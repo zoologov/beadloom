@@ -1,4 +1,11 @@
-"""The `impact` command: what a change touches, answered from the source."""
+"""The `## Axes` family: derive a work item's axes, read them back, judge a commit.
+
+Three commands over one subject. `impact` derives what a change touches from the
+source and renders the section; `axes` reads a section back and generates the
+bead's `refs:` from it; `scope-check` compares the paths a commit stages against
+the section the work item declared. One document, written by the first, read by
+the second and enforced by the third.
+"""
 # beadloom:component=cli-commands
 
 from __future__ import annotations
@@ -6,10 +13,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from beadloom.services.commands._root import main
+
+if TYPE_CHECKING:
+    from beadloom.application.declared_scope import ScopeRun
 
 
 @main.command()
@@ -142,3 +153,89 @@ def axes(*, document: Path, as_refs: bool, as_json: bool) -> None:
         click.echo(f"  [{decision}] {axis.axis} — {axis.node or '—'}: {axis.sites}")
     click.echo("")
     click.echo(refs_line(section))
+
+
+@main.command(name="scope-check")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--since",
+    default=None,
+    metavar="REF",
+    help="Judge every path this branch changes against REF, not only the staged ones.",
+)
+@click.option(
+    "--branch",
+    default=None,
+    help="Name the work item's branch instead of reading the checked-out one.",
+)
+@click.option(
+    "--porcelain", is_flag=True, help="One finding per line, for a hook to read."
+)
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+def scope_check(
+    *,
+    project: Path | None,
+    since: str | None,
+    branch: str | None,
+    porcelain: bool,
+    as_json: bool,
+) -> None:
+    """Does this commit stay inside the axes its work item declared?
+
+    The work item is the one the checked-out branch names, and its `## Axes`
+    section is the scope a human approved. A bead may narrow freely inside it; a
+    commit that LEAVES it means the approval no longer covers the change, which
+    is the re-plan trigger. Exit code 2 when a path falls outside, 0 otherwise —
+    and a run that could not find a branch, a work item, an index or a section
+    says so rather than reporting a clean sheet.
+    """
+    from beadloom.application.declared_scope import scope_check as run_scope_check
+
+    run = run_scope_check(project or Path.cwd(), branch=branch, since=since)
+
+    if as_json:
+        click.echo(json.dumps(_scope_payload(run), ensure_ascii=False, indent=2))
+    elif porcelain:
+        for finding in run.verdict.findings:
+            click.echo(f"{finding.path}:{finding.line}\t{finding.check}\t{finding.excerpt}")
+        if not run.checked:
+            click.echo(f"NOT CHECKED\t{run.reason}", err=True)
+    else:
+        click.echo(run.describe())
+        for finding in run.verdict.findings:
+            click.echo("")
+            click.echo(f"  {finding.path}: {finding.excerpt}")
+            click.echo(f"    why: {finding.why}")
+            click.echo(f"    fix: {finding.remediation}")
+
+    if run.verdict.findings:
+        sys.exit(2)
+
+
+def _scope_payload(run: ScopeRun) -> dict[str, object]:
+    """The run as JSON: the verdict, the population, and the reason for neither."""
+    return {
+        "checked": run.checked,
+        "reason": run.reason,
+        "work_item": run.work_item,
+        "document": run.document,
+        "scope": run.scope,
+        "judged": run.verdict.judged,
+        "unowned": run.verdict.unowned,
+        "undecided": run.verdict.undecided,
+        "findings": [
+            {
+                "check": finding.check,
+                "path": finding.path,
+                "excerpt": finding.excerpt,
+                "why": finding.why,
+                "remediation": finding.remediation,
+            }
+            for finding in run.verdict.findings
+        ],
+    }

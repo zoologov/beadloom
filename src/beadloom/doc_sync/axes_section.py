@@ -69,6 +69,10 @@ AXIS_WITHOUT_A_SCOPE_DECISION = "axis-without-a-scope-decision"
 CHECK_NAMES: tuple[str, ...] = (AXES_WITHOUT_A_SEED, AXIS_WITHOUT_A_SCOPE_DECISION)
 
 _FIELD_RE = re.compile(r"^>\s*\*\*(?P<name>[A-Za-z ]+):\*\*\s*(?P<value>.*)$")
+#: Backticked spans of the ``Derived by`` field. The targets are named inside
+#: them, and only inside them: the field is prose, and a word outside a code
+#: span is a sentence rather than a path.
+_CODE_SPAN_RE = re.compile(r"`([^`]+)`")
 _QUOTE_RE = re.compile(r"^>\s?(.*)$")
 
 #: Cells that decide the scope, exactly. Matched whole so the shipped skeleton's
@@ -196,6 +200,30 @@ def _row(cells: Sequence[str], header: Sequence[str], line: int) -> Axis:
         why=column("why"),
         line=line,
     )
+
+
+def derived_targets(section: AxesSection) -> tuple[str, ...]:
+    """The paths the derivation was run over, as the ``Derived by`` field names them.
+
+    A SHAPE, not a spelling: any whitespace-separated word inside a code span of
+    the field that carries a path separator. That reads the rendered form, where
+    the target and the sweep root share one span, and a hand-written field
+    naming three files in three spans, without either being a case. A target
+    given as a SYMBOL carries no separator and is not returned, because a symbol
+    names no path and the caller has nothing to resolve; that gap is stated
+    rather than guessed at.
+
+    Deduplicated in the field's own order. Whether a returned word is a file, a
+    directory or neither is the caller's question: this domain has no filesystem
+    and no index to ask.
+    """
+    found: list[str] = []
+    for span in _CODE_SPAN_RE.findall(section.derived_by):
+        for word in span.split():
+            token = word.strip("`,;()[]")
+            if "/" in token and token not in found:
+                found.append(token)
+    return tuple(found)
 
 
 def refs_line(section: AxesSection) -> str:

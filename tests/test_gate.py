@@ -132,7 +132,7 @@ class TestRunCiGate:
         assert isinstance(result, GateResult)
         assert result.ok is True
         # reindex, lint, sync-check, docs-audit, docs-quality, doc-spaces,
-        # config-check, doctor all ran.
+        # scope-check, config-check, doctor all ran.
         names = [s.name for s in result.steps]
         assert names == [
             "reindex",
@@ -141,16 +141,22 @@ class TestRunCiGate:
             "docs-audit",
             "docs-quality",
             "doc-spaces",
+            # BDL-068 S1.6: the branch judged against the axes its work item
+            # declares. It sits before `config-check` because it reads the
+            # planning corpus rather than the composed agent config.
+            "scope-check",
             "config-check",
             "doctor",
         ]
         assert all(s.passed for s in result.steps)
-        # ``docs-quality`` and ``doc-spaces`` are named SKIPs on a project with
-        # no planning documents — a skip that says why, never a silent pass
-        # (BDL-061 S1). Both name the globs that matched nothing.
+        # ``docs-quality``, ``doc-spaces`` and ``scope-check`` are named SKIPs
+        # on a project with no planning documents — a skip that says why, never
+        # a silent pass (BDL-061 S1). The first two name the globs that matched
+        # nothing; the third names the branch that names no work item.
         assert [s.name for s in result.steps if s.skipped] == [
             "docs-quality",
             "doc-spaces",
+            "scope-check",
         ]
         assert all(
             s.status == "PASS" for s in result.steps if not s.skipped

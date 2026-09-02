@@ -97,6 +97,7 @@ is" cannot disagree with itself between the two.
 | `Axis` / `AxesSection` | dataclass |
 | `read_axes_section` | function |
 | `refs_line` | function |
+| `derived_targets` | function |
 | `check_axes_section` | function |
 
 ## Dependencies
@@ -105,8 +106,20 @@ is" cannot disagree with itself between the two.
   reader, so a `## Axes` quoted inside a fenced block is not read as this document's own; and
   `doc_sync.doc_quality.QualityFinding`, the shape every planning-document finding takes.
 - Used by: `application.planning_report` (the one composition behind the Gate step and
-  `beadloom docs quality`), `application.impact.section` (the renderer), and the
-  `beadloom axes` command.
+  `beadloom docs quality`), `application.impact.section` (the renderer), the
+  `beadloom axes` command, and `application.declared_scope` (BDL-068 S1.6), which resolves
+  what `derived_targets` returns.
+
+## The targets the derivation ran over
+
+`derived_targets(section)` returns the paths the `Derived by` field names, over a SHAPE
+rather than a spelling: any whitespace-separated word inside a code span of that field which
+carries a path separator. That reads the rendered form, where the target and the sweep root
+share one span, and a hand-written field naming three files in three spans, without either
+being a special case. A target given as a SYMBOL carries no separator and is not returned,
+because a symbol names no path and the caller has nothing to resolve — the gap is stated
+rather than guessed at. Whether a returned word is a file, a directory or neither is the
+caller's question: this domain has no filesystem and no index to ask.
 
 ## Parent
 

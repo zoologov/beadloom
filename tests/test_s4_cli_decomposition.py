@@ -42,6 +42,9 @@ EXPECTED_COMMANDS = {
     # BDL-068 S1.4: reads a work item's `## Axes` section back, so a bead's
     # `refs:` is generated from the document rather than written beside it.
     "axes",
+    # BDL-068 S1.6: the third command of the `## Axes` family — the section
+    # `impact` renders and `axes` reads back is what this one judges a commit against.
+    "scope-check",
     "ci",
     "config-check",
     "ctx",

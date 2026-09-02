@@ -51,7 +51,19 @@ is what holds that line.
 | `guard.py` | `guard` |
 | `waves.py` | `waves` |
 | `review_brief.py` | `review-brief` |
-| `impact.py` | `impact`, `axes` |
+| `impact.py` | `impact`, `axes`, `scope-check` |
+
+`impact.py` holds three commands over one subject and not three subjects: `impact` derives a
+work item's axes from the source and renders the `## Axes` section, `axes` reads a section
+back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the
+paths a commit stages against the section the work item declared. One document, written by
+the first, read by the second and enforced by the third. `scope-check` exits 2 when a path
+falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
+or a section prints its reason rather than a clean sheet. The pre-commit hook
+`install-hooks` writes calls it with `--porcelain`; it WARNS in both hook modes, including
+the blocking one, because one work item in 64 carries a `## Axes` section today and a check
+that blocked would meet a repository that cannot satisfy it and be answered with
+`--no-verify`.
 
 Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph

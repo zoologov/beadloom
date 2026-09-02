@@ -164,8 +164,8 @@ class TestLayer1GateIntegration:
         project = _stale_fact_project(tmp_path)
         # Act
         result = run_ci_gate(project, fail_on=None, hub_exports=[], no_reindex=False)
-        # Assert: all six core steps present, each with an honest status, and the
-        # steps after docs-audit (config-check, doctor) actually ran.
+        # Assert: every core step present, each with an honest status, and the
+        # steps after docs-audit (scope-check, config-check, doctor) actually ran.
         names = [s.name for s in result.steps]
         assert names == [
             "reindex",
@@ -174,12 +174,22 @@ class TestLayer1GateIntegration:
             "docs-audit",
             "docs-quality",
             "doc-spaces",
+            # BDL-068 S1.6: the branch judged against the axes its work item
+            # declares. It sits before `config-check` because it reads the
+            # planning corpus rather than the composed agent config.
+            "scope-check",
             "config-check",
             "doctor",
         ]
         assert all(s.status in {"PASS", "FAIL", "WARN", "SKIP"} for s in result.steps)
         after = names[names.index("docs-audit") + 1 :]
-        assert after == ["docs-quality", "doc-spaces", "config-check", "doctor"]
+        assert after == [
+            "docs-quality",
+            "doc-spaces",
+            "scope-check",
+            "config-check",
+            "doctor",
+        ]
         # ``docs-quality`` is allowed its NAMED skip — this fixture holds no
         # planning document, and a skip that says why is the honest outcome
         # (BDL-061 S1). The invariant under test is that a failing docs-audit

@@ -341,6 +341,16 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/work-item-type/SPEC.md
 
+  # Feature: the paths a commit stages, judged against the axes its work item
+  # declared (BDL-068 S1.6). Pure: paths, a declared scope and an ownership map
+  # in, a verdict out — the git and index halves are `declared-scope`'s.
+  - ref_id: scope-check
+    kind: feature
+    summary: "The paths a commit stages, judged against the axes its work item declared: a node an axis rules out of scope, or a bounded context no declared axis reaches"
+    source: src/beadloom/doc_sync/scope_check.py
+    docs:
+      - docs/domains/doc-sync/features/scope-check/SPEC.md
+
   # Feature: Doc Quality (BDL-061 S4b) — the writing standard, read back.
   - ref_id: doc-quality
     kind: feature
@@ -587,6 +597,17 @@ nodes:
     source: src/beadloom/application/work_item_routing.py
     docs:
       - docs/domains/application/components/work-item-routing/DOC.md
+
+  # Component: which work item a commit belongs to, and the scope its `## Axes`
+  # declare (BDL-068 S1.6). The join `scope-check` cannot make for itself: the
+  # index that owns a path, git for the paths and the branch, and the planning
+  # corpus that says which folders are work items.
+  - ref_id: declared-scope
+    kind: component
+    summary: "The work item a branch names, and the scope its `## Axes` section declares — resolved through the graph index, git and the planning corpus"
+    source: src/beadloom/application/declared_scope.py
+    docs:
+      - docs/domains/application/components/declared-scope/DOC.md
 
   # Component: the adapter that feeds `node-intent` (BDL-061 `.87`). It reads the
   # TO-BE space through `doc-spaces`' declaration join rather than a second one.
@@ -894,6 +915,42 @@ edges:
     kind: depends_on
   - src: planning-report
     dst: work-item-routing
+    kind: depends_on
+  - src: scope-check
+    dst: doc-sync
+    kind: part_of
+  - src: scope-check
+    dst: axes-section
+    kind: depends_on
+  - src: scope-check
+    dst: doc-quality
+    kind: depends_on
+  - src: declared-scope
+    dst: application
+    kind: part_of
+  - src: declared-scope
+    dst: scope-check
+    kind: depends_on
+  - src: declared-scope
+    dst: axes-section
+    kind: depends_on
+  - src: declared-scope
+    dst: impact
+    kind: depends_on
+  - src: declared-scope
+    dst: sync-check
+    kind: depends_on
+  - src: declared-scope
+    dst: doc-shape-requirements
+    kind: depends_on
+  - src: declared-scope
+    dst: flow-guards
+    kind: depends_on
+  - src: ci-gate
+    dst: declared-scope
+    kind: depends_on
+  - src: cli-commands
+    dst: declared-scope
     kind: depends_on
   - src: work-item-routing
     dst: application

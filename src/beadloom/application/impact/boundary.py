@@ -74,6 +74,17 @@ class GraphBoundary:
         node = get_owning_ref_id(self._connection, relative_path)
         return Ownership(node, self._bounding_context(node))
 
+    def context_of(self, node: str | None) -> str | None:
+        """The bounded context *node* sits in, by name rather than by path.
+
+        The same walk :meth:`owner_of` performs, exposed because a caller that
+        starts from a DECLARED node — a row of a work item's ``## Axes`` table —
+        has no path to look it up by. Re-deriving the walk beside this class
+        would make "which context owns this node" a thing that can disagree with
+        itself.
+        """
+        return self._bounding_context(node)
+
     def _bounding_context(self, node: str | None) -> str | None:
         """Walk ``part_of`` upward until a domain or service, guarding against a cycle."""
         seen: set[str] = set()

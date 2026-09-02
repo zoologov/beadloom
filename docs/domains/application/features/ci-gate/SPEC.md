@@ -134,7 +134,23 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+7. **scope-check** — did this branch leave the axes its work item declared?
+   (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
+   the tree is shared by several agents, so judging it would fail one agent's
+   push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
+   request contains and what the approval was spent on. The trunk is the
+   `options.trunk` the `working-branch` guard already reads, preferring
+   `origin/<trunk>` when that remote-tracking ref exists — measured on this
+   repository, a local `main` two commits behind the remote made another work
+   item's LANDED change read as this branch's work. `passed=True`
+   unconditionally, like `docs-quality` and `doc-spaces`: the check ships as
+   `warn` so a project whose work items predate `## Axes` does not go red on
+   upgrade. A run that found no branch, no work item, no index, no `## Axes`
+   section, no answer from git, or no changed path a node owns is a NAMED SKIP
+   with its reason — never a PASS, because a comparison over an empty
+   population has verified nothing. The summary states the findings, the paths
+   judged, the paths no node owns and the declared rows nobody decided.
+8. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -144,8 +160,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-8. **doctor** — graph integrity.
-9. **federate** — `federate --fail-on` when hub exports are supplied.
+9. **doctor** — graph integrity.
+10. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

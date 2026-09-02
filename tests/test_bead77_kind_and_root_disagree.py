@@ -403,7 +403,11 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # 105 -> 107 in BDL-068 `.5`: `work-item-routing` (the routes derived from
         # the composed /task-init) and `work-item-type` (the two checks over a
         # work-item folder), which are a derivation and a check and not one thing.
-        assert populations[SPACE_AS_IS] == 107
+        # 107 -> 109 in BDL-068 `.6`: `scope-check` (the paths a commit stages
+        # judged against a declared scope) and `declared-scope` (the branch, the
+        # index and the planning corpus joined for it), which are again a check
+        # and the composition that feeds it and not one thing.
+        assert populations[SPACE_AS_IS] == 109
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

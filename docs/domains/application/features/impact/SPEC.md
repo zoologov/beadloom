@@ -134,7 +134,7 @@ derivation that can change it.
 |---|---|
 | `seeds.py` | the seed rule, the declared effect table, and the sinks a target reaches |
 | `axes.py` | the four questions, computed over a seed set |
-| `boundary.py` | which node owns a path, and the bounded context above it |
+| `boundary.py` | which node owns a path, and the bounded context above it — `owner_of(path)` and, since BDL-068 S1.6, `context_of(node)` for a caller that starts from a DECLARED node and has no path to look it up by |
 | `unresolved.py` | what the derivation could not read, as a population |
 | `answer.py` | the vocabulary and the one orchestration every rendering reads |
 | `render.py` | that one answer as a dictionary and as text |

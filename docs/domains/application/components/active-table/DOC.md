@@ -101,7 +101,11 @@ headings, the Progress Log, and non-Status columns are always left untouched.
 
 ## Collaborators
 
-- **`services/commands/docsync.py` — `active-sync` command (and helpers).**
+- **`services/commands/docsync.py` — `active-sync` command (and helpers).** The same
+  module also carries the pre-commit and pre-push hook TEMPLATES, whose subject is
+  `guard-hooks` rather than this component; the one line of them that belongs here is the
+  coherence block, which runs `active-sync --stage` so the commit is coherent by
+  construction and names the paths it added.
   Queries `bd list --all --json -n 0` (via the mockable
   `services/bd_seam.run_bd` seam) — `--all` and the lifted row cap are load-
   bearing: `bd list` defaults to open beads capped at 50 rows, which on this

@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
     from beadloom.application.doctor import Check
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
+    from beadloom.doc_sync.doc_quality import QualityFinding
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -208,6 +209,7 @@ def run_ci_gate(
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
+    steps.append(_step_scope_check(project_root))
     steps.append(_step_config_check(project_root))
     steps.append(_step_doctor(project_root))
     if hub_exports:
@@ -746,6 +748,72 @@ def _doc_quality_finding(finding: object) -> Finding:
         ],
         "why": f"{finding.why}: {finding.excerpt}",  # type: ignore[attr-defined]
         "remediation": finding.remediation,  # type: ignore[attr-defined]
+    }
+
+
+def _step_scope_check(project_root: Path) -> GateStep:
+    """``scope-check`` — did this branch leave the axes its work item declared?
+
+    Branch-scoped rather than tree-scoped, and that is the whole point: the tree
+    is shared by several agents, so judging it would fail one agent's push on a
+    neighbour's edit, while ``<trunk>...HEAD`` is exactly what the pull request
+    contains and what the approval was spent on. The pre-commit hook asks the
+    same question of one commit; this asks it of the branch, so a commit made
+    through a hook nobody re-installed is still caught before the push.
+
+    ``passed=True`` unconditionally, like its two siblings above: the check ships
+    as ``warn`` so a project whose work items predate ``## Axes`` does not go red
+    on upgrade. A run that found no branch, no work item, no index or no section
+    is reported as SKIPPED with its reason — never as a pass.
+
+    Measured on this repository before it was wired: silent over the 36 owned
+    paths of ``features/BDL-068`` against ``origin/main``, and red on
+    ``a4738b7c`` — another work item's landed commit — for
+    ``src/beadloom/graph/linter.py``.
+    """
+    from beadloom.application.declared_scope import scope_check, trunk_ref
+
+    run = scope_check(project_root, since=trunk_ref(project_root))
+    if not run.checked:
+        return GateStep("scope-check", skipped=True, summary=f"skipped — {run.reason}")
+    findings = [_scope_finding(finding) for finding in run.verdict.findings]
+    summary = (
+        f"{len(findings)} path(s) outside the axes {run.work_item} declares "
+        f"({run.document}); {run.verdict.judged} judged, "
+        f"{run.verdict.unowned} owned by no node"
+    )
+    if run.verdict.undecided:
+        summary += f", {run.verdict.undecided} declared row(s) nobody decided"
+    if not run.verdict.judged:
+        # Nothing this branch changed belongs to a node, so the comparison ran
+        # over an empty population. PASS would claim it checked something.
+        return GateStep(
+            "scope-check",
+            skipped=True,
+            summary=f"skipped — {summary}, so nothing was compared",
+        )
+    return GateStep(
+        "scope-check",
+        passed=True,
+        findings=findings,
+        summary=summary,
+    )
+
+
+def _scope_finding(finding: QualityFinding) -> Finding:
+    """One ``scope-check`` finding in the shared shape.
+
+    Typed rather than projected through ``object``: this step's findings have
+    one origin, and the ``# type: ignore`` its neighbours carry buys nothing
+    where the type is already importable.
+    """
+    return {
+        "kind": "scope-check",
+        "rule": finding.check,
+        "severity": "warning",
+        "locations": [{"file": finding.path, "line": finding.line}],
+        "why": f"{finding.why}: {finding.excerpt}",
+        "remediation": finding.remediation,
     }
 
 

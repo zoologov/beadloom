@@ -1,16 +1,29 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-02
+> **Last updated:** 2026-09-03
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.6` — the commit-scope check, running beside `.5` in this wave and the
-combined-tree gate owner for it.
+**Bead:** `beadloom-0mdo.7` — test. `.6` closed and the combined-tree gate for this wave was
+measured by it.
 
-**The bead just closed.** `beadloom-0mdo.5` — the `Explore` role, composed by `role-composer`,
+**The bead just closed.** `beadloom-0mdo.6` — the commit-scope check: a change outside the
+work item's declared axes is a finding.
+**Goal:** compare the paths a commit stages against the axes a human approved, so a commit
+leaving the approval is a finding rather than something noticed afterwards.
+**The rule was measured before it was chosen, because an always-red check is an ignored
+check.** Judging a staged path's owning NODE against the nodes the kept rows name is red on
+all three of this branch's own code commits — the table records what a change RANGES OVER and
+the surfaces it CHANGES live in the `Derived by` field. Judged at the bounded context the
+declared axes reach, the same three commits are silent and 115 of the 155 commits before this
+branch that touch an owned path fall outside. Both halves verified on real commits: silent
+over the branch's 36 owned paths against `origin/main`, and red on `a4738b7c` for
+`src/beadloom/graph/linter.py`.
+
+**Previously closed.** `beadloom-0mdo.5` — the `Explore` role, composed by `role-composer`,
 inside `/task-init` step 0.5
 **Goal:** give the role that derives the axes a protocol file with a FIXED deliverable, and put
 it before the type decision so the axis count is what the route is chosen on.
@@ -37,6 +50,9 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 - [x] S1.5 — the `Explore` role composed from a shipped fragment; the role population derived
       rather than declared three times; `/task-init` step 0.5 before the type decision, and the
       route checked against the axes (dev)
+- [x] S1.6 — `beadloom scope-check`: the paths a commit stages, judged against the axes its
+      work item declared; wired into the pre-commit hook and into the Gate as a branch-scoped
+      step (dev)
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -53,7 +69,7 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 | `beadloom-0mdo.3` | Done | measured at `af26750d` (the parent of `acf4066`, 2026-08-31), macOS, foreground, the lifted package imported from `430d9ae` and pointed at a detached worktree. Seeded with the commit point `write_yaml_atomic` the derivations list 2 writers (`bootstrap_project`, `import_docs`) and 4 branches of `init`; seeded with `bootstrap_project`, the function that bead was changing, they list 0 writers and 3 branches — the number the epic carried throughout. Both facts were in reach on the day and neither is reached from the function under change, so the premise survives as a conditional and the condition is now S1.2's hardest criterion. Second measurement: the seed is derivable from the target under `SERIALISES_YAML` (2 candidates from `bootstrap.py`) and unreachable under `PUTS_BYTES_ON_DISK`, which does not contain the commit point at all. Kept as 8 cases in `tests/test_the_seed_decides_what_impact_reports.py`, each demonstrated red. |
 | `beadloom-0mdo.4` | Done | `## Axes` in the BRIEF and RFC skeletons, required by the same act that adds it: `required_sections_by_document_kind` runs `doc_templates`' own heading extraction over the composed `/templates` command's fenced blocks. `doc_shape`'s peer-majority policy extracted into `peer_section_shape` and used over both corpora; `check_planning_sections` reports `missing-section` (peer-relative) and `empty-section` (not). `doc_sync/axes_section.py` holds the section's grammar — `axes-without-a-seed`, `axis-without-a-scope-decision` — and `application/impact/section.py` renders one from an `ImpactAnswer` using that grammar, so the writer and the reader are one shape. `application/planning_report.py` is now the ONE composition of all nine checks behind the gate step and `beadloom docs quality`. New CLI: `beadloom impact --section` and `beadloom axes <document> [--refs]`. Measured on this repository, foreground, no pipe: `missing-section` 102 over 256 read, `empty-section` 0 over 256, 17 kind-level conventions including `BRIEF Axes (0/12)` and `RFC Axes (0/48)`; the 767 findings a non-peer-relative policy would give is why the peer one was chosen. `empty-section` was 155 until a defect the run exposed — a section whose content lives in its subsections read as empty — was fixed by propagating content up the heading depth. 9 scenarios + 29 cases, every case demonstrated red by eleven mutants. Green on the tree, macOS: 7944 passed (baseline 7905), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. Green in a clean room over 33 files, with the pre-existing sync-baseline failure reproduced at HEAD alone. |
 | `beadloom-0mdo.5` | Done | `Explore` is a role FILE with a fixed deliverable — the `## Axes` section rendered by `beadloom impact --section`, every site a path and a line, the scope column left for the person, no narrative — read-only tools, `ddd`/`fsd` and `python` overlays. **A role exists because a core fragment ships for it:** `roles_in()` derives the population from `templates/roles/core/*.md.txt` over a shape (front matter naming its own file), so `ROLE_NAMES`, `AGENT_FILES` and the Cursor pointer are one fact instead of three. `/task-init` gains a mandatory step 0.5 stated BEFORE the type table, and the routing table is read back out of the composed command by `application/work_item_routing.py` — so the command cannot state a route the check does not police. `doc_sync/work_item_type.py` adds `routed-without-axes` and `route-not-supported-by-the-axes` over the work-item FOLDER. Measured on this repository, foreground, no pipe: `routed-without-axes` 12 findings over 12 work items — including BDL-067's own BRIEF, the item this slice exists because of — and `route-not-supported-by-the-axes` 0 over the same 12, which cannot fire until a work item carries axes and is verified red on fixtures instead. The `BRIEF Axes (0/12)` convention line is gone: the absence is now reported absolutely and withdrawn from the peer half alone, so `empty-section` still reads it. 11 scenarios (red before the code existed) + 43 cases, every case demonstrated red by sixteen mutants; two further mutants SURVIVED and both guards were DELETED rather than re-tested, because a guard nobody can make fail is a guard nobody can argue with. Green on the tree, macOS: 8023 passed (baseline 7944), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
-| `beadloom-0mdo.6` | Pending | unblocked by `.4` — the commit-scope check. It reads the WORK ITEM's declared axes through `beadloom.doc_sync.axes_section.read_axes_section`; the grammar and the `refs:` generation are in place |
+| `beadloom-0mdo.6` | Done | `beadloom scope-check` compares the paths a commit stages — or, with `--since`, the paths a branch changes against its trunk — against the `## Axes` its WORK ITEM declared. `doc_sync/scope_check.py` holds the check, pure: paths, a `DeclaredScope` and an ownership map in, a verdict out. `application/declared_scope.py` makes the join `scope-check` cannot make for itself — the branch names the work item (the pre-commit hook runs before the commit message is finalised, so the `[KEY]` prefix is unreadable there), the index owns the paths, and the planning corpus says which folders are work items. **The rule was measured before it was chosen:** the node-level rule is red on all three of this branch's code commits (11, 5 and 6 paths) because the table records what a change RANGES OVER while the surfaces it CHANGES are in the `Derived by` field; the bounded-context rule is silent on all three and outside for 115 of the 155 preceding commits that touch an owned path. A node an axis rules OUT of scope is reported by that axis's name; an undecided row neither widens nor narrows and its count travels with the verdict; a path no node owns is counted, never reported. Verified on REAL commits: silent over the branch's 36 owned paths against `origin/main`, red on `a4738b7c` for `src/beadloom/graph/linter.py` naming `callers`. One measured contract detail: `--since main` reported that path where `--since origin/main` was silent, because a local trunk two commits behind makes another work item's LANDED change read as this branch's — hence `ref...HEAD` and `origin/<trunk>`. Wired into both pre-commit hook templates (WARN in both, because one work item in 64 carries a section today) and as the branch-scoped Gate step `scope-check`. 9 scenarios (red at collection before the code existed) + 54 cases; every case demonstrated red by sixteen mutants, four of which SURVIVED the first pass and each exposed a real gap — including a two-dot/three-dot case that `--diff-filter=ACMR` masked until it was rebuilt on the shape `a4738b7` actually has. Green on the tree, macOS: 8087 passed (baseline 8026), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.7` | Pending | blocked by `.3`, `.5`, `.6` — test |
 | `beadloom-0mdo.8` | Pending | blocked by `.7` — review |
 | `beadloom-0mdo.9` | Pending | blocked by `.8` — tech-writer |
