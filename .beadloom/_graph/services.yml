@@ -332,6 +332,15 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/axes-section/SPEC.md
 
+  # Feature: the route a work item took, checked against the axes it was decided
+  # from (BDL-068 S1.5). The unit is the work-item FOLDER, not the document.
+  - ref_id: work-item-type
+    kind: feature
+    summary: "The route a work item took, checked against the axes it was decided from: no axes on the route that skips scope approval, and kept axes naming more nodes than that route holds"
+    source: src/beadloom/doc_sync/work_item_type.py
+    docs:
+      - docs/domains/doc-sync/features/work-item-type/SPEC.md
+
   # Feature: Doc Quality (BDL-061 S4b) — the writing standard, read back.
   - ref_id: doc-quality
     kind: feature
@@ -569,6 +578,15 @@ nodes:
     source: src/beadloom/application/doc_shape.py
     docs:
       - docs/domains/application/components/doc-shape-requirements/DOC.md
+
+  # Component: the routes `/task-init` declares, derived from the composed
+  # command rather than restated in Python (BDL-068 S1.5).
+  - ref_id: work-item-routing
+    kind: component
+    summary: "The work-item types, their flows and the documents each writes, derived from the composed /task-init command"
+    source: src/beadloom/application/work_item_routing.py
+    docs:
+      - docs/domains/application/components/work-item-routing/DOC.md
 
   # Component: the adapter that feeds `node-intent` (BDL-061 `.87`). It reads the
   # TO-BE space through `doc-spaces`' declaration join rather than a second one.
@@ -835,6 +853,15 @@ edges:
   - src: axes-section
     dst: doc-sync
     kind: part_of
+  - src: work-item-type
+    dst: doc-sync
+    kind: part_of
+  - src: work-item-type
+    dst: axes-section
+    kind: depends_on
+  - src: work-item-type
+    dst: doc-quality
+    kind: depends_on
   - src: axes-section
     dst: doc-shape
     kind: depends_on
@@ -861,6 +888,27 @@ edges:
     kind: depends_on
   - src: planning-report
     dst: doc-shape-requirements
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-type
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-routing
+    kind: depends_on
+  - src: work-item-routing
+    dst: application
+    kind: part_of
+  - src: work-item-routing
+    dst: doc-shape
+    kind: depends_on
+  - src: work-item-routing
+    dst: flow-composer
+    kind: depends_on
+  - src: work-item-routing
+    dst: doc-templates
+    kind: depends_on
+  - src: work-item-routing
+    dst: role-composer
     kind: depends_on
   - src: doc-spaces
     dst: application

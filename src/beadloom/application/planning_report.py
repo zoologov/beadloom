@@ -17,19 +17,26 @@ Three families of check read the same corpus and answer different questions:
   missing a section its template carries and its peers keep, and a required
   section whose heading is there with nothing under it;
 * the two AXES checks (:mod:`beadloom.doc_sync.axes_section`) — axes stated
-  without the seed they were derived from, and an axis with no scope decision.
+  without the seed they were derived from, and an axis with no scope decision;
+* the two ROUTE checks (:mod:`beadloom.doc_sync.work_item_type`) — a work item
+  routed through the flow that passes no scope approval with no axes at all,
+  and one whose kept axes name more nodes than that route holds. Their unit is
+  the work-item FOLDER rather than the document, so their population is counted
+  separately.
 
 The requirements the structural checks are held to are DERIVED from the composed
 templates, so a project that adds a section to its own template layer makes it
-required by the same act and tells nothing else.
+required by the same act and tells nothing else. The routes the route checks
+judge are derived from the composed ``/task-init`` command for the same reason.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync import axes_section
+from beadloom.doc_sync.axes_section import AXES_HEADING
 from beadloom.doc_sync.doc_quality import CHECK_NAMES as WRITING_CHECK_NAMES
 from beadloom.doc_sync.doc_quality import QualityReport, check_documents
 from beadloom.doc_sync.doc_shape import (
@@ -37,6 +44,11 @@ from beadloom.doc_sync.doc_shape import (
     MISSING_SECTION,
     PlanningShapeReport,
     check_planning_sections,
+)
+from beadloom.doc_sync.work_item_type import CHECK_NAMES as ROUTE_CHECK_NAMES
+from beadloom.doc_sync.work_item_type import (
+    WorkItemTypeReport,
+    check_work_item_types,
 )
 
 if TYPE_CHECKING:
@@ -51,6 +63,7 @@ CHECK_NAMES: tuple[str, ...] = (
     MISSING_SECTION,
     EMPTY_SECTION,
     *axes_section.CHECK_NAMES,
+    *ROUTE_CHECK_NAMES,
 )
 
 
@@ -67,6 +80,7 @@ class PlanningReport:
 
     quality: QualityReport
     structure: PlanningShapeReport
+    routes: WorkItemTypeReport = field(default_factory=WorkItemTypeReport)
     axes: tuple[QualityFinding, ...] = ()
     #: Documents carrying an ``## Axes`` section with at least one row — the
     #: population the axes checks ENTERED, which is not the corpus size.
@@ -77,7 +91,12 @@ class PlanningReport:
         """Every finding, ordered by the file a reader would open."""
         return tuple(
             sorted(
-                (*self.quality.findings, *self.structure.findings, *self.axes),
+                (
+                    *self.quality.findings,
+                    *self.structure.findings,
+                    *self.axes,
+                    *self.routes.findings,
+                ),
                 key=lambda finding: (finding.path, finding.line, finding.check),
             )
         )
@@ -100,6 +119,11 @@ class PlanningReport:
         counts[EMPTY_SECTION] = self.structure.documents
         for name in axes_section.CHECK_NAMES:
             counts[name] = self.axes_read
+        for name in ROUTE_CHECK_NAMES:
+            # The work-item folder, not the document: a route is a property of
+            # the item, and reporting the document count would claim a wider
+            # population than these two checks ever entered.
+            counts[name] = self.routes.work_items
         return counts
 
     @property
@@ -121,6 +145,7 @@ def planning_report(paths: list[Path], *, project_root: Path) -> PlanningReport:
         document_section_requirements,
         shipped_placeholders,
     )
+    from beadloom.application.work_item_routing import task_init_routing
 
     quality = check_documents(
         paths,
@@ -141,9 +166,15 @@ def planning_report(paths: list[Path], *, project_root: Path) -> PlanningReport:
             relative = str(path)
         documents.append((relative, text))
 
+    simplified_kinds = task_init_routing(project_root=project_root).simplified_kinds
     structure = check_planning_sections(
-        documents, document_section_requirements(project_root)
+        documents,
+        document_section_requirements(project_root),
+        absence_reported_elsewhere={
+            kind: frozenset({AXES_HEADING}) for kind in simplified_kinds
+        },
     )
+    routes = check_work_item_types(documents, simplified_kinds=simplified_kinds)
     axes: list[QualityFinding] = []
     axes_read = 0
     for relative, text in documents:
@@ -154,6 +185,7 @@ def planning_report(paths: list[Path], *, project_root: Path) -> PlanningReport:
     return PlanningReport(
         quality=quality,
         structure=structure,
+        routes=routes,
         axes=tuple(axes),
         axes_read=axes_read,
     )

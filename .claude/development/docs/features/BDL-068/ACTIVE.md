@@ -7,20 +7,21 @@
 
 ## Current Bead
 
-**Bead:** none — `.1`, `.3`, `.2` and `.4` closed. `bd ready` lists `.6` (the commit-scope
-check, unblocked by `.4`) and `.5` (the `Explore` role); they may run beside each other.
+**Bead:** `beadloom-0mdo.6` — the commit-scope check, running beside `.5` in this wave and the
+combined-tree gate owner for it.
 
-**The bead just closed.** `beadloom-0mdo.4` — `## Axes` as a required section, reported by
-`doc-quality` when absent or empty
-**Goal:** make the section a work item declares its axes in a requirement the flow enforces,
-derived from the template that carries it rather than from a list in code.
-**The premise did not hold, and that is the first thing this bead measured.**
-`doc_templates.required_sections` derives over the `docs` artifact kind, whose kinds are graph
-NODE documents; BRIEF and RFC have no template in that family at all, and `missing_sections` is
-a sync-check reason over paired node documents rather than a `doc-quality` finding. So the
-derivation was EXTENDED to the planning skeletons — fenced blocks inside the composed
-`/templates` command — and `doc_shape`'s peer policy was extracted into one function used over
-both corpora, rather than a second mechanism built beside either.
+**The bead just closed.** `beadloom-0mdo.5` — the `Explore` role, composed by `role-composer`,
+inside `/task-init` step 0.5
+**Goal:** give the role that derives the axes a protocol file with a FIXED deliverable, and put
+it before the type decision so the axis count is what the route is chosen on.
+**Both halves of the premise needed measuring, and both were half-false.** "Composed like the
+other four" presumed one role population; there were TWO hand-maintained literals of it
+(`role_composer.ROLE_NAMES`, `agentic_flow_setup.AGENT_FILES`) with eight readers between them,
+and a third list spelled as prose inside the Cursor orchestrator pointer. The population is now
+DERIVED from the shipped CORE fragments, so a role exists because a fragment ships for it.
+"`/task-init` cannot reach the type decision without it having run" was false: measured at
+`2a5c0d1`, `## Axes` was required by the BRIEF template and reported by nothing, because
+`missing-section` is peer-relative and the corpus carried it in 0 of 12 briefs.
 
 ## Progress
 
@@ -33,6 +34,9 @@ both corpora, rather than a second mechanism built beside either.
 - [x] S1.2 — `beadloom impact`, seed derived and named, unresolved population as a field (dev)
 - [x] S1.4 — `## Axes` required by the template that carries it; nine checks behind one
       composition; `beadloom axes` generates the bead `refs:` from the document (dev)
+- [x] S1.5 — the `Explore` role composed from a shipped fragment; the role population derived
+      rather than declared three times; `/task-init` step 0.5 before the type decision, and the
+      route checked against the axes (dev)
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -48,7 +52,7 @@ both corpora, rather than a second mechanism built beside either.
 | `beadloom-0mdo.2` | Done | `beadloom impact <path\|symbol>` in `src/beadloom/application/impact/` (six modules by responsibility, a `feature` node with a SPEC) plus `services/commands/impact.py`, human and `--json`. The seed is DERIVED under the rule `reaches-an-effect-sink` — a name the target reaches transitively whose own body performs a declared effect directly — and the answer names the seed, the rule and the effect. Measured at `af26750d`, macOS, foreground, through `git archive` with no argument naming a commit point: `bootstrap.py` → seed `write_yaml_atomic`, co-writers 6 including `bootstrap_project` and `import_docs`; `setup.py` → 7 seeds including it and none of the first-hop names, `init` 4 branches, exits `{return, sys.exit(0)}`. A target no rule finds a sink for reports `co_writers.resolved = false` with the reason, never an empty list. Eight kinds in the unresolved population. 9 scenarios (red before the code existed) + 20 cases; every case demonstrated red by eight mutants — forward closure frozen at the first hop → 8, seeds taken from what reaches a sink → 12, an absent seed rendered as empty → 2, the population dropped → 7, the effect conjunction turned into a disjunction → 3, `ends_the_branch` reduced to `Return \| Raise` → 3, the boundary claiming an index it did not read → 2, `PUTS_BYTES_ON_DISK` added to the effect table → 2. Green on the tree, macOS: 7905 passed, `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.3` | Done | measured at `af26750d` (the parent of `acf4066`, 2026-08-31), macOS, foreground, the lifted package imported from `430d9ae` and pointed at a detached worktree. Seeded with the commit point `write_yaml_atomic` the derivations list 2 writers (`bootstrap_project`, `import_docs`) and 4 branches of `init`; seeded with `bootstrap_project`, the function that bead was changing, they list 0 writers and 3 branches — the number the epic carried throughout. Both facts were in reach on the day and neither is reached from the function under change, so the premise survives as a conditional and the condition is now S1.2's hardest criterion. Second measurement: the seed is derivable from the target under `SERIALISES_YAML` (2 candidates from `bootstrap.py`) and unreachable under `PUTS_BYTES_ON_DISK`, which does not contain the commit point at all. Kept as 8 cases in `tests/test_the_seed_decides_what_impact_reports.py`, each demonstrated red. |
 | `beadloom-0mdo.4` | Done | `## Axes` in the BRIEF and RFC skeletons, required by the same act that adds it: `required_sections_by_document_kind` runs `doc_templates`' own heading extraction over the composed `/templates` command's fenced blocks. `doc_shape`'s peer-majority policy extracted into `peer_section_shape` and used over both corpora; `check_planning_sections` reports `missing-section` (peer-relative) and `empty-section` (not). `doc_sync/axes_section.py` holds the section's grammar — `axes-without-a-seed`, `axis-without-a-scope-decision` — and `application/impact/section.py` renders one from an `ImpactAnswer` using that grammar, so the writer and the reader are one shape. `application/planning_report.py` is now the ONE composition of all nine checks behind the gate step and `beadloom docs quality`. New CLI: `beadloom impact --section` and `beadloom axes <document> [--refs]`. Measured on this repository, foreground, no pipe: `missing-section` 102 over 256 read, `empty-section` 0 over 256, 17 kind-level conventions including `BRIEF Axes (0/12)` and `RFC Axes (0/48)`; the 767 findings a non-peer-relative policy would give is why the peer one was chosen. `empty-section` was 155 until a defect the run exposed — a section whose content lives in its subsections read as empty — was fixed by propagating content up the heading depth. 9 scenarios + 29 cases, every case demonstrated red by eleven mutants. Green on the tree, macOS: 7944 passed (baseline 7905), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. Green in a clean room over 33 files, with the pre-existing sync-baseline failure reproduced at HEAD alone. |
-| `beadloom-0mdo.5` | Pending | blocked by `.2` — the `Explore` role |
+| `beadloom-0mdo.5` | Done | `Explore` is a role FILE with a fixed deliverable — the `## Axes` section rendered by `beadloom impact --section`, every site a path and a line, the scope column left for the person, no narrative — read-only tools, `ddd`/`fsd` and `python` overlays. **A role exists because a core fragment ships for it:** `roles_in()` derives the population from `templates/roles/core/*.md.txt` over a shape (front matter naming its own file), so `ROLE_NAMES`, `AGENT_FILES` and the Cursor pointer are one fact instead of three. `/task-init` gains a mandatory step 0.5 stated BEFORE the type table, and the routing table is read back out of the composed command by `application/work_item_routing.py` — so the command cannot state a route the check does not police. `doc_sync/work_item_type.py` adds `routed-without-axes` and `route-not-supported-by-the-axes` over the work-item FOLDER. Measured on this repository, foreground, no pipe: `routed-without-axes` 12 findings over 12 work items — including BDL-067's own BRIEF, the item this slice exists because of — and `route-not-supported-by-the-axes` 0 over the same 12, which cannot fire until a work item carries axes and is verified red on fixtures instead. The `BRIEF Axes (0/12)` convention line is gone: the absence is now reported absolutely and withdrawn from the peer half alone, so `empty-section` still reads it. 11 scenarios (red before the code existed) + 43 cases, every case demonstrated red by sixteen mutants; two further mutants SURVIVED and both guards were DELETED rather than re-tested, because a guard nobody can make fail is a guard nobody can argue with. Green on the tree, macOS: 8023 passed (baseline 7944), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.6` | Pending | unblocked by `.4` — the commit-scope check. It reads the WORK ITEM's declared axes through `beadloom.doc_sync.axes_section.read_axes_section`; the grammar and the `refs:` generation are in place |
 | `beadloom-0mdo.7` | Pending | blocked by `.3`, `.5`, `.6` — test |
 | `beadloom-0mdo.8` | Pending | blocked by `.7` — review |
@@ -128,6 +132,28 @@ narrowing to `.7` and nothing in `impact` is built on top of it. The synthetic t
 its sink writes through `os.fdopen(...).write` and `Path.replace`, exactly as
 `write_yaml_atomic` does — so that case runs on every leg rather than only where the history is
 in the checkout.
+
+**The archive gains 12 warnings, and they are true.** `routed-without-axes` reports every one
+of this repository's 12 simplified-flow work items, because none of them carries an `## Axes`
+section — they were all written before the section existed. The check is `warn` and the Gate is
+rc 0 on them. The number is small because the requirement is scoped to the simplified route
+rather than to all 60 typed work items: the full route writes a PRD and an RFC and each passes
+an approval gate, so a mis-route there meets a person, while the simplified route passes one
+gate on work already scoped. Whether the twelve briefs are revised or the corpus is narrowed
+with `doc_quality.paths` is the owner's call and not a dev bead's.
+
+**A check that reads a population it cannot fire on, stated rather than hidden.**
+`route-not-supported-by-the-axes` enters 12 work items and finds 0, and it cannot find anything
+until one of them carries axes. It is verified red on fixtures — two kept nodes reported, one
+kept node silent, a node ruled out of scope not counted, one node named by two rows counted
+once — and the population is in the report so the Gate can say so.
+
+**Two guards were deleted rather than defended.** A mutant run showed that the localisation
+guard in `roles_in` and the empty-routing early return in `check_work_item_types` could not be
+made to fail: the front-matter equality rule already excludes a localisation, and `_collect`
+already keeps no folder that nothing routes. Both were removed, with the reason recorded where
+they stood. The alternative — keeping a guard nobody can demonstrate — is the shape of a check
+that cannot fail, which this epic's CONTEXT forbids.
 
 **Still open, and still nobody's bead.** BDL-068's RFC carries Q1–Q5 as `Pending` while CONTEXT
 records four of them as decided, and the Gate warns `pending-in-approved` on all five. `.3`

@@ -96,8 +96,31 @@ heading of every document gives **767** findings, because the archive predates `
 carries none of today's headings. Under the majority policy the same requirement gives **17**
 statements about a kind — including `BRIEF Axes (0/12)` and `RFC Axes (0/48)` — and **102** about
 a document. Every one of the 102 is a real departure from the shape its peers keep; they are old
-RFCs with no `## Overview` and old PRDs with no `## Impact`. All nine planning checks are `warn`,
-so the Gate stays green on them.
+RFCs with no `## Overview` and old PRDs with no `## Impact`. All eleven planning checks are
+`warn`, so the Gate stays green on them.
+
+### An absence another check reports absolutely is withdrawn from the peer half only
+
+`BRIEF Axes (0/12)` is the measurement that made this necessary. A section **no** peer carries
+produces one kind-level statement and no document-level finding, which is right for a convention
+an archive never adopted and wrong for the input to a decision: `## Axes` was required by the
+template and reported by nothing. BDL-068 S1.5 gave it an absolute reporter in
+`doc_sync.work_item_type`, and `check_planning_sections` takes
+`absence_reported_elsewhere={kind: {section}}` so one fault keeps one reporter.
+
+The withdrawal is from the peer-relative half **alone**. The requirement itself stays, so a
+heading present with nothing under it is still `empty-section`'s finding — withdrawing the
+requirement removes the emptiness check with it, which is a coverage loss rather than a
+de-duplication. That is not a hypothetical: the first cut of S1.5 withdrew the requirement and
+the suite went red on exactly this case.
+
+### One markdown table reader
+
+`table_cells(line)` is the project's only reader of a markdown table row, and the `## Axes`
+grammar is expressed over it. The `## Axes` table and `/task-init`'s routing table are two
+tables read for two facts, and two parsers would make "what a row is" a thing that can disagree
+with itself. An alignment row is not a row of data and returns `None`, so no caller has to know
+it exists.
 
 ### Emptiness is judged over the whole section, not over the heading's own lines
 
@@ -120,6 +143,7 @@ that a BRIEF quoting its own skeleton would be credited with every section the s
 | `read_sections` | function |
 | `document_sections` | function |
 | `carries_section` | function |
+| `table_cells` | function |
 | `peer_section_shape` | function |
 | `check_section_shape` | function |
 | `check_planning_sections` | function |

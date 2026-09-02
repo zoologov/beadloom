@@ -82,6 +82,12 @@ named by two axes is one ref. `beadloom axes <document> --refs` prints it. The o
 sees in the document is the order the bead carries, so the two can be compared by eye as well
 as by a check.
 
+### The table it reads is read by one reader
+
+The row grammar is `doc_shape.table_cells`, not a parser of this module's own (BDL-068 S1.5).
+`/task-init`'s routing table is read for a different fact by the same function, so "what a row
+is" cannot disagree with itself between the two.
+
 ## Public API
 
 | Symbol | Kind |

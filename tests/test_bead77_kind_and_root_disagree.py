@@ -400,7 +400,10 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # adopter runs over that component. 103 -> 105 in BDL-068 `.4`: the
         # `axes-section` grammar and the `planning-report` composition, each a
         # node with its own responsibility and therefore its own document.
-        assert populations[SPACE_AS_IS] == 105
+        # 105 -> 107 in BDL-068 `.5`: `work-item-routing` (the routes derived from
+        # the composed /task-init) and `work-item-type` (the two checks over a
+        # work-item folder), which are a derivation and a check and not one thing.
+        assert populations[SPACE_AS_IS] == 107
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

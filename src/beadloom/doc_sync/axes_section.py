@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync.doc_quality import QualityFinding
-from beadloom.doc_sync.doc_shape import read_sections
+from beadloom.doc_sync.doc_shape import read_sections, table_cells
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -70,8 +70,6 @@ CHECK_NAMES: tuple[str, ...] = (AXES_WITHOUT_A_SEED, AXIS_WITHOUT_A_SCOPE_DECISI
 
 _FIELD_RE = re.compile(r"^>\s*\*\*(?P<name>[A-Za-z ]+):\*\*\s*(?P<value>.*)$")
 _QUOTE_RE = re.compile(r"^>\s?(.*)$")
-_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
-_SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
 
 #: Cells that decide the scope, exactly. Matched whole so the shipped skeleton's
 #: ``yes / no`` — which offers both and chooses neither — is undecided rather
@@ -121,16 +119,6 @@ class AxesSection:
         return tuple(axis for axis in self.axes if axis.in_scope)
 
 
-def _cells(line: str) -> list[str] | None:
-    match = _ROW_RE.match(line)
-    if match is None:
-        return None
-    cells = [cell.strip() for cell in match.group(1).split("|")]
-    if all(_SEPARATOR_CELL_RE.match(cell) for cell in cells if cell):
-        return None
-    return cells
-
-
 def _scope_of(cell: str) -> bool | None:
     lowered = cell.strip().strip("*_` ").lower()
     if lowered in _IN_SCOPE:
@@ -178,7 +166,7 @@ def _read_body(lineno: int, body: Sequence[str]) -> AxesSection:
             fields[current].append(quoted.group(1).strip())
             continue
         current = None
-        cells = _cells(line)
+        cells = table_cells(line)
         if cells is None:
             continue
         if header is None:

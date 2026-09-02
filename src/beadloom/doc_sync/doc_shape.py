@@ -71,6 +71,29 @@ _HEADING_RE = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 #: A markdown horizontal rule — a separator, never a section's content.
 _HRULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 
+#: A markdown table row and the alignment row under its header.
+_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
+_SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
+
+
+def table_cells(line: str) -> list[str] | None:
+    """The cells of a markdown table row, or ``None`` when *line* is not one.
+
+    The one table reader in the project (BDL-068 S1.5). The ``## Axes`` grammar
+    and the ``/task-init`` routing table are two different tables read for two
+    different facts, and reading them with two parsers would make "what a row
+    is" a thing that can disagree with itself — the class this epic removes.
+    An alignment row is not a row of data and returns ``None``, so a caller
+    never has to know it exists.
+    """
+    match = _ROW_RE.match(line)
+    if match is None:
+        return None
+    cells = [cell.strip() for cell in match.group(1).split("|")]
+    if all(_SEPARATOR_CELL_RE.match(cell) for cell in cells if cell):
+        return None
+    return cells
+
 
 @dataclass(frozen=True)
 class Section:
@@ -260,6 +283,8 @@ class PlanningShapeReport:
 def check_planning_sections(
     documents: Iterable[tuple[str, str]],
     requirements: Mapping[str, tuple[str, ...]],
+    *,
+    absence_reported_elsewhere: Mapping[str, frozenset[str]] | None = None,
 ) -> PlanningShapeReport:
     """Hold each planning document to the sections its own template carries.
 
@@ -274,7 +299,16 @@ def check_planning_sections(
     against the kind instead of once per document. ``empty-section`` is not:
     a heading the author wrote with nothing under it is a defect whatever the
     peers do, and it is the one a presence check is satisfied by.
+
+    ``absence_reported_elsewhere`` names, per kind, the sections whose ABSENCE
+    another check reports absolutely — today ``## Axes`` on the simplified
+    route, which ``work_item_type`` reports for every work item on it. They are
+    withdrawn from the peer-relative half only: the section is still required,
+    so a heading present with nothing under it is still ``empty-section``'s
+    finding. Withdrawing the requirement itself would have removed the
+    emptiness check with it, which is a coverage loss and not a de-duplication.
     """
+    excluded = absence_reported_elsewhere or {}
     read: dict[str, list[tuple[str, tuple[Section, ...]]]] = {}
     count = 0
     for path, text in documents:
@@ -289,7 +323,14 @@ def check_planning_sections(
             kind: [(path, [s.title for s in sections]) for path, sections in entries]
             for kind, entries in read.items()
         },
-        requirements,
+        {
+            kind: tuple(
+                section
+                for section in sections
+                if section not in excluded.get(kind, frozenset())
+            )
+            for kind, sections in requirements.items()
+        },
     )
 
     findings = [

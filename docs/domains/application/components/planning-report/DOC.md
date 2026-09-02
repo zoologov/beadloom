@@ -14,31 +14,40 @@ checks. Two assemblies of one report can disagree about what was checked, and BD
 remove that class of defect. The assembly now lives here, once, and both surfaces render what
 it returns.
 
-Three families of check read the same corpus and answer different questions:
+Four families of check read the same corpus and answer different questions:
 
 | Family | Module | Checks |
 |--------|--------|--------|
 | Writing standard | `doc_sync.doc_quality` | `measurable-goal`, `decision-reason`, `risk-mitigation`, `pending-in-approved`, `unfilled-placeholder` |
 | Structure | `doc_sync.doc_shape` | `missing-section`, `empty-section` |
 | Axes | `doc_sync.axes_section` | `axes-without-a-seed`, `axis-without-a-scope-decision` |
+| Route | `doc_sync.work_item_type` | `routed-without-axes`, `route-not-supported-by-the-axes` |
 
 The section requirements the structural checks are held to are **derived** from the composed
 `/templates` command, so a project that appends a section to its own template layer makes it
-required by the same act and tells nothing else.
+required by the same act and tells nothing else. The routes the route checks judge are derived
+from the composed `/task-init` command by `application.work_item_routing`, for the same reason.
 
 ## Public surface
 
 - `CHECK_NAMES` — every check, in report order. One list, so a summary counting findings per
   check cannot silently omit a family.
 - `planning_report(paths, project_root=...)` — run everything over *paths*.
-- `PlanningReport` — `quality`, `structure`, `axes`, `axes_read`, and the derived `findings`,
-  `applicable` and `checks_that_read_nothing`.
+- `PlanningReport` — `quality`, `structure`, `routes`, `axes`, `axes_read`, and the derived
+  `findings`, `applicable` and `checks_that_read_nothing`.
 
-`applicable` is stated for all nine checks rather than for the five that already had it,
+`applicable` is stated for all eleven checks rather than for the five that already had it,
 because a check reported as `0 finding(s)` over a population of zero has verified nothing and
 must not read as a pass. On this repository the two axes checks read **0** documents today, and
 the Gate says so — `NOT CHECKED: axes-without-a-seed, axis-without-a-scope-decision` — because
 no planning document carries an `## Axes` section yet.
+
+The two ROUTE checks report a different population from every other check here: their unit is
+the work-item FOLDER, so `applicable` carries `routes.work_items` for them. The document count
+would overstate it by however many documents a work item holds. Measured on this repository:
+`routed-without-axes` 12 findings over 12 work items, `route-not-supported-by-the-axes` 0 over
+the same 12 — the second cannot fire until a work item carries axes, and it is verified red on
+a fixture instead.
 
 ## What it deliberately does not merge
 

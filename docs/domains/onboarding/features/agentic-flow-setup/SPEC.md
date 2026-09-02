@@ -43,6 +43,8 @@ the `__BEADLOOM_PROJECT_NAME__` placeholder with the substituted name.
 
 ### Role files
 
+`AGENT_FILES` is `role_composer.ROLE_NAMES` itself since BDL-068 S1.5, not a second literal beside it: the two used to be separate tuples whose comments each claimed to mirror the other, so a role added to one was present to the composer and absent from this module's vendored scaffold and from `orphaned_flow_files`.
+
 Since BDL-052 the role files (`.claude/agents/*`) are composed from a CORE
 definition plus DDD/FSD and stack overlays by `role_adapters.generate_adapters`,
 which is the source of truth for those files. `scaffold(..., include_agents=False)`
