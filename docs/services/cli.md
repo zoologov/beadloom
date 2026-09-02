@@ -759,7 +759,7 @@ Check the project's planning documents against the shipped writing standard
 beadloom docs quality [--json] [--check NAME]... [--strict] [--project DIR]
 ```
 
-Five checks, all `warn`:
+Nine checks, all `warn`:
 
 | Check | Reports | Where it looks |
 |-------|---------|----------------|
@@ -768,6 +768,17 @@ Five checks, all `warn`:
 | `risk-mitigation` | a risk row with no mitigation, or one that names no action (`monitor it`) | any table with a Mitigation column |
 | `pending-in-approved` | a question still answered `Pending` | `## Open Questions`, in a document whose status is `Approved` or `Accepted` |
 | `unfilled-placeholder` | a shipped template token nobody replaced | the whole document, outside fenced blocks and inline code |
+| `missing-section` | a section this document's kind carries in its template AND a majority of its peers keep | every document of a kind the `/templates` command describes |
+| `empty-section` | a required section whose heading is there with nothing under it | the same, and not peer-relative: a heading answering nothing is a defect whatever the peers do |
+| `axes-without-a-seed` | an `## Axes` section stating axes without naming the seed they were derived from | the `## Axes` section |
+| `axis-without-a-scope-decision` | an axis row carrying the derivation's output and no decision | the same |
+
+The last four arrived with BDL-068 S1.4. The section requirements are DERIVED
+from the composed `/templates` command, so a project that appends a section to
+its own template layer makes it required by the same act. A required section no
+MAJORITY of a kind carries is reported once against the KIND, with its ratio
+(`BRIEF documents do not carry Axes (0/12)`) — the fix is in the template, not
+in every document.
 
 The exit code is **0 even with findings** — no adopter's green project turns red
 on upgrade. `--strict` exits 1 when anything is reported, for a project that
@@ -833,6 +844,32 @@ beadloom docs quality --check pending-in-approved --json
 # Enforce it
 beadloom docs quality --strict
 ```
+
+### beadloom axes
+
+Read a work item's `## Axes` section back: what it declares, and the `refs:` line
+generated from it (BDL-068 S1.4).
+
+```bash
+beadloom axes DOCUMENT [--refs] [--json]
+```
+
+DOCUMENT is a BRIEF or an RFC. The section records the derivation's output and
+the person's scope decision; this reads it back, so a bead's `refs:` is
+GENERATED from the document rather than written beside it — two authored homes
+for one fact are two things that can disagree.
+
+`beadloom impact <path|symbol> --section` writes the other direction: the same
+answer, rendered as the section to paste into the document, with every row left
+undecided until a person rules on it.
+
+```
+$ beadloom axes .claude/development/docs/features/KEY-1/BRIEF.md --refs
+refs: doc-quality, flow-composer
+```
+
+Exits 1 when the document carries no `## Axes` section, naming the command that
+produces one.
 
 ### beadloom docs spaces
 

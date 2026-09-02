@@ -397,8 +397,10 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # in BDL-068 `.1`, which lifted the three AST derivations into
         # `application/source_derivation/` and documented them as a component.
         # 102 -> 103 in BDL-068 `.2`, which documented `impact` — the feature an
-        # adopter runs over that component.
-        assert populations[SPACE_AS_IS] == 103
+        # adopter runs over that component. 103 -> 105 in BDL-068 `.4`: the
+        # `axes-section` grammar and the `planning-report` composition, each a
+        # node with its own responsibility and therefore its own document.
+        assert populations[SPACE_AS_IS] == 105
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

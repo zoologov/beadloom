@@ -28,10 +28,18 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    nothing was excused, so a project that declares no exemption keeps its line.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
-5. **docs-quality** — the five writing-standard checks over the project's
-   planning documents (BDL-061 S4b): a goal with a measurable clause, a decision
-   carrying a reason, a risk carrying a mitigation, no `Pending` question inside
-   an `Approved` document, and no unfilled template placeholder. Every finding is
+5. **docs-quality** — every check that reads the project's planning documents,
+   assembled by `application/planning_report.py` so this step and
+   `beadloom docs quality` report ONE run (BDL-068 S1.4). Five writing-standard
+   checks (BDL-061 S4b): a goal with a measurable clause, a decision carrying a
+   reason, a risk carrying a mitigation, no `Pending` question inside an
+   `Approved` document, and no unfilled template placeholder. Two structural
+   ones: `missing-section` and `empty-section`, against the sections each
+   document kind's own composed skeleton carries. Two about the axes:
+   `axes-without-a-seed` and `axis-without-a-scope-decision`. A required section
+   no majority of a kind carries is reported once against the KIND, with its
+   ratio and no file location, because the fix is in the template rather than in
+   every document. Every finding is
    a `warn` and the step is `passed` unconditionally, so a project whose
    documents predate the checks does not go red on upgrade. A project with no
    planning document is a NAMED skip that states the globs it looked under.
@@ -45,9 +53,16 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    Measured on this repository, 2026-08-24, the step reports:
 
    ```
-   docs-quality WARN | 243 document(s) read; measurable-goal 4,
-                       pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
+   docs-quality WARN | 259 document(s) read; measurable-goal 4,
+                       pending-in-approved 7, missing-section 102;
+                       NOT CHECKED: axes-without-a-seed,
+                       axis-without-a-scope-decision;
+                       NO CHECK READS: BRIEF, PLAN, SUMMARY
    ```
+
+   Measured again on 2026-09-02, after S1.4. The two axes checks read **0**
+   documents because no planning document in this repository carries an
+   `## Axes` section yet, and the line says so rather than reporting them clean.
 
    **The line prints findings, not what the check stopped deciding about.** After
    `beadloom-mr2l.70` re-scoped `measurable-goal`, 27 of the 150 newly-accepted

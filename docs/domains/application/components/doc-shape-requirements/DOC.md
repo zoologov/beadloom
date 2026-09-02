@@ -22,6 +22,9 @@ placeholder vocabulary, derived from the shipped `/templates` command.
   when the flow config is malformed. `None` is returned rather than raised because a bad
   `flow.yml` is `config-check`'s finding by name, and raising here would turn one configuration
   error into a failing freshness gate that names the wrong file.
+- `document_section_requirements(project_root)` — required sections per **planning document
+  kind** (`BRIEF`, `RFC`, …), derived from the composed `/templates` command. Returns `{}` rather
+  than raising for a malformed `flow.yml`, for the same reason its sibling returns `None`.
 - `planning_document_globs(project_root)` / `planning_documents(project_root)` — where the
   writing-standard checks read from. Defaults to
   `.claude/development/docs/features/*/*.md`, the convention `/task-init` scaffolds into;
@@ -57,4 +60,6 @@ Who to page.
 ```
 
 A section appended by the project layer becomes a required section of that doc kind. There is one
-source of truth: the composed template.
+source of truth: the composed template. The same holds for the planning documents, whose project
+layer is `.beadloom/flow/commands/templates.md` — a fragment declaring `## RUNBOOK.md` with its
+own headings makes them required of every `RUNBOOK.md` in the corpus.

@@ -51,7 +51,7 @@ is what holds that line.
 | `guard.py` | `guard` |
 | `waves.py` | `waves` |
 | `review_brief.py` | `review-brief` |
-| `impact.py` | `impact` |
+| `impact.py` | `impact`, `axes` |
 
 Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph

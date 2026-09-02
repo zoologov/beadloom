@@ -641,9 +641,8 @@ def docs_quality(
     from beadloom.application.doc_shape import (
         planning_document_globs,
         planning_documents,
-        shipped_placeholders,
     )
-    from beadloom.doc_sync.doc_quality import CHECK_NAMES, check_documents
+    from beadloom.application.planning_report import CHECK_NAMES, planning_report
 
     project_root = project or Path.cwd()
     unknown = [c for c in only_checks if c not in CHECK_NAMES]
@@ -656,13 +655,10 @@ def docs_quality(
         sys.exit(1)
 
     documents = planning_documents(project_root)
-    report = check_documents(
-        documents,
-        project_root=project_root,
-        placeholders=shipped_placeholders(project_root),
-    )
+    report = planning_report(documents, project_root=project_root)
+    all_findings = report.findings
     findings = [
-        f for f in report.findings if not only_checks or f.check in only_checks
+        f for f in all_findings if not only_checks or f.check in only_checks
     ]
 
     if output_json:
@@ -674,12 +670,22 @@ def docs_quality(
                     "checks": {
                         name: {
                             "findings": sum(
-                                1 for f in report.findings if f.check == name
+                                1 for f in all_findings if f.check == name
                             ),
                             "read": report.applicable.get(name, 0),
                         }
                         for name in CHECK_NAMES
                     },
+                    "conventions": [
+                        {
+                            "kind": convention.kind,
+                            "section": convention.section,
+                            "carried": convention.carried,
+                            "total": convention.total,
+                        }
+                        for convention in report.structure.conventions
+                    ],
+                    "kinds_judged": list(report.structure.kinds_judged),
                     "read_nothing": list(report.checks_that_read_nothing),
                     # Per KIND, because the list above is an OR over the whole
                     # corpus and cannot see a check blind on one document kind.
@@ -690,12 +696,14 @@ def docs_quality(
                             "read": dict(cov.applicable),
                             "read_nothing": list(cov.checks_that_read_nothing),
                         }
-                        for cov in report.by_kind
+                        for cov in report.quality.by_kind
                     },
-                    "kinds_read_by_nothing": list(report.kinds_that_read_nothing),
+                    "kinds_read_by_nothing": list(
+                        report.quality.kinds_that_read_nothing
+                    ),
                     "unreadable": [
                         {"path": path, "reason": reason}
-                        for path, reason in report.unreadable
+                        for path, reason in report.quality.unreadable
                     ],
                     "findings": [
                         {
@@ -727,9 +735,17 @@ def docs_quality(
             click.echo(f"         {f.excerpt}")
         click.echo("")
         for name in CHECK_NAMES:
-            count = sum(1 for f in report.findings if f.check == name)
+            count = sum(1 for f in all_findings if f.check == name)
             read = report.applicable.get(name, 0)
             click.echo(f"  {name}: {count} finding(s) over {read} read")
+        for convention in report.structure.conventions:
+            # A statement about the project's CONVENTION, not about a document:
+            # below a majority, no document is reported for the section.
+            click.echo(
+                f"  CONVENTION: {convention.kind} documents do not carry "
+                f"{convention.section} ({convention.ratio}) — no document is "
+                f"reported for it"
+            )
         blind = report.checks_that_read_nothing
         if blind:
             # Unverifiable is not clean — the same statement `docs audit` makes
@@ -738,7 +754,7 @@ def docs_quality(
                 f"  NOT CHECKED: {', '.join(blind)} — no document carried "
                 f"anything for these to read"
             )
-        _echo_per_kind(report)
+        _echo_per_kind(report.quality)
         click.echo(f"  {report.documents} document(s) read")
 
     if strict and findings:

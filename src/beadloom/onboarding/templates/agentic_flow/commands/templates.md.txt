@@ -119,7 +119,24 @@ Used for: `epic`, `feature`
 - [Additional constraints specific to this task]
 
 ### Affected Areas
-[Which domains/services/modules will be touched — discover via `beadloom ctx`]
+[Constraints of the surrounding code — the areas themselves are derived below, not listed here]
+
+## Axes
+
+Derived, never authored. Run `beadloom impact <path|symbol>`, paste its answer into the table,
+then take the scope decision in the last two columns — the derivation says what a change ranges
+over, a person says how much of it this work item takes. The `refs:` of every bead below is
+generated from the rows kept in scope, so a bead naming a node this table does not is a finding.
+
+> **Derived by:** `beadloom impact` over [the target the derivation was run on]
+> **Seed:** [the seed the answer names, and the rule that derived it — `none` when the rule
+> found no seed, in which case every axis below is unresolved and not empty]
+> **Unresolved:** [what the derivation could not read, by kind and count — `none` is a claim
+> about a run, so say which run]
+
+| Axis | Node | Sites | In scope | Why |
+|------|------|-------|----------|-----|
+| co-writers | [ref-id] | [how many, and the first one] | yes / no | [why it is in or out] |
 
 ## Proposed Solution
 
@@ -334,6 +351,23 @@ Used for: `bug`, `task`, `chore`
 ## Solution
 
 [How we will solve it]
+
+## Axes
+
+Derived, never authored. Run `beadloom impact <path|symbol>`, paste its answer into the table,
+then take the scope decision in the last two columns — the derivation says what a change ranges
+over, a person says how much of it this work item takes. The `refs:` of every bead below is
+generated from the rows kept in scope, so a bead naming a node this table does not is a finding.
+
+> **Derived by:** `beadloom impact` over [the target the derivation was run on]
+> **Seed:** [the seed the answer names, and the rule that derived it — `none` when the rule
+> found no seed, in which case every axis below is unresolved and not empty]
+> **Unresolved:** [what the derivation could not read, by kind and count — `none` is a claim
+> about a run, so say which run]
+
+| Axis | Node | Sites | In scope | Why |
+|------|------|-------|----------|-----|
+| co-writers | [ref-id] | [how many, and the first one] | yes / no | [why it is in or out] |
 
 ## Beads
 

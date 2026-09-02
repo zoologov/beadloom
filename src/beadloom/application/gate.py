@@ -501,7 +501,7 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
 
 
 def _step_docs_quality(project_root: Path) -> GateStep:
-    """``docs quality`` — the five writing-standard checks; reports, never blocks.
+    """``docs quality`` — every planning-document check; reports, never blocks.
 
     ``passed=True`` unconditionally and deliberately: every check here ships as
     ``warn``, so a project whose documents predate them does not go red on
@@ -519,9 +519,8 @@ def _step_docs_quality(project_root: Path) -> GateStep:
     from beadloom.application.doc_shape import (
         planning_document_globs,
         planning_documents,
-        shipped_placeholders,
     )
-    from beadloom.doc_sync.doc_quality import CHECK_NAMES, check_documents
+    from beadloom.application.planning_report import CHECK_NAMES, planning_report
 
     documents = planning_documents(project_root)
     if not documents:
@@ -531,20 +530,18 @@ def _step_docs_quality(project_root: Path) -> GateStep:
             skipped=True,
             summary=f"skipped — no planning document matches {globs}",
         )
-    report = check_documents(
-        documents,
-        project_root=project_root,
-        placeholders=shipped_placeholders(project_root),
-    )
-    findings = [_doc_quality_finding(f) for f in report.findings]
+    report = planning_report(documents, project_root=project_root)
+    all_findings = report.findings
+    findings = [_doc_quality_finding(f) for f in all_findings]
+    findings.extend(_convention_finding(c) for c in report.structure.conventions)
     blind = report.checks_that_read_nothing
     # A whole document kind no check enters is a population never ENTERED, which
     # the global OR above structurally cannot see.
-    unread_kinds = report.kinds_that_read_nothing
+    unread_kinds = report.quality.kinds_that_read_nothing
     counts = ", ".join(
-        f"{name} {sum(1 for f in report.findings if f.check == name)}"
+        f"{name} {sum(1 for f in all_findings if f.check == name)}"
         for name in CHECK_NAMES
-        if any(f.check == name for f in report.findings)
+        if any(f.check == name for f in all_findings)
     )
     summary = f"{report.documents} document(s) read"
     if counts:
@@ -553,15 +550,41 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         summary += f"; NOT CHECKED: {', '.join(blind)}"
     if unread_kinds:
         summary += f"; NO CHECK READS: {', '.join(unread_kinds)}"
-    if report.unreadable:
-        summary += f"; UNREADABLE: {len(report.unreadable)}"
+    if report.quality.unreadable:
+        summary += f"; UNREADABLE: {len(report.quality.unreadable)}"
     return GateStep(
         "docs-quality",
         passed=True,
-        not_verified=bool(blind or unread_kinds or report.unreadable),
+        not_verified=bool(blind or unread_kinds or report.quality.unreadable),
         findings=findings,
         summary=summary,
     )
+
+
+def _convention_finding(convention: object) -> Finding:
+    """A required section below the majority: one statement about the KIND.
+
+    Located at no file on purpose. It is a fact about the project's convention
+    and is fixed in the document template, not in the documents — reporting it
+    against each of them would invert the finding, which is the shape
+    ``section_not_in_use`` already reports for generated documentation.
+    """
+    return {
+        "kind": "docs-quality",
+        "rule": "section-not-in-use",
+        "severity": "warning",
+        "locations": [],
+        "why": (
+            f"required section {convention.section!r} "  # type: ignore[attr-defined]
+            f"is carried by {convention.ratio} "  # type: ignore[attr-defined]
+            f"{convention.kind} document(s), so this is a statement about the "  # type: ignore[attr-defined]
+            "convention and no document is reported for it"
+        ),
+        "remediation": (
+            "add the section to the documents of this kind as they are revised, "
+            "or drop it from the document template if it does not belong there"
+        ),
+    }
 
 
 def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:

@@ -594,7 +594,11 @@ class TestTheCliAndTheGateReportIt:
 
         assert step.passed is True
         assert step.status == "WARN"
-        assert [f["rule"] for f in step.findings] == [MEASURABLE_GOAL]
+        # The step reports every planning-document check since BDL-068 `.4`, so
+        # the writing-standard finding is asserted among them rather than alone:
+        # a PRD carrying one Goals section is missing the six other sections its
+        # template carries, and that is a true statement about this fixture.
+        assert MEASURABLE_GOAL in [f["rule"] for f in step.findings]
 
     @staticmethod
     def _two_kinds(root: Path) -> Path:

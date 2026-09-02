@@ -138,6 +138,7 @@ derivation that can change it.
 | `unresolved.py` | what the derivation could not read, as a population |
 | `answer.py` | the vocabulary and the one orchestration every rendering reads |
 | `render.py` | that one answer as a dictionary and as text |
+| `section.py` | that one answer as the `## Axes` section a work item's document carries |
 
 ## Public API
 
@@ -149,7 +150,17 @@ from beadloom.application.impact import (
     THE_SEED_RULE,    # the rule's name, carried in every answer
     THE_EFFECT_RULES, # the declared effects, each with its statement
 )
+from beadloom.application.impact.section import render_axes_section  # -> str
 ```
+
+`render_axes_section` is a THIRD rendering of the same computation, not a third
+answer (BDL-068 S1.4). It writes the derivation's half — the seed, the rule, the
+axes and the population the derivation could not read — and leaves the person's
+scope decision undecided, because a renderer that filled that column in would be
+deciding the thing the section exists to record. An absent seed renders as the
+word `none` with every axis below it unresolved, never as an empty population.
+The grammar is `doc_sync.axes_section`'s, imported rather than restated, and a
+round-trip case holds the writer and the reader to one shape.
 
 `impact_of` takes the target and the project root. It never takes a commit point,
 and no module under `src/beadloom/application/impact/` spells one — checked over

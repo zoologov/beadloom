@@ -3,12 +3,12 @@
   "written": {
     ".claude/CLAUDE.md": "0d70a6199d4d09ad8284608d0d2ba2d61696109cf7f84b6f36bc4825a5f4681a",
     ".claude/agents/dev.md": "c70978743c7bfc3a407441075ed59908f2b14994923f3e85e094beadbf033b0e",
-    ".claude/agents/review.md": "c14e7916d822ba44396ac1cd0da17f015aa74362d88ab0db2347312adf48374d",
+    ".claude/agents/review.md": "92479501892d75b9e2a4c6d3c6299d54520e6393fccc3e9f80fcb551fc9889c2",
     ".claude/agents/tech-writer.md": "5bbb00dc9eb4c534ff7524687e3aeaad5d8c0f798b5a81f881b80fd14f8c9225",
     ".claude/agents/test.md": "7c46729f22e1dcd8f21ea7d6b47bd88f122095b5f2561feffa7ed4e3f4f5ed59",
     ".claude/commands/checkpoint.md": "d6019d0b91d01f6243b749bf9d8beb61426aa8e190d2660110942c6c2468e900",
-    ".claude/commands/coordinator.md": "eab47d3282d9dd59e25f8cc4e9aca073f28acb34ae22a97adcfa4e4160c5675d",
+    ".claude/commands/coordinator.md": "6ceeec2c544d46bb149077c8e9fd8405d3dce73d31b5b7bd46d548e1c3b557de",
     ".claude/commands/task-init.md": "1183502a530b879b056e71a1bf1371bc42df35f8f9140fd7bcf561967d6c1a47",
-    ".claude/commands/templates.md": "aa81562c230257e1729408aaa34cc6f966822abe4059c73e19434572f0a1a254"
+    ".claude/commands/templates.md": "948f77656c7bae509e3c5247ef31b0deb9621a35712ed8722b57f046fa72092e"
   }
 }
