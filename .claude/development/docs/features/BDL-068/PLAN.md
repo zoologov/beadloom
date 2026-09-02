@@ -76,12 +76,32 @@ else calls these symbols, how many branches the enclosing command has and how ma
 terminates — plus the boundary from the graph: which domain each found site belongs to, and
 therefore when a change leaves one. Human and `--json` output.
 
-**Done when:**
+**Done when** — rewritten by S1.3's measurement, which found the answer to both of the
+criteria below is a property of the seed and not of the tree:
+
 - [ ] The answer names the population it could not resolve — unparseable module, dynamic
       dispatch, call through a variable — as a field, not an omission.
-- [ ] Run against `onboarding/scanner/bootstrap.py` it lists both writers of graph nodes.
-- [ ] Run against `services/commands/setup.py` it lists four entry points of `init` and the
-      exit forms including `sys.exit`.
+- [ ] **`impact` derives its seed from the target and names it in the answer.** No invocation
+      takes the commit point as an argument and no literal names it. Measured at `af26750d`:
+      seeded with `write_yaml_atomic` the lifted derivations list 2 writers and 4 branches of
+      `init`; seeded with `bootstrap_project`, the function that bead was changing, they list
+      0 writers and 3 branches. Three is the number BDL-067 carried for the whole epic. The
+      criteria below are satisfied by a tool that hardcodes `write_yaml_atomic`, which is the
+      authored list this epic exists to remove, so they are worth nothing without this one.
+- [ ] The answer names the RULE the seed came from, and a target the rule finds no seed for
+      puts that in the unresolved population rather than answering over an empty set. A clean
+      list is trusted and stopped at.
+- [ ] Run against `onboarding/scanner/bootstrap.py` **at `af26750d`**, with no argument naming
+      a commit point, it lists both writers of graph nodes.
+- [ ] Run against `services/commands/setup.py` at the same commit, on the same terms, it lists
+      four entry points of `init` and the exit forms including `sys.exit`. Measured there: the
+      commit point is two hops from that file, so a seed rule that stops at the target's own
+      callees returns eight first-hop names and not the sink.
+- [ ] The seed rule is not stated over `PUTS_BYTES_ON_DISK`. Measured at `af26750d`:
+      `write_yaml_atomic` is not among the 268 names that reach a body in that set, because it
+      puts its bytes down through `os.fdopen(...).write` and `Path.replace` and the set spells
+      `write_text`, `write_bytes` and `open`. Over `SERIALISES_YAML` it is one of two
+      candidates from `bootstrap.py`.
 - [ ] It is NOT a graph walk: a node whose axes live entirely inside it still produces an answer.
 
 ### S1.3: Validate the derivations against BDL-067 retroactively
@@ -93,10 +113,46 @@ bead (2026-08-31, before `acf4066`) and answer one question: would they have lis
 writers of graph nodes and **four** entry points of `init`?
 
 **Done when:**
-- [ ] The answer is recorded with the commit it was measured at, whichever way it comes out.
-- [ ] If it is no, S1.2's acceptance is rewritten against what the derivation actually finds
+- [x] The answer is recorded with the commit it was measured at, whichever way it comes out.
+- [x] If it is no, S1.2's acceptance is rewritten against what the derivation actually finds
       before any further slice consumes it. A feature justified by an argument where a
       measurement was available is the defect this epic exists to remove.
+
+**The answer: PARTIAL, and the partial half is the seed.** Measured at `af26750d` — the parent
+of `acf4066`, 2026-08-31 22:29 +0300, reached through a detached worktree — on macOS
+(Darwin 25.6.0, CPython 3.13.7), in the foreground, with the lifted package imported from
+`430d9ae`:
+
+| seeded with | writers of graph nodes | direct callers of the seed | branches of `init` |
+|-------------|------------------------|----------------------------|--------------------|
+| `write_yaml_atomic`, the commit point | 2 — `bootstrap_project`, `import_docs` | 6 | 4 — `non_interactive`, `bootstrap`, `import_path`, the fallthrough |
+| `bootstrap_project`, the function under change | 0 | 3, and `import_docs` is not among them | 3 |
+
+Both facts were inside the derivations' reach on the day, before either was known: the second
+writer was first answered in BDL-067's fourth fix cycle and the fourth entry point by its ninth
+review. Neither is reached from the function the first dev bead was changing. BDL-067's own
+instrument was seeded narrowly until its fifteenth bead, so the seed that gives the right
+answer is not the seed that day had. The premise therefore survives as a conditional, and the
+condition is now S1.2's hardest criterion rather than an assumption.
+
+The measurement is kept as a check rather than as this paragraph, so the command that re-runs
+it is:
+
+```
+uv run pytest tests/test_the_seed_decides_what_impact_reports.py
+```
+
+Eight cases in three classes. `TestTheSeedDecidesTheAnswer` builds a tree with the shape
+`af26750d` had and runs everywhere; `TestTheMeasurementAtTheBdl067Tree` re-runs the original
+measurement against the real commit through `git archive`, and skips where the commit is not in
+the checkout — which is CI's `tests` job, at `actions/checkout@v5`'s default depth of one. Each
+case was demonstrated red: the reachability fixpoint frozen at the seed turns five red, the
+writer's payload half removed turns four red, and widening `PUTS_BYTES_ON_DISK` with `write`
+and `fdopen` turns the two gap-recording cases red.
+
+Run against the current tree as a control the derivations reproduce the same structure — 2
+writers, 6 callers, 4 guards wide and 3 narrow — so the difference between the two rows is the
+seed and not the two months between the trees.
 
 ### S1.4: `## Axes` as a required section
 

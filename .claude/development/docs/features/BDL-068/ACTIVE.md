@@ -7,17 +7,16 @@
 
 ## Current Bead
 
-**Bead:** none — `.1` closed; `.2` (`beadloom impact`) and `.3` (retroactive validation) are
-unblocked and may run beside each other.
+**Bead:** none — `.1` and `.3` closed; `.2` (`beadloom impact`) is unblocked and runs against
+the acceptance `.3` rewrote.
 
-**The bead just closed.** `beadloom-0mdo.1` — lift the three AST derivations out of `tests/`
-into a production package
-**Goal:** the derivations that answer *who else writes this, who else calls this, how many
-branches does this have* become importable by production code, without weakening the tests
-that currently hold them.
-**Done when:** no derivation logic remains in `tests/`; each test still fails on the shape it
-was written to catch, verified against the evasion spellings those modules already carry; a
-derivation with no test that fails on a fifth body is reported rather than lifted.
+**The bead just closed.** `beadloom-0mdo.3` — validate the derivations against BDL-067
+retroactively, before anything consumes them
+**Goal:** answer, from a measurement rather than from an argument, whether the lifted
+derivations would have listed both writers of graph nodes and four entry points of `init` on
+the tree BDL-067's first dev bead started from.
+**The answer: partial, and the partial half is the seed.** Recorded in PLAN.md under S1.3 with
+the commit, the room and the command; S1.2's acceptance rewritten before `.2` starts.
 
 ## Progress
 
@@ -26,6 +25,7 @@ derivation with no test that fails on a fifth body is reported rather than lifte
 - [x] CONTEXT + PLAN approved — Q1, Q2, Q4, Q5 decided; Q3 left open with its decision rule
 - [x] Beads created: epic `beadloom-0mdo`, nine S1 beads, five slice placeholders, DAG wired
 - [x] S1.1 — the three derivations lifted into `application/source_derivation/` (dev)
+- [x] S1.3 — the derivations validated against BDL-067 retroactively; the answer is partial
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -39,7 +39,7 @@ derivation with no test that fails on a fifth body is reported rather than lifte
 |------|--------|---------|
 | `beadloom-0mdo.1` | Done | the three derivations lifted into `src/beadloom/application/source_derivation/` (six modules by responsibility, a `component` node with a DOC). The tests keep their assertions and supply the seeds; measured with `git diff --numstat`, the five affected test modules shrink by 329 lines net (466 deleted, 137 added) and the package is 716 lines. Each lifted shape is demonstrated capable of failing by mutating it and running the suite: reader verbs narrowed → 5 red, the call vocabulary narrowed to attribute calls → 1 red, the writer payload half removed → 4 red, the reachability fixpoint frozen → 13 red, the terminator reduced to `Return \| Raise` → 2 red, the bypass sweep made blind → 1 red. One derivation REFUSED and reported: the prose sibling-reference scanner, which passes 27/27 with its finding computation replaced by `[]`. Green on the tree, macOS: 7867 passed, `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.2` | Pending | blocked by `.1` — `beadloom impact` |
-| `beadloom-0mdo.3` | Pending | blocked by `.1` — retroactive validation against BDL-067 |
+| `beadloom-0mdo.3` | Done | measured at `af26750d` (the parent of `acf4066`, 2026-08-31), macOS, foreground, the lifted package imported from `430d9ae` and pointed at a detached worktree. Seeded with the commit point `write_yaml_atomic` the derivations list 2 writers (`bootstrap_project`, `import_docs`) and 4 branches of `init`; seeded with `bootstrap_project`, the function that bead was changing, they list 0 writers and 3 branches — the number the epic carried throughout. Both facts were in reach on the day and neither is reached from the function under change, so the premise survives as a conditional and the condition is now S1.2's hardest criterion. Second measurement: the seed is derivable from the target under `SERIALISES_YAML` (2 candidates from `bootstrap.py`) and unreachable under `PUTS_BYTES_ON_DISK`, which does not contain the commit point at all. Kept as 8 cases in `tests/test_the_seed_decides_what_impact_reports.py`, each demonstrated red. |
 | `beadloom-0mdo.4` | Pending | blocked by `.2` — `## Axes` required section |
 | `beadloom-0mdo.5` | Pending | blocked by `.2` — the `Explore` role |
 | `beadloom-0mdo.6` | Pending | blocked by `.4` — the commit-scope check |
@@ -71,11 +71,23 @@ expressed as structure rather than as discipline.
   the budget that withdrew `tests-windows`, nightly otherwise — measured in S3 before the job
   is added.
 
-**The one bead that can invalidate the epic's premise, on purpose.** `.3` runs the lifted
-derivations against the tree as it stood at BDL-067's first dev bead and asks whether they
-would have listed both graph writers and four entry points of `init`. The answer is recorded
-whichever way it comes out, and a *no* rewrites `.2`'s acceptance before any later slice
-consumes it.
+**The bead that could invalidate the epic's premise, and partly did.** `.3` ran the lifted
+derivations against the tree as it stood at BDL-067's first dev bead. Both facts the epic
+claims an axes artifact would have surfaced are inside the derivations' reach on that tree —
+and only under a seed BDL-067 did not choose until its own fifteenth bead. Seeded from the
+function the first dev bead was changing, the same derivations report three branches and no
+writers, confidently and cleanly. So the premise holds as a conditional, the condition is seed
+derivation, and `.2`'s acceptance was rewritten to make it the load-bearing criterion rather
+than an implementation detail. The measurement was not softened into a pass and the derivation
+was not repaired to make it come out yes; a repair would have measured the repair.
+
+**A second measurement `.3` did not go looking for.** `PUTS_BYTES_ON_DISK` — the lifted
+shape for *this body puts bytes on disk* — does not contain `write_yaml_atomic`, the product's
+own single commit point, because that function writes through `os.fdopen(...).write` and
+`Path.replace` while the shape spells `write_text`, `write_bytes` and `open`. A shape stated
+over three spellings walking past the thing it exists to protect is this epic's own defect
+class, found inside this epic's own instrument. Left unrepaired on purpose and handed to `.7`,
+which already owns the other half of the same gap.
 
 **Three counts this epic's own planning commit broke.** `409e977` added four planning
 documents and a PRD carrying fourteen scenario references, and left three hand-maintained
@@ -84,6 +96,5 @@ PRD/BRIEF (36) and WORKING documents (57). The branch was Gate-green and suite-r
 time for that whole interval, because `beadloom ci` does not run pytest. Corrected in `.1`
 with the reason recorded beside each literal; the class is `mr2l.72` and S6 owns it.
 
-**Branch.** `features/BDL-068` is stacked on `features/BDL-067`, because S1 lifts three
-derivations that exist only there. PR #58 is open, green and unmerged; this branch is rebased
-onto `main` once it lands.
+**Branch.** `features/BDL-068`. PR #58 landed on `main` as `a4738b7`, so the three lifted
+derivations are no longer stacked on an open branch.

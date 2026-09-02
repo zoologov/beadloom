@@ -76,6 +76,7 @@ instrument the other five are measured by.
 | 2026-09-02 | Q5: `Explore` becomes a role file composed by the same composer as the other four, not a mode of an existing role. | A mode has no protocol file, and that is precisely why the one `Explore` run in BDL-067 returned an excellent trace of the defect and nothing about axes. Composing it through `role-composer` is what stops it drifting independently (#191's shape). |
 | 2026-09-02 | Beads are created per slice, when the preceding slice's review closes — not for the whole epic up front. | Writing 24 beads now means writing 20 of them before the first slice has taught anything. This is the re-plan rule expressed as structure rather than as discipline. |
 | 2026-09-02 | Q3 stays open by design, with its decision rule stated: the mutation job runs per PR if it fits under the budget that withdrew `tests-windows` (~16-28 runner-minutes), and nightly otherwise. Measured in S3 before the job is added. | A cost decision taken before the cost is measured is the kind of claim this project rejects from everyone else. |
+| 2026-09-02 | S1.3's measurement: `impact` DERIVES its seed from the target and names it in the answer. No invocation may take the commit point as an argument and no literal may name it. | Measured at `af26750d`, the tree BDL-067's first dev bead started from: seeded with `write_yaml_atomic` the lifted derivations list both writers and four branches of `init`; seeded with `bootstrap_project`, the function that bead was changing, they list no writers and three branches. Three is the number the epic carried throughout. The answer is a property of the seed, so a hardcoded seed would satisfy S1.2's acceptance while being the authored list this epic exists to remove. |
 
 ## Related Files
 
@@ -87,7 +88,8 @@ Discover through `beadloom ctx <ref-id>` — every node the RFC names resolves t
 
 ## Current Phase
 
-- **Phase:** Planning
-- **Current bead:** none — S1's beads are created when this PLAN is approved
-- **Blockers:** PR #58 (`features/BDL-067`) is open and green but not merged; this branch is
-  stacked on it because S1 lifts three derivations that live only there.
+- **Phase:** Development — S1
+- **Current bead:** `.3` closed; `.2` (`beadloom impact`) is next and runs against the
+  acceptance S1.3 rewrote.
+- **Blockers:** none. PR #58 landed on `main` as `a4738b7`, so the three lifted derivations are
+  no longer stacked on an open branch.
