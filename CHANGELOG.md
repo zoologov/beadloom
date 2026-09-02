@@ -5,6 +5,83 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`beadloom init` no longer reports success over a graph that fails the rules it just
+  wrote** (BDL-UX #192). Every entry point that writes a file under `.beadloom/_graph/` —
+  `--yes` in any mode, `--bootstrap`, `--import` and the default interactive wizard — now
+  re-indexes and then runs the Gate's own lint step (`application.gate.lint_step`, the same
+  object `beadloom ci` runs, so the two verdicts cannot drift). When the step does not pass,
+  `init` withdraws the completion it has already printed, names each error-severity rule with
+  its node and the graph file that node was written into, and exits 1. The scaffold is left on
+  disk: the exit code reports the state, it does not withdraw the graph. **This is a
+  behaviour change for anyone scripting `beadloom init`** — a run that used to exit 0 over a
+  failing scaffold now exits 1, which is the point, since the next command was `beadloom ci`
+  and it was red.
+
+  Measured on projects that are not this one, across all four entry points and all three
+  modes (`bootstrap`, `import`, `both`) — eight (entry point x mode) cells, derived from
+  `init`'s own source rather than listed by hand. The original report was a virgin
+  `beadloom init --yes --mode bootstrap` on a TypeScript service: rc 0 and `Graph: 2 nodes,
+  0 edges`, then `beadloom lint --strict` rc 1 and `beadloom ci` rc 1 on
+  `domain-needs-parent`, a rule that same run had written one step earlier.
+
+- **The bootstrap writes no domain without a `part_of` edge.** That was #192's instance: the
+  classifier produced a `domain` node and no edges at all while `generate_rules` wrote
+  `domain-needs-parent` beside it. Both writers of graph nodes — `bootstrap_project` and
+  `import_docs` — now share one post-condition and one function that computes the edges it is
+  short of, so a branch that forgets the edge is closed whether or not anyone remembers the
+  branch exists.
+
+- **The failure report says whose failure it is.** The two halves of its headline are chosen
+  from two facts about the tree, read at the grain each is decided at: whether this run wrote
+  the failing NODE, and whether this run wrote the `rules.yml` FILE. Only the corner where
+  both are this run's calls the result a defect in Beadloom's bootstrap and asks for a bug
+  report; the other three name what was already in `.beadloom/_graph/` and ask for nothing.
+  Each rule line names the graph file its node came from, so the advice points at the file
+  that holds the node rather than at `services.yml` by habit.
+
+- **A `.beadloom/_graph/rules.yml` the loader refuses is reported as the loader's complaint**,
+  not as a rule named `lint`, and the report states that no rule was evaluated — so the graph
+  is unchecked rather than wrong.
+
+- **`init --yes --mode both` no longer judges a graph it has not finished writing.** The
+  reindex sat inside the bootstrap block, so the import step wrote `imported.yml` after it and
+  the verdict read a stale index. The reindex now runs after every block that writes a graph
+  file. `--import` re-indexes what it wrote instead of telling you to do it by hand.
+
+- **`init --bootstrap` and the wizard now leave the same tree.** `--bootstrap` passed its own
+  node list to the doc-skeleton writer, so on a project that already carried a graph file it
+  wrote skeletons for the bootstrap's nodes alone; the parameter is gone and every caller
+  reads the tree.
+
+- **One skip policy for every reader of `.beadloom/_graph/` that `init`'s own modules hold**
+  (`onboarding/graph_files.py::each_graph_file`): a name that is not a graph file's, a file
+  that will not read or parse, and a file that parses to anything other than a mapping are all
+  skipped, so a caller may read `data["nodes"]` without asking again whether it can. There
+  were four bodies with four policies, two of them with no guard at all.
+
+### Known limitations
+
+- **A graph file `init` cannot handle still ends the command in a Python traceback**
+  (BDL-UX #220, open). The consolidation above covers the readers under `onboarding/`; the
+  readers `init` reaches in other domains keep their own answers. Measured over `init`'s eight
+  cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml` — a file that
+  does not parse, a file whose top level is a list, and a file carrying an unquoted date — 24
+  runs, of which the 15 that reach the file traceback: `--bootstrap`, `--import` and all three
+  wizard modes, on every shape. The frames are
+  `application/reindex/indexing.py::read_declared_docs` and `graph/loader.py::load_graph`.
+  `--yes` reaches none of them, and not because a guard works: it returns `skipped` when
+  `.beadloom/` already exists, and `--force` deletes the directory first. The measurement is
+  pinned by a test that fails the day it is closed, so this cannot be read as fixed.
+
+- **`init` writes two nodes with the same `ref_id` on the classic Python `src/<project>/`
+  layout** (BDL-UX #214, open), where the root and the domain are handed the same name. The
+  loader keeps one of the two and `domain-needs-parent` goes inert rather than red, so the
+  verdict above does not catch it. The fix is a unique `ref_id`, not an edge.
+
 ## [3.0.2] - 2026-08-27
 
 **A check whose population was smaller than the fact's, printing the word a complete check prints.**

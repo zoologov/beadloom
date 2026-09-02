@@ -35,6 +35,155 @@
 
 ## Open Issues
 
+222. [2026-09-02] [LOW] The independent cross-check states and computes an attribution rule the implementation stopped using
+
+    **Severity:** low (it cannot fail against the regression it was written to catch, and it will one day fail against a correct implementation)
+    **Command:** `uv run pytest tests/test_init_one_table_over_every_axis.py`
+    **Context:** found by the ninth review pass of BDL-067 (`beadloom-e8s4.28`), filed rather than fixed under the epic's stop rule.
+    **Issue:** invariant 3 of that module reads "the bug-report request appears exactly where THIS run wrote both the rules and the graph FILE the failing node came from". That was the key until BDL-067 `.24`; the shipped key is `_this_run_wrote_the_node_that_fails`, read at the NODE grain. `RunOutcome.corner` still computes the file-grain answer, under a docstring saying the case fails when the report and the tree disagree.
+    **Measured:** over all ten red runs the table performs, both grains computed side by side, they AGREE in every cell. The agreement is a consequence of the ARRANGEMENTS, not of the rules: since `.21`, `generate_skeletons` annotates every node on disk, so a cell that rewrites `legacy.yml` also rewrites the failing node's own entry. The one tree where the two rules diverge — the file moves for a SIBLING while the failing node does not — is the tree the eighth review measured, and no cell of this table builds it.
+    **Expected:** either compute the corner at the node grain here too (the module already digests `.beadloom/_graph/` before and after, so a `{ref_id: node}` digest is the same walk), or keep the file grain as a deliberately coarser instrument and SAY so — rename `wrote_the_failing_graph_file`, correct invariant 3 to name the node, and add one case asserting that the two grains coincide on this table, so the day they stop coinciding is the day it is noticed.
+    **Why it is not merge-blocking:** the divergence tree is covered by two sibling classes, `TestTheGraphHalfIsAskedOfTheNodeAndNotOfTheFile` and `TestEachSentenceSpeaksAtTheGrainItsKeyIsReadAt`, which build it and would go red.
+    **Tracker:** `beadloom-tgo8`.
+
+221. [2026-09-02] [MEDIUM] Attribution keys on the whole node, so annotating a node makes its neighbour's failure read as ours
+
+    **Severity:** medium (it asks an adopter for a bug report about a writer that did not run, on an ordinary tree shape)
+    **Command:** `beadloom init --bootstrap` on a project carrying an inherited `.beadloom/_graph/legacy.yml`
+    **Context:** the open question of BDL-067 `.24`, answered NO by the eighth review (`beadloom-e8s4.26`) and re-planned out on the reviewer's own recommendation.
+    **Issue:** "is a node whose `docs:` field this run wrote a node this run wrote?" — not for this instrument. The instrument exists to answer whether this run produced the property that makes the node FAIL, and the failing rule reads `kind` and `part_of` edges. `docs:` is not a field the finding's rule can see, so answering yes attributes to Beadloom a failure Beadloom did not cause.
+    **Measured:** an inherited `legacy.yml` holding ONE undocumented orphan still prints `(True, True)` — "This is a defect in Beadloom's bootstrap rather than in your project — please report it" — about a node no writer in this run produced. Single-node inherited graph files are at least as ordinary as the two-node case BDL-067 `.24` did close.
+    **Expected:** key the node sample on a RULE-RELEVANT PROJECTION of the node, DERIVED rather than hand-listed — digest the node restricted to the fields the rule engine can read, taken from `graph/rules/loader.py`'s own authoring surface. A `docs:`-only annotation is then not a change the failing rule can see, while a `kind`, `source` or edge rewrite still reads as ours, so the created-or-CHANGED error direction is preserved rather than traded away. **Not** an exemption for a `docs:`-only diff: a filter over one named field goes stale the next time the block gains a writer.
+    **Precedent:** `test_every_authoring_key_the_loader_accepts_has_a_type` holds `_detect_rule_type` to `graph.rules.loader.AUTHORING_KEYS`, so a rule dimension added later widens the projection by the same act.
+    **Tracker:** `beadloom-0mb5`.
+
+220. [2026-09-02] [HIGH] `init` still tracebacks on a graph file it cannot handle — N readers across four domains, each with its own policy
+
+    **Severity:** high (a hand-edited or truncated file under `.beadloom/_graph/` makes the first command an adopter runs print a Python traceback instead of a message)
+    **Command:** `beadloom init --bootstrap`, `beadloom init --import DIR`, `beadloom init` (all three wizard modes)
+    **Context:** measured by BDL-067 `.24` after its own fix and widened by `.25`. **Pinned, not fixed** — it predates BDL-067 and BDL-067 did not close it.
+    **What IS fixed:** the four readers of `.beadloom/_graph/*.yml` under `onboarding/` and in `setup.py` now share one skip policy (`onboarding/graph_files.py::each_graph_file`), so the traceback BDL-067 `.21` introduced in `doc_generator._load_graph_from_yaml` is gone.
+    **What is NOT, measured over `init`'s own eight (entry point x mode) cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml` — 24 runs, of which 15 reach the file and all 15 traceback:**
+
+    ```
+    a file that does not parse   -> yaml.parser.ParserError  application/reindex/indexing.read_declared_docs
+    a top-level list             -> AttributeError           same reader (parses fine, dies on data.get)
+    added: 2026-09-02            -> TypeError                graph/loader.load_graph (json.dumps, no default)
+    ```
+
+    **Issue:** N readers of the adopter's graph directory across four domains, each with its own answer to "what if this file does not parse". BDL-067 consolidated the four inside `onboarding` and could not reach the rest without crossing domain boundaries mid-fix-cycle. `graph/loader.py:186`, `graph/diff.py:220`, `reindex/change_detection.py:89` and `services/commands/index_ops.py:235` walk the same directory. The date shape is the reason a fix scoped to "unreadable YAML" would close two thirds of the class and no more: that file parses, and every reader `init` owns yields it happily.
+    **Branch coverage, and why it adds nothing to the diagnosis:** `--yes` tracebacks on no shape, and not because a guard works — `non_interactive_init` returns `skipped` when `.beadloom/` already exists, and `--force` deletes the directory first. Every branch that reads the tree reaches the same two unguarded readers, which is why this is one decision and not four.
+    **Expected:** decide once what every reader of a graph file does with one it cannot handle, then apply it. **Needs `/task-init`** — the same shape as #218, and for the same reason it is not a fix cycle.
+    **Pinned, not silent:** `tests/test_graph_files_are_read_under_one_policy.py` asserts BOTH halves — the fixed frame is gone AND the second one is still there — so it fails the day somebody closes `indexing.py`, and no future reader of this repository can take "init no longer tracebacks" as true.
+    **Tracker:** `beadloom-l22o`.
+
+219. [2026-09-02] [HIGH] The review's withholding does not cover commit messages, which is where this project writes its accounts
+
+    **Severity:** high (the better the commit message, the more completely the mechanism is defeated)
+    **Command:** `beadloom review-brief`, followed by the review protocol's own `git diff <base>...HEAD`
+    **Context:** found and declared unprompted by the seventh-pass reviewer of BDL-067 (`beadloom-e8s4.23`). The second structural defeat of this mechanism; #212 was the first.
+    **Issue:** `git log main..HEAD` carries the author's full account in the commit bodies — on BDL-067 the `.21` and `.22` messages are longer and more specific than any bead comment, including `.22`'s explicit "FINDING for `.23`". Step 3 of the review protocol tells the reviewer to read the diff, so the account is one command away. `review-brief` reports "0 comments withheld" and is correct about bead comments while the account is fully available elsewhere.
+    **Why it is worse than #212:** #212 was a coordinator handing over `ACTIVE.md`, fixable by changing the launch prompt, and it was. This one is not reachable by prompt discipline, because the protocol itself sends the reviewer to the diff and this project deliberately writes long, specific commit bodies.
+    **Expected, and it is a decision rather than a patch:** (a) `review-brief` also withholds or summarises commit bodies on the reviewed range and says how many it withheld; or (b) the mechanism stops claiming to withhold and instead REPORTS what is reachable, so the reviewer can declare it — which is what both the `.16` and the `.23` reviewer did unprompted, and the only reason either leak is known; or (c) accept it, on the ground that independence on a re-review is not worth the cost and the first pass is the only one where it matters.
+    **Related:** #212 (defeated through `ACTIVE.md`, fixed by prompt), #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained). All three are one shape: an instrument that measures its own scope and is read as measuring the question.
+    **Tracker:** `beadloom-tm76`.
+
+218. [2026-09-02] [HIGH] `init` holds three hand-written step sequences and no artifact states what the sequence is
+
+    **Severity:** high (it is the class the seventh review pass found after six passes of fixing its instances one symbol at a time)
+    **Command:** `beadloom init` (all four entry points)
+    **Context:** re-planned out of BDL-067 by owner decision on the seventh review's diagnosis. **Needs `/task-init` and an RFC before any code** — the fix changes `init`'s control flow, and appending it as cycle 8 of a bug fix is what the re-plan rule ranked P0 in the ROADMAP exists to prevent.
+    **Issue, quoted from `beadloom-e8s4.23`:** "Every instrument this epic has built ranges over ONE symbol's callers. Nothing ranges over one entry point's STEPS. `init` holds three hand-written step sequences — the `--bootstrap` branch inline in `setup.py`, `non_interactive_init`, `interactive_init` — and no artifact states what the sequence is. So the next divergence was a step that two sequences run and the third does not, and a step that runs once over one writer's output and is never revisited."
+    **Three measured instances:** `auto_link_docs` is run by two of the three sequences, so doc-sync is off on the third; `generate_rules` is a second whole-graph artifact rendered from ONE writer's node list; and `--bootstrap` honours neither the existing-`.beadloom/` check nor `--force`, unlike `--yes`, so it re-bootstraps over an existing graph silently.
+    **Expected:** declare what `init`'s sequence IS — one artifact the entry points share, or derive from — rather than fixing the sequences one divergence at a time.
+    **Evidence that iteration had stopped paying:** majors per review pass on BDL-067 ran 2, 1, 1, 3, 4, 3, 5, 2, 2.
+    **Tracker:** `beadloom-6i5q`.
+
+217. [2026-09-02] [MEDIUM] An earlier `init --mode import` leaves domains that no later run will parent
+
+    **Severity:** medium (the report is honest about it, and the adopter still has a manual repair with no reminder)
+    **Command:** `beadloom init --yes --mode import`, then `beadloom init --bootstrap` on the same tree
+    **Context:** found and named by BDL-067 `.17` as its own stated limit, reported rather than absorbed.
+    **Issue:** `.17` made the verdict tree-level, which removed the REASON for the `--mode import` carve-out rather than the check. It does not parent the nodes an EARLIER import run already left in `imported.yml`. So the sequence the fifth review measured is narrowed, not closed: an import-only run followed later by a bootstrap still meets domain nodes that no run of this command parented. The report now names them honestly — it prints "the graph already in `.beadloom/_graph/`" and asks for no bug report — and the graph is still one the adopter repairs by hand.
+    **Why `.17` stopped there:** making the bootstrap parent nodes it did not write means REWRITING A GRAPH FILE THE ADOPTER MAY HAVE AUTHORED. Every other fix in BDL-067 constrains what Beadloom writes about its own output; this one would have Beadloom edit an existing graph on the adopter's disk.
+    **Expected — a decision, before any code:** (a) parent the orphans on a later run, which is structurally complete and edits a file the adopter may own; (b) report them and stop, which is honest and leaves a manual repair with no reminder; or (c) parent only nodes carrying provenance that Beadloom wrote them, which needs provenance the graph does not record today.
+    **Tracker:** `beadloom-gv0z`.
+
+216. [2026-09-01] [MEDIUM] `init --bootstrap` and the wizard leave different trees for the same declared mode
+
+    **Severity:** medium (one declared mode, two entry points, two different graphs — on a project that already carried a graph file)
+    **Command:** `beadloom init --bootstrap` versus `beadloom init` answered `bootstrap`
+    **Context:** recorded rather than asserted away by BDL-067 `.19`, because closing it was a behaviour change and `.19` was a test bead. Raised as a major by the sixth review and closed by `.21`.
+    **Measured** on a project carrying `.beadloom/_graph/legacy.yml` with one service root and one domain `ledger`:
+
+    ```
+    only `--bootstrap` left:  ledger with no `docs:` field
+    only the wizard left:     ledger with docs: ['docs/domains/ledger/README.md'], that file,
+                              and `ledger` in the Domains table of docs/architecture.md
+    ```
+
+    **Issue:** one argument. The `--bootstrap` branch called `generate_skeletons(root, result["nodes"], result["edges"])` while every other caller passed no node list and therefore wrote skeletons for every node on disk. `--yes --mode both` carried the sibling of the same defect: it imported the skeletons it had generated seconds earlier.
+
+    > **FIXED on `features/BDL-067` (`.18` and `.21`); not yet merged, so this entry stays here until it is.** Closed by taking the parameter OFF `generate_skeletons` rather than by editing the third call site, since a function that renders a document about the whole tree and can be handed part of the tree is a defect one caller at a time. Pinned by `test_every_branch_leaves_the_same_thing_on_a_tree_it_did_not_start` and `test_the_skeleton_writer_cannot_be_handed_a_subset_of_the_tree`, both measured red before the parameter came off: the docs differed by `docs/domains/ledger/README.md` and the architecture document by whether it named `ledger` at all.
+
+    **Tracker:** `beadloom-e8s4.18` / `beadloom-e8s4.21`, both closed.
+
+215. [2026-09-01] [MEDIUM] The Gate reports an index problem as a rules configuration error
+
+    **Severity:** medium (the headline names a file that is fine, the detail names the real cause, and the adopter reads the headline)
+    **Command:** `beadloom ci --no-reindex`
+    **Context:** found by the `beadloom-e8s4.12` sweep during BDL-067, on a scratch adopter with a **valid** `rules.yml` and no index.
+    **Measured:**
+
+    ```
+    beadloom ci --no-reindex  ->  lint FAIL: rules configuration error
+                                  (the same run's `why` carries `index not found at ...`)
+    ```
+
+    **Issue:** `application/gate.py:242-248` stamps `summary=RULES_CONFIG_ERROR` on **all three** `LintError` raise sites in `graph/linter.py`, and two of them are index problems rather than rules problems. The same prose appears in `src/beadloom/application/gate.py:61`, `docs/domains/application/README.md` and `docs/domains/application/features/ci-gate/SPEC.md:23` — the wrong summary is **documented as the behaviour**, which is how it survived review.
+    **Expected:** the summary names what actually failed. Either distinguish the rules-parse raise site from the index raise sites in `graph/linter.py`, or derive the summary from the raise instead of stamping one constant on all three. The two documents are corrected in the same change; they currently certify the defect.
+    **Why it is recorded as a class and not a typo:** BDL-067 found three instances of *a user-facing message asserting a fact the code knows to be false* — a comment counting monkeypatch bindings and calling them branches (#192 fix cycle 1), a message blaming Beadloom for the adopter's own rules (cycle 2), a withdrawal claiming a rule failed where none was evaluated (cycle 3). Each arrived the same way: careful reasoning about one shape, not carried across to the neighbouring shape. This is the fourth, one layer up, in the Gate every adopter runs. Three reviews found three of them and each was found only after the previous was fixed, which says the sweep is the deliverable and the individual fix is not.
+    **Tracker:** `beadloom-uz8x`. Filed separately from BDL-067 by the same reasoning the owner applied to #214: a different defect on a different surface, deserving its own measurement.
+
+214. [2026-08-31] [HIGH] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
+
+    **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)
+    **Command:** `beadloom init --yes --mode bootstrap`
+    **Context:** measured during the BDL-067 review by the review subagent, on a fresh `ledger` project laid out as `src/ledger/`.
+    **Measured:**
+
+    ```
+    beadloom init --yes --mode bootstrap  ->  rc 0   Graph: 2 nodes, 0 edges
+    services.yml                              TWO nodes with ref_id `ledger` — one service (root), one domain
+    the loader                                keeps ONE
+    beadloom lint --strict                ->  domain-needs-parent:rule_liveness:warn
+    beadloom ci                           ->  rc 0
+    ```
+
+    **Issue:** the root `ref_id` comes from `_detect_project_name` (the `pyproject`/`package.json` name) and the domain `ref_id` comes from the source directory; on `src/<project>/` those are the same string. The graph loses a node, and because the surviving node is the root, `domain-needs-parent` goes **inert** rather than failing — so the gate reports a warning about rule liveness and exits 0. The adopter is told nothing.
+    **Not a regression, and not caused by BDL-067:** pre-fix behaviour is identical. BDL-067 deliberately carves out a domain whose `ref_id` equals the root's (`onboarding/scanner/bootstrap.py:69`), because a self-edge is not a parent — that carve-out is right, and the defect is upstream of it.
+    **Expected:** unique `ref_id`s, not an edge. Disambiguate the colliding node, and make a duplicate `ref_id` in a *generated* graph something the writer refuses rather than something the loader silently resolves.
+    **Numbering:** first filed as #211, which is already taken by the closed 1.x-description issue of 2026-08-27 further down this file. Caught by the `beadloom-e8s4.6` subagent, which noticed `CHANGELOG.md:17` and `docs/domains/onboarding/README.md:31` citing #211, before the duplicate shipped. The coordinator's own check had missed it: `grep -nE '^21[0-9]\. \['` does not match a closed entry, which is written `211. ~~[`. That is the `mr2l.91` shape — two issues numbered 187 — one allocation away from happening a second time.
+    **Tracker:** `beadloom-7c6k`. Filed separately from BDL-067 by owner decision — a different defect with a different fix, deserving its own measurement rather than a line at the end of another PR.
+
+213. [2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions
+
+    **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
+    **Command:** `beadloom ci` (the `docs quality` step)
+    **Context:** the BDL-067 coordinator wrote its verification of a subagent's report as a two-column table — the claim in one column, what re-measuring it produced in the other — in `ACTIVE.md`.
+    **Issue:** the check reported `decision-reason: the decision carries no reason` against a row that records a *measurement*, not a decision. Rewriting the same content as a bulleted list silenced it, with no change in meaning. A table of "claim → what I measured" is a shape this repository will keep writing, because the playbook asks a coordinator to verify rather than believe its subagents, and nothing distinguishes it from a decision table but the words in the header.
+    **Expected:** either recognise a verification table by its header vocabulary, or scope `decision-reason` to a section the document declares as decisions rather than to any two-column table.
+    **Related:** the same run showed a second-order version of the problem — the coordinator counted error-level lines with `grep -c "::error"` and matched its own prose, because the text quoted the token. A substring count is not a measurement of severity.
+
+212. [2026-08-31] [HIGH] The review's withholding is defeated by the epic document the playbook itself mandates
+
+    **Severity:** high (the withholding is the whole mechanism; where it is ceremonial, the review's independence is asserted and not held)
+    **Command:** `beadloom review-brief <bead-id>` + the `/coordinator` review-launch prompt
+    **Context:** BDL-067, review bead `beadloom-e8s4.4`. The launch prompt carried no author summary — deliberately, per the playbook's own rule that a review prompt carries the bead id and nothing else about the change.
+    **Issue:** `review-brief` reported **0 comments withheld** and was correct: the authors' accounts were not in bead comments. They were in `ACTIVE.md` — the per-bead Results table, carrying the `gate._step_lint -> lint_step` API change, the red-verification counts and the coverage numbers — and the launch prompt named `ACTIVE.md` as required reading, because the playbook says a role subagent gets `CONTEXT.md` + `ACTIVE.md`. So the coordinator withheld the author's account through one channel and handed it over through another, in the same prompt. **The reviewer detected this and declared it unprompted**, which is the only reason it is written down; nothing in the tooling could have reported it.
+    **Expected:** the review launch prompt must not name `ACTIVE.md` (fixed as practice on 2026-08-31), and `review-brief` should be able to say that a document the reviewer was told to read carries author accounts — a withholding that a neighbouring file defeats is withholding nobody performed.
+    **Related:** #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained) — this is that issue arriving with a measured instance, and the instance is worse than the issue as written: the leak came not from a careless prompt but from the prompt the playbook prescribes.
+
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
     **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
@@ -414,6 +563,16 @@
     **Why the existing guard does not cover it:** `rules_gen.py` already carries this exact worry for `feature` — BDL-UX #71 made `has_edge_to` an empty matcher so a feature nested under a service is not flagged, and the comment says requiring a domain parent *"makes a clean bootstrap fail its own `lint --strict` gate out of the box"*. An empty matcher relaxes WHERE the edge may point; it does not excuse a node that has no edge. The `service-needs-parent` rule was removed outright for the same class. So the fix was applied twice, to the two neighbours, and the middle case is what ships.
     **Expected:** one command's output must pass that command's own rules. Two candidate fixes, and the choice is a decision rather than a patch: (a) the bootstrap emits `part_of` edges from every classified domain to the root service node, which makes the graph structurally complete and is what a hand-authored graph looks like; or (b) `generate_rules` omits `domain-needs-parent` when the bootstrap produced no `part_of` edge to require, which keeps the graph honest about what was inferred but ships a project with one fewer structural rule. (a) states a structure the classifier did not verify; (b) leaves the rule to be added when the human authors the parent. Whichever is chosen, `init` must not print `rc 0` over a graph that fails the rules it just wrote.
     **Workaround:** add the edge by hand — `edges: [{src: src, dst: <root-ref-id>, kind: part_of}]` in `.beadloom/_graph/services.yml`, then `beadloom reindex`.
+
+    > **FIXED on `features/BDL-067` (`beadloom-e8s4`, 28 beads, nine review passes). Not yet merged, so this entry stays here until it is.** Both candidate fixes were on the table and (a) was taken — the bootstrap emits the `part_of` edge — with the addition that the epic closed the CLASS as well as the instance: `init` writing a graph and `init` requiring a graph are two halves of one command, and nothing checked that they agreed.
+    >
+    > **The instance.** `bootstrap_project` and `import_docs` are the two writers of graph nodes, and they now hold ONE post-condition — every node carries at least one outgoing `part_of` edge, to its classified parent where one exists, to the root service node otherwise, and to nothing when the node's `ref_id` is the root's own — computed by one function, `parent_edges.missing_parent_edges`. The fallback branch this report found (a flat `src/index.ts` produces no clusters, so the loop that attaches top-level nodes to the root reaches none of them) is closed by the post-condition rather than by a patch to that branch.
+    >
+    > **The class.** `beadloom init` no longer reports success over a graph that fails the rules on disk beside it. Every entry point that writes a file under `.beadloom/_graph/` re-indexes and then runs the Gate's own `lint_step` — the same object `beadloom ci` runs, shared rather than restated, so the two verdicts cannot drift — and exits 1 when it does not pass, withdrawing the completion it has already printed and naming each error-severity rule with its node and the graph file that node was written into.
+    >
+    > **Measured over four entry points and three modes**, not over the one this report used: eight (entry point x mode) cells, derived from `init`'s own source by `tests/test_init_one_table_over_every_axis.py` rather than listed by hand, on fixtures that are not this repository. The entry points are `--yes`, `--bootstrap`, `--import` and the default interactive wizard; the wizard was the branch a human adopter meets first and it carried this exact shape through four green waves, because the tests covering the other two were parametrised over two BINDINGS of `bootstrap_project` and the wizard shares one of them. Two paths take no verdict and both are stated rather than implied: a run that changed nothing under `.beadloom/_graph/`, and the wizard's `edit` review answer, which hands the graph over to be edited by hand.
+    >
+    > **What is NOT closed, stated because the epic's own accounting requires it.** `init` still ends in a Python traceback on a graph file it cannot handle — 24 runs over the same eight cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml`, of which the 15 that reach the file traceback, in `application/reindex/indexing.read_declared_docs` and `graph/loader.load_graph`. That is #220, open, pinned by a test that fails the day somebody closes it. And `init` still writes two nodes under one `ref_id` on the classic Python `src/<project>/` layout, where `domain-needs-parent` goes inert rather than red, so the verdict above does not see it — #214, open.
 
 187. [2026-08-25] [HIGH] External (steveyegge/beads): `bd list --json` returns a filtered view as a bare list, with nothing saying it filtered
 

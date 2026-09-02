@@ -11,12 +11,14 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -64,6 +66,22 @@ def _create_sample_project(tmp_path: Path) -> None:
     utils = tmp_path / "src" / "utils"
     utils.mkdir(parents=True)
     (utils / "helpers.py").write_text("def format_date(d: str) -> str:\n    return d\n")
+
+
+def _create_flat_source_dir_project(tmp_path: Path) -> None:
+    """Create a project whose only source file sits directly in ``src/``.
+
+    ``_create_sample_project`` gives every source directory code-bearing
+    children, so the bootstrap's cluster loop attaches everything it writes.
+    This shape has none, which is the branch BDL-UX #192 was reported against:
+    one node of kind ``domain`` and, before BDL-067, no edge at all.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "flat-app"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    src = tmp_path / "src"
+    src.mkdir(parents=True)
+    (src / "app.py").write_text("def run() -> int:\n    return 1\n", encoding="utf-8")
 
 
 def _bootstrap(tmp_path: Path, *, preset: str | None = None) -> None:
@@ -126,14 +144,39 @@ class TestFullBootstrapPipeline:
             assert "has_edge_to" in req
             assert "edge_kind" in req
 
-    def test_lint_zero_violations_after_init(self, tmp_path: Path) -> None:
-        """A freshly bootstrapped project should pass lint with zero violations."""
-        _create_sample_project(tmp_path)
+    @pytest.mark.parametrize(
+        "make_project",
+        [_create_sample_project, _create_flat_source_dir_project],
+        ids=["nested", "flat"],
+    )
+    def test_lint_zero_violations_after_init(
+        self, tmp_path: Path, make_project: Callable[[Path], None]
+    ) -> None:
+        """A freshly bootstrapped project passes ``lint --strict`` with zero violations.
+
+        ``--strict`` is what makes the assertion capable of stating the claim in
+        the name.  Bare ``lint`` exits 0 even when error-severity violations were
+        printed — deliberately, so an adopter's pipeline does not turn red on
+        upgrade (``services/commands/federation.py``) — so a test that invokes it
+        and checks only the exit code reads a broken graph as clean.  This one did,
+        for two major releases, over BDL-UX #192.
+
+        The violation count is asserted from the output as well as through the
+        exit code, because ``--strict`` alone still says nothing about the
+        warning-severity violations the name claims are zero.
+
+        The flat leg exists because the nested fixture cannot reach the branch
+        that produced #192; the nested leg stays so the check cannot pass by
+        being permanently red.
+        """
+        make_project(tmp_path)
         _bootstrap(tmp_path)
 
         runner = CliRunner()
-        result = runner.invoke(main, ["lint", "--project", str(tmp_path)])
-        assert result.exit_code == 0, f"lint failed:\n{result.output}"
+        result = runner.invoke(main, ["lint", "--strict", "--project", str(tmp_path)])
+
+        assert result.exit_code == 0, f"lint --strict failed:\n{result.output}"
+        assert "0 violations" in result.output, result.output
 
     def test_ctx_returns_content_after_init(self, tmp_path: Path) -> None:
         """``beadloom ctx auth`` should return non-empty context after bootstrap."""

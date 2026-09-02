@@ -457,6 +457,13 @@ nodes:
 
   # --- Components (internal/infra building blocks with a DOC.md) ---
 
+  - ref_id: graph-files
+    kind: component
+    summary: "One skip policy for every reader of .beadloom/_graph/ — name, parse and mapping guards in one body"
+    source: src/beadloom/onboarding/graph_files.py
+    docs:
+      - docs/domains/onboarding/components/graph-files/DOC.md
+
   - ref_id: graph-loader
     kind: component
     summary: "YAML graph parser + SQLite loader — reads .beadloom/_graph/*.yml into the nodes/edges tables"
@@ -878,6 +885,9 @@ edges:
     kind: part_of
 
   # BDL-051 S3b (BEAD-14): components part_of their domains/services
+  - src: graph-files
+    dst: onboarding
+    kind: part_of
   - src: graph-loader
     dst: graph
     kind: part_of

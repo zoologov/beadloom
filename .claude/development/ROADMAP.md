@@ -26,21 +26,211 @@
 
 ## What is being worked on now
 
-### P0 — A virgin `beadloom init` leaves the Gate red
+### P0 — the flow cannot see a change's axes, and cannot re-plan when they turn out larger
+
+**Not yet a bead. Needs `/task-init`.** Ranked above the two items below it: this one produces
+the work the others check.
+
+**Measured on BDL-067, 2026-08-31 to 2026-09-02.** One bug — "the bootstrap writes a domain with
+no `part_of` edge" — became 28 beads, 37 commits and nine review passes. At `5f46c4f`, the last
+commit before the documentation wave: 50 files, +12227 / -133 lines. Majors per review pass ran
+2, 1, 1, 3, 4, 3, 5, 2, 2 — the count did not decay with the passes. The defect was never one
+missing edge: it was a class, *a statement scoped to one shape while a neighbouring shape
+exists*, and eight instances of it are named. A comment counting monkeypatch bindings and calling
+them branches. A message blaming Beadloom for the adopter's own rules. A withdrawal bound to one
+branch of three. A quoted line matching one renderer of three. A post-condition stated per writer
+over two writers. A wizard answer that writes two files and leaves through `sys.exit` above the
+verdict. An attribution sentence still saying `graph file(s)` after its key had moved to the
+NODE. And a reader detector asking for one spelling — `glob` with the literal `"*.yml"` plus
+`yaml.safe_load` by name — where five bodies that read the directory spell it otherwise. A ninth
+was a document rather than code: one of two twin files carried the superseded detector sentence
+after the other was corrected, found by the ninth review and closed in the documentation wave.
+
+Three gaps in the flow produced that, and each is fixable:
+
+**No artifact names the axes a change ranges over.** `/task-init` routed this as `bug`, whose
+simplified flow is BRIEF + ACTIVE with no RFC, and the BRIEF template has no section for blast
+radius. The question — how many writers of graph nodes, how many branches of `init`, how many
+modes, how many renderers — was first asked in fix cycle four, by a bead told to sweep, and
+answered in **one pass**: six writers into `.beadloom/_graph/`, two of which create nodes. Asked at
+intake, the first dev bead would have been written over both writers and the fourth review pass
+would not have existed.
+
+**Nothing re-plans a work item whose type stops being true.** By the second fix cycle this was
+not a bug, and 23 beads lived under a document that still describes one missing edge. At the
+fourth review pass the approved BRIEF's own acceptance criterion was **measured false** for
+`--mode both`, and nothing re-opened the document for approval.
+
+**Nothing turns a repeated defect into a sweep.** The rule *second instance of a class → the next
+bead's deliverable is the sweep, not the fix* was applied first in cycle three and paid
+immediately; the consolidation in cycle five is what finally moved the review count down with a
+diagnosis attached rather than by luck.
+
+**The tool: `beadloom impact`.** `why` answers dependencies between graph nodes. Nothing answers
+*who else writes this file, who else calls this function, how many branches does this command
+have, how many ways does it terminate*. Those three questions are what the whole epic turned out
+to be. `beadloom waves` already does the analogous job for a set of beads, so the shape is known.
+
+**The constraint that decides whether this helps or harms: `impact` is NOT `why` at a new name.**
+`why` walks `part_of` / `depends_on` between graph nodes, and **not one axis this epic needed is a
+fact of the graph** — which functions write into `.beadloom/_graph/`, how many branches `init` has
+and how many ways it terminates, how many modes and renderers, which functions parse YAML and under
+what policy. Every one of those lives *inside* a single node. An `impact` built as a graph walk
+would answer confidently and miss all of them, which is a green describing the checker's ignorance —
+the class this project exists to remove, shipped as a feature. **Axes come from the source (AST);
+the graph supplies the boundary** — which domain a found call site belongs to, and therefore when a
+change crosses out of one. That boundary is what made BDL-UX #220 legible at all: its readers sit in
+four different domains, and without the graph that finding is a flat list of files.
+
+**Three working prototypes already exist, written as tests inside BDL-067**, which is most of why
+this is cheaper than it looks: `tests/test_init_branches_that_reach_the_bootstrap.py` (30 cases)
+derives `init`'s writing branches from `init`'s own source; `tests/test_one_parent_post_condition_over_every_writer.py`
+(25) derives the graph writers by shape; `tests/test_graph_files_are_read_under_one_policy.py` (15)
+derives the readers as a shape — *lists a directory and parses YAML* — over six listing verbs and
+six loaders, with five evasion spellings measured and closed. Lifting those out of the suite into a
+command is the bulk of the work.
+
+**The role: `Explore` given a protocol, positioned inside `/task-init` as step 0.5.** It is the
+only role in this flow with no file in `.claude/agents/`, and the one time this epic used it, it
+returned an excellent trace of the defect and nothing about axes — because nobody had written
+down what its deliverable is. A role exists so the coordinator's prompt stops mattering, and this
+one has no such guarantee today. The coordinator cannot produce the artifact itself at any point,
+now or later: it is barred from reading source by the context boundary.
+
+Three conditions on that role, because this project has shipped a duty without a check before —
+BDL-061 S4 put mutation testing into every role core and no runner with it, and four beads in
+BDL-067 then reported four different hand methods as prose:
+
+- it runs **inside** `/task-init`, before the type is chosen, because the axis count is what says
+  whether a work item is a bug;
+- its deliverable is a fixed `## Axes` section — writers, callers, branches, modes, renderers,
+  with paths and lines, derived from source — not a narrative;
+- an absent or empty `## Axes` section is a `docs quality` finding, the way `missing_sections`
+  already reports a document missing a section its peers carry.
+
+**Advice is not a gate, and this project has three measured proofs of it.** A section the Gate can
+see missing is the cheap half. The half that makes `impact` an instrument rather than a
+recommendation is the second check: **a change that touches a call site outside the declared axes is
+a finding.** The machinery exists — `sync-check --staged` and the commit-scoped hook already judge a
+commit by its paths. Without it, the axes are a prompt input, and this repository has watched a
+prompt input be ignored or routed around three times: the mutation duty shipped into every role core
+with no runner (BDL-061 S4), the review's withholding defeated through `ACTIVE.md` (#212) and then
+through commit bodies (#219). Each was correct as written and none of them held.
+
+**Recall over precision, and the tool must name what it could not determine.** A narrowing tool that
+errs small is more dangerous than no tool. Today an agent that does not know the boundary reads
+widely and sometimes stumbles onto the neighbouring shape — that is how several of BDL-067's
+findings surfaced. Given a declared axes list, it will trust it and stop, so the failure mode
+inverts from ignorance to false confidence. The derivation must therefore report the population it
+could not resolve — an unparseable module, a dynamic dispatch, a call through a variable — as part
+of the answer rather than omitting it. `rule_liveness` and BDL-UX #215 are the same lesson already
+paid for here: an instrument that measures its own scope and reads as answering the question.
+
+**Validate it against BDL-067 before building it.** The three AST derivations already exist. Run
+them retroactively against the tree as it stood at the first dev bead on 2026-08-31 and ask one
+question: would they have listed **both** writers of graph nodes and **three** entry points of
+`init`? If yes, the feature is justified by a measurement rather than by an argument. If no, that is
+known in an hour instead of a sprint. This project asks that of every claim it reviews; the claim
+that this feature would have prevented BDL-067 is currently unmeasured, and it is the whole case
+for ranking it first.
+
+**Done when** a work item cannot reach its first dev bead without an `## Axes` section the Gate
+can see, a second ISSUES verdict on one work item forces a recorded re-plan rather than another
+fix cycle, and `beadloom impact` answers the three questions above from the source rather than
+from a human's recollection.
+
+### P0 — nothing can check the mutation duty this project ships
+
+**Not yet a bead. Needs `/task-init`.** Ranked first: the item below it is in flight and
+closing, this one has not started.
+
+BDL-061 S4 (`beadloom-mr2l.13`) put a mutation-testing **duty** into every composed role
+core, on the stated ground that owning a runner would break tool-agnosticism. So the
+convention shipped and the enforcement did not. Nothing in this repository can tell a
+performed mutation check from a sentence claiming one.
+
+**The case is measured, this week, on this branch.** BDL-067 ran five review passes over
+`init`. In the fourth, `beadloom init --yes --mode both` exited 0 over a graph that
+`lint --strict` then failed on three counts — #192's own signature, still live — while
+**112 tests across the epic's seven files passed and none of them could see it**. Four
+beads in that epic each reported doing "mutation checking", by four different hand methods,
+and every result exists only as prose in a bead comment. One of those beads, sent to audit
+another, found that a reported "all 20 assertions red before the fix" was eleven guards
+that cannot fail.
+
+A suite that cannot fail is the thing this project exists to detect, and it is currently
+detected by a person reading bead comments.
+
+**The tool is decided: `mutmut`.** Researched 2026-09-01 against `cosmic-ray`,
+`pytest-gremlins`, `poodle`, `mutatest`, `MutPy` and `mutahunter`. The deciding property is
+per-mutant test selection from coverage, which only `mutmut` and `pytest-gremlins` have:
+mutation cost is mutants × time-per-run, and on a 215-second suite over `graph/rules/`
+(4 465 code lines, order 2 000–4 000 mutants) selection is what separates ninety minutes
+from a week. `cosmic-ray` runs the configured `test-command` for every mutant and answers
+cost with horizontal distribution — which this project already declined once, when
+`beadloom-mr2l.64` withdrew `tests-windows` over runner minutes. `pytest-gremlins` is
+architecturally the most advanced of the four and far too young for a gate (51 stars,
+v1.9.0), and its published benchmark is a synthetic project on which its sequential mode is
+slower than `mutmut`.
+
+Worth recording because it nearly propagated: three separate sources justify themselves by
+calling `mutmut` unmaintained — including a peer-reviewed paper stating "last commits 2–6
+years ago" and "460K downloads, far exceeding alternatives". `mutmut` released 3.7.0 on
+2026-07-31 and takes 4.4M downloads a month; 460K is `cosmic-ray`'s own figure. The claim
+reads as a measurement and is not one.
+
+**First slice: `graph/rules/` only.** Eleven modules, the rule evaluation and liveness
+logic. It is where a false green costs most — if `evaluators.py` lets a violation through,
+the whole Gate is theatre — and it is deterministic branch-and-comparison code, which is
+what the standard operator set is strongest against. Explicitly out of scope: `services/`,
+`tui/`, `ai_agents/`, `infrastructure/`, and message-rendering code anywhere. BDL-067 found
+four defects in user-facing message text; mutation would have caught none of them, because
+one string substituted for another is equivalent almost always.
+
+**Two conditions that would overturn this**, stated now so the decision can be lost rather
+than defended: the first slice producing incomplete results from `mutmut` — the one
+reproduced finding against it in the literature — or `pytest-gremlins` publishing a
+reproducible benchmark on a real codebase.
+
+**Done when** a mutation score is produced by a command in CI rather than asserted in a
+bead comment, and a declared mutation target outside the configured source paths is
+reported rather than silently scoring zero.
+
+### P0 — A virgin `beadloom init` leaves the Gate red — CLOSED on the branch, not yet merged
 
 **`beadloom-e8s4` · BDL-UX #192 · the adopter-facing blocker.**
 
-`beadloom init --yes --mode bootstrap` exits 0 and then fails its own `beadloom ci`
+`beadloom init --yes --mode bootstrap` exited 0 and then failed its own `beadloom ci`
 on `domain-needs-parent` — a rule the same command wrote one step earlier. The
-bootstrap writes a domain with no `part_of` edge.
+bootstrap wrote a domain with no `part_of` edge.
 
-It is not new and it was never measured, because everything measured here runs on
-a repository whose graph has been hand-authored since BDL-008. It was found by
+It was not new and it had never been measured, because everything measured here runs
+on a repository whose graph has been hand-authored since BDL-008. It was found by
 verifying the 3.0.0 wheel against a project that is not us.
 
-**Why it outranks everything below:** Beadloom is about to be installed on a
+**Why it outranked everything below:** Beadloom is about to be installed on a
 microservice landscape and on a second private project by people who did not
-write it. The first command they run leaves the Gate red.
+write it. The first command they ran left the Gate red.
+
+**State on `features/BDL-067`.** Both halves shipped. The INSTANCE: both writers of
+graph nodes hold one post-condition and one function that computes the edges they are
+short of, so no domain is written without a `part_of` edge. The CLASS: every entry
+point of `init` that writes a file under `.beadloom/_graph/` re-indexes and then runs
+the Gate's own `lint_step` over the project, and exits 1 rather than reporting success
+over a graph that fails the rules beside it. Measured over eight (entry point x mode)
+cells derived from `init`'s own source — four entry points (`--yes`, `--bootstrap`,
+`--import`, the wizard) and three modes — on fixtures that are not this repository.
+Two paths take no verdict and both are stated: a run that changed nothing under
+`.beadloom/_graph/`, and the wizard's `edit` answer, which hands the graph over to be
+edited by hand.
+
+**What this epic did NOT close, ranked below as its own item:** `init` still ends in a
+Python traceback on a graph file it cannot handle (BDL-UX #220, `beadloom-l22o`), and
+still writes two nodes under one `ref_id` on the classic Python `src/<project>/`
+layout (BDL-UX #214, `beadloom-7c6k`). Nine review passes were needed to get here, and
+eight of the defects they found were one sentence true of one shape while a
+neighbouring shape existed — which is the argument for the axes artifact ranked above
+this item, not a separate observation.
 
 ### P1 — BDL-066: agent behaviour observability, trace and result
 

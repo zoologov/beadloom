@@ -558,6 +558,7 @@ The context-oracle domain exposes functionality through CLI commands registered 
   - `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF_ID] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use `--level` for diagram granularity and `--scope` to show internals of one container (only with `--level=component`).
 - **`services/commands/federation.py`** — federation, gate, and lint commands:
   - `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain|github] [--project DIR]` -- Architecture lint rules. The `github` format emits GitHub Actions `::error` annotations for CI integration.
+  - The Gate renderers live here too. `_format_gate_rich` prints one line per step through `application.gate.gate_step_line` (`[STATUS] name: summary`) rather than spelling that shape itself, because `beadloom init` quotes the same line to say what `beadloom ci` will report about the graph it just judged (BDL-067 `.14`).
 
 ## Testing
 

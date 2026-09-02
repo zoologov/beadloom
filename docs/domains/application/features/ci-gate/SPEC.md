@@ -20,7 +20,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` runs, in order:
 
 1. **reindex** (unless `--no-reindex`) — rebuild the index.
-2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused (`… 12 rules, 0 violations, 6 crossings suppressed by an exemption`), taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch.
+2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused (`… 12 rules, 0 violations, 6 crossings suppressed by an exemption`), taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, reports `unverified` ones as `WARN` rather than fresh, and states how
    many pairs a WORKING declaration EXCUSED, with the reason it was declared
@@ -209,6 +209,9 @@ Module `src/beadloom/application/gate.py`:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
   `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
+- `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
+  `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
+  attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `GateResult` — aggregate: `steps`, plus the `ok` and `findings` properties.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex) -> GateResult`
   — run every gate step and aggregate the result.

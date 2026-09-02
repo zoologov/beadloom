@@ -58,6 +58,14 @@ if TYPE_CHECKING:
 # A single finding in the shared, agent-actionable shape (see linter._finding).
 Finding = dict[str, object]
 
+#: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
+#: Named rather than spelled twice because that step is the one case where the
+#: finding's ``rule`` is this step's own name instead of a rule's, so a reader of
+#: the findings has to branch on it (BDL-067 `.6`): ``beadloom init`` prints the
+#: loader's complaint here and the rule names everywhere else. Two copies of the
+#: string in two modules is exactly how the two would drift apart.
+RULES_CONFIG_ERROR = "rules configuration error"
+
 
 def _run_doctor_checks(
     conn: sqlite3.Connection, *, project_root: Path | None = None
@@ -132,6 +140,19 @@ class GateStep:
         return "WARN" if self.not_verified else "PASS"
 
 
+def gate_step_line(step: GateStep) -> str:
+    """The one line the Gate prints about a step: ``[STATUS] name: summary``.
+
+    Lives here rather than in the renderer because two commands quote it and one
+    of them is not the Gate: ``init`` tells the adopter what ``beadloom ci`` will
+    say about the graph it just judged, and it said ``lint - <summary>``, which
+    nothing prints (BDL-067 `.14`, the review of `.13`'s minor 3). A line that
+    pre-empts another command's output has to be produced by that command's own
+    formatter, or it drifts the first time either is reworded.
+    """
+    return f"[{step.status}] {step.name}: {step.summary}"
+
+
 @dataclass
 class GateResult:
     """Aggregate of every gate step. ``ok`` only when every step passed."""
@@ -178,7 +199,7 @@ def run_ci_gate(
     # `sync-check` measured. Order is behaviour here, not layout.
     steps: list[GateStep] = [
         _step_reindex(project_root, no_reindex=no_reindex),
-        _step_lint(project_root),
+        lint_step(project_root),
     ]
     sync = _step_sync_check(project_root)
     steps.append(sync)
@@ -214,8 +235,17 @@ def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
     return GateStep("reindex", summary=summary)
 
 
-def _step_lint(project_root: Path) -> GateStep:
-    """``lint --strict`` — boundary rules at error severity."""
+def lint_step(project_root: Path) -> GateStep:
+    """``lint --strict`` — boundary rules at error severity.
+
+    Public, unlike its sibling steps, because ``beadloom init`` calls it to check
+    the graph it has just written before it reports success (BDL-067 `.2`). The
+    alternative — restating ``passed = not result.has_errors`` at the init site —
+    is a second copy of the Gate's verdict, and the defect this closes
+    (BDL-UX #192) is precisely two halves of one command disagreeing about
+    whether a tree is green. Sharing the function makes that disagreement
+    unrepresentable rather than merely unlikely.
+    """
     from beadloom.graph.linter import LintError, _finding, _suppressed_note
     from beadloom.graph.linter import lint as run_lint
 
@@ -227,7 +257,7 @@ def _step_lint(project_root: Path) -> GateStep:
             "lint",
             passed=False,
             findings=[_simple_finding("lint", "error", str(exc), None)],
-            summary="rules configuration error",
+            summary=RULES_CONFIG_ERROR,
         )
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors

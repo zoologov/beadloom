@@ -18,6 +18,7 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
+from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
     _detect_project_name,
@@ -227,6 +228,21 @@ def bootstrap_project(
             sanitized_cluster = _sanitize_ref_id(cluster_name)
             if sanitized_cluster != project_name:
                 edges.append({"src": sanitized_cluster, "dst": project_name, "kind": "part_of"})
+
+        # Post-condition: no node leaves this function without a parent.
+        # The loop above only reaches nodes that came from `clusters`; this
+        # reaches every node the function wrote, whichever branch wrote it.
+        # The rule itself lives in `parent_edges` and is shared with the other
+        # writer of nodes (`doc_classify.import_docs`), because the two of them
+        # held one invariant in two bodies and had already drifted apart once
+        # (the review of BDL-067 `.20`, major 3). What stays here is the only
+        # part that is this writer's own: which ref_ids already have a parent.
+        # The bootstrap produces the whole graph, so it reads that off the edges
+        # it is about to write; the importer adds to a graph and reads it off
+        # the one on disk.
+        edges.extend(
+            missing_parent_edges(nodes, root_node["ref_id"], parented_by(edges))
+        )
 
     # Write YAML graph.
     if nodes:

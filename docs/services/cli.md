@@ -18,7 +18,8 @@ beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND
 
 ### beadloom init
 
-Project initialization. Three modes:
+Project initialization. Four entry points, and three modes for the two that let you
+choose one:
 
 ```bash
 # Generate graph from code structure (auto-detects architecture)
@@ -51,6 +52,67 @@ When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` -> micr
 - `both` -- bootstrap graph and import docs
 
 `--force` overwrites an existing `.beadloom/` directory. Without it, non-interactive init skips if `.beadloom/` already exists.
+
+#### Exit codes
+
+`0` = a scaffold that passes the rules written beside it. `1` = a scaffold that does not.
+
+**`init` takes a verdict on the graph it wrote.** Every entry point that writes a file
+under `.beadloom/_graph/` — `--yes` in any mode, `--bootstrap`, `--import`, and the
+interactive wizard — re-indexes and then runs the Gate's own lint step
+(`application.gate.lint_step`, the same object `beadloom ci` runs) over the project. When
+that step does not pass, `init` withdraws the completion it has already printed, reports
+the failure on stderr and exits 1. The scaffold is left on disk either way: the exit code
+reports the state, it does not withdraw the graph. The non-zero code is what makes a
+scripted `init && ci` stop while the cause is still in view.
+
+Before BDL-067 there was no verdict. A virgin `beadloom init --yes --mode bootstrap`
+printed `Graph: 2 nodes, 0 edges`, exited 0, and the adopter's next command — `beadloom
+ci` — was red on `domain-needs-parent`, a rule that same run had written one step earlier
+(BDL-UX #192).
+
+Two conditions decide whether a verdict is taken at all, and both are asked of the tree
+rather than of the branch reporting:
+
+- **Nothing under `.beadloom/_graph/` changed during the run** — no verdict. This is what
+  keeps the wizard's re-init prompt, which is put before any writer runs, from reporting
+  an existing tree's failures under a line saying a scaffold was written.
+- **The wizard's `edit` review answer** — no verdict, deliberately. The wizard has just
+  handed the graph over to be edited by hand and told you to run `beadloom reindex`
+  afterwards, so there is nothing settled to judge.
+
+**Two report shapes**, because a rule that failed and a rules file that would not load are
+not the same news:
+
+1. *Rules were evaluated and the graph fails them.* One line per error-severity rule,
+   naming the rule, the node, and the graph file that node was written into. Under it, one
+   sentence saying whose the failure is, chosen from two facts about the tree: did this run
+   write the failing node, and did this run write `rules.yml`. Only the corner where both
+   are this run's calls the result a defect in Beadloom's bootstrap and asks for a bug
+   report. The other three name what was already in `.beadloom/_graph/` and ask for
+   nothing.
+2. *`.beadloom/_graph/rules.yml` could not be read.* The loader's complaint is printed
+   instead of a rule name, and the report states that no rule was evaluated, so the graph
+   is unchecked rather than wrong. `init` leaves an existing rules file alone, so this is
+   usually a hand edit.
+
+The closing line names the step `beadloom ci` will fail by the step's name and summary
+rather than by quoting a rendered line: `ci` renders with `rich` on a TTY and with the
+`github` renderer everywhere else, and the two print different text for the same failure —
+which is exactly the scripted context `--yes` serves.
+
+**Known limitation — a graph file `init` cannot read still ends in a traceback**
+(BDL-UX #220, open). The readers under `onboarding/` share one skip policy, but the
+readers `init` reaches in other domains do not: `application/reindex/indexing.py`'s
+`read_declared_docs` and `graph/loader.py` walk `.beadloom/_graph/` with their own
+answers. Measured over `init`'s eight (entry point x mode) cells crossed with three shapes
+of a hand-edited `.beadloom/_graph/legacy.yml` — a file that does not parse, a file whose
+top level is a list, and a file carrying an unquoted date (`added: 2026-09-02`) — 24 runs,
+of which the 15 that reach the file end in a Python traceback: `--bootstrap`, `--import`
+and all three wizard modes, on every shape.
+`--yes` reaches none of them, and not because a guard works: non-interactive init returns
+`skipped` when `.beadloom/` already exists, and `--force` deletes the directory, and the
+unreadable file with it, before writing.
 
 Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
@@ -531,7 +593,7 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 
 `--format` options:
 - `rich` -- human-readable text (default on a TTY).
-- `json` -- structured output: a backward-compatible `violations` array (now with an additive `remediation` key), a stable agent-actionable `findings` array (`{kind, rule, severity, locations, why, remediation}`), a `suppressed` array naming every crossing a `forbid_import` exemption excused, and a `summary` object (whose `violations_suppressed` is that array's length). Deterministic (violations are pre-sorted).
+- `json` -- structured output: a backward-compatible `violations` array (now with an additive `remediation` key), a stable agent-actionable `findings` array (`{kind, rule, severity, node, locations, why, remediation}`), a `suppressed` array naming every crossing a `forbid_import` exemption excused, and a `summary` object (whose `violations_suppressed` is that array's length). Deterministic (violations are pre-sorted).
 - `porcelain` -- one colon-separated line per violation (default when piped).
 - `github` -- GitHub Actions workflow commands (`::error file=…,line=…::<rule>: <message> — <remediation>`) so violations surface as inline PR annotations; warnings use `::warning`.
 
@@ -1219,7 +1281,7 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
-**Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
+**Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
 
 ### beadloom setup-mcp
 

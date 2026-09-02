@@ -543,9 +543,21 @@ class TestFormatJsonAgentActionable:
         parsed = json.loads(format_json(result))
         assert "findings" in parsed
         f0 = parsed["findings"][0]
-        assert set(f0) == {"kind", "rule", "severity", "locations", "why", "remediation"}
+        # `node` joined the shape in BDL-067 `.14`: the violating node was named
+        # only inside the English of `why`, so `init` — telling an adopter which
+        # graph file to open — had to parse a sentence to find it.
+        assert set(f0) == {
+            "kind",
+            "rule",
+            "severity",
+            "node",
+            "locations",
+            "why",
+            "remediation",
+        }
         assert f0["kind"] == "deny"
         assert f0["rule"] == "billing-no-auth"
+        assert f0["node"] == "billing"
         assert f0["locations"] == [{"file": "src/billing/invoice.py", "line": 12}]
         assert f0["why"] == "imports auth"
         assert f0["remediation"] == "remove the import `billing -> auth`"

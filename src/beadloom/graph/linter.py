@@ -355,6 +355,13 @@ def _finding(v: Violation) -> dict[str, object]:
     so the same finding maps cleanly to GitHub annotations. Deterministic by
     construction; ordering is the caller's responsibility (violations are
     pre-sorted by :func:`~beadloom.graph.rule_engine.evaluate_all`).
+
+    ``node`` is the violating node's ref_id, or ``None`` for a finding that is
+    about no single node. It was added by BDL-067 `.14`: the node was named in
+    ``why`` as prose and nowhere else, so a reader that needed it — ``init``,
+    telling an adopter which graph file to open — had to parse an English
+    sentence to get it. A require rule fires on one node and a location the
+    reader can act on is the point of this shape.
     """
     locations: list[dict[str, object]] = []
     if v.file_path is not None:
@@ -366,6 +373,7 @@ def _finding(v: Violation) -> dict[str, object]:
         "kind": v.rule_type,
         "rule": v.rule_name,
         "severity": v.severity,
+        "node": v.from_ref_id,
         "locations": locations,
         "why": v.message,
         "remediation": v.remediation,

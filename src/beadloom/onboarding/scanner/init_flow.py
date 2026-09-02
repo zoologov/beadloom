@@ -79,28 +79,9 @@ def non_interactive_init(
         bs_result = bootstrap_project(project_root)
         result["bootstrap"] = bs_result
 
-        nodes = bs_result.get("nodes", [])
-        edges = bs_result.get("edges", [])
-
         # Auto-link existing docs to graph nodes before skeleton generation.
-        linked = auto_link_docs(project_root, nodes)
+        linked = auto_link_docs(project_root, bs_result.get("nodes", []))
         result["docs_linked"] = linked
-
-        # Generate doc skeletons.
-        from beadloom.onboarding.doc_generator import generate_skeletons
-
-        docs_result = generate_skeletons(project_root, nodes, edges)
-        result["docs_generated"] = docs_result
-
-        # Auto-reindex to populate import analysis and depends_on edges.
-        from beadloom.application.reindex import reindex as do_reindex
-
-        ri = do_reindex(project_root)
-        result["reindex"] = {
-            "symbols": ri.symbols_indexed,
-            "imports": ri.imports_indexed,
-            "edges": ri.edges_loaded,
-        }
 
     if mode in ("import", "both"):
         docs_dir = project_root / "docs"
@@ -110,9 +91,64 @@ def non_interactive_init(
         else:
             result["import"] = []
 
+    # The doc skeletons are generated LAST, after the import step — the order
+    # `interactive_init` has always run these two in: bootstrap, import,
+    # skeletons. While `generate_skeletons` sat inside the bootstrap block above,
+    # `--mode both` classified the documents it had written seconds earlier, so
+    # one command with one declared mode left two different graphs. Measured on a
+    # project with `src/orders/`, `src/catalog/` and one document of the
+    # adopter's own: `--yes --mode both` imported four documents (`architecture`,
+    # `readme`, `readme`, `payments`) where the wizard answering `both` imported
+    # one, and the two `readme` nodes are a single ref_id — the file stem is the
+    # ref_id and the loader keeps one node per ref_id — so that graph had already
+    # dropped a document it claimed to describe (BDL-067 `.18`, BDL-UX #216).
+    #
+    # THE ORDER RATHER THAN A FILTER. Excluding this run's own output from the
+    # import scan would have to name `docs/architecture.md` and
+    # `docs/domains/*/README.md`, and those are the ADOPTER's documents whenever
+    # the adopter wrote them first: `_write_if_missing` never overwrites, so a
+    # file at one of those paths may well predate the command. A filter would
+    # drop it from the graph and the two entry points would still leave two
+    # different graphs, with the divergence moved onto adopters who name their
+    # documents the way Beadloom does. The order removes the possibility; a
+    # filter removes only today's consequence, and goes stale the next time this
+    # block gains a writer.
+    #
+    # It is called the way the wizard calls it — with no node list, so it reads
+    # every graph file on disk. Passing the bootstrap's nodes would render
+    # `docs/architecture.md` from a graph missing the imported nodes, which is
+    # the same divergence one file further on.
+    if mode in ("bootstrap", "both"):
+        from beadloom.onboarding.doc_generator import generate_skeletons
+
+        result["docs_generated"] = generate_skeletons(project_root)
+
     # Generate AGENTS.md.
     generate_agents_md(project_root)
     result["agents_md_created"] = True
+
+    # Auto-reindex to populate import analysis and depends_on edges. It runs
+    # after EVERY block that writes a graph file, not inside the bootstrap block
+    # it used to sit in: the import step writes `imported.yml`, and `init` takes
+    # its verdict through `gate.lint_step`, which reads the index without
+    # re-indexing. With the reindex in the bootstrap block, `--mode both` judged
+    # an index that predated the last graph file the command wrote — rc 0 from
+    # `init`, rc 1 from the adopter's next `lint --strict` (BDL-067 `.14`). The
+    # wizard already ran its reindex here, which is why the wizard reported the
+    # failure that `--yes` reported clean: the two halves of one command
+    # disagreed because only one of them had re-indexed.
+    #
+    # `generate_skeletons` counts as such a block: it patches a `docs:` field
+    # into the graph YAML for every skeleton it creates, so it has to run before
+    # this reindex and not after it (BDL-067 `.18`, which moved it down to here).
+    from beadloom.application.reindex import reindex as do_reindex
+
+    ri = do_reindex(project_root)
+    result["reindex"] = {
+        "symbols": ri.symbols_indexed,
+        "imports": ri.imports_indexed,
+        "edges": ri.edges_loaded,
+    }
 
     return result
 
@@ -212,7 +248,8 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
         console.print(f"  Preset: {preset_name}")
         console.print(f"  Generated {len(nodes)} nodes, {len(edges)} edges")
 
-        # Interactive review.
+        # Interactive review. The graph is on disk already: the answers below
+        # decide what happens NEXT, not whether anything was written.
         if nodes:
             console.print(f"\n{_format_review_table(nodes, edges)}")
             console.print("")
@@ -222,12 +259,27 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
                 default="yes",
             )
             if review == "cancel":
-                console.print("Cancelled.")
+                # "Cancelled." on its own was false here, and false in the one
+                # way that costs an adopter something: `bootstrap_project` has
+                # already written the graph and the rules by the time this
+                # prompt is put, so the answer stops the REST of the run and not
+                # the part that touched the tree (the review of BDL-067 `.20`,
+                # major 2). The message names what is on disk and how to undo
+                # it; `init` takes the verdict on it either way, because a run
+                # that wrote a graph file is judged however it ends.
+                console.print(
+                    "Cancelled — the graph was written before this prompt. "
+                    ".beadloom/_graph/ holds it: delete .beadloom/ to undo, or "
+                    "edit those files and run [bold]beadloom reindex[/bold]."
+                )
                 result["mode"] = "cancelled"
                 return result
             if review == "edit":
                 graph_path = project_root / ".beadloom" / "_graph" / "services.yml"
-                console.print(f"\n[bold]Edit:[/bold] {graph_path}")
+                # soft_wrap: rich hard-wraps at the console width and would
+                # split an absolute path mid-token, handing the adopter a path
+                # they cannot copy out of the message that exists to name it.
+                console.print(f"\n[bold]Edit:[/bold] {graph_path}", soft_wrap=True)
                 console.print("Edit the file, then run [bold]beadloom reindex[/bold].")
                 result["review"] = "edit"
                 # Generate AGENTS.md before early return.

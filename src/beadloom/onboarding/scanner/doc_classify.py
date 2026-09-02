@@ -9,6 +9,8 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
+from beadloom.onboarding.graph_files import each_graph_file
+from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -17,6 +19,14 @@ if TYPE_CHECKING:
 _ADR_RE = re.compile(r"(decision|status:\s*(accepted|deprecated|superseded))", re.I)
 _FEATURE_RE = re.compile(r"(user\s+story|feature|requirement|spec)", re.I)
 _ARCH_RE = re.compile(r"(architect|system\s+design|infrastructure|deployment)", re.I)
+
+#: The graph file this module writes, and the one thing this reader asks of
+#: `each_graph_file` that no other caller asks: skip it, because this run is
+#: about to replace it and the graph it must read is the one it will be added
+#: to. `rules.yml` is not named here — a rules file is not a graph file for any
+#: reader, so it belongs to the shared policy (`graph_files.NOT_A_GRAPH_FILE`)
+#: rather than to this caller.
+_ABOUT_TO_BE_REPLACED = frozenset({"imported.yml"})
 
 
 def classify_doc(doc_path: Path) -> str:
@@ -32,11 +42,75 @@ def classify_doc(doc_path: Path) -> str:
     return "other"
 
 
+def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
+    """Read the graph already on disk: its root node, and who already has a parent.
+
+    The root is the one node of kind `service` that no `part_of` edge leaves —
+    which is what `bootstrap_project` writes and why `generate_rules` dropped
+    `service-needs-parent` (the root has no parent by definition). When the
+    graph holds no such node, or more than one, this returns *None*: naming a
+    parent by guessing between candidates would write an edge that claims
+    something the graph does not say.
+
+    "More than one" counts distinct ref_ids, not node entries. The graph
+    identifies a node by its ref_id — the loader keeps one node per ref_id, and
+    `parented` and `parent_edges.missing_parent_edges`' `seen` are both sets of ref_ids — so
+    a single root written twice is a single candidate. Until BDL-067 `.17` the
+    candidates were collected into a list and counted there, and
+    `bootstrap_project` produces the duplicate on an ordinary project shape: it
+    writes the root service node under the project name and its top-level
+    attachment loop skips the cluster whose sanitized name equals that name
+    (`bootstrap.py`), so a repository named after one of its own source
+    directories yields two unparented `service` entries under one ref_id. The
+    import then attached nothing and `init --yes --mode both` exited 1 on every
+    run — measured on a project named `core` holding `src/core/` and
+    `src/orders/` (the review of BDL-067 `.16`, major 1).
+
+    The ref_id is read off the node as written rather than recomputed from the
+    project name. Cluster refs pass through `_sanitize_ref_id` and the root ref
+    does not, so a recomputed destination silently resolves to nothing for a
+    project whose name carries parentheses (BDL-067 `.1`).
+
+    A file that is not readable YAML is skipped rather than raised on: `init`
+    can meet a hand-edited graph file, and failing the import over it would
+    replace a missing edge with a traceback. That skip is `each_graph_file`'s
+    since BDL-067 `.24`, along with the three other bodies that held a version
+    of it; `imported.yml` is this caller's own reason and is passed as one.
+    """
+    nodes: list[dict[str, Any]] = []
+    parented: set[str] = set()
+    for _yml, data in each_graph_file(graph_dir, also_skip=_ABOUT_TO_BE_REPLACED):
+        nodes.extend(data.get("nodes") or [])
+        parented.update(parented_by(data.get("edges") or []))
+    roots = sorted(
+        {
+            str(n["ref_id"])
+            for n in nodes
+            if n.get("kind") == "service" and n.get("ref_id") not in parented
+        }
+    )
+    return (roots[0] if len(roots) == 1 else None), parented
+
+
 def import_docs(
     project_root: Path,
     docs_dir: Path,
 ) -> list[dict[str, str]]:
     """Import and classify existing documentation.
+
+    Post-condition, and the reason this function reads the graph before it
+    writes one: every node written here carries an outgoing `part_of` edge to
+    the graph's root, unless the graph has no single root to attach it to.
+
+    This is the SECOND writer of `domain` nodes, and the post-condition it holds
+    is the same object `bootstrap_project` holds — `parent_edges` — rather than a
+    second statement of it. Until BDL-067 `.21` there were two functions with one
+    name in two modules, and their only stated connection was a docstring here
+    naming a symbol that had been renamed away. They had already drifted once and
+    were repaired by editing both (the review of `.16`, minor 2; the review of
+    `.20`, major 3). What this writer computes for itself is `parented`, read off
+    the graph already on disk, because it is adding to a graph rather than
+    producing one.
 
     Returns list of dicts with path, kind for each classified doc.
     """
@@ -65,7 +139,12 @@ def import_docs(
         )
 
     if nodes:
+        root_ref_id, parented = _existing_graph(graph_dir)
         graph_data: dict[str, Any] = {"nodes": nodes}
+        if root_ref_id is not None:
+            edges = missing_parent_edges(nodes, root_ref_id, parented)
+            if edges:
+                graph_data["edges"] = edges
         write_yaml_atomic(
             graph_dir / "imported.yml",
             graph_data,

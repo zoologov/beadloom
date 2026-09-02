@@ -434,9 +434,11 @@ def _format_gate(result: GateResult, fmt: str) -> str:
 
 def _format_gate_rich(result: GateResult) -> str:
     """Human report: one honest line per step, then findings, then the verdict."""
+    from beadloom.application.gate import gate_step_line
+
     lines: list[str] = ["Beadloom CI gate", ""]
     for step in result.steps:
-        lines.append(f"  [{step.status}] {step.name}: {step.summary}")
+        lines.append(f"  {gate_step_line(step)}")
     findings = result.findings
     if findings:
         lines.append("")

@@ -15,7 +15,161 @@ Cross-IDE context injection via a three-layer architecture.
    the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
    prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
 
-4. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+4. **The domain-parent post-condition** (one invariant, two writers) — every node
+   `bootstrap_project()`
+   writes leaves the function with at least one outgoing `part_of` edge, to its classified
+   parent where one exists and to the root service node otherwise. It reads no kind since
+   BDL-067 `.17`: until then it said `kind: domain`, the kind today's generated rules require
+   a parent for, while `generate_rules` also writes `feature-needs-parent` and the sibling
+   statement in `import_docs` already covered every kind — two writers of one invariant
+   disagreeing about its population (the review of `.16`, minor 2). One node is carved out
+   and the sentence says so since BDL-067 `.6`: a node whose `ref_id` is the root's own gets
+   no edge, because an edge from a node to itself is not a parent.
+   That `ref_id` collision (reachable on `src/<project>/`) is tracked as its own defect,
+   `beadloom-7c6k`, since its fix is a unique `ref_id` rather than an edge. The
+   same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
+   domain, so a domain without that edge makes `init` exit 0 over a graph the very next
+   `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
+   (BDL-UX #192). `parent_edges.missing_parent_edges(nodes, root_ref_id, parented)` enforces
+   it over the whole node list rather than inside the branch that was reported, and reads
+   *root_ref_id* back from the root node instead of recomputing it, because cluster refs pass
+   through `_sanitize_ref_id` and the root ref does not.
+
+   `import_docs()` is the **second** writer of `domain` nodes and did not receive the
+   invariant until BDL-067 `.14`: every document the classifier could not place became a
+   domain with no parent, in `imported.yml`, in the same run that wrote
+   `domain-needs-parent` at error severity — so `init --yes --mode both` exited 0 and the
+   next `lint --strict` exited 1 on three nodes, BDL-UX #192's signature on a branch the
+   epic had declared covered. It calls the SAME function `bootstrap_project` calls, and
+   `_existing_graph(graph_dir)` finds the root by reading the graph on disk: the one node of
+   kind `service` that no `part_of` edge leaves. It attaches every kind, not only the two the
+   generated rules require a parent for, because a post-condition that tracked today's rule
+   set would go stale the next time `generate_rules` gains a rule. With no single root — an
+   import-only run on a virgin project, or a graph with two unparented services — no parent
+   is named rather than one guessed.
+
+   One post-condition, one implementation, since BDL-067 `.21`. Until then the two writers
+   carried the same private name in two modules with the same loop body, differing in a
+   `str()` call and in their parameter order, and the only thing binding them was a docstring
+   naming a symbol `.17` had renamed away. They had already drifted once and been repaired by
+   editing both — one covered every kind, the other only `domain` (the review of `.16`, minor
+   2; the review of `.20`, major 3). `scanner/parent_edges.py` now holds
+   `missing_parent_edges(nodes, root_ref_id, parented)` and `parented_by(edges)`, and both
+   writers import them. What stays each writer's own is the one thing that genuinely differs:
+   where `parented` comes from. The bootstrap produces the whole graph and reads it off the
+   edges it is about to write; the importer adds to a graph and reads it off the one on disk.
+   A THIRD writer of nodes is caught rather than repaired afterwards:
+   `tests/test_one_parent_post_condition_over_every_writer.py` derives the writers from the
+   source — every function that reaches `write_yaml_atomic` and builds a payload holding
+   `nodes` — and fails when that set changes.
+
+   ONE POLICY FOR THE READING SIDE TOO, since BDL-067 `.24`.
+   `graph_files.each_graph_file(graph_dir, *, also_skip=frozenset())` states the skip
+   policy once: a file whose name is not a graph file's is skipped, a file that will not read
+   or will not parse is skipped, and a file that parses to anything other than a mapping is
+   skipped — so a caller may read `data["nodes"]` without asking again whether it can.
+   `rules.yml` belongs to the policy, because a rules file is not a graph file for any reader;
+   `also_skip` is the one genuine difference between the callers and is passed at the call
+   site, by `doc_classify._existing_graph` alone, naming `imported.yml` because the run that
+   asks is about to replace it. There were four bodies with four policies until `.24` —
+   `doc_generator._load_graph_from_yaml`, `doc_generator._patch_docs_field`,
+   `doc_classify._existing_graph` and `setup._graph_file_of_each_node` — and two carried no
+   guard at all. `.21` removed `generate_skeletons`' node-list parameter, so `init
+   --bootstrap` began reading the tree through an unguarded one and a hand-edited
+   `.beadloom/_graph/legacy.yml` that does not parse reached the adopter as a raw
+   `yaml.parser.ParserError` traceback, while the same commit added exactly that guard to two
+   of the siblings and listed it as delivered (the review of `.23`, major 3). The mapping
+   guard is separate from the parse guard and is needed separately: a graph file holding a
+   top-level list parses without complaint and then raises `AttributeError` on `data.get`.
+   `tests/test_graph_files_are_read_under_one_policy.py` derives the readers from the source
+   — a function that both LISTS a directory and PARSES YAML, by any name the standard library
+   or PyYAML offers for either — and fails when a fifth body appears under `onboarding/` or in
+   `setup.py`. The detector was widened at BDL-067 `.25`: `.24`'s asked for `glob` with the
+   literal `"*.yml"` and for `yaml.safe_load` by name, which is the spelling `each_graph_file`
+   happens to use rather than what makes a body a reader, and five bodies that read the
+   directory were measured passing it.
+
+   The policy covers the readers `init`'s own modules hold and no others, which is a scope and
+   not a claim about the command. `init` still ends in a Python traceback on a graph file it
+   cannot handle, and BDL-067 did not close that (BDL-UX #220, open). MEASURED at `.25` over
+   `init`'s own eight (entry point x mode) cells crossed with three shapes of a hand-edited
+   `.beadloom/_graph/legacy.yml`: 24 runs, of which the 15 that reach the file traceback —
+   `--bootstrap`, `--import` and all three wizard modes, on a file that does not parse, on a
+   file whose top level is a list, and on a file carrying an unquoted date. Two frames, both
+   outside `onboarding`: `application/reindex/indexing.read_declared_docs` and
+   `graph/loader.load_graph`. The date shape is the one that shows a parse guard would not be
+   enough — every reader `init` owns yields that file happily. `--yes` reaches none of them,
+   and not because a guard works: `non_interactive_init` returns `skipped` when `.beadloom/`
+   already exists, and `--force` deletes the directory first. `graph/diff.py`,
+   `reindex/change_detection.py` and `services/commands/index_ops.py` walk the directory too.
+   The measurement is pinned in the same test file, which fails as soon as somebody closes it.
+
+   "No single root" counts DISTINCT ref_ids since BDL-067 `.17`. The candidates were
+   collected into a list and counted there, and `bootstrap_project` produces one root under
+   two node entries on an ordinary project shape: it writes the root service node under the
+   project name and its top-level attachment loop skips the cluster whose sanitized name
+   equals that name. A repository named after one of its own source directories therefore
+   read as two candidates, the import attached nothing, and `init --yes --mode both` exited 1
+   on every run — measured on a project named `core` holding `src/core/` and `src/orders/`
+   (the review of `.16`, major 1). The graph identifies a node by its ref_id and the loader
+   keeps one node per ref_id, so the population the uniqueness test ranges over is the
+   distinct ref_ids.
+
+   An import-only run on a virgin project leaves those domains unparented and is green,
+   which rests on one fact and no longer on two: no `rules.yml` is on disk, so `lint --strict`
+   evaluates nothing. The second reason — that `--mode import` reached no verdict at all —
+   was withdrawn in `.17`. It held only until the next `init` on the same tree, because the
+   wizard's re-init does not delete `.beadloom/`, so `imported.yml` survived into a later
+   bootstrap that wrote the rule and met the nodes. Every branch of `init` that writes a file
+   under `.beadloom/_graph/` now takes the verdict.
+
+5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+
+6. **One order for all three entry points** (BDL-067 `.18` and `.21`, BDL-UX #216) — `init`
+   bootstraps, then imports, then generates the doc skeletons, whether the mode arrived
+   through `--yes --mode`, through `--bootstrap` or through the wizard's prompt. `non_interactive_init()` used to generate
+   the skeletons inside its bootstrap block and import after them, so under `--mode both` it
+   classified the documents it had written seconds earlier. Measured on a project with
+   `src/orders/`, `src/catalog/` and one document of the adopter's own: `--yes --mode both`
+   imported four documents — `architecture`, `readme`, `readme`, `payments` — where the
+   wizard answering `both` imported one. Three of the four are Beadloom's own scaffolding,
+   and the two `readme` nodes are a single ref_id, because the importer names a node after
+   the file stem and the loader keeps one node per ref_id: that graph had already dropped a
+   document it claimed to describe. The defect predates this epic, and `.14` changed its
+   character — the parent post-condition gives every imported node a `part_of` edge to the
+   root, so the wrong graph became structurally valid and both runs exited 0.
+
+   The ORDER fixes it rather than a filter over the import scan. An exclusion would have to
+   name `docs/architecture.md` and `docs/domains/*/README.md`, and those are the ADOPTER's
+   documents whenever the adopter wrote them first — `generate_skeletons()` never overwrites
+   an existing file — so a filter would drop a real document from the graph and leave the two
+   entry points disagreeing about a different population. `generate_skeletons()` reads every
+   graph file on disk: rendering `docs/architecture.md` from the bootstrap's nodes alone
+   produced a whole-tree document describing part of the tree, which is the same divergence
+   one file further on.
+
+   `.18` closed that between `--yes` and the wizard by changing one call. There are three
+   entry points, and `--bootstrap` still passed its node list: on a tree carrying a graph
+   file an earlier run had left, `init --bootstrap` and the wizard answering `bootstrap`
+   left different trees — only the wizard wrote `docs/domains/ledger/README.md`, only the
+   wizard's `docs/architecture.md` named `ledger`, and only the wizard's run patched that
+   node's `docs:` field back into the file holding it (the review of `.20`, major 1).
+   BDL-067 `.21` closed it by REMOVING the parameter rather than by editing the third call
+   site: `generate_skeletons(project_root)` takes the project root and nothing else, so a
+   document about the whole tree cannot be handed part of the tree by any caller, including
+   one written later. That is an API change for anyone importing
+   `beadloom.onboarding.generate_skeletons`.
+
+1. **A path the render broke in half is a path nobody can copy.** The wizard's `edit` answer
+   names the graph file to open, and `rich` hard-wraps at the console width — 80 when the
+   output is not a terminal — inserting a real newline wherever the line runs out, token or
+   no token. Whether that lands inside `.beadloom/_graph/services.yml` depends on how long
+   the project's own path happens to be, so the assertion over it was green on macOS for
+   nine consecutive runs and red on all six CI legs, whose temporary prefix is 68 characters
+   and leaves exactly 12 before the break. The message now prints with `soft_wrap`, so the
+   emitted text carries no inserted newline and the terminal folds it visually instead;
+   `test_the_path_it_names_survives_the_render_whole` asserts the tail contiguously, which
+   is the only form of the claim a wrap cannot satisfy by accident.
 
 ## API
 

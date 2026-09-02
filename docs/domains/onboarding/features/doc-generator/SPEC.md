@@ -17,7 +17,7 @@ structured data for AI agents to enrich those skeletons. Part of the
 
 | Function | Description |
 |----------|-------------|
-| `generate_skeletons(project_root, nodes?, edges?)` | Create `docs/` tree from graph: architecture.md, domain READMEs, service pages, feature SPECs. Loads symbols from SQLite for Public API sections. Writes `docs:` field back to `services.yml` via `_patch_docs_field()`. |
+| `generate_skeletons(project_root)` | Create `docs/` tree from the graph on disk: architecture.md, domain READMEs, service pages, feature SPECs. Loads symbols from SQLite for Public API sections. Writes `docs:` field back to the graph file each node came from, via `_patch_docs_field()`. Takes the project root and nothing else since BDL-067 `.21`: it also accepted a node list, and `docs/architecture.md` is a document about the WHOLE graph, so a caller that passed one got a whole-tree document describing part of the tree. Three of four callers read the tree and one passed a list, which left `init --bootstrap` and the wizard leaving different documents on a project that already carried a graph file (BDL-UX #216, the review of BDL-067 `.20`, major 1). Removing the parameter closes it for callers written later as well; it is an API change for anyone importing `beadloom.onboarding.generate_skeletons`. |
 | `generate_polish_data(project_root, ref_id?)` | Return structured JSON (nodes with symbols/deps/existing docs, Mermaid diagram, AI enrichment prompt). Enriches with SQLite dependency edges via `_enrich_edges_from_sqlite()`. |
 | `format_polish_text(data)` | Render polish data as multi-line human-readable text with node details, symbols, deps, doc status. |
 
@@ -49,10 +49,10 @@ Root service node (no `part_of` edge as src) is skipped — covered by `architec
 
 ## docs: Writeback
 
-After creating skeleton files, `generate_skeletons()` writes `docs:` field back to `services.yml` via `_patch_docs_field(graph_dir, docs_map)`:
+After creating skeleton files, `generate_skeletons()` writes the `docs:` field back to the graph file each node came from, via `_patch_docs_field(graph_dir, docs_map)`:
 
 - Collects `{ref_id: relative_doc_path}` for all **newly created** files only
-- Reads each `.yml` in graph directory (skips `rules.yml`)
+- Reads each graph file through `graph_files.each_graph_file(graph_dir)`, which is where the skip policy lives since BDL-067 `.24`: a file that is not a graph file's by name, or will not read, or will not parse, or does not parse to a mapping, is skipped. This body carried no guard until then, so a hand-edited graph file raised out of a step whose only purpose is annotation
 - Adds `docs: [path]` to nodes that don't already have the field
 - Writes each `.yml` atomically via `write_yaml_atomic(yml, data, sort_keys=False, allow_unicode=True)` (the [atomic-io](../../../infrastructure/components/atomic-io/DOC.md) primitive — temp file + `fsync` + `os.replace`), so an interrupted writeback never leaves a truncated `services.yml`. `sort_keys=False` preserves key ordering; output bytes are identical to the prior direct `yaml.dump`.
 
@@ -78,7 +78,7 @@ When SQLite database exists (post-reindex), skeletons include:
 
 | Function | Role |
 |----------|------|
-| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml` |
+| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml`, through `graph_files.each_graph_file`. `.21` made this the reader `init --bootstrap` reaches, and it had no unreadable-YAML guard: the adopter got a `yaml.parser.ParserError` traceback (the review of `.23`, major 3) |
 | `_find_root_node` | Identify root service (no `part_of` as src) |
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
 | `_load_symbols_by_source` | Best-effort SQLite symbol loading |
@@ -94,7 +94,7 @@ When SQLite database exists (post-reindex), skeletons include:
 | `_resolved_config` | The flow config to compose with when the caller named no project root |
 | `_generate_mermaid` | `graph LR` from `depends_on`/`part_of` edges |
 | `_write_if_missing` | Idempotent file writer |
-| `_patch_docs_field` | Write `docs:` back to graph YAML for newly created files |
+| `_patch_docs_field` | Write `docs:` back to graph YAML for newly created files, through `graph_files.each_graph_file` |
 | `_enrich_edges_from_sqlite` | Read `depends_on` edges from SQLite into node data |
 | `format_polish_text` | Render polish data as human-readable multi-line text |
 

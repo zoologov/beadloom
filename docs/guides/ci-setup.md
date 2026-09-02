@@ -135,7 +135,7 @@ verdict with one exit code (0 = every step passed, 1 = any step failed). It neve
 short-circuits — every step runs and contributes findings — and it names every
 step that ran with its honest result (PASS/WARN/FAIL/SKIP); a green is never a silently
 skipped step. All steps share one agent-actionable finding shape
-(`{kind, rule, severity, locations, why, remediation}`), so `--format` applies
+(`{kind, rule, severity, node, locations, why, remediation}`), so `--format` applies
 uniformly: `rich` (default in a TTY), `json` (structured), or `github` (default
 when piped — emits `::error` annotations so violations show inline on the PR).
 

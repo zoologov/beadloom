@@ -56,6 +56,153 @@ Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph
 silently.
 
+## The one command that ends in a verdict
+
+`init` renders its summary and then runs one more application call before it returns: the
+Gate's `lint_step` over the graph it has just written, exiting 1 when the graph fails the
+rules on disk (BDL-067, closing BDL-UX #192). The check stays
+in the application layer and this module only calls it and renders its findings, so the rule
+above holds — but the exit code is a decision this command makes, and every branch that writes
+a file under `.beadloom/_graph/` makes it: `--yes` in any mode, `--bootstrap`, `--import`, and
+the default interactive wizard.
+
+The enumeration is over branches that WRITE rather than over branches that bootstrap, since
+BDL-067 `.17`. Until then the guard was `"bootstrap" in result` and `--import` was carved out
+on a stated reason — it re-indexed nothing, so there was no index of its own output to judge —
+while `--yes --mode import` was carved out on another: both headlines opened with *the graph
+this command just wrote*, and that run wrote no bootstrap graph and no rules. Both reasons
+held only until the next `init` on the same tree. The wizard's re-init does not delete
+`.beadloom/`, so an `imported.yml` from an earlier run survived into a later bootstrap that
+wrote `domain-needs-parent` and met the unparented nodes — reported by a run that had written
+neither them nor `import_docs` (the review of `.16`, major 2). The `--import` branch now
+re-indexes what it wrote before judging it, which removes the reason rather than the check.
+
+Stated because it is the limit of that change: judging every writing run does not make the
+import-only run report its own orphans. On a virgin tree it writes no `rules.yml`, so
+`lint_step` evaluates nothing and passes honestly. What the change buys is that no branch is
+excluded by an accident of another module, and that the run which does meet the rule describes
+it truthfully.
+
+The wizard was added in BDL-067 `.6` — the verdict shipped at two call sites because the
+covering tests counted the two **bindings** of `bootstrap_project` rather than the branches,
+and the wizard shares the `--yes` binding. It is skipped on exactly one path, the wizard's
+`edit` review answer, where the graph has just been handed to the user to edit and nothing has
+re-indexed.
+
+Whether a verdict is owed is asked of the TREE, not of the branch, since BDL-067 `.21`: the
+verdict returns without linting when nothing under `.beadloom/_graph/` changed between the
+start of the run and the verdict, using the digest it already takes to answer whose failure it
+is. That replaced a branch answering the same question by its position in the source, which is
+how the wizard's `cancel` answer came to write `services.yml` and `rules.yml` — both are
+written before "Proceed with this graph?" is asked — and then exit 0 through `sys.exit(0)`
+with no verdict at all (the review of `.20`, major 2). `init` now contains no `sys.exit`, so
+the cancelled result reaches the same guard as every other wizard answer, and the wizard's
+OTHER cancelled answer, the re-init prompt asked before any writer runs, is correctly left
+unjudged: reporting there would name an existing tree's failures under a withdrawal line
+stating that a scaffold was written.
+
+Each evaluated-rule line names the rule, the violating node, and the graph file that node was
+written into, read off `.beadloom/_graph/*.yml` rather than off any writer's return value. It
+named `services.yml` by habit until BDL-067 `.14`, and the review of `.13` measured the cost:
+the failing node was `payments`, written by the import step into `imported.yml`, and the
+adopter was sent to two files that do not contain it. The `node` key the line reads comes from
+the shared finding shape; before `.14` the node was named only inside the English of `why`.
+The line that pre-empts the adopter's next command states the step's name and its summary —
+`` `beadloom ci` will fail its lint step: <summary>`` — rather than quoting a rendering of it.
+`ci` picks `rich` only on a TTY and `github` otherwise, and the github renderer builds its own
+step line instead of calling `gate_step_line`, so quoting `gate_step_line` was wrong in exactly
+the scripted context `--yes` serves: one non-TTY shell had `init` promise
+`[FAIL] lint: 2 error(s), 0 warning(s)` where `ci` printed
+`::notice::lint FAIL: 2 error(s), 0 warning(s)` (the review of `.16`, the minor). The name and
+the summary are the two fields every renderer reads off the step, so a sentence built from them
+survives all three and any renderer added later.
+
+Two shapes of failure are rendered separately. Rules that were evaluated and failed are named
+as rules; a `rules.yml` the loader refuses is rendered as the loader's complaint, because the
+finding the Gate raises there carries the step's own name (`lint`) in `rule` and the reason in
+`why` — printing the name told an adopter with a hand-edited rules file that a rule called
+`lint` had failed.
+
+The evaluated-rule report also names **whose** the failure is, from two facts about the tree
+rather than from one boolean about a writer's return value. `init` samples
+`.beadloom/_graph/` before any writer runs (`_graph_sample`) and again at verdict time, at two
+grains at once: the FILE grain (`_graph_files_now`, a digest of each file's bytes) and the NODE
+grain (`_graph_nodes_now`, a digest of each node as written, keyed by ref_id). The headline's two
+halves and the sentence under them are then chosen from `(this run wrote the failing node, this
+run wrote rules.yml)` through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION` — tables over the
+full product, so a corner cannot be left unwritten. Only the corner where both are this run's
+calls the red a defect in Beadloom's bootstrap and asks for a report. The other three name what
+was already there and ask for nothing.
+
+Each of those three denials is made at the grain its own half of the key is read at, which is
+what keeps it checkable against the tree: the two corners chosen by the NODE deny writing the
+node, and the corner chosen by `rules.yml` denies writing that file. Both node-chosen sentences
+said `graph file(s)` until BDL-067 `.27` — `.24` moved the key to the node and left the words
+behind, so the claim no longer followed from what selected it. MEASURED by the review of `.26`,
+twice: a run that rewrote an inherited graph file in order to annotate the failing node's
+sibling then told the adopter it had not written that file, while `git diff` showed it modified.
+
+The two grains answer different questions and neither can answer the other's, which is why they
+are sampled together in one place rather than separately. The FILE grain answers the verdict's
+precondition — did this run change the adopter's tree at all — and the `rules.yml` half, since a
+rules file holds no nodes and the file is its grain. The NODE grain answers whether this run
+produced the node that fails, and it took that half over in BDL-067 `.24`, by the decision of the
+review of `.23` (major 4). Read at the file grain, that half said yes whenever any writer touched
+the file the failing node happened to sit in — and `generate_skeletons` touches inherited files by
+default, since it writes a README for every node in the tree that has none and patches `docs:`
+back into that node's file. So a node no writer in this run produced, sharing a file with a node
+that gained a `docs:` field, was announced as *the graph this command just wrote* and the adopter
+was asked to file a bug report about it, on the common path.
+
+`created or changed` rather than `created`: a node this run rewrote into failing — a `kind` or
+`source` change on a ref_id that was already there — stays ours, so the instrument's error
+direction is not "hide our own defect".
+
+MEASURED at `.24`, and stated because the decision predicted otherwise: the finer grain does not
+move the case where the annotated node IS the failing node. `generate_skeletons` writes the
+`docs:` field into that node's own entry, so the node is one this run changed at either grain, and
+`init --bootstrap` over an inherited undocumented orphan still asks for a bug report. What the
+finer grain does move is the case where the annotated node and the failing node are different
+nodes in one file, which is the ordinary shape of an inherited graph file. Both are pinned in
+`tests/test_init_report_says_whose_failure_it_is.py`.
+
+Until BDL-067 `.17` a single boolean about `rules.yml` chose both sentences, and there was no
+counterpart for the node: a run that bootstrapped over an inherited `imported.yml` said *the
+graph this command just wrote* about nodes it had not written and asked the adopter to file a
+bug against `import_docs`, which had not run (the review of `.16`, major 2). The digest is read
+off the directory rather than off any writer's return value for the same reason
+`_graph_file_of_each_node` reads the files: the point is to cover writers this module does not
+know about, and `init` gained a second one four waves into this epic. Its two limitations are
+stated in the docstring. A file rewritten byte-for-byte with what was already there reads as one
+this run did not write — and in that case both answers name the same rules and the same nodes. A
+file that cannot be read is left out of the digest rather than digested, so a file unreadable
+before the run and readable after it reads as one this run wrote. `.6` established the rules half and applied it to the unloadable-rules branch alone,
+which is how the evaluated-rules branch went on blaming Beadloom for a hand-written
+`service-needs-parent` until `.9` — measured by the review of `.8` on a scratch TypeScript
+project.
+
+`WITHDRAWN_COMPLETION_CLAIM` is printed by the verdict itself, so no branch can decline it.
+Every branch has announced a scaffold by the time the verdict runs: the wizard's
+`Initialization complete!` and `Next steps:`, `--bootstrap`'s four check marks, `--yes`'s
+`Initialized beadloom (mode: ...)` and summary, `--import`'s `Classified N documents`. Until
+BDL-067 `.17` it was a `claim_to_withdraw` argument that one of the call sites passed, under a
+docstring asserting that the `--bootstrap` branch took its verdict first and never made the
+claim — it makes it, four check marks and then the error with no withdrawal, measured by the
+review of `.16` (major 3). That false sentence is why the omission read as a decision for two
+waves. The line is printed here rather than inside `interactive_init`, which would put a
+services-layer decision in the onboarding domain.
+
+That one line precedes **both** report shapes, so it states only what is true of both: the
+check did not pass. Until BDL-067 `.12` it read `it does not pass the rules it is checked
+against:` and opened the unloadable-rules report, whose next two lines say the graph was not
+checked and that no rule was evaluated — the review of `.11` measured the contradiction on two
+different unloadable files, so it was the branch and not one parse error. The colon went with
+the claim: it promised the list of failing rules that `_report_rules_the_graph_fails` prints
+and this branch does not. A second withdrawal string for the second shape was rejected for the
+reason `RULES_CONFIG_ERROR` is shared at all — two strings to keep in step is how they drift.
+The assertions that hold this are stated over the line as printed rather than over the
+constant, so a second string added later is judged by the same claim.
+
 ## Related
 
 - `cli` — the registration shell this component is wired into
