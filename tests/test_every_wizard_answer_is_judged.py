@@ -75,6 +75,10 @@ WHAT_THE_CARVE_OUT_OWES_THE_ADOPTER = "beadloom reindex"
 #: naming them. The three answers say different things; all three have written
 #: the graph into this directory by the time they say it.
 WHERE_THE_FILES_ARE = ".beadloom/_graph"
+# The tail of the path the `edit` answer names. It is asserted CONTIGUOUSLY:
+# rich hard-wraps at the console width, and a path split across two lines is a
+# path the adopter cannot copy out of the message that exists to name it.
+THE_FILE_THE_EDIT_ANSWER_NAMES = ".beadloom/_graph/services.yml"
 
 
 def _the_review_answers() -> tuple[str, ...]:
@@ -266,6 +270,28 @@ class TestEveryAnswerThatLeavesAGraphFileIsJudged:
 
         assert result.exit_code == 0, result.output
         assert WHERE_THE_FILES_ARE in closing, closing
+
+    def test_the_path_it_names_survives_the_render_whole(
+        self, answered_on_a_green_tree: Any
+    ) -> None:
+        """A path the render broke in half is a path nobody can copy.
+
+        `rich` hard-wraps at the console width — 80 when the output is not a
+        terminal — and inserts a real newline wherever the line runs out, token
+        or no token. Whether it lands inside `.beadloom/_graph/services.yml`
+        depends on how long the project's own path happens to be, so this was
+        green on macOS for nine consecutive runs and red on all six CI legs,
+        whose temporary prefix is 68 characters and leaves exactly 12 before the
+        break. The claim here is about what the message HANDS the adopter, which
+        is why it is asserted contiguously rather than by any substring that a
+        wrap could leave intact. `edit` is reused rather than given a second name:
+        it is the same answer, and two names for one fact are two things that can
+        disagree.
+        """
+        result, _ = answered_on_a_green_tree(THE_ANSWER_THAT_IS_NOT_JUDGED)
+
+        assert result.exit_code == 0, result.output
+        assert THE_FILE_THE_EDIT_ANSWER_NAMES in result.output, result.output
 
 
 class TestARunThatWroteNothingTakesNoVerdict:

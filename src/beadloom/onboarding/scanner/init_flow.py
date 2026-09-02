@@ -276,7 +276,10 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
                 return result
             if review == "edit":
                 graph_path = project_root / ".beadloom" / "_graph" / "services.yml"
-                console.print(f"\n[bold]Edit:[/bold] {graph_path}")
+                # soft_wrap: rich hard-wraps at the console width and would
+                # split an absolute path mid-token, handing the adopter a path
+                # they cannot copy out of the message that exists to name it.
+                console.print(f"\n[bold]Edit:[/bold] {graph_path}", soft_wrap=True)
                 console.print("Edit the file, then run [bold]beadloom reindex[/bold].")
                 result["review"] = "edit"
                 # Generate AGENTS.md before early return.

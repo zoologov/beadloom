@@ -160,6 +160,17 @@ Cross-IDE context injection via a three-layer architecture.
    one written later. That is an API change for anyone importing
    `beadloom.onboarding.generate_skeletons`.
 
+1. **A path the render broke in half is a path nobody can copy.** The wizard's `edit` answer
+   names the graph file to open, and `rich` hard-wraps at the console width — 80 when the
+   output is not a terminal — inserting a real newline wherever the line runs out, token or
+   no token. Whether that lands inside `.beadloom/_graph/services.yml` depends on how long
+   the project's own path happens to be, so the assertion over it was green on macOS for
+   nine consecutive runs and red on all six CI legs, whose temporary prefix is 68 characters
+   and leaves exactly 12 before the break. The message now prints with `soft_wrap`, so the
+   emitted text carries no inserted newline and the terminal folds it visually instead;
+   `test_the_path_it_names_survives_the_render_whole` asserts the tail contiguously, which
+   is the only form of the claim a wrap cannot satisfy by accident.
+
 ## API
 
 ### `prime_context(project_root, *, fmt="markdown")`
