@@ -7,8 +7,8 @@
 
 ## Current Bead
 
-**Bead:** none — `.1`, `.3`, `.2` and `.4` closed; `.5` (`Explore`) is unblocked, and `.6` (the
-commit-scope check) is now unblocked by `.4`.
+**Bead:** none — `.1`, `.3`, `.2` and `.4` closed. `bd ready` lists `.6` (the commit-scope
+check, unblocked by `.4`) and `.5` (the `Explore` role); they may run beside each other.
 
 **The bead just closed.** `beadloom-0mdo.4` — `## Axes` as a required section, reported by
 `doc-quality` when absent or empty
