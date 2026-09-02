@@ -26,6 +26,68 @@
 
 ## What is being worked on now
 
+### P0 — the flow cannot see a change's axes, and cannot re-plan when they turn out larger
+
+**Not yet a bead. Needs `/task-init`.** Ranked above the two items below it: this one produces
+the work the others check.
+
+**Measured on BDL-067, 2026-08-31 to 2026-09-02.** One bug — "the bootstrap writes a domain with
+no `part_of` edge" — became 23 beads, 26 commits, seven review passes and +8115 lines. Majors per
+review pass ran 2, 1, 1, 3, 4, 3. The defect was never one missing edge: it was a class, *a
+statement scoped to one shape while a neighbouring shape exists*, and it had six instances — a
+comment counting monkeypatch bindings and calling them branches, a message blaming Beadloom for
+the adopter's own rules, a withdrawal bound to one branch of three, a quoted line matching one
+renderer of three, a post-condition stated per writer over two writers, and a wizard answer that
+writes two files and leaves through `sys.exit` above the verdict.
+
+Three gaps in the flow produced that, and each is fixable:
+
+**No artifact names the axes a change ranges over.** `/task-init` routed this as `bug`, whose
+simplified flow is BRIEF + ACTIVE with no RFC, and the BRIEF template has no section for blast
+radius. The question — how many writers of graph nodes, how many branches of `init`, how many
+modes, how many renderers — was first asked in fix cycle four, by a bead told to sweep, and
+answered in **one pass**: six writers into `.beadloom/_graph/`, two of which create nodes. Asked at
+intake, the first dev bead would have been written over both writers and the fourth review pass
+would not have existed.
+
+**Nothing re-plans a work item whose type stops being true.** By the second fix cycle this was
+not a bug, and 23 beads lived under a document that still describes one missing edge. At the
+fourth review pass the approved BRIEF's own acceptance criterion was **measured false** for
+`--mode both`, and nothing re-opened the document for approval.
+
+**Nothing turns a repeated defect into a sweep.** The rule *second instance of a class → the next
+bead's deliverable is the sweep, not the fix* was applied first in cycle three and paid
+immediately; the consolidation in cycle five is what finally moved the review count down with a
+diagnosis attached rather than by luck.
+
+**The tool: `beadloom impact`.** `why` answers dependencies between graph nodes. Nothing answers
+*who else writes this file, who else calls this function, how many branches does this command
+have, how many ways does it terminate*. Those three questions are what the whole epic turned out
+to be. `beadloom waves` already does the analogous job for a set of beads, so the shape is known.
+
+**The role: `Explore` given a protocol, positioned inside `/task-init` as step 0.5.** It is the
+only role in this flow with no file in `.claude/agents/`, and the one time this epic used it, it
+returned an excellent trace of the defect and nothing about axes — because nobody had written
+down what its deliverable is. A role exists so the coordinator's prompt stops mattering, and this
+one has no such guarantee today. The coordinator cannot produce the artifact itself at any point,
+now or later: it is barred from reading source by the context boundary.
+
+Three conditions on that role, because this project has shipped a duty without a check before —
+BDL-061 S4 put mutation testing into every role core and no runner with it, and four beads in
+BDL-067 then reported four different hand methods as prose:
+
+- it runs **inside** `/task-init`, before the type is chosen, because the axis count is what says
+  whether a work item is a bug;
+- its deliverable is a fixed `## Axes` section — writers, callers, branches, modes, renderers,
+  with paths and lines, derived from source — not a narrative;
+- an absent or empty `## Axes` section is a `docs quality` finding, the way `missing_sections`
+  already reports a document missing a section its peers carry.
+
+**Done when** a work item cannot reach its first dev bead without an `## Axes` section the Gate
+can see, a second ISSUES verdict on one work item forces a recorded re-plan rather than another
+fix cycle, and `beadloom impact` answers the three questions above from the source rather than
+from a human's recollection.
+
 ### P0 — nothing can check the mutation duty this project ships
 
 **Not yet a bead. Needs `/task-init`.** Ranked first: the item below it is in flight and
