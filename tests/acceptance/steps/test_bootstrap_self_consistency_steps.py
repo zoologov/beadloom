@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import traceback
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
@@ -1205,3 +1206,124 @@ def _then_the_two_runs_leave_the_same_tree(world: dict[str, Any]) -> None:
     first, *rest = sorted(left)
     for name in rest:
         assert left[name] == left[first], (name, first, left)
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.24` — one skip policy for the readers, and the failing node's own
+# provenance rather than its file's
+# ---------------------------------------------------------------------------
+
+#: A graph file a hand edit left mid-sentence. The review of `.23` measured
+#: `init --bootstrap` on exactly this and got a `yaml.parser.ParserError`
+#: traceback at the adopter.
+A_GRAPH_FILE_THAT_DOES_NOT_PARSE = "nodes:\n  - ref_id: ledger\n   kind: domain\n  bad: [\n"
+
+#: The readers `init`'s own modules hold. Named as frames rather than as call
+#: sites because what the scenario observes is that none of them RAISED.
+THE_READERS_INIT_HOLDS = (
+    "_load_graph_from_yaml",
+    "_patch_docs_field",
+    "_existing_graph",
+    "_graph_file_of_each_node",
+)
+
+#: The sibling that gets annotated, in the same file as the node that fails. It
+#: has a parent, so it passes every rule the bootstrap writes, and no `docs:`,
+#: so `generate_skeletons` writes it a README and patches the field back —
+#: changing the FILE while leaving the failing node's own entry untouched.
+THE_UNDOCUMENTED_SIBLING = "warehouse"
+
+
+@given("a graph file in .beadloom/_graph/ that is not readable YAML")
+def _given_a_graph_file_that_does_not_parse(world: dict[str, Any]) -> None:
+    graph_dir = world["project"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "legacy.yml").write_text(
+        A_GRAPH_FILE_THAT_DOES_NOT_PARSE, encoding="utf-8"
+    )
+
+
+@then("no reader in init's own modules raised on the file it could not parse")
+def _then_no_reader_of_inits_own_raised(world: dict[str, Any]) -> None:
+    result = world["init"]
+    raised = [
+        frame.name
+        for frame in traceback.extract_tb(
+            result.exception.__traceback__ if result.exception else None
+        )
+        if frame.name in THE_READERS_INIT_HOLDS
+    ]
+    assert raised == [], raised
+
+
+@then("the scaffold is written from the graph files that do parse")
+def _then_the_scaffold_is_written_anyway(world: dict[str, Any]) -> None:
+    """Anti-vacuity: a skip that skipped the whole directory would satisfy the
+
+    negative claim above and leave the adopter with nothing.
+    """
+    project = world["project"]
+    written = project / ".beadloom" / "_graph" / "services.yml"
+    data = yaml.safe_load(written.read_text(encoding="utf-8"))
+    assert data["nodes"], data
+    assert (project / "docs" / "architecture.md").exists(), project
+
+
+@given("a graph file an earlier run left, holding a failing node and an undocumented one")
+def _given_an_inherited_file_with_an_annotatable_sibling(world: dict[str, Any]) -> None:
+    """The failing node is documented and untouched; its sibling is neither.
+
+    Both halves matter. The failing node carries a `docs:` naming a document
+    that exists, so no writer in this run touches its entry — which is what makes
+    "this run wrote it" a question with a right answer. The sibling carries none
+    and has a parent, so `generate_skeletons` annotates it, the file's bytes
+    change, and the file grain says yes about a node it should not.
+    """
+    project = world["project"]
+    graph_dir = project / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "payments.md").write_text("# Payments\n", encoding="utf-8")
+    (graph_dir / AN_EARLIER_RUNS_GRAPH_FILE).write_text(
+        yaml.safe_dump(
+            {
+                "nodes": [
+                    {
+                        "ref_id": THE_INHERITED_ORPHAN,
+                        "kind": "domain",
+                        "summary": "Imported from payments.md",
+                        "docs": ["docs/payments.md"],
+                    },
+                    {
+                        "ref_id": THE_UNDOCUMENTED_SIBLING,
+                        "kind": "domain",
+                        "summary": "Left by the same run, parented and undocumented.",
+                    },
+                ],
+                "edges": [
+                    {
+                        "src": THE_UNDOCUMENTED_SIBLING,
+                        "dst": THE_INHERITED_ORPHAN,
+                        "kind": "part_of",
+                    }
+                ],
+            },
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+@then("this run annotates the undocumented node and leaves the failing one alone")
+def _then_the_annotation_missed_the_failing_node(world: dict[str, Any]) -> None:
+    """The premise, measured, because the whole scenario rests on it."""
+    path = world["project"] / ".beadloom" / "_graph" / AN_EARLIER_RUNS_GRAPH_FILE
+    by_ref = {
+        node["ref_id"]: node
+        for node in yaml.safe_load(path.read_text(encoding="utf-8"))["nodes"]
+    }
+    assert by_ref[THE_UNDOCUMENTED_SIBLING].get("docs"), by_ref
+    assert by_ref[THE_INHERITED_ORPHAN]["docs"] == ["docs/payments.md"], by_ref

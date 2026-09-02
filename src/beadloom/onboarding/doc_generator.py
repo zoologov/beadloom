@@ -28,19 +28,21 @@ logger = logging.getLogger(__name__)
 def _load_graph_from_yaml(
     project_root: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Load all graph nodes and edges from ``.beadloom/_graph/*.yml``."""
-    import yaml
+    """Load all graph nodes and edges from ``.beadloom/_graph/*.yml``.
+
+    Reads through `each_graph_file`, which is where the skip policy is stated.
+    Until BDL-067 `.24` this body carried none: `.21` gave the `--bootstrap`
+    branch a tree read here, and a hand-edited graph file that does not parse
+    reached the adopter as a `yaml.parser.ParserError` traceback.
+    """
+    from beadloom.onboarding.graph_files import each_graph_file
 
     graph_dir = project_root / ".beadloom" / "_graph"
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
-    for yml in sorted(graph_dir.glob("*.yml")):
-        if yml.name == "rules.yml":
-            continue
-        data = yaml.safe_load(yml.read_text(encoding="utf-8"))
-        if data:
-            nodes.extend(data.get("nodes", []))
-            edges.extend(data.get("edges", []))
+    for _yml, data in each_graph_file(graph_dir):
+        nodes.extend(data.get("nodes") or [])
+        edges.extend(data.get("edges") or [])
     return nodes, edges
 
 
@@ -522,24 +524,20 @@ def _patch_docs_field(graph_dir: Path, docs_map: dict[str, str]) -> None:
     docs_map:
         Mapping of ``{ref_id: relative_doc_path}`` for files that were
         **newly created** (not skipped).
-    """
-    import yaml
 
+    Reads through `each_graph_file`, which is where the skip policy is stated.
+    Until BDL-067 `.24` this body carried none, so a hand-edited graph file that
+    does not parse raised out of a step whose whole purpose is annotation.
+    """
     from beadloom.infrastructure.atomic_io import write_yaml_atomic
+    from beadloom.onboarding.graph_files import each_graph_file
 
     if not docs_map:
         return
 
-    for yml in sorted(graph_dir.glob("*.yml")):
-        if yml.name == "rules.yml":
-            continue
-
-        data = yaml.safe_load(yml.read_text(encoding="utf-8"))
-        if not data or "nodes" not in data:
-            continue
-
+    for yml, data in each_graph_file(graph_dir):
         modified = False
-        for node in data["nodes"]:
+        for node in data.get("nodes") or []:
             ref_id = node.get("ref_id", "")
             if ref_id in docs_map and "docs" not in node:
                 node["docs"] = [docs_map[ref_id]]

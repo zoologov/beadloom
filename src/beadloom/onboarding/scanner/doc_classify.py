@@ -8,9 +8,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-import yaml
-
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
+from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 
 if TYPE_CHECKING:
@@ -21,11 +20,13 @@ _ADR_RE = re.compile(r"(decision|status:\s*(accepted|deprecated|superseded))", r
 _FEATURE_RE = re.compile(r"(user\s+story|feature|requirement|spec)", re.I)
 _ARCH_RE = re.compile(r"(architect|system\s+design|infrastructure|deployment)", re.I)
 
-#: The graph file this module writes, and the one file under `_graph/` that
-#: holds no nodes. Both are excluded when the existing graph is read: the first
-#: because it is about to be replaced by this run, the second because a rules
-#: file is not a graph.
-_NOT_THE_EXISTING_GRAPH = frozenset({"imported.yml", "rules.yml"})
+#: The graph file this module writes, and the one thing this reader asks of
+#: `each_graph_file` that no other caller asks: skip it, because this run is
+#: about to replace it and the graph it must read is the one it will be added
+#: to. `rules.yml` is not named here — a rules file is not a graph file for any
+#: reader, so it belongs to the shared policy (`graph_files.NOT_A_GRAPH_FILE`)
+#: rather than to this caller.
+_ABOUT_TO_BE_REPLACED = frozenset({"imported.yml"})
 
 
 def classify_doc(doc_path: Path) -> str:
@@ -72,19 +73,13 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
 
     A file that is not readable YAML is skipped rather than raised on: `init`
     can meet a hand-edited graph file, and failing the import over it would
-    replace a missing edge with a traceback.
+    replace a missing edge with a traceback. That skip is `each_graph_file`'s
+    since BDL-067 `.24`, along with the three other bodies that held a version
+    of it; `imported.yml` is this caller's own reason and is passed as one.
     """
     nodes: list[dict[str, Any]] = []
     parented: set[str] = set()
-    for yml in sorted(graph_dir.glob("*.yml")):
-        if yml.name in _NOT_THE_EXISTING_GRAPH:
-            continue
-        try:
-            data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
-        except (yaml.YAMLError, UnicodeDecodeError):
-            continue
-        if not isinstance(data, dict):
-            continue
+    for _yml, data in each_graph_file(graph_dir, also_skip=_ABOUT_TO_BE_REPLACED):
         nodes.extend(data.get("nodes") or [])
         parented.update(parented_by(data.get("edges") or []))
     roots = sorted(

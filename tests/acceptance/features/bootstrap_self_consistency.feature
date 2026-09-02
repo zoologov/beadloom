@@ -367,3 +367,43 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When the bootstrap flag and the wizard are each run over that tree
     Then both runs document the domain the earlier run left
     And the two runs leave the same graph and the same documents
+
+  # BDL-067 `.24`, the review of `.23`'s major 3 — the one defect in this epic
+  # that this epic introduced. `.21` removed `generate_skeletons`' node-list
+  # parameter, so `init --bootstrap` stopped passing its own nodes and started
+  # reading the tree, through the one reader of `.beadloom/_graph/` that carried
+  # no guard. An adopter with a hand-edited graph file that does not parse got a
+  # raw `yaml.parser.ParserError` traceback instead of a scaffold. The scenario
+  # is stated over the READERS and not over the one branch that reached them:
+  # there were four readers of that directory with four skip policies, which is
+  # the shape `.21` consolidated for the writers, standing on the readers.
+  #
+  # It says "in init's own modules" because that is the scope `.24` was given and
+  # because the wider claim would be false: `reindex.read_declared_docs` walks
+  # the same directory with no guard, so the command still ends in a traceback
+  # one step later. That residue is measured and pinned in
+  # `tests/test_graph_files_are_read_under_one_policy.py`.
+  @bead:beadloom-e8s4.24
+  Scenario: a hand-edited graph file that does not parse is skipped rather than raised on
+    Given a project whose only source file sits directly in its source directory
+    And a graph file in .beadloom/_graph/ that is not readable YAML
+    When beadloom init is run with the bootstrap flag
+    Then no reader in init's own modules raised on the file it could not parse
+    And the scaffold is written from the graph files that do parse
+
+  # BDL-067 `.24`, the review of `.23`'s major 4, decided by that review. The
+  # corner that asks the adopter to file a bug report is the only one where
+  # Beadloom is at fault, and it was chosen by whether this run wrote the FILE
+  # the failing node sat in. `generate_skeletons` writes a README for every node
+  # in the tree with no document and patches `docs:` back into that node's file,
+  # so a node no writer in this run produced was blamed on this run whenever a
+  # SIBLING node in the same file was annotated.
+  @bead:beadloom-e8s4.24
+  Scenario: a failing node an earlier run wrote is not blamed on this one
+    Given a project whose only source file sits directly in its source directory
+    And a graph file an earlier run left, holding a failing node and an undocumented one
+    When beadloom init is run with the bootstrap flag
+    Then this run annotates the undocumented node and leaves the failing one alone
+    And the command does not report success
+    And the command does not ask for a bug report
+    And the command says the graph file was already there

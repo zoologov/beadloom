@@ -388,8 +388,10 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # bundle. 98 -> 100 in BDL-062 `.4`, which documented the two undocumented
         # nodes that could be documented (`status`, `cli-commands`). The number moves
         # when this repository gains a document, which is what makes it a denominator
-        # rather than a constant.
-        assert populations[SPACE_AS_IS] == 100
+        # rather than a constant. 100 -> 101 in BDL-067 `.24`, which documented the
+        # `graph-files` component: the four readers of `.beadloom/_graph/` became one
+        # body, and a body with a single responsibility is a node with a DOC.
+        assert populations[SPACE_AS_IS] == 101
         # 55 -> 56 in BDL-062, -> 57 in BDL-067: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 57
 

@@ -49,10 +49,10 @@ Root service node (no `part_of` edge as src) is skipped — covered by `architec
 
 ## docs: Writeback
 
-After creating skeleton files, `generate_skeletons()` writes `docs:` field back to `services.yml` via `_patch_docs_field(graph_dir, docs_map)`:
+After creating skeleton files, `generate_skeletons()` writes the `docs:` field back to the graph file each node came from, via `_patch_docs_field(graph_dir, docs_map)`:
 
 - Collects `{ref_id: relative_doc_path}` for all **newly created** files only
-- Reads each `.yml` in graph directory (skips `rules.yml`)
+- Reads each graph file through `graph_files.each_graph_file(graph_dir)`, which is where the skip policy lives since BDL-067 `.24`: a file that is not a graph file's by name, or will not read, or will not parse, or does not parse to a mapping, is skipped. This body carried no guard until then, so a hand-edited graph file raised out of a step whose only purpose is annotation
 - Adds `docs: [path]` to nodes that don't already have the field
 - Writes each `.yml` atomically via `write_yaml_atomic(yml, data, sort_keys=False, allow_unicode=True)` (the [atomic-io](../../../infrastructure/components/atomic-io/DOC.md) primitive — temp file + `fsync` + `os.replace`), so an interrupted writeback never leaves a truncated `services.yml`. `sort_keys=False` preserves key ordering; output bytes are identical to the prior direct `yaml.dump`.
 
@@ -78,7 +78,7 @@ When SQLite database exists (post-reindex), skeletons include:
 
 | Function | Role |
 |----------|------|
-| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml` |
+| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml`, through `graph_files.each_graph_file`. `.21` made this the reader `init --bootstrap` reaches, and it had no unreadable-YAML guard: the adopter got a `yaml.parser.ParserError` traceback (the review of `.23`, major 3) |
 | `_find_root_node` | Identify root service (no `part_of` as src) |
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
 | `_load_symbols_by_source` | Best-effort SQLite symbol loading |
@@ -94,7 +94,7 @@ When SQLite database exists (post-reindex), skeletons include:
 | `_resolved_config` | The flow config to compose with when the caller named no project root |
 | `_generate_mermaid` | `graph LR` from `depends_on`/`part_of` edges |
 | `_write_if_missing` | Idempotent file writer |
-| `_patch_docs_field` | Write `docs:` back to graph YAML for newly created files |
+| `_patch_docs_field` | Write `docs:` back to graph YAML for newly created files, through `graph_files.each_graph_file` |
 | `_enrich_edges_from_sqlite` | Read `depends_on` edges from SQLite into node data |
 | `format_polish_text` | Render polish data as human-readable multi-line text |
 

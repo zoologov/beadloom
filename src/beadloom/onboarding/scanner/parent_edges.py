@@ -1,8 +1,7 @@
-"""The parent post-condition every writer of graph nodes holds.
+"""The parent post-condition every writer of graph nodes holds."""
 
 # beadloom:domain=onboarding
 # beadloom:feature=agent-prime
-"""
 
 from __future__ import annotations
 

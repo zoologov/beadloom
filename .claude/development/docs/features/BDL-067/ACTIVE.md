@@ -7,15 +7,16 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.22` — the writing side as axes: writers, skeleton callers, ways out of `init`
-**Goal:** `.21` converted the writing side; this bead asks whether the three axes it left can
-actually FAIL. Each of the sixth review's three predicted divergences — a third writer of graph
-nodes, a fourth caller of `generate_skeletons`, a fifth way out of `init` — must be derived from
-the source and demonstrated capable of reporting a new one, the way
-`tests/test_init_branches_that_reach_the_bootstrap.py` demonstrates it for a fourth branch.
-**Done when:** each axis is red-proved against a tree without the fix it covers, the attribution
-corners that `.21` reported are asserted rather than left to be re-answered silently, and cells
-already covered are named as covered rather than duplicated. `beadloom ci` rc 0.
+**Bead:** `beadloom-e8s4.24` — the three regressions this epic introduced, and the attribution
+instrument
+**Goal:** cycle 8 fixes only what this epic broke or was asked to decide — major 3 (the traceback
+`.21` introduced, and the four readers of `.beadloom/_graph/` behind it), major 4 (the attribution
+instrument, per the seventh review's own decision), major 5 (the stale `generate_skeletons`
+signature at `docs/domains/onboarding/README.md:206`) and the `parent_edges` annotation minor.
+Majors 1 and 2 and the `setup.py:1210` minor are re-planned onto `beadloom-6i5q` / BDL-UX #218.
+**Done when:** the four readers are one body with one stated policy and a derived test that fails
+on a fifth, the attribution's graph half is keyed on the node rather than on the file with both
+outcomes measured, the signature line agrees with the code, and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -64,6 +65,8 @@ already covered are named as covered rather than duplicated. `beadloom ci` rc 0.
 | `beadloom-e8s4.20` | ✓ done | sixth-pass review: 0 critical, 3 major. The diagnosis rather than the count is the deliverable — a conversion completed on the reporting side and not started on the writing side — plus the prediction `.21` exists to falsify. |
 | `beadloom-e8s4.21` | ✓ done | the writing side converted. **Major 3:** one post-condition, one implementation — `scanner/parent_edges.py` (`missing_parent_edges` + `parented_by`), imported by both writers; the writers are DERIVED from the source (reach `write_yaml_atomic`, build a payload holding `nodes`), so a third one fails on the day it is written. **Major 1:** `generate_skeletons` no longer accepts a node list at all — a whole-tree document that cannot be handed part of the tree by any caller, present or later. **Major 2:** `init` contains no `sys.exit`; the wizard's `cancel` answer is judged like every other, the verdict asks the TREE whether a verdict is owed, the enumerator's terminator set resolves a callee and reads its return annotation, and the review answers are read off the wizard's own prompt and RUN. **Minor:** the node-less `forbid_import` finding staged end to end (the measurement `.20` could not complete) and the unreadable-YAML guards covered. 50 new tests, 7740 → 7790 passed. Two acceptance scenarios, both measured red by re-applying the two reversions. `beadloom ci` rc 0. |
 | `beadloom-e8s4.22` | ✓ done | the three axes, each demonstrated capable of failing, plus the attribution question `.21` reported. **Axis 1:** the writer scan had no mutants — the equality case only fails if the scan SEES the third writer, and nothing established that it can; `TestTheWriterScanReportsAThirdWriter` now reads five synthetic modules (a third writer found, a patcher excluded, a delegating writer declared as the ceiling, a public-named copy caught by the import check, a private-named copy caught by the call check and the underscore-stripping definition scan). **Axis 2:** new module over every caller of `generate_skeletons` — the set is derived, every call site is asserted to hand over the project root (the signature says ONE argument, not WHICH), and a caller that re-indexes at all must re-index AFTER the skeletons, which is `.18`'s defect stated over the callers. The universal "no re-index before" rule was measured FALSE on the product first: `interactive_init` re-indexes before and again after under `files_created > 0`. **Axis 3:** covered twice by `.21` and by `THE_BRANCHES`, re-audited and not duplicated; the same for the non-virgin entry-point invariant the bead named, which `.21` had already landed. **FINDING for `.23`:** with one call shape in, `--bootstrap` patches `docs:` into inherited graph files, so a docs-less inherited orphan now prints `(True, True)` — "a defect in Beadloom's bootstrap ... please report it" — for a node no writer in this run produced, while the same tree with the `docs:` field prints `(False, True)`. Both corners asserted as today's answers, neither endorsed. 20 new tests, 7790 → 7810 passed, `beadloom ci` rc 0. |
+| `beadloom-e8s4.23` | ✓ done | seventh-pass review: 0 critical, 5 major. The three converted axes hold and the divergence moved off all three: every instrument this epic built ranges over one SYMBOL's callers, and nothing ranges over one entry point's STEPS. Owner decision — cycle 8 fixes only what this epic broke; majors 1 and 2 are re-planned onto `beadloom-6i5q` / BDL-UX #218. |
+| `beadloom-e8s4.24` | ✓ done | **Major 3:** `onboarding/graph_files.each_graph_file` holds the one skip policy — name, read, parse and mapping — and all four readers plus the new node sampler are converted; a derived test (a function that both globs `*.yml` and calls `yaml.safe_load`) fails on a fifth body. MEASURED and stated rather than claimed away: `init --bootstrap` on the review's own tree STILL ends in a `ParserError`, one frame later, from `reindex/indexing.read_declared_docs` — another domain, reachable before `.21`, so outside this cycle and pinned so it cannot read as closed. **Major 4:** implemented as `.23` decided (`GraphSample`, `_graph_nodes_now`, created-or-changed per ref_id) and MEASURED against what the decision predicted: the two pinned cases did NOT swap, because the annotation goes into the failing node's own entry. What the finer grain does close is the annotated-SIBLING case, `(True, True)` → `(False, True)`, pinned in a new class. **Major 5:** the signature line, plus line 31's `services.yml` in the same entry. **Minor:** annotations after the docstring. 13 new tests (11 unit + 2 scenarios), 7810 → 7823 passed, `beadloom ci` rc 0. |
 
 ## Notes
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -792,6 +793,79 @@ def _graph_files_now(project_root: Path) -> dict[str, str]:
     return digests
 
 
+def _graph_nodes_now(project_root: Path) -> dict[str, str]:
+    """Digest every node under `.beadloom/_graph/`, keyed by ref_id.
+
+    The finer of the report's two grains, and the one the graph half of
+    `_ATTRIBUTION` is keyed on. Sampled beside `_graph_files_now` and compared
+    the same way: a ref_id absent before, or a node whose content differs, is a
+    node THIS RUN wrote.
+
+    The file grain could not answer this question, and the review of BDL-067
+    `.23` decided it at this one. `generate_skeletons` writes a README for every
+    node in the tree that has none and patches `docs:` back into the file that
+    node sits in, so a run that only ANNOTATED an inherited file changed its
+    bytes — and every node in it, including ones no writer in this run produced,
+    read as this run's. That is the corner that asks the adopter for a bug
+    report, on the common path, which is the defect BDL-067 `.9` was created to
+    remove one level up.
+
+    CREATED-OR-CHANGED rather than CREATED. Created alone fixes the same corner
+    and mis-attributes in the opposite direction: a node this run rewrote into
+    failing — a `kind` or `source` change on a ref_id that was already there —
+    would read as the adopter's, so the instrument's error direction would become
+    "hide our own defect", which is what this epic exists because of.
+
+    The node is digested over a canonical JSON rendering rather than compared as
+    a mapping, so that key order in the file is not a change and the sample stays
+    small. `default=str` covers the scalars YAML produces that JSON does not
+    carry — a date, most often — because the question is whether the value
+    moved, not what type it loaded as.
+
+    The limitation `_graph_files_now` states carries over at this grain and is
+    re-stated because it is now about a node: a file that will not parse is in
+    neither sample, so a node in a file unreadable before the run and readable
+    after it reads as one this run wrote, and a node whose entry is rewritten to
+    the same content reads as one it did not.
+    """
+    from beadloom.onboarding.graph_files import each_graph_file
+
+    graph_dir = project_root / ".beadloom" / "_graph"
+    digests: dict[str, str] = {}
+    for _yml, data in each_graph_file(graph_dir):
+        for node in data.get("nodes") or []:
+            ref_id = node.get("ref_id")
+            if ref_id is None:
+                continue
+            rendered = json.dumps(node, sort_keys=True, default=str)
+            digests[str(ref_id)] = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+    return digests
+
+
+@dataclass(frozen=True)
+class GraphSample:
+    """`.beadloom/_graph/` at one moment, at both grains the report needs.
+
+    Two instruments, sampled together so that no branch can take one and forget
+    the other, and so that "before" means the same instant for both. They answer
+    different questions and neither can answer the other's: the FILE grain
+    answers whether this run changed the adopter's tree at all (the verdict's
+    precondition) and whether it wrote `rules.yml` (which holds no nodes, so the
+    file is its grain); the NODE grain answers whether this run produced the node
+    that fails.
+    """
+
+    files: Mapping[str, str]
+    nodes: Mapping[str, str]
+
+
+def _graph_sample(project_root: Path) -> GraphSample:
+    """Both grains of `.beadloom/_graph/`, taken at one moment."""
+    return GraphSample(
+        files=_graph_files_now(project_root), nodes=_graph_nodes_now(project_root)
+    )
+
+
 def _graph_files_this_run_wrote(
     before: Mapping[str, str], after: Mapping[str, str]
 ) -> frozenset[str]:
@@ -799,7 +873,14 @@ def _graph_files_this_run_wrote(
     return frozenset(name for name, digest in after.items() if before.get(name) != digest)
 
 
-def _this_run_wrote_a_graph_file(project_root: Path, graph_before: Mapping[str, str]) -> bool:
+def _nodes_this_run_wrote(
+    before: Mapping[str, str], after: Mapping[str, str]
+) -> frozenset[str]:
+    """The ref_ids this run created or changed. Same comparison, finer grain."""
+    return frozenset(ref for ref, digest in after.items() if before.get(ref) != digest)
+
+
+def _this_run_wrote_a_graph_file(project_root: Path, graph_before: GraphSample) -> bool:
     """Whether anything under `.beadloom/_graph/` changed since the run started.
 
     The precondition of the verdict, asked of the TREE rather than of the branch
@@ -817,7 +898,7 @@ def _this_run_wrote_a_graph_file(project_root: Path, graph_before: Mapping[str, 
     return.
     """
     return bool(
-        _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
+        _graph_files_this_run_wrote(graph_before.files, _graph_files_now(project_root))
     )
 
 
@@ -874,7 +955,7 @@ _REPAIR_ADVICE = (
 def _verdict_on_the_generated_graph(
     project_root: Path,
     *,
-    graph_before: Mapping[str, str],
+    graph_before: GraphSample,
 ) -> None:
     """Exit non-zero when the graph `init` just wrote fails the rules on disk.
 
@@ -893,9 +974,10 @@ def _verdict_on_the_generated_graph(
     no longer in view. The scaffold is left on disk either way — the rc reports
     the state, it does not withdraw the graph.
 
-    *graph_before* is the digest of `.beadloom/_graph/` taken before this run
-    wrote anything, and it answers WHOSE the failure is — for `rules.yml` and for
-    the file each failing node came from, with one instrument rather than two.
+    *graph_before* is `.beadloom/_graph/` sampled before this run wrote anything,
+    and it answers WHOSE the failure is — for `rules.yml` at the file grain and
+    for each failing node at the node grain. It is one sample taken in one place,
+    so no branch can ask the question at one grain and forget the other.
     Until BDL-067 `.17` the caller passed a single boolean about `rules.yml`,
     read off `bootstrap_project`'s return value, and there was no counterpart for
     the node: an `init` that bootstrapped over an `imported.yml` a previous run
@@ -924,7 +1006,8 @@ def _verdict_on_the_generated_graph(
     """
     from beadloom.application.gate import RULES_CONFIG_ERROR, lint_step
 
-    written = _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
+    after = _graph_sample(project_root)
+    written = _graph_files_this_run_wrote(graph_before.files, after.files)
     if not written:
         return
 
@@ -941,6 +1024,7 @@ def _verdict_on_the_generated_graph(
             step,
             project_root=project_root,
             files_this_run_wrote=written,
+            nodes_this_run_wrote=_nodes_this_run_wrote(graph_before.nodes, after.nodes),
         )
     # The fact, not one renderer's spelling of it. `ci` picks `rich` on a TTY and
     # `github` otherwise, and the github renderer builds its own step line, so the
@@ -963,21 +1047,14 @@ def _graph_file_of_each_node(project_root: Path) -> dict[str, str]:
     point is to cover writers this function does not know about. A file that is
     not readable YAML is skipped: the adopter is being handed a failure report,
     and a traceback from the reporter is a worse answer than one unattributed
-    node.
+    node. That skip is `each_graph_file`'s since BDL-067 `.24`, which is also
+    where the other three readers of this directory now take it from.
     """
-    import yaml
+    from beadloom.onboarding.graph_files import each_graph_file
 
     graph_dir = project_root / ".beadloom" / "_graph"
     source_of: dict[str, str] = {}
-    for yml in sorted(graph_dir.glob("*.yml")):
-        if yml.name == "rules.yml":
-            continue
-        try:
-            data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
-        except (yaml.YAMLError, UnicodeDecodeError, OSError):
-            continue
-        if not isinstance(data, dict):
-            continue
+    for yml, data in each_graph_file(graph_dir):
         for node in data.get("nodes") or []:
             ref_id = node.get("ref_id")
             if ref_id and ref_id not in source_of:
@@ -1006,23 +1083,35 @@ def _failing_rule_lines(step: GateStep, source_of: dict[str, str]) -> list[str]:
     return sorted(lines)
 
 
-def _this_run_wrote_the_graph_that_fails(
+def _this_run_wrote_the_node_that_fails(
     step: GateStep,
     source_of: Mapping[str, str],
+    nodes_this_run_wrote: frozenset[str],
     files_this_run_wrote: frozenset[str],
 ) -> bool:
-    """Whether a failing node came out of a graph file this run wrote.
+    """Whether a failing node is one this run created or changed.
 
-    The finest attribution the report has is per node: `source_of` names the
-    graph file each node was read from, and *files_this_run_wrote* names the
-    files whose bytes this run produced. When no error-severity finding names a
-    node any graph file claims — a rule-level finding, or a node no file holds —
-    there is nothing to attribute at that grain, and the question falls back to
-    the coarsest fact available: did this run write any graph file at all. On a
-    virgin bootstrap it did, which is the answer a rule-level finding needs.
+    The finest attribution the report has is per node, and until BDL-067 `.24`
+    it was not asked per node: the question was whether this run wrote the FILE
+    the failing node came from. `generate_skeletons` annotates inherited files by
+    default, so any node sharing a file with a node that gained a `docs:` field
+    read as this run's — including the one corner that asks the adopter to file a
+    bug report (the review of `.23`, major 4, which decided this grain).
+
+    When no error-severity finding names a node any graph file claims — a
+    rule-level finding, or a node no file holds — there is nothing to attribute
+    at that grain, and the question falls back to the coarsest fact available:
+    did this run write any graph file at all. On a virgin bootstrap it did, which
+    is the answer a rule-level finding needs. That fallback is why the file grain
+    is still a parameter here.
+
+    *source_of* decides which findings are attributable and
+    *nodes_this_run_wrote* decides the answer. The two agree on their population
+    by construction: both are read off `.beadloom/_graph/` through
+    `each_graph_file`, so a node one of them can see is a node the other can.
     """
     attributable = [
-        source_of[str(finding["node"])]
+        str(finding["node"])
         for finding in step.findings
         if finding.get("severity") == "error"
         and finding.get("node")
@@ -1030,7 +1119,7 @@ def _this_run_wrote_the_graph_that_fails(
     ]
     if not attributable:
         return bool(files_this_run_wrote)
-    return any(Path(where).name in files_this_run_wrote for where in attributable)
+    return any(ref_id in nodes_this_run_wrote for ref_id in attributable)
 
 
 def _report_rules_the_graph_fails(
@@ -1038,6 +1127,7 @@ def _report_rules_the_graph_fails(
     *,
     project_root: Path,
     files_this_run_wrote: frozenset[str],
+    nodes_this_run_wrote: frozenset[str],
 ) -> None:
     """Name each error-severity rule the graph violates, and say whose it is.
 
@@ -1049,8 +1139,10 @@ def _report_rules_the_graph_fails(
 
     Both halves of the headline and the sentence under it are chosen from the
     same pair of facts — did this run write `rules.yml`, and did it write the
-    graph file the failing node came from — through `_GRAPH_HALF`, `_RULES_HALF`
-    and `_ATTRIBUTION`. A table over the product cannot leave a corner unwritten,
+    failing node — through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION`. The
+    two facts are read at two different grains on purpose: `rules.yml` holds no
+    nodes, so the file is its grain, and the node is the grain of the other half
+    since BDL-067 `.24`. A table over the product cannot leave a corner unwritten,
     which the previous shape did: one boolean about `rules.yml` chose both
     sentences, so the corner where the rule is ours and the node is not printed
     the corner where both are (the review of BDL-067 `.16`, major 2, measured by
@@ -1064,8 +1156,8 @@ def _report_rules_the_graph_fails(
     """
     source_of = _graph_file_of_each_node(project_root)
     rules = _failing_rule_lines(step, source_of)
-    graph_is_this_run_s = _this_run_wrote_the_graph_that_fails(
-        step, source_of, files_this_run_wrote
+    graph_is_this_run_s = _this_run_wrote_the_node_that_fails(
+        step, source_of, nodes_this_run_wrote, files_this_run_wrote
     )
     rules_are_this_run_s = "rules.yml" in files_this_run_wrote
 
@@ -1164,9 +1256,10 @@ def init(
     project_root = project or Path.cwd()
     # Sampled before any writer runs, in ONE place, so every branch below is
     # judged by the same instrument: the difference against the same directory
-    # at verdict time is the set of graph files this run wrote. See
-    # `_graph_files_now`.
-    graph_before = _graph_files_now(project_root)
+    # at verdict time is what this run wrote. Both grains at once — the files,
+    # for the verdict's precondition and for `rules.yml`, and the nodes, for the
+    # attribution of the failing node. See `GraphSample`.
+    graph_before = _graph_sample(project_root)
 
     # Non-interactive mode: --yes / -y flag.
     if non_interactive:

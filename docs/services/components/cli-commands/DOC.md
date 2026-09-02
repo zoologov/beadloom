@@ -124,14 +124,39 @@ finding the Gate raises there carries the step's own name (`lint`) in `rule` and
 `lint` had failed.
 
 The evaluated-rule report also names **whose** the failure is, from two facts about the tree
-rather than from one boolean about a writer's return value. `init` digests
-`.beadloom/_graph/` before any writer runs (`_graph_files_now`) and again at verdict time; the
-difference is the set of files this run wrote. The headline's two halves and the sentence under
-them are then chosen from `(this run wrote the graph file the failing node came from, this run
-wrote rules.yml)` through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION` — tables over the full
-product, so a corner cannot be left unwritten. Only the corner where both are this run's calls
-the red a defect in Beadloom's bootstrap and asks for a report; the other three name what was
-already on disk and ask for nothing.
+rather than from one boolean about a writer's return value. `init` samples
+`.beadloom/_graph/` before any writer runs (`_graph_sample`) and again at verdict time, at two
+grains at once: the FILE grain (`_graph_files_now`, a digest of each file's bytes) and the NODE
+grain (`_graph_nodes_now`, a digest of each node as written, keyed by ref_id). The headline's two
+halves and the sentence under them are then chosen from `(this run wrote the failing node, this
+run wrote rules.yml)` through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION` — tables over the
+full product, so a corner cannot be left unwritten. Only the corner where both are this run's
+calls the red a defect in Beadloom's bootstrap and asks for a report; the other three name what
+was already on disk and ask for nothing.
+
+The two grains answer different questions and neither can answer the other's, which is why they
+are sampled together in one place rather than separately. The FILE grain answers the verdict's
+precondition — did this run change the adopter's tree at all — and the `rules.yml` half, since a
+rules file holds no nodes and the file is its grain. The NODE grain answers whether this run
+produced the node that fails, and it took that half over in BDL-067 `.24`, by the decision of the
+review of `.23` (major 4). Read at the file grain, that half said yes whenever any writer touched
+the file the failing node happened to sit in — and `generate_skeletons` touches inherited files by
+default, since it writes a README for every node in the tree that has none and patches `docs:`
+back into that node's file. So a node no writer in this run produced, sharing a file with a node
+that gained a `docs:` field, was announced as *the graph this command just wrote* and the adopter
+was asked to file a bug report about it, on the common path.
+
+`created or changed` rather than `created`: a node this run rewrote into failing — a `kind` or
+`source` change on a ref_id that was already there — stays ours, so the instrument's error
+direction is not "hide our own defect".
+
+MEASURED at `.24`, and stated because the decision predicted otherwise: the finer grain does not
+move the case where the annotated node IS the failing node. `generate_skeletons` writes the
+`docs:` field into that node's own entry, so the node is one this run changed at either grain, and
+`init --bootstrap` over an inherited undocumented orphan still asks for a bug report. What the
+finer grain does move is the case where the annotated node and the failing node are different
+nodes in one file, which is the ordinary shape of an inherited graph file. Both are pinned in
+`tests/test_init_report_says_whose_failure_it_is.py`.
 
 Until BDL-067 `.17` a single boolean about `rules.yml` chose both sentences, and there was no
 counterpart for the node: a run that bootstrapped over an inherited `imported.yml` said *the

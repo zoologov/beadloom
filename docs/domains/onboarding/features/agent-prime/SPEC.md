@@ -63,6 +63,37 @@ Cross-IDE context injection via a three-layer architecture.
    source — every function that reaches `write_yaml_atomic` and builds a payload holding
    `nodes` — and fails when that set changes.
 
+   ONE POLICY FOR THE READING SIDE TOO, since BDL-067 `.24`.
+   `graph_files.each_graph_file(graph_dir, *, also_skip=frozenset())` states the skip
+   policy once: a file whose name is not a graph file's is skipped, a file that will not read
+   or will not parse is skipped, and a file that parses to anything other than a mapping is
+   skipped — so a caller may read `data["nodes"]` without asking again whether it can.
+   `rules.yml` belongs to the policy, because a rules file is not a graph file for any reader;
+   `also_skip` is the one genuine difference between the callers and is passed at the call
+   site, by `doc_classify._existing_graph` alone, naming `imported.yml` because the run that
+   asks is about to replace it. There were four bodies with four policies until `.24` —
+   `doc_generator._load_graph_from_yaml`, `doc_generator._patch_docs_field`,
+   `doc_classify._existing_graph` and `setup._graph_file_of_each_node` — and two carried no
+   guard at all. `.21` removed `generate_skeletons`' node-list parameter, so `init
+   --bootstrap` began reading the tree through an unguarded one and a hand-edited
+   `.beadloom/_graph/legacy.yml` that does not parse reached the adopter as a raw
+   `yaml.parser.ParserError` traceback, while the same commit added exactly that guard to two
+   of the siblings and listed it as delivered (the review of `.23`, major 3). The mapping
+   guard is separate from the parse guard and is needed separately: a graph file holding a
+   top-level list parses without complaint and then raises `AttributeError` on `data.get`.
+   `tests/test_graph_files_are_read_under_one_policy.py` derives the readers from the source
+   — every function that both globs `*.yml` and calls `yaml.safe_load` — and fails when a
+   fifth body appears under `onboarding/` or in `setup.py`.
+
+   The policy covers the readers `init`'s own modules hold and no others, which is a scope and
+   not a claim about the command. MEASURED at `.24` on the review's own tree:
+   `application/reindex/indexing.read_declared_docs` walks the same directory with no guard,
+   so `init --bootstrap` still ends in a `ParserError` one step later. That reader is in
+   another domain and `--bootstrap` reached it before `.21` as well, so it is outside what
+   this epic broke; `graph/loader.py`, `graph/diff.py`, `reindex/change_detection.py` and
+   `services/commands/index_ops.py` walk it too. The measurement is pinned in the same test
+   file, which fails as soon as somebody closes it.
+
    "No single root" counts DISTINCT ref_ids since BDL-067 `.17`. The candidates were
    collected into a list and counted there, and `bootstrap_project` produces one root under
    two node entries on an ordinary project shape: it writes the root service node under the

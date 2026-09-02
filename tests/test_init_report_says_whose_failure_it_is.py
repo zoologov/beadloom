@@ -594,6 +594,24 @@ class TestWhatCountsAsWritingTheFileTheFailingNodeCameFrom:
     — and so that the seventh review decides it holding both corners rather than
     one. If `.23` moves to the finer grain, the two cases below swap corners and
     say so; nothing here claims the present answer is the right one.
+
+    THEY DID NOT SWAP, and that is the measurement `.24` owes this class. `.23`
+    decided the finer grain — the graph half is now keyed on a per-node
+    created-or-changed sample (`setup._graph_nodes_now`) — and `.24` implemented
+    it, and BOTH cases below still print the corner they printed before. The
+    reason is in `test_the_run_annotates_the_inherited_file_it_did_not_write`
+    just below, which was already measuring it: on the first tree the annotation
+    goes INTO the failing node itself, so `ledger` gains a `docs:` field and is a
+    node this run changed at the file grain and at the node grain alike. The
+    decision's stated outcome — that this corner stops asking for a bug report —
+    does not follow from the grain it chose, on the pair it was decided over.
+
+    What the finer grain does move is the case where the annotated node and the
+    failing node are DIFFERENT nodes in one file, which is the common shape of an
+    inherited graph file and is measured in
+    `TestTheGraphHalfIsAskedOfTheNodeAndNotOfTheFile` below. Both classes are
+    kept: this one records what the instrument still does, that one records what
+    it now does, and an instrument change that moves either has to come to both.
     """
 
     def _corners_printed(self, output: str) -> list[Any]:
@@ -675,3 +693,103 @@ class TestWhatCountsAsWritingTheFileTheFailingNodeCameFrom:
         assert self._corners_printed(annotated.output) != self._corners_printed(
             untouched.output
         )
+
+
+#: The sibling that moves and the orphan that does not, in ONE file. `warehouse`
+#: has a parent, so it passes every rule the bootstrap writes, and it has no
+#: `docs:`, so `generate_skeletons` writes it a README and patches the field
+#: back — which changes the FILE's bytes while leaving `ledger`'s node entry
+#: exactly as an earlier run wrote it.
+A_FILE_WHOSE_OTHER_NODE_GETS_ANNOTATED = {
+    "nodes": [
+        {
+            "ref_id": THE_INHERITED_ORPHAN_IN_THE_LEGACY_FILE,
+            "kind": "domain",
+            "summary": "Left by an earlier run, with no parent.",
+            "docs": ["docs/ledger.md"],
+        },
+        {
+            "ref_id": "warehouse",
+            "kind": "domain",
+            "summary": "Left by the same earlier run, parented, and undocumented.",
+        },
+    ],
+    "edges": [
+        {"src": "warehouse", "dst": THE_INHERITED_ORPHAN_IN_THE_LEGACY_FILE,
+         "kind": "part_of"},
+    ],
+}
+
+
+def _a_tree_whose_annotated_node_is_not_the_failing_one(tmp_path: Path) -> Path:
+    project = typescript_project(tmp_path).root
+    _write_graph_file(project, THE_INHERITED_FILE, A_FILE_WHOSE_OTHER_NODE_GETS_ANNOTATED)
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "ledger.md").write_text("# Ledger\n", encoding="utf-8")
+    return project
+
+
+class TestTheGraphHalfIsAskedOfTheNodeAndNotOfTheFile:
+    """The attribution instrument at the grain the review of `.23` decided.
+
+    The graph half of `_ATTRIBUTION` used to be read off the BYTES of the file
+    the failing node came from, so any writer that touched that file for any
+    reason made every node in it this run's. `generate_skeletons` touches
+    inherited files by default — it writes a README for every node in the tree
+    that has none and patches `docs:` back — so the corner that asks the adopter
+    for a bug report fired on the common path.
+
+    Decided by the review of `.23` and implemented here: the graph half is keyed
+    on a before/after sample of `{ref_id: the node as written}`, taken in the
+    same one place the file digests are, and "this run wrote the node" means the
+    ref_id was absent before or its content differs. CREATED-OR-CHANGED rather
+    than CREATED, so a node this run rewrote into failing — a `kind` or `source`
+    change on a ref_id that was already there — stays ours; an instrument whose
+    error direction is "hide our own defect" is what this epic exists because of.
+
+    The byte digest is kept for the two questions it answers correctly: the
+    verdict PRECONDITION (did this run change the adopter's tree at all) and the
+    `rules.yml` half, since a rules file holds no nodes and the file is its grain.
+
+    THE LIMITATION CARRIES OVER AT THE FINER GRAIN, and is re-stated because it
+    is now about a node rather than a file: a file that would not parse is not in
+    either sample, so a node in a file unreadable before the run and readable
+    after it reads as one this run wrote, and a node whose entry is rewritten
+    byte-for-byte identically reads as one it did not.
+    """
+
+    def _corners_printed(self, output: str) -> list[Any]:
+        return [key for key, sentence in _ATTRIBUTION.items() if sentence in output]
+
+    def test_the_run_annotates_the_file_without_touching_the_failing_node(
+        self, tmp_path: Path
+    ) -> None:
+        """The premise: the file moves, the failing node's own entry does not."""
+        project = _a_tree_whose_annotated_node_is_not_the_failing_one(tmp_path)
+        path = project / ".beadloom" / "_graph" / THE_INHERITED_FILE
+        before = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        _bootstrap(project)
+
+        after = yaml.safe_load(path.read_text(encoding="utf-8"))
+        by_ref = {node["ref_id"]: node for node in after["nodes"]}
+        assert by_ref["warehouse"]["docs"] == ["docs/domains/warehouse/README.md"], after
+        assert by_ref[THE_INHERITED_ORPHAN_IN_THE_LEGACY_FILE] == before["nodes"][0]
+
+    def test_the_failing_node_is_the_earlier_runs_though_its_file_moved(
+        self, tmp_path: Path
+    ) -> None:
+        """The corner the decision was taken for, at the grain it was taken at.
+
+        Under the byte instrument this printed `(True, True)` — "This is a defect
+        in Beadloom's bootstrap ... please report it" — about a node no writer in
+        this run produced, because a SIBLING node in the same file was annotated.
+        """
+        project = _a_tree_whose_annotated_node_is_not_the_failing_one(tmp_path)
+
+        output = _bootstrap(project).output
+
+        assert self._corners_printed(output) == [(False, True)], output
+        assert _GRAPH_HALF[False] in output, output
+        assert f".beadloom/_graph/{THE_INHERITED_FILE}" in output, output
