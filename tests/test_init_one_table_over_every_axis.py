@@ -135,6 +135,7 @@ import yaml
 from click.testing import CliRunner
 
 from beadloom.application.gate import GateResult, GateStep, lint_step
+from beadloom.application.source_derivation import callables_that_reach
 from beadloom.onboarding.doc_generator import generate_skeletons
 from beadloom.services.cli import main
 from beadloom.services.commands.federation import _format_gate
@@ -158,7 +159,7 @@ from tests.test_init_agrees_across_its_modes import (
 from tests.test_init_branches_that_reach_the_bootstrap import (
     THE_GRAPH_COMMIT_POINT,
     _call_sites_in,
-    _callables_that_reach,
+    _package_root,
     _the_commands_source,
 )
 from tests.test_init_report_says_whose_failure_it_is import (
@@ -572,9 +573,7 @@ class TestTheTableIsTheCommandsOwnShape:
 
     def test_the_entry_points_are_the_branches_that_write_a_graph_file(self) -> None:
         """`.7`'s enumerator finds the branches; this table must be those branches."""
-        import beadloom
-
-        writing = _callables_that_reach(beadloom, THE_GRAPH_COMMIT_POINT)
+        writing = callables_that_reach(_package_root(), THE_GRAPH_COMMIT_POINT)
         sites = _call_sites_in(_the_commands_source(), writing)
 
         assert {site.guard for site in sites} == {
@@ -605,9 +604,7 @@ class TestTheTableIsTheCommandsOwnShape:
         that grew a second writer stops being a one-mode cell here rather than
         being tested as one.
         """
-        import beadloom
-
-        writing = _callables_that_reach(beadloom, THE_GRAPH_COMMIT_POINT)
+        writing = callables_that_reach(_package_root(), THE_GRAPH_COMMIT_POINT)
         under_the_guard = {
             site.callee
             for site in _call_sites_in(_the_commands_source(), writing)

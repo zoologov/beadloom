@@ -567,6 +567,17 @@ nodes:
     docs:
       - docs/domains/application/components/mutation-scope/DOC.md
 
+  # Component: the three AST derivations BDL-067 wrote as tests, lifted into
+  # production by BDL-068 S1.1 so `beadloom impact` and the checks after it can
+  # ask the same questions. A component rather than a feature: the capability an
+  # adopter runs is the command that will consume it, not this.
+  - ref_id: source-derivation
+    kind: component
+    summary: "Answer who else writes this, who else calls this and how many branches this has from the source, over a shape rather than a spelling"
+    source: src/beadloom/application/source_derivation/
+    docs:
+      - docs/domains/application/components/source-derivation/DOC.md
+
   - ref_id: doc-indexer
     kind: component
     summary: "Document indexer — Markdown scanning, chunking, and SQLite population for docs"
@@ -804,6 +815,9 @@ edges:
     dst: application
     kind: part_of
   - src: mutation-scope
+    dst: application
+    kind: part_of
+  - src: source-derivation
     dst: application
     kind: part_of
   - src: scenario-binding

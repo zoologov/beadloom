@@ -7,7 +7,11 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.1` — lift the three AST derivations out of `tests/` into a production package
+**Bead:** none — `.1` closed; `.2` (`beadloom impact`) and `.3` (retroactive validation) are
+unblocked and may run beside each other.
+
+**The bead just closed.** `beadloom-0mdo.1` — lift the three AST derivations out of `tests/`
+into a production package
 **Goal:** the derivations that answer *who else writes this, who else calls this, how many
 branches does this have* become importable by production code, without weakening the tests
 that currently hold them.
@@ -21,6 +25,7 @@ derivation with no test that fails on a fifth body is reported rather than lifte
 - [x] RFC approved — six slices, three alternatives rejected with reasons
 - [x] CONTEXT + PLAN approved — Q1, Q2, Q4, Q5 decided; Q3 left open with its decision rule
 - [x] Beads created: epic `beadloom-0mdo`, nine S1 beads, five slice placeholders, DAG wired
+- [x] S1.1 — the three derivations lifted into `application/source_derivation/` (dev)
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -32,7 +37,7 @@ derivation with no test that fails on a fifth body is reported rather than lifte
 
 | Bead | Status | Details |
 |------|--------|---------|
-| `beadloom-0mdo.1` | Pending | S1 dev — lift the derivations |
+| `beadloom-0mdo.1` | Done | the three derivations lifted into `src/beadloom/application/source_derivation/` (six modules by responsibility, a `component` node with a DOC). The tests keep their assertions and supply the seeds; measured with `git diff --numstat`, the five affected test modules shrink by 329 lines net (466 deleted, 137 added) and the package is 716 lines. Each lifted shape is demonstrated capable of failing by mutating it and running the suite: reader verbs narrowed → 5 red, the call vocabulary narrowed to attribute calls → 1 red, the writer payload half removed → 4 red, the reachability fixpoint frozen → 13 red, the terminator reduced to `Return \| Raise` → 2 red, the bypass sweep made blind → 1 red. One derivation REFUSED and reported: the prose sibling-reference scanner, which passes 27/27 with its finding computation replaced by `[]`. Green on the tree, macOS: 7867 passed, `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.2` | Pending | blocked by `.1` — `beadloom impact` |
 | `beadloom-0mdo.3` | Pending | blocked by `.1` — retroactive validation against BDL-067 |
 | `beadloom-0mdo.4` | Pending | blocked by `.2` — `## Axes` required section |
@@ -71,6 +76,13 @@ derivations against the tree as it stood at BDL-067's first dev bead and asks wh
 would have listed both graph writers and four entry points of `init`. The answer is recorded
 whichever way it comes out, and a *no* rewrites `.2`'s acceptance before any later slice
 consumes it.
+
+**Three counts this epic's own planning commit broke.** `409e977` added four planning
+documents and a PRD carrying fourteen scenario references, and left three hand-maintained
+literals in the suite at their BDL-067 values: TO-BE documents (199), scenario references in
+PRD/BRIEF (36) and WORKING documents (57). The branch was Gate-green and suite-red at the same
+time for that whole interval, because `beadloom ci` does not run pytest. Corrected in `.1`
+with the reason recorded beside each literal; the class is `mr2l.72` and S6 owns it.
 
 **Branch.** `features/BDL-068` is stacked on `features/BDL-067`, because S1 lifts three
 derivations that exist only there. PR #58 is open, green and unmerged; this branch is rebased

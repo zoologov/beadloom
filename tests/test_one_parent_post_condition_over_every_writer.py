@@ -44,6 +44,15 @@ from pathlib import Path
 import pytest
 
 import beadloom
+from beadloom.application.source_derivation import (
+    FoundFunction,
+    called_names,
+    definitions_named,
+    function_named,
+    imports_in,
+    module_tree,
+    writers_that_build,
+)
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 
@@ -78,98 +87,34 @@ def _package_root() -> Path:
     return Path(inspect.getfile(beadloom)).parent
 
 
-def _called_names(node: ast.AST) -> set[str]:
-    """Every callee name used under *node*, attribute calls by last segment."""
-    names: set[str] = set()
-    for child in ast.walk(node):
-        if not isinstance(child, ast.Call):
-            continue
-        func = child.func
-        if isinstance(func, ast.Name):
-            names.add(func.id)
-        elif isinstance(func, ast.Attribute):
-            names.add(func.attr)
-    return names
-
-
-def _builds_a_payload_holding_nodes(function: ast.AST) -> bool:
-    """Whether *function* constructs a mapping with a `nodes` key.
-
-    This is what separates a writer that CREATES nodes from one that patches a
-    node somebody else created: `update_node_in_yaml`, `_patch_docs_field` and
-    `link` all read `nodes` out of a file they loaded, and none of them builds
-    the key. A writer that builds it is a writer that decides what nodes exist,
-    which is the writer the parent post-condition is about.
-    """
-    return any(
-        isinstance(node, ast.Dict)
-        and any(
-            isinstance(key, ast.Constant) and key.value == "nodes" for key in node.keys
-        )
-        for node in ast.walk(function)
-    )
-
-
-def _writers_that_create_nodes(root: Path | None = None) -> dict[str, Path]:
+def _writers_that_create_nodes(root: Path | None = None) -> dict[str, FoundFunction]:
     """Every function under *root* that commits a graph file holding nodes.
+
+    The derivation is `source_derivation.writers_that_build`; what this module
+    supplies is the two names that make it a question about GRAPH NODES — the
+    commit point every graph YAML routes through, and the key a payload has to
+    build to be creating nodes rather than patching them. Both are read off the
+    product's own objects above, so a rename fails here rather than leaving a
+    scan that quietly finds no writer at all.
 
     *root* is the product's own package unless a caller says otherwise.
     `TestTheWriterScanReportsAThirdWriter` points it at a directory holding one
     synthetic module, which is how the scan itself is tested before the two
     classes above are trusted to it.
     """
-    root = root or _package_root()
-    found: dict[str, Path] = {}
-    for path in sorted(root.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if THE_GRAPH_COMMIT_POINT not in _called_names(node):
-                continue
-            if _builds_a_payload_holding_nodes(node):
-                found[node.name] = path
-    return found
-
-
-def _imports_in(path: Path) -> set[tuple[str, str]]:
-    """Every `from <module> import <name>` pair in the file at *path*."""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    return {
-        (node.module or "", alias.name)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    }
+    return writers_that_build(
+        root or _package_root(), key="nodes", commit_point=THE_GRAPH_COMMIT_POINT
+    )
 
 
 def _definitions_of_the_post_condition(root: Path) -> list[str]:
-    """Every definition of the post-condition under *root*, by relative path.
-
-    The leading underscore is stripped before the comparison, because that is
-    exactly how the two copies were spelled: both writers carried a private
-    `_missing_parent_edges`, and a check that matched only the public name would
-    have counted the shared definition and neither of them.
-    """
-    return [
-        str(path.relative_to(root))
-        for path in sorted(root.rglob("*.py"))
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and node.name.lstrip("_") == THE_POST_CONDITION
-    ]
+    """Every definition of the post-condition under *root*, by relative path."""
+    return definitions_named(root, THE_POST_CONDITION)
 
 
 def _function_named(name: str, path: Path) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    found = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and node.name == name
-    ]
-    assert found, f"no function named {name!r} in {path}"
-    return found[0]
+    """The function called *name* in the file at *path*."""
+    return function_named(name, module_tree(path))
 
 
 class TestTheWritersAreDerivedFromTheSource:
@@ -297,7 +242,7 @@ class TestTheWriterScanReportsAThirdWriter:
     scan says about each one is a difference that module makes and nothing else.
     """
 
-    def _scanning(self, tmp_path: Path, source: str) -> dict[str, Path]:
+    def _scanning(self, tmp_path: Path, source: str) -> dict[str, FoundFunction]:
         (tmp_path / "third_writer.py").write_text(source, encoding="utf-8")
         return _writers_that_create_nodes(tmp_path)
 
@@ -353,12 +298,12 @@ class TestTheWriterScanReportsAThirdWriter:
         module that owns it, which is what makes the call reach a copy.
         """
         found = self._scanning(tmp_path, A_WRITER_CARRYING_ITS_OWN_COPY)
-        path = found["write_the_service_map"]
+        where = found["write_the_service_map"]
 
-        assert THE_POST_CONDITION in _called_names(
-            _function_named("write_the_service_map", path)
+        assert THE_POST_CONDITION in called_names(
+            _function_named("write_the_service_map", where.path)
         )
-        assert (THE_OWNING_MODULE, THE_POST_CONDITION) not in _imports_in(path)
+        assert (THE_OWNING_MODULE, THE_POST_CONDITION) not in imports_in(where.path)
 
     def test_a_private_copy_is_caught_by_the_call_check_and_counted_as_a_definition(
         self, tmp_path: Path
@@ -377,10 +322,10 @@ class TestTheWriterScanReportsAThirdWriter:
         (tmp_path / "third_writer.py").write_text(
             A_WRITER_CARRYING_A_PRIVATE_COPY, encoding="utf-8"
         )
-        path = _writers_that_create_nodes(tmp_path)["write_the_service_map"]
+        where = _writers_that_create_nodes(tmp_path)["write_the_service_map"]
 
-        assert THE_POST_CONDITION not in _called_names(
-            _function_named("write_the_service_map", path)
+        assert THE_POST_CONDITION not in called_names(
+            _function_named("write_the_service_map", where.path)
         )
         assert _definitions_of_the_post_condition(tmp_path) == ["third_writer.py"]
 
@@ -390,9 +335,9 @@ class TestEveryWriterOfNodesReachesTheOnePostCondition:
 
     @pytest.mark.parametrize("writer", sorted(THE_WRITERS_THAT_CREATE_NODES))
     def test_the_writer_calls_the_shared_post_condition(self, writer: str) -> None:
-        path = _writers_that_create_nodes()[writer]
+        where = _writers_that_create_nodes()[writer]
 
-        assert THE_POST_CONDITION in _called_names(_function_named(writer, path)), (
+        assert THE_POST_CONDITION in called_names(_function_named(writer, where.path)), (
             f"{writer} creates graph nodes and never calls {THE_POST_CONDITION!r}, "
             "so nothing states that the nodes it writes carry a parent"
         )
@@ -406,10 +351,10 @@ class TestEveryWriterOfNodesReachesTheOnePostCondition:
         That is exactly the state this major found: two modules, one name, two
         bodies. The import is what makes the call reach the shared definition.
         """
-        path = _writers_that_create_nodes()[writer]
+        where = _writers_that_create_nodes()[writer]
 
-        assert (THE_OWNING_MODULE, THE_POST_CONDITION) in _imports_in(path), (
-            f"{path} calls {THE_POST_CONDITION!r} without importing it from "
+        assert (THE_OWNING_MODULE, THE_POST_CONDITION) in imports_in(where.path), (
+            f"{where.path} calls {THE_POST_CONDITION!r} without importing it from "
             f"{THE_OWNING_MODULE!r}, so it is calling a copy of its own"
         )
 
