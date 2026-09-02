@@ -102,6 +102,32 @@ BDL-067 then reported four different hand methods as prose:
 - an absent or empty `## Axes` section is a `docs quality` finding, the way `missing_sections`
   already reports a document missing a section its peers carry.
 
+**Advice is not a gate, and this project has three measured proofs of it.** A section the Gate can
+see missing is the cheap half. The half that makes `impact` an instrument rather than a
+recommendation is the second check: **a change that touches a call site outside the declared axes is
+a finding.** The machinery exists — `sync-check --staged` and the commit-scoped hook already judge a
+commit by its paths. Without it, the axes are a prompt input, and this repository has watched a
+prompt input be ignored or routed around three times: the mutation duty shipped into every role core
+with no runner (BDL-061 S4), the review's withholding defeated through `ACTIVE.md` (#212) and then
+through commit bodies (#219). Each was correct as written and none of them held.
+
+**Recall over precision, and the tool must name what it could not determine.** A narrowing tool that
+errs small is more dangerous than no tool. Today an agent that does not know the boundary reads
+widely and sometimes stumbles onto the neighbouring shape — that is how several of BDL-067's
+findings surfaced. Given a declared axes list, it will trust it and stop, so the failure mode
+inverts from ignorance to false confidence. The derivation must therefore report the population it
+could not resolve — an unparseable module, a dynamic dispatch, a call through a variable — as part
+of the answer rather than omitting it. `rule_liveness` and BDL-UX #215 are the same lesson already
+paid for here: an instrument that measures its own scope and reads as answering the question.
+
+**Validate it against BDL-067 before building it.** The three AST derivations already exist. Run
+them retroactively against the tree as it stood at the first dev bead on 2026-08-31 and ask one
+question: would they have listed **both** writers of graph nodes and **three** entry points of
+`init`? If yes, the feature is justified by a measurement rather than by an argument. If no, that is
+known in an hour instead of a sprint. This project asks that of every claim it reviews; the claim
+that this feature would have prevented BDL-067 is currently unmeasured, and it is the whole case
+for ranking it first.
+
 **Done when** a work item cannot reach its first dev bead without an `## Axes` section the Gate
 can see, a second ISSUES verdict on one work item forces a recorded re-plan rather than another
 fix cycle, and `beadloom impact` answers the three questions above from the source rather than
