@@ -34,17 +34,23 @@ Beadloom's own tree would fail these. Nothing is patched in the unsabotaged case
 the real bootstrap, the real `import_docs`, the real `generate_rules` and the real
 linter all run.
 
-ONE DIVERGENCE BETWEEN THE ENTRY POINTS IS NOT ASSERTED AWAY, and is written down
-here rather than left for the next reader to trip over. Under `--mode both` the two
-runs do not leave the same graph: `--yes` generates the doc skeletons inside its
-bootstrap block, so the import step that follows classifies the skeletons it just
-wrote and the graph gains `architecture` (domain) and `readme` (feature) nodes the
-wizard's graph does not have. The wizard imports first and offers the skeletons
-afterwards. Both graphs pass their own rules and every domain in both is parented, so
-what these cases assert is the VERDICT and the invariant, not node-set equality.
-Whether a run should classify the documents it generated in the same run is a
-separate question, reported on `beadloom-e8s4.15` for the review rather than decided
-here.
+THE DIVERGENCE THIS MODULE ONCE ONLY RECORDED IS NOW ASSERTED AWAY. Until `.18`,
+`--yes --mode both` generated the doc skeletons inside its bootstrap block and
+imported afterwards, so it classified the documents it had written seconds earlier
+and its graph gained `architecture` and two `readme` nodes the wizard's graph did not
+have. The paragraph that stood here reported that, said both graphs passed their own
+rules, and routed the question to the review. The review decided it: one command with
+one declared mode must not leave two different graphs, and a graph whose nodes are
+named after Beadloom's own scaffolding is not a description of the adopter's project
+(BDL-UX #216). `non_interactive_init` now generates the skeletons last, in the
+wizard's order, and `TestTheWizardAndTheFlagImportTheSameDocuments` asserts node-set
+equality where this paragraph used to explain its absence.
+
+The verdict was green on both sides of that divergence, which is why it needed its own
+assertion: `.14` gives every imported node a `part_of` edge to the root, so the wrong
+graph was structurally valid. An epic that hides a defect it did not create has done
+the thing it exists to stop, so `TestNoRunImportsTheScaffoldingItWrote` states the
+claim over one entry point at a time and does not depend on the other agreeing.
 """
 
 from __future__ import annotations
@@ -247,22 +253,90 @@ def _a_project_with_code_and_docs(tmp_path: Path, name: str = "orders-web") -> P
     return project
 
 
+def _a_project_whose_skeletons_would_collide(tmp_path: Path) -> Path:
+    """Two code-bearing source directories, plus documents the adopter wrote.
+
+    The shape the review of `.16` measured. `generate_skeletons` writes
+    `docs/architecture.md`, `docs/domains/orders/README.md` and
+    `docs/domains/catalog/README.md`, and `import_docs` names a node after the
+    file STEM — so both READMEs arrive under the single ref_id `readme`. A
+    fixture with one cluster would show a run importing its own scaffolding but
+    not the collision, and the collision is the part that makes the imported
+    graph unrepairable rather than merely wrong: the loader keeps one node per
+    ref_id, so one of the two documents is silently dropped.
+
+    `typescript_project` is flat by construction and this shape is not, so the
+    project is built here rather than adapted from it. The manifest name is the
+    same, which keeps the root node's ref_id comparable with the other fixtures.
+    """
+    project = tmp_path / "orders-web"
+    for cluster in ("orders", "catalog"):
+        (project / "src" / cluster).mkdir(parents=True)
+        (project / "src" / cluster / f"{cluster}.ts").write_text(
+            f"export const {cluster} = [];\n", encoding="utf-8"
+        )
+    (project / "package.json").write_text(
+        '{\n  "name": "orders-web",\n  "version": "0.4.1"\n}\n', encoding="utf-8"
+    )
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    for filename, text in UNCLASSIFIABLE_DOCS.items():
+        (docs / filename).write_text(text, encoding="utf-8")
+    return project
+
+
+def _documents_under(project_root: Path) -> list[str]:
+    """Every markdown file under `docs/`, by its path relative to the project."""
+    docs_dir = project_root / "docs"
+    if not docs_dir.is_dir():
+        return []
+    return sorted(
+        str(path.relative_to(project_root))
+        for path in docs_dir.rglob("*.md")
+        if path.is_file()
+    )
+
+
+def _the_imported_graph(project_root: Path) -> dict[str, Any]:
+    """`imported.yml` as written, or an empty mapping when no import ran."""
+    path = project_root / ".beadloom" / "_graph" / THE_IMPORT_FILE
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
 @contextmanager
-def _answering(prompts: tuple[str, ...]) -> Iterator[None]:
-    """Answer the wizard's prompts; a no-op for the entry point that asks none."""
+def _answering(
+    prompts: tuple[str, ...], *, generate_skeletons: bool = False
+) -> Iterator[None]:
+    """Answer the wizard's prompts; a no-op for the entry point that asks none.
+
+    `generate_skeletons` is the answer to the one `Confirm.ask` the wizard puts:
+    "Generate doc skeletons?". Declining it keeps a case about the verdict, which
+    is what every case written before `.18` wanted. `.18` compares the graph the
+    two entry points leave behind, and `--yes` has no such prompt — it always
+    generates — so a declining wizard would be compared against a run that did
+    strictly more work, and an agreement measured there would say nothing about
+    the divergence.
+    """
     if not prompts:
         yield
         return
     with (
         patch("rich.prompt.Prompt.ask", side_effect=list(prompts)),
-        # Declining the doc-skeleton prompt keeps the case about the verdict.
-        patch("rich.prompt.Confirm.ask", return_value=False),
+        patch("rich.prompt.Confirm.ask", return_value=generate_skeletons),
     ):
         yield
 
 
-def _init(project_root: Path, entry: InitEntryPoint, mode: str) -> Any:
-    with _answering(entry.prompts(mode)):
+def _init(
+    project_root: Path,
+    entry: InitEntryPoint,
+    mode: str,
+    *,
+    generate_skeletons: bool = False,
+) -> Any:
+    with _answering(entry.prompts(mode), generate_skeletons=generate_skeletons):
         return CliRunner().invoke(
             main, ["init", *entry.argv(mode), "--project", str(project_root)]
         )
@@ -551,6 +625,124 @@ class TestTheWizardAndTheFlagAgree:
         assert sorted(_unparented_domains(by_flag)) == sorted(
             _unparented_domains(by_wizard)
         )
+
+
+THE_IMPORTING_COMBINATIONS = [
+    (entry, mode) for entry in THE_ENTRY_POINTS for mode in THE_MODES_THAT_IMPORT
+]
+IMPORTING_COMBINATION_IDS = [
+    f"{entry.name}-{mode}" for entry, mode in THE_IMPORTING_COMBINATIONS
+]
+
+
+@pytest.mark.parametrize(
+    ("entry", "mode"), THE_IMPORTING_COMBINATIONS, ids=IMPORTING_COMBINATION_IDS
+)
+class TestNoRunImportsTheScaffoldingItWrote:
+    """BDL-067 `.18`, BDL-UX #216. The graph describes the adopter, not us.
+
+    Stated over one entry point at a time, so it holds whether or not the other
+    one agrees: an agreement between two runs that both import their own
+    scaffolding would be green and worthless. What is asserted is that every node
+    in `imported.yml` names a document that was on disk before `init` ran.
+
+    Measured on the pre-`.18` tree over `_a_project_whose_skeletons_would_collide`:
+    `--yes --mode both` reported `Imported: 4 documents` and left `imported.yml`
+    holding `architecture`, `readme`, `readme` and `payments` — three of the four
+    written by `generate_skeletons` seconds earlier, inside the same command.
+    """
+
+    def test_every_imported_node_names_a_document_that_predates_the_run(
+        self, tmp_path: Path, entry: InitEntryPoint, mode: str
+    ) -> None:
+        project = _a_project_whose_skeletons_would_collide(tmp_path)
+        the_adopters_documents = _documents_under(project)
+
+        _init(project, entry, mode, generate_skeletons=True)
+
+        imported = _the_imported_graph(project).get("nodes") or []
+        # Anti-vacuity: an import that wrote nothing satisfies any claim about
+        # what it wrote, and `--mode import` on this fixture has documents to read.
+        assert imported, "no node was imported, so nothing was checked"
+        assert sorted(
+            doc for node in imported for doc in (node.get("docs") or [])
+        ) == the_adopters_documents
+
+    def test_no_two_imported_nodes_share_a_ref_id(
+        self, tmp_path: Path, entry: InitEntryPoint, mode: str
+    ) -> None:
+        """The consequence that makes the wrong import lossy rather than noisy.
+
+        The importer names a node after the file stem, so two generated
+        `README.md` files became two nodes under the ref_id `readme`. The loader
+        keeps one node per ref_id, so a graph in that state has already dropped a
+        document it claims to describe.
+        """
+        project = _a_project_whose_skeletons_would_collide(tmp_path)
+
+        _init(project, entry, mode, generate_skeletons=True)
+
+        ref_ids = [
+            str(node["ref_id"]) for node in (_the_imported_graph(project).get("nodes") or [])
+        ]
+        assert ref_ids, "no node was imported, so nothing was checked"
+        assert sorted(ref_ids) == sorted(set(ref_ids)), ref_ids
+
+
+@pytest.mark.parametrize("mode", THE_MODES_THAT_IMPORT, ids=list(THE_MODES_THAT_IMPORT))
+class TestTheWizardAndTheFlagImportTheSameDocuments:
+    """One command, one declared mode, one imported graph — BDL-067 `.18`.
+
+    `TestTheWizardAndTheFlagAgree` asserts the verdict and the parenting and says
+    so in its own docstring; the node sets were left out of it because they
+    differed, and the difference was recorded in this module's docstring and
+    routed to the review rather than decided. The review decided it: a graph whose
+    nodes are named after Beadloom's own scaffolding is not a description of the
+    adopter's project, and one command with one declared mode must not leave two
+    different graphs.
+
+    Measured on the pre-`.18` tree, one project copied twice:
+
+        init --yes --mode both      -> imported.yml: architecture, readme, readme, payments
+        the wizard answering both   -> imported.yml: payments
+
+    Both entry points generate the skeletons here. The wizard is offered them and
+    accepts, because `--yes` has no such prompt and comparing it against a wizard
+    that declined would compare two different amounts of work.
+    """
+
+    def _two_runs(self, tmp_path: Path, mode: str) -> tuple[Path, Path]:
+        by_flag = _a_project_whose_skeletons_would_collide(tmp_path / "flag")
+        by_wizard = _a_project_whose_skeletons_would_collide(tmp_path / "wizard")
+        _init(by_flag, THE_FLAG, mode, generate_skeletons=True)
+        _init(by_wizard, THE_WIZARD, mode, generate_skeletons=True)
+        return by_flag, by_wizard
+
+    def test_they_write_the_same_imported_graph(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        by_flag, by_wizard = self._two_runs(tmp_path, mode)
+
+        through_the_flag = _the_imported_graph(by_flag)
+        through_the_wizard = _the_imported_graph(by_wizard)
+
+        # Anti-vacuity: two runs that imported nothing agree about nothing.
+        assert through_the_flag.get("nodes"), "the flag imported no node"
+        assert through_the_flag == through_the_wizard
+
+    def test_they_generate_the_same_documents(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """The other half of the same act, and the one that orders it.
+
+        The import reads `docs/`, so two entry points can only import the same
+        documents if they also leave the same ones behind. Stated separately
+        because a run that generated nothing at all would satisfy the claim above
+        while doing less than the adopter asked for.
+        """
+        by_flag, by_wizard = self._two_runs(tmp_path, mode)
+
+        assert _documents_under(by_flag) == _documents_under(by_wizard)
 
 
 @pytest.mark.parametrize("mode", THE_MODES_THAT_IMPORT, ids=list(THE_MODES_THAT_IMPORT))

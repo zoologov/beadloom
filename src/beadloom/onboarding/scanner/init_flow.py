@@ -79,18 +79,9 @@ def non_interactive_init(
         bs_result = bootstrap_project(project_root)
         result["bootstrap"] = bs_result
 
-        nodes = bs_result.get("nodes", [])
-        edges = bs_result.get("edges", [])
-
         # Auto-link existing docs to graph nodes before skeleton generation.
-        linked = auto_link_docs(project_root, nodes)
+        linked = auto_link_docs(project_root, bs_result.get("nodes", []))
         result["docs_linked"] = linked
-
-        # Generate doc skeletons.
-        from beadloom.onboarding.doc_generator import generate_skeletons
-
-        docs_result = generate_skeletons(project_root, nodes, edges)
-        result["docs_generated"] = docs_result
 
     if mode in ("import", "both"):
         docs_dir = project_root / "docs"
@@ -99,6 +90,38 @@ def non_interactive_init(
             result["import"] = docs_imported
         else:
             result["import"] = []
+
+    # The doc skeletons are generated LAST, after the import step — the order
+    # `interactive_init` has always run these two in: bootstrap, import,
+    # skeletons. While `generate_skeletons` sat inside the bootstrap block above,
+    # `--mode both` classified the documents it had written seconds earlier, so
+    # one command with one declared mode left two different graphs. Measured on a
+    # project with `src/orders/`, `src/catalog/` and one document of the
+    # adopter's own: `--yes --mode both` imported four documents (`architecture`,
+    # `readme`, `readme`, `payments`) where the wizard answering `both` imported
+    # one, and the two `readme` nodes are a single ref_id — the file stem is the
+    # ref_id and the loader keeps one node per ref_id — so that graph had already
+    # dropped a document it claimed to describe (BDL-067 `.18`, BDL-UX #216).
+    #
+    # THE ORDER RATHER THAN A FILTER. Excluding this run's own output from the
+    # import scan would have to name `docs/architecture.md` and
+    # `docs/domains/*/README.md`, and those are the ADOPTER's documents whenever
+    # the adopter wrote them first: `_write_if_missing` never overwrites, so a
+    # file at one of those paths may well predate the command. A filter would
+    # drop it from the graph and the two entry points would still leave two
+    # different graphs, with the divergence moved onto adopters who name their
+    # documents the way Beadloom does. The order removes the possibility; a
+    # filter removes only today's consequence, and goes stale the next time this
+    # block gains a writer.
+    #
+    # It is called the way the wizard calls it — with no node list, so it reads
+    # every graph file on disk. Passing the bootstrap's nodes would render
+    # `docs/architecture.md` from a graph missing the imported nodes, which is
+    # the same divergence one file further on.
+    if mode in ("bootstrap", "both"):
+        from beadloom.onboarding.doc_generator import generate_skeletons
+
+        result["docs_generated"] = generate_skeletons(project_root)
 
     # Generate AGENTS.md.
     generate_agents_md(project_root)
@@ -114,6 +137,10 @@ def non_interactive_init(
     # wizard already ran its reindex here, which is why the wizard reported the
     # failure that `--yes` reported clean: the two halves of one command
     # disagreed because only one of them had re-indexed.
+    #
+    # `generate_skeletons` counts as such a block: it patches a `docs:` field
+    # into the graph YAML for every skeleton it creates, so it has to run before
+    # this reindex and not after it (BDL-067 `.18`, which moved it down to here).
     from beadloom.application.reindex import reindex as do_reindex
 
     ri = do_reindex(project_root)

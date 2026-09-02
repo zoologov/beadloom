@@ -70,6 +70,29 @@ Cross-IDE context injection via a three-layer architecture.
 
 5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
+6. **One order for both entry points** (BDL-067 `.18`, BDL-UX #216) — `init` bootstraps,
+   then imports, then generates the doc skeletons, whether the mode arrived through
+   `--yes --mode` or through the wizard's prompt. `non_interactive_init()` used to generate
+   the skeletons inside its bootstrap block and import after them, so under `--mode both` it
+   classified the documents it had written seconds earlier. Measured on a project with
+   `src/orders/`, `src/catalog/` and one document of the adopter's own: `--yes --mode both`
+   imported four documents — `architecture`, `readme`, `readme`, `payments` — where the
+   wizard answering `both` imported one. Three of the four are Beadloom's own scaffolding,
+   and the two `readme` nodes are a single ref_id, because the importer names a node after
+   the file stem and the loader keeps one node per ref_id: that graph had already dropped a
+   document it claimed to describe. The defect predates this epic, and `.14` changed its
+   character — `doc_classify._missing_parent_edges` gives every imported node a `part_of`
+   edge to the root, so the wrong graph became structurally valid and both runs exited 0.
+
+   The ORDER fixes it rather than a filter over the import scan. An exclusion would have to
+   name `docs/architecture.md` and `docs/domains/*/README.md`, and those are the ADOPTER's
+   documents whenever the adopter wrote them first — `generate_skeletons()` never overwrites
+   an existing file — so a filter would drop a real document from the graph and leave the two
+   entry points disagreeing about a different population. `generate_skeletons()` is now also
+   called with no node list, the way the wizard calls it, so it reads every graph file on
+   disk: passing the bootstrap's nodes rendered `docs/architecture.md` from a graph that was
+   missing the imported ones, which is the same divergence one file further on.
+
 ## API
 
 ### `prime_context(project_root, *, fmt="markdown")`

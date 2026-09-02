@@ -918,3 +918,95 @@ def _then_no_renderers_line_is_quoted(world: dict[str, Any]) -> None:
         assert lines_about_the_step, (fmt, rendered)
         quoted = [line for line in lines_about_the_step if line in output]
         assert quoted == [], (fmt, quoted, output)
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.18`, BDL-UX #216 — the run's own scaffolding is not the adopter's
+# documentation
+# ---------------------------------------------------------------------------
+
+
+def _documents_under(project: Path) -> list[str]:
+    """Every markdown file under `docs/`, by its path relative to the project."""
+    docs_dir = project / "docs"
+    if not docs_dir.is_dir():
+        return []
+    return sorted(
+        str(path.relative_to(project))
+        for path in docs_dir.rglob("*.md")
+        if path.is_file()
+    )
+
+
+def _the_imported_graph(project: Path) -> dict[str, Any]:
+    """`imported.yml` as written, or an empty mapping when no import ran."""
+    path = project / ".beadloom" / "_graph" / "imported.yml"
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+@when(
+    "the project is initialised twice over and both runs generate doc skeletons"
+)
+def _when_initialised_through_both_entry_points_with_skeletons(
+    world: dict[str, Any], tmp_path: Path
+) -> None:
+    """The same two entry points, with the doc skeletons in play on both sides.
+
+    The step above declines the wizard's skeleton offer, which keeps its
+    scenarios about the verdict. Here the skeletons ARE the subject: `--yes` has
+    no such prompt and always generates, so a wizard that declined would be
+    compared against a run that did strictly more work.
+
+    The documents on disk are recorded before either run, because the claim is
+    about which documents the graph was built from and no writer reports that.
+    """
+    by_flag = tmp_path / "with-skeletons" / "through-the-flag" / world["project"].name
+    by_wizard = tmp_path / "with-skeletons" / "through-the-wizard" / world["project"].name
+    shutil.copytree(world["project"], by_flag)
+    shutil.copytree(world["project"], by_wizard)
+
+    world["by_flag"] = by_flag
+    world["by_wizard"] = by_wizard
+    world["documents_before"] = _documents_under(by_flag)
+    assert world["documents_before"], "the fixture has no document to import"
+
+    world["flag_run"] = CliRunner().invoke(
+        main, ["init", "--yes", "--mode", THE_MODE, "--project", str(by_flag)]
+    )
+    with (
+        patch("rich.prompt.Prompt.ask", side_effect=_the_wizard_answering(THE_MODE)),
+        patch("rich.prompt.Confirm.ask", return_value=True),
+    ):
+        world["wizard_run"] = CliRunner().invoke(
+            main, ["init", "--project", str(by_wizard)]
+        )
+
+
+@then("every imported node in either graph names a document the run did not write")
+def _then_no_node_names_a_generated_document(world: dict[str, Any]) -> None:
+    """Stated over each run on its own, so it holds whether or not they agree.
+
+    Two entry points that both imported their own scaffolding would satisfy an
+    agreement and describe neither adopter's project.
+    """
+    for label, root in (("--yes", world["by_flag"]), ("the wizard", world["by_wizard"])):
+        imported = _the_imported_graph(root).get("nodes") or []
+        # Anti-vacuity: an import that wrote nothing satisfies any claim about
+        # what it wrote, and this fixture has documents to read.
+        assert imported, f"{label} imported no node, so nothing was checked"
+        named = sorted(doc for node in imported for doc in (node.get("docs") or []))
+        assert named == world["documents_before"], (
+            label,
+            [doc for doc in named if doc not in world["documents_before"]],
+        )
+
+
+@then("the two runs leave the same imported graph")
+def _then_the_two_imported_graphs_are_the_same(world: dict[str, Any]) -> None:
+    through_the_flag = _the_imported_graph(world["by_flag"])
+    through_the_wizard = _the_imported_graph(world["by_wizard"])
+
+    assert through_the_flag.get("nodes"), "the flag imported no node"
+    assert through_the_flag == through_the_wizard

@@ -296,3 +296,21 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     And the command names the failing gate step and what it will say
     And every rendering the gate offers prints both of those
     And the command quotes no rendering's own step line
+
+  # BDL-067 `.18`, the review's major 4 on `.16` (BDL-UX #216). `--yes --mode
+  # both` generated the doc skeletons inside its bootstrap block and imported
+  # afterwards, so it classified the documents it had written seconds earlier:
+  # four documents where the wizard answering `both` classified one, three of
+  # them Beadloom's own scaffolding, two of them arriving under a single ref_id
+  # because the importer names a node after the file stem. The defect predates
+  # this epic; `.14` changed its character by giving every imported node a
+  # `part_of` edge to the root, so what used to be a visible orphan became
+  # structurally valid and green. The scenario is therefore stated over what the
+  # graph DESCRIBES, not over the verdict, which was already 0 on both sides.
+  @bead:beadloom-e8s4.18
+  Scenario: neither entry point imports the documents it generated in the same run
+    Given a project whose source directory has code-bearing subdirectories
+    And a docs directory whose documents the classifier reads as domains
+    When the project is initialised twice over and both runs generate doc skeletons
+    Then every imported node in either graph names a document the run did not write
+    And the two runs leave the same imported graph

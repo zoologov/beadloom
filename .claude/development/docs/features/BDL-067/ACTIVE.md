@@ -7,17 +7,18 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.17` — consolidation: replace the per-shape instruments with tree-level ones
-**Goal:** five review passes returned 2, 1, 1, 3, 4 majors — rising — because every cycle fixed its
-finding by introducing an instrument scoped to one shape, and the next review found the neighbouring
-shape. The deliverable is instruments that range over the set that actually varies: distinct ref_ids
-rather than node occurrences, every kind rather than the kinds today's rules name, every caller
-rather than the one that remembers, every renderer rather than the one a TTY selects, every branch
-that WRITES rather than the ones that bootstrap.
-**Done when:** a project named after one of its own source directories no longer gets rc 1 from
-`init` on every run; the report's attribution is chosen from the full product of two facts about the
-tree; each rewritten test is verified RED against `HEAD`; `sync-check` back to rc 0 and
-`beadloom ci` rc 0.
+**Bead:** `beadloom-e8s4.18` — `--yes --mode both` imports the skeletons it generated seconds
+earlier (BDL-UX #216)
+**Goal:** one command with one declared mode must not leave two different graphs, and a graph whose
+nodes are named after Beadloom's own scaffolding is not a description of the adopter's project.
+Measured before the fix on a project with `src/orders/`, `src/catalog/` and one document of the
+adopter's own: `--yes --mode both` imported four documents (`architecture`, `readme`, `readme`,
+`payments`) where the wizard answering `both` imported one. The defect predates this epic; `.14`
+changed its character by parenting those nodes, so a visible orphan became structurally valid and
+green — this epic hid a defect it did not create, which is the class it exists to remove.
+**Done when:** the two entry points leave the same `imported.yml` for the same declared mode, no
+imported node names a document the run itself wrote, the case is in the mode-agreement suite, and
+`beadloom ci` is rc 0.
 
 ## Progress
 
@@ -34,7 +35,7 @@ tree; each rewritten test is verified RED against `HEAD`; `sync-check` back to r
 - [x] Wave 4c — `.9` dev (`9eac01f`) / `.10` test (`28f1cd2`) / `.11` review (launched)
 - [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (closed, 3 majors)
 - [x] Wave 4e — `.14` dev (`b68ebb2`) / `.15` test (`6989d5d`) / `.16` review (closed, 4 majors)
-- [ ] Wave 4f — `.17` dev (consolidation) / `.18` dev (`--yes --mode both` imports its own skeletons)
+- [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`--yes --mode both` imports its own skeletons)
 - [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
@@ -59,6 +60,7 @@ tree; each rewritten test is verified RED against `HEAD`; `sync-check` back to r
 | `beadloom-e8s4.15` | ✓ done | the mode axis, and the branch enumerator re-seeded from `write_yaml_atomic` — the one commit point every graph YAML routes through — so a second writer joins the instrument on the day it is written. Commit `6989d5d`. |
 | `beadloom-e8s4.16` | ✓ done | fifth-pass review: 0 critical, 4 major. The root guard counting occurrences (a release blocker), the `--mode import` carve-out that survives one command, the withdrawal bound to one branch of three, and `--yes --mode both` importing its own skeletons (routed to `.18`). |
 | `beadloom-e8s4.17` | ✓ done | the common cause, not four instances. Root candidates counted by DISTINCT ref_id; the bootstrap post-condition over every kind; the verdict taken by every branch that writes a graph file, with `--import` re-indexing what it wrote; attribution chosen from a table over the full `(graph, rules)` product sampled off the tree by digest rather than off one writer's return value; the withdrawal printed by the verdict so no caller can decline it; the `ci` line stating the step's name and summary instead of quoting one of three renderings. Resumed from an authentication-killed attempt: its uncommitted work was read, judged sound and built on, with one false docstring sentence in it corrected. |
+| `beadloom-e8s4.18` | ✓ done | the doc skeletons are generated LAST, after the import step — the order `interactive_init` has always run. `--yes --mode both` no longer classifies the documents it wrote seconds earlier: measured on twin scratch projects, `imported.yml`, `services.yml` and the whole `docs/` tree are now identical between the flag and the wizard, and `doctor`'s two `Node catalog/orders has no doc linked` warnings are gone. Chosen over excluding the run's own files from the import scan, because such a filter would have to name `docs/architecture.md` and `docs/domains/*/README.md` — the ADOPTER's documents whenever the adopter wrote them first. 13 tests (12 unit + 1 scenario), all verified RED with the source change reverted. |
 
 ## Notes
 
