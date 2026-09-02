@@ -69,6 +69,19 @@ features. Use `--yes` (`-y`) to skip prompts (CI / automation).
 It also runs a full reindex: code symbols are extracted, imports resolved, and
 `depends_on` edges inferred from code.
 
+**`init` checks its own output, and can exit 1.** After the graph is written and indexed,
+every entry point that wrote a file under `.beadloom/_graph/` — `--yes` in any mode,
+`--bootstrap`, `--import` and the interactive wizard — runs the same lint step `beadloom
+ci` runs. When the scaffold does not pass the rules the same run wrote beside it, `init`
+withdraws the completion it has already printed, names each failing rule with its node and
+the graph file that node was written into, and exits 1. The scaffold is left on disk: the
+exit code reports the state, it does not withdraw the graph. Until BDL-067 there was no
+such check, so a virgin `beadloom init --yes --mode bootstrap` exited 0 and the next
+command an adopter runs — `beadloom ci` — was red on a rule that same run had written
+(BDL-UX #192). A scripted `beadloom init --yes && beadloom ci` now stops at `init`
+instead. The [CLI reference](services/cli.md) has the two report shapes, the two paths
+that take no verdict, and the one graph file shape that still ends `init` in a traceback.
+
 > No documentation is required to start — Beadloom bootstraps a skeleton from
 > code structure alone. You fill it in by hand or with any AI agent (see
 > `beadloom docs polish`), and Beadloom keeps it current.

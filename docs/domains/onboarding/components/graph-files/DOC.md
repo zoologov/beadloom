@@ -71,14 +71,20 @@ graph file holding a top-level list parses without complaint and then raises
 ## Scope, and what is outside it
 
 This policy covers the readers `init`'s own modules hold. It is not a claim about the
-command. MEASURED at `.24` on the review's own tree, after all four were converted:
-`application/reindex/indexing.py::read_declared_docs` walks the same directory with no
-guard, so `init --bootstrap` still ends in a `ParserError` one step later, reached
-through `do_reindex`. That reader is in another domain and `--bootstrap` reached it
-before `.21` as well, so it is outside what BDL-067 broke and was left alone
-deliberately. `graph/loader.py`, `graph/diff.py`, `reindex/change_detection.py` and
-`services/commands/index_ops.py` walk the directory too. Closing the class is a
-planning decision rather than a fix.
+command: `init` still ends in a Python traceback on a graph file it cannot handle, filed
+as BDL-UX #220 and open. MEASURED at `.25` over `init`'s own eight (entry point x mode)
+cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml` — 24 runs,
+of which the 15 that reach the file traceback. Those are `--bootstrap`, `--import` and all
+three wizard modes, on a file that does not parse, on a file whose top level is a list,
+and on a file carrying an unquoted date. Two frames, both outside `onboarding`:
+`application/reindex/indexing.py::read_declared_docs`, reached through `do_reindex`, and
+`graph/loader.py::load_graph`. The date shape is why a fix scoped to unreadable YAML would
+close two thirds of the class and no more — that file parses, and every reader this policy
+covers yields it happily. `--yes` reaches none of the 15, and not because a guard works:
+`non_interactive_init` returns `skipped` when `.beadloom/` already exists, and `--force`
+deletes the directory first. `graph/diff.py`, `reindex/change_detection.py` and
+`services/commands/index_ops.py` walk the directory too. Closing the class is a planning
+decision rather than a fix.
 
 ## Tests
 

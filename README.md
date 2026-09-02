@@ -102,6 +102,8 @@ beadloom reindex                   # build the index
 beadloom ci                        # run every check at once
 ```
 
+`beadloom init` checks its own output before it reports success. When the scaffold fails the rules the same run wrote beside it, `init` says which rule and which node, and exits 1 — rather than exiting 0 and leaving you to find it at the first `beadloom ci`. The scaffold stays on disk either way.
+
 Three things are worth looking at next: `beadloom ctx <node>` — what the tool knows about a piece of the system, `beadloom prime` — exactly what an agent will see, `beadloom docs site` — how it looks on the portal.
 
 You need no documentation to start: the skeleton is raised from the structure of the code alone. Filling it in can be done by hand or by any AI agent (see `beadloom docs polish`), and keeping it current is Beadloom's job from then on.

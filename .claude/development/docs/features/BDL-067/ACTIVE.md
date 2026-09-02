@@ -7,15 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.27` — the attribution sentence says FILE while the fact behind it is a
-NODE
-**Goal:** make each attribution sentence say what the key that selects it actually asks. `.24`
-moved the graph half of the key from the FILE the failing node came from to the NODE and left both
-denials saying `graph file(s)`, so a claim that used to be true by construction became independent
-of what selects it — and the review of `.26` measured it false on the corner `.24` created.
-**Done when:** the two sentences and the acceptance step deny at the node grain, the assertions
-that bind them to their key were verified red first, the `graph-files` DOC states the detector
-`.25` shipped rather than the one `.24` shipped, and `beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.5` — doc refresh for the bootstrap/init surfaces changed by BDL-067
+**Goal:** make the adopter-facing documents state `init`'s exit-code contract, which nine review
+passes found missing from `docs/services/cli.md` and which `sync-check` cannot see, since no CLI
+command or flag changed and the drift channel that did move is the coarse `graph` signature.
+**Done when:** every document named by the four reviews is true of all four entry points and all
+three modes, no document claims `init` has stopped tracebacking, the six surface-drift documents
+are re-attested only after being made true, and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -34,10 +32,10 @@ that bind them to their key were verified red first, the `graph-files` DOC state
 - [x] Wave 4e — `.14` dev (`b68ebb2`) / `.15` test (`6989d5d`) / `.16` review (closed, 4 majors)
 - [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`52f52ae`) / `.19` test (the one table)
 - [x] Wave 4g — `.20` review (sixth pass, closed, 3 majors + 1 minor)
-- [ ] Wave 4h — `.21` dev (the writing side) / `.22` test (the three as axes) / `.23` seventh review
-- [ ] Wave 4i — `.24` dev (`9e61988`) / `.25` test (the reader axis and the attribution instrument) / `.26` eighth review
-- [ ] Wave 4j — `.27` dev (the sentence at the grain of its key) / `.28` ninth review
-- [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
+- [x] Wave 4h — `.21` dev (the writing side) / `.22` test (the three as axes) / `.23` seventh review
+- [x] Wave 4i — `.24` dev (`9e61988`) / `.25` test (the reader axis and the attribution instrument) / `.26` eighth review
+- [x] Wave 4j — `.27` dev (the sentence at the grain of its key) / `.28` ninth review
+- [x] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
 ## Results
@@ -48,7 +46,7 @@ that bind them to their key were verified red first, the `graph-files` DOC state
 | `beadloom-e8s4.2` | ✓ done | `init` now takes a verdict on the graph it wrote, in both the `--yes` and interactive `--bootstrap` branches, using the Gate's own `has_errors` semantics. 15 tests. The divergence is CONSTRUCTED — `part_of` edges are stripped back out of `services.yml` after the real bootstrap wrote the real rules — so the case does not depend on `.1` still leaving a naturally-broken graph. API change: `gate._step_lint` → public `lint_step`. Commit `e52aa06`. |
 | `beadloom-e8s4.3` | ✓ done | the three suite defects closed. All five assertions verified RED against the pre-fix source (`git archive af26750 src` imported via `PYTHONPATH`, the override confirmed by `gate.lint_step` being absent there): pre-fix 5 failed / 20 passed, post-fix 25 passed, no pre-existing test turned red. Coverage 97% / 93% / 91% on the changed modules. Commits `e870b0b`, `fee64db`. |
 | `beadloom-e8s4.4` | ✓ done | REVIEW ISSUES: 0 critical, 2 major. Verified green independently: the #192 reproduction on a scratch adopter (`2 nodes, 1 edges`, `lint --strict` rc 0, `ci` rc 0) against the same fixture on pre-fix source (`2 nodes, 0 edges`, no `edges:` key); the deliverable is an invariant (`_missing_domain_parent_edges` runs over the whole node list after every edge producer); the edge uses `root_node["ref_id"]` as written; `rules_gen.py` diff is empty. |
-| `beadloom-e8s4.5` | Pending | re-pointed: now blocked by `.8`. Doc surface named by the review, not to be guessed. |
+| `beadloom-e8s4.5` | ✓ done | the documentation wave. `docs/services/cli.md` gained the exit-code contract it has been open on since the FIRST review pass: four entry points, three modes, the two paths that take no verdict, the two report shapes, and a Known limitation naming BDL-UX #220 as open with its measurement (24 runs, 15 traceback). Six named documents plus five the same cause had made stale: `getting-started`, both READMEs, `CHANGELOG` (a new `[Unreleased]` section, the verdict marked as a behaviour change for anyone scripting `init`), the `agent-prime` SPEC's superseded detector sentence, the residue paragraph in all three of its copies, the onboarding README's semicolon splice and pronoun, `parallel-waves` (a THIRD defeat of the review withholding, BDL-UX #219, where it named two), and `architecture.md` (`graph_files.py`). Tracker: #192 gets its FIXED note in place rather than a move to Closed, since the branch is not merged, and BDL-UX #216-#222 were filed — they were cited 59 times across the branch and the log stopped at #215. ROADMAP: both P0 sections re-measured (28 beads, 37 commits, nine passes, majors 2,1,1,3,4,3,5,2,2, eight named instances of the class). Measured: 7865 passed, `beadloom ci` rc 0. |
 | `beadloom-e8s4.6` | ✓ done | the wizard now takes the verdict (guarded on `mode in (bootstrap, both)` and skipped on the `edit` review answer, where the graph has just been handed to the user). The covering module is parametrised over the three BRANCHES instead of the two bindings: 14 cases → 33. Minor 4 closed — an unloadable `rules.yml` now prints the loader's complaint instead of the gate step's own name, and does not blame the bootstrap for a file the bootstrap does not rewrite. 21 new tests (19 unit + 2 scenarios); 13 of them verified RED against `git archive HEAD src` on PYTHONPATH. Minor 3 wording corrected in all three prose copies of the post-condition sentence (BRIEF, onboarding README, agent-prime SPEC); the fourth copy was this file's goal line and is replaced above. API change: `gate.RULES_CONFIG_ERROR`. |
 | `beadloom-e8s4.7` | ✓ done | the branch count is now READ from `init`'s source, not written down: `tests/test_init_branches_that_reach_the_bootstrap.py` derives the callables that reach `bootstrap_project`, finds every call to one of them in the command body, and asserts each is followed by a reachable verdict. Demonstrated capable of failing on three mutant trees (a fourth branch with no verdict — 2 red; a fourth branch WITH one — 1 red, the coverage assertion; a renamed guard — 2 red), and red against the pre-`.6` source. The three cases `.6` declared vacuous at `[wizard]` now carry an anti-vacuity guard and are red there too (pre-`.6`: 13 red → 16 red). 12 new tests (11 unit + 1 scenario, the `edit` carve-out). 7367 → 7379 passed, `beadloom ci` rc 0. |
 | `beadloom-e8s4.8` | ✓ done | REVIEW ISSUES: 0 critical, 1 major. Confirmed closed by measurement: the wizard verdict, the `why` in the `LintError` branch, and both wording findings. Verified the enumeration test against the REAL `init` mutated three ways. |

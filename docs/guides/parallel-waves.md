@@ -232,7 +232,7 @@ notice about the defeats the command cannot see.
 verdict comment exists. It exits `3` — distinct from `2`, so a caller cannot confuse *refused*
 with *failed* — and says the account stays withheld.
 
-**Documented, not enforced**, for two defeats it cannot observe:
+**Documented, not enforced**, for three defeats it cannot observe:
 
 1. **A reviewer with a shell can run `bd comments` directly.** Nothing here can prevent that, and
    a mechanism that claimed to would be the overstatement this feature exists to remove.
@@ -242,6 +242,17 @@ with *failed* — and says the account stays withheld.
    observation is — the brief tells the reviewer to say in its verdict if the prompt carried
    anything it did not derive itself, including the coordinator's own observation of the change
    rather than only a pasted summary.
+3. **The commit bodies on the reviewed range carry the account as well.** `review-brief`
+   withholds bead comments and does not touch `git log`, while step 3 of the review protocol
+   sends the reviewer to `git diff <base>...HEAD`. Measured on BDL-067: the `.21` and `.22`
+   commit messages were longer and more specific than any bead comment, one of them opening
+   with an explicit *FINDING for `.23`*, while the brief reported 0 comments withheld. It is
+   not reachable by prompt discipline, because the protocol itself sends the reviewer to the
+   diff and this project deliberately writes long commit bodies — the better the message, the
+   more completely the mechanism is defeated. Filed as BDL-UX #219 and undecided: either the
+   brief withholds or summarises the commit bodies on the range and says how many, or it stops
+   claiming to withhold and instead reports what is reachable so the reviewer can declare it.
+   Both reviewers who met it declared it unprompted, which is the only reason it is known.
 
 What changed is the **default**. The cheap path is now the independent one, and the withholding
 is counted and visible.

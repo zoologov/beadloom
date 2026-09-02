@@ -82,17 +82,27 @@ Cross-IDE context injection via a three-layer architecture.
    guard is separate from the parse guard and is needed separately: a graph file holding a
    top-level list parses without complaint and then raises `AttributeError` on `data.get`.
    `tests/test_graph_files_are_read_under_one_policy.py` derives the readers from the source
-   — every function that both globs `*.yml` and calls `yaml.safe_load` — and fails when a
-   fifth body appears under `onboarding/` or in `setup.py`.
+   — a function that both LISTS a directory and PARSES YAML, by any name the standard library
+   or PyYAML offers for either — and fails when a fifth body appears under `onboarding/` or in
+   `setup.py`. The detector was widened at BDL-067 `.25`: `.24`'s asked for `glob` with the
+   literal `"*.yml"` and for `yaml.safe_load` by name, which is the spelling `each_graph_file`
+   happens to use rather than what makes a body a reader, and five bodies that read the
+   directory were measured passing it.
 
    The policy covers the readers `init`'s own modules hold and no others, which is a scope and
-   not a claim about the command. MEASURED at `.24` on the review's own tree:
-   `application/reindex/indexing.read_declared_docs` walks the same directory with no guard,
-   so `init --bootstrap` still ends in a `ParserError` one step later. That reader is in
-   another domain and `--bootstrap` reached it before `.21` as well, so it is outside what
-   this epic broke; `graph/loader.py`, `graph/diff.py`, `reindex/change_detection.py` and
-   `services/commands/index_ops.py` walk it too. The measurement is pinned in the same test
-   file, which fails as soon as somebody closes it.
+   not a claim about the command. `init` still ends in a Python traceback on a graph file it
+   cannot handle, and BDL-067 did not close that (BDL-UX #220, open). MEASURED at `.25` over
+   `init`'s own eight (entry point x mode) cells crossed with three shapes of a hand-edited
+   `.beadloom/_graph/legacy.yml`: 24 runs, of which the 15 that reach the file traceback —
+   `--bootstrap`, `--import` and all three wizard modes, on a file that does not parse, on a
+   file whose top level is a list, and on a file carrying an unquoted date. Two frames, both
+   outside `onboarding`: `application/reindex/indexing.read_declared_docs` and
+   `graph/loader.load_graph`. The date shape is the one that shows a parse guard would not be
+   enough — every reader `init` owns yields that file happily. `--yes` reaches none of them,
+   and not because a guard works: `non_interactive_init` returns `skipped` when `.beadloom/`
+   already exists, and `--force` deletes the directory first. `graph/diff.py`,
+   `reindex/change_detection.py` and `services/commands/index_ops.py` walk the directory too.
+   The measurement is pinned in the same test file, which fails as soon as somebody closes it.
 
    "No single root" counts DISTINCT ref_ids since BDL-067 `.17`. The candidates were
    collected into a list and counted there, and `bootstrap_project` produces one root under

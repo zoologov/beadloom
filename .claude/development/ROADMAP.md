@@ -32,13 +32,19 @@
 the work the others check.
 
 **Measured on BDL-067, 2026-08-31 to 2026-09-02.** One bug — "the bootstrap writes a domain with
-no `part_of` edge" — became 23 beads, 26 commits, seven review passes and +8115 lines. Majors per
-review pass ran 2, 1, 1, 3, 4, 3. The defect was never one missing edge: it was a class, *a
-statement scoped to one shape while a neighbouring shape exists*, and it had six instances — a
-comment counting monkeypatch bindings and calling them branches, a message blaming Beadloom for
-the adopter's own rules, a withdrawal bound to one branch of three, a quoted line matching one
-renderer of three, a post-condition stated per writer over two writers, and a wizard answer that
-writes two files and leaves through `sys.exit` above the verdict.
+no `part_of` edge" — became 28 beads, 37 commits and nine review passes. At `5f46c4f`, the last
+commit before the documentation wave: 50 files, +12227 / -133 lines. Majors per review pass ran
+2, 1, 1, 3, 4, 3, 5, 2, 2 — the count did not decay with the passes. The defect was never one
+missing edge: it was a class, *a statement scoped to one shape while a neighbouring shape
+exists*, and eight instances of it are named. A comment counting monkeypatch bindings and calling
+them branches. A message blaming Beadloom for the adopter's own rules. A withdrawal bound to one
+branch of three. A quoted line matching one renderer of three. A post-condition stated per writer
+over two writers. A wizard answer that writes two files and leaves through `sys.exit` above the
+verdict. An attribution sentence still saying `graph file(s)` after its key had moved to the
+NODE. And a reader detector asking for one spelling — `glob` with the literal `"*.yml"` plus
+`yaml.safe_load` by name — where five bodies that read the directory spell it otherwise. A ninth
+was a document rather than code: one of two twin files carried the superseded detector sentence
+after the other was corrected, found by the ninth review and closed in the documentation wave.
 
 Three gaps in the flow produced that, and each is fixable:
 
@@ -190,21 +196,41 @@ reproducible benchmark on a real codebase.
 bead comment, and a declared mutation target outside the configured source paths is
 reported rather than silently scoring zero.
 
-### P0 — A virgin `beadloom init` leaves the Gate red
+### P0 — A virgin `beadloom init` leaves the Gate red — CLOSED on the branch, not yet merged
 
 **`beadloom-e8s4` · BDL-UX #192 · the adopter-facing blocker.**
 
-`beadloom init --yes --mode bootstrap` exits 0 and then fails its own `beadloom ci`
+`beadloom init --yes --mode bootstrap` exited 0 and then failed its own `beadloom ci`
 on `domain-needs-parent` — a rule the same command wrote one step earlier. The
-bootstrap writes a domain with no `part_of` edge.
+bootstrap wrote a domain with no `part_of` edge.
 
-It is not new and it was never measured, because everything measured here runs on
-a repository whose graph has been hand-authored since BDL-008. It was found by
+It was not new and it had never been measured, because everything measured here runs
+on a repository whose graph has been hand-authored since BDL-008. It was found by
 verifying the 3.0.0 wheel against a project that is not us.
 
-**Why it outranks everything below:** Beadloom is about to be installed on a
+**Why it outranked everything below:** Beadloom is about to be installed on a
 microservice landscape and on a second private project by people who did not
-write it. The first command they run leaves the Gate red.
+write it. The first command they ran left the Gate red.
+
+**State on `features/BDL-067`.** Both halves shipped. The INSTANCE: both writers of
+graph nodes hold one post-condition and one function that computes the edges they are
+short of, so no domain is written without a `part_of` edge. The CLASS: every entry
+point of `init` that writes a file under `.beadloom/_graph/` re-indexes and then runs
+the Gate's own `lint_step` over the project, and exits 1 rather than reporting success
+over a graph that fails the rules beside it. Measured over eight (entry point x mode)
+cells derived from `init`'s own source — four entry points (`--yes`, `--bootstrap`,
+`--import`, the wizard) and three modes — on fixtures that are not this repository.
+Two paths take no verdict and both are stated: a run that changed nothing under
+`.beadloom/_graph/`, and the wizard's `edit` answer, which hands the graph over to be
+edited by hand.
+
+**What this epic did NOT close, ranked below as its own item:** `init` still ends in a
+Python traceback on a graph file it cannot handle (BDL-UX #220, `beadloom-l22o`), and
+still writes two nodes under one `ref_id` on the classic Python `src/<project>/`
+layout (BDL-UX #214, `beadloom-7c6k`). Nine review passes were needed to get here, and
+eight of the defects they found were one sentence true of one shape while a
+neighbouring shape existed — which is the argument for the axes artifact ranked above
+this item, not a separate observation.
 
 ### P1 — BDL-066: agent behaviour observability, trace and result
 
