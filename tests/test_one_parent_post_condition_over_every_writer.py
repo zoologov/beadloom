@@ -110,9 +110,15 @@ def _builds_a_payload_holding_nodes(function: ast.AST) -> bool:
     )
 
 
-def _writers_that_create_nodes() -> dict[str, Path]:
-    """Every function in the package that commits a graph file holding nodes."""
-    root = _package_root()
+def _writers_that_create_nodes(root: Path | None = None) -> dict[str, Path]:
+    """Every function under *root* that commits a graph file holding nodes.
+
+    *root* is the product's own package unless a caller says otherwise.
+    `TestTheWriterScanReportsAThirdWriter` points it at a directory holding one
+    synthetic module, which is how the scan itself is tested before the two
+    classes above are trusted to it.
+    """
+    root = root or _package_root()
     found: dict[str, Path] = {}
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -135,6 +141,23 @@ def _imports_in(path: Path) -> set[tuple[str, str]]:
         if isinstance(node, ast.ImportFrom)
         for alias in node.names
     }
+
+
+def _definitions_of_the_post_condition(root: Path) -> list[str]:
+    """Every definition of the post-condition under *root*, by relative path.
+
+    The leading underscore is stripped before the comparison, because that is
+    exactly how the two copies were spelled: both writers carried a private
+    `_missing_parent_edges`, and a check that matched only the public name would
+    have counted the shared definition and neither of them.
+    """
+    return [
+        str(path.relative_to(root))
+        for path in sorted(root.rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and node.name.lstrip("_") == THE_POST_CONDITION
+    ]
 
 
 def _function_named(name: str, path: Path) -> ast.FunctionDef | ast.AsyncFunctionDef:
@@ -181,6 +204,187 @@ class TestTheWritersAreDerivedFromTheSource:
         assert "update_node_in_yaml" not in _writers_that_create_nodes()
 
 
+#: A third writer of nodes, written the way a third writer gets written: it
+#: builds the payload, commits it through the one commit point, and nobody
+#: remembered the post-condition. Spelled through the two derived names rather
+#: than typed out, so a rename moves the mutant with the product instead of
+#: leaving a synthetic module that no longer has the shape it is named after.
+A_THIRD_WRITER_OF_NODES = """
+from beadloom.infrastructure.atomic_io import COMMIT
+
+
+def write_the_service_map(project_root, nodes):
+    payload = {"nodes": nodes, "edges": []}
+    COMMIT(project_root / ".beadloom" / "_graph" / "third.yml", payload)
+""".replace("COMMIT", THE_GRAPH_COMMIT_POINT)
+
+#: A function that commits a graph file and creates no node: it reads `nodes`
+#: out of a file somebody else wrote and puts the same list back. This is the
+#: shape of `update_node_in_yaml`, `_patch_docs_field` and `link`, and the scan
+#: must not ask any of them to hold a post-condition about nodes they did not
+#: create.
+A_FUNCTION_THAT_ONLY_PATCHES_NODES = """
+import yaml
+
+from beadloom.infrastructure.atomic_io import COMMIT
+
+
+def patch_the_summary(path, ref_id, summary):
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for node in data.get("nodes", []):
+        if node["ref_id"] == ref_id:
+            node["summary"] = summary
+    COMMIT(path, data)
+""".replace("COMMIT", THE_GRAPH_COMMIT_POINT)
+
+#: A third writer that builds the payload and hands the commit to a helper. The
+#: scan cannot see it, and that is the ceiling this module states rather than
+#: discovers: the two halves it matches on are in two functions, so neither
+#: function carries both.
+A_WRITER_THAT_HANDS_THE_COMMIT_TO_A_HELPER = """
+from beadloom.infrastructure.atomic_io import COMMIT
+
+
+def write_the_domain_map(project_root, nodes):
+    _commit(project_root / ".beadloom" / "_graph" / "third.yml", {"nodes": nodes})
+
+
+def _commit(path, payload):
+    COMMIT(path, payload)
+""".replace("COMMIT", THE_GRAPH_COMMIT_POINT)
+
+#: A third writer that calls the post-condition by its public name and defines
+#: its own. This is the shape the import check exists for and the only one it
+#: catches alone: the name is called, so a check that asked no more than that
+#: reports the module clean while the call reaches a body of its own.
+A_WRITER_CARRYING_ITS_OWN_COPY = """
+from beadloom.infrastructure.atomic_io import COMMIT
+
+
+def POST_CONDITION(nodes, root_ref_id, parented):
+    return []
+
+
+def write_the_service_map(project_root, nodes):
+    payload = {"nodes": nodes, "edges": POST_CONDITION(nodes, "root", set())}
+    COMMIT(project_root / ".beadloom" / "_graph" / "third.yml", payload)
+""".replace("COMMIT", THE_GRAPH_COMMIT_POINT).replace(
+    "POST_CONDITION", THE_POST_CONDITION
+)
+
+#: The same copy under the spelling the two writers actually had — private, with
+#: a leading underscore. Two checks catch it and it takes both to say so: the
+#: call check does not match a private name, and the definition scan strips the
+#: underscore before comparing, which is the only reason it counts.
+A_WRITER_CARRYING_A_PRIVATE_COPY = A_WRITER_CARRYING_ITS_OWN_COPY.replace(
+    THE_POST_CONDITION, f"_{THE_POST_CONDITION}"
+)
+
+
+class TestTheWriterScanReportsAThirdWriter:
+    """The scan itself, before the classes above are trusted to it.
+
+    BDL-067 `.22`, covering `.21`. The two classes above say what the writers of
+    nodes must do, and both of them ask the scan which functions those are. A
+    scan that could not SEE a third writer would leave both of them green on the
+    day one arrived — the equality case only fails if the new writer is found —
+    and nothing established that it can. That is the same gap one level down as
+    the one this epic keeps meeting, and it is closed the way
+    `tests/test_init_branches_that_reach_the_bootstrap.py` closes it for a fourth
+    branch of `init`: by mutants of the real shape, read by the real scan.
+
+    The synthetic modules are written into a directory of their own, so what the
+    scan says about each one is a difference that module makes and nothing else.
+    """
+
+    def _scanning(self, tmp_path: Path, source: str) -> dict[str, Path]:
+        (tmp_path / "third_writer.py").write_text(source, encoding="utf-8")
+        return _writers_that_create_nodes(tmp_path)
+
+    def test_a_third_writer_of_nodes_is_found(self, tmp_path: Path) -> None:
+        """The failure this module exists to produce, produced on demand.
+
+        Found means named: `test_the_scan_finds_the_writers_the_sweep_found_by
+        _hand` compares the derived set against the declared one, so a writer the
+        scan sees is a writer somebody has to answer for.
+        """
+        found = self._scanning(tmp_path, A_THIRD_WRITER_OF_NODES)
+
+        assert set(found) == {"write_the_service_map"}, found
+
+    def test_a_function_that_only_patches_nodes_is_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """Anti-vacuity for the case above: a scan that found everything passes it.
+
+        `test_a_writer_that_only_patches_nodes_is_not_counted` states the same
+        exclusion over the real `update_node_in_yaml`. This states it over a
+        shape the scan has never seen, which is what a third patcher will be.
+        """
+        assert self._scanning(tmp_path, A_FUNCTION_THAT_ONLY_PATCHES_NODES) == {}
+
+    def test_a_writer_that_hands_the_commit_to_a_helper_is_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """The ceiling, stated as a case rather than as a sentence in a docstring.
+
+        The scan matches both halves in ONE function body, so a writer that
+        builds the payload and delegates the commit is invisible here. It is not
+        invisible to the suite: the helper becomes a seventh direct caller of the
+        commit point and fails `test_the_writer_seed_finds_the_writers_the_sweep
+        _found_by_hand` in `tests/test_init_branches_that_reach_the_bootstrap.py`,
+        whose failure text asks whether the new writer creates nodes. The cost of
+        the ceiling is therefore a worse question, not a missed one — and if that
+        other case is ever relaxed to containment, this one is the record of what
+        was relying on it.
+        """
+        found = self._scanning(tmp_path, A_WRITER_THAT_HANDS_THE_COMMIT_TO_A_HELPER)
+
+        assert found == {}, found
+
+    def test_a_writer_calling_its_own_copy_is_found_and_imports_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """The discriminator between the call check and the import check.
+
+        Both are asserted here because either alone is satisfied by the state
+        this major found: the writer DOES call the post-condition by name, so a
+        call-only check reports it clean, and it does not import it from the
+        module that owns it, which is what makes the call reach a copy.
+        """
+        found = self._scanning(tmp_path, A_WRITER_CARRYING_ITS_OWN_COPY)
+        path = found["write_the_service_map"]
+
+        assert THE_POST_CONDITION in _called_names(
+            _function_named("write_the_service_map", path)
+        )
+        assert (THE_OWNING_MODULE, THE_POST_CONDITION) not in _imports_in(path)
+
+    def test_a_private_copy_is_caught_by_the_call_check_and_counted_as_a_definition(
+        self, tmp_path: Path
+    ) -> None:
+        """`_missing_parent_edges` is how both copies were actually spelled.
+
+        Both halves, because the two checks answer it differently and only
+        together do they cover the two spellings a copy can have. The call check
+        matches the public name, so a private copy fails it outright — which is
+        why the case above had to be written with the public one to reach the
+        import check at all. And the definition scan strips the leading
+        underscore before comparing: a scan that did not would have counted the
+        one shared definition and neither of the two private ones it exists to
+        find.
+        """
+        (tmp_path / "third_writer.py").write_text(
+            A_WRITER_CARRYING_A_PRIVATE_COPY, encoding="utf-8"
+        )
+        path = _writers_that_create_nodes(tmp_path)["write_the_service_map"]
+
+        assert THE_POST_CONDITION not in _called_names(
+            _function_named("write_the_service_map", path)
+        )
+        assert _definitions_of_the_post_condition(tmp_path) == ["third_writer.py"]
+
+
 class TestEveryWriterOfNodesReachesTheOnePostCondition:
     """The invariant is edited once, because there is one of it."""
 
@@ -211,14 +415,7 @@ class TestEveryWriterOfNodesReachesTheOnePostCondition:
 
     def test_the_package_defines_the_post_condition_once(self) -> None:
         """A second definition is how the two copies got there in the first place."""
-        root = _package_root()
-        defined_in = [
-            str(path.relative_to(root))
-            for path in sorted(root.rglob("*.py"))
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-            and node.name.lstrip("_") == THE_POST_CONDITION
-        ]
+        defined_in = _definitions_of_the_post_condition(_package_root())
 
         assert len(defined_in) == 1, (
             f"{THE_POST_CONDITION!r} is defined in more than one place: "

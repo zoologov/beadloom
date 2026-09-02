@@ -501,3 +501,177 @@ class TestAGraphFileThatCannotBeReadIsSkipped:
         assert _graph_file_of_each_node(tmp_path) == {
             "billing": ".beadloom/_graph/services.yml"
         }
+
+
+#: An inherited graph file holding one unparented domain and NO `docs:` field.
+#: The field is the whole of the difference against `AN_INHERITED_FILE_ALREADY
+#: _DOCUMENTED` below, and it is what decides whether this run touches the file:
+#: `generate_skeletons` writes a README for every node that has no document and
+#: patches `docs:` back into the graph file the node is in.
+AN_INHERITED_FILE_WITH_NO_DOCUMENT = {
+    "nodes": [
+        {
+            "ref_id": "ledger",
+            "kind": "domain",
+            "summary": "Left by an earlier run, with no parent and no document.",
+        }
+    ]
+}
+
+#: The same file, with the document an earlier run would have written for it.
+#: This is the state `import_docs` actually leaves — it writes a `docs:` entry
+#: for every node it creates — and it is why `AN_IMPORT_FILE_FROM_AN_EARLIER_RUN`
+#: above carries one.
+AN_INHERITED_FILE_ALREADY_DOCUMENTED = {
+    "nodes": [
+        {
+            "ref_id": "ledger",
+            "kind": "domain",
+            "summary": "Left by an earlier run, with no parent.",
+            "docs": ["docs/ledger.md"],
+        }
+    ]
+}
+
+#: The node in both of them, and the one the report names either way.
+THE_INHERITED_ORPHAN_IN_THE_LEGACY_FILE = "ledger"
+THE_INHERITED_FILE = "legacy.yml"
+
+
+def _a_tree_carrying_an_undocumented_orphan(tmp_path: Path) -> Path:
+    """A project that is not us, carrying one graph file an earlier run wrote.
+
+    No `rules.yml`, so this run writes its own and the rules half of every corner
+    below is `True`. That is deliberate: holding one half fixed leaves the
+    annotation as the only thing that can move the other.
+    """
+    project = typescript_project(tmp_path).root
+    _write_graph_file(project, THE_INHERITED_FILE, AN_INHERITED_FILE_WITH_NO_DOCUMENT)
+    return project
+
+
+def _a_tree_whose_orphan_already_has_its_document(tmp_path: Path) -> Path:
+    """The same tree, one field further on: the node names a document that exists."""
+    project = typescript_project(tmp_path).root
+    _write_graph_file(project, THE_INHERITED_FILE, AN_INHERITED_FILE_ALREADY_DOCUMENTED)
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "ledger.md").write_text("# Ledger\n", encoding="utf-8")
+    return project
+
+
+class TestWhatCountsAsWritingTheFileTheFailingNodeCameFrom:
+    """The attribution instrument, over a file this run only ANNOTATED.
+
+    BDL-067 `.22`, and the consequence `.21` reported rather than redesigned.
+    `.21` gave `--bootstrap` the same call shape as the other two entry points,
+    so it now runs `generate_skeletons` over the whole tree — which writes a
+    README for every node with no document and patches `docs:` back into the
+    graph file that node sits in, inherited files included. The instrument
+    behind `_GRAPH_HALF` and `_ATTRIBUTION` asks whether the bytes of that file
+    changed during the run, so "this run wrote the file the failing node came
+    from" is now TRUE for a file this run neither created nor put a node in.
+
+    MEASURED, on two trees differing by one field on one node:
+
+        legacy.yml's node has no `docs:`  -> (True, True):  "the graph this
+            command just wrote ... This is a defect in Beadloom's bootstrap
+            rather than in your project — please report it"
+        legacy.yml's node has `docs:`     -> (False, True): "the graph already
+            in .beadloom/_graph/ ... the rule(s) this command wrote are meeting
+            a graph that predates them"
+
+    Same rule, same node, same file, two answers — and the first of them is the
+    bug-report request `.17` built the table to confine to the one corner where
+    Beadloom is at fault. An adopter on the first tree is asked to file a report
+    about a node no writer in this run produced.
+
+    WHAT THESE CASES ARE FOR, since the question is not this bead's to settle.
+    `.21` states the attribution question is per FILE and per BYTES, and that
+    per-node-CREATED is a different instrument. Both answers above are recorded
+    here as the answers the product gives TODAY, so that changing the instrument
+    is a test failure with a measurement attached rather than a silent re-answer
+    — and so that the seventh review decides it holding both corners rather than
+    one. If `.23` moves to the finer grain, the two cases below swap corners and
+    say so; nothing here claims the present answer is the right one.
+    """
+
+    def _corners_printed(self, output: str) -> list[Any]:
+        return [key for key, sentence in _ATTRIBUTION.items() if sentence in output]
+
+    def test_the_run_annotates_the_inherited_file_it_did_not_write(
+        self, tmp_path: Path
+    ) -> None:
+        """The premise, measured: the bytes change, and only the `docs:` field.
+
+        Without this the two cases below would rest on an assumption about what
+        `generate_skeletons` touches. The node is the same node afterwards —
+        same ref_id, same kind, same summary, still no parent — so nothing about
+        the failure changed, only the file's bytes.
+        """
+        project = _a_tree_carrying_an_undocumented_orphan(tmp_path)
+        path = project / ".beadloom" / "_graph" / THE_INHERITED_FILE
+        before = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        _bootstrap(project)
+
+        after = yaml.safe_load(path.read_text(encoding="utf-8"))
+        [node] = after["nodes"]
+        assert node["docs"] == ["docs/domains/ledger/README.md"], after
+        assert {k: v for k, v in node.items() if k != "docs"} == before["nodes"][0]
+
+    def test_a_file_this_run_only_annotated_is_attributed_to_this_run(
+        self, tmp_path: Path
+    ) -> None:
+        """Recorded, not endorsed: today the annotation makes the file ours.
+
+        The report names `legacy.yml` beside the node and calls it "the graph
+        this command just wrote" in the same paragraph, and asks the adopter for
+        a bug report about it.
+        """
+        project = _a_tree_carrying_an_undocumented_orphan(tmp_path)
+
+        output = _bootstrap(project).output
+
+        assert self._corners_printed(output) == [(True, True)], output
+        assert _GRAPH_HALF[True] in output, output
+        assert f".beadloom/_graph/{THE_INHERITED_FILE}" in output, output
+
+    def test_the_same_file_left_untouched_is_attributed_to_the_earlier_run(
+        self, tmp_path: Path
+    ) -> None:
+        """The other side of the pair: one `docs:` field, one different answer."""
+        project = _a_tree_whose_orphan_already_has_its_document(tmp_path)
+
+        output = _bootstrap(project).output
+
+        assert self._corners_printed(output) == [(False, True)], output
+        assert _GRAPH_HALF[False] in output, output
+
+    def test_the_two_trees_fail_the_same_rule_on_the_same_node(
+        self, tmp_path: Path
+    ) -> None:
+        """Anti-vacuity, and the whole point of stating the pair.
+
+        Two different sentences are only a finding if the failure underneath
+        them is the same failure. Both trees are red, both name
+        `domain-needs-parent` against `ledger` in `legacy.yml`, and neither of
+        those nodes was written by the run that reports it. What differs is the
+        attribution, and nothing else does.
+        """
+        annotated = _bootstrap(_a_tree_carrying_an_undocumented_orphan(tmp_path / "a"))
+        untouched = _bootstrap(
+            _a_tree_whose_orphan_already_has_its_document(tmp_path / "b")
+        )
+
+        the_finding = (
+            f"domain-needs-parent: {THE_INHERITED_ORPHAN_IN_THE_LEGACY_FILE} "
+            f"(.beadloom/_graph/{THE_INHERITED_FILE})"
+        )
+        assert annotated.exit_code == 1, annotated.output
+        assert untouched.exit_code == 1, untouched.output
+        assert the_finding in annotated.output, annotated.output
+        assert the_finding in untouched.output, untouched.output
+        assert self._corners_printed(annotated.output) != self._corners_printed(
+            untouched.output
+        )

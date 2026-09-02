@@ -7,15 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.21` — convert the WRITING side, the way `.17` converted the reporting side
-**Goal:** `.17` and `.19` converted the REPORTING side — attribution from a digest of the whole
-graph directory, a table over the full product, one verdict shared with the Gate, branches derived
-from `init`'s own source — and nobody converted the WRITING side, where all three of the sixth
-review's majors live: one writer, one caller and one exit form each doing its own thing.
-**Done when:** the three majors and the minor are closed so that a new one of each KIND fails a
-test on the day it is written rather than being found by the seventh review — the reviewer's
-prediction being a third writer of graph nodes, a fourth caller of `generate_skeletons`, or a fifth
-way out of `init` that is not `return` — and `beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.22` — the writing side as axes: writers, skeleton callers, ways out of `init`
+**Goal:** `.21` converted the writing side; this bead asks whether the three axes it left can
+actually FAIL. Each of the sixth review's three predicted divergences — a third writer of graph
+nodes, a fourth caller of `generate_skeletons`, a fifth way out of `init` — must be derived from
+the source and demonstrated capable of reporting a new one, the way
+`tests/test_init_branches_that_reach_the_bootstrap.py` demonstrates it for a fourth branch.
+**Done when:** each axis is red-proved against a tree without the fix it covers, the attribution
+corners that `.21` reported are asserted rather than left to be re-answered silently, and cells
+already covered are named as covered rather than duplicated. `beadloom ci` rc 0.
 
 ## Progress
 
@@ -63,6 +63,7 @@ way out of `init` that is not `return` — and `beadloom ci` is rc 0.
 | `beadloom-e8s4.19` | ✓ done | ONE table over (entry point x mode), with the renderer varied inside it, replacing a third one-axis enumeration. 8 cells derived from `init`'s own source — the four guards `.7`'s enumerator finds, times the modes each branch offers, with a one-mode branch's declared mode checked against the writers under its guard. 10 red runs; the report's attribution is MEASURED off `.beadloom/_graph/` by this module's own digest rather than read back from the report or taken from the product's instrument. 169 tests (168 unit + 1 scenario, the `--import` branch's verdict, which `.17` introduced and no scenario stated). Red proved per invariant against four single-edit mutants of `setup.py` (10 / 4 / 10 / 7 failures) and against `52f52ae^` for invariant 5. Five classes declared as guards that cannot fail, with reasons. Collapsed five constants that were about to exist in a third module. |
 | `beadloom-e8s4.20` | ✓ done | sixth-pass review: 0 critical, 3 major. The diagnosis rather than the count is the deliverable — a conversion completed on the reporting side and not started on the writing side — plus the prediction `.21` exists to falsify. |
 | `beadloom-e8s4.21` | ✓ done | the writing side converted. **Major 3:** one post-condition, one implementation — `scanner/parent_edges.py` (`missing_parent_edges` + `parented_by`), imported by both writers; the writers are DERIVED from the source (reach `write_yaml_atomic`, build a payload holding `nodes`), so a third one fails on the day it is written. **Major 1:** `generate_skeletons` no longer accepts a node list at all — a whole-tree document that cannot be handed part of the tree by any caller, present or later. **Major 2:** `init` contains no `sys.exit`; the wizard's `cancel` answer is judged like every other, the verdict asks the TREE whether a verdict is owed, the enumerator's terminator set resolves a callee and reads its return annotation, and the review answers are read off the wizard's own prompt and RUN. **Minor:** the node-less `forbid_import` finding staged end to end (the measurement `.20` could not complete) and the unreadable-YAML guards covered. 50 new tests, 7740 → 7790 passed. Two acceptance scenarios, both measured red by re-applying the two reversions. `beadloom ci` rc 0. |
+| `beadloom-e8s4.22` | ✓ done | the three axes, each demonstrated capable of failing, plus the attribution question `.21` reported. **Axis 1:** the writer scan had no mutants — the equality case only fails if the scan SEES the third writer, and nothing established that it can; `TestTheWriterScanReportsAThirdWriter` now reads five synthetic modules (a third writer found, a patcher excluded, a delegating writer declared as the ceiling, a public-named copy caught by the import check, a private-named copy caught by the call check and the underscore-stripping definition scan). **Axis 2:** new module over every caller of `generate_skeletons` — the set is derived, every call site is asserted to hand over the project root (the signature says ONE argument, not WHICH), and a caller that re-indexes at all must re-index AFTER the skeletons, which is `.18`'s defect stated over the callers. The universal "no re-index before" rule was measured FALSE on the product first: `interactive_init` re-indexes before and again after under `files_created > 0`. **Axis 3:** covered twice by `.21` and by `THE_BRANCHES`, re-audited and not duplicated; the same for the non-virgin entry-point invariant the bead named, which `.21` had already landed. **FINDING for `.23`:** with one call shape in, `--bootstrap` patches `docs:` into inherited graph files, so a docs-less inherited orphan now prints `(True, True)` — "a defect in Beadloom's bootstrap ... please report it" — for a node no writer in this run produced, while the same tree with the `docs:` field prints `(False, True)`. Both corners asserted as today's answers, neither endorsed. 20 new tests, 7790 → 7810 passed, `beadloom ci` rc 0. |
 
 ## Notes
 
