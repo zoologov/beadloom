@@ -396,7 +396,9 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # body, and a body with a single responsibility is a node with a DOC. 101 -> 102
         # in BDL-068 `.1`, which lifted the three AST derivations into
         # `application/source_derivation/` and documented them as a component.
-        assert populations[SPACE_AS_IS] == 102
+        # 102 -> 103 in BDL-068 `.2`, which documented `impact` — the feature an
+        # adopter runs over that component.
+        assert populations[SPACE_AS_IS] == 103
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

@@ -35,10 +35,13 @@ from beadloom.application.source_derivation.source_tree import (
     functions_in,
     module_tree,
     python_files,
+    sweep_modules,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from beadloom.application.source_derivation.source_tree import ModuleSweep
 
 #: Listing a directory, by every name the standard library offers for it.
 LISTS_A_DIRECTORY = frozenset({"glob", "rglob", "iterdir", "listdir", "scandir", "walk"})
@@ -112,6 +115,30 @@ def yaml_directory_readers_in(source: str) -> list[str]:
     ]
 
 
+def bodies_calling(
+    sweep: ModuleSweep, verbs: frozenset[str], *, and_also: frozenset[str] = frozenset()
+) -> tuple[FoundFunction, ...]:
+    """Every function in *sweep* whose own body calls one of *verbs*, with its place.
+
+    *and_also* makes the shape a conjunction: both halves must be in ONE body.
+    That is what separates a sound predicate from a spelling — "lists a directory
+    AND parses YAML" names a reader, while either half alone names most of a
+    codebase.
+
+    The word OWN is the load-bearing one. A body that merely REACHES a verb
+    through a helper is not named here, and that is the difference between the
+    sink and the first hop: MEASURED at `af26750d`, 58 names reach a body that
+    serialises YAML and exactly 3 bodies do it themselves.
+    """
+    return tuple(
+        FoundFunction(function.name, path, function.lineno)
+        for path, tree in sweep.parsed
+        for function in functions_in(tree)
+        for calls in [called_names(function)]
+        if calls & verbs and (not and_also or calls & and_also)
+    )
+
+
 def functions_that_serialise_yaml_to_disk(root: Path) -> dict[str, FoundFunction]:
     """Every function under *root* that turns data into YAML and writes it itself.
 
@@ -119,9 +146,8 @@ def functions_that_serialise_yaml_to_disk(root: Path) -> dict[str, FoundFunction
     only way out. This is how that premise is checked rather than trusted.
     """
     return {
-        function.name: FoundFunction(function.name, path, function.lineno)
-        for path in python_files(root)
-        for function in functions_in(module_tree(path))
-        for calls in [called_names(function)]
-        if calls & SERIALISES_YAML and calls & PUTS_BYTES_ON_DISK
+        found.name: found
+        for found in bodies_calling(
+            sweep_modules(root), SERIALISES_YAML, and_also=PUTS_BYTES_ON_DISK
+        )
     }

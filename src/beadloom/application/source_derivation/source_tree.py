@@ -52,6 +52,45 @@ def module_tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
+@dataclass(frozen=True)
+class UnparsedModule:
+    """A file under a swept root that could not be parsed, and why.
+
+    Every sweep in this package walks past it. A sweep that walked past it
+    SILENTLY would hand its caller a clean list over an incomplete tree, which is
+    the one failure mode this package is built against, so the file travels with
+    the answer instead of being dropped.
+    """
+
+    path: Path
+    reason: str
+
+
+@dataclass(frozen=True)
+class ModuleSweep:
+    """Every module under a root, split into the ones that parsed and the ones that did not."""
+
+    parsed: tuple[tuple[Path, ast.Module], ...]
+    unparsed: tuple[UnparsedModule, ...]
+
+
+def sweep_modules(root: Path) -> ModuleSweep:
+    """Parse every Python file under *root*, keeping the failures rather than raising.
+
+    A syntax error in one module is a hole in every sweep built on this one, and
+    a hole a caller cannot see is worse than one it can. So the failures are
+    returned beside the trees instead of ending the walk.
+    """
+    parsed: list[tuple[Path, ast.Module]] = []
+    unparsed: list[UnparsedModule] = []
+    for path in python_files(root):
+        try:
+            parsed.append((path, module_tree(path)))
+        except (SyntaxError, ValueError, UnicodeDecodeError) as failure:
+            unparsed.append(UnparsedModule(path, f"{type(failure).__name__}: {failure}"))
+    return ModuleSweep(tuple(parsed), tuple(unparsed))
+
+
 def functions_in(node: ast.AST) -> Iterator[FunctionNode]:
     """Every function defined anywhere under *node*, nested ones included."""
     for child in ast.walk(node):

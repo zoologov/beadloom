@@ -23,8 +23,11 @@ built on this is for.
 from __future__ import annotations
 
 import ast
+import importlib
 import os
 import sys
+from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import NoReturn
 
 from beadloom.application.source_derivation.calls import dotted_name
@@ -77,3 +80,82 @@ def ends_the_branch(statement: ast.stmt, resolving_in: object) -> bool:
         and isinstance(statement.value, ast.Call)
         and never_returns(dotted_name(statement.value), resolving_in)
     )
+
+
+def exit_forms(function: ast.AST, resolving_in: object) -> tuple[str, ...]:
+    """Every distinct way *function* ends, as its own source spells it.
+
+    Three forms, because :func:`ends_the_branch` knows three. Rendered from the
+    source rather than classified into words, so ``sys.exit(0)`` and ``return``
+    read as the branch wrote them and a reader can go and look.
+    """
+    return tuple(
+        sorted(
+            {
+                ast.unparse(statement)
+                for statement in ast.walk(function)
+                if isinstance(statement, ast.stmt) and ends_the_branch(statement, resolving_in)
+            }
+        )
+    )
+
+
+@dataclass(frozen=True)
+class ResolvedNames:
+    """A namespace terminator names resolve through, and the names it could not bind.
+
+    The unbound half is not a diagnostic, it is part of the answer. A name this
+    namespace cannot bind is read by :func:`ends_the_branch` as a call the branch
+    CARRIES ON past — so a `NoReturn` helper hiding behind an unbound name is an
+    exit form the derivation does not list, and the only honest thing to do with
+    that is say which names it is.
+    """
+
+    namespace: SimpleNamespace
+    unbound: tuple[str, ...]
+
+
+def _stdlib_object(module: str, attribute: str | None) -> object | None:
+    """The named stdlib object, or ``None`` for anything outside the standard library.
+
+    Only the standard library is imported. A project-local or third-party module
+    would have to be executed to be asked, and a derivation that runs the tree it
+    is reading is a derivation that can change it.
+    """
+    if module.split(".")[0] not in sys.stdlib_module_names:
+        return None
+    try:
+        imported = importlib.import_module(module)
+    except ImportError:
+        return None
+    return imported if attribute is None else getattr(imported, attribute, None)
+
+
+def stdlib_names_of(tree: ast.Module) -> ResolvedNames:
+    """Bind the module's imported names to their stdlib objects, and name the rest.
+
+    The namespace is built from the source's OWN import statements, so what a
+    terminator name means here is what it means in the module under examination
+    rather than what it happens to mean in this process.
+    """
+    bound: dict[str, object] = {}
+    unbound: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                head = alias.name.split(".")[0]
+                local = alias.asname or head
+                target = _stdlib_object(alias.name if alias.asname else head, None)
+                if target is None:
+                    unbound.add(local)
+                else:
+                    bound[local] = target
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                local = alias.asname or alias.name
+                target = _stdlib_object(node.module or "", alias.name)
+                if target is None:
+                    unbound.add(local)
+                else:
+                    bound[local] = target
+    return ResolvedNames(SimpleNamespace(**bound), tuple(sorted(unbound)))

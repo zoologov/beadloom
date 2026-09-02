@@ -34,7 +34,9 @@ from beadloom.services.cli import (
 )
 
 # The complete, ordered command set the CLI exposes (the S4 split must not add,
-# drop, or rename any command — registration is behavior-preserving).
+# drop, or rename any command — registration is behavior-preserving). A LATER
+# slice may add one, and then this literal moves with it: `impact` joined in
+# BDL-068 `.2`.
 EXPECTED_COMMANDS = {
     "active-sync",
     "ci",
@@ -47,6 +49,7 @@ EXPECTED_COMMANDS = {
     "federate",
     "graph",
     "guard",
+    "impact",
     "init",
     "install-hooks",
     "link",
