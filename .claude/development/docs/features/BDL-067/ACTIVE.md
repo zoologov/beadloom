@@ -7,17 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.18` — `--yes --mode both` imports the skeletons it generated seconds
-earlier (BDL-UX #216)
-**Goal:** one command with one declared mode must not leave two different graphs, and a graph whose
-nodes are named after Beadloom's own scaffolding is not a description of the adopter's project.
-Measured before the fix on a project with `src/orders/`, `src/catalog/` and one document of the
-adopter's own: `--yes --mode both` imported four documents (`architecture`, `readme`, `readme`,
-`payments`) where the wizard answering `both` imported one. The defect predates this epic; `.14`
-changed its character by parenting those nodes, so a visible orphan became structurally valid and
-green — this epic hid a defect it did not create, which is the class it exists to remove.
-**Done when:** the two entry points leave the same `imported.yml` for the same declared mode, no
-imported node names a document the run itself wrote, the case is in the mode-agreement suite, and
+**Bead:** `beadloom-e8s4.19` — one enumeration over branches x modes x renderers
+**Goal:** stop adding one-axis enumerations. The suite already enumerates branches (`.7`) and then
+modes (`.15`), and the fifth review still returned four majors — three of them on axes no
+enumeration covered: which branch withdraws the completion claim, which renderer the quoted `ci`
+line matches, and which run wrote the failing node. A third one-axis enumeration would repeat that
+at a larger number.
+**Done when:** one table over (entry point x mode) with the renderer varied inside it asserts the
+five invariants in every cell it reaches, every new assertion is measured red against a tree
+without the fix it covers, every assertion that cannot fail is declared with its reason, and
 `beadloom ci` is rc 0.
 
 ## Progress
@@ -35,7 +33,8 @@ imported node names a document the run itself wrote, the case is in the mode-agr
 - [x] Wave 4c — `.9` dev (`9eac01f`) / `.10` test (`28f1cd2`) / `.11` review (launched)
 - [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (closed, 3 majors)
 - [x] Wave 4e — `.14` dev (`b68ebb2`) / `.15` test (`6989d5d`) / `.16` review (closed, 4 majors)
-- [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`--yes --mode both` imports its own skeletons)
+- [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`52f52ae`) / `.19` test (the one table)
+- [ ] Wave 4g — `.20` review (sixth pass, after the consolidation)
 - [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
@@ -61,6 +60,7 @@ imported node names a document the run itself wrote, the case is in the mode-agr
 | `beadloom-e8s4.16` | ✓ done | fifth-pass review: 0 critical, 4 major. The root guard counting occurrences (a release blocker), the `--mode import` carve-out that survives one command, the withdrawal bound to one branch of three, and `--yes --mode both` importing its own skeletons (routed to `.18`). |
 | `beadloom-e8s4.17` | ✓ done | the common cause, not four instances. Root candidates counted by DISTINCT ref_id; the bootstrap post-condition over every kind; the verdict taken by every branch that writes a graph file, with `--import` re-indexing what it wrote; attribution chosen from a table over the full `(graph, rules)` product sampled off the tree by digest rather than off one writer's return value; the withdrawal printed by the verdict so no caller can decline it; the `ci` line stating the step's name and summary instead of quoting one of three renderings. Resumed from an authentication-killed attempt: its uncommitted work was read, judged sound and built on, with one false docstring sentence in it corrected. |
 | `beadloom-e8s4.18` | ✓ done | the doc skeletons are generated LAST, after the import step — the order `interactive_init` has always run. `--yes --mode both` no longer classifies the documents it wrote seconds earlier: measured on twin scratch projects, `imported.yml`, `services.yml` and the whole `docs/` tree are now identical between the flag and the wizard, and `doctor`'s two `Node catalog/orders has no doc linked` warnings are gone. Chosen over excluding the run's own files from the import scan, because such a filter would have to name `docs/architecture.md` and `docs/domains/*/README.md` — the ADOPTER's documents whenever the adopter wrote them first. 13 tests (12 unit + 1 scenario), all verified RED with the source change reverted. |
+| `beadloom-e8s4.19` | ✓ done | ONE table over (entry point x mode), with the renderer varied inside it, replacing a third one-axis enumeration. 8 cells derived from `init`'s own source — the four guards `.7`'s enumerator finds, times the modes each branch offers, with a one-mode branch's declared mode checked against the writers under its guard. 10 red runs; the report's attribution is MEASURED off `.beadloom/_graph/` by this module's own digest rather than read back from the report or taken from the product's instrument. 169 tests (168 unit + 1 scenario, the `--import` branch's verdict, which `.17` introduced and no scenario stated). Red proved per invariant against four single-edit mutants of `setup.py` (10 / 4 / 10 / 7 failures) and against `52f52ae^` for invariant 5. Five classes declared as guards that cannot fail, with reasons. Collapsed five constants that were about to exist in a third module. |
 
 ## Notes
 
@@ -316,3 +316,36 @@ graph: `--yes` generates its doc skeletons inside the bootstrap block, so the im
 follows classifies the skeletons the same run just wrote and the graph gains `architecture`
 (domain) and `readme` (feature) nodes the wizard's graph does not have. Both graphs pass their own
 rules, so it is not a defect this epic reported. It is raised on `beadloom-e8s4.15` for the review.
+
+---
+
+## `beadloom-e8s4.19` — what the table found and did not close
+
+**Reported, not decided here (1).** `beadloom init --bootstrap` and the wizard answering
+`bootstrap` do NOT leave the same graph on a tree that already carries a graph file. Measured on a
+project with `.beadloom/_graph/legacy.yml` holding one service root and one domain `ledger`:
+
+- only `--bootstrap` leaves `ledger` with no `docs:` field;
+- only the wizard leaves `ledger` with `docs: ['docs/domains/ledger/README.md']`, and that file.
+
+The cause is one argument. The `--bootstrap` branch calls `generate_skeletons(root,
+result["nodes"], result["edges"])`; `interactive_init` calls `generate_skeletons(root)` with no
+node list, so it writes skeletons for nodes an earlier run left. That is BDL-UX #216 — the
+divergence `.18` closed on `non_interactive_init` — standing on the third entry point, and it
+changes the failure report's headline between two runs of one declared mode: `--bootstrap` prints
+"the graph already in `.beadloom/_graph/`" where the wizard prints "the graph this command just
+wrote", and both are honest about what each run did. It is invisible on a virgin tree, which is
+why the table asserts entry-point agreement there and passes. Closing it is a behaviour change and
+belongs to a dev bead with its own UX number, so `.20` decides it.
+
+**Reported, not decided here (2).** `setup._this_run_wrote_the_graph_that_fails` has a branch no
+test in this epic reaches: `if not attributable: return bool(files_this_run_wrote)`, the fallback
+`.17` documented as "the coarsest fact available" for a finding that names no node. Measured with
+`--cov` over the four modules under test: `setup.py` misses lines 790-791, 953-954, 956, 974,
+978-979 and 1008 in the verdict-and-report region, and all of them except 1008 are defensive
+`except OSError` / malformed-YAML paths. Reaching 1008 needs a rule that produces a node-less
+error finding — `forbid_import` and `module_coverage` are the two that do. One attempt was made
+and rejected as an honest failure rather than left unsaid: an adopter `module_coverage` rule over
+the TypeScript fixture does not fire, because the fixture indexes zero symbols and the evaluator
+skips a file below `min_symbols`. A fixture with Python sources would reach it, and that is a
+fixture this bead did not need for anything else.

@@ -1010,3 +1010,91 @@ def _then_the_two_imported_graphs_are_the_same(world: dict[str, Any]) -> None:
 
     assert through_the_flag.get("nodes"), "the flag imported no node"
     assert through_the_flag == through_the_wizard
+
+
+#: A graph file name no writer in the product produces. `bootstrap_project`
+#: writes `services.yml` and `import_docs` writes `imported.yml`, so a file under
+#: this name is one every writer leaves alone -- which is what makes it usable
+#: with the `--import` branch, where the inherited-graph fixture above cannot be
+#: (that one is `imported.yml`, the very file the branch rewrites).
+A_FILE_NO_WRITER_REWRITES = "legacy.yml"
+
+#: The root it provides, so `import_docs` has a single service node to attach the
+#: documents it classifies to, and the only node left unparented is the one this
+#: fixture leaves unparented on purpose.
+THE_INHERITED_ROOT = "orders-web"
+
+#: The domain that fails, and the reason the tree is red.
+THE_UNPARENTED_INHERITED_DOMAIN = "ledger"
+
+#: The adopter's own `domain-needs-parent`. Written by hand because an import-only
+#: run writes no `rules.yml` at all -- only `bootstrap_project` writes rules -- so
+#: the only rule that branch can be judged against is one the adopter wrote.
+A_DOMAIN_RULE_THE_ADOPTER_WROTE = """\
+version: 1
+rules:
+  - name: domain-needs-parent
+    description: Every domain must have a part_of edge
+    require:
+      for:
+        kind: domain
+      has_edge_to: {}
+      edge_kind: part_of
+"""
+
+
+@given("a graph file no writer rewrites, holding a root and a domain with no parent")
+def _given_a_graph_file_no_writer_rewrites(world: dict[str, Any]) -> None:
+    graph_dir = world["project"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / A_FILE_NO_WRITER_REWRITES).write_text(
+        yaml.safe_dump(
+            {
+                "nodes": [
+                    {
+                        "ref_id": THE_INHERITED_ROOT,
+                        "kind": "service",
+                        "summary": "The root an earlier run wrote.",
+                    },
+                    {
+                        "ref_id": THE_UNPARENTED_INHERITED_DOMAIN,
+                        "kind": "domain",
+                        "summary": "Left by an earlier run, with no parent.",
+                    },
+                ]
+            },
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+@given("a rules file the adopter wrote requiring every domain to have a parent")
+def _given_the_adopters_domain_rule(world: dict[str, Any]) -> None:
+    graph_dir = world["project"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "rules.yml").write_text(
+        A_DOMAIN_RULE_THE_ADOPTER_WROTE, encoding="utf-8"
+    )
+
+
+@when("beadloom init is run with the import flag over that tree")
+def _when_init_import_is_run_over_a_tree_it_must_judge(world: dict[str, Any]) -> None:
+    """The same branch as the step above, without its assertion of success.
+
+    That step asserts rc 0 as part of its own scenario's arrangement, so it
+    cannot state this one: the whole point here is a run of that branch that
+    ends non-zero.
+    """
+    world["init"] = CliRunner().invoke(
+        main,
+        [
+            "init",
+            "--import",
+            str(world["project"] / "docs"),
+            "--project",
+            str(world["project"]),
+        ],
+    )

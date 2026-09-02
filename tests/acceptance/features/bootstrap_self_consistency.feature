@@ -314,3 +314,23 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When the project is initialised twice over and both runs generate doc skeletons
     Then every imported node in either graph names a document the run did not write
     And the two runs leave the same imported graph
+
+  # BDL-067 `.19`. `.17` gave the `--import` branch a verdict: it re-indexes the
+  # graph file it just wrote and takes the Gate's reading over the tree, where
+  # before it printed "then run `beadloom reindex`" and returned 0 whatever the
+  # tree said. That is the one adopter-visible change `.17` made with no scenario
+  # over it, and `--import` is the branch no enumeration in this epic reaches over
+  # a failing tree: the branch enumerations run at `--mode bootstrap` and the mode
+  # enumerations run through `--yes` and the wizard. The rules here are the
+  # adopter's, so the run is red over a graph and a rule it did not write, which
+  # is why it must not ask for a bug report while still refusing to report success.
+  @bead:beadloom-e8s4.19
+  Scenario: the import flag judges the tree it leaves without blaming Beadloom for it
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    And a graph file no writer rewrites, holding a root and a domain with no parent
+    And a rules file the adopter wrote requiring every domain to have a parent
+    When beadloom init is run with the import flag over that tree
+    Then the command does not report success
+    And the completion claim is withdrawn before the failure is reported
+    And the command does not ask for a bug report
