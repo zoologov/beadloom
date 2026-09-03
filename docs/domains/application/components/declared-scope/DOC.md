@@ -66,8 +66,18 @@ and resolving a directory would put its whole domain inside the approval by acci
 | `work_item_of_branch(project_root, branch)` | The work-item folder a branch names |
 | `trunk_ref(project_root)` | The ref a branch's whole work is compared against |
 | `ScopeRun` | The verdict, the work item, the document, the scope and the reason |
+| `VERDICT_MARKER` | What marks `ScopeRun.describe()` in porcelain output, so a shell gate splits it from the findings |
+
+`VERDICT_MARKER` is `"# "`, and it is declared beside the line it marks rather than at either
+end of the pipe. The producer is `beadloom scope-check --porcelain` and the consumer is the
+pre-commit hook `install-hooks` writes; a marker each of them spelled for itself would be two
+things that can disagree. The split works on a shape rather than an agreement: a finding line
+opens with a project-relative path, and no path opens with `# `.
 
 ## Tests
 
 - `tests/acceptance/features/declared_axes.feature` — the scenarios.
+- `tests/acceptance/features/commit_gate_verdict.feature` — what the gate says it compared.
 - `tests/test_a_commit_is_judged_against_the_declared_axes.py` — the cases.
+- `tests/test_the_commit_gate_states_what_it_compared.py` — the verdict's stream, and the
+  exempt set measured over this branch's own commits.

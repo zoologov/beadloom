@@ -70,6 +70,15 @@ NO_INDEX = (
 #: git could not say which paths to judge.
 GIT_SILENT = "git could not say which paths this commit changes, so nothing was judged"
 
+#: What marks :meth:`ScopeRun.describe` in porcelain output, so a gate written in
+#: shell separates the verdict from the findings without parsing either. A
+#: finding line begins with a project-relative path and no path begins with
+#: ``"# "``, so the split is a property of the two shapes rather than a
+#: convention both ends have to remember. Declared here, beside the line it
+#: marks, because a marker the producer and the consumer each spell for
+#: themselves is two things that can disagree.
+VERDICT_MARKER = "# "
+
 #: The guard whose ``options.trunk`` names this project's trunk branch. Read
 #: from there rather than declared again: ``working-branch`` already asks the
 #: project for the name, and two declarations of one branch are two things that
@@ -110,7 +119,7 @@ class ScopeRun:
             return f"Declared axes: NOT CHECKED — {self.reason}"
         return (
             f"Declared axes ({self.work_item}, {self.scope}): "
-            f"{self.verdict.describe()}"
+            f"{self.verdict.population()}"
         )
 
 

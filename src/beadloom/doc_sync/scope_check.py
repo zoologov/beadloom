@@ -130,17 +130,28 @@ class ScopeVerdict:
     unowned: int = 0
     undecided: int = 0
 
-    def describe(self) -> str:
-        """The one line a commit gate prints about what it judged."""
+    def population(self) -> str:
+        """The population this run compared over, as one clause.
+
+        Split out of :meth:`describe` so a caller that has already named the
+        comparison -- :meth:`beadloom.application.declared_scope.ScopeRun.describe`
+        opens with ``Declared axes`` -- states the counts without restating the
+        subject. Two renderings of one count would be two things that can
+        disagree, so there is one and both callers spend it.
+        """
         undecided = (
             f", {self.undecided} declared row(s) nobody decided"
             if self.undecided
             else ""
         )
         return (
-            f"Judged against the declared axes: {self.judged} staged path(s) a "
-            f"node owns, {self.unowned} no node owns{undecided}."
+            f"{self.judged} staged path(s) a node owns, "
+            f"{self.unowned} no node owns{undecided}."
         )
+
+    def describe(self) -> str:
+        """The one line a commit gate prints about what it judged."""
+        return f"Judged against the declared axes: {self.population()}"
 
 
 def declared_scope(

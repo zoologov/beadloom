@@ -97,9 +97,27 @@ to ask — the same split `work-item-type` and `work-item-routing` already use.
 | `check_commit_scope(paths, scope, *, ownership)` | The paths the scope does not cover |
 | `DeclaredScope` | Kept nodes, derivation targets, rulings, contexts and the undecided count |
 | `ScopeVerdict` | The findings, the paths judged, the paths no node owns and the undecided rows |
+| `ScopeVerdict.population()` | The counts alone, for a caller that has already named the comparison |
+| `ScopeVerdict.describe()` | `Judged against the declared axes: ` and that population |
 | `OUTSIDE_THE_DECLARED_AXES` | The check's name |
+
+`population()` was split out of `describe()` because two callers render one count and only one
+of them needs the subject named. `ScopeRun.describe()` already opens by naming the work item
+and the scope, and before the split its line read
+`Declared axes (BDL-068, staged): Judged against the declared axes: ...`. That line is printed
+at every commit by the hook, so the stutter was not cosmetic. Two renderings of one count
+would have been the alternative, and two renderings can disagree.
+
+**How large the unreported half is.** Measured over the eleven commits of `features/BDL-068`
+at `b7c9476..8b40417`: 52 paths, of which 11 are owned by a node and 41 are not, and 0
+findings. So the exempt set is not an authored list of paths — it is *the paths no node owns*,
+derived from graph ownership, which is why it cannot drift out of step with the graph. It is
+also four paths in five, and the count beside the verdict is the only thing that says so.
 
 ## Tests
 
 - `tests/acceptance/features/declared_axes.feature` — the scenarios.
+- `tests/acceptance/features/commit_gate_verdict.feature` — what the gate says it compared.
 - `tests/test_a_commit_is_judged_against_the_declared_axes.py` — the cases.
+- `tests/test_the_commit_gate_states_what_it_compared.py` — the exempt set, kept executable
+  over the commits the decision was taken on.

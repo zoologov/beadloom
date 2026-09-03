@@ -136,7 +136,7 @@ beadloom install-hooks --remove
 - `beadloom sync-check --staged --porcelain` (stale doc detection, narrowed to the pairs this commit stages)
 - `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
 
-It also states three things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), which paths `active-sync --stage` added to the commit while it was in flight, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run.
+It also states four things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), how much of the COMMIT it compared against the work item's declared axes and how much of it no node owns (`beadloom scope-check --porcelain`, whose verdict the hook prints whatever it says — including `NOT CHECKED` and the reason, which used to reach only stderr and be discarded), which paths `active-sync --stage` added to the commit while it was in flight, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run, and the old one is the silent one.
 
 What it cannot do: a neighbour's hunk swept into a commit, inside a file the committer legitimately touches, is not caught and cannot be caught here — the swept hunk is inside the commit, which is the region the gate judges.
 

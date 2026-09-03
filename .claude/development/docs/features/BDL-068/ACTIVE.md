@@ -41,6 +41,30 @@ filed; this name is the free mitigation and later slices keep it.
     combined tree is green — 8 542 passed, 0 failed, `beadloom ci` rc 0 foreground and unpiped.
     Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
     Filed BDL-UX #235: the two rooms of this wave collided on one scratchpad path.
+  - [x] `0mdo.32` — the residue of `mr2l.81`, and mostly not where the bead expected. The
+    `scope-check` call had been in both hook templates since S1; what the hook DID with the
+    answer was the hole. It read the command as `2>/dev/null` while the reason for having
+    compared nothing went to stderr, so a clean run and a run that could attribute no work item
+    were the same empty string on that stream and the gate printed the same nothing for both.
+    `--porcelain` now leads stdout with the verdict, marked `# ` so a shell splits it from the
+    findings on a shape rather than an agreement, and both templates print it whether or not
+    anything fell outside. **The three open decisions, each measured before it was taken.** The
+    exempt set is *the paths no node owns*, derived from graph ownership rather than authored as
+    a list that could drift out of step with it — measured over this branch's eleven commits at
+    `b7c9476..8b40417`: 52 paths, of which 11 have an owner in the graph and 41 have none, and 0
+    findings on every commit. **Warn, not block**, because a zero false-positive rate over eleven
+    commits is not enough when only two of them touched an owned path at all and one work item in
+    64 carries an `## Axes` section. And an unattributable commit is `NOT CHECKED` with its
+    reason, which is what makes BDL-UX #230's consequence audible: a branch named
+    `features/BDL-068-S4` now prints why it judged nothing instead of printing nothing.
+    Green in a clean room over 14 files (8 539 passed; the 1 failure is a stated property of the
+    room — no `.git`, so 41 pairs read `unverified` rather than `ok`, and it is red at HEAD in an
+    identically-built room). **As its own gate owner:** the tree is green — 8 570 passed, 0
+    failed, `beadloom ci` rc 0 foreground and unpiped. Every verdict in Darwin arm64 / CPython
+    3.13.7, 0 of the 21 declared rooms. Two of this bead's own defects were caught by the
+    project's instruments rather than by review: the clean room found an inline code span that
+    spilled `<key>, <scope>` onto the next line, and `docs-audit` read "41 no node owns" as a
+    `node_count` claim. The second was fixed by rewording, not by `docs_audit.ignore`.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

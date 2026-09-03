@@ -367,12 +367,25 @@ Where it runs, and what it does there:
 | the pre-commit hook | the staged paths | warns, in both hook modes, and never blocks |
 | `beadloom ci` (`scope-check` step) | `<trunk>...HEAD`, what the pull request contains | reports; the step passes |
 
-Both are `warn` for one measured reason: one work item in 64 on this repository carries an
-`## Axes` section today, so a check that blocked would meet a repository that cannot satisfy
-it and be answered with `--no-verify`. A run that found no branch, no work item, no index or
-no section is reported as SKIPPED with its reason, never as a pass — and neither surface
-catches a neighbour's hunk that lands inside the same approved axes, which is the half of
-BDL-UX #118 that stays open.
+Both are `warn`, and the reason was measured twice. One work item in 64 on this repository
+carries an `## Axes` section today, so a check that blocked would meet a repository that
+cannot satisfy it and be answered with `--no-verify`. And over the eleven commits of
+`features/BDL-068` — 52 paths, of which 11 have an owner in the graph and 41 have none — the check produced 0
+findings, so its false-positive rate is zero; that is still not a reason to block, because
+only two of those commits touched a path a node owns at all.
+
+Both surfaces print the verdict whatever it says, and until BDL-068 S4 (`beadloom-0mdo.32`)
+only the `beadloom ci` step did. The hook read the command as `2>/dev/null` while the reason
+for having compared nothing went to standard error, so a clean run and a run that could
+attribute no work item were the same empty string there and the hook printed neither. A
+sentence in this guide claimed otherwise for both surfaces; it was true of one.
+
+The verdict also carries the population, because the finding count alone is the smaller half:
+41 of those 52 paths are owned by no node — the tracker export, the planning documents, the
+tests, the docs, the graph YAML — and so were never compared. That is the exempt set, and it
+is derived from graph ownership rather than authored as a path list, so it cannot drift out
+of step with the graph. Neither surface catches a neighbour's hunk that lands inside the same
+approved axes, which is the half of BDL-UX #118 that stays open.
 
 `beadloom ci`'s step is branch-scoped rather than tree-scoped for the reason the whole guide
 turns on: the tree is shared, so judging it would fail one agent's push on a neighbour's edit.

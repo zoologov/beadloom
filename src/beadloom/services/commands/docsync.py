@@ -532,6 +532,61 @@ if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
 fi
 """
 
+#: The declared-axes block, written once and used by both templates -- the same
+#: comparison in the warn hook and the blocking one, because a commit gate and a
+#: push gate disagreeing about what left the approval would be a second home for
+#: one answer.
+#:
+#: `beadloom-0mdo.32`, the residue of `beadloom-mr2l.81`. The call itself has
+#: been here since S1; what it did with the answer had a hole. The command was
+#: read as `2>/dev/null` and printed only when stdout came back non-empty, while
+#: the reason for having compared nothing went to stderr -- so a run that found
+#: nothing outside and a run that could attribute no work item were BOTH the
+#: empty string here, and the gate printed the same nothing for both. A commit
+#: nobody could attribute read as clean, which is the false green BDL-068 exists
+#: to remove and the visible consequence of BDL-UX #230 (`beadloom-bdnv`), where
+#: a branch named `features/BDL-068-S4` matches no work-item folder at all.
+#:
+#: Now the command leads its porcelain output with the verdict, marked so this
+#: block splits it from the findings without parsing either, and the verdict is
+#: printed whatever it says. The count it carries is a count of paths actually
+#: COMPARED: the paths no node owns are stated beside it rather than folded in,
+#: because a green count that reads as a checked count is the thing being fixed.
+_HOOK_DECLARED_AXES = r"""
+# --- Declared axes, over the paths this commit stages ---
+# The work item is the one the BRANCH names: this hook runs before the commit
+# message is finalised, so the `[KEY]` prefix is not readable here. A run that
+# finds no branch, no work item, no index or no `## Axes` section reports its
+# reason as the verdict and never blocks -- a check with nothing to compare
+# against must not read as a clean sheet.
+#
+# WARNS in both hook modes, including the blocking one, and that is a decision
+# rather than an omission. Measured over the eleven commits of `features/BDL-068`
+# before this block was written -- 52 paths, 11 a node owns, 41 no node owns, 0
+# findings -- the false-positive rate is zero, and that is still not enough to
+# block on: only two of those commits touched an owned path at all, and one work
+# item in this repository's sixty-four carries an `## Axes` section. A check that
+# BLOCKED would meet a repository that cannot satisfy it and be answered with
+# `--no-verify`, which is the failure BDL-UX #118 itself was. The branch-scoped
+# run in `beadloom ci` reports the same comparison where a reviewer reads it.
+axes_report=$(beadloom scope-check --porcelain 2>/dev/null)
+axes_verdict=$(echo "$axes_report" | sed -n 's/^# //p')
+axes_outside=$(echo "$axes_report" | grep -v '^# ')
+if [ -n "$axes_outside" ]; then
+  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
+  echo "$axes_outside" | sed 's/^/  /'
+  echo ""
+  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
+fi
+# An empty verdict means the command produced none -- beadloom absent from PATH,
+# or a failure that swallowed its own answer. That is a comparison that could not
+# be made, and it prints a different word from one that passed.
+if [ -z "$axes_verdict" ]; then
+  axes_verdict="Declared axes: NOT CHECKED -- beadloom scope-check returned no verdict here"
+fi
+echo "$axes_verdict"
+"""
+
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
@@ -568,27 +623,7 @@ fi
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
-
-# --- Declared axes, over the paths this commit stages ---
-# The work item is the one the BRANCH names: this hook runs before the commit
-# message is finalised, so the `[KEY]` prefix is not readable here. A run that
-# finds no branch, no work item, no index or no `## Axes` section prints its
-# reason on stderr and never blocks -- a check with nothing to compare against
-# must not read as a clean sheet.
-#
-# WARNS in both hook modes, including the blocking one, and that is a decision
-# rather than an omission: one work item in 64 carries a `## Axes` section
-# today, so a check that BLOCKED would meet a repository that cannot satisfy it
-# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
-# reports the same comparison where a reviewer reads it.
-axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
-if [ -n "$axes_outside" ]; then
-  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
-  echo "$axes_outside"
-  echo ""
-  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
-fi
-
+""" + _HOOK_DECLARED_AXES + """
 # --- What this commit did NOT judge ---
 echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."
@@ -637,27 +672,7 @@ fi
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
-
-# --- Declared axes, over the paths this commit stages ---
-# The work item is the one the BRANCH names: this hook runs before the commit
-# message is finalised, so the `[KEY]` prefix is not readable here. A run that
-# finds no branch, no work item, no index or no `## Axes` section prints its
-# reason on stderr and never blocks -- a check with nothing to compare against
-# must not read as a clean sheet.
-#
-# WARNS in both hook modes, including the blocking one, and that is a decision
-# rather than an omission: one work item in 64 carries a `## Axes` section
-# today, so a check that BLOCKED would meet a repository that cannot satisfy it
-# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
-# reports the same comparison where a reviewer reads it.
-axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
-if [ -n "$axes_outside" ]; then
-  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
-  echo "$axes_outside"
-  echo ""
-  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
-fi
-
+""" + _HOOK_DECLARED_AXES + """
 # --- What this commit did NOT judge ---
 echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."

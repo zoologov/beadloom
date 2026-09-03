@@ -926,21 +926,33 @@ review.
   which is what a pull request contains, instead of only the staged ones.
 - `--branch NAME` — name the work item's branch instead of reading the
   checked-out one.
-- `--porcelain` — one finding per line (`path:line`, check, excerpt), for a hook.
+- `--porcelain` — the verdict first as a `# `-marked line, then one finding per
+  line (`path:line`, check, excerpt). A hook splits the two on the marker: a
+  finding line opens with a project-relative path and no path opens with `# `.
 - `--json` — the verdict plus `checked`, `reason`, `work_item`, `document`,
   `scope`, `judged`, `unowned` and `undecided`.
 
+**The verdict is printed whatever it says, on standard output, in both forms.**
+Until BDL-068 S4 (`beadloom-0mdo.32`) the reason for having compared nothing
+went to standard error alone, and the pre-commit hook read this command as
+`2>/dev/null`: a run that found nothing outside and a run that could attribute
+no work item were both the empty string there, so the gate printed the same
+nothing for both and an unattributable commit read as clean.
+
 A clean run states its population rather than only its verdict. Measured on this
-branch, 2026-09-03:
+branch, 2026-09-04:
 
 ```
 $ beadloom scope-check --since origin/main
-Declared axes (BDL-068, against origin/main): Judged against the declared axes: 40 staged path(s) a node owns, 64 no node owns.
+Declared axes (BDL-068, against origin/main): 11 staged path(s) a node owns, 28 no node owns.
 ```
 
-The 64 are counted and stated, never reported: a path no node owns — a document,
+The 28 are counted and stated, never reported: a path no node owns — a document,
 a test, a graph YAML — is not a call site and has no axis to be outside of.
 Counting them as checked would be the false green the check exists to remove.
+They are also the larger half: measured over the eleven commits of this branch,
+52 paths carried 11 with an owner in the graph against 41 with none, so four paths in five
+were never compared and the count is the only thing that says so.
 
 There are five ways to have checked nothing — no branch, no work item, no graph
 index, no `## Axes` section and no answer from git — and each is reported as

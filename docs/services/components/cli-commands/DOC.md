@@ -84,11 +84,21 @@ back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) 
 paths a commit stages against the section the work item declared. One document, written by
 the first, read by the second and enforced by the third. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
-or a section prints its reason rather than a clean sheet. The pre-commit hook
-`install-hooks` writes calls it with `--porcelain`; it WARNS in both hook modes, including
-the blocking one, because one work item in 64 carries a `## Axes` section today and a check
-that blocked would meet a repository that cannot satisfy it and be answered with
-`--no-verify`.
+or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
+marked `# ` and on standard output, whether the run compared anything or not: the reason used
+to go to standard error alone, and the pre-commit hook reads the command as `2>/dev/null`, so
+a clean run and an unattributable one were the same empty string there and the gate printed
+the same nothing for both (`beadloom-0mdo.32`, the residue of `beadloom-mr2l.81`). A finding
+line opens with a project-relative path, so the marker separates the two without either side
+parsing the other.
+
+The pre-commit hook `install-hooks` writes calls it with `--porcelain`; it WARNS in both hook
+modes, including the blocking one. Measured over the eleven commits of `features/BDL-068`
+before the reader was written — 52 paths, of which 11 have an owner in the graph and 41 have none, 0 findings — the
+false-positive rate is zero, and that is still not enough to block on: only two of those
+commits touched an owned path at all, and one work item in 64 carries a `## Axes` section
+today, so a check that blocked would meet a repository that cannot satisfy it and be answered
+with `--no-verify`.
 
 Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph
