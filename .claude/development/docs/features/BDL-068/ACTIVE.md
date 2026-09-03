@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** none claimed. `bd ready` offers `beadloom-0mdo.27` (S4).
+**Bead:** none claimed. S4's beads are created (2026-09-03) and its wave shape is being derived.
 **Goal of S4:** the guards' enforcement surface is narrower than their promise — derive each
 guard's surface from its own matcher, compare it against what exists, report the gap.
 **Branch:** `features/BDL-068` — **no suffix, deliberately**. BDL-UX #230: `declared_scope`
@@ -53,22 +53,35 @@ prompt as one nothing can inspect.
 - **Q5** — `Explore` is a role file composed by `role-composer`, not a mode.
 - **Beads are created per slice**, when the preceding slice's review closes.
 
-## S4, and what is already attached to it
+## S4, as created
 
-`beadloom-0mdo.12` is the slice; it depends on all of these, so it cannot close while one is open:
+`beadloom-0mdo.12` is the slice and depends on every row below, so it cannot close while one is open.
+Eight dev beads, then test → review → tech-writer. Created 2026-09-03 under the epic's rule that
+beads are created per slice, once the preceding slice's review closes.
 
-- `beadloom-0mdo.27` — the general check: a duty declared for a role is carried by that role's
-  composed core, in BOTH directions. Its bead names the three sub-shapes and the trap: do not
-  derive duties from prose, declare them the way scenarios carry `@bead:`/`@node:` tags.
-- `beadloom-67t1` / **#228** — the clean-room duty reaches roles only through the coordinator's
-  typing. Zero occurrences in any role file or shipped template.
-- `beadloom-gsal` / **#231** — the commit hook type-checks an undeclared surface (970 errors in
-  90 files), discards mypy's output, never blocks; a real `src/` error prints the same sentence.
-- `beadloom-en0x` / **#232** — `waves` plans from an authored `refs:` line, so two beads editing
-  one document read as independent. Measured: `.21` and `.26` both edited `docs/services/cli.md`
-  and it reported 0 findings.
+| Bead | What it is | P |
+|---|---|---|
+| `0mdo.27` | a duty declared for a role is carried by that role's composed core, checked in BOTH directions — the machine half | P1 |
+| `67t1` / **#228** | the clean-room duty reaches roles only through the coordinator's typing — the duty half; depends on `.27` | P1 |
+| `0mdo.31` | **#170**, the entry this slice is named after: the guard binds `Edit\|Write\|NotebookEdit` and a write through `Bash` fires nothing. Three pieces, and the third — report the SURFACE, not the firings — is the real one | P1 |
+| `0mdo.32` | the residue of `mr2l.81`: the commit gate judges staged paths, so a neighbour's hunk inside a file the committer touched reads clean. Wire S1's `scope-check` into the hook | P1 |
+| `0mdo.33` | the residue of `mr2l.60`: the refusal rule is a literal backslash, so on Windows every edit is MALFORMED and the stated reason is false there. `os.sep`/`os.altsep` + a shape gate | P2 |
+| `gsal` / **#231** | the commit hook type-checks an undeclared surface (970 errors in 90 files), discards mypy's output, never blocks; a real `src/` error prints the same sentence | P1 |
+| `en0x` / **#232** | `waves` plans from an AUTHORED `refs:` line, so two beads editing one document read as independent. Measured: `.21` and `.26` both edited `docs/services/cli.md`, 0 findings | P1 |
+| `nn4c` / **#233** | the read-only guard test attributes by TIMING, and a `bd` export burst lands inside the measurement window and misses the control window. Least reliable exactly when the flow is most parallel | P1 |
+| `0mdo.34` | test — the surface as a shape, never a spelling | P1 |
+| `0mdo.35` | review | P1 |
+| `0mdo.36` | tech-writer | P1 |
 
-Original S4 contents from PLAN: #170, `mr2l.81`, `mr2l.60`, `mr2l.82`, `mr2l.92`.
+**`mr2l.81`, `.60`, `.82`, `.92` were closed 2026-08-31 in a tracker cleanup as UNFINISHED work,
+not as done** — the close comment says so on each. `.82` and `.92` came back sharper as `gsal` and
+`nn4c`; `.81` and `.60` are carried here as `.32` and `.33`. A closed bead whose work never
+happened is the same false green this epic is about, one layer up in the tracker.
+
+**`.32` is mostly wiring now, and that is S1 paying off.** `.81` had to design the mechanism it
+needed; `beadloom scope-check` shipped it in S1, and CONTEXT Q1/Q2 already answered two of the four
+questions `.81` said had to be settled before building. What is left is the exempt set (measured
+against real commits BEFORE it goes live), warn-not-block, and `unjudged` for an unattributable commit.
 
 ## Standing conventions every launch prompt carries
 
