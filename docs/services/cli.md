@@ -1347,30 +1347,117 @@ would retry the wrong one.
 The brief carries the **assignment** (the bead's title and description), the
 **declared scope**, the **specification** (the graph's documents for those nodes
 and every scenario whose `@bead:` tag names the bead) and the **change**
-(`git diff <base>...HEAD`, the working tree, and the untracked files, each
-path carrying the node that owns it). It does not carry the bead's comments. Those are
-counted and never printed (the notice is wrapped for this page):
+(`git diff <base>...HEAD`, the working tree, and the untracked files, each path
+carrying the node that owns it). It does not carry the bead's comments.
 
-```
-WITHHELD — 4 author comment(s) withheld
-  reason: the author's account of the change converges the reviewer on the author's framing
-    before the reviewer has looked at the code
-  release: a verdict recorded on the bead; then `beadloom review-brief <bead> --release`
-  if your launch prompt carried anything about this change that you did not derive yourself
-    — the author's summary, or the coordinator's own observation of it — this withholding was
-    defeated before it ran; say so in your verdict, you are the only party that can see it
-```
-
-The measurement behind the ordering: in hidden-profile tasks a group that hears
+The measurement behind that ordering: in hidden-profile tasks a group that hears
 one member's conclusion first scores 17-36% where a single holder of all the
-facts scores ~100%. `0 withheld` and `4 withheld` are different facts, so the
-count is always printed -- an absent input is reported rather than left silent.
+facts scores ~100%. So the account is released after the reviewer's own judgement
+is recorded rather than never.
+
+#### The reachability block
+
+The brief closes with a statement of what can reach the reviewer, **per
+channel** -- not with a count of what this command holds back. Four channels, each
+either inspected or named as one nothing here can inspect (the output is wrapped
+for this page):
+
+```
+REACHABLE — what can reach you about this change, per channel. This command withholds one
+of them and closes none of the others; declaring what actually reached you is still yours
+to do.
+  bead comments: 0 item(s) — counted on <bead> and on no other bead — the beads that made
+    this change are neither read nor counted here; withheld by this command until a verdict
+    recorded on the bead; then `beadloom review-brief <bead> --release`; the author's account
+    of the change converges the reviewer on the author's framing before the reviewer has
+    looked at the code
+  the work item's documents: 5 item(s) — the folder
+    .claude/development/docs/features/BDL-068, against the 9 document name(s) this
+    project's composed prompts mention
+    .claude/development/docs/features/BDL-068/ACTIVE.md — named by roles/dev,
+      commands/checkpoint, commands/coordinator, commands/task-init, commands/templates
+  the commit bodies of the reviewed range: 19 item(s) — read over the range since main;
+    19 of 19 carry a body, and your protocol sends you to this diff
+    ab7e9fa9 [BDL-068] feat: review-brief states what is reachable — 24 body line(s)
+  the launch prompt: NOT INSPECTED — nothing in this process can see one, so: if your launch
+    prompt carried anything about this change that you did not derive yourself — the author's
+    summary, or the coordinator's own observation of it — this withholding was defeated
+    before it ran; say so in your verdict, you are the only party that can see it
+```
+
+The count that was printed before S2 said `4 author comment(s) withheld` and
+nothing else, and a reviewer read it as a statement about its own knowledge. It
+is not one: all three defeats of the withholding measured so far reached the
+reviewer through a channel that count never mentioned -- `ACTIVE.md`
+(BDL-UX #212), the commit bodies of the reviewed range (BDL-UX #219), and the
+launch prompt (BDL-UX #204). Each was known only because a reviewer declared it
+unprompted.
+
+**This raises detectability and closes nothing.** The review protocol itself
+sends the reviewer to the diff, and the commit bodies come with it; no report
+changes that. What changed is that a reviewer can now see what it could reach and
+say so, which is how all three defeats were found in the first place.
+
+**A channel found empty never reads like one nobody could inspect.**
+`0 item(s)` and `NOT INSPECTED — <reason>` are different sentences. A `flow.yml`
+that will not parse costs the documents channel and not the brief: the channel
+reports `NOT INSPECTED — the project's flow.yml will not parse, so no prompt
+could be composed`, where before S2 the malformed file raised out of the command
+and no brief was produced at all.
+
+**A commit body is counted, never quoted** -- subject and non-empty body-line
+count only, so a report about a leak is not itself one.
+
+The documents channel is derived rather than listed: the names come from the
+composed role and command prompts for this project's `flow.yml`, project layer
+included, matched by shape (an upper-case name ending in `.md`). A team that names
+`DECISIONS.md` in `.beadloom/flow/roles/review.md` moves this report by that act.
+
+#### Two channels the block does not name
+
+Both are measured, filed, and open. A reader of this section should not take the
+four channels as the whole list.
+
+- **The tracker export inside the reviewed diff** (BDL-UX #229). Where the project
+  commits its tracker, the diff under review carries the author's comments as
+  data. Measured on this feature's own S2 review: 16 added record lines, 30 author
+  comments, 81,270 characters of comment text. The brief's own change inventory
+  lists that file and prints `read it: git diff <base>...HEAD -- <path>` beneath
+  it, so the report sends the reviewer to a channel it does not count -- BDL-UX
+  #219's mechanism one step further along. Widening the count to that export and
+  to the slice's sibling beads is filed, not done.
+- **The work item's documents on a branch whose name carries a suffix**
+  (BDL-UX #230). `work_item_of_branch` matches a `/`-separated segment that
+  *equals* a work-item key, so `features/BDL-068` names the work item and
+  `features/BDL-068-S2S3` names none. Measured on this feature's own development
+  branch: the channel read `NOT INSPECTED — the branch 'features/BDL-068-S2S3'
+  names no work item among the project's planning documents` while the reviewer
+  was reading `RFC.md` and `CONTEXT.md` out of exactly that folder. The fix belongs
+  in `application/declared_scope.py`, its one home, and is filed there.
+
+#### The release half
 
 `--release` prints the account once a verdict comment is on the bead, so the
 deferrals, sabotage tables and measured numbers stay available to a reviewer who
 would otherwise re-derive them. A verdict is a comment whose **first non-blank
 line opens with** `REVIEW PASSED:`, `REVIEW ISSUES:` or `REVIEW FINDINGS:`, the
 colon included -- the exact openings the review role is instructed to write.
+
+A refusal names the bead its count was taken over, in the same vocabulary the
+reachability block uses:
+
+```
+$ beadloom review-brief <bead> --release
+WITHHELD — bead comments on <bead>: 0 item(s) stay withheld: no verdict is recorded on
+this bead — the author's account stays withheld until one is. Record it with
+`bd comments add <bead> "REVIEW PASSED: ..."` or a findings comment opening `REVIEW ISSUES:`
+```
+
+`0 item(s)` there says this bead carries no account. It says nothing about the
+beads that made the change, and on a wave-structured slice — where the brief is
+for a review bead — that is the ordinary case: the S2 review of this feature read
+`0 item(s)` while 31,544 characters of the author's account sat on the two beads
+that made the change.
 
 The verdict comment's author is compared with the bead's assignee, and the answer
 is **reported, not enforced**. A self-recorded verdict still releases, prints why
@@ -1385,11 +1472,19 @@ own — say which it was in your review
 RELEASED — 5 author comment(s), on the verdict 'REVIEW ISSUES' already recorded.
 ```
 
+A tracker that names no author for the verdict comment gets its own note rather
+than that one — `the tracker named no author for the verdict comment, so this gate
+could not tell whether the account was released by its own author`. Two different
+facts, so two sentences: a shared identity and an absent author field are not the
+same finding, and the S2 review of this feature met the second where it predicted
+the first.
+
 Refusing was rejected on a measurement: where every role writes under one tracker
 identity, a refusal refuses every release, and a gate nobody can pass is bypassed
 rather than obeyed. What this command withholds is an **input**, not a door -- a
 reviewer with a shell can read the comments directly, and the value is in the
-default and in the count being visible.
+default and in the reachability statement being printed where the reviewer will
+read it.
 
 The change is measured over the **branch**, not over the bead, because no
 per-bead attribution exists in the commits. On a branch carrying five beads all
@@ -1397,10 +1492,208 @@ five briefs report the same files, so the `changed-outside-scope` finding names
 its window (`measured over the branch since <ref>`). `--since <ref>` narrows it.
 
 `--json` carries `bead`, `title`, `assignment`, `refs`, `unknown_refs`, `docs`,
-`base_ref`, `change_measured`, `changed`, `scenarios`, `withheld`, `findings` and
-`exit_code`. Under `--release` it carries `withheld_count`, `verdict_marker`,
-`verdict_author`, `independence_note`, `refused_reason`, `released` and
-`exit_code`. The account never appears in the non-release `--json`.
+`base_ref`, `change_measured`, `changed`, `scenarios`, `reachability`, `findings`
+and `exit_code`. `reachability` is an array of objects carrying `channel`,
+`inspected`, `carries`, `reason` and `items` — it replaced the `withheld` object
+in S2, a declared break. Under `--release` it carries `withheld_count`,
+`verdict_marker`, `verdict_author`, `independence_note`, `refused_reason`,
+`released` and `exit_code`; `withheld_count` is unchanged, because the break was
+declared for the before half only. The account never appears in the non-release
+`--json`.
+
+### beadloom mutation
+
+The score a run produced, held against the mutation scope the project declared
+(BDL-068 S3.1). It reports a mutation run. It does not perform one.
+
+```bash
+beadloom mutation [--project DIR] [--stats FILE] [--target PATH]... [--only PATH]...
+                  [--tool NAME] [--min-score FRACTION] [--json]
+```
+
+**Beadloom ships no mutation runner, and this command needs none installed.** The tool
+is the project's choice, because owning one would tie the flow to a language (BDL-061
+CONTEXT Q5) — which is why BDL-061 S4 shipped the mutation duty with no score behind it.
+What ships here is the seam the project's own runner meets: `--stats` names a JSON object
+of counters that *whatever* tool the project ran wrote, and this command reads them **by
+name**. `killed` and `survived` are required; `timeout`, `no_tests`, `skipped` and
+`suspicious` are optional; `total` is accepted as a second spelling of `mutants`. Nothing
+under `src/` imports a runner, and a test asserts it.
+
+**A counter it did not find is reported, never read as zero**
+(`mutation-counters-missing`). A missing `killed` read as zero produces "0%", and a number
+is what gets pasted into a bead comment. The same refusal covers a non-integer, a negative
+value, and a stats file that is absent or is not a JSON object.
+
+**Timeouts count as killed; mutants no test covers do not.** A mutant that hung was
+detected. A mutant nothing executed was not, and leaving that class out of the denominator
+is how a slice with no tests scores 100%.
+
+- `--stats FILE` — the counters a run wrote. Without it the command still reports: every
+  declared target is then measured by no run, which is a finding rather than silence.
+- `--target PATH` — a path the run covered. Repeatable, and **required whenever `--stats`
+  is given**: a run that does not say what it covered exits `2` rather than being assumed
+  to cover the declared scope.
+- `--only PATH` — judge only these declared targets; the rest print as `Not judged by this
+  run`. A first slice measures one target of several, and both obvious alternatives are
+  wrong. Reporting the rest as findings makes a scheduled job permanently red, which is how
+  a check stops being read; dropping them from `mutation.targets` deletes a duty to make a
+  job green.
+- `--tool NAME` — the runner that produced the counters. Omitted, the report says `an
+  unnamed runner`: a score whose producer is unnamed is a weaker claim and should look like
+  one.
+- `--min-score FRACTION` — the floor the score must clear (`0.95` is 95%). A floor declared
+  against a score that does not exist is **missed**, not passed.
+- `--json` — the same facts as the human report: `declared`, `not_judged`, `covered`,
+  `tool`, `room`, `score`, `counters`, `missing_counters`, `min_score`, `below_floor` and
+  `findings`.
+
+Exit `0` when every judged target was measured by a run that produced mutants and the score
+clears the floor — and also when the project declares no mutation scope at all, because not
+opting in is not a violation. Exit `1` on findings or a missed floor. Exit `2` when the
+invocation cannot be answered (`--stats` without `--target`).
+
+**Every report names its room, including one carrying no run.** A report over declared
+targets nothing covered exits 1, so it is a verdict, and until BDL-068 S3.3 it printed no
+room at all. The room is a property of the process rather than of the run.
+
+**An empty population is a finding, not a 100%** (BDL-068 S3.3). Before that slice this
+command never asked the scope half anything, and each of these scored `100.0% of 10 scored
+mutants` at exit 0: a declared target not on disk, a target outside the configured
+`scan_paths`, and a target inside them holding no source file. The score is now folded with
+`check_mutation_scope` over the targets the run is answerable for, so the same invocation
+still prints the number the counters state and no longer prints it alone. Measured on a
+temporary project whose only declared target is absent:
+
+```
+$ beadloom mutation --stats counters.json --target src/gone/
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores
+Declared scope: src/gone/
+Measured: src/gone/
+Tool: an unnamed runner
+Counters: killed 10, survived 0
+Score: 100.0% of 10 scored mutants
+WARN [mutation-target-missing] src/gone/: the mutation target 'src/gone/' is not on disk — the run produces zero mutants and a mutation score computed over nothing
+  fix: update `mutation.targets` in .beadloom/flow.yml to the path the code moved to, or drop the target
+$ echo $?
+1
+```
+
+Two more populations are refused the same way. A run whose counters produce no mutants, and
+a run that produced mutants and reached a verdict on none of them, both raise
+`mutation-run-zero-mutants`: a suite that cannot start in the runner's copied tree skips
+every mutant and leaves counters that look like a clean sheet.
+
+The findings, all at `warn` severity: `mutation-target-unmeasured`,
+`mutation-run-zero-mutants` and `mutation-counters-missing` from the score half, plus the
+three scope checks `config-check` has raised since BDL-061 S4b —
+`mutation-target-missing`, `mutation-outside-source` and `mutation-zero-mutants`.
+
+**A measured report.** The counters below are the ones a `mutmut` run over
+`src/beadloom/graph/rules/` wrote — 3 989 mutants, 54 min 55 s, in the room the output's
+first line names. The runner's own release is whatever `--tool` was handed and is printed
+back verbatim: this document does not restate it, because a third-party version quoted here
+goes stale in a way that says nothing about the command.
+
+```
+$ beadloom mutation --stats mutants/mutmut-cicd-stats.json \
+    --target src/beadloom/graph/rules/ --only src/beadloom/graph/rules/ \
+    --tool 'mutmut 3.7.0' --min-score 0.95
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores
+Declared scope: src/beadloom/doc_sync/doc_quality.py, src/beadloom/doc_sync/doc_shape.py, src/beadloom/graph/rules/
+Not judged by this run: src/beadloom/doc_sync/doc_quality.py, src/beadloom/doc_sync/doc_shape.py
+Measured: src/beadloom/graph/rules/
+Tool: mutmut 3.7.0
+Counters: killed 3836, mutants 3989, no_tests 0, skipped 0, survived 152, suspicious 0, timeout 1
+Score: 96.2% of 3989 scored mutants
+Floor: 0.95 — the score is at or over it.
+```
+
+That 96.2% is one room's figure and was not taken on a CI runner.
+`.github/workflows/mutation.yml` runs the same command nightly under the same floor and is
+deliberately NOT a required status check: the run is two to three times the ~16-28
+runner-minute budget that withdrew this project's Windows leg, and a scheduled workflow
+produces no check-run on a pull request, so requiring its context would make `main`
+unmergeable.
+
+The three findings, the counter vocabulary and the report's own invariants are in the
+[Mutation Scope DOC](../domains/application/components/mutation-scope/DOC.md).
+
+### beadloom rooms
+
+The room this run is in, the rooms the project declares, and which of them the run did not
+enter (BDL-068 S3.2).
+
+```bash
+beadloom rooms [--project DIR] [--dimension AXIS] [--json]
+```
+
+**The census is derived, never listed.** The supported interpreters come from the
+`Programming Language :: Python :: X.Y` classifiers in the packaging metadata; the legs come
+from every job of every `.github/workflows/*.y*ml`, each matrix expanded as a product and a
+`matrix.<axis>` expression in `runs-on` resolved through it. The module owns a runner-label
+vocabulary (`ubuntu` / `macos` / `windows`) and no room list, so a leg added to a workflow is
+covered by the same act that adds it. A hand-written list satisfies every test beside it and
+goes stale the first time a leg moves: this repository's own
+`DEFAULT_STATUS_CHECK_CONTEXTS` has drifted from what CI reports three times, and a required
+check that never reports makes `main` unmergeable.
+
+**Naming the room does not make a verdict stronger. It makes it answerable** — a reader can
+see which declared rooms the run covers and which it does not. It is not a step and carries
+no status.
+
+Measured on this repository, 2026-09-03, with rows elided:
+
+```
+$ beadloom rooms
+Rooms — derived from this project's declaration, never from a list
+
+  This run is in: Darwin arm64 · CPython 3.13.7 · 10 cores
+
+  Declared rooms: 21, entered by this run: 0
+    [  ] os=ubuntu-latest python=3.13    .github/workflows/ci.yml: tests
+         os: the leg is ubuntu-latest (Linux) and this run is Darwin
+    [  ] locale=C os=ubuntu-latest    .github/workflows/ci.yml: tests-locale
+         locale: this run cannot describe the dimension `locale`, which the leg declares as C; os: ...
+    [  ] os=ubuntu-latest    .github/workflows/mutation.yml: mutation
+         os: the leg is ubuntu-latest (Linux) and this run is Darwin
+    ... and 9 more
+
+  Interpreters this project supports: 3.10, 3.11, 3.12, 3.13 (floor >=3.10)
+
+  Unresolved (1):
+    .github/workflows/ci.yml: ai-techwriter — the runner label `self-hosted+ai-techwriter` names no platform this report knows, so no run can be said to have entered it
+```
+
+A local run is in **0 of the 21 rooms this project declares**, and that is the point rather
+than a caveat: nine "green on the tree" reports across BDL-067 were taken in exactly this
+room. The `mutation` leg above was added by the slice that added it and appeared in the
+census with no edit to the census's own code, which is the property the required-contexts
+tuple lacks.
+
+A run enters a declared room only when every dimension is comparable and equal. A runner
+label naming no platform (`self-hosted`) and a dimension this run cannot describe (the two
+`locale` legs) both resolve to NOT ENTERED with the deciding dimension named, and an
+unresolved job is listed rather than dropped: a comparison that cannot be made must never
+manufacture coverage.
+
+- `--dimension AXIS` — the distinct values of one axis, one per line: the form a checklist
+  loops over instead of spelling out a set that goes stale. The Python overlay's type-check
+  step is `for v in $(beadloom rooms --dimension python)`, and the honest limit of that local
+  form is that it varies the TARGET version only — the interpreter the checker runs under is
+  still one, which is a difference only CI measures.
+- `--json` — `current`, `declared` (each with `dimensions`, `source`, `entered` and `why`),
+  `supported`, `floor`, `supported_without_a_leg` and `unresolved`.
+
+Exit `0` when the census was taken; a project declaring no leg also exits `0`, because this
+command grades nothing. Exit `2` when `--dimension` names an axis no declared room carries,
+and the refusal names the axes that exist (`no declared room carries a 'nonesuch' axis; the
+axes declared are: locale, os, python`). An empty answer would read as "this project has no
+such axis", which is the clean list an agent trusts and stops at.
+
+The derivation, the floor-is-not-a-set rule and why the packaging metadata is read without a
+TOML parser are in the
+[Verdict Room DOC](../domains/application/components/verdict-room/DOC.md).
 
 ### beadloom ci
 
@@ -1419,13 +1712,15 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 5. `docs-quality` — the eleven planning-document checks (the five writing-standard ones, the four shape ones and the two route ones) over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-09-03: `WARN | 259 document(s) read; measurable-goal 4, pending-in-approved 7, missing-section 102, routed-without-axes 12; NO CHECK READS: BRIEF, PLAN, SUMMARY`. The line prints the finding count and not the 27 accepted-without-witness statements the re-scope stopped deciding about; that limit is stated in the doc-quality SPEC.
 6. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
 7. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
-8. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
+8. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
 9. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 10. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
 **Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
+
+**The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-03: a local macOS run reports `0 of 21 declared room(s) not entered by this run`, which is the verdict's address rather than a caveat on it. The census itself is [`beadloom rooms`](#beadloom-rooms).
 
 ### beadloom setup-mcp
 
@@ -1674,8 +1969,9 @@ cohesive module per command group: `_root` (the `main` group + global options),
 (`sync-check`/`sync-update`/`install-hooks`/`active-sync`/`ci`), `federation`
 (`export`/`federate`), `docs` (the `docs` group: `generate`/`site`/`audit`/`polish`),
 `setup` (the `init`/`setup-*`/`mcp` commands), `dashboard` (`tui`/`ui`/`watch`),
-`snapshot` (the `snapshot` group), `waves` (`waves`) and `review_brief`
-(`review-brief`). The `status` command's data-gathering was
+`snapshot` (the `snapshot` group), `waves` (`waves`), `review_brief`
+(`review-brief`), `mutation` (`mutation`) and `rooms` (`rooms`). The `status`
+command's data-gathering was
 moved DOWN to the application layer (`application/status.py`:
 `gather_status`/`compute_context_metrics`/`StatusData`); the command keeps only
 the Rich/JSON presentation. The CLI surface (every command, option, help text,
@@ -1710,9 +2006,11 @@ Commands (re-exported from the package via the registration shell):
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
-- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments and reporting how many; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
+- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments, and state what is REACHABLE per channel: bead comments (counted on that bead and on no other), the documents of the work item the branch names, the commit bodies of the reviewed range, and the launch prompt, which is named as a channel nothing here can inspect; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
+- `mutation` -- the score a run produced over the declared `mutation.targets`, from the counters the project's own runner wrote (`--stats`/`--target`/`--only`/`--tool`/`--min-score`/`--json`); reads counters by NAME and reports one it did not find rather than as zero; folds the scope check in, so an empty population is a finding and not a 100%; exit 0 clean or nothing declared / 1 findings or under the floor / 2 counters named without the scope they cover; delegates to `application/mutation_scope/score.py:report_mutation_score()`
+- `rooms` -- the room this run is in and the rooms the project declares, derived from the packaging classifiers and every CI workflow rather than from a list (`--dimension` prints one axis, one value per line, for a checklist to loop over; `--json`); exit 0 census taken / 2 `--dimension` names an axis no declared room carries; delegates to `application/rooms.py:take_census()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
@@ -1724,4 +2022,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`. Two commands carry their command-level tests outside that naming, beside the application tests they render: `test_mutation_command.py` (with `test_mutation_score.py`, `test_mutation_phantom_gate.py`, `test_mutation_runner_scope.py` and `test_mutation_ci_job.py`) and `test_rooms_command.py` (with `test_verdict_room_derivation.py`, `test_verdict_room_census.py`, `test_verdict_room_population.py` and `test_gate_verdict_room.py`).

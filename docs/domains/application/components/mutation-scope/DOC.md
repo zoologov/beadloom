@@ -1,8 +1,9 @@
 # Mutation Scope (component)
 
-Whether a declared mutation target could run a single mutant.
+Whether a declared mutation target could run a single mutant, and what a run over it
+produced.
 
-**Source:** `src/beadloom/application/mutation_scope.py`
+**Source:** `src/beadloom/application/mutation_scope/`
 
 ---
 
@@ -17,6 +18,13 @@ it), the scope convention, and this check.
 ratio, and a target naming a moved package, a deleted module or a directory holding no source file
 produces the strongest possible ratio over an empty denominator. That reads as evidence of test
 strength and is evidence of nothing.
+
+**The component has two halves and they shipped eleven weeks apart.** `scope.py` asks whether a
+declared target COULD run a mutant. `score.py` (BDL-068 S3.1) asks what a run over it DID, and it
+exists because until it shipped nothing here could tell a performed mutation check from a sentence
+claiming one: four beads in BDL-067 each reported "mutation checking" by a different hand method,
+every result prose in a bead comment, and one of them — sent to audit another — found a reported
+"all twenty assertions red before the fix" was eleven guards that cannot fail.
 
 ## The three findings
 
@@ -41,9 +49,93 @@ mutation:
 `scan_paths` and `languages` come from `.beadloom/config.yml`, so an adopter whose code lives in
 `lib/` is judged against `lib/`.
 
+## The score, and the states in which there is none
+
+`beadloom mutation` reads the counters a run wrote and holds them against the declared scope.
+The counter vocabulary is NAMES rather than a tool — `killed` and `survived` are required,
+`timeout`, `no_tests`, `skipped`, `suspicious` are optional, and `total` is accepted as the
+second spelling of `mutants` — so any runner that writes a JSON object of counts is read.
+
+```bash
+beadloom mutation --stats mutants/mutmut-cicd-stats.json \
+  --target src/beadloom/graph/rules/ --tool "mutmut 3.7.0"
+```
+
+| Check | Condition | Why it matters |
+|-------|-----------|----------------|
+| `mutation-target-unmeasured` | a declared target no run covered | the duty is stated and no score answers it |
+| `mutation-run-zero-mutants` | the run produced no mutants, OR produced them and reached a verdict on none | a ratio over an empty denominator, again |
+| `mutation-counters-missing` | the counters carry no `killed` or no `survived` | a missing counter read as zero produces "0%", and a number is what gets pasted into a bead comment |
+
+Five rules decide what the number means, and each of them prevents a specific way of
+flattering the suite:
+
+- **A missing counter is not zero.** An absence stays an absence, and no score is stated.
+- **Timeouts count as killed; mutants no test covers do not.** A mutant that hung the suite was
+  detected. A mutant nothing executes was not, and leaving that class out of the denominator is
+  how a slice with no tests at all scores 100%.
+- **A run that does not say what it covered is not a run.** `--stats` without `--target` exits 2
+  rather than assuming the run covered everything declared.
+- **A run that classified nothing is not a run either** (BDL-068 S3.3). Ten mutants with
+  `killed: 0`, `survived: 0` and `skipped: 10` stated `Score: none — see the findings below.`
+  with no findings below it, and exited 0. Both emptinesses now report under
+  `mutation-run-zero-mutants`, with a different `why` each, because the repairs differ: a run
+  that produced nothing is pointed at the wrong path, and a run that classified nothing usually
+  could not start its suite in the runner's copied tree.
+- **A counter that cannot be a count is not read** (BDL-068 S3.3). `killed: -5` beside
+  `survived: 1` divided to `125.0% of -4 scored mutants`. A negative is refused for the same
+  reason `true` is: it makes a percentage out of something that is not a count. A required
+  counter written that way is MISSING; an optional one is absent.
+
+### The scope half is asked as well
+
+Until BDL-068 S3.3 it was not, and the two halves of this component never met. A target naming a
+path the code had moved away from, a target outside `scan_paths`, and a target holding no source
+file each scored **100.0% of 10 scored mutants at exit 0**, measured on the shipped console
+script over three temporary projects. `config-check` and the Gate reported all three; the command
+producing the NUMBER asked neither.
+
+`report_mutation_score` now folds `check_mutation_scope` over the targets the run is answerable
+for, so `mutation-outside-source`, `mutation-target-missing` and `mutation-zero-mutants` reach the
+score as well as the configuration report. It is filtered by `--only` for the reason `--only`
+exists: reporting a target the run never claimed is how a scheduled job becomes permanently red.
+
+### A slice that does not claim the whole scope
+
+A first slice measures one declared target of several, and both obvious answers are wrong.
+Reporting the rest as findings makes a scheduled job permanently red, which is how a check stops
+being read; dropping them from `mutation.targets` deletes the duty to make the job green.
+`--only` takes the third answer, which is the one this project uses everywhere else: judge what
+the run is answerable for, and NAME what was not judged.
+
+```bash
+beadloom mutation --stats … --target src/beadloom/graph/rules/ \
+  --only src/beadloom/graph/rules/
+# Not judged by this run: src/beadloom/doc_sync/doc_quality.py, …
+```
+
+`--only` narrows what is judged; it never excuses what it names. A target inside the slice that
+the run did not cover is still reported.
+
+The report carries the ROOM it was measured in — platform, machine, interpreter and cores —
+derived rather than typed by the caller (BDL-UX #227: the same suite skips fifteen tests on
+Linux that it does not skip on macOS, and a mutation score is a ratio over whatever ran). Since
+BDL-068 S3.2 `describe_room` composes that sentence in the
+[verdict-room component](../verdict-room/DOC.md), so a Gate verdict and a mutation score name
+one room in one wording; `beadloom rooms` says which rooms the project declares and which of
+them a run did not enter.
+
+The room is printed on **every** report, not only on the ones carrying a run. A report over a
+declared target that no run covered exits 1 — it is a verdict — and it printed no room at all
+until BDL-068 S3.3, which is the shape BDL-067 produced nine times. The room is a property of the
+process, so it is stated wherever the process states anything.
+
+Exit codes: `0` clean or nothing declared, `1` findings or a score under `--min-score`, `2` the
+invocation cannot be answered.
+
 ## Where it is called
 
-`beadloom config-check` prints the findings among its warnings, and the `config-check` gate step
+`beadloom config-check` prints the scope findings among its warnings, and the `config-check` gate step
 carries them with their own `rule` names — the remedy is to edit the declared scope, not to run
 `--fix`, and a reader filtering the gate's JSON must be able to find them.
 

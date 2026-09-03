@@ -58,7 +58,8 @@ class TestTheStandardIsShared:
         assert carriers == ["_writing.md.txt"]
 
     def test_it_is_declared_as_a_shared_fragment_of_the_roles_kind(self) -> None:
-        assert SHARED_ROLE_FRAGMENTS == ("_writing",)
+        """BDL-068 S3.2 added `_rooms` beside it; the writing standard is first."""
+        assert SHARED_ROLE_FRAGMENTS[0] == "_writing"
 
     def test_a_shared_fragment_is_not_itself_composable_as_a_role(self) -> None:
         """`_writing` is a layer, not a role — composing it as one is a config error."""
@@ -82,7 +83,8 @@ class TestLayerOrder:
     def test_the_standard_lands_between_the_core_and_the_overlays(self) -> None:
         composition = compose("roles", "dev", config=_config())
         layers = [fragment.layer for fragment in composition.fragments]
-        assert layers[:3] == ["core", "core:_writing", "architecture:ddd"]
+        assert layers[:2] == ["core", "core:_writing"]
+        assert layers[len(SHARED_ROLE_FRAGMENTS) + 1] == "architecture:ddd"
 
     def test_the_composition_is_deterministic(self) -> None:
         first = compose_role("review", architecture="ddd", stack=("python",))

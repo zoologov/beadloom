@@ -158,12 +158,14 @@ class TestComposeApi:
         )
         result = compose("roles", "dev", config=config, project_root=project)
         layers = [f.layer for f in result.fragments]
-        # ``core:_writing`` is the shared writing standard, composed into every
-        # role straight after its own core (BDL-061 S4). It is a LAYER and not a
-        # role: one text, one file, four consumers.
+        # ``core:_writing`` is the shared writing standard and ``core:_rooms``
+        # the shared room statement (BDL-061 S4, BDL-068 S3.2), composed into
+        # every role straight after its own core. Both are LAYERS and not roles:
+        # one text, one file, every consumer.
         assert layers == [
             "core",
             "core:_writing",
+            "core:_rooms",
             "architecture:ddd",
             "stack:python",
             "project",

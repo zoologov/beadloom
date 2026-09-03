@@ -26,8 +26,8 @@ recorded by anyone other than the bead's own author — released, and a finding,
 the same rule that makes an unmeasured medium a finding instead of a silent pass.
 
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
-the same counts and the same withholding, and neither depends on whether stdout
-is a terminal — a surface whose shape depends on whether a human is watching will
+the same counts and the same reachability statement, and neither depends on
+whether stdout is a terminal — a surface whose shape depends on whether a human is watching will
 be sampled by a program and silently given a different answer (BDL-UX #148).
 Nothing here asks a caller to count lines.
 """
@@ -49,7 +49,13 @@ from beadloom.services.commands._root import main
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from beadloom.application.review_brief import AuthorNote, ReleaseOutcome, ReviewBrief
+    from beadloom.application.review_brief import (
+        AuthorNote,
+        Channel,
+        Commit,
+        ReleaseOutcome,
+        ReviewBrief,
+    )
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
 _EXIT_CLEAN = 0
@@ -135,6 +141,58 @@ def _changed_since(project_root: Path, ref: str) -> frozenset[str] | None:
             return None
         paths.update(line.strip() for line in proc.stdout.splitlines() if line.strip())
     return frozenset(paths)
+
+
+#: Field and record separators for ``git log``. Bytes no commit message can
+#: contain, so a subject holding a newline or a pipe cannot shift a field — the
+#: same reason ``git status --porcelain -z`` is read with NULs elsewhere.
+_LOG_FIELD_SEP = "\x1f"
+_LOG_RECORD_SEP = "\x1e"
+
+
+def _commits_since(project_root: Path, ref: str) -> tuple[Commit, ...] | None:
+    """The commits of the reviewed range, or ``None`` when git had no answer.
+
+    ``ref..HEAD`` — what THIS branch added — rather than the symmetric
+    difference, so a commit that landed on the trunk after the branch left is not
+    reported as something the reviewer can read about this change.
+
+    Only the subject and the body's LINE COUNT come back. The bodies are the
+    channel being reported, not the report's content: this project writes long,
+    specific commit messages, which is exactly why BDL-UX #219 found them
+    defeating the withholding, and a report that quoted them would be the leak.
+    """
+    fmt = f"%H{_LOG_FIELD_SEP}%s{_LOG_FIELD_SEP}%b{_LOG_RECORD_SEP}"
+    try:
+        proc = subprocess.run(  # noqa: S603
+            ["git", "log", f"--format={fmt}", f"{ref}..HEAD"],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            encoding=_GIT_ENCODING,
+            errors=_GIT_DECODE_ERRORS,
+            check=False,
+            timeout=_GIT_TIMEOUT_S,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    from beadloom.application import review_brief as vocabulary
+
+    found: list[Commit] = []
+    for record in proc.stdout.split(_LOG_RECORD_SEP):
+        fields = record.strip("\n").split(_LOG_FIELD_SEP)
+        if len(fields) != 3 or not fields[0].strip():
+            continue
+        sha, subject, body = fields
+        found.append(
+            vocabulary.Commit(
+                sha=sha.strip()[:8],
+                subject=subject.strip(),
+                body_lines=len([line for line in body.splitlines() if line.strip()]),
+            )
+        )
+    return tuple(found)
 
 
 def _bead_fields(bead_id: str, project_root: Path) -> dict[str, Any]:
@@ -267,12 +325,16 @@ def _brief_as_dict(brief: ReviewBrief) -> dict[str, Any]:
         "scenarios": [
             {"name": s.name, "path": s.path, "line": s.line} for s in brief.scenarios
         ],
-        "withheld": {
-            "count": brief.withheld.count,
-            "reason": brief.withheld.reason,
-            "release_condition": brief.withheld.release_condition,
-            "defeat_notice": brief.withheld.defeat_notice,
-        },
+        "reachability": [
+            {
+                "channel": channel.name,
+                "inspected": channel.inspected,
+                "carries": channel.carries,
+                "reason": channel.reason,
+                "items": list(channel.items),
+            }
+            for channel in brief.reachability.channels
+        ],
         "findings": list(brief.findings),
         "exit_code": _EXIT_FINDINGS if brief.findings else _EXIT_CLEAN,
     }
@@ -314,12 +376,28 @@ def _render_change(brief: ReviewBrief) -> None:
     click.echo(f"  read it: git diff {base_ref}...HEAD -- <path>")
 
 
-def _render_withholding(brief: ReviewBrief) -> None:
+#: The heading of the reachability block, and the claim it is careful NOT to
+#: make. This report raises detectability; it closes nothing. The review protocol
+#: itself sends a reviewer to the diff, and the commit bodies come with it.
+_REACHABLE_HEADING = (
+    "REACHABLE — what can reach you about this change, per channel. This command "
+    "withholds one of them and closes none of the others; declaring what actually "
+    "reached you is still yours to do."
+)
+
+
+def _render_channel(channel: Channel) -> None:
+    """One channel's statement, then what it carries, indented under it."""
+    click.echo(f"  {channel.statement()}")
+    for item in channel.items:
+        click.echo(f"    {item}")
+
+
+def _render_reachability(brief: ReviewBrief) -> None:
     click.echo("")
-    click.echo(f"WITHHELD — {brief.withheld.count} author comment(s) withheld")
-    click.echo(f"  reason: {brief.withheld.reason}")
-    click.echo(f"  release: {brief.withheld.release_condition}")
-    click.echo(f"  {brief.withheld.defeat_notice}")
+    click.echo(_REACHABLE_HEADING)
+    for channel in brief.reachability.channels:
+        _render_channel(channel)
 
 
 def _render_brief(brief: ReviewBrief) -> None:
@@ -331,18 +409,27 @@ def _render_brief(brief: ReviewBrief) -> None:
     )
     _render_specification(brief)
     _render_change(brief)
-    _render_withholding(brief)
+    _render_reachability(brief)
     if brief.findings:
         click.echo("")
         for finding in brief.findings:
             click.echo(f"FINDING: {finding}", err=True)
 
 
-def _render_release(outcome: ReleaseOutcome, notes: Sequence[AuthorNote]) -> None:
+def _render_release(
+    outcome: ReleaseOutcome, notes: Sequence[AuthorNote], *, bead: str
+) -> None:
+    """The release half, in the vocabulary the brief half already speaks.
+
+    The refusal names the CHANNEL and the BEAD, because it reports a count of
+    things it does not show and that is exactly the count whose population has to
+    be stated. The release below it names neither: it prints the comments
+    themselves, so its population is on the screen under it.
+    """
     if outcome.refused_reason is not None:
         click.echo(
-            f"WITHHELD — {len(notes)} author comment(s) stay withheld: "
-            f"{outcome.refused_reason}",
+            f"WITHHELD — bead comments on {bead}: {len(notes)} item(s) stay "
+            f"withheld: {outcome.refused_reason}",
             err=True,
         )
         return
@@ -397,7 +484,7 @@ def _run_release(bead: str, project_root: Path, *, output_json: bool) -> int:
     if output_json:
         click.echo(json.dumps(_release_as_dict(outcome, notes), indent=2))
     else:
-        _render_release(outcome, notes)
+        _render_release(outcome, notes, bead=bead)
     return _release_exit_code(outcome)
 
 
@@ -406,6 +493,7 @@ def _run_brief(
 ) -> int:
     """The BEFORE half: the change and the specification, and a count."""
     from beadloom.application.review_brief import assemble_brief
+    from beadloom.doc_sync.git_baseline import current_branch
     from beadloom.infrastructure.db import open_db
 
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -426,6 +514,9 @@ def _run_brief(
             measured_since=base_ref,
             notes=notes,
             scenarios=_suite_scenarios(project_root),
+            project_root=project_root,
+            branch=current_branch(project_root),
+            commits=_commits_since(project_root, base_ref),
         )
     finally:
         conn.close()

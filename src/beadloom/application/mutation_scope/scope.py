@@ -25,12 +25,8 @@ Three findings, all ``warn``:
 ``mutation-zero-mutants``
     The target exists and holds no file in a language the project indexes.
 
-This lives in ``application`` rather than beside the rest of the flow
-configuration because it joins two sources — ``flow.yml``'s declaration and
-``config.yml``'s scan paths, the second of which is read through the
-infrastructure seam that ``onboarding`` may not import. Reading ``flow.yml``
-directly here follows the precedent set by ``application.guards.config``, which
-owns the ``guards:`` block the same way.
+Where this sits in the package, and why it may read ``flow.yml`` at all, is
+stated once in the package docstring beside its sibling ``score``.
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ always did.
 The node's `source` is the **directory**, not a file. A component whose source
 is a package `__init__.py` records that file as its whole surface, and every
 symbol reader then sees an empty façade (BDL-UX #157). Pointing at the directory
-keeps all fourteen modules inside the node for `module-coverage` and for the
+keeps all sixteen modules inside the node for `module-coverage` and for the
 symbol counts.
 
 ## Presentation only
@@ -52,6 +52,23 @@ is what holds that line.
 | `waves.py` | `waves` |
 | `review_brief.py` | `review-brief` |
 | `impact.py` | `impact`, `axes`, `scope-check` |
+| `mutation.py` | `mutation` |
+| `rooms.py` | `rooms` |
+
+`mutation.py` renders what `application.mutation_scope` decided: the score a run produced
+over the scope `.beadloom/flow.yml` declared. It reads the counters a runner wrote and
+names none — Beadloom owns no mutation runner, so the module knows counter NAMES and not a
+tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carrying no run
+at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
+(BDL-UX #181).
+
+`rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
+project declares — interpreters from its packaging metadata, legs from its CI workflows — and
+the ones the run did not enter (BDL-068 S3.2). `--dimension <axis>` prints one axis, one value
+per line, which is the form a completion checklist loops over instead of a spelled-out list
+that goes stale. It exits 2 when the named axis is carried by no declared room, and names the
+axes that exist: an empty answer would read as "this project has no such axis", which is the
+clean list an agent trusts and stops at.
 
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section

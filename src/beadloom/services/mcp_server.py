@@ -782,6 +782,24 @@ def _run_test_suite(project_root: Path) -> tuple[bool, str]:
     return passed, summary[0]
 
 
+def _verdict_room(project_root: Path) -> dict[str, object]:
+    """The room this verdict was taken in, and how much of the declaration it covers.
+
+    Carried on the verdict an agent closes a bead on, because that is the
+    strongest claim this tool makes and it is true of one room. It changes no
+    status and adds no finding — the same verdict, answerable.
+    """
+    from beadloom.application.rooms import room_line, take_census
+
+    census = take_census(project_root)
+    return {
+        "current": room_line(census.current),
+        "declared": len(census.comparisons),
+        "entered": len(census.entered),
+        "not_entered": [c.room.label for c in census.not_entered],
+    }
+
+
 def handle_complete_bead(
     project_root: Path,
     *,
@@ -822,8 +840,9 @@ def handle_complete_bead(
                 }
             )
 
+    room = _verdict_room(project_root)
     if not (gate_ok and tests_ok):
-        return {"status": "FAIL", "bead": bead, "findings": findings}
+        return {"status": "FAIL", "bead": bead, "findings": findings, "room": room}
 
     try:
         # Locate the bead's epic ACTIVE.md before closing (best-effort, mocked in tests).
@@ -846,6 +865,7 @@ def handle_complete_bead(
         "status": "PASS",
         "bead": bead,
         "findings": [],
+        "room": room,
         "next": close.stdout.strip(),
         "active_updated": active_updated,
     }

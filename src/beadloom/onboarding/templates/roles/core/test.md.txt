@@ -49,11 +49,16 @@ Mutation testing answers that, and it is the only cheap answer there is.
   mutation run is minutes, and a hook nobody can wait for is a hook everybody disables.
 - **A survivor is a finding**, and the fix is a stronger assertion, not a deleted mutant.
 - **Beadloom does not ship a mutation runner** — the tool is the project's choice, and owning
-  one would break tool-agnosticism. Record the tool, the target and the surviving count in the
-  bead comment; a target that ran zero mutants is reported as zero, never as clean.
+  one would break tool-agnosticism. It reads what your runner wrote, and a target that ran
+  zero mutants is reported as zero, never as clean.
+- **Report the run, do not describe it.** `beadloom mutation --stats <counters.json> --target
+  <path> [--only <path>] [--min-score <fraction>]` turns those counters into a score and
+  reports a missing counter rather than reading it as zero — read as zero it scores `0%`, and
+  a number is what gets pasted into a bead comment. Paste its report; a sentence about a
+  mutation run is not one.
 
 ### Validation, checkpoint, completion
-1. Tests pass + coverage >= 80%.
+1. Tests pass + coverage >= 80% — in a named room. A suite that skips a case in your room and runs it in another produces two different coverage numbers about one tree.
 2. Architecture/doc validation green (`beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict`).
 3. Checkpoint: `bd comments add <bead-id> "TESTS: unit X, integration Y, coverage Z%, edge cases: <list>, known limitations: <…>"`.
 4. Close: `bd close <bead-id> --suggest-next` (append `--session "$CLAUDE_SESSION_ID"` only when set).

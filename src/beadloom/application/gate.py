@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
     REASON_MISSING_SECTIONS,
@@ -160,6 +161,20 @@ class GateResult:
     """Aggregate of every gate step. ``ok`` only when every step passed."""
 
     steps: list[GateStep] = field(default_factory=list)
+    room: RoomCensus | None = None
+    """The room this verdict was taken in, and the declared rooms it did not enter.
+
+    A verdict is true of the room it was taken in. BDL-067 reported "green on
+    the tree" nine times from macOS against CI legs that are Ubuntu, and the
+    tenth measurement was red on six of them. The census is carried on the
+    result rather than printed by one renderer, so all three formats say the
+    same thing about one run.
+
+    It is NOT a step, and that is deliberate: a step has a status, and naming
+    the room makes no claim that could pass or fail. The verdict is the same
+    verdict; it is now answerable. ``None`` means no census was taken, and a
+    surface that was not told makes no room claim.
+    """
 
     @property
     def ok(self) -> bool:
@@ -215,7 +230,7 @@ def run_ci_gate(
     steps.append(_step_doctor(project_root))
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
-    return GateResult(steps=steps)
+    return GateResult(steps=steps, room=take_census(project_root))
 
 
 def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:

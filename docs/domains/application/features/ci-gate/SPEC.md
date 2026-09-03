@@ -218,6 +218,21 @@ as the code's health (BDL-UX #174/#175):
   summary is now `N check(s): 0 error(s), W warning(s), I info`, and the word
   *clean* appears only when every check is OK.
 
+### The verdict names the room it was taken in
+
+A verdict is true of the room it was taken in, and this project read one as a claim about the
+product four times — nine "green on the tree" reports measured on macOS against CI legs on
+Ubuntu, with the tenth measurement red on six of them, being the loudest. Since BDL-068 S3.2
+`GateResult` carries a `RoomCensus`: the room the run was in, the rooms the project declares
+(interpreters from its packaging metadata, legs from every job of every workflow) and the ones
+this run did not enter. All three formats print it — under the verdict in `rich`, as a `room`
+object in `--format json`, and as one `::notice::room` in `--format github`.
+
+**It is not a step, and naming it changes nothing.** A step has a status, and the room makes no
+claim that can pass or fail: the same `ok`, the same exit code, the same findings. What it
+changes is that a green is answerable — a reader can see which of the declared rooms it covers.
+Do not read a room-naming verdict as a stronger one.
+
 ## Invariants
 
 - Every step runs; the gate never short-circuits on the first failure.
@@ -230,6 +245,8 @@ as the code's health (BDL-UX #174/#175):
 - `WARN` never changes the exit code: an adopter whose project is green today
   does not go red on upgrade, it only stops reading green where nothing was
   verified.
+- The room census never changes the verdict. It adds no step, no finding and no
+  exit code, and `tests/test_gate_verdict_room.py` fails if it starts to.
 - `fail_on=None` selects the safe default federate set
   (`breaking,drift,orphaned_consumer,undeclared_producer`); the
   no-false-gate verdicts are never included.
@@ -243,7 +260,9 @@ Module `src/beadloom/application/gate.py`:
 - `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
-- `GateResult` — aggregate: `steps`, plus the `ok` and `findings` properties.
+- `GateResult` — aggregate: `steps`, the room census (`room`, a
+  `RoomCensus | None`), plus the `ok` and `findings` properties. `None` means no
+  census was taken, and a surface that was not told makes no room claim.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex) -> GateResult`
   — run every gate step and aggregate the result.
 

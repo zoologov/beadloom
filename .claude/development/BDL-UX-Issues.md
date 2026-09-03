@@ -35,6 +35,83 @@
 
 ## Open Issues
 
+233. [2026-09-03] [MEDIUM] the read-only guard test reports a `bd` export burst as the guard's own write
+
+    **Severity:** medium
+    **Tracker:** `beadloom-nn4c`
+    **Issue:** The differing digest is `.beads/issues.jsonl`, never `beadloom.db`. `_moved_with_nothing_running` opens a control window of the measurement window's duration and skips only if the repository moves DURING it, so a millisecond `bd` export burst lands in the measurement window and misses the control. A two-writer wave makes it likelier — the check is least reliable exactly when the flow is most parallel. Attributed by `beadloom-0mdo.26` after `.22` recorded it non-reproducing and `.23` and `.24` each looked across four runs without meeting it.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-nn4c`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+232. [2026-09-03] [MEDIUM] `waves` plans from an authored `refs:` line, so two beads editing one document read as independent
+
+    **Severity:** medium
+    **Tracker:** `beadloom-en0x`
+    **Issue:** `beadloom-0mdo.21` and `.26` both edited `docs/services/cli.md` concurrently; `waves` reported 0 findings. The graph knows the file — it is the `cli` node's spec — but `waves` compares the `refs:` each bead DECLARES, and both were authored from the CODE each would touch. The planner's input is authored while everything else BDL-068 built is derived.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-en0x`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+231. [2026-09-03] [MEDIUM] the commit hook warns about type errors on an undeclared surface, discards the output, and never blocks
+
+    **Severity:** medium
+    **Tracker:** `beadloom-gsal`
+    **Issue:** `.git/hooks/pre-commit` runs mypy over every staged Python file with `2>/dev/null` and prints one contentless sentence. `[tool.mypy]` declares `packages = ["beadloom"]`; `uv run mypy tests/` reports 970 errors in 90 files. A real error in `src/` produces the identical sentence, so the case that matters is drowned by the case that does not. Sharper than `mr2l.82`'s one-liner.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-gsal`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+230. [2026-09-03] [MEDIUM] a branch whose name carries a suffix after the work-item key names no work item
+
+    **Severity:** medium
+    **Tracker:** `beadloom-bdnv`
+    **Issue:** On `features/BDL-068-S2S3` the brief's work-item channel reads NOT INSPECTED while the reviewer was reading RFC.md and CONTEXT.md from that very folder. `declared_scope.py` matches a segment that EQUALS a key; it should match one that BEGINS WITH it, longest key wins. The coordinator's branch naming exposed it; the defect is real for any adopter whose branch names carry a suffix.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-bdnv`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+229. [2026-09-03] [MEDIUM] the brief sends the reviewer to the tracker export and does not name it as a channel
+
+    **Severity:** medium
+    **Tracker:** `beadloom-qil0`
+    **Issue:** `git diff main...HEAD -- .beads/issues.jsonl` adds 16 record lines carrying 30 author comments and 81,270 characters, and the brief's own change inventory lists that file and tells the reviewer to read it. `models.py:170` asserted that a reviewer seeing `0 withheld` learns the author wrote nothing; on that run it was false by 31,544 characters.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-qil0`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+228. [2026-09-03] [HIGH] the clean-room duty reaches the roles that must perform it only through the coordinator's typing
+
+    **Severity:** high
+    **Tracker:** `beadloom-67t1`
+    **Issue:** Zero occurrences of `clean room` in `.claude/agents/*` and in the role templates `setup-agentic-flow` composes for an adopter; the rule lives in the project layer of CLAUDE.md, which is never distributed, and in `waves/media.py`, which emits it only for a wave of more than one bead. Roughly twenty single-bead waves across two epics carried it by prompt alone. Same class as BDL-061 S4 and worse: there the duty at least reached the role.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-67t1`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+227. [2026-09-02] [MEDIUM] mypy --strict runs on one Python version locally and four in CI
+
+    **Severity:** medium
+    **Tracker:** `(fixed in BDL-068 S1)`
+    **Issue:** `tests (3.10)` and `(3.11)` failed in 18 and 21 seconds on PR #59 while 3.12 and 3.13 passed: `--strict` reports an UNNECESSARY `type: ignore` as an error. Every local measurement in two epics ran `uv run mypy src/` against the developer's own interpreter. Third instance of a claim true of the room it was measured in — after nine macOS greens meeting six red Ubuntu legs, and `mr2l.61`.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show (fixed in BDL-068 S1)`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+226. [2026-09-02] [HIGH] the pre-push Gate crashes on a full pipe and reports it as stale docs
+
+    **Severity:** high
+    **Tracker:** `beadloom-jwfc`
+    **Issue:** `beadloom ci` writes its whole report through one `click.echo`; under `git push` stdout is a pipe whose buffer fills and the flush raises `BlockingIOError`. The hook then prints `Gate failed (docs stale / lint / coverage / doctor)` on ANY non-zero exit — measured against the same tree in the foreground: rc 0, zero error lines, 8186 tests passing. The bigger the honest report, the likelier the crash.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-jwfc`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+225. [2026-09-03] [HIGH] `impact` under-reports on `src/<one package>` beside code outside src/
+
+    **Severity:** high
+    **Tracker:** `beadloom-f7kb`
+    **Issue:** The narrowing gap is compared against `src/<package>` rather than against the project, so Python outside `src/` is swept by nothing and declared by nothing, with `callers.resolved` and `co_writers.resolved` both True over a demonstrably partial answer. The commonest Python layout there is. Found by the S1 re-review with a red proof in the layout matrix's own form.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-f7kb`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+224. [2026-09-02] [HIGH] a new test file landing on an existing path deletes its scenarios and the suite goes GREEN over the wreckage
+
+    **Severity:** high
+    **Tracker:** `beadloom-hdky`
+    **Issue:** `beadloom-0mdo.6` overwrote two of BDL-061 S6's acceptance files. Deleting scenarios REMOVES tests rather than failing them: 8026 baseline, 8087 after, +61 where 63 were added. `git status` showing ` M` where `??` was expected is the only thing that reports it; `scenario-coverage` cannot see that a file which held four scenarios now holds nine different ones.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-hdky`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+223. [2026-09-02] [LOW] 102 planning documents depart from the shape their peers keep
+
+    **Severity:** low
+    **Tracker:** `beadloom-l27n`
+    **Issue:** Measured when the section checks were wired: missing-section 102 over 256 read, under `doc_shape`'s majority policy; a non-peer-relative policy over the same requirement gives 767. The 102 are the archive — old RFCs with no `## Overview`, old PRDs with no `## Impact`. Reported rather than suppressed by owner decision.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-l27n`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
 222. [2026-09-02] [LOW] The independent cross-check states and computes an attribution rule the implementation stopped using
 
     **Severity:** low (it cannot fail against the regression it was written to catch, and it will one day fail against a correct implementation)

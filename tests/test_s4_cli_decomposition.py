@@ -61,9 +61,17 @@ EXPECTED_COMMANDS = {
     "link",
     "lint",
     "mcp-serve",
+    # BDL-068 S3.1: the score a mutation run produced over the declared scope —
+    # the half `mutation-scope` shipped without, which is why a claimed mutation
+    # check was indistinguishable from a performed one.
+    "mutation",
     "prime",
     "reindex",
     "review-brief",
+    # BDL-068 S3.2: the rooms this project declares, the one a run is in, and the
+    # ones it did not enter — so a completion checklist can name rooms without
+    # spelling a list that goes stale the first time a leg changes.
+    "rooms",
     "search",
     "setup-agentic-flow",
     "setup-ai-techwriter",

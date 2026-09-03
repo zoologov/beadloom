@@ -86,6 +86,15 @@ dev = [
     "mypy>=1.13",
     "types-PyYAML>=6.0",
 ]
+# The mutation RUNNER is this repository's dev dependency and nothing else
+# (BDL-068 S3, CONTEXT's tool-agnosticism constraint). It is deliberately NOT in
+# `dev` and NOT in `all`: every CI leg installs those, and a runner an adopter
+# never needs has no business on the path of a `uv sync --extra dev`. What
+# Beadloom ships for mutation testing is the declared SCOPE (`mutation.targets`
+# in .beadloom/flow.yml) and the REPORT format -- never a required runner.
+mutation = [
+    "mutmut>=3.7",
+]
 all = [
     "beadloom[languages,dev,tui,watch,graphql]",
 ]
@@ -204,3 +213,156 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 fail_under = 80
+
+# ---------------------------------------------------------------------------
+# mutmut -- the first mutation slice (BDL-068 S3.1)
+# ---------------------------------------------------------------------------
+# TOOL DECIDED in ROADMAP (researched 2026-09-01) against cosmic-ray,
+# pytest-gremlins, poodle, mutatest, MutPy and mutahunter. The deciding property
+# is per-mutant test selection from coverage: mutation cost is mutants x
+# time-per-run, and cosmic-ray answers cost with horizontal distribution instead
+# -- which this project already declined once, when beadloom-mr2l.64 withdrew
+# `tests-windows` over runner minutes.
+#
+# `source_paths` is the whole package because mutmut copies it into `mutants/`
+# and imports it there; `only_mutate` is what makes this the graph/rules/ slice.
+# The two are different jobs and only the second is the scope.
+#
+# THE SCOPE IS DECLARED TWICE ON PURPOSE and the two homes are held together by
+# a test: `.beadloom/flow.yml` carries `mutation.targets`, which is what ships
+# and what `config-check` reads, and this block is what the runner reads.
+# tests/test_mutation_runner_scope.py fails if they disagree.
+#
+# THE TEST POOL IS DERIVED, NOT CHOSEN, and the derivation is written down so it
+# can be run again:
+#
+#   pytest --cov=beadloom.graph.rules --cov-context=test
+#   select distinct context from arc join context ...   # the coverage database
+#
+# 73 test files execute graph/rules/ (measured 2026-09-03 over 8 195 tests),
+# and a 74th imports the package at COLLECTION time, where a coverage context
+# does not reach -- it was added by the import check named below, on its first
+# run, which is the check earning its place.
+# They are listed below because mutmut needs the pool statically, and a list is
+# the thing this epic distrusts -- so two things are stated about it rather than
+# hoped for. FIRST, the failure direction: a killer test OUTSIDE the pool cannot
+# be selected for a mutant, so the mutant survives and the score UNDER-claims. A
+# stale pool therefore understates test strength; it can never overstate it.
+# SECOND, tests/test_mutation_runner_scope.py fails if a pool entry no longer
+# exists, or if a test file that imports the rules package directly is missing
+# from the pool.
+#
+# ONE DERIVED ENTRY IS EXCLUDED, and the reason is the room rather than taste:
+# tests/test_bead15_s3b_coverage.py runs `sync-check` over the tree it is in, and
+# in `mutants/` that tree is a MUTATED copy — every rules module has a different
+# hash, so the pairs are stale by construction and the test cannot pass there.
+# It executes graph/rules/, so dropping it costs whatever mutants it would have
+# killed, in the under-claiming direction.
+#
+# THE WHOLE SUITE WAS TRIED FIRST AND DOES NOT FIT THE ROOM. mutmut runs the
+# pool inside `mutants/`, over a MUTATED copy of the package and without a
+# `.git` directory.
+# Measured there: 14 failures and 7 errors, and the irreducible ones are
+# structural -- the meta-tests that lint the shipped package (it is mutated by
+# construction) and the ones that walk git history (there is no repository).
+# The derived pool runs green in that room; the whole suite cannot.
+#
+# `also_copy` is what makes the pool runnable in `mutants/` at all: mutmut copies
+# the source and the tests and runs there, so this project's meta-tests -- the
+# ones that read ci.yml, the graph, the shipped documents -- fail in the copy
+# unless the tree they read comes with them. MEASURED in the copied room over
+# the derived pool: 77 failures and 12 errors before these paths were copied,
+# 0 after (2026-09-03).
+[tool.mutmut]
+source_paths = ["src/beadloom"]
+only_mutate = ["src/beadloom/graph/rules/*"]
+pytest_add_cli_args_test_selection = [
+    "tests/acceptance/steps/test_bootstrap_self_consistency_steps.py",
+    "tests/acceptance/steps/test_doc_area_coherence_steps.py",
+    "tests/acceptance/steps/test_graph_summary_facts_steps.py",
+    "tests/acceptance/steps/test_rule_population_steps.py",
+    "tests/acceptance/steps/test_scenario_coverage_steps.py",
+    "tests/acceptance/steps/test_source_root_minority_steps.py",
+    "tests/acceptance/steps/test_wave_plan_steps.py",
+    "tests/test_auto_link_docs.py",
+    "tests/test_bdl062_seams.py",
+    "tests/test_bead06_misc_fixes.py",
+    "tests/test_bead14_s4_binding.py",
+    "tests/test_bead22_wave_guarantee.py",
+    "tests/test_bead57_config_check_sight.py",
+    "tests/test_bead83_failure_direction.py",
+    "tests/test_bootstrap_clean_lint.py",
+    "tests/test_cli_json_streams.py",
+    "tests/test_cli_lint.py",
+    "tests/test_cycle_rule.py",
+    "tests/test_doc_area_coherence.py",
+    "tests/test_e2e_wave3.py",
+    "tests/test_every_wizard_answer_is_judged.py",
+    "tests/test_exit_condition_expiry.py",
+    "tests/test_f3_gate_coverage.py",
+    "tests/test_f3_gate_dogfood.py",
+    "tests/test_flow_composition.py",
+    "tests/test_gate.py",
+    "tests/test_gate_three_states.py",
+    "tests/test_graph_summary_facts.py",
+    "tests/test_guards.py",
+    "tests/test_guards_adversarial.py",
+    "tests/test_guards_config.py",
+    "tests/test_guards_invocation.py",
+    "tests/test_guards_liveness.py",
+    "tests/test_guards_matrix.py",
+    "tests/test_guards_parity.py",
+    "tests/test_guards_paths.py",
+    "tests/test_ignore_block.py",
+    "tests/test_import_boundary_liveness.py",
+    "tests/test_import_boundary_rule.py",
+    "tests/test_init_agrees_across_its_modes.py",
+    "tests/test_init_doc_generation.py",
+    "tests/test_init_one_table_over_every_axis.py",
+    "tests/test_init_report_says_whose_failure_it_is.py",
+    "tests/test_init_verdict_over_its_own_rules.py",
+    "tests/test_integration.py",
+    "tests/test_integration_onboarding.py",
+    "tests/test_integration_v1.py",
+    "tests/test_lifecycle_rules.py",
+    "tests/test_linter.py",
+    "tests/test_mcp_process_tools.py",
+    "tests/test_module_coverage_hardening.py",
+    "tests/test_onboarding.py",
+    "tests/test_reference_leg_syntax.py",
+    "tests/test_reindex.py",
+    "tests/test_rule_engine.py",
+    "tests/test_rule_liveness_all_types.py",
+    "tests/test_rule_severity.py",
+    "tests/test_rules_docstring_references.py",
+    "tests/test_s2_false_green_residue.py",
+    "tests/test_s2_lying_checks.py",
+    "tests/test_s2_move_regression.py",
+    "tests/test_s3_config_check_residual.py",
+    "tests/test_s3_decomposition.py",
+    "tests/test_s3_owns_nothing.py",
+    "tests/test_scaffold_findings_are_printed.py",
+    "tests/test_scenario_coverage_rule.py",
+    "tests/test_site_dashboard.py",
+    "tests/test_source_root_minority.py",
+    "tests/test_sync_update_check_does_not_write.py",
+    "tests/test_tui.py",
+    "tests/test_verdict_downgrade.py",
+    "tests/test_virgin_scaffold_is_green.py",
+    "tests/test_wave_plan.py",
+]
+also_copy = [
+    ".beadloom",
+    ".claude",
+    ".gitattributes",
+    ".github",
+    ".gitlab-ci.yml",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "README.ru.md",
+    "SECURITY.md",
+    "ci-templates",
+    "docs",
+]

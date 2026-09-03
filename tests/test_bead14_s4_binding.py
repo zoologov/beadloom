@@ -42,6 +42,7 @@ branch had no test, only its scanner did.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -639,6 +640,19 @@ def _run_pytest(args: list[str], *, cwd: Path, report: Path) -> tuple[int, list[
     return completed.returncode, outcomes
 
 
+def _numbered_with_the_line_above(path: Path) -> list[tuple[int, str, str]]:
+    """Every line of *path* numbered, carried with the line before it.
+
+    The line above is what a guarding `if` sits on, so a marker written there
+    reaches the statement it guards without this having to parse the block.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [
+        (number, line, lines[number - 2] if number > 1 else "")
+        for number, line in enumerate(lines, 1)
+    ]
+
+
 def _shipped_scenario_count() -> int:
     """How many scenarios the shipped suite declares, READ from the suite.
 
@@ -672,6 +686,38 @@ class TestTheScenariosExecute:
         assert [name for name, outcome in outcomes if outcome == "skipped"] == []
         passed = [name for name, outcome in outcomes if outcome == "passed"]
         assert len(passed) == _shipped_scenario_count(), outcomes
+
+    def test_no_step_implementation_of_the_shipped_suite_steps_aside(self) -> None:
+        """A step that skips is a scenario that stops running where it matters.
+
+        The sibling above catches one only in the room where the skip FIRES: a
+        step guarded on Linux is invisible to every run of that test on macOS,
+        which is how a scenario about naming rooms reached a pull request
+        stepping aside on precisely the two legs where the run is in one. This
+        reads the step modules, so the room a run is taken in does not decide
+        whether the check bites.
+
+        A scenario the room cannot hold is rewritten to hold in both states, or
+        it is not a scenario -- the arithmetic of `entered 0 of 21` and `entered
+        1 of 21` differs, the claim does not.
+
+        A branch already marked `pragma: no cover` is exonerated: that marker
+        states the branch does not execute in a run at all, which is a different
+        thing from a step that runs and declines to assert. The one in the suite
+        today guards an unreadable checkout, and a checkout that cannot be read
+        reddens the sibling above in every room.
+        """
+        steps = sorted((REPO_ROOT / "tests" / "acceptance" / "steps").glob("*.py"))
+        assert steps, "no step implementations were found to read"
+        stepping_aside = [
+            f"{path.name}:{number}"
+            for path in steps
+            for number, line, above in _numbered_with_the_line_above(path)
+            if re.search(r"pytest\.(skip|xfail)\(|skipif", line)
+            and "pragma: no cover" not in line + above
+        ]
+
+        assert stepping_aside == []
 
     def test_a_step_the_suite_no_longer_implements_reddens_the_run(self, tmp_path: Path) -> None:
         """Sabotage as a test: the runner must adjudicate the scenario, not host it.

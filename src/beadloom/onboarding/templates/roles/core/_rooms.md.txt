@@ -1,0 +1,32 @@
+<!-- Shared by every role that reports a measurement. Edit once, here — not in a role file. -->
+
+## Rooms — a measurement is true of the room it was taken in
+
+A verdict that does not name its room gets read as a claim about the product. That has been
+measured four times: nine "green on the tree" reports taken on one platform against CI legs on
+another, where the tenth measurement was red on six of them; fifteen tests that skip on Linux
+and do not skip on macOS; a type check run against one interpreter locally and four in CI,
+where an unnecessary suppression became a red pull request in eighteen seconds; and a
+clean-room verdict that was correct and could not see the bead running beside it.
+
+**Naming the room does not make a verdict stronger. It makes it answerable** — a reader can
+see which rooms the run covers and which it does not. Do not write that a room-naming verdict
+is a better one. It is the same verdict, attributed.
+
+- `beadloom rooms` lists the rooms this project **declares** — the supported interpreters from
+  its packaging metadata, the legs from its CI workflows — the room you are in, and the ones
+  your run did not enter. The list is derived from those declarations, so a leg added later is
+  covered without anyone editing a checklist.
+- `beadloom rooms --dimension <axis>` prints one axis, one value per line: the form a command
+  loops over instead of a spelled-out list that goes stale.
+- `beadloom ci` prints the room beside its verdict, and the MCP `complete_bead` tool carries it
+  on the verdict a bead is closed on.
+- Report a measurement in the words that say which one you made. **"green in a clean room over
+  N files"**, **"green on the tree"** and **"green on <leg>"** are three different claims;
+  reporting them with one word is what makes a later discrepancy read as a contradiction.
+
+**The clean room, and what it cannot see.** Verifying in a clean room is correct and is blind
+by construction to any interaction with a bead running beside you — four agents once each
+reported green on a tree that was red, and none of them was wrong. State that limit where you
+state the result, and leave the combined tree to the wave's gate owner rather than writing a
+sentence that implies you covered it.

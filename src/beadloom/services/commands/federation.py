@@ -451,7 +451,39 @@ def _format_gate_rich(result: GateResult) -> str:
                 lines.append(f"      fix: {remediation}")
     lines.append("")
     lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
+    lines.extend(_gate_room_lines(result))
     return "\n".join(lines)
+
+
+def _gate_room_lines(result: GateResult) -> list[str]:
+    """The room the verdict was taken in, and the declared rooms it did not enter.
+
+    Printed under the verdict rather than beside it, because it does not change
+    the verdict: the same result, now answerable about which rooms it covers.
+    """
+    from beadloom.application.rooms import room_line
+
+    census = result.room
+    if census is None:
+        return []
+    lines = [f"Room: {room_line(census.current)}"]
+    if not census.comparisons:
+        lines.append(
+            "  this project declares no room a verdict could be held against "
+            "(no CI workflow declares a leg)"
+        )
+        return lines
+    missed = census.not_entered
+    if not missed:
+        lines.append(f"  every declared room entered ({len(census.comparisons)})")
+        return lines
+    named = ", ".join(c.room.label for c in missed[:3])
+    more = " ..." if len(missed) > 3 else ""
+    lines.append(
+        f"  {len(missed)} of {len(census.comparisons)} declared room(s) "
+        f"not entered by this run: {named}{more}"
+    )
+    return lines
 
 
 def _format_gate_json(result: GateResult) -> str:
@@ -467,7 +499,21 @@ def _format_gate_json(result: GateResult) -> str:
         }
         for step in result.steps
     ]
-    return json.dumps({"ok": result.ok, "steps": steps}, indent=2)
+    payload: dict[str, object] = {"ok": result.ok, "steps": steps}
+    census = result.room
+    if census is not None:
+        payload["room"] = {
+            "current": dict(census.current.dimensions),
+            "entered": [c.room.label for c in census.entered],
+            "not_entered": [
+                {"room": c.room.label, "source": c.room.source, "why": c.why}
+                for c in census.not_entered
+            ],
+            "unresolved": [
+                {"source": u.source, "why": u.why} for u in census.unresolved
+            ],
+        }
+    return json.dumps(payload, indent=2)
 
 
 def _format_gate_github(result: GateResult) -> str:
@@ -478,7 +524,16 @@ def _format_gate_github(result: GateResult) -> str:
     ``file``/``line`` parameters are comma-separated key=value pairs, NOT a
     ``file=<path:line>`` colon-joined string (which GitHub does not parse).
     """
+    from beadloom.application.rooms import room_line
+
     lines: list[str] = []
+    if result.room is not None:
+        entered = len(result.room.entered)
+        declared = len(result.room.comparisons)
+        lines.append(
+            f"::notice::room {room_line(result.room.current)} — "
+            f"{entered} of {declared} declared room(s) entered by this run"
+        )
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
     for f in result.findings:

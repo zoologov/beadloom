@@ -167,20 +167,33 @@ others do not, BDL-061 S4 added three of them, and BDL-068 S1.5 added the fifth 
 |------|--------------------------------|
 | `explore` | Read-only, and it runs BEFORE the work item has a type — `/task-init` step 0.5, not a wave. One fixed deliverable: the `## Axes` section `beadloom impact <target> --section` renders, every site a path and a line, the `In scope` column left undecided because that half is the person's. No narrative, no recommendation, and the axes are derived from the source rather than read out of a bead comment or a previous plan. |
 | `dev` | TDD (red → green → refactor); the `# beadloom:` annotation discipline that keeps the graph honest; architecture boundaries; cohesion-driven design. **BDD (S4):** acceptance criteria are Gherkin scenarios that RUN, written before the unit test and seen red first, each naming its bead and its node — or the work declares itself non-behavioural with a reason. |
-| `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice and the declared target is what gets checked. |
+| `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice; the role reports the counters that tool wrote through `beadloom mutation`, which scores them against the declared target. |
 | `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. **The brief first (S6):** step 1 is `beadloom review-brief <bead>`, both doc-freshness sources are derived from the change rather than from the author's note, and the account is read only after the verdict is recorded. |
 | `tech-writer` | Edits documentation only. Two staleness sources — `sync-check` and the dev's `API CHANGE:` notes — because a `reindex` can re-baseline hashes while the prose stays wrong. |
-| **all five** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. |
+| **all five** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. **The room a measurement was taken in (BDL-068 S3.2),** in the second shared layer `core:_rooms`: report a verdict in the words that say which room it was measured in, and state the clean room's blindness to a bead running beside you where the result is stated. Naming the room does not make the verdict stronger — it makes it answerable. |
 
-Two of those duties have a mechanism behind them and one deliberately does not. The BDD
-duty is checked by the `scenario_coverage` rule
+All three of those duties now have a mechanism behind them, and the third one got its
+second half last. The BDD duty is checked by the `scenario_coverage` rule
 ([BDD guide](bdd-scenarios.md)); the writing standard is checked by
-`beadloom docs quality` ([document kinds](document-kinds.md)). The mutation duty has no
-runner and no score: what Beadloom checks is that a **declared** mutation target lies
-inside the configured source paths, exists, and holds a file in an indexed language — the
-failure worth catching is a target that runs zero mutants and reports a clean score. Owning
-a mutation runner would break tool-agnosticism, so the duty is stated, the scope is declared
-in `flow.yml`, and the number goes in the bead comment.
+`beadloom docs quality` ([document kinds](document-kinds.md)).
+
+The mutation duty has two halves and shipped them two releases apart, which is worth
+stating because the first half alone let a claimed check read like a performed one. The
+SCOPE half (BDL-061 S4b) checks that a **declared** `mutation.targets` entry lies inside the
+configured source paths, exists, and holds a file in an indexed language — the failure worth
+catching is a target that runs zero mutants and reports a clean score. The SCORE half
+(BDL-068 S3) is [`beadloom mutation`](../services/cli.md#beadloom-mutation): it holds the
+counters a run wrote against that declared scope, reports a counter it did not find rather
+than reading it as zero, and refuses a score over an empty population instead of printing
+`100.0%`. The composed `test` role names the command, so the result is reported rather than
+described.
+
+**Beadloom still ships no mutation runner, and adopting this duty does not require one.**
+Owning a runner would break tool-agnosticism, so the tool stays the project's choice and
+the seam is a JSON object of counters read by name — `killed` and `survived` required,
+`timeout`, `no_tests`, `skipped` and `suspicious` optional. A project that runs no mutation
+tool at all is still told which of its declared targets is measured by nothing, which is a
+report the scope half alone could not produce.
 
 ## The role configurator (BDL-052)
 
@@ -236,11 +249,14 @@ one implementation instead of three:
 1. **CORE** — the universal, stack/tool-neutral fragment (the single source of
    truth).
 2. the **SHARED** core fragments (`SHARED_ROLE_FRAGMENTS`, BDL-061 S4), composed
-   as a labelled `core:<name>` layer. Today that is `_writing`, the writing
-   standard, carried by every role instead of by `tech-writer` alone: the
-   roles that produce intent documents had no standard at all. It is a layer and
-   not a role, so `compose_role("_writing", …)` raises, and it is
-   language-selectable like every other layer (`_writing.ru.md.txt` ships).
+   as a labelled `core:<name>` layer. Today those are `_writing`, the writing
+   standard, carried by every role instead of by `tech-writer` alone (the roles
+   that produce intent documents had no standard at all); and `_rooms`
+   (BDL-068 S3.2), the statement that a measurement is true of the room it was
+   taken in, which reaches all five roles from one file rather than from five
+   copies that drift the moment one is edited. Each is a layer and not a role,
+   so `compose_role("_writing", …)` raises, and each is language-selectable like
+   every other layer (`_writing.ru.md.txt` and `_rooms.ru.md.txt` ship).
 3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary. FSD is at
    **parity** with DDD (every role has both overlays).

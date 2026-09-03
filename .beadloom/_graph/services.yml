@@ -627,14 +627,27 @@ nodes:
     docs:
       - docs/domains/application/components/doc-spaces/DOC.md
 
-  # Component: the mutation SCOPE check (BDL-061 S4b, CONTEXT Q5). Beadloom owns
-  # no mutation runner; it owns the check that a declared target could run one.
+  # Component: the declared mutation scope and the score a run over it produced
+  # (BDL-061 S4b + BDL-068 S3.1, CONTEXT Q5). Beadloom owns no mutation runner;
+  # it owns the check that a declared target could run one, and the report over
+  # whatever counters a run wrote.
   - ref_id: mutation-scope
     kind: component
-    summary: "Check a declared mutation target lies inside the configured source paths and would run more than zero mutants"
-    source: src/beadloom/application/mutation_scope.py
+    summary: "Check a declared mutation target could run a mutant, and report the score a run over it produced"
+    source: src/beadloom/application/mutation_scope/
     docs:
       - docs/domains/application/components/mutation-scope/DOC.md
+
+  # Component: the rooms a verdict can be taken in (BDL-068 S3.2). Derived from
+  # what the project declares — interpreters in the packaging metadata, legs in
+  # the CI workflows — because a hand-written room list goes stale the first
+  # time a leg changes.
+  - ref_id: verdict-room
+    kind: component
+    summary: "The room a verdict was taken in, the rooms a project declares, and the ones a run did not enter"
+    source: src/beadloom/application/rooms.py
+    docs:
+      - docs/domains/application/components/verdict-room/DOC.md
 
   # Component: the three AST derivations BDL-067 wrote as tests, lifted into
   # production by BDL-068 S1.1 so `beadloom impact` and the checks after it can
@@ -973,6 +986,15 @@ edges:
   - src: mutation-scope
     dst: application
     kind: part_of
+  - src: verdict-room
+    dst: application
+    kind: part_of
+  - src: ci-gate
+    dst: verdict-room
+    kind: depends_on
+  - src: mutation-scope
+    dst: verdict-room
+    kind: depends_on
   - src: impact
     dst: application
     kind: part_of

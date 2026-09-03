@@ -61,6 +61,93 @@ DEFEAT_NOTICE = (
 )
 
 
+#: The channels the report speaks about, named as constants so the derivation,
+#: the renderer and a test cannot spell one of them three ways.
+CHANNEL_BEAD_COMMENTS = "bead comments"
+CHANNEL_WORK_ITEM_DOCUMENTS = "the work item's documents"
+CHANNEL_COMMIT_BODIES = "the commit bodies of the reviewed range"
+CHANNEL_LAUNCH_PROMPT = "the launch prompt"
+
+
+@dataclass(frozen=True)
+class Commit:
+    """One commit of the reviewed range, and how much prose its body carries.
+
+    The subject and the body LENGTH, never the body text: this is a statement
+    about what a reviewer can reach, and a report that quoted the bodies would
+    be the leak it exists to make visible.
+    """
+
+    sha: str
+    subject: str
+    body_lines: int
+
+
+@dataclass(frozen=True)
+class Channel:
+    """One way the change's account can reach the reviewer, and what it carries.
+
+    ``inspected=False`` with no items is NOT the same statement as
+    ``inspected=True`` with no items, and the two must never render alike. That
+    is :class:`beadloom.application.impact.Population`'s rule one layer up: a
+    channel this command could not look into, reported as a channel it looked
+    into and found empty, is a claim about the reviewer's knowledge that nobody
+    measured.
+
+    ``reason`` is required in both directions — why the channel could not be
+    inspected, or what the count was taken over — because a number whose window
+    is unstated is the defect ``0 withheld`` was (BDL-UX #204).
+    """
+
+    name: str
+    inspected: bool
+    items: tuple[str, ...] = ()
+    reason: str = ""
+
+    @property
+    def carries(self) -> int:
+        """How many things this channel was found to carry."""
+        return len(self.items)
+
+    def statement(self) -> str:
+        """The one line a reader gets, in the shape that keeps the two apart."""
+        if not self.inspected:
+            return f"{self.name}: NOT INSPECTED — {self.reason}"
+        counted = f"{self.name}: {self.carries} item(s)"
+        return f"{counted} — {self.reason}" if self.reason else counted
+
+
+@dataclass(frozen=True)
+class Reachability:
+    """What can reach the reviewer about this change, channel by channel.
+
+    It replaces the withheld count rather than joining it. ``0 withheld`` was
+    true of bead comments and was read as a statement about the reviewer's
+    knowledge; three measured defeats of the withholding — through ``ACTIVE.md``,
+    through the commit bodies of the reviewed range, and through a launch prompt
+    nothing here can see — all reached a reviewer that had been told nothing was
+    held back (BDL-UX #204, #212, #219).
+
+    It raises detectability and closes nothing. Every one of those three was
+    known only because a reviewer declared it unprompted, and no report can stop
+    a reviewer reading a commit body its own protocol sends it to.
+    """
+
+    channels: tuple[Channel, ...] = ()
+
+    def named(self, name: str) -> Channel | None:
+        """The channel called *name*, or ``None`` when the report has none."""
+        for channel in self.channels:
+            if channel.name == name:
+                return channel
+        return None
+
+    @property
+    def uninspected(self) -> tuple[Channel, ...]:
+        """Every channel this command could not look into, in report order."""
+        return tuple(channel for channel in self.channels if not channel.inspected)
+
+
 @dataclass(frozen=True)
 class AuthorNote:
     """One comment on the bead, as the tracker holds it.
@@ -79,9 +166,16 @@ class WithheldNotes:
     """The author's account, reduced to a count and the condition that frees it.
 
     Absence must not be silence — the same rule that makes a suppressed lint
-    crossing and an excused document countable rather than implicit. A reviewer
-    that sees ``0 withheld`` learns the author wrote nothing; a reviewer that sees
-    ``6 withheld`` learns there is an account and that it is deliberately later.
+    crossing and an excused document countable rather than implicit. The count is
+    taken over ONE bead and that is the whole of what it says: ``6 withheld``
+    means there is an account on THIS bead and that it is deliberately later, and
+    ``0 withheld`` means this bead carries none.
+
+    It used to say that a reviewer seeing ``0 withheld`` learns the author wrote
+    nothing. That was measured false by 31,544 characters on this feature's own
+    S2 review, where the bead was a review bead and the account of the change sat
+    on the two beads that made it. What a reviewer can REACH is a different
+    question, and :class:`Reachability` answers it per channel.
     """
 
     count: int
@@ -152,6 +246,11 @@ class ReviewBrief:
     (:attr:`docs` and :attr:`scenarios`), and what actually changed
     (:attr:`changed`). The author's account of the change is represented by
     :attr:`withheld` and by nothing else.
+
+    :attr:`reachability` is a statement about the reviewer rather than about the
+    brief: :attr:`withheld` says what THIS command holds back, and that is the
+    sentence three defeats were read through. What the reviewer can reach is a
+    different question with a different answer, and it is reported per channel.
     """
 
     bead_id: str
@@ -170,6 +269,7 @@ class ReviewBrief:
     change_measured: bool = True
     scenarios: tuple[BoundScenario, ...] = ()
     withheld: WithheldNotes = WithheldNotes(count=0)
+    reachability: Reachability = Reachability()
     findings: tuple[str, ...] = ()
 
     @property

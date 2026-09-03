@@ -101,8 +101,9 @@ template. Nothing else has to be told.
 ## Declaring your mutation scope
 
 `flow.yml` also records which code a mutation run is supposed to cover. Beadloom
-runs no mutants — the tool is yours to choose — and checks only that the scope
-could run one:
+runs no mutants — the tool is yours to choose — and it checks two things about
+what you declare: that the scope could run one, and, once your runner has
+written its counters, what a run over that scope actually produced.
 
 ```yaml
 # .beadloom/flow.yml
@@ -116,6 +117,17 @@ not on disk, or holds no file in a language you index. All three are warnings,
 and all three describe the same failure: a mutation score computed over an empty
 denominator reads as evidence of test strength and is evidence of nothing.
 Declare nothing and nothing is reported.
+
+[`beadloom mutation`](../services/cli.md#beadloom-mutation) is the other half,
+and it asks those same three questions of the targets a run says it covered.
+Until it did, the failure above was describable and not detectable from a score:
+a declared target that had moved scored `100.0% of 10 scored mutants` and exited
+0, because the command producing the NUMBER never asked whether the target could
+have produced a mutant. It needs no particular tool installed — `--stats` names
+whatever counters your runner wrote, read by name — and a counter it does not
+find is reported rather than read as zero. Declaring a scope you never run is
+therefore not silent either: each declared target is reported as measured by no
+run.
 
 ## Declaring a wave override
 

@@ -101,9 +101,14 @@ def _artifact_kinds() -> dict[str, ArtifactKind]:
 
 
 #: CORE fragments shared by every role. Named here, next to the composition that
-#: reads them, because ``_writing`` is a LAYER and not a role: it has no front
-#: matter, is never written as an adapter, and ``compose_role`` refuses it.
-SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing",)
+#: reads them, because a LAYER is not a role: it has no front matter, is never
+#: written as an adapter, and ``compose_role`` refuses it.
+#:
+#: ``_writing`` holds the standard every role that writes a document is held to;
+#: ``_rooms`` holds the one every role that reports a MEASUREMENT is held to.
+#: Both are shared for the same reason: five copies of one rule drift the moment
+#: one of them is edited.
+SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms")
 
 #: The artifact kinds ``compose`` understands.
 ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "docs")

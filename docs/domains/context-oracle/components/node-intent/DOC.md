@@ -40,7 +40,7 @@ whole subgraph would spend the budget on nodes nobody named.
 | `none_declared` | The TO-BE space was read and nothing in it declares this node. |
 | `not_checked` | Nobody read the space, or there was nothing in it to read. `reason` says which. |
 
-`none_declared` is the common case — this repository holds 84 nodes and only
+`none_declared` is the common case — this repository holds 94 nodes and only
 fifteen of them are declared by any epic — so it carries `epics_read` and
 `epics_declaring_nodes`. That turns it from a claim into a measurement: an empty
 answer over 62 epics and an empty answer over none are the same sentence about
