@@ -35,6 +35,7 @@ from beadloom.doc_sync.doc_shape import (
     REASON_MISSING_SECTIONS,
     REASON_SECTION_NOT_IN_USE,
     STATUS_INCOMPLETE,
+    SectionConvention,
 )
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
@@ -563,7 +564,7 @@ def _step_docs_quality(project_root: Path) -> GateStep:
     )
 
 
-def _convention_finding(convention: object) -> Finding:
+def _convention_finding(convention: SectionConvention) -> Finding:
     """A required section below the majority: one statement about the KIND.
 
     Located at no file on purpose. It is a fact about the project's convention
@@ -577,9 +578,9 @@ def _convention_finding(convention: object) -> Finding:
         "severity": "warning",
         "locations": [],
         "why": (
-            f"required section {convention.section!r} "  # type: ignore[attr-defined]
-            f"is carried by {convention.ratio} "  # type: ignore[attr-defined]
-            f"{convention.kind} document(s), so this is a statement about the "  # type: ignore[attr-defined]
+            f"required section {convention.section!r} "
+            f"is carried by {convention.ratio} "
+            f"{convention.kind} document(s), so this is a statement about the "
             "convention and no document is reported for it"
         ),
         "remediation": (
