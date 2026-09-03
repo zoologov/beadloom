@@ -7,9 +7,8 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.16` — a case per source layout. `.15` closed the epic's first
-CRITICAL: `impact` no longer answers `callers: none found.` over a namespace package, and
-the branch axis no longer answers for the wrong seat.
+**Bead:** `beadloom-0mdo.17` — the S1 re-review, now that the critical is closed on the tree
+that shows it and the suite has a fixture per source layout that can disagree with the sweep.
 
 **The bead just closed.** `beadloom-0mdo.7` — the derivations as shapes, the unresolved
 population, and the two new checks.
@@ -74,6 +73,10 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 - [x] S1.7 — the derivations audited as shapes: every verb of the disk-write vocabulary made
       load-bearing, the prose scanner `.1` refused to lift given trees built to dangle, and the
       unresolved report's direction pinned at the renderers (test)
+- [x] S1.10 — the epic's first CRITICAL closed: the sweep is a claim the answer can withdraw,
+      and a branch count names the seat it was taken from (dev)
+- [x] S1.11 — a fixture per source layout, because the critical was invisible to a suite whose
+      every fixture built the one shape the old walk was right about (test)
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -95,7 +98,7 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 | `beadloom-0mdo.8` | Done | REVIEW ISSUES — 1 critical, 3 major. The assigned question was answered and the answer is the finding: `beadloom impact` under-reports on a PEP 420 namespace tree, not on this repository's, where every package carries `__init__.py`. Routed: critical 1 + major 2 + minor 5 → `.15`, major 3 → `.16`, major 4 → `.9`, re-review → `.17`. |
 | `beadloom-0mdo.9` | Pending | blocked by `.17` — tech-writer, and it owns finding 4 (`docs/services/cli.md` carries no `### beadloom impact` and no `### beadloom scope-check`) |
 | `beadloom-0mdo.15` | Done | the critical closed on the tree that shows it. `package_root_of` no longer requires `__init__.py` on the way up — it stops below a `src`-named directory, below one carrying `pyproject.toml`, and never above the project root — and `source_root_of` counts a child of `src/` that HOLDS Python at any depth. `callers.resolved` is a predicate over whether the swept root holds the target, and two new unresolved kinds (`target-outside-the-sweep`, `sweep-narrower-than-the-project`, the second carrying both paths) mean a narrowed answer cannot read as a complete one. Both renderers print the sites an unresolved axis DID find, under the caveat rather than instead of it. MAJOR 2: the branch axis is computed for the caller sites already found and every count carries its seat — `impact bootstrap.py --section` now writes `init: 4 branch(es), 1 exit form(s), from a caller's seat` beside the arithmetically-correct `bootstrap_project: 3 branch(es)`, which is the number this project carried for nine review passes. Measured on a namespace tree built for it: before, the two spellings of one target gave opposite answers and the wrong one was clean; after, they give one. Red verified by stashing only the package and re-running the four new scenarios — 4 failed, the text being `assert ['run'] == []` and its mirror. `impact_of` over `bootstrap.py` went 1.48 s → 1.65 s, mean of three runs each, the cost of one parse per caller file, recorded in the SPEC. 18 tests added (14 unit, 4 scenarios). Green on the tree, macOS: 8133 passed (baseline 8115), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
-| `beadloom-0mdo.16` | Pending | blocked by `.15` — a case per source layout, because finding 1 exists only because the suite cannot see it |
+| `beadloom-0mdo.16` | Done | MAJOR 3: the axis that had no fixture able to disagree with it. `tests/test_impact_over_every_source_layout.py`, 53 cases over five BUILT layouts — a regular package, a PEP 420 namespace package, a lone file outside any package, a plain directory that is not a package, and two packages under `src/` where `source_root_of` falls back to the project root. The last two are the layouts `.15`'s close named as unbuilt. Every expectation travels on a `Layout` dataclass with the tree that produces it, so a sixth layout cannot be added without stating what it must answer. Each layout is asked the same three questions: the swept root; whether a caller outside the target's own directory is FOUND or DECLARED; and whether the same function spelled as a path, as a symbol and as the directory holding it gives one answer — the shape of the defect rather than one of its instances, since a case checking one spelling would have been green. Where two spellings legitimately sweep different roots the narrower one must carry `sweep-narrower-than-the-project`, and that is asserted rather than assumed. RED verified against the pre-`9db8e5a` package in a detached worktree on `PYTHONPATH` — never by reverting this shared working tree — 31 failed, 22 passed. The 22 are declared with their reason: 16 are controls on the four layouts the OLD walk already got right, 3 are a negative assertion over a kind that did not exist pre-fix, and 3 are new arms whose pre-fix failure is a `TypeError` on a signature `.15` changed, which is not evidence about the old behaviour. Two hand-written mutants killed 8 and 5 cases, so neither the controls nor the negative assertion is vacuous on the shipped tree. Coverage of `application/impact` 86.97% (was 86.35%), `answer.py` 99% statements with 2 partial branches (was 97% with 4). Green on the tree, macOS: 8186 passed — baseline 8133 plus 53 added, exactly, so no scenario was deleted; `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.17` | Pending | blocked by `.16` — re-review |
 | `beadloom-0mdo.10` .. `.14` | Pending | S2–S6, ordered by dependency; their beads are created when the preceding slice's review closes |
 
