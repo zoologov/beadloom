@@ -41,6 +41,21 @@ def _declare(world: dict[str, Any], target: str) -> None:
     (root / ".beadloom" / "flow.yml").write_text(
         f"mutation:\n  targets:\n  - {target}\n", encoding="utf-8"
     )
+    _place(root, target)
+
+
+def _place(root: Path, target: str) -> None:
+    """Put a Python file where a declared target says its code lives.
+
+    A declaration whose path is not on disk is itself a finding since BDL-068
+    S3.3 — `report_mutation_score` now asks the scope half about every target it
+    judges — so an arrangement that only declares is arranging a broken project
+    and would report two things at once. Placing the source keeps each test
+    about the one state it names.
+    """
+    directory = root / target
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "unit.py").write_text("VALUE = 1\n", encoding="utf-8")
 
 
 def _record_run(world: dict[str, Any], covered: str, **counters: int) -> None:
@@ -68,6 +83,8 @@ def _a_project_declaring_two(world: dict[str, Any], first: str, second: str) -> 
     (root / ".beadloom" / "flow.yml").write_text(
         f"mutation:\n  targets:\n  - {first}\n  - {second}\n", encoding="utf-8"
     )
+    _place(root, first)
+    _place(root, second)
 
 
 @given(parsers.parse('the run is answerable only for "{target}"'))
@@ -153,3 +170,55 @@ def _nothing_reported_about(world: dict[str, Any], target: str) -> None:
 
 def _checks(world: dict[str, Any]) -> list[str]:
     return [f["check"] for f in world["payload"]["findings"]]
+
+
+# --- BDL-068 S3.3: the populations that were empty and read as clean -------
+
+
+@given(
+    parsers.parse(
+        'a project declaring the mutation target "{target}" whose code is not '
+        "on disk"
+    )
+)
+def _a_project_whose_target_moved(world: dict[str, Any], target: str) -> None:
+    root = world["root"]
+    (root / ".beadloom").mkdir(parents=True, exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(
+        "languages:\n- .py\nscan_paths:\n- src\n", encoding="utf-8"
+    )
+    (root / ".beadloom" / "flow.yml").write_text(
+        f"mutation:\n  targets:\n  - {target}\n", encoding="utf-8"
+    )
+
+
+@given(
+    parsers.parse(
+        'a run over "{covered}" that produced 10 mutants and classified none of '
+        "them"
+    )
+)
+def _a_run_that_classified_none(world: dict[str, Any], covered: str) -> None:
+    _record_run(world, covered, killed=0, survived=0, skipped=10, total=10)
+
+
+@then(parsers.parse('"{target}" is reported as unable to produce a mutant'))
+def _target_cannot_produce_a_mutant(world: dict[str, Any], target: str) -> None:
+    assert any(
+        f["target"] == target and f["check"] == "mutation-target-missing"
+        for f in world["payload"]["findings"]
+    )
+
+
+@then("the report is not clean")
+def _the_report_is_not_clean(world: dict[str, Any]) -> None:
+    assert world["result"].exit_code == 1
+
+
+@then("the run is reported as having classified none of its mutants")
+def _classified_none_reported(world: dict[str, Any]) -> None:
+    assert "mutation-run-zero-mutants" in _checks(world)
+    assert any(
+        "reached a verdict on none of them" in f["why"]
+        for f in world["payload"]["findings"]
+    )

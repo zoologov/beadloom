@@ -50,3 +50,10 @@ Feature: a verdict names the room it was taken in
     Then the verdict names the room it was taken in
     And the verdict states the same result it states without its room
     And naming the room adds no finding
+
+  @bead:beadloom-0mdo.24
+  Scenario: a verdict with no run to report still names the room it was taken in
+    Given a project declaring a mutation target that no run covered
+    When the mutation verdict is rendered
+    Then the verdict names the room it was taken in
+    And the verdict reports the target as measured by no run

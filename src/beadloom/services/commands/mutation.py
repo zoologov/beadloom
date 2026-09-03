@@ -23,6 +23,12 @@ Codes (the contract a caller may rely on):
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
 the same score, the same room and the same findings, so a monitoring surface and
 a reader are told the same thing (BDL-UX #148).
+
+**The room is named on every report, not only on the ones carrying a run**
+(BDL-068 S3.3). A report over declared targets no run covered is still a verdict
+— it exits 1 — and it was printing no room at all, which is the shape BDL-067
+produced nine times. The room is a property of the process, so it is stated
+wherever the process states anything.
 """
 
 # beadloom:component=cli-commands
@@ -121,10 +127,11 @@ def mutation(
         )
         sys.exit(_EXIT_UNANSWERABLE)
 
+    room = describe_room()
     run = (
         MutationRun(
             tool=tool or _UNNAMED_TOOL,
-            room=describe_room(),
+            room=room,
             covered=tuple(targets),
             counters=read_run_counters(stats),
         )
@@ -135,9 +142,9 @@ def mutation(
     below_floor = _below_floor(report.score, min_score)
 
     if output_json:
-        click.echo(json.dumps(_payload(report, min_score, below_floor), indent=2))
+        click.echo(json.dumps(_payload(report, room, min_score, below_floor), indent=2))
     else:
-        _render(report, min_score, below_floor)
+        _render(report, room, min_score, below_floor)
 
     if report.findings or below_floor:
         sys.exit(_EXIT_FINDINGS)
@@ -157,7 +164,10 @@ def _below_floor(score: float | None, min_score: float | None) -> bool:
 
 
 def _payload(
-    report: MutationReport, min_score: float | None, below_floor: bool
+    report: MutationReport,
+    room: str,
+    min_score: float | None,
+    below_floor: bool,
 ) -> dict[str, object]:
     run = report.run
     return {
@@ -165,7 +175,7 @@ def _payload(
         "not_judged": list(report.not_judged),
         "covered": list(run.covered) if run else [],
         "tool": run.tool if run else None,
-        "room": run.room if run else None,
+        "room": room,
         "score": report.score,
         "counters": dict(run.counters.values) if run else {},
         "missing_counters": list(run.counters.missing) if run else [],
@@ -184,8 +194,14 @@ def _payload(
     }
 
 
-def _render(report: MutationReport, min_score: float | None, below_floor: bool) -> None:
+def _render(
+    report: MutationReport,
+    room: str,
+    min_score: float | None,
+    below_floor: bool,
+) -> None:
     """Print the score, the room it was measured in, and what was not measured."""
+    click.echo(f"Room: {room}")
     if not report.declared:
         click.echo(
             "No mutation scope declared — `mutation.targets` in "
@@ -202,7 +218,6 @@ def _render(report: MutationReport, min_score: float | None, below_floor: bool) 
     else:
         click.echo(f"Measured: {', '.join(run.covered)}")
         click.echo(f"Tool: {run.tool}")
-        click.echo(f"Room: {run.room}")
         counters = ", ".join(
             f"{name} {value}" for name, value in sorted(run.counters.values.items())
         )

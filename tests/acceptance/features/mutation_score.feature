@@ -48,3 +48,19 @@ Feature: a mutation score is produced by a command over a declared scope
     When the mutation score is reported
     Then "src/other/" is named as not judged by this run
     And nothing is reported about "src/other/"
+
+  @bead:beadloom-0mdo.24
+  Scenario: a target the code moved away from is not scored as measured
+    Given a project declaring the mutation target "src/core/" whose code is not on disk
+    And a run over "src/core/" that killed 8 of 10 mutants
+    When the mutation score is reported
+    Then "src/core/" is reported as unable to produce a mutant
+    And the report is not clean
+
+  @bead:beadloom-0mdo.24
+  Scenario: a run that reached a verdict on none of its mutants is not a pass
+    Given a project declaring the mutation target "src/core/"
+    And a run over "src/core/" that produced 10 mutants and classified none of them
+    When the mutation score is reported
+    Then the run is reported as having classified none of its mutants
+    And no score is stated

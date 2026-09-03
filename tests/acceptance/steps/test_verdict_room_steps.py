@@ -184,7 +184,22 @@ def _verdict_names_room(world: dict[str, Any]) -> None:
 
     assert "Room:" in world["verdict"]
     assert platform.system() in world["verdict"]
-    assert world["verdict_payload"]["room"]["current"]["os"] == platform.system()
+    assert platform.system() in _payload_room(world["verdict_payload"])
+
+
+def _payload_room(payload: dict[str, Any]) -> str:
+    """The room out of a verdict payload, in either shape a verdict uses.
+
+    The Gate carries a census — the current room plus the declared ones it did
+    or did not enter — and `beadloom mutation` carries the one line naming the
+    room its report was produced in. Both are the same claim at different
+    widths, and this feature is about whether the claim is made at all, so the
+    step reads either rather than being written twice.
+    """
+    room = payload["room"]
+    if isinstance(room, str):
+        return room
+    return json.dumps(room["current"])
 
 
 @then("the verdict names how many declared rooms it did not enter")
@@ -208,3 +223,39 @@ def _same_result(world: dict[str, Any]) -> None:
 def _no_finding_added(world: dict[str, Any]) -> None:
     findings = [f for step in world["verdict_payload"]["steps"] for f in step["findings"]]
     assert not any("room" in json.dumps(f).lower() for f in findings)
+
+
+# --- BDL-068 S3.3: the same rule over a second verdict surface -------------
+
+
+@given(parsers.parse("a project declaring a mutation target that no run covered"))
+def _a_mutation_target_no_run_covered(world: dict[str, Any]) -> None:
+    root = world["root"]
+    (root / ".beadloom").mkdir(parents=True, exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(
+        "languages:\n- .py\nscan_paths:\n- src\n", encoding="utf-8"
+    )
+    (root / ".beadloom" / "flow.yml").write_text(
+        "mutation:\n  targets:\n  - src/core/\n", encoding="utf-8"
+    )
+    (root / "src" / "core").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "core" / "unit.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+
+@when("the mutation verdict is rendered")
+def _render_mutation_verdict(world: dict[str, Any]) -> None:
+    runner = CliRunner()
+    human = runner.invoke(main, ["mutation", "--project", str(world["root"])])
+    machine = runner.invoke(
+        main, ["mutation", "--project", str(world["root"]), "--json"]
+    )
+    world["verdict"] = human.stdout
+    world["verdict_payload"] = json.loads(machine.stdout)
+    world["exit_code"] = human.exit_code
+
+
+@then("the verdict reports the target as measured by no run")
+def _verdict_reports_the_unmeasured_target(world: dict[str, Any]) -> None:
+    checks = [f["check"] for f in world["verdict_payload"]["findings"]]
+    assert "mutation-target-unmeasured" in checks
+    assert world["exit_code"] == 1

@@ -49,7 +49,7 @@ mutation:
 `scan_paths` and `languages` come from `.beadloom/config.yml`, so an adopter whose code lives in
 `lib/` is judged against `lib/`.
 
-## The score, and the three states in which there is none
+## The score, and the states in which there is none
 
 `beadloom mutation` reads the counters a run wrote and holds them against the declared scope.
 The counter vocabulary is NAMES rather than a tool — `killed` and `survived` are required,
@@ -64,10 +64,10 @@ beadloom mutation --stats mutants/mutmut-cicd-stats.json \
 | Check | Condition | Why it matters |
 |-------|-----------|----------------|
 | `mutation-target-unmeasured` | a declared target no run covered | the duty is stated and no score answers it |
-| `mutation-run-zero-mutants` | the run covered the target and produced no mutants | a ratio over an empty denominator, again |
+| `mutation-run-zero-mutants` | the run produced no mutants, OR produced them and reached a verdict on none | a ratio over an empty denominator, again |
 | `mutation-counters-missing` | the counters carry no `killed` or no `survived` | a missing counter read as zero produces "0%", and a number is what gets pasted into a bead comment |
 
-Three rules decide what the number means, and each of them prevents a specific way of
+Five rules decide what the number means, and each of them prevents a specific way of
 flattering the suite:
 
 - **A missing counter is not zero.** An absence stays an absence, and no score is stated.
@@ -76,6 +76,29 @@ flattering the suite:
   how a slice with no tests at all scores 100%.
 - **A run that does not say what it covered is not a run.** `--stats` without `--target` exits 2
   rather than assuming the run covered everything declared.
+- **A run that classified nothing is not a run either** (BDL-068 S3.3). Ten mutants with
+  `killed: 0`, `survived: 0` and `skipped: 10` stated `Score: none — see the findings below.`
+  with no findings below it, and exited 0. Both emptinesses now report under
+  `mutation-run-zero-mutants`, with a different `why` each, because the repairs differ: a run
+  that produced nothing is pointed at the wrong path, and a run that classified nothing usually
+  could not start its suite in the runner's copied tree.
+- **A counter that cannot be a count is not read** (BDL-068 S3.3). `killed: -5` beside
+  `survived: 1` divided to `125.0% of -4 scored mutants`. A negative is refused for the same
+  reason `true` is: it makes a percentage out of something that is not a count. A required
+  counter written that way is MISSING; an optional one is absent.
+
+### The scope half is asked as well
+
+Until BDL-068 S3.3 it was not, and the two halves of this component never met. A target naming a
+path the code had moved away from, a target outside `scan_paths`, and a target holding no source
+file each scored **100.0% of 10 scored mutants at exit 0**, measured on the shipped console
+script over three temporary projects. `config-check` and the Gate reported all three; the command
+producing the NUMBER asked neither.
+
+`report_mutation_score` now folds `check_mutation_scope` over the targets the run is answerable
+for, so `mutation-outside-source`, `mutation-target-missing` and `mutation-zero-mutants` reach the
+score as well as the configuration report. It is filtered by `--only` for the reason `--only`
+exists: reporting a target the run never claimed is how a scheduled job becomes permanently red.
 
 ### A slice that does not claim the whole scope
 
@@ -101,6 +124,11 @@ BDL-068 S3.2 `describe_room` composes that sentence in the
 [verdict-room component](../verdict-room/DOC.md), so a Gate verdict and a mutation score name
 one room in one wording; `beadloom rooms` says which rooms the project declares and which of
 them a run did not enter.
+
+The room is printed on **every** report, not only on the ones carrying a run. A report over a
+declared target that no run covered exits 1 — it is a verdict — and it printed no room at all
+until BDL-068 S3.3, which is the shape BDL-067 produced nine times. The room is a property of the
+process, so it is stated wherever the process states anything.
 
 Exit codes: `0` clean or nothing declared, `1` findings or a score under `--min-score`, `2` the
 invocation cannot be answered.

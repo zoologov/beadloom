@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.mutation_scope.scope import (
     MutationScopeFinding,
+    check_mutation_scope,
     load_mutation_targets,
 )
 
@@ -171,6 +172,13 @@ def report_mutation_score(
     covered, a run that produced no mutants, and counters the score cannot be
     computed from.
 
+    The scope half is asked as well, and only about the targets this run is
+    answerable for. Until BDL-068 S3.3 it was not: a target naming a path the
+    code had moved away from could be "measured" at 100 percent and exit 0,
+    because the command producing the NUMBER never asked whether the target
+    could have produced a mutant. ``config-check`` and the Gate did ask, and a
+    reader holding a score in their hand was looking at neither.
+
     ``only`` names the declared targets this run is answerable for. A first
     slice measures one target of several, and both obvious answers are wrong:
     reporting the rest as findings makes a job permanently red, which is how a
@@ -187,6 +195,8 @@ def report_mutation_score(
     for target in judged:
         if not _is_covered(target, covered):
             findings.append(_unmeasured(target, covered))
+
+    findings.extend(f for f in check_mutation_scope(project_root) if f.target in judged)
 
     if run is not None:
         findings.extend(_counter_findings(run))
@@ -235,6 +245,25 @@ def _counter_findings(run: MutationRun) -> list[MutationScopeFinding]:
                 ),
             )
         ]
+    if run.counters.scored == 0:
+        return [
+            MutationScopeFinding(
+                check=MUTATION_RUN_ZERO_MUTANTS,
+                target=scope,
+                why=(
+                    f"the run over {scope} produced {run.counters.produced} "
+                    f"mutants and reached a verdict on none of them, so the "
+                    f"score is a ratio over an empty denominator — a run whose "
+                    f"every mutant was skipped states no more than a run that "
+                    f"never happened"
+                ),
+                remediation=(
+                    "check why the runner classified nothing — a suite that "
+                    "cannot start in the runner's copied tree skips every "
+                    "mutant and leaves counters that look like a clean sheet"
+                ),
+            )
+        ]
     return []
 
 
@@ -276,15 +305,22 @@ def _read_json_object(path: Path) -> Mapping[str, object]:
 
 
 def _counter(data: Mapping[str, object], spellings: tuple[str, ...]) -> int | None:
-    """One counter, under any spelling, provided it is a whole number.
+    """One counter, under any spelling, provided it is a whole non-negative number.
 
     ``bool`` is excluded on purpose: ``True`` is an ``int`` in Python and
     ``"killed": true`` is not a count.
+
+    A NEGATIVE is excluded for the same reason and with a sharper consequence
+    (BDL-068 S3.3): ``killed: -5`` beside ``survived: 1`` divided to
+    "125.0% of -4 scored mutants" — a percentage over a negative denominator,
+    printed with no finding beside it. A count that cannot be a count is not
+    read, so a required counter written that way is MISSING and an optional one
+    is absent, which are both states this module already reports.
     """
     for spelling in spellings:
         value = data.get(spelling)
         if isinstance(value, bool):
             continue
-        if isinstance(value, int):
+        if isinstance(value, int) and value >= 0:
             return value
     return None

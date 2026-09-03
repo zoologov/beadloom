@@ -58,7 +58,9 @@ is what holds that line.
 `mutation.py` renders what `application.mutation_scope` decided: the score a run produced
 over the scope `.beadloom/flow.yml` declared. It reads the counters a runner wrote and
 names none — Beadloom owns no mutation runner, so the module knows counter NAMES and not a
-tool (BDL-068 S3.1).
+tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carrying no run
+at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
+(BDL-UX #181).
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and

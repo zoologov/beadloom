@@ -33,7 +33,23 @@ def _project(root: Path, *targets: str) -> Path:
         f"mutation:\n  targets:\n{declared}" if targets else "tools:\n- claude\n",
         encoding="utf-8",
     )
+    for target in targets:
+        _place(root, target)
     return root
+
+
+def _place(root: Path, target: str) -> None:
+    """Put a Python file where a declared target says its code lives.
+
+    A declaration whose path is not on disk is itself a finding since BDL-068
+    S3.3 — `report_mutation_score` now asks the scope half about every target it
+    judges — so an arrangement that only declares is arranging a broken project
+    and would report two things at once. Placing the source keeps each test
+    about the one state it names.
+    """
+    directory = root / target
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "unit.py").write_text("VALUE = 1\n", encoding="utf-8")
 
 
 def _stats(root: Path, **values: int) -> str:
