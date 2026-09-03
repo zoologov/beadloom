@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from beadloom.application.waves.independence import conflicts_among
-from beadloom.application.waves.media import media_for
+from beadloom.application.waves.media import SHARED_MEDIA
 from beadloom.application.waves.media_checks import check_media, finding_for
 from beadloom.application.waves.models import (
     DECISION_PARALLEL,
@@ -276,10 +276,8 @@ def plan_waves(
         planned=waves,
         today=today,
     )
-    widest = max((len(wave.beads) for wave in waves), default=0)
     checks = check_media(
         records,
-        concurrent=widest > 1,
         owned_paths=frozenset(path for scope in scopes for path in scope.files),
         environment=environment,
     )
@@ -288,7 +286,7 @@ def plan_waves(
         scopes=scopes,
         conflicts=conflicts,
         overrides=outcomes,
-        shared_media=media_for(widest),
+        shared_media=SHARED_MEDIA,
         findings=_findings(scopes, outcomes, checks),
         media_checks=checks,
     )

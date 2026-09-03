@@ -46,14 +46,6 @@ is what holds that line.
 | `federation.py` | `export`, `federate`, `lint`, `ci` |
 | `docs.py` | `docs generate`, `docs polish`, `docs site`, `docs audit`, `docs quality`, `docs spaces` |
 | `setup.py` | `setup-mcp`, `setup-rules`, `setup-ai-techwriter`, `setup-agentic-flow`, `setup-branch-protection`, `config-check`, `mcp-serve`, `init` |
-
-`config-check` prints two derivations beside the drift list, because neither has a Gate
-step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
-owns no runner to hang a step on) and, whenever a project declares at least one duty, the
-population `role_duties.duty_report()` could not inspect. The second prints on the clean path
-as well as the blocking one: a check that speaks only when it finds something hands the reader
-a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
-declares no duty, where there is no verdict to qualify.
 | `dashboard.py` | `tui`, `ui`, `watch` |
 | `snapshot.py` | `snapshot save`, `snapshot list`, `snapshot compare` |
 | `guard.py` | `guard` |
@@ -63,12 +55,28 @@ declares no duty, where there is no verdict to qualify.
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
 
+`config-check` prints two derivations beside the drift list, because neither has a Gate
+step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
+owns no runner to hang a step on) and, whenever a project declares at least one duty, the
+population `role_duties.duty_report()` could not inspect. The second prints on the clean path
+as well as the blocking one: a check that speaks only when it finds something hands the reader
+a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
+declares no duty, where there is no verdict to qualify.
+
 `mutation.py` renders what `application.mutation_scope` decided: the score a run produced
 over the scope `.beadloom/flow.yml` declared. It reads the counters a runner wrote and
 names none — Beadloom owns no mutation runner, so the module knows counter NAMES and not a
 tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carrying no run
 at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
 (BDL-UX #181).
+
+`waves.py` renders what `application.waves` decided, and renders it at every wave size. Each
+wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
+each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate
+owner and the shared media were printed only for a wave of more than one bead, so the
+instrument spoke where a coordinator was already thinking about concurrency and was silent
+where it was not (BDL-UX #228); the room is named after the bead because two agents once each
+built one at a shared scratchpad path and one measured over the other's files (BDL-UX #235).
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and

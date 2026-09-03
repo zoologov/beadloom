@@ -43,14 +43,14 @@ def test_a_duty_marker_naming_no_performer_declares_nothing(project: Path) -> No
     declaration into a silent claim that the duty is already delivered — the
     check satisfying itself.
     """
-    _fragment(project, "commands", "coordinator", "<!-- beadloom:duty=clean-room -->")
+    _fragment(project, "commands", "coordinator", "<!-- beadloom:duty=example-duty -->")
 
     report = duty_report(project)
 
     malformed = [f for f in report.findings if f.kind == "malformed"]
-    assert [f.duty for f in malformed] == ["clean-room"]
-    assert report.declarations == ()
-    assert report.carried == ()
+    assert [f.duty for f in malformed] == ["example-duty"]
+    assert "example-duty" not in {d.duty for d in report.declarations}
+    assert not [pair for pair in report.carried if pair[1] == "example-duty"]
 
 
 def test_a_duty_text_outside_a_role_file_is_still_read(project: Path) -> None:
@@ -61,14 +61,14 @@ def test_a_duty_text_outside_a_role_file_is_still_read(project: Path) -> None:
     exists to report.
     """
     _fragment(
-        project, "commands", "checkpoint", "<!-- beadloom:carries=clean-room -->"
+        project, "commands", "checkpoint", "<!-- beadloom:carries=example-duty -->"
     )
 
     report = duty_report(project)
 
     undeclared = [f for f in report.findings if f.kind == "undeclared"]
     assert [(f.duty, f.role) for f in undeclared] == [
-        ("clean-room", "commands/checkpoint")
+        ("example-duty", "commands/checkpoint")
     ]
 
 
@@ -78,9 +78,9 @@ def test_a_role_is_not_satisfied_by_another_roles_carriage(project: Path) -> Non
         project,
         "commands",
         "coordinator",
-        "<!-- beadloom:duty=clean-room roles=dev,review -->",
+        "<!-- beadloom:duty=example-duty roles=dev,review -->",
     )
-    _fragment(project, "roles", "dev", "<!-- beadloom:carries=clean-room -->")
+    _fragment(project, "roles", "dev", "<!-- beadloom:carries=example-duty -->")
 
     report = duty_report(project)
 
@@ -89,16 +89,21 @@ def test_a_role_is_not_satisfied_by_another_roles_carriage(project: Path) -> Non
     ]
 
 
-def test_the_report_names_its_limit_even_with_nothing_declared(project: Path) -> None:
+def test_the_report_names_its_limit_on_a_clean_run(project: Path) -> None:
     """The launch prompt is named on a clean run too.
 
     A check that speaks only when it finds something hands the reader a clean
     list, and a clean list is trusted and stopped at.
+
+    The project declares nothing of its own here. It is no longer a project that
+    declares NOTHING: since BDL-UX #228 the shipped coordinator declares the
+    `clean-room` duty for all five roles, so every project running this flow
+    inherits one declaration and one carriage per role.
     """
     report = duty_report(project)
 
     assert report.findings == ()
-    assert report.declarations == ()
+    assert {d.duty for d in report.declarations} == {"clean-room"}
     prompts = [e for e in report.not_inspected if "prompt" in e.source]
     assert len(prompts) == 1
     assert "not an artifact" in prompts[0].why
@@ -117,7 +122,7 @@ def test_every_duty_this_repository_declares_reaches_the_roles_it_names() -> Non
 
     A self-fact rather than a fixture: it holds today because this repository
     declares no duty yet, and it goes on holding when `beadloom-67t1` declares
-    the clean-room duty and writes it into the role cores. A regression there is
+    the example-duty duty and writes it into the role cores. A regression there is
     exactly the finding this check exists to make.
     """
     report = duty_report(_REPO_ROOT)

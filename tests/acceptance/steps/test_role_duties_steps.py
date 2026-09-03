@@ -17,6 +17,10 @@ import pytest
 from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from beadloom.application.waves import room_for
+from beadloom.onboarding.composer import compose
+from beadloom.onboarding.flow_config import resolve_flow_config
+from beadloom.onboarding.role_composer import ROLE_NAMES
 from beadloom.onboarding.role_duties import duty_report
 from beadloom.services.cli import main
 
@@ -196,6 +200,71 @@ def _orphan_carries_nothing(world: dict[str, Any], duty: str) -> None:
 def _config_check_blocks(world: dict[str, Any]) -> None:
     outcome = world["outcome"]
     combined = outcome.stdout + outcome.stderr
-    assert "clean-room" in combined, combined
+    assert "example-duty" in combined, combined
     assert "review" in combined, combined
     assert outcome.exit_code == 1, combined
+
+
+# --- BDL-UX #228: the flow as this repository ships it -----------------------
+#
+# The steps above build a synthetic duty in a temporary project. These run the
+# shipped templates unchanged, because the defect was in what an ADOPTER
+# receives and a synthetic fixture cannot see that.
+
+
+@given("a project running the flow exactly as this repository ships it")
+def _shipped_flow(world: dict[str, Any]) -> None:
+    """No project fragment at all -- the composition is CORE plus overlays."""
+    assert not (world["root"] / ".beadloom" / "flow").exists()
+
+
+@when("a role's core is composed")
+def _compose_a_role(world: dict[str, Any]) -> None:
+    world["composed"] = {
+        role: compose(
+            "roles",
+            role,
+            config=resolve_flow_config(world["root"]),
+            project_root=world["root"],
+        ).text
+        for role in ROLE_NAMES
+    }
+
+
+@then(parsers.parse('"{duty}" is declared for every role this flow ships'))
+def _declared_for_every_role(world: dict[str, Any], duty: str) -> None:
+    declared: set[str] = set()
+    for declaration in world["report"].declarations:
+        if declaration.duty == duty:
+            declared.update(declaration.roles)
+    assert declared == set(ROLE_NAMES), declared
+
+
+@then(parsers.parse('every role\'s composed core carries "{duty}"'))
+def _carried_by_every_role(world: dict[str, Any], duty: str) -> None:
+    carried = {
+        artifact.partition("/")[2]
+        for artifact, carried_duty in world["report"].carried
+        if carried_duty == duty and artifact.startswith("roles/")
+    }
+    assert carried == set(ROLE_NAMES), carried
+
+
+@then("it names the room a bead owes in the form the wave planner emits")
+def _names_the_room_form(world: dict[str, Any]) -> None:
+    """The prose and the machine agree on one spelling, or this goes red.
+
+    The literal is derived from `room_for`, so renaming the room in the planner
+    reddens the role text that promises it -- which is the binding the two halves
+    of #228 exist to have.
+    """
+    form = room_for("<bead-id>")
+    for role, text in world["composed"].items():
+        assert form in text, (role, form)
+
+
+@then("it names the gate owner as the one who measures the combined tree")
+def _names_the_gate_owner(world: dict[str, Any]) -> None:
+    for role, text in world["composed"].items():
+        assert "gate owner" in text, role
+        assert "combined tree" in text, role

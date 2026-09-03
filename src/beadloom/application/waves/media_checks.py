@@ -41,7 +41,6 @@ from beadloom.application.waves.models import (
     GATE_ABSENT,
     GATE_COMMIT_SCOPED,
     STATUS_FAILED,
-    STATUS_NOT_APPLICABLE,
     STATUS_PASSED,
     STATUS_UNMEASURED,
     MediumCheck,
@@ -100,9 +99,8 @@ def _check_tracker_ids(records: Sequence[BeadRecord]) -> MediumCheck:
     Checked whether or not the plan is concurrent, and that is deliberate. The
     mis-wiring in #171 happened at bead CREATION, before any wave ran, so a plan
     that serialises the beads it mis-wired is exactly the plan whose ids most
-    need checking. :func:`~beadloom.application.waves.media.media_for` still says
-    nothing about a wave of one — what is stated and what is checked are separate
-    questions, and only the second one is settled here.
+    need checking. Since BDL-UX #228 every other check is unconditional too, so
+    this one is no longer the exception it was written as.
     """
     mismatches = title_id_mismatches(records)
     if not mismatches:
@@ -230,30 +228,22 @@ def _check_doc_baseline(environment: WaveEnvironment) -> MediumCheck:
 def check_media(
     records: Sequence[BeadRecord],
     *,
-    concurrent: bool,
     owned_paths: frozenset[str] = frozenset(),
     environment: WaveEnvironment | None = None,
 ) -> tuple[MediumCheck, ...]:
     """One verdict per shared medium, in the order :mod:`.media` states them.
 
-    *concurrent* says whether any wave holds more than one bead. When it does
-    not, the three media that carry state BETWEEN beads carry nothing and are
-    reported ``not_applicable`` — the same rule ``media_for`` applies to the
-    statements. The tracker-id check is unconditional; :func:`_check_tracker_ids`
-    says why.
+    Every medium is checked at every wave size (BDL-UX #228). The first version
+    reported the three that carry state between beads as ``not_applicable``
+    whenever no wave held more than one bead, and that read the width of ONE
+    plan as solitude. It is not: a plan is one slice of one epic, and
+    :func:`_check_working_tree` exists precisely to report paths that differ from
+    ``HEAD`` and are owned by no bead in the plan — work from outside it, in the
+    same tree, judged by the same hook, against the same doc baseline. Measured
+    against the consequence: roughly twenty single-bead waves ran across two
+    epics, and the instrument was silent in all of them.
     """
     observed = environment or WaveEnvironment()
-    if not concurrent:
-        idle = tuple(
-            MediumCheck(
-                medium,
-                STATUS_NOT_APPLICABLE,
-                "no wave runs more than one bead, so nothing is carried between "
-                "beads through this medium",
-            )
-            for medium in (MEDIUM_WORKING_TREE, MEDIUM_COMMIT_GATE, MEDIUM_DOC_BASELINE)
-        )
-        return (*idle, _check_tracker_ids(records))
     return (
         _check_working_tree(observed, owned_paths),
         _check_commit_gate(observed),

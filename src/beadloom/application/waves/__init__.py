@@ -40,8 +40,9 @@ from beadloom.application.waves.media import (
     MEDIUM_DOC_BASELINE,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
+    ROOM_PREFIX,
     SHARED_MEDIA,
-    media_for,
+    room_for,
 )
 from beadloom.application.waves.media_checks import (
     check_media,
@@ -111,6 +112,7 @@ __all__ = [
     "REASON_SHARED_FILE",
     "REASON_SHARED_NODE",
     "REASON_UNRESOLVED_SCOPE",
+    "ROOM_PREFIX",
     "SHARED_MEDIA",
     "STATUS_FAILED",
     "STATUS_NOT_APPLICABLE",
@@ -140,10 +142,10 @@ __all__ = [
     "declared_refs",
     "finding_for",
     "load_overrides",
-    "media_for",
     "parse_declaration",
     "plan_waves",
     "resolve_scope",
     "resolve_scopes",
+    "room_for",
     "title_id_mismatches",
 ]

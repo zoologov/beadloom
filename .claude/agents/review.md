@@ -139,11 +139,23 @@ is a better one. It is the same verdict, attributed.
   N files"**, **"green on the tree"** and **"green on <leg>"** are three different claims;
   reporting them with one word is what makes a later discrepancy read as a contradiction.
 
+<!-- beadloom:carries=clean-room -->
+
 **The clean room, and what it cannot see.** Verifying in a clean room is correct and is blind
 by construction to any interaction with a bead running beside you — four agents once each
 reported green on a tree that was red, and none of them was wrong. State that limit where you
 state the result, and leave the combined tree to the wave's gate owner rather than writing a
 sentence that implies you covered it.
+
+- **Build the room at a path that carries your bead's id** — `room-<bead-id>`, which is the
+  name `beadloom waves` prints for you next to each bead. Two agents once each built a room
+  called `cleanroom` under one shared session scratchpad, and one of them measured over its
+  neighbour's untracked files and got a result that looked exactly like a correct clean room.
+  A room whose name cannot say whose it is is a shared directory with a reassuring name.
+- **The wave's gate owner measures the combined tree; everyone else reports their own room
+  only.** `beadloom waves` names the owner for every wave, including a wave of one. If you are
+  not the owner, do not write a sentence that implies you covered the tree; if you are, say
+  "green on the tree" as a claim separate from your own room's.
 <!-- overlay:ddd — DDD boundary review checklist + annotation vocabulary. -->
 ## ARCHITECTURE (Domain-Driven Design)
 

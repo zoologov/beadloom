@@ -31,6 +31,7 @@ from beadloom.application.waves import (
     WaveEnvironment,
     WaveOverride,
     plan_waves,
+    room_for,
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
@@ -272,3 +273,24 @@ def then_plan_clean(world: dict[str, Any]) -> None:
 def then_plan_not_clean(world: dict[str, Any]) -> None:
     assert world["plan"].findings
     assert world["plan"].exit_code == 1
+
+
+@then("no wave holds more than one bead")
+def then_no_concurrent_wave(world: dict[str, Any]) -> None:
+    assert max(len(wave.beads) for wave in world["plan"].waves) == 1
+
+
+@then("every bead is told the clean room it owes, named after its own id")
+def then_every_bead_owes_a_room(world: dict[str, Any]) -> None:
+    """One room per bead, and no two beads sharing a path.
+
+    BDL-UX #235: two concurrent agents each built a clean room at the same path
+    and one measurement was taken over its neighbour's untracked files. A room
+    whose name cannot say whose it is is a shared directory with a reassuring
+    name.
+    """
+    beads = [bead for wave in world["plan"].waves for bead in wave.beads]
+    rooms = [room_for(bead) for bead in beads]
+    assert len(set(rooms)) == len(beads)
+    for bead, room in zip(beads, rooms, strict=True):
+        assert bead in room

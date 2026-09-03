@@ -65,6 +65,7 @@ from beadloom.application.waves import (
     load_overrides,
     plan_waves,
     resolve_scope,
+    room_for,
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
@@ -371,12 +372,18 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
         assert plan.wave_of("a") == plan.wave_of("b") != plan.wave_of("mute")
         assert {m.name for m in plan.shared_media} == {m.name for m in SHARED_MEDIA}
 
-    def test_only_a_plan_with_no_concurrency_at_all_states_no_medium(
+    def test_a_plan_with_no_concurrency_at_all_states_the_same_media(
         self, conn: sqlite3.Connection
     ) -> None:
+        """BDL-UX #228 — no plan shape can switch a medium off.
+
+        This asserted the opposite until #228 measured what the silence cost:
+        the width of one plan was read as solitude, and roughly twenty
+        single-bead waves across two epics were told nothing at all.
+        """
         plan = plan_waves([_bead("a", "billing"), _bead("b", "payments")], conn=conn)
         assert all(len(wave.beads) == 1 for wave in plan.waves)
-        assert plan.shared_media == ()
+        assert plan.shared_media == SHARED_MEDIA
 
     def test_a_forced_parallel_wave_states_the_media_it_did_not_earn(
         self, conn: sqlite3.Connection
@@ -665,7 +672,8 @@ class TestThisSessionsOwnWaveFailuresReplayed:
         assert plan.exit_code == 0
         tree = next(m for m in plan.shared_media if m.name == MEDIUM_WORKING_TREE)
         assert "clean room" in tree.statement
-        assert tree.evidence == "BDL-UX #181"
+        assert tree.evidence == "BDL-UX #181, #235"
+        assert room_for("d1") in tree.statement.replace("<bead-id>", "d1")
 
         unmeasured = plan_waves(beads, conn=conn)
         assert unmeasured.exit_code == 1
@@ -703,34 +711,35 @@ class TestThisSessionsOwnWaveFailuresReplayed:
         """
         wrong = [_bead("ci-bead", "shipping", frozenset({"core-bead"})),
                  _bead("core-bead", "billing")]
-        plan = plan_waves(wrong, conn=conn)
+        plan = plan_waves(wrong, conn=conn, environment=_measured())
         assert [c.reason for c in plan.conflicts] == [REASON_BLOCKED_BY_BEAD]
         assert _wave(plan, "core-bead") < _wave(plan, "ci-bead")
         assert plan.findings == ()
         assert plan.exit_code == 0
 
-    def test_bdlux_171_serialising_the_pair_also_withdraws_the_id_space_caution(
+    def test_bdlux_171_a_serialised_plan_states_and_checks_every_medium(
         self, conn: sqlite3.Connection
     ) -> None:
-        """OBSERVATION BDL-061.22-B — the medium is stated only under concurrency.
+        """OBSERVATION BDL-061.22-B, ANSWERED BY BDL-UX #228.
 
-        `media_for` returns nothing for a wave of one, on the reasoning that a
-        wave of one shares nothing with anybody. For three of the four media that
-        holds. It does not hold for `tracker-ids`: #171's mis-wiring happened at
-        bead CREATION, before any wave ran, and a plan that serialises the beads
-        it mis-wired is exactly the plan whose ids most need checking. The
-        caution is withdrawn by the failure it describes.
+        The observation was that a wave of one stated no medium at all, and that
+        this was wrong for `tracker-ids` at least: #171's mis-wiring happened at
+        bead CREATION, before any wave ran, so a plan that serialises the beads
+        it mis-wired is exactly the plan whose ids most need checking. `.80`
+        answered half of it by making the tracker-id CHECK unconditional while
+        leaving the statement conditional.
 
-        The counter-argument is not weak: a command that decides concurrency
-        should state what concurrency costs, and printing a creation-time caution
-        on a fully serial plan is scope creep. `.23` is where that is ruled on.
+        #228 answered the other half, and against the wider case: a plan is one
+        slice of one epic, so its width is not a statement about solitude. This
+        test now records the settled behaviour — every medium is stated and
+        checked at every wave size — and the observation is closed.
         """
         wrong = [_bead("ci-bead", "shipping", frozenset({"core-bead"})),
                  _bead("core-bead", "billing")]
         plan = plan_waves(wrong, conn=conn)
         assert all(len(wave.beads) == 1 for wave in plan.waves)
-        assert MEDIUM_TRACKER_IDS not in {medium.name for medium in plan.shared_media}
-        assert plan.shared_media == ()
+        assert MEDIUM_TRACKER_IDS in {medium.name for medium in plan.shared_media}
+        assert plan.shared_media == SHARED_MEDIA
 
     def test_the_two_beads_this_session_ran_concurrently_would_have_been_serialised(
         self, conn: sqlite3.Connection
@@ -746,7 +755,7 @@ class TestThisSessionsOwnWaveFailuresReplayed:
         assert plan.wave_of("mr2l.21") != plan.wave_of("mr2l.72")
         assert plan.exit_code == 1
         assert len([f for f in plan.findings if f.startswith("unresolved_scope")]) == 2
-        assert plan.shared_media == ()
+        assert plan.shared_media == SHARED_MEDIA
 
 
 def _hook_scope_block() -> str:

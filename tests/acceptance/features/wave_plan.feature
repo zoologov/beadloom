@@ -113,3 +113,23 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     Then "alpha" and "terse" are in different waves
     And the decision names "unresolved_scope" for "terse"
     And the plan is not clean
+
+  # BDL-UX #228 / beadloom-67t1. Stating the media only for a wave of MORE THAN
+  # ONE bead made the instrument speak exactly where the coordinator was already
+  # thinking about concurrency and stay silent where it was not: roughly twenty
+  # single-bead waves across two epics carried the rule by prompt alone. A wave
+  # of one is not solitude -- `_check_working_tree` reports paths owned by no
+  # bead in the plan, which is the module already knowing that work outside the
+  # plan lands in the same tree.
+
+  @bead:beadloom-67t1
+  Scenario: A wave of one bead names the same media and the room its bead owes
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "billing"
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then no wave holds more than one bead
+    And the wave names the working tree, the commit gate, the doc baseline and the tracker id space
+    And every bead is told the clean room it owes, named after its own id
+    And exactly one bead of the wave owns the combined-tree result
+    And every medium the wave names carries a verdict of its own

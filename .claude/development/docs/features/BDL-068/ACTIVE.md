@@ -1,14 +1,14 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
 > **Last updated:** 2026-09-04
-> **Phase:** Development — S1-S3 merged; S4 wave 1 landed, wave 2 in flight
+> **Phase:** Development — S1-S3 merged; S4 waves 1-2 landed, wave 3 in flight
 
 ---
 
 ## Current Bead
 
-**Bead:** S4 wave 2 — `0mdo.32` alone (`beadloom waves` serialised it against all five remaining
-beads), so it is its own gate owner. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`, `5fd9636`.
+**Bead:** S4 wave 3 — `0mdo.33` + `67t1`, gate owner `67t1`. Wave 1 (`0mdo.27` + `0mdo.31`)
+landed: `9d73c99`, `5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`.
 Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
 `gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
 `flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
@@ -65,6 +65,29 @@ filed; this name is the free mitigation and later slices keep it.
     project's instruments rather than by review: the clean room found an inline code span that
     spilled `<key>, <scope>` onto the next line, and `docs-audit` read "41 no node owns" as a
     `node_count` claim. The second was fixed by rewording, not by `docs_audit.ignore`.
+  - [x] `67t1` / **#228** — the clean-room duty, both halves. The DUTY half declares
+    `<!-- beadloom:duty=clean-room roles=dev,explore,review,tech-writer,test -->` in the
+    coordinator command every adopter composes, and `<!-- beadloom:carries=clean-room -->` in
+    `roles/core/_rooms.md.txt` and its Russian twin, so one marker delivers to all five roles in
+    both languages. It carries the two facts learned after the bead was written: the room's path
+    is `room-<bead-id>` (#235) and the gate owner measures the combined tree while everyone else
+    reports their own room. `config-check` reads it as `Duties: 1 declared, checked over 10
+    composed artifact(s)`, 0 findings; removing the carriage marker gives rc 1 and five
+    `undelivered` findings, one per role, which is the tree the check goes red on. The MACHINE
+    half removes `media_for(wave_size)`: every wave states all four media and names its gate
+    owner and one room per bead, whatever its width, and `not_applicable` is gone as a verdict a
+    plan's shape can produce. The reason is in the module rather than in a bead comment — a plan
+    is one slice of one epic, so its width is not a claim about solitude, and the working-tree
+    check exists precisely to report paths owned by no bead in the plan. **The scratchpad is not
+    a fifth medium, deliberately:** a medium there is one with a plan-time precondition a command
+    can observe, and a session scratchpad path exists only inside a running agent session — the
+    same reason the launch prompt is `not_inspected` rather than a finding. Its remedy ships
+    instead, as `room_for`. Green in a clean room over 32 files (8 545 passed; the 1 failure is a
+    stated property of the room — no `.git`, and it is red at pure HEAD in an identically-built
+    room); `beadloom ci` rc 0 there. On the tree: 8 619 passed and 2 failed, both
+    `TestSyncCheckNewPairs` requiring `sync-check` rc 0 while `0mdo.33`'s two doc pairs are stale.
+    Every verdict in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. Not a claim about
+    the combined tree; that verdict follows once `0mdo.33` lands.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

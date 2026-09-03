@@ -140,18 +140,36 @@ bead.
 
 ### What a wave shares regardless of the shape
 
-Printed by every plan whose widest wave holds more than one bead, each with the
+Printed by every plan, whatever the width of its widest wave, each with the
 evidence it comes from:
 
 | Medium | Evidence |
 |---|---|
-| `working-tree` | an agent's clean-room green is a claim about N files, not about the tree |
+| `working-tree` | an agent's clean-room green is a claim about N files, not about the tree, and the room is built at `room-<bead-id>` so it can say whose it is |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
 | `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
 | `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted |
 
-A wave of one shares nothing concurrently — its clean room *is* the tree — and
-the plan says that rather than printing the list as a banner.
+The first version printed the list only for a wave of more than one bead, on the
+reasoning that a wave of one shares nothing concurrently. BDL-UX #228 measured
+what that cost: `wave_size` is the width of ONE plan, and a plan is one slice of
+one epic, so it says nothing about solitude — the `working-tree` check exists
+precisely to report paths owned by no bead in the plan, which is work from
+outside it in the same tree. Roughly twenty single-bead waves ran across two
+epics, and in every one of them the discipline travelled by the coordinator's
+launch prompt because the instrument was silent there.
+
+`room_for(bead_id)` names the clean room a bead owes — `room-<bead-id>`, printed
+per bead by `beadloom waves` and under `rooms` in `--json`. Two agents once each
+built a room at one shared session-scratchpad path, and one took a measurement
+over its neighbour's untracked files that looked exactly like a correct clean
+room (BDL-UX #235). The session scratchpad is a genuinely shared medium and is
+deliberately **not** one of the four: a medium here is one with a plan-time
+precondition a command can observe, and a scratchpad path exists only inside a
+running agent session. A fifth entry would be permanently `unmeasured` — a
+finding on every plan — or permanently true. What is observable is the remedy,
+so the remedy is what ships, in `room_for`, in the `working-tree` statement and
+in the role cores that carry the `clean-room` duty.
 
 ### What each medium is checked against
 
@@ -169,10 +187,13 @@ One verdict per medium, in `plan.media_checks` and under `media_checks` in
 The three machine-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
 without a repository and without a hook — each absence arrives as a `None` the
-check reports, never as a silent zero. They are reported `not_applicable` when no
-wave holds more than one bead, on the same rule that governs the statements.
+check reports, never as a silent zero. Every medium is checked at every wave
+size: `not_applicable` was removed as a verdict a plan's shape could produce
+(BDL-UX #228), because a check that switches itself off is silent exactly where
+nobody is already thinking about the risk.
 
-The `tracker-ids` check runs whether or not the plan is concurrent. The
+The `tracker-ids` check has run whether or not the plan is concurrent since
+`beadloom-mr2l.80`, and is no longer the exception it was written as. The
 mis-numbering it looks for happens at bead *creation*, before any wave runs, so a
 plan that serialises the beads it mis-wired is exactly the plan whose ids most
 need checking. Only the trailing number is compared: the title convention writes
@@ -219,7 +240,8 @@ not tell them apart.
 - One composition of a bead's declaration, shared by every caller of the parser.
 - One reason per serialised pair, taken from a closed named vocabulary.
 - The same inputs produce the same shape, including the order within a wave.
-- A wave of more than one bead always names its shared media and its gate owner.
+- Every wave names its shared media, its gate owner and one room per bead,
+  whatever its width.
 - Every medium the plan names carries a verdict, and an unobserved one is
   `unmeasured` rather than `passed`.
 - A required override field is required by its content: a key present but blank
@@ -237,8 +259,8 @@ not tell them apart.
 | `compose_declaration(record)` | the tracker's four fields as the one string the parser reads |
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
-| `media_for(wave_size)` | what a wave of that size shares |
-| `check_media(records, *, concurrent, owned_paths, environment)` | one verdict per medium |
+| `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
+| `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `title_id_mismatches(records)` | every bead whose title numbers it differently |
 
 `plan_waves` takes bead records as **data**, never a tracker handle: the

@@ -155,7 +155,13 @@ class TestShape:
     def test_a_shared_node_serialises_and_the_reason_is_printed(
         self, tmp_path: Path, bd: Any
     ) -> None:
-        project = _project(tmp_path)
+        """A measured project, because a serial plan is checked too (#228).
+
+        It ran against `_project` until the media stopped being conditional on
+        wave size: a plan whose three machine-observed media nobody could measure
+        is `unmeasured` at exit 1 whether or not any wave holds two beads.
+        """
+        project = _measured_project(tmp_path)
         bd({"a": _record("a", "billing"), "b": _record("b", "billing")})
         result = CliRunner().invoke(
             main, ["waves", "a", "b", "--project", str(project)]

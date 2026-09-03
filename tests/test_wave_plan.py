@@ -27,9 +27,9 @@ from beadloom.application.waves import (
     WaveOverride,
     declared_refs,
     load_overrides,
-    media_for,
     plan_waves,
     resolve_scope,
+    room_for,
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
@@ -301,16 +301,37 @@ class TestSharedMedia:
         assert plan.shared_media == SHARED_MEDIA
         assert len(SHARED_MEDIA) == 4
 
-    def test_a_plan_that_runs_nothing_concurrently_names_none(
+    def test_a_plan_that_runs_nothing_concurrently_names_the_same_media(
         self, conn: sqlite3.Connection
     ) -> None:
+        """BDL-UX #228 — the counter-claim this replaces.
+
+        The first version returned no medium at all when no wave held more than
+        one bead. That read the width of ONE plan as solitude, and the silence
+        landed exactly where the coordinator was not already thinking about
+        concurrency: roughly twenty single-bead waves across two epics carried
+        the discipline by launch prompt alone.
+        """
         plan = plan_waves([_bead("a", "billing"), _bead("b", "billing")], conn=conn)
-        assert plan.shared_media == ()
+        assert all(len(wave.beads) == 1 for wave in plan.waves)
+        assert plan.shared_media == SHARED_MEDIA
 
     def test_every_medium_carries_its_evidence(self) -> None:
-        for medium in media_for(2):
+        for medium in SHARED_MEDIA:
             assert medium.evidence.startswith("BDL-UX #")
             assert len(medium.statement) > 40
+
+    def test_the_room_a_bead_owes_carries_that_bead_s_id(self) -> None:
+        """BDL-UX #235 — a room whose name cannot say whose it is is shared."""
+        assert room_for("beadloom-67t1") == "room-beadloom-67t1"
+        assert room_for("a") != room_for("b")
+
+    def test_every_bead_of_every_wave_is_given_a_room_of_its_own(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        plan = plan_waves([_bead("a", "billing"), _bead("b", "shipping")], conn=conn)
+        beads = [bead for wave in plan.waves for bead in wave.beads]
+        assert len({room_for(bead) for bead in beads}) == len(beads)
 
     def test_each_wave_names_a_gate_owner_from_its_own_members(
         self, conn: sqlite3.Connection

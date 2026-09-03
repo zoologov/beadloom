@@ -163,6 +163,8 @@ def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
 
 def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
     """The whole plan as data — the same facts the human shape prints."""
+    from beadloom.application.waves import room_for
+
     return {
         "beads": len(plan.scopes),
         "waves": [
@@ -204,6 +206,9 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             }
             for o in plan.overrides
         ],
+        "rooms": {
+            bead: room_for(bead) for wave in plan.waves for bead in wave.beads
+        },
         "shared_media": [
             {"name": m.name, "statement": m.statement, "evidence": m.evidence}
             for m in plan.shared_media
@@ -219,6 +224,8 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
 
 def _render(plan: WavePlan) -> None:
     """Print the decided shape, its reasons, and what it did not decide."""
+    from beadloom.application.waves import room_for
+
     click.echo(
         f"{len(plan.waves)} wave(s) for {len(plan.scopes)} bead(s), "
         f"{len(plan.conflicts)} serialisation(s), {len(plan.findings)} finding(s)."
@@ -226,8 +233,9 @@ def _render(plan: WavePlan) -> None:
     click.echo("")
     for wave in plan.waves:
         click.echo(f"Wave {wave.index}: {', '.join(wave.beads)}")
-        if len(wave.beads) > 1:
-            click.echo(f"  combined-tree gate: {wave.gate_owner}")
+        click.echo(f"  combined-tree gate: {wave.gate_owner}")
+        rooms = "; ".join(f"{bead} -> {room_for(bead)}" for bead in wave.beads)
+        click.echo(f"  clean room: {rooms}")
     if plan.conflicts:
         click.echo("")
         click.echo("Serialised because:")
@@ -247,17 +255,9 @@ def _render(plan: WavePlan) -> None:
             f"— {state}"
         )
     click.echo("")
-    if plan.shared_media:
-        click.echo(
-            "Shared by every wave of more than one bead, and NOT decided by code "
-            "independence:"
-        )
-        for medium in plan.shared_media:
-            click.echo(f"  {medium.name} ({medium.evidence}) — {medium.statement}")
-    else:
-        click.echo(
-            "No wave runs more than one bead, so nothing is shared concurrently."
-        )
+    click.echo("Shared by every wave, and NOT decided by code independence:")
+    for medium in plan.shared_media:
+        click.echo(f"  {medium.name} ({medium.evidence}) — {medium.statement}")
     if plan.media_checks:
         click.echo("")
         click.echo("Plan-time precondition of each shared medium:")
