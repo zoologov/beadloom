@@ -64,6 +64,7 @@ from beadloom.onboarding.role_adapters import (
     generate_adapters,
 )
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
+from beadloom.onboarding.role_duties import duty_report
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
@@ -805,6 +806,45 @@ def _suppression_drifts(project_root: Path) -> list[ConfigDrift]:
     return drifts
 
 
+def _duty_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report duties whose declaration and whose delivery disagree.
+
+    The sibling of :func:`_suppression_drifts`, over the same corpus and for the
+    same reason: a declaration in the flow, checked against the artifacts it
+    describes. The subject here is the class measured four times across two
+    epics — a duty an agent is obliged to perform, written somewhere the
+    performer does not read.
+
+    These block, where a suppression finding warns. The two differ in who can
+    introduce them: a suppression is an adopter's line in ``flow.yml`` and a
+    release must not turn their green project red, while a duty finding needs a
+    ``roles=`` declaration that somebody wrote on purpose. Beadloom ships both
+    sides of its own duties, so a mismatch introduced by a release is caught by
+    this repository's own Gate before it reaches anyone.
+
+    Never ``fixable``: the repair is the duty's TEXT in a role core, and
+    ``--fix`` writes compositions, not prose. Offering it would be the BDL-UX
+    #186 shape — recommending the command that will decline.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        report = duty_report(project_root)
+    except FlowConfigError:
+        # Reported by :func:`_flow_config_drift`; don't double-report.
+        return []
+    return [
+        ConfigDrift(
+            file=finding.source,
+            reason=finding.why,
+            severity="error",
+            remediation=finding.remediation,
+            fixable=False,
+        )
+        for finding in report.findings
+    ]
+
+
 def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     """Every artifact this project composes — the text a suppression is matched against."""
     texts = [composed_command(name, config, project_root) for name in COMMAND_FILES]
@@ -1082,6 +1122,7 @@ def check_config_drift(
     if layer is not None:
         drifts.append(layer)
     drifts.extend(_suppression_drifts(project_root))
+    drifts.extend(_duty_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

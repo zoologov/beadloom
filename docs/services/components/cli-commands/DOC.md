@@ -46,6 +46,14 @@ is what holds that line.
 | `federation.py` | `export`, `federate`, `lint`, `ci` |
 | `docs.py` | `docs generate`, `docs polish`, `docs site`, `docs audit`, `docs quality`, `docs spaces` |
 | `setup.py` | `setup-mcp`, `setup-rules`, `setup-ai-techwriter`, `setup-agentic-flow`, `setup-branch-protection`, `config-check`, `mcp-serve`, `init` |
+
+`config-check` prints two derivations beside the drift list, because neither has a Gate
+step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
+owns no runner to hang a step on) and, whenever a project declares at least one duty, the
+population `role_duties.duty_report()` could not inspect. The second prints on the clean path
+as well as the blocking one: a check that speaks only when it finds something hands the reader
+a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
+declares no duty, where there is no verdict to qualify.
 | `dashboard.py` | `tui`, `ui`, `watch` |
 | `snapshot.py` | `snapshot save`, `snapshot list`, `snapshot compare` |
 | `guard.py` | `guard` |

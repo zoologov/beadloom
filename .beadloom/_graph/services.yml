@@ -466,6 +466,13 @@ nodes:
     docs:
       - docs/domains/onboarding/features/role-adapters/SPEC.md
 
+  - ref_id: role-duties
+    kind: feature
+    summary: "duty_report — the duties a composed flow declares, checked in both directions against the composed core of every role each one names"
+    source: src/beadloom/onboarding/role_duties.py
+    docs:
+      - docs/domains/onboarding/features/role-duties/SPEC.md
+
   - ref_id: flow-composer
     kind: feature
     summary: "compose(core, architecture, stack, project) — the one layered assembly behind role files, slash commands and CLAUDE.md; the project layer lives in .beadloom/flow/"
@@ -1069,6 +1076,24 @@ edges:
   - src: role-adapters
     dst: onboarding
     kind: part_of
+  - src: role-duties
+    dst: onboarding
+    kind: part_of
+  - src: role-duties
+    dst: role-composer
+    kind: depends_on
+  - src: role-duties
+    dst: flow-composer
+    kind: depends_on
+  - src: role-duties
+    dst: flow-config
+    kind: depends_on
+  - src: role-duties
+    dst: agentic-flow-setup
+    kind: depends_on
+  - src: config-check
+    dst: role-duties
+    kind: depends_on
   - src: flow-composer
     dst: onboarding
     kind: part_of

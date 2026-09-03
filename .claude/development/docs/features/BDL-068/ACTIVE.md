@@ -7,7 +7,12 @@
 
 ## Current Bead
 
-**Bead:** none claimed. S4's beads are created (2026-09-03) and its wave shape is being derived.
+**Bead:** S4 wave 1 — `0mdo.27` (the duty mechanism) and `0mdo.31` (#170, the guard surface)
+run concurrently in one working tree. `.31` owns the combined-tree gate; `.27` reports its own room.
+`0mdo.27` is DONE: `beadloom.onboarding.role_duties` checks a declared duty against the composed
+core of every role it names, in both directions, and `config-check` blocks on the findings. It
+declares no duty itself — `beadloom-67t1` (#228) writes the clean-room duty into the role cores and
+declares it, and the slice forbids shipping either half alone.
 **Goal of S4:** the guards' enforcement surface is narrower than their promise — derive each
 guard's surface from its own matcher, compare it against what exists, report the gap.
 **Branch:** `features/BDL-068` — **no suffix, deliberately**. BDL-UX #230: `declared_scope`
@@ -22,6 +27,10 @@ filed; this name is the free mitigation and later slices keep it.
 - [x] **S2 — the review's independence, reported rather than asserted** — merged in PR #60
 - [x] **S3 — what we measure with** — merged in PR #60 (`97e0504`)
 - [ ] S4 — the guards' enforcement surface
+  - [x] `0mdo.27` — duties declared rather than inferred, checked in both directions. Green in a
+    clean room over 12 files (8 316 passed, 1 pre-existing failure that is red at HEAD in the same
+    room); `beadloom ci` rc 0 there, verdict taken in Darwin arm64 / CPython 3.13.7, 0 of 21
+    declared rooms. Not a claim about the combined tree.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

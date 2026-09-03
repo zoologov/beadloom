@@ -409,7 +409,9 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # and the composition that feeds it and not one thing.
         # 109 -> 110 in BDL-068 `.23`: `verdict-room`, the rooms a verdict can be
         # taken in, derived from the packaging metadata and the CI workflows.
-        assert populations[SPACE_AS_IS] == 110
+        # 110 -> 111 in BDL-068 `.27`: `role-duties`, the duties a composed flow
+        # declares checked against the composed core of every role each one names.
+        assert populations[SPACE_AS_IS] == 111
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

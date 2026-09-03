@@ -231,6 +231,29 @@ flow, or whose `until:` date has passed, is reported at `warn`. See the
 flow-suppression SPEC; the deadline logic is `exit_condition_deadline`, shared
 with the `rules.yml` import exemptions rather than restated.
 
+### Duty delivery
+
+A duty declared for a role and absent from that role's composed core is reported at
+`error`, and so is a duty an artifact carries that nothing declares. The derivation is
+`role_duties.duty_report()`; `_duty_drifts()` maps its findings onto `ConfigDrift`.
+
+This is `_suppression_drifts()`'s sibling — a declaration in the flow checked against the
+artifacts it describes — and it differs from it in severity, deliberately. A suppression
+is an adopter's line in `flow.yml`, and a release must not turn their green project red.
+A duty finding needs a `roles=` declaration somebody wrote on purpose, and Beadloom ships
+both sides of its own duties, so a mismatch introduced by a release is caught by this
+repository's own Gate before it reaches anyone.
+
+The findings are never `fixable`. The repair is the duty's **text** in a role core, and
+`--fix` writes compositions, not prose; offering it would be the BDL-UX #186 shape —
+recommending the command that will decline.
+
+The command prints `duty_report`'s not-inspected population whenever a project declares
+at least one duty, on the clean path as well as the blocking one, because a check that
+speaks only when it finds something hands the reader a clean list. The channel that
+matters there is the coordinator's launch prompt: a prompt is not an artifact, so no
+file-based check reaches it.
+
 ### Ownership boundary
 
 The `CLAUDE.md` body is **judged** only when the file is Beadloom's: it has a flow
@@ -287,6 +310,8 @@ Module `src/beadloom/onboarding/config_sync.py`:
   `remediation` (the concrete next move, or `None` for the caller's generic
   advice) and `fixable` (whether `--fix` can repair it; `False` when repairing
   would mean deleting the body on disk).
+- `_duty_drifts(project_root) -> list[ConfigDrift]` — every `role_duties` finding as
+  a blocking, non-fixable drift; empty for a project with no `.beadloom/flow.yml`.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
