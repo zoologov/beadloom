@@ -7,8 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S4 wave 3 — `0mdo.33` + `67t1`, gate owner `67t1`. Wave 1 (`0mdo.27` + `0mdo.31`)
-landed: `9d73c99`, `5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`.
+**Bead:** S4 wave 3 landed — `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner
+`67t1`, combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
+`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 4 is `en0x`, then `gsal`, then `nn4c`.
 Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
 `gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
 `flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
@@ -87,7 +88,36 @@ filed; this name is the free mitigation and later slices keep it.
     room); `beadloom ci` rc 0 there. On the tree: 8 619 passed and 2 failed, both
     `TestSyncCheckNewPairs` requiring `sync-check` rc 0 while `0mdo.33`'s two doc pairs are stale.
     Every verdict in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. Not a claim about
-    the combined tree; that verdict follows once `0mdo.33` lands.
+    the combined tree; that verdict follows below. A SECOND defect was found and fixed inside
+    this bead rather than filed: declaring the first duty made `role_duties`' `not_inspected`
+    list grow from two entries to seven, the five new ones being the vendored
+    `templates/agentic_flow/agents/*.md.txt` snapshot, each under a reason saying the duties in
+    it reach no role — false twice, because the marker is inspected in its composed form and the
+    file is dropped verbatim into an adopter's roles directory by the plain scaffold path. The
+    snapshot is now out of the subtraction base. **As this wave's gate owner:** the combined tree
+    of `0mdo.33` + `67t1` is green — 8 622 passed, 0 failed, `beadloom ci` rc 0 foreground and
+    unpiped, `sync-check PASS: 419 pair(s) fresh`. Darwin arm64 / CPython 3.13.7, 0 of the 21
+    declared rooms, so it is a claim about this machine and about no CI leg.
+  - [x] `0mdo.33` — **`mr2l.60`'s residue**, items 2, 3 and 5; its measurements stand and were not
+    redone. The rule is now over the SEPARATOR rather than over one character: the refused set is
+    every spelling `ntpath`/`posixpath` declare minus this platform's own (`os.sep`, `os.altsep`),
+    so POSIX behaviour does not move by one character and Windows goes from *every edit target is
+    `MALFORMED`* to a working guard. What the shape gate then owes there is three refusals it never
+    made — a trailing dot, a trailing space and the 22 reserved device names, each of which the
+    Win32 name layer silently REWRITES, which is the guard-and-writer divergence the module exists
+    for; the characters Win32 forbids outright are deliberately left out, because such a write fails
+    loudly and nothing diverges. **Item 5 without a leg:** the platform is a substitutable input
+    (`PathFlavour`, the same shape S3 gave the room), so both platforms' rules are measured on one
+    machine — no `xfail`, and what substitution cannot reach is a residual in the SPEC, including the
+    new one it introduces (a REFUSED target is settled anywhere because the refusal is lexical; an
+    ACCEPTED one is then resolved by whatever kernel is running). 7 acceptance scenarios seen red in
+    two steps — the second with the flavour plumbed and the OLD rule, so 5 of 7 were seen to bite on
+    the rule rather than on an import. Green in a clean room over 9 files (8 557 passed; the 1
+    failure is the room's stated property — no `.git` — and is red at HEAD in an identically-built
+    control room). Every verdict in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms; not a
+    claim about the combined tree, which is `67t1`'s to make. Filed BDL-UX #236: a clean room's
+    verdict is decided by which optional extras it installed, measured as 0, 1 and 82 mypy errors
+    over one code base.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 
@@ -151,8 +181,11 @@ against real commits BEFORE it goes live), warn-not-block, and `unjudged` for an
 
 ## Standing conventions every launch prompt carries
 
-These are prompt-level today, which is exactly what #228 is about. Until it lands they must be
-typed into every bead's prompt:
+**#228 landed 2026-09-04.** The first two below are no longer prompt-level: the shipped
+coordinator command declares the `clean-room` duty for all five roles, `roles/core/_rooms.md.txt`
+and its Russian twin carry it, and `config-check` blocks on either half going missing. The room's
+path carries the bead id (#235) and `beadloom waves` prints it per bead for every wave. The rest
+are still carried by the prompt and by nothing else:
 
 - **"green in a clean room over N files" and "green on the tree" are different claims** — report
   them in different words (BDL-UX #181).
