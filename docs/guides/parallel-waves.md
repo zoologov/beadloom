@@ -179,8 +179,12 @@ the plan whose ids most need checking. Dogfooding found a live one on this repos
   between beads: four agents once each reported green on a tree that was red, and none of them
   was wrong.
 - An agent reports its result in the words that say which measurement it made. "Green in a clean
-  room over 16 files" is a different claim from "green on the tree", and reporting both with one
-  word is what makes the discrepancy read as a contradiction later.
+  room over 16 files" is a different claim from "green on the tree", and "green on `tests-locale`"
+  is a third; reporting them with one word is what makes a discrepancy read as a contradiction
+  later. [`beadloom rooms`](../services/cli.md#beadloom-rooms) prints the room a run is in and
+  the declared rooms it did not enter, and `beadloom ci` prints the same census beside its own
+  verdict — so the address is derived from the project's CI declaration rather than typed by
+  the agent. Naming the room does not make the verdict stronger. It makes it answerable.
 
 ## Overriding the shape
 
