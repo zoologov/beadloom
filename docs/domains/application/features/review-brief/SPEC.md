@@ -65,7 +65,7 @@ independently and recorded; the hidden-profile risk is in the first pass.
 | Specification | the graph's documents for those nodes | authored against the design, held to the code by `sync-check` |
 | Scenarios | the acceptance suite's `@bead:` tags | executable; it either runs or it does not |
 | Change | `git diff <base>...HEAD`, the working tree, and the untracked files | measured from the repository |
-| Withheld | a count, a reason, a release condition, a defeat notice | the account itself is not printed |
+| Withheld | a count, a reason, a release condition, a defeat notice | the account itself is not printed; carried on the brief and read by `--release`, while the before half prints the reachability statement instead |
 | Reachability | four channels, each inspected or named as uninspectable | what the reviewer can reach, which is a different question from what this command holds |
 
 The `refs:` token is read from the title, the description, the design field and
@@ -159,6 +159,35 @@ buys is that a reviewer knows what to declare.
 subject and the number of non-empty body lines, so a report about a leak is not
 itself one.
 
+### The channels the report does not name
+
+Four channels is what the report states, not what exists. Two more are measured
+and filed, and a reader who takes the four for the whole list has the same wrong
+picture `0 withheld` used to give.
+
+**The tracker export inside the reviewed diff** (BDL-UX #229). Where a project
+commits its tracker, the diff under review carries the author's comments as data.
+Measured on this feature's own S2 review: `git diff main...HEAD -- .beads/issues.jsonl`
+added 16 record lines carrying 30 author comments and 81,270 characters of comment
+text. The brief's own change inventory lists that file and prints
+`read it: git diff <base>...HEAD -- <path>` beneath it, so the report sends the
+reviewer to a channel it does not count — BDL-UX #219's mechanism one step further
+along, where the report names the commit bodies its protocol sends the reviewer to
+and not the export it sends the reviewer to in the same breath. The population is
+derivable exactly as the commit range is, from the change inventory the brief
+already holds, and counting comment records in the added lines needs no comment
+text. Behind it sit the slice's sibling beads, reachable through `waves`. Neither
+widening was taken here.
+
+**A branch whose name carries a suffix after the work-item key** (BDL-UX #230).
+Measured on this feature's own development branch: the documents channel read
+`NOT INSPECTED — the branch 'features/BDL-068-S2S3' names no work item among the
+project's planning documents` while the reviewer was reading `RFC.md` and
+`CONTEXT.md` out of exactly that folder, which is step 4 of the review protocol.
+The report failed to name a channel the reviewer had reached, and it is the
+channel BDL-UX #212 is about. The brief contradicts itself inside one page there:
+its change inventory lists `.claude/development/docs/features/BDL-068/ACTIVE.md`.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -170,6 +199,13 @@ itself one.
 
 `3` is distinct from `2` on purpose. Nothing failed — the account is simply still
 withheld, and a caller that could not tell those apart would retry the wrong one.
+
+Both halves of the command speak one vocabulary and both name the bead: the
+refusal reads `WITHHELD — bead comments on <bead>: N item(s) stay withheld: …`.
+The RELEASED line does not name its population, deliberately — it prints the
+comments themselves, so the population is on the screen beneath it. The release
+half's `withheld_count` JSON key is unchanged: the `--json` break was declared for
+the before half only, and breaking an undeclared key would be a widening.
 
 ### How a verdict is recognised
 
@@ -222,12 +258,13 @@ is why the duty to declare stays where the observation is.
 **A branch whose name is not exactly the work item's key inspects no documents.**
 `work_item_of_branch` matches a `/`-separated segment against the planning
 corpus, so `features/BDL-068` names the work item and `features/BDL-068-S2S3`
-names none — measured on this feature's own development branch, where the
-documents channel reads `NOT INSPECTED` for that reason. The channel states it
-rather than reporting an empty folder, and the rule is not restated here: a
-second reader of the branch-to-work-item convention is the two-sources-of-truth
-defect this epic exists to remove, so the convention is fixed in one place or
-not at all.
+names none. The channel states that rather than reporting an empty folder, and
+the rule is not restated here: a second reader of the branch-to-work-item
+convention is the two-sources-of-truth defect this epic exists to remove, so the
+convention is fixed in one place or not at all. That one place is
+`application/declared_scope.py`, and BDL-UX #230 is the filing — the suffixed
+shape is the ordinary one, so the limit is a real blind spot rather than a
+notational choice.
 
 **This withholds an input; it does not lock a door.** A reviewer with a shell can
 run `bd comments` directly, and a coordinator can paste the author's summary into

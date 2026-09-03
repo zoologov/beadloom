@@ -1347,30 +1347,117 @@ would retry the wrong one.
 The brief carries the **assignment** (the bead's title and description), the
 **declared scope**, the **specification** (the graph's documents for those nodes
 and every scenario whose `@bead:` tag names the bead) and the **change**
-(`git diff <base>...HEAD`, the working tree, and the untracked files, each
-path carrying the node that owns it). It does not carry the bead's comments. Those are
-counted and never printed (the notice is wrapped for this page):
+(`git diff <base>...HEAD`, the working tree, and the untracked files, each path
+carrying the node that owns it). It does not carry the bead's comments.
 
-```
-WITHHELD — 4 author comment(s) withheld
-  reason: the author's account of the change converges the reviewer on the author's framing
-    before the reviewer has looked at the code
-  release: a verdict recorded on the bead; then `beadloom review-brief <bead> --release`
-  if your launch prompt carried anything about this change that you did not derive yourself
-    — the author's summary, or the coordinator's own observation of it — this withholding was
-    defeated before it ran; say so in your verdict, you are the only party that can see it
-```
-
-The measurement behind the ordering: in hidden-profile tasks a group that hears
+The measurement behind that ordering: in hidden-profile tasks a group that hears
 one member's conclusion first scores 17-36% where a single holder of all the
-facts scores ~100%. `0 withheld` and `4 withheld` are different facts, so the
-count is always printed -- an absent input is reported rather than left silent.
+facts scores ~100%. So the account is released after the reviewer's own judgement
+is recorded rather than never.
+
+#### The reachability block
+
+The brief closes with a statement of what can reach the reviewer, **per
+channel** -- not with a count of what this command holds back. Four channels, each
+either inspected or named as one nothing here can inspect (the output is wrapped
+for this page):
+
+```
+REACHABLE — what can reach you about this change, per channel. This command withholds one
+of them and closes none of the others; declaring what actually reached you is still yours
+to do.
+  bead comments: 0 item(s) — counted on <bead> and on no other bead — the beads that made
+    this change are neither read nor counted here; withheld by this command until a verdict
+    recorded on the bead; then `beadloom review-brief <bead> --release`; the author's account
+    of the change converges the reviewer on the author's framing before the reviewer has
+    looked at the code
+  the work item's documents: 5 item(s) — the folder
+    .claude/development/docs/features/BDL-068, against the 9 document name(s) this
+    project's composed prompts mention
+    .claude/development/docs/features/BDL-068/ACTIVE.md — named by roles/dev,
+      commands/checkpoint, commands/coordinator, commands/task-init, commands/templates
+  the commit bodies of the reviewed range: 19 item(s) — read over the range since main;
+    19 of 19 carry a body, and your protocol sends you to this diff
+    ab7e9fa9 [BDL-068] feat: review-brief states what is reachable — 24 body line(s)
+  the launch prompt: NOT INSPECTED — nothing in this process can see one, so: if your launch
+    prompt carried anything about this change that you did not derive yourself — the author's
+    summary, or the coordinator's own observation of it — this withholding was defeated
+    before it ran; say so in your verdict, you are the only party that can see it
+```
+
+The count that was printed before S2 said `4 author comment(s) withheld` and
+nothing else, and a reviewer read it as a statement about its own knowledge. It
+is not one: all three defeats of the withholding measured so far reached the
+reviewer through a channel that count never mentioned -- `ACTIVE.md`
+(BDL-UX #212), the commit bodies of the reviewed range (BDL-UX #219), and the
+launch prompt (BDL-UX #204). Each was known only because a reviewer declared it
+unprompted.
+
+**This raises detectability and closes nothing.** The review protocol itself
+sends the reviewer to the diff, and the commit bodies come with it; no report
+changes that. What changed is that a reviewer can now see what it could reach and
+say so, which is how all three defeats were found in the first place.
+
+**A channel found empty never reads like one nobody could inspect.**
+`0 item(s)` and `NOT INSPECTED — <reason>` are different sentences. A `flow.yml`
+that will not parse costs the documents channel and not the brief: the channel
+reports `NOT INSPECTED — the project's flow.yml will not parse, so no prompt
+could be composed`, where before S2 the malformed file raised out of the command
+and no brief was produced at all.
+
+**A commit body is counted, never quoted** -- subject and non-empty body-line
+count only, so a report about a leak is not itself one.
+
+The documents channel is derived rather than listed: the names come from the
+composed role and command prompts for this project's `flow.yml`, project layer
+included, matched by shape (an upper-case name ending in `.md`). A team that names
+`DECISIONS.md` in `.beadloom/flow/roles/review.md` moves this report by that act.
+
+#### Two channels the block does not name
+
+Both are measured, filed, and open. A reader of this section should not take the
+four channels as the whole list.
+
+- **The tracker export inside the reviewed diff** (BDL-UX #229). Where the project
+  commits its tracker, the diff under review carries the author's comments as
+  data. Measured on this feature's own S2 review: 16 added record lines, 30 author
+  comments, 81,270 characters of comment text. The brief's own change inventory
+  lists that file and prints `read it: git diff <base>...HEAD -- <path>` beneath
+  it, so the report sends the reviewer to a channel it does not count -- BDL-UX
+  #219's mechanism one step further along. Widening the count to that export and
+  to the slice's sibling beads is filed, not done.
+- **The work item's documents on a branch whose name carries a suffix**
+  (BDL-UX #230). `work_item_of_branch` matches a `/`-separated segment that
+  *equals* a work-item key, so `features/BDL-068` names the work item and
+  `features/BDL-068-S2S3` names none. Measured on this feature's own development
+  branch: the channel read `NOT INSPECTED — the branch 'features/BDL-068-S2S3'
+  names no work item among the project's planning documents` while the reviewer
+  was reading `RFC.md` and `CONTEXT.md` out of exactly that folder. The fix belongs
+  in `application/declared_scope.py`, its one home, and is filed there.
+
+#### The release half
 
 `--release` prints the account once a verdict comment is on the bead, so the
 deferrals, sabotage tables and measured numbers stay available to a reviewer who
 would otherwise re-derive them. A verdict is a comment whose **first non-blank
 line opens with** `REVIEW PASSED:`, `REVIEW ISSUES:` or `REVIEW FINDINGS:`, the
 colon included -- the exact openings the review role is instructed to write.
+
+A refusal names the bead its count was taken over, in the same vocabulary the
+reachability block uses:
+
+```
+$ beadloom review-brief <bead> --release
+WITHHELD — bead comments on <bead>: 0 item(s) stay withheld: no verdict is recorded on
+this bead — the author's account stays withheld until one is. Record it with
+`bd comments add <bead> "REVIEW PASSED: ..."` or a findings comment opening `REVIEW ISSUES:`
+```
+
+`0 item(s)` there says this bead carries no account. It says nothing about the
+beads that made the change, and on a wave-structured slice — where the brief is
+for a review bead — that is the ordinary case: the S2 review of this feature read
+`0 item(s)` while 31,544 characters of the author's account sat on the two beads
+that made the change.
 
 The verdict comment's author is compared with the bead's assignee, and the answer
 is **reported, not enforced**. A self-recorded verdict still releases, prints why
@@ -1385,11 +1472,19 @@ own — say which it was in your review
 RELEASED — 5 author comment(s), on the verdict 'REVIEW ISSUES' already recorded.
 ```
 
+A tracker that names no author for the verdict comment gets its own note rather
+than that one — `the tracker named no author for the verdict comment, so this gate
+could not tell whether the account was released by its own author`. Two different
+facts, so two sentences: a shared identity and an absent author field are not the
+same finding, and the S2 review of this feature met the second where it predicted
+the first.
+
 Refusing was rejected on a measurement: where every role writes under one tracker
 identity, a refusal refuses every release, and a gate nobody can pass is bypassed
 rather than obeyed. What this command withholds is an **input**, not a door -- a
 reviewer with a shell can read the comments directly, and the value is in the
-default and in the count being visible.
+default and in the reachability statement being printed where the reviewer will
+read it.
 
 The change is measured over the **branch**, not over the bead, because no
 per-bead attribution exists in the commits. On a branch carrying five beads all
@@ -1397,10 +1492,14 @@ five briefs report the same files, so the `changed-outside-scope` finding names
 its window (`measured over the branch since <ref>`). `--since <ref>` narrows it.
 
 `--json` carries `bead`, `title`, `assignment`, `refs`, `unknown_refs`, `docs`,
-`base_ref`, `change_measured`, `changed`, `scenarios`, `withheld`, `findings` and
-`exit_code`. Under `--release` it carries `withheld_count`, `verdict_marker`,
-`verdict_author`, `independence_note`, `refused_reason`, `released` and
-`exit_code`. The account never appears in the non-release `--json`.
+`base_ref`, `change_measured`, `changed`, `scenarios`, `reachability`, `findings`
+and `exit_code`. `reachability` is an array of objects carrying `channel`,
+`inspected`, `carries`, `reason` and `items` — it replaced the `withheld` object
+in S2, a declared break. Under `--release` it carries `withheld_count`,
+`verdict_marker`, `verdict_author`, `independence_note`, `refused_reason`,
+`released` and `exit_code`; `withheld_count` is unchanged, because the break was
+declared for the before half only. The account never appears in the non-release
+`--json`.
 
 ### beadloom ci
 
@@ -1712,7 +1811,7 @@ Commands (re-exported from the package via the registration shell):
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
-- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments and reporting how many; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
+- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments, and state what is REACHABLE per channel: bead comments (counted on that bead and on no other), the documents of the work item the branch names, the commit bodies of the reviewed range, and the launch prompt, which is named as a channel nothing here can inspect; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
