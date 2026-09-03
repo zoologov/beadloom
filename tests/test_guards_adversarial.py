@@ -41,7 +41,14 @@ from beadloom.application.guards.contract import GuardProbes
 from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import read_firings
 from beadloom.application.guards.models import GuardOutcome
-from beadloom.application.guards.paths import PathScope, rejection_reason, resolve_edit_path
+from beadloom.application.guards.paths import (
+    NATIVE_PATHS,
+    POSIX_PATHS,
+    WINDOWS_PATHS,
+    PathScope,
+    rejection_reason,
+    resolve_edit_path,
+)
 from beadloom.services.cli import main
 from tests.filesystem_names import (
     UNENCODABLE_FRAGMENT,
@@ -163,8 +170,14 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
 
     The SPEC sentence under test (``flow-guards/SPEC.md``, "The accepted shape"):
     a well-formed edit target is a non-empty string with no C0 control character
-    and no ``DEL``, no backslash, no leading ``~``, and encodable for this
-    filesystem.
+    and no ``DEL``, no directory separator this platform does not use, no leading
+    ``~``, no component this platform's own name layer would rewrite, and
+    encodable for this filesystem.
+
+    Two of those clauses are platform-conditional since beadloom-0mdo.33, so the
+    rows below assert the answer for THIS platform and
+    :mod:`tests.test_windows_dimension` asserts the other platform's by passing
+    its flavour in. The two files divide the same sentence, they do not repeat it.
     """
 
     @pytest.mark.parametrize(
@@ -356,15 +369,24 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
         """
         sentence = " ".join(_SPEC.read_text(encoding="utf-8").split())
         clauses = {
-            "no C0 control character and no `DEL`": "a\x01b",
-            "contains no backslash": "a\\b",
-            "does not begin with `~`": "~a",
-            "can be encoded for this filesystem": "a\ud800b",
+            "no C0 control character and no `DEL`": ("a\x01b", NATIVE_PATHS),
+            "contains no directory separator this platform does not use": (
+                "a\\b",
+                POSIX_PATHS,
+            ),
+            "does not begin with `~`": ("~a", NATIVE_PATHS),
+            "contains no component this platform's own name layer would rewrite": (
+                "docs/CON.md",
+                WINDOWS_PATHS,
+            ),
+            "can be encoded for this filesystem": ("a\ud800b", NATIVE_PATHS),
         }
 
-        for clause, breaker in clauses.items():
+        for clause, (breaker, flavour) in clauses.items():
             assert clause in sentence, f"the SPEC no longer states: {clause}"
-            assert rejection_reason(breaker) != "", f"unenforced clause: {clause}"
+            assert rejection_reason(breaker, flavour=flavour) != "", (
+                f"unenforced clause: {clause}"
+            )
 
 
 class TestTheStripHappensBeforeTheShapeIsJudged:
@@ -508,8 +530,15 @@ class TestAnEmptyTargetIsAbsentAndTheSpecNowSaysSo:
         assert resolved.rejection == ""
 
     def test_the_spec_no_longer_calls_an_empty_target_malformed(self) -> None:
-        """The two artifacts are read together, so they cannot drift apart again."""
-        spec = _SPEC.read_text(encoding="utf-8")
+        """The two artifacts are read together, so they cannot drift apart again.
+
+        Whitespace-normalised before the search, as its sibling row below already
+        is: the document wraps at 95 columns, so a sentence that keeps saying the
+        same thing can move a line break into the middle of the phrase. That is a
+        false red about the prose rather than a finding about the code, and it
+        cost one on beadloom-0mdo.33.
+        """
+        spec = " ".join(_SPEC.read_text(encoding="utf-8").split())
 
         assert "absent or empty target is not a refusal" in spec
 

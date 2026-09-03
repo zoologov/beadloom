@@ -24,17 +24,46 @@ with ``ValueError``, so a model-supplied string produced no verdict at all. Both
 defects have one root — an arbitrary string was *normalised*, and every
 normalisation is a guess about what the harness will write. So the input is
 narrowed instead. A well-formed edit target is a non-empty string that carries
-no C0 control character or ``DEL``, no backslash, no leading ``~``, and can be
-encoded for this filesystem (:func:`os.fsencode`). Each rule removes a spelling
-that means one file to this guard and a different one to whoever writes it: a
-NUL ends the name in the C layer, a backslash separates directories on the
-harness's platform and does not here, ``~`` is expanded by a shell and not by
-us, and a string the filesystem cannot encode names nothing at all. Anything
-outside the shape is :attr:`PathScope.MALFORMED` — refused with a stated reason,
-never repaired, never resolved, and never matched against an exclusion. What is
-NOT part of the shape, deliberately: a length limit (a long path resolves to
-exactly what it says; the OS enforces its own maximum) and percent-encoding
-(nothing here decodes it, so ``%2e%2e`` names a directory called ``%2e%2e``).
+no C0 control character or ``DEL``, no directory separator this platform does
+not use, no leading ``~``, no component this platform's own name layer would
+rewrite, and can be encoded for this filesystem (:func:`os.fsencode`). Each rule
+removes a spelling that means one file to this guard and a different one to
+whoever writes it: a NUL ends the name in the C layer, ``~`` is expanded by a
+shell and not by us, and a string the filesystem cannot encode names nothing at
+all. Anything outside the shape is :attr:`PathScope.MALFORMED` — refused with a
+stated reason, never repaired, never resolved, and never matched against an
+exclusion. What is NOT part of the shape, deliberately: a length limit (a long
+path resolves to exactly what it says; the OS enforces its own maximum) and
+percent-encoding (nothing here decodes it, so ``%2e%2e`` names a directory
+called ``%2e%2e``).
+
+**The two platform rules are stated over a SHAPE, not over a spelling
+(``beadloom-mr2l.60``).** Until this fix the module refused a backslash
+unconditionally, on the reasoning that it "separates directories on the harness's
+platform and is an ordinary file-name character on this one" — two clauses that
+are each true and that describe two different platforms, while the guard runs in
+the harness's own process tree, where there is one. Measured there rather than
+argued: this module reads no ``sys.platform`` and no ``os.name``, and the refusal
+returns before :func:`os.fsencode`, so it was one code path on every operating
+system — and on Windows, where ``os.path.join`` produces exactly that spelling,
+every edit target was ``MALFORMED`` and every guarded edit an ``error`` at exit 2,
+with a remediation ("supply the target as a POSIX path") the harness there cannot
+carry out. What the rule is actually about is the SEPARATOR: a spelling this
+platform reads as one names the file the writer will touch, and a spelling it
+does not names a file whose reading the guard cannot settle. So the refusal is now
+over :data:`SEPARATOR_SPELLINGS` minus this platform's own, which on a POSIX
+machine is the same single character as before and on Windows is nothing.
+
+**And what the shape gate then owes on Windows, which it never asked.** The
+Win32 name layer REWRITES what it is handed: it strips a trailing dot or space,
+and it resolves a reserved device name (``CON``, ``NUL``, ``LPT1``…) to a
+character device in whatever directory it appears. Both are the guard-and-writer
+divergence this module exists for, and each is a stronger argument for a refusal
+than the backslash ever was. Deliberately NOT refused there: the characters
+Win32 forbids outright (``<>:"|?*``). A write to such a name FAILS, loudly, so
+the guard and the writer do not end up looking at different files — nothing is
+written at all — and refusing it here would be the guard inventing a policy about
+names rather than protecting its own answer.
 
 **A harness that supplies a COMMAND rather than a path resolves to nothing, and
 the verdict says so.** The binding fires on the shell tool too (BDL-UX #170), and
@@ -61,16 +90,70 @@ be a policy nobody declared.
 
 from __future__ import annotations
 
+import ntpath
 import os
+import posixpath
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING
 
 from beadloom.application.guards.models import exception_detail
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+@dataclass(frozen=True)
+class PathFlavour:
+    """How one platform reads a file name, as the three facts this gate needs.
+
+    A flavour is an ARGUMENT rather than a lookup, so the rules below can be
+    exercised for a platform this project has no runner for: ``beadloom-mr2l.64``
+    withdrew the ``tests-windows`` leg on a measured cost, and a rule that can
+    only be reasoned about there is how the refusal this bead repairs survived
+    for a release. It is the same technique ``tests/room_simulation.py`` applies
+    to a CI leg — the platform is a substitutable input, so its answer is
+    measured on the machine at hand instead of predicted.
+
+    ``parser`` is the stdlib's own reader for that platform, so what counts as a
+    component is :mod:`pathlib`'s answer and not a hand-rolled split.
+    ``separators`` comes from :mod:`ntpath` / :mod:`posixpath`, so the spellings
+    are the ones the platform declares. ``rewrites_names`` is the one fact with
+    no stdlib spelling: whether the platform's name layer changes a name on its
+    way to the filesystem — Win32 strips a trailing dot or space and redirects a
+    reserved device name, while the POSIX layer passes the bytes through.
+    """
+
+    parser: type[PurePath]
+    separators: frozenset[str]
+    rewrites_names: bool
+
+
+#: The two flavours Python itself implements. Both are importable everywhere,
+#: which is what makes the other platform's rules measurable on this one.
+POSIX_PATHS = PathFlavour(
+    parser=PurePosixPath,
+    separators=frozenset({posixpath.sep}),
+    rewrites_names=False,
+)
+WINDOWS_PATHS = PathFlavour(
+    parser=PureWindowsPath,
+    separators=frozenset({ntpath.sep, ntpath.altsep}),
+    rewrites_names=True,
+)
+
+#: The flavour the guard and the writer share, derived from what :mod:`os`
+#: declares about this platform rather than from its name. ``os.sep`` is the
+#: whole test: the platform that separates directories with a backslash is the
+#: one whose name layer rewrites names, and there is exactly one.
+NATIVE_PATHS = WINDOWS_PATHS if os.sep == ntpath.sep else POSIX_PATHS
+
+#: Every spelling of a directory separator, as the union of what the two
+#: flavours declare — derived, so a third flavour would widen it by being added
+#: rather than by someone remembering to.
+SEPARATOR_SPELLINGS = POSIX_PATHS.separators | WINDOWS_PATHS.separators
+
 
 #: Stated in ``not_covered`` when the target resolved outside the project root.
 OUTSIDE_ROOT_NOT_COVERED = (
@@ -87,11 +170,22 @@ MALFORMED_NOT_COVERED = (
 #: The ``why`` of the verdict a refused target produces.
 MALFORMED_WHY = "the supplied edit target is not a well-formed path: {rejection}"
 
-#: How to get past a refusal — stated, because a verdict nobody can act on is noise.
-MALFORMED_REMEDIATION = (
-    "supply the target as a POSIX path ('/' separators, no control characters, "
-    "no leading '~'), or set this guard's strictness to 'off' in flow.yml if "
-    "such a name is legitimate in this project"
+#: How to get past a refusal — stated, because a verdict nobody can act on is
+#: noise, and stated in this platform's own spellings, because a remediation
+#: naming a platform is a way out only on that one. It used to read "supply the
+#: target as a POSIX path", which on Windows names something the harness there
+#: cannot produce.
+MALFORMED_REMEDIATION_TEMPLATE = (
+    "supply the target as a path this platform spells literally ({separators} "
+    "between directories, no control characters, no leading '~'{extra}), or set "
+    "this guard's strictness to 'off' in flow.yml if such a name is legitimate "
+    "in this project"
+)
+
+#: The clause the template adds where the platform's name layer rewrites names.
+REWRITING_REMEDIATION_CLAUSE = (
+    ", and no component this platform's name layer would rewrite — a reserved "
+    "device name, or a trailing dot or space"
 )
 
 #: Used in messages when the harness supplied no path at all.
@@ -126,16 +220,45 @@ CONTROL_CHARACTER_REJECTION = (
     "it contains a control character ({code}) at position {index}, and the "
     "layer that writes the file may read the name as ending there"
 )
-BACKSLASH_REJECTION = (
-    "it contains a backslash, which separates directories on the harness's "
-    "platform and is an ordinary file-name character on this one, so the guard "
-    "and the writer would not be looking at the same file"
+FOREIGN_SEPARATOR_REJECTION = (
+    "it contains {name}, which separates directories on the platform that "
+    "spelling comes from and is an ordinary file-name character on this one, so "
+    "the guard cannot tell whether it names one file or several, and it refuses "
+    "rather than choose"
+)
+TRAILING_REJECTION = (
+    "the component {component} ends in {ending}, which this platform's name "
+    "layer strips before the write reaches the filesystem, so the guard would "
+    "record one file and the writer would create another"
+)
+RESERVED_DEVICE_REJECTION = (
+    "the component {component} is a reserved device name on this platform, so "
+    "the write would reach that device rather than any file the guard could name"
 )
 HOME_PREFIX_REJECTION = (
     "it starts with '~', a shell abbreviation this guard does not expand"
 )
 UNENCODABLE_REJECTION = "it cannot be encoded for this filesystem ({detail})"
 UNRESOLVABLE_REJECTION = "it could not be resolved ({detail})"
+
+#: How each separator spelling is named to a human. A rule quantified over a set
+#: of characters still has to print one, and ``'\\\\'`` in a hook's stderr is not
+#: a word a reader can act on.
+SEPARATOR_NAMES = {"\\": "a backslash", "/": "a forward slash"}
+
+#: The endings the Win32 name layer removes, named the same way and for the same
+#: reason. A trailing tab is not here: it is already a C0 control character.
+REWRITTEN_ENDINGS = {".": "a dot", " ": "a space"}
+
+#: The names Win32 resolves to a character device wherever they appear — in any
+#: directory, and whatever extension follows (``CON.md`` is the console too).
+#: Written as ranges rather than as twenty-two literals, because a range is what
+#: the platform documents and a literal list is a thing to keep in step with it.
+RESERVED_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{number}" for number in range(1, 10)}
+    | {f"LPT{number}" for number in range(1, 10)}
+)
 
 #: Highest code point treated as a C0 control character, and the DEL code point.
 _LAST_CONTROL = 0x1F
@@ -235,12 +358,49 @@ def undetermined_target(
     )
 
 
-def rejection_reason(raw: str) -> str:
+def malformed_remediation(flavour: PathFlavour = NATIVE_PATHS) -> str:
+    """How to spell a target *flavour* accepts, as a sentence a human can act on."""
+    separators = " or ".join(repr(spelling) for spelling in sorted(flavour.separators))
+    extra = REWRITING_REMEDIATION_CLAUSE if flavour.rewrites_names else ""
+    return MALFORMED_REMEDIATION_TEMPLATE.format(separators=separators, extra=extra)
+
+
+def _foreign_separator(raw: str, flavour: PathFlavour) -> str:
+    """Why *raw* carries a separator spelling *flavour* does not read as one."""
+    for spelling in sorted(SEPARATOR_SPELLINGS - flavour.separators):
+        if spelling in raw:
+            return FOREIGN_SEPARATOR_REJECTION.format(name=SEPARATOR_NAMES[spelling])
+    return ""
+
+
+def _rewritten_component(raw: str, flavour: PathFlavour) -> str:
+    """Why a component of *raw* is one *flavour*'s name layer would not keep.
+
+    Every component, not only the last: a directory called ``src.`` is stripped
+    to ``src`` by the same layer, and a device name resolves to the device in
+    whatever position it appears. The components are :mod:`pathlib`'s, taken
+    through the flavour's own parser, so what counts as one is the platform's
+    answer rather than a split written here.
+    """
+    for component in flavour.parser(raw).parts:
+        ending = REWRITTEN_ENDINGS.get(component[-1:], "")
+        if ending:
+            return TRAILING_REJECTION.format(component=repr(component), ending=ending)
+        if component.partition(".")[0].upper() in RESERVED_DEVICE_NAMES:
+            return RESERVED_DEVICE_REJECTION.format(component=repr(component))
+    return ""
+
+
+def rejection_reason(raw: str, *, flavour: PathFlavour = NATIVE_PATHS) -> str:
     """Why *raw* is outside the accepted shape, or ``""`` when it is inside it.
 
     Purely lexical, and deliberately so: it runs *before* anything touches the
     filesystem, which is where the NUL crash came from. Order is by cost of
-    being wrong, not by likelihood.
+    being wrong, not by likelihood — and the two platform rules are decided
+    before :func:`os.fsencode`, the one call here whose behaviour a platform
+    owns, so their answer for *flavour* is the same on whatever machine asks.
+    That is what lets the Windows rules be measured without a Windows kernel,
+    which is the only way they are measured at all (``beadloom-mr2l.64``).
     """
     for index, char in enumerate(raw):
         code = ord(char)
@@ -248,10 +408,15 @@ def rejection_reason(raw: str) -> str:
             return CONTROL_CHARACTER_REJECTION.format(
                 code=f"U+{code:04X}", index=index
             )
-    if "\\" in raw:
-        return BACKSLASH_REJECTION
+    foreign = _foreign_separator(raw, flavour)
+    if foreign:
+        return foreign
     if raw.startswith("~"):
         return HOME_PREFIX_REJECTION
+    if flavour.rewrites_names:
+        rewritten = _rewritten_component(raw, flavour)
+        if rewritten:
+            return rewritten
     try:
         os.fsencode(raw)
     except ValueError as exc:  # UnicodeEncodeError: a lone surrogate names no file
@@ -274,7 +439,9 @@ def _malformed(label: str, rejection: str) -> ResolvedEditPath:
     )
 
 
-def resolve_edit_path(raw: str | None, project_root: Path) -> ResolvedEditPath:
+def resolve_edit_path(
+    raw: str | None, project_root: Path, *, flavour: PathFlavour = NATIVE_PATHS
+) -> ResolvedEditPath:
     """Resolve *raw* against *project_root* and classify where it landed.
 
     **Nothing is removed before the shape is judged.** An earlier version
@@ -299,7 +466,7 @@ def resolve_edit_path(raw: str | None, project_root: Path) -> ResolvedEditPath:
         return ResolvedEditPath(scope=PathScope.ABSENT)
     supplied = raw
     label = _echo(supplied)
-    rejection = rejection_reason(supplied)
+    rejection = rejection_reason(supplied, flavour=flavour)
     if rejection:
         return _malformed(label, rejection)
     candidate = Path(supplied)

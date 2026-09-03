@@ -29,8 +29,12 @@ already, and it would arrive here by deleting a job and forgetting a tuple.
 WHAT THE PROJECT IS THEREFORE NOT CLAIMING. Nothing in this repository has ever
 executed on Windows, and by this decision nothing will. That is *unverified by
 decision* — a third state next to verified and broken, and the one this epic
-exists to keep visible: the backslash refusal in ``application/guards/paths.py``
-exists FOR Windows harnesses and has never run on one (``beadloom-mr2l.60``).
+exists to keep visible: the platform rules in ``application/guards/paths.py``
+answer for Windows harnesses and have never run under one. What CAN be settled
+without a runner is settled by making the platform an argument rather than an
+ambient fact (``beadloom-0mdo.33``, which closed ``beadloom-mr2l.60``'s residue);
+what cannot is a residual in ``flow-guards/SPEC.md``, never a mark no runner can
+flip.
 """
 
 from __future__ import annotations

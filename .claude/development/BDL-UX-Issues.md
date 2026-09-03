@@ -35,6 +35,17 @@
 
 ## Open Issues
 
+237. [2026-09-04] [MEDIUM] `bd merge-slot acquire --wait` does not wait, and cannot serialise agents that share one tracker identity
+
+    **Severity:** medium (the convention that keeps two agents out of one commit is the one that silently does nothing)
+    **Command:** `bd merge-slot acquire --wait` / `check`
+    **Context:** BDL-068 S4 wave 3, `beadloom-0mdo.33` about to commit beside `beadloom-67t1` in one working tree. Every launch prompt in this epic carries "take `bd merge-slot acquire --wait` before committing and `release` after".
+    **Issue:** two failures, and the second makes the first unfixable from here. `acquire --wait` returned **immediately** with `Slot held by v.zoologov, added to waiters queue (position 5)` and exit 0 — it queued and returned rather than waiting, so an agent that follows the instruction proceeds to commit exactly as if it had the slot. And the holder it named was `v.zoologov`, which is who **I** am: every role in this repository writes under one tracker identity, so the slot cannot tell the holder from the waiter. `bd show beadloom-merge-slot` says `Updated: 2026-09-03` — the hold is a day old and belongs to no live agent — and the queue carries four stale waiters (`coordinator`, `agent-viaj-12`, `agent-viaj-13`, `probe`) from sessions that ended. There is no safe move: waiting deadlocks on a stale hold, and `release` would release whatever a live neighbour holds.
+    **Why it matters:** this is the same root the review's independence check already reports rather than enforces — one identity for every role — arriving in a primitive that is supposed to be an exclusive lock. A mutex whose holder is indistinguishable from its claimant is not a mutex, and `--wait` returning at once means nobody finds that out. The serialisation this epic's waves depend on is currently carried by the agents not colliding.
+    **Expected:** the slot is held by the BEAD, not by the user — `acquire <bead-id>`, so a holder can be compared with a live claim and a stale hold can be aged out with its bead's status. `--wait` blocks until the slot is free or a stated timeout expires, and says which it did; without a timeout it is a poll loop the caller has to write. A hold whose bead is closed is reclaimable, and `check` says how old the hold is rather than only who has it.
+    **The last observation, taken after the commit:** the slot then read `OPEN` with no holder at all, `Updated: 2026-09-03` unchanged. So across one wave's commit the primitive was, in order, held by a name indistinguishable from the claimant's, non-blocking on `--wait`, and empty — and nothing was serialised at any point. The commits did not collide because they touched different files, which is the property the slot exists so that nobody has to rely on.
+    **Related:** the review-brief independence report (one tracker identity for every role), #235 and #236 (the other two conventions in this wave whose isolation was assumed rather than checked).
+
 236. [2026-09-04] [MEDIUM] a clean room's verdict is decided by which optional extras it installed, and the convention never names them
 
     **Severity:** medium (the verdict is reported as a claim about the code, and three different verdicts about the same code were measured in one hour)

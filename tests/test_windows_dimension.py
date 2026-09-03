@@ -59,6 +59,8 @@ from __future__ import annotations
 
 import ast
 import ntpath
+import os
+import posixpath
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -68,8 +70,14 @@ import pytest
 
 from beadloom.application.guards import paths
 from beadloom.application.guards.paths import (
-    BACKSLASH_REJECTION,
+    NATIVE_PATHS,
+    POSIX_PATHS,
+    RESERVED_DEVICE_NAMES,
+    SEPARATOR_SPELLINGS,
+    WINDOWS_PATHS,
+    PathFlavour,
     PathScope,
+    malformed_remediation,
     rejection_reason,
     resolve_edit_path,
 )
@@ -237,6 +245,22 @@ def _markers_mentioning_platform(kind: str) -> list[_Marker]:
             if marker.kind == kind and "sys.platform" in marker.condition
         )
     return found
+
+
+def _module_attributes_read(module: Path) -> set[str]:
+    """Every ``<name>.<attr>`` the module's CODE reads, prose excluded.
+
+    Read through :mod:`ast` rather than by searching the text, because the
+    property is about what the module DOES and the module now explains what it
+    deliberately does not do — a text search cannot tell an access from the
+    sentence describing one, and would make the explanation itself a violation.
+    """
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    return {
+        f"{node.value.id}.{node.attr}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+    }
 
 
 def test_no_win32_skip_is_unjudged() -> None:
@@ -420,43 +444,40 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         assert PureWindowsPath("src\\app.py").parts == ("src", "app.py")
         assert PurePosixPath("src\\app.py").parts == ("src\\app.py",)
 
-    def test_the_shape_gate_refuses_the_spelling_a_windows_harness_produces(
+    def test_the_shape_gate_accepts_the_spelling_a_windows_harness_produces(
         self, tmp_path: Path
     ) -> None:
-        """FINDING, pinned rather than fixed — filed as beadloom-mr2l.60.
+        """CLOSED by beadloom-0mdo.33; this row is the finding turned round.
 
-        ``rejection_reason`` refuses a backslash unconditionally, so on Windows
-        it refuses ``src\\app.py`` — the spelling a Windows harness natively
-        produces and the one ``pathlib`` there reads correctly. The guard is
-        fail-CLOSED (an ``error`` verdict at exit 2, not a bypass), but every
-        edit on a Windows machine would be refused, and the stated remediation
-        ("supply the target as a POSIX path") is not something the harness can
-        do. The refusal's own justification — that the guard and the writer
-        "would not be looking at the same file" — is the reverse of true there:
-        it is the REFUSAL that stops them looking at the same file.
+        It used to assert the defect: ``rejection_reason`` refused a backslash
+        unconditionally, so on Windows it refused ``src\\app.py`` — the spelling
+        a Windows harness natively produces and the one ``pathlib`` there reads
+        correctly — which made every guarded edit there an ``error`` at exit 2
+        with a remediation ("supply the target as a POSIX path") the harness
+        cannot carry out.
 
-        Not fixed in BDL-061.39 ON PURPOSE, and still not fixed here. Relaxing
-        the rule where ``os.sep == "\\\\"`` would replace one unverified Windows
-        claim with another, which is the defect rather than the remedy; it is a
-        product change and it is beadloom-mr2l.60, which stays open.
-
-        WHAT CHANGED IN beadloom-mr2l.64 is who settles the prediction. .39
-        expected the ``tests-windows`` leg to adjudicate a strict xfail; the
-        owner withdrew that leg on cost, so nothing will. The consequence is
-        asserted here instead, one level higher than before: not only the
-        rejection reason but the VERDICT the guard reaches — ``MALFORMED``,
-        refused before any exclusion or check is applied to it.
+        The rule is now over the separator rather than over the character, so
+        the same string is refused where a backslash is an ordinary file-name
+        character and accepted where it is a separator. Both halves are asserted
+        here, on one machine, because the flavour is an argument: what the
+        withdrawn ``tests-windows`` leg would have adjudicated (beadloom-mr2l.64)
+        is decided by passing the platform in.
         """
         native_for_windows = ntpath.join("src", "app.py")
 
         assert native_for_windows == "src\\app.py"
-        assert rejection_reason(native_for_windows) == BACKSLASH_REJECTION
+        assert rejection_reason(native_for_windows, flavour=WINDOWS_PATHS) == ""
+        assert rejection_reason(native_for_windows, flavour=POSIX_PATHS) != ""
 
-        refused = resolve_edit_path(native_for_windows, tmp_path)
+        accepted = resolve_edit_path(
+            native_for_windows, tmp_path, flavour=WINDOWS_PATHS
+        )
 
-        assert refused.scope is PathScope.MALFORMED, refused
-        assert refused.rejection == BACKSLASH_REJECTION, refused
-        assert refused.relative is None, refused
+        assert accepted.scope is not PathScope.MALFORMED, accepted
+        # What the shape gate accepted names two components there, which is the
+        # property the refusal was destroying. The RESOLUTION of it is this
+        # machine's and is not a claim about Windows — see the SPEC's residual.
+        assert PureWindowsPath(native_for_windows).parts == ("src", "app.py")
 
     def test_a_drive_letter_is_a_root_there_and_a_directory_name_here(self) -> None:
         """The SPEC's drive-letter paragraph is platform-conditional and says it is not.
@@ -530,49 +551,290 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         assert resolved.scope is PathScope.INSIDE, resolved
         assert resolved.relative == "src/app.py", resolved
 
-    def test_the_module_that_refuses_contains_no_platform_branch(self) -> None:
-        """Why the row above transfers to Windows at all, stated as a measurement.
+    def test_the_module_that_refuses_names_no_platform(self) -> None:
+        """The licence for measuring the other platform here, after the fix.
 
-        A verdict measured here is a claim about there only if the code cannot
-        take a different branch there. ``paths.py`` reads no ``sys.platform`` and
-        no ``os.name`` — nor does anything else under ``src/``, measured
-        repo-wide in BDL-061.39 — so the refusal is one code path on every
-        operating system, and what varies is only the STRING the harness hands
-        it, which ``ntpath`` renders exactly.
+        Before beadloom-0mdo.33 this row said the module had NO platform
+        dependence at all, and that was the whole trouble: one code path
+        everywhere meant the backslash refusal fired on the platform where a
+        backslash is the separator. The module is platform-dependent now, and
+        the property that replaces "no dependence" is a narrower one — the
+        dependence goes through what :mod:`os` DECLARES about this machine
+        (``os.sep``, ``os.altsep``) and never through what the platform is
+        CALLED. ``sys.platform`` and ``os.name`` are still absent, which is what
+        keeps the flavour a value the suite can substitute rather than a branch
+        only a Windows runner could enter.
 
-        This is the row that turns "the guard would refuse every Windows edit"
-        from reasoning into a composition of measurements. If a platform branch
-        is ever added here, that composition stops holding and this fails, which
-        is the correct moment to be told.
+        If a ``sys.platform`` branch is ever added here, every Windows row in
+        this class stops being a measurement and becomes a prediction again,
+        and this is the row that says so.
         """
-        source = Path(paths.__file__).read_text(encoding="utf-8")
+        read = _module_attributes_read(Path(paths.__file__))
 
-        assert "sys.platform" not in source
-        assert "os.name" not in source
+        assert "sys.platform" not in read
+        assert "os.name" not in read
+        assert "os.sep" in read
 
-    def test_the_backslash_verdict_is_reached_before_any_call_the_platform_owns(
-        self, monkeypatch: pytest.MonkeyPatch
+    def test_the_native_flavour_is_the_one_pathlib_itself_uses(self) -> None:
+        """Two independent derivations of the same fact must agree.
+
+        ``NATIVE_PATHS`` is chosen by ``os.sep``; ``pathlib`` chooses its own
+        class by ``os.name``. If those ever disagreed, the guard would judge a
+        name under one platform's rules and resolve it under another's — so the
+        agreement is asserted rather than assumed, and it is the assertion that
+        would bite on a runner this project does not have.
+        """
+        assert (NATIVE_PATHS is WINDOWS_PATHS) is isinstance(Path(), PureWindowsPath)
+        assert NATIVE_PATHS.separators == {sep for sep in (os.sep, os.altsep) if sep}
+        assert isinstance(Path(), NATIVE_PATHS.parser)
+
+    @pytest.mark.parametrize(
+        ("label", "raw", "flavour"),
+        [
+            ("a foreign separator", "src\\app.py", POSIX_PATHS),
+            ("a trailing dot", "src/app.py.", WINDOWS_PATHS),
+            ("a trailing space", "src/app.py ", WINDOWS_PATHS),
+            ("a reserved device name", "docs/CON.md", WINDOWS_PATHS),
+        ],
+    )
+    def test_every_platform_rule_is_decided_before_the_call_the_platform_owns(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        label: str,
+        raw: str,
+        flavour: PathFlavour,
     ) -> None:
-        """The second half of the licence: the refusal is decided lexically.
+        """The second half of the licence: every platform rule is lexical.
 
         ``rejection_reason`` ends with ``os.fsencode``, whose codec IS the
         machine's — the one line in the function whose behaviour a Windows
-        kernel could change. The backslash rule is decided before it, so the
-        verdict for a native Windows target cannot depend on that codec.
-        Asserted by making the call fail loudly if it is ever reached, rather
-        than by reading the source and believing the order.
+        kernel could change. Each rule that differs between the two flavours is
+        decided before it, so the answer this class measures for a platform is
+        the answer that platform would give. Asserted by making the call fail
+        loudly if it is ever reached, rather than by reading the source and
+        believing the order.
+
+        Parametrised over all four rules rather than over the backslash alone:
+        the row that only covered the backslash was true and stopped being
+        enough the moment the name-layer rules were added, which is the shape of
+        every finding in this slice.
         """
 
         def unreachable(_: str) -> bytes:
             raise AssertionError(
-                "os.fsencode was reached for a backslash target, so the refusal "
-                "is not purely lexical and the Windows verdict measured in this "
-                "class no longer follows from a POSIX run"
+                f"os.fsencode was reached for {label}, so the rule is not "
+                "purely lexical and the Windows verdicts measured in this class "
+                "no longer follow from a run on this machine"
             )
 
         monkeypatch.setattr(paths.os, "fsencode", unreachable)
 
-        assert rejection_reason(ntpath.join("src", "app.py")) == BACKSLASH_REJECTION
+        assert rejection_reason(raw, flavour=flavour) != ""
+
+
+class TestWhatTheNameLayerOwesOnWindows:
+    """The rules the shape gate never asked for, and this bead's item 3.
+
+    The Win32 name layer does not merely PARSE a name, it REWRITES one: it
+    strips a trailing dot or space, and it resolves a reserved device name to a
+    character device in whatever directory it appears. Each is exactly the
+    condition ``paths.py`` exists for — the guard records one file and the
+    writer touches another — and each is a stronger argument for a refusal than
+    the backslash the module used to refuse instead.
+
+    Every row runs on whatever machine collects it, by passing the platform in.
+    What that cannot reach — whether the Win32 layer strips in the way this
+    assumes, and what ``Path.resolve`` then does with the accepted name — is a
+    residual in the SPEC, not a prediction here.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "raw"),
+        [
+            ("a trailing dot on the file", "src/app.py."),
+            ("a trailing space on the file", "src/app.py "),
+            ("a trailing dot on a directory", "src./app.py"),
+            ("a trailing space on a directory", "src /app.py"),
+        ],
+    )
+    def test_a_name_the_layer_would_rewrite_is_refused_there_and_kept_here(
+        self, tmp_path: Path, label: str, raw: str
+    ) -> None:
+        """Refused where the layer rewrites, accepted where nothing does.
+
+        Both directions, because a rule applied on the wrong platform is the
+        defect this bead is repairing: these are ordinary, legal names on a
+        POSIX filesystem and refusing them there would be the same class of
+        over-refusal one platform further on.
+        """
+        refused = resolve_edit_path(raw, tmp_path, flavour=WINDOWS_PATHS)
+
+        assert refused.scope is PathScope.MALFORMED, f"{label}: {refused}"
+        assert refused.relative is None, label
+        assert "strips" in refused.rejection, refused.rejection
+
+        kept = resolve_edit_path(raw, tmp_path, flavour=POSIX_PATHS)
+
+        assert kept.scope is PathScope.INSIDE, f"{label}: {kept}"
+
+    @pytest.mark.parametrize("device", sorted(RESERVED_DEVICE_NAMES))
+    def test_every_reserved_device_name_is_refused_where_it_names_a_device(
+        self, tmp_path: Path, device: str
+    ) -> None:
+        """Quantified over the declared set, not over three examples of it.
+
+        A write to ``CON`` on Windows reaches the console and creates no file at
+        all, so a guard that resolved it to a path under the project root would
+        be reporting about a file nobody wrote. The extension does not save it —
+        ``CON.md`` is the console too — and neither does the directory, which is
+        why the rule looks at every component.
+        """
+        raw = f"docs/{device}.md"
+
+        refused = resolve_edit_path(raw, tmp_path, flavour=WINDOWS_PATHS)
+
+        assert refused.scope is PathScope.MALFORMED, refused
+        assert "device" in refused.rejection, refused.rejection
+
+        kept = resolve_edit_path(raw, tmp_path, flavour=POSIX_PATHS)
+
+        assert kept.scope is PathScope.INSIDE, kept
+
+    def test_the_device_name_is_matched_however_it_is_cased(
+        self, tmp_path: Path
+    ) -> None:
+        """Win32 matches the device name case-insensitively, so the rule must.
+
+        A rule that only caught ``CON`` would be a spelling again: ``con`` and
+        ``Con`` reach the same device.
+        """
+        for spelling in ("con", "Con", "cOn"):
+            refused = resolve_edit_path(
+                f"docs/{spelling}", tmp_path, flavour=WINDOWS_PATHS
+            )
+
+            assert refused.scope is PathScope.MALFORMED, refused
+
+    def test_a_name_that_merely_starts_with_a_device_name_is_not_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """The over-refusal direction, which is the one this bead is about.
+
+        ``console.py`` and ``nullable.md`` are not devices. A rule written as a
+        prefix test would refuse them, and a guard that refuses ordinary project
+        files is exactly the failure the backslash rule produced on Windows.
+        """
+        for raw in ("src/console.py", "docs/nullable.md", "src/comms/app.py"):
+            resolved = resolve_edit_path(raw, tmp_path, flavour=WINDOWS_PATHS)
+
+            assert resolved.scope is PathScope.INSIDE, resolved
+
+    def test_the_characters_win32_forbids_outright_are_deliberately_not_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """The stated boundary of the rule, asserted so it cannot drift into one.
+
+        ``<>"|?*`` are illegal in a Win32 file name, and a write to such a name
+        FAILS — loudly, with nothing created. The shape gate exists to stop the
+        guard and the writer looking at different files, and a write that never
+        happens produces no such disagreement, so refusing here would be the
+        guard inventing a naming policy nobody declared. Stated in the module
+        docstring and in the SPEC; pinned here so a later "while we are at it"
+        has to change a test that says why.
+        """
+        for raw in ("src/a<b.py", "src/a?b.py", "src/a*b.py", 'src/a"b.py'):
+            resolved = resolve_edit_path(raw, tmp_path, flavour=WINDOWS_PATHS)
+
+            assert resolved.scope is PathScope.INSIDE, resolved
+
+
+class TestTheRuleTheBackslashWasASpellingOf:
+    """Item 2: the refusal is over the separator, not over one character.
+
+    The old rule refused ``\\`` unconditionally and justified it with a sentence
+    about "the harness's platform" and "this one" — two platforms, where the
+    guard runs in the harness's own process tree and there is one. The rule is
+    now: a separator spelling THIS platform does not read as a separator is
+    refused, because the guard cannot tell whether such a target names one file
+    or several. On a POSIX machine that is the same single character as before,
+    which is why nothing about this project's own behaviour moves.
+    """
+
+    def test_the_refused_set_is_derived_from_the_platforms_own_declarations(
+        self,
+    ) -> None:
+        """No spelling is authored: both flavours come from the stdlib's modules.
+
+        A hand-written set is a spelling of the rule and would be wrong the same
+        way the backslash was — right until the platform it describes is not the
+        one running.
+        """
+        assert POSIX_PATHS.separators == {posixpath.sep}
+        assert WINDOWS_PATHS.separators == {ntpath.sep, ntpath.altsep}
+        assert sorted(SEPARATOR_SPELLINGS) == ["/", "\\"]
+        assert SEPARATOR_SPELLINGS - WINDOWS_PATHS.separators == set()
+
+    def test_a_mixed_spelling_is_legal_where_both_are_separators(
+        self, tmp_path: Path
+    ) -> None:
+        """``src\\sub/app.py`` is one unambiguous path on Windows and was refused.
+
+        The row beadloom-mr2l.60 named when it said to consider ``os.altsep``:
+        the mixed form is what a Windows harness produces when a POSIX-spelled
+        relative path is joined onto a native one, and there is nothing
+        ambiguous about it there.
+        """
+        assert PureWindowsPath("src\\sub/app.py").parts == ("src", "sub", "app.py")
+
+        accepted = resolve_edit_path("src\\sub/app.py", tmp_path, flavour=WINDOWS_PATHS)
+
+        assert accepted.scope is not PathScope.MALFORMED, accepted
+
+    def test_the_forward_slash_is_never_foreign_on_either_platform(
+        self, tmp_path: Path
+    ) -> None:
+        """The rule cannot refuse the spelling every platform reads.
+
+        Stated as its own row because it is the one way a rule quantified over a
+        SET could be worse than the character it replaced: if a flavour ever
+        declared ``/`` foreign, every ordinary target in this repository would be
+        refused, on both platforms at once.
+        """
+        for flavour in (POSIX_PATHS, WINDOWS_PATHS, NATIVE_PATHS):
+            resolved = resolve_edit_path("src/app.py", tmp_path, flavour=flavour)
+
+            assert resolved.scope is PathScope.INSIDE, resolved
+
+    def test_the_reason_no_longer_describes_two_platforms_at_once(self) -> None:
+        """The half of the finding that is about the SENTENCE, not the verdict.
+
+        beadloom-mr2l.60's real complaint: both clauses of the old reason were
+        true and they were about different machines. The reason now names the
+        platform the SPELLING comes from — which is a fact about the string —
+        and this one, which is a fact about the process; those can differ
+        without the sentence being false.
+        """
+        reason = rejection_reason("src\\app.py", flavour=POSIX_PATHS)
+
+        assert "a backslash" in reason
+        assert "the platform that spelling comes from" in reason
+        assert "harness" not in reason
+
+    def test_the_way_out_is_spelled_in_the_platforms_own_separators(self) -> None:
+        """A remediation that names a platform is a way out only on that one.
+
+        It read "supply the target as a POSIX path", which on Windows names
+        something the harness there cannot produce — the finding one layer down
+        from the refusal itself.
+        """
+        assert malformed_remediation(POSIX_PATHS).startswith(
+            "supply the target as a path this platform spells literally ('/'"
+        )
+        assert "'/' or " + repr("\\") in malformed_remediation(WINDOWS_PATHS)
+        assert "reserved device name" in malformed_remediation(WINDOWS_PATHS)
+        assert "reserved device name" not in malformed_remediation(POSIX_PATHS)
+        for flavour in (POSIX_PATHS, WINDOWS_PATHS):
+            assert "POSIX" not in malformed_remediation(flavour)
 
 
 class TestTheSymlinkCapabilityProbe:
