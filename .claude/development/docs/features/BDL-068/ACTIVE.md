@@ -153,10 +153,14 @@ filed; this name is the free mitigation and later slices keep it.
     what it installed). **As its own gate owner:** the combined tree at `ded748d` is green —
     8 657 passed, 0 failed, `beadloom ci` rc 0 foreground and unpiped, `HEAD` verified unchanged
     before and after, and `mypy` clean against all four declared target versions. Every verdict
-    in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. The tree carries four files
-    from outside this bead (`onboarding/bootstrap.py`, `doc_classify.py`,
-    `services/commands/setup.py` and two tests), uncommitted before this bead began and left
-    that way. Four existing tests went red and were UPDATED rather than the rule weakened —
+    in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. **A claim this bead made and
+    then had to withdraw:** the combined-tree verdict was first reported as taken over a tree
+    also carrying four uncommitted files from outside the bead. It was not. Those four are
+    byte-identical to `HEAD` and their mtimes predate this bead's first command, so the launch
+    context's `git status` snapshot was stale and was restated instead of re-derived — the
+    bead's own defect, one layer up. The verdict itself is unaffected and both commits carry
+    only this bead's files. Four existing tests went red and were UPDATED rather than the rule
+    weakened —
     each now says what its declarations were held against — which is the same move `mr2l.80`
     made when the environment default stopped meaning clean.
 - [ ] S5 — the tracker adapters
