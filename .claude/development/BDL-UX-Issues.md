@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+238. [2026-09-04] [LOW] this repository's own `.gitignore` drifted from the ignore block Beadloom emits, and nothing compares the two
+
+    **Severity:** low here, medium for an early adopter (an upgrade adds a written file that the ignore block written at `init` time does not name)
+    **Command:** `beadloom init` / `beadloom config-check`, `onboarding/ignore_block.py`
+    **Context:** BDL-068 S4. `.beadloom/guard-firings.1.jsonl` appeared as an untracked file during wave 3 and `beadloom waves` would have reported it as a path owned by no bead. It appeared now, and not earlier, because `beadloom-0mdo.31` widened the guard matcher to include `Bash` in the same slice, so firings roughly tripled and the log rotated for the first time.
+    **Issue:** the pattern this project SHIPS is already correct — `ignore_block.py:95` emits `.beadloom/guard-firings*.jsonl`, a glob, and its own docstring explains the rotation it covers. This repository's `.gitignore` carries `.beadloom/guard-firings.jsonl`, the exact filename, written before rotation existed and never re-derived. So the product is right and its own repository is stale, and the only reason anyone noticed is that an unrelated bead made the rotation happen.
+    **Why it is the epic's own shape:** a rule stated as a SPELLING rather than as a SHAPE, in the one file where nobody looks for rules. And a second layer: the ignore block is GENERATED for an adopter and hand-maintained here, so the two can only agree by coincidence. An adopter who ran `init` before the rotation feature has the same stale line and nothing will tell them either.
+    **Expected:** `config-check` compares the ignore block on disk against the block the current version emits, and reports the drift — the same both-directions check `beadloom-0mdo.27` built for role duties, applied to the other thing `init` writes into a repository it does not own. Fixing this repository's line is the instance; the check is the class.
+    **Fixed (instance):** `.gitignore` now carries the shipped glob. The class is filed as a bead under S6.
+
 237. [2026-09-04] [MEDIUM] `bd merge-slot acquire --wait` does not wait, and cannot serialise agents that share one tracker identity
 
     **Severity:** medium (the convention that keeps two agents out of one commit is the one that silently does nothing)
