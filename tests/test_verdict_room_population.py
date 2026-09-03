@@ -27,14 +27,18 @@ whole Gate down with it, and the Gate is where this instrument was installed.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 import pytest
 from click.testing import CliRunner, Result
 
-from beadloom.application.rooms import current_room, take_census
+from beadloom.application.rooms import RUNNER_PLATFORMS, current_room, take_census
 from beadloom.services.cli import main
+from tests.acceptance.steps.room_judgement import (
+    legs_entered_that_do_not_match,
+    legs_not_entered_naming_no_difference,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -410,3 +414,105 @@ class TestThisRepositorysOwnRoomsStayDerived:
         for comparison in census.not_entered:
             assert comparison.why.strip(), comparison.room.label
             assert ":" in comparison.why, comparison.room.label
+
+
+class TestTheScenarioIsJudgedInsideADeclaredLegToo:
+    """`a run names the declared rooms it did not enter`, over a leg this run IS in.
+
+    The scenario's third step judges what `entered` means, and no run on a
+    developer machine can reach it: this repository's legs are ubuntu-latest and
+    the owner's machine is Darwin. Until this bead the step did not run in CI
+    either -- the scenario skipped on Linux, which is the one place a leg is
+    entered -- so the branch was unreachable in every room the suite is run in.
+
+    Nothing is doubled to reach it. The project written here declares a runner
+    label for THIS run's platform and the interpreter version THIS run is on, so
+    `take_census` reports one leg entered and one not, for real, in whatever room
+    the suite is executed in.
+    """
+
+    def _project_declaring_this_run(self, tmp_path: Path) -> Path:
+        """A workflow declaring THIS run's platform and interpreter.
+
+        The runner label is inverted from the report's own vocabulary, so a
+        platform added there is exercised here by that act rather than by
+        somebody remembering this file.
+        """
+        current = current_room()
+        label = next(
+            f"{family}-latest"
+            for family, platform in RUNNER_PLATFORMS.items()
+            if platform == current.dimensions["os"]
+        )
+        here = current.dimensions["python"]
+        elsewhere = "3.9" if here != "3.9" else "3.8"
+        workflows = tmp_path / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text(
+            "jobs:\n"
+            "  tests:\n"
+            f"    runs-on: {label}\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            f'        python-version: ["{here}", "{elsewhere}"]\n',
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    def _payload(self, project: Path) -> dict[str, Any]:
+        outcome = CliRunner().invoke(main, ["rooms", "--project", str(project), "--json"])
+        assert outcome.exit_code == 0, outcome.stdout
+        payload: dict[str, Any] = json.loads(outcome.stdout)
+        return payload
+
+    def test_this_run_is_inside_exactly_one_of_the_two_declared_legs(
+        self, tmp_path: Path
+    ) -> None:
+        """The arrangement, asserted before the judgement rests on it.
+
+        Two legs differing only in the interpreter, one of them this run's: an
+        arrangement that stopped producing an entered leg would make the test
+        below vacuous rather than red, which is the failure this epic keeps
+        finding.
+        """
+        # Arrange / Act
+        payload = self._payload(self._project_declaring_this_run(tmp_path))
+
+        # Assert
+        assert [room["entered"] for room in payload["declared"]].count(True) == 1
+
+    def test_the_scenario_holds_over_the_leg_this_run_entered(self, tmp_path: Path) -> None:
+        """Both judgements the scenario makes, driven inside a declared leg."""
+        # Arrange
+        payload = self._payload(self._project_declaring_this_run(tmp_path))
+
+        # Act / Assert
+        assert legs_entered_that_do_not_match(payload) == []
+        assert legs_not_entered_naming_no_difference(payload) == []
+
+    def test_a_leg_claiming_a_run_it_does_not_match_is_reported(self, tmp_path: Path) -> None:
+        """TESTS MUST BITE: the judgement's failing branch, which nothing reached.
+
+        A report that called a leg entered while the run differs from it is the
+        false green the whole instrument exists to remove, and the step that
+        catches it never executed anywhere before this bead.
+        """
+        # Arrange
+        payload = self._payload(self._project_declaring_this_run(tmp_path))
+        entered = next(room for room in payload["declared"] if room["entered"])
+        entered["dimensions"]["python"] = "2.7"
+
+        # Act / Assert
+        assert legs_entered_that_do_not_match(payload) == [entered]
+
+    def test_a_leg_dismissed_without_naming_the_difference_is_reported(
+        self, tmp_path: Path
+    ) -> None:
+        """The other judgement's failing branch, over a leg this run is not in."""
+        # Arrange
+        payload = self._payload(self._project_declaring_this_run(tmp_path))
+        dismissed = next(room for room in payload["declared"] if not room["entered"])
+        dismissed["why"] = "the leg is not this one"
+
+        # Act / Assert
+        assert legs_not_entered_naming_no_difference(payload) == [dismissed]

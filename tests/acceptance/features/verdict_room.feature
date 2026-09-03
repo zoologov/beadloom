@@ -27,10 +27,10 @@ Feature: a verdict names the room it was taken in
   Scenario: a run names the declared rooms it did not enter
     Given a project whose packaging declares support for Python 3.10 and 3.11
     And a workflow job running on "ubuntu-latest" over both versions
-    And this run is taken on a machine that is not that runner
     When the rooms are reported
-    Then both legs are reported as not entered
-    And the dimension that differs is named
+    Then at least one declared leg is reported as not entered
+    And every leg not entered names the dimension that differs
+    And every leg reported as entered matches this run in every dimension it declares
 
   Scenario: a leg the report cannot describe is named rather than dropped
     Given a workflow job running on a runner label the report has no platform for

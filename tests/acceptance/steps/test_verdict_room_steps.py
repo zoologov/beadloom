@@ -20,6 +20,11 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.cli import main
 
+from .room_judgement import (
+    legs_entered_that_do_not_match,
+    legs_not_entered_naming_no_difference,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -75,18 +80,6 @@ def _a_job_over_both(world: dict[str, Any], label: str) -> None:
         "      matrix:\n"
         f'        python-version: ["{first}", "{second}"]\n',
     )
-
-
-@given("this run is taken on a machine that is not that runner")
-def _not_that_runner(world: dict[str, Any]) -> None:
-    """Asserted rather than arranged: the room is derived, so it cannot be set."""
-    import platform
-
-    if platform.system() == "Linux":
-        pytest.skip(
-            "this scenario needs a run outside the declared leg; on Linux the "
-            "run may be inside it, which is the state the scenario contrasts with"
-        )
 
 
 @given("a workflow job running on a runner label the report has no platform for")
@@ -156,14 +149,41 @@ def _a_third_version(world: dict[str, Any]) -> None:
     assert "3.13" in {r["dimensions"]["python"] for r in payload["declared"]}
 
 
-@then("both legs are reported as not entered")
-def _both_not_entered(world: dict[str, Any]) -> None:
-    assert [r["entered"] for r in world["payload"]["declared"]] == [False, False]
+@then("at least one declared leg is reported as not entered")
+def _at_least_one_not_entered(world: dict[str, Any]) -> None:
+    """True in every room, which is the point of writing it this way.
+
+    The two legs differ only in the interpreter, so no run can be in both: on a
+    developer machine neither is entered, on the 3.10 leg one is. The claim the
+    scenario makes -- a verdict names the rooms it did not enter -- is the same
+    assertion at both arithmetics, and the earlier wording (`both legs are not
+    entered`) made it a claim about the machine instead. It then had to step
+    aside on Linux, so the scenario ran only where the feature is least
+    exercised.
+    """
+    declared = world["payload"]["declared"]
+    assert len(declared) == 2
+    assert [r for r in declared if not r["entered"]]
 
 
-@then("the dimension that differs is named")
-def _the_dimension_is_named(world: dict[str, Any]) -> None:
-    assert all("os" in r["why"] for r in world["payload"]["declared"])
+@then("every leg not entered names the dimension that differs")
+def _not_entered_names_the_difference(world: dict[str, Any]) -> None:
+    assert legs_not_entered_naming_no_difference(world["payload"]) == []
+
+
+@then("every leg reported as entered matches this run in every dimension it declares")
+def _entered_matches_this_run(world: dict[str, Any]) -> None:
+    """The half no run outside a declared leg can reach.
+
+    On a developer machine this iterates nothing and the scenario rests on the
+    two steps above; on a CI leg it is the only step that judges what `entered`
+    means. Both halves are written because the room decides which one carries
+    the scenario, and neither room is the one this suite is always run in. The
+    judgement lives in a named function so `tests/test_verdict_room_population`
+    can drive it over a run inside a declared leg, which no run on a developer
+    machine is.
+    """
+    assert legs_entered_that_do_not_match(world["payload"]) == []
 
 
 @then("that job is reported as unresolved")

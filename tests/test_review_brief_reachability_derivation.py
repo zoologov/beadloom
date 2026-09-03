@@ -28,6 +28,7 @@ BDL-UX #204 restored.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -79,6 +80,37 @@ def _project_fragment(project: Path, kind: str, name: str, text: str) -> None:
     fragment = project / ".beadloom" / "flow" / kind / f"{name}.md"
     fragment.parent.mkdir(parents=True, exist_ok=True)
     fragment.write_text(text, encoding="utf-8")
+
+
+#: Where the non-Latin work-item key case still runs, written into the skip it
+#: fires. A skip whose reason does not say where the case can fail is a case that
+#: quietly stopped being one.
+WHERE_A_KEY_OUTSIDE_THE_LATIN_ALPHABET_IS_STILL_READ = (
+    "a work-item folder whose name is spelled outside the Latin alphabet cannot "
+    "exist where the filesystem encoding is ASCII or an 8-bit codec, so this room "
+    "forbids the ARRANGEMENT and never reaches the assertion. It is not a skip "
+    "that can never fail: every UTF-8 filesystem runs it - macOS unconditionally, "
+    "and the `tests`, `gate` and `site-build` legs of every pull request - and it "
+    "steps aside only on the two `tests-locale` legs. That is the inverse of the "
+    "guard in tests/test_ci_locale_dimension.py, which runs on every CI leg and "
+    "nowhere else; this one runs everywhere except two of them. The reason is "
+    "spelled in ASCII on purpose: it is printed by `-ra` on precisely the legs "
+    "whose stdout cannot encode the name the case is about."
+)
+
+
+def _the_filesystem_can_spell(name: str) -> bool:
+    """Whether a path segment named *name* can exist in the room this run is in.
+
+    Derived from the encoding `os.mkdir` will use rather than from the platform:
+    a platform check would step aside on all of Linux, including the four `tests`
+    legs where this case executes today.
+    """
+    try:
+        name.encode(sys.getfilesystemencoding())
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _work_item(project: Path, key: str, *documents: str, body: str = "") -> Path:
@@ -353,9 +385,16 @@ class TestTheWorkItemChannelIsDerivedFromTheProject:
 
         A branch segment matches a folder name; nothing in the derivation
         requires that name to be spelled the way this project spells one.
+
+        The guard reads the ROOM, not the platform: a directory whose name this
+        run's filesystem encoding cannot hold is an arrangement the room forbids,
+        and the assertion never gets to be wrong. What the room can spell is what
+        `os.mkdir` will accept, so that is what is asked.
         """
         project = tmp_path / "proj"
         key = "設計-1"
+        if not _the_filesystem_can_spell(key):
+            pytest.skip(WHERE_A_KEY_OUTSIDE_THE_LATIN_ALPHABET_IS_STILL_READ)
         _work_item(project, key, "CONTEXT.md")
 
         channel = work_item_documents_channel(project, branch=f"features/{key}")
@@ -631,3 +670,54 @@ class TestTheBeadCommentCountNamesTheBeadItWasTakenOver:
         assert channel.carries == 1
         assert "beadloom-0mdo.28" in channel.reason
         assert _PROSE not in repr(report)
+
+
+class TestTheRoomDecidesWhetherTheCaseCanBeArranged:
+    """TESTS MUST BITE applies to a skip: its guard and its reason are asserted.
+
+    A skip that fires in the wrong rooms silently deletes a case, and nothing in
+    the suite notices — which is the whole lesson of the leg that produced this
+    bead. Both tests below execute in every room, including the two
+    `tests-locale` legs where the case they are about steps aside.
+    """
+
+    def test_the_case_steps_aside_where_the_filesystem_cannot_spell_the_key(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The guard fires, and the reason says where the case still fails.
+
+        Forcing the encoding is how this run enters a room it is not in: on the
+        `tests-locale` legs the setting is what the room already is, and here it
+        is what the room is not.
+        """
+        # Arrange
+        monkeypatch.setattr(sys, "getfilesystemencoding", lambda: "ascii")
+
+        # Act
+        with pytest.raises(pytest.skip.Exception) as stepped_aside:
+            TestTheWorkItemChannelIsDerivedFromTheProject().test_a_work_item_key_outside_the_latin_alphabet_is_still_read(
+                tmp_path
+            )
+
+        # Assert
+        assert "tests-locale" in str(stepped_aside.value)
+        assert "macOS" in str(stepped_aside.value)
+
+    def test_the_guard_reads_the_encoding_rather_than_the_platform(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A platform guard would delete the case on all of Linux.
+
+        The four `tests` legs are Linux with a UTF-8 filesystem and they run this
+        case today; only the locale legs cannot hold the name. So the question
+        asked is the encoding's, and both of its answers are pinned here rather
+        than left to whichever room the suite happens to be run in.
+        """
+        # Arrange / Act / Assert
+        assert _the_filesystem_can_spell("ALPHA-1")
+
+        monkeypatch.setattr(sys, "getfilesystemencoding", lambda: "ascii")
+        assert not _the_filesystem_can_spell("設計-1")
+
+        monkeypatch.setattr(sys, "getfilesystemencoding", lambda: "utf-8")
+        assert _the_filesystem_can_spell("設計-1")
