@@ -97,7 +97,12 @@ filed; this name is the free mitigation and later slices keep it.
     snapshot is now out of the subtraction base. **As this wave's gate owner:** the combined tree
     of `0mdo.33` + `67t1` is green — 8 622 passed, 0 failed, `beadloom ci` rc 0 foreground and
     unpiped, `sync-check PASS: 419 pair(s) fresh`. Darwin arm64 / CPython 3.13.7, 0 of the 21
-    declared rooms, so it is a claim about this machine and about no CI leg.
+    declared rooms, so it is a claim about this machine and about no CI leg. The tree measured is
+    `9030722`, which carries `e0dd14f` as well — a commit from outside this wave that landed
+    during the first attempt at this measurement, mid-collection, which is why the number above
+    comes from a second run on a settled tree with `HEAD` verified unchanged before and after. A
+    combined-tree verdict taken across a write is the same class as a clean room that cannot see
+    the bead beside it: it looks exactly like a correct measurement.
   - [x] `0mdo.33` — **`mr2l.60`'s residue**, items 2, 3 and 5; its measurements stand and were not
     redone. The rule is now over the SEPARATOR rather than over one character: the refused set is
     every spelling `ntpath`/`posixpath` declare minus this platform's own (`os.sep`, `os.altsep`),
