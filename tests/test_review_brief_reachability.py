@@ -200,6 +200,7 @@ class TestInspectedAndEmptyIsNotUninspected:
             branch=None,
             commits=None,
             since="main",
+            bead_id="alpha",
         )
         uninspected = {channel.name for channel in report.uninspected}
         assert CHANNEL_WORK_ITEM_DOCUMENTS in uninspected
@@ -219,7 +220,8 @@ class TestNothingCarriesTheAccountItCounts:
     def test_the_bead_comment_channel_carries_no_comment_text(self) -> None:
         account = "CHECKPOINT: the clause is a constant tuple"
         channel = bead_comments_channel(
-            [AuthorNote(text=account, author="dev", created="2026-09-03")]
+            [AuthorNote(text=account, author="dev", created="2026-09-03")],
+            bead_id="alpha",
         )
         assert channel.carries == 1
         assert account not in repr(channel)

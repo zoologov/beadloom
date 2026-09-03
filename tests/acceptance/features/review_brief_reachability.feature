@@ -67,3 +67,31 @@ Feature: the brief states what can reach the reviewer, per channel, and names a 
     When the reviewer's brief is assembled
     Then the "the launch prompt" channel was not inspected
     And the "the launch prompt" channel says only the reviewer can see it
+
+  # BDL-068.19-1, filed as a strict xfail by the test bead and reproduced by the
+  # S2 review: the config the prompts compose from was read OUTSIDE the guard the
+  # composition already had, so a `flow.yml` that will not parse raised out of the
+  # derivation and `review-brief` produced no brief at all. A report about what a
+  # reviewer can reach is worth nothing if a broken configuration file removes it.
+  @bead:beadloom-0mdo.28
+  Scenario: A project flow file that will not parse costs one channel and not the brief
+    Given a work item "ALPHA-1" carrying the documents "CONTEXT.md, ACTIVE.md"
+    And the review runs on the branch "features/ALPHA-1"
+    And the project's own flow file will not parse
+    And the reviewed range since "main" holds no commits
+    When the reviewer's brief is assembled
+    Then the "the work item's documents" channel was not inspected
+    And the "the work item's documents" channel gives its reason
+    And the "the commit bodies of the reviewed range" channel was inspected and carries 0 item(s)
+
+  # The count is scoped to ONE bead, and under this project's wave structure that
+  # bead is a review bead, which by construction carries no author account: the
+  # account of the change sits on the beads that made it. On the S2 review's own
+  # run `0 item(s)` stood beside 31,544 characters on two sibling beads.
+  @bead:beadloom-0mdo.28
+  Scenario: The bead comments channel names the one bead it counted and says the others are not counted
+    Given a bead "alpha" declaring the node scope "billing"
+    And the author recorded 3 comments on "alpha"
+    When the reviewer's brief is assembled
+    Then the "bead comments" channel names the bead it counted
+    And the "bead comments" channel says no other bead's comments are counted

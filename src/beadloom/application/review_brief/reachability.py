@@ -82,10 +82,43 @@ _FRAGMENT_SUFFIX = ".md.txt"
 #: written twice.
 LAUNCH_PROMPT_REASON = f"nothing in this process can see one, so: {DEFEAT_NOTICE}"
 
-#: Why bead comments are a channel at all: this command holds them, and says so.
-BEAD_COMMENTS_REASON = (
-    f"withheld by this command until {RELEASE_CONDITION}; {WITHHELD_REASON}"
+#: What is reported when the project's own ``flow.yml`` will not parse. The
+#: attribution of a document is DERIVED by composing the prompts, so a config
+#: that will not load costs this one channel and nothing else: the brief is still
+#: produced, and naming the malformed file is ``config-check``'s job — a second
+#: reporter of one fault is how two checks come to disagree about it. The same
+#: answer :func:`beadloom.application.doc_shape.section_requirements` gives one
+#: module away, for the same fault and the same reason.
+UNREADABLE_CONFIG_REASON = (
+    "the project's flow.yml will not parse, so no prompt could be composed"
 )
+
+#: What is said when the tracker names no bead, so the sentence still names the
+#: population it was counted over instead of trailing off.
+UNNAMED_BEAD = "the bead this brief is for"
+
+
+def bead_comments_reason(bead_id: str) -> str:
+    """Why bead comments are a channel, and WHOSE comments were counted.
+
+    The population is one bead. Under a wave structure the bead a brief is for is
+    a REVIEW bead, which by construction carries no author account: the account
+    of the change sits on the beads that MADE it, and this command neither reads
+    nor counts those. Measured on this feature's own S2 review, where
+    ``bead comments: 0 item(s)`` stood beside 31,544 characters on two sibling
+    beads — the number was right and the sentence a reader took from it was
+    false, which is BDL-UX #204's shape again: a count whose population is
+    unstated is read as a statement about the reviewer's knowledge.
+
+    Naming the counted bead is the whole repair. Counting the sibling beads, and
+    the tracker export inside the reviewed diff, are a WIDENING of the report and
+    are filed as BDL-UX #229.
+    """
+    return (
+        f"counted on {bead_id or UNNAMED_BEAD} and on no other bead — the beads "
+        "that made this change are neither read nor counted here; withheld by "
+        f"this command until {RELEASE_CONDITION}; {WITHHELD_REASON}"
+    )
 
 
 def _command_names() -> tuple[str, ...]:
@@ -123,7 +156,7 @@ def _composed_prompts(
 
 def prompts_naming_documents(
     project_root: Path | None = None, *, config: FlowConfig | None = None
-) -> dict[str, tuple[str, ...]]:
+) -> dict[str, tuple[str, ...]] | None:
     """Which composed prompts name which document, ``{document: (prompt, ...)}``.
 
     ``config`` defaults to the project's own ``flow.yml`` when a root is given
@@ -131,11 +164,22 @@ def prompts_naming_documents(
     :func:`beadloom.application.work_item_routing.task_init_routing` makes, so a
     project that never scaffolded the flow is still read against the shipped
     prompts rather than against nothing.
+
+    ``None`` is *the project's own ``flow.yml`` will not parse*, and it is not
+    ``{}``: composing nothing and composing every prompt to find none of them
+    names a document are two different facts about what a reviewer can reach, and
+    a single value for both hands :func:`work_item_documents_channel` a state it
+    cannot tell apart. That is :class:`Channel`'s own rule, applied to the
+    derivation the channel rests on rather than only to the channel.
     """
     if config is None:
-        config = (
-            doc_flow_config(project_root) if project_root is not None else DEFAULT_DOC_CONFIG
-        )
+        if project_root is None:
+            config = DEFAULT_DOC_CONFIG
+        else:
+            try:
+                config = doc_flow_config(project_root)
+            except FlowConfigError:
+                return None
     naming: dict[str, list[str]] = {}
     for label, text in _composed_prompts(config, project_root):
         for document in sorted(set(_DOCUMENT_RE.findall(text))):
@@ -145,12 +189,16 @@ def prompts_naming_documents(
     return {document: tuple(labels) for document, labels in sorted(naming.items())}
 
 
-def bead_comments_channel(notes: Sequence[AuthorNote]) -> Channel:
+def bead_comments_channel(notes: Sequence[AuthorNote], *, bead_id: str) -> Channel:
     """The author's comments, counted and attributed, never quoted.
 
     The items are each comment's author and date. That is what a reviewer needs
     to know an account exists and how much of it there is; the text is the thing
     being withheld, so it is not here and is not in the count's explanation.
+
+    ``bead_id`` is required rather than defaulted: this count's population is one
+    bead, and a report that cannot say which bead is the unstated window this
+    whole statement replaced.
     """
     items = tuple(
         f"{note.author or 'unattributed'} {note.created}".strip() for note in notes
@@ -159,7 +207,7 @@ def bead_comments_channel(notes: Sequence[AuthorNote]) -> Channel:
         name=CHANNEL_BEAD_COMMENTS,
         inspected=True,
         items=items,
-        reason=BEAD_COMMENTS_REASON,
+        reason=bead_comments_reason(bead_id),
     )
 
 
@@ -176,9 +224,11 @@ def work_item_documents_channel(
 ) -> Channel:
     """The documents of the work item this branch names, and who names them.
 
-    Four different ways this cannot be answered, each reported as itself rather
+    Five different ways this cannot be answered, each reported as itself rather
     than as an empty folder: no project root, no branch, a branch naming no work
-    item in the project's planning corpus, and a work item folder that is gone.
+    item in the project's planning corpus, a work item folder that is gone, and a
+    ``flow.yml`` that will not parse — the fifth being the one that used to raise
+    out of the command and cost the reviewer the whole brief (BDL-068.19-1).
     """
     if project_root is None:
         return Channel(
@@ -203,6 +253,12 @@ def work_item_documents_channel(
             ),
         )
     naming = prompts_naming_documents(project_root, config=config)
+    if naming is None:
+        return Channel(
+            name=CHANNEL_WORK_ITEM_DOCUMENTS,
+            inspected=False,
+            reason=UNREADABLE_CONFIG_REASON,
+        )
     items = tuple(
         _document_item(document, project_root, naming)
         for document in sorted(folder.glob("*.md"))
@@ -263,6 +319,7 @@ def reachability_of(
     branch: str | None,
     commits: Iterable[Commit] | None,
     since: str,
+    bead_id: str,
     config: FlowConfig | None = None,
 ) -> Reachability:
     """The whole statement, in the order a reviewer reads it.
@@ -270,10 +327,14 @@ def reachability_of(
     Bead comments first, because that is the channel this command acts on;
     the launch prompt last, because it is the one nothing here can measure and a
     reader who stops early should have read every answer before the absence.
+
+    ``bead_id`` names the bead the comment count was taken over. Every other
+    channel already states the window it was read over — the range, the folder,
+    the reason nothing could be looked at — and this one did not.
     """
     return Reachability(
         channels=(
-            bead_comments_channel(notes),
+            bead_comments_channel(notes, bead_id=bead_id),
             work_item_documents_channel(project_root, branch=branch, config=config),
             commit_bodies_channel(commits, since=since),
             launch_prompt_channel(),

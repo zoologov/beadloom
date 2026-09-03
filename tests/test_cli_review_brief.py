@@ -258,6 +258,27 @@ class TestRelease:
         assert _AUTHOR_TEXT not in result.output
         assert "no verdict is recorded" in result.output
 
+    def test_the_refusal_names_the_channel_and_the_bead_the_brief_named(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """One command, one vocabulary (BDL-068 S2 review, minor).
+
+        The BEFORE half states `bead comments` as a channel counted over ONE
+        bead. The refusal reported the same population as `N author comment(s)`
+        and named no bead, so the two halves of one command described one fact
+        two ways — and the refusal's count carried the unstated window the
+        reachability statement exists to remove.
+        """
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [_comment(_AUTHOR_TEXT)])
+        result = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--release", "--since", "main", "--project", str(project)],
+        )
+        assert result.exit_code == _EXIT_WITHHELD
+        assert "bead comments on a" in result.output
+        assert _AUTHOR_TEXT not in result.output
+
     def test_a_recorded_verdict_releases_the_account(
         self, tmp_path: Path, bd: Any
     ) -> None:

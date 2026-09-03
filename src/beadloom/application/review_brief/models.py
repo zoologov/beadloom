@@ -166,9 +166,16 @@ class WithheldNotes:
     """The author's account, reduced to a count and the condition that frees it.
 
     Absence must not be silence — the same rule that makes a suppressed lint
-    crossing and an excused document countable rather than implicit. A reviewer
-    that sees ``0 withheld`` learns the author wrote nothing; a reviewer that sees
-    ``6 withheld`` learns there is an account and that it is deliberately later.
+    crossing and an excused document countable rather than implicit. The count is
+    taken over ONE bead and that is the whole of what it says: ``6 withheld``
+    means there is an account on THIS bead and that it is deliberately later, and
+    ``0 withheld`` means this bead carries none.
+
+    It used to say that a reviewer seeing ``0 withheld`` learns the author wrote
+    nothing. That was measured false by 31,544 characters on this feature's own
+    S2 review, where the bead was a review bead and the account of the change sat
+    on the two beads that made it. What a reviewer can REACH is a different
+    question, and :class:`Reachability` answers it per channel.
     """
 
     count: int

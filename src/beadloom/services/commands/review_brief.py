@@ -416,11 +416,20 @@ def _render_brief(brief: ReviewBrief) -> None:
             click.echo(f"FINDING: {finding}", err=True)
 
 
-def _render_release(outcome: ReleaseOutcome, notes: Sequence[AuthorNote]) -> None:
+def _render_release(
+    outcome: ReleaseOutcome, notes: Sequence[AuthorNote], *, bead: str
+) -> None:
+    """The release half, in the vocabulary the brief half already speaks.
+
+    The refusal names the CHANNEL and the BEAD, because it reports a count of
+    things it does not show and that is exactly the count whose population has to
+    be stated. The release below it names neither: it prints the comments
+    themselves, so its population is on the screen under it.
+    """
     if outcome.refused_reason is not None:
         click.echo(
-            f"WITHHELD — {len(notes)} author comment(s) stay withheld: "
-            f"{outcome.refused_reason}",
+            f"WITHHELD — bead comments on {bead}: {len(notes)} item(s) stay "
+            f"withheld: {outcome.refused_reason}",
             err=True,
         )
         return
@@ -475,7 +484,7 @@ def _run_release(bead: str, project_root: Path, *, output_json: bool) -> int:
     if output_json:
         click.echo(json.dumps(_release_as_dict(outcome, notes), indent=2))
     else:
-        _render_release(outcome, notes)
+        _render_release(outcome, notes, bead=bead)
     return _release_exit_code(outcome)
 
 

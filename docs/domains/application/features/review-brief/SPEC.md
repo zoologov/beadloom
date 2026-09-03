@@ -80,11 +80,15 @@ defect this epic met three times (BDL-UX #171, #177, #179).
 
 ### Absence is never silence
 
-A withheld input is reported with its count: `N author comment(s) withheld`. A
-reviewer that sees `0 withheld` learns the author wrote nothing; a reviewer that
-sees `6 withheld` learns there is an account and that it is deliberately later.
-The same rule makes a suppressed lint crossing and an excused document printable
-rather than implicit.
+A withheld input is reported with its count, and the count names the bead it was
+taken over. `6 withheld` says there is an account on THIS bead and that it is
+deliberately later; `0 withheld` says this bead carries none, and says nothing
+about the beads that made the change. It used to say that a reviewer seeing `0
+withheld` learns the author wrote nothing, which was measured false by 31,544
+characters on this feature's own S2 review — the brief was for a review bead, and
+the account sat on the two beads that made the change (BDL-068 S2 review, Major
+1(a)). The same rule makes a suppressed lint crossing and an excused document
+printable rather than implicit.
 
 A change nobody could measure — no repository, no git, a base ref that does not
 resolve — comes back as `change_measured: false` with a finding, never as an
@@ -124,8 +128,8 @@ channels:
 
 | Channel | Inspected from | When it cannot be inspected |
 |---|---|---|
-| bead comments | the tracker's answer for this bead | never; a tracker that will not answer is exit `2` |
-| the work item's documents | the folder the branch's work item names | no project root, no branch, or a branch naming no work item in the planning corpus |
+| bead comments | the tracker's answer for THIS bead, named in the statement — the beads that made the change are neither read nor counted (widening it is BDL-UX #229) | never; a tracker that will not answer is exit `2` |
+| the work item's documents | the folder the branch's work item names | no project root, no branch, a branch naming no work item in the planning corpus, or a `flow.yml` that will not parse |
 | the commit bodies of the reviewed range | `git log <base>..HEAD` | git gave no answer |
 | the launch prompt | nothing | always — nothing in this process can observe one |
 
@@ -292,8 +296,8 @@ from beadloom.application.review_brief import (
     assemble_brief,           # -> ReviewBrief: the change, the specification, the reachability
     release_notes,            # -> ReleaseOutcome: the account, or the reason it is withheld
     verdict_recorded,         # -> str | None: the marker of the first recorded verdict
-    reachability_of,          # -> Reachability: the four channels
-    prompts_naming_documents, # -> {document: (prompt, ...)} derived from the composed prompts
+    reachability_of,          # -> Reachability: the four channels; `bead_id` names the count's population
+    prompts_naming_documents, # -> {document: (prompt, ...)}, or None when the project's flow.yml will not parse
 )
 ```
 

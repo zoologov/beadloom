@@ -33,6 +33,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.review_brief import (
+    CHANNEL_BEAD_COMMENTS,
+    CHANNEL_WORK_ITEM_DOCUMENTS,
+    RELEASE_CONDITION,
     Commit,
     bead_comments_channel,
     commit_bodies_channel,
@@ -116,6 +119,7 @@ def _worlds(project: Path) -> dict[str, Reachability]:
             branch="features/ALPHA-1",
             commits=[Commit(sha="0f1e2d3", subject="the fix", body_lines=4)],
             since="main",
+            bead_id="alpha",
         ),
         "blind": reachability_of(
             notes=(),
@@ -123,6 +127,7 @@ def _worlds(project: Path) -> dict[str, Reachability]:
             branch=None,
             commits=None,
             since="main",
+            bead_id="alpha",
         ),
     }
 
@@ -436,10 +441,12 @@ class TestTheDirectionOfTheStatement:
         project = tmp_path / "proj"
         project.mkdir()
         empty = reachability_of(
-            notes=(), project_root=project, branch=None, commits=(), since="main"
+            notes=(), project_root=project, branch=None, commits=(), since="main",
+            bead_id="alpha",
         )
         blind = reachability_of(
-            notes=(), project_root=project, branch=None, commits=None, since="main"
+            notes=(), project_root=project, branch=None, commits=None, since="main",
+            bead_id="alpha",
         )
         compared = 0
         for looked in empty.channels:
@@ -485,7 +492,8 @@ class TestTheDirectionOfTheStatement:
         """The tracker does not always record an author. The channel says so
         rather than dropping the comment out of the count or naming somebody."""
         channel = bead_comments_channel(
-            [AuthorNote(text=_PROSE), AuthorNote(text=_PROSE, author="dev", created="")]
+            [AuthorNote(text=_PROSE), AuthorNote(text=_PROSE, author="dev", created="")],
+            bead_id="alpha",
         )
         assert channel.carries == 2
         assert "unattributed" in channel.items[0]
@@ -494,35 +502,116 @@ class TestTheDirectionOfTheStatement:
 
 
 class TestWhatTheReportCannotSurvive:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-068.19-1: prompts_naming_documents reads the project's "
-            "flow.yml through doc_flow_config OUTSIDE the FlowConfigError guard "
-            "that _composed_prompts puts around compose(), so a malformed "
-            "flow.yml raises out of reachability_of and `review-brief` produces "
-            "no brief at all. The module's own rule is that a prompt which will "
-            "not compose contributes nothing and is not an error here, because "
-            "reporting a malformed config is config-check's job."
-        ),
-    )
-    def test_a_malformed_flow_config_costs_the_channel_and_not_the_brief(
-        self, tmp_path: Path
-    ) -> None:
-        """A report about what a reviewer can reach is worth nothing if a broken
-        configuration file removes the report."""
+    """FINDING BDL-068.19-1, filed here as a strict xfail by `beadloom-0mdo.19`
+    and reproduced by the S2 review before the fix landed.
+
+    The crash was the finding, so the case that was red stays exactly as it was
+    written and is joined by what the repair has to SAY. Reporting the folder as
+    inspected and empty would move the defect rather than remove it: the
+    documents are there, and only their attribution could not be derived.
+    """
+
+    @staticmethod
+    def _with_a_broken_config(tmp_path: Path) -> Path:
+        """A project whose work item exists and whose `flow.yml` will not parse."""
         project = tmp_path / "proj"
         _work_item(project, "ALPHA-1", "CONTEXT.md")
         (project / ".beadloom").mkdir(parents=True, exist_ok=True)
         (project / ".beadloom" / "flow.yml").write_text(
             "architecture: [unclosed\n", encoding="utf-8"
         )
+        return project
 
+    def test_a_malformed_flow_config_costs_the_channel_and_not_the_brief(
+        self, tmp_path: Path
+    ) -> None:
+        """A report about what a reviewer can reach is worth nothing if a broken
+        configuration file removes the report."""
         report = reachability_of(
             notes=(),
-            project_root=project,
+            project_root=self._with_a_broken_config(tmp_path),
             branch="features/ALPHA-1",
             commits=(),
             since="main",
+            bead_id="alpha",
         )
         assert len(report.channels) > 1
+
+    def test_the_channel_that_could_not_compose_says_so_and_carries_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """The folder holds `CONTEXT.md`. A channel reporting `0 item(s)` over a
+        document that is there is `Channel`'s own rule broken in the direction
+        the first pass could not see."""
+        channel = work_item_documents_channel(
+            self._with_a_broken_config(tmp_path), branch="features/ALPHA-1"
+        )
+        assert channel.name == CHANNEL_WORK_ITEM_DOCUMENTS
+        assert not channel.inspected
+        assert channel.items == ()
+        assert "flow.yml" in channel.reason
+        assert channel.statement().startswith(f"{CHANNEL_WORK_ITEM_DOCUMENTS}: NOT INSPECTED")
+
+    def test_the_derivation_answers_that_it_composed_nothing_rather_than_that_nothing_named(
+        self, tmp_path: Path
+    ) -> None:
+        """`None` is *the project's own flow.yml will not parse* and `{}` is
+        *every prompt composed and none named a document*. One value for both
+        would hand the channel a fact it cannot tell apart."""
+        project = self._with_a_broken_config(tmp_path)
+        assert prompts_naming_documents(project) is None
+        composed = prompts_naming_documents(
+            project, config=FlowConfig(tools=("claude",), architecture="ddd", stack=("python",))
+        )
+        assert composed is not None, "a config given by the caller is not the project's file"
+        assert composed, "the shipped prompts name documents"
+
+
+class TestTheBeadCommentCountNamesTheBeadItWasTakenOver:
+    """BDL-068 S2 review, Major 1(a). `bead comments: 0 item(s)` was measured
+    beside 31,544 characters on the two beads that made the change: the count is
+    scoped to ONE bead, and on a wave-structured slice that bead is a review bead
+    which by construction carries no author account. The number was right and the
+    sentence a reader took from it was false, which is BDL-UX #204's shape again
+    — a count whose population is unstated.
+    """
+
+    def test_the_statement_names_the_bead_the_count_was_taken_over(self) -> None:
+        channel = bead_comments_channel((), bead_id="beadloom-0mdo.28")
+        assert channel.name == CHANNEL_BEAD_COMMENTS
+        assert "beadloom-0mdo.28" in channel.statement()
+
+    def test_the_statement_says_the_other_beads_of_the_change_are_not_counted(self) -> None:
+        """The half a reader cannot supply: `0` on this bead says nothing about
+        the beads that made the change, and the sentence has to say so."""
+        statement = bead_comments_channel((), bead_id="beadloom-0mdo.28").statement()
+        assert "no other bead" in statement.lower()
+
+    def test_the_statement_still_says_what_this_command_withholds(self) -> None:
+        """The naming is added to the reason, not swapped for it."""
+        reason = bead_comments_channel((), bead_id="alpha").reason
+        assert "withheld by this command" in reason
+        assert RELEASE_CONDITION in reason
+
+    def test_a_report_with_no_bead_named_says_which_bead_rather_than_none(self) -> None:
+        """A tracker record with no id is not an occasion to print a dangling
+        sentence: the scope is named in words instead."""
+        statement = bead_comments_channel((), bead_id="").statement()
+        assert "the bead this brief is for" in statement
+        assert "  " not in statement
+
+    def test_the_whole_report_carries_the_named_count(self, tmp_path: Path) -> None:
+        """Through `reachability_of`, which is what the brief actually calls."""
+        report = reachability_of(
+            notes=[AuthorNote(text=_PROSE, author="dev", created="2026-09-03")],
+            project_root=tmp_path,
+            branch=None,
+            commits=None,
+            since="main",
+            bead_id="beadloom-0mdo.28",
+        )
+        channel = report.named(CHANNEL_BEAD_COMMENTS)
+        assert channel is not None
+        assert channel.carries == 1
+        assert "beadloom-0mdo.28" in channel.reason
+        assert _PROSE not in repr(report)

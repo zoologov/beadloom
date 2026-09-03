@@ -33,9 +33,11 @@ from beadloom.application.review_brief.models import (
     WithheldNotes,
 )
 from beadloom.application.review_brief.reachability import (
-    BEAD_COMMENTS_REASON,
     LAUNCH_PROMPT_REASON,
+    UNNAMED_BEAD,
+    UNREADABLE_CONFIG_REASON,
     bead_comments_channel,
+    bead_comments_reason,
     commit_bodies_channel,
     launch_prompt_channel,
     prompts_naming_documents,
@@ -52,7 +54,6 @@ from beadloom.application.review_brief.release import (
 )
 
 __all__ = [
-    "BEAD_COMMENTS_REASON",
     "CHANNEL_BEAD_COMMENTS",
     "CHANNEL_COMMIT_BODIES",
     "CHANNEL_LAUNCH_PROMPT",
@@ -68,7 +69,9 @@ __all__ = [
     "REFUSED_NO_VERDICT",
     "RELEASE_CONDITION",
     "SELF_RECORDED_VERDICT",
+    "UNNAMED_BEAD",
     "UNNAMED_VERDICT_AUTHOR",
+    "UNREADABLE_CONFIG_REASON",
     "VERDICT_MARKERS",
     "WITHHELD_REASON",
     "AuthorNote",
@@ -83,6 +86,7 @@ __all__ = [
     "WithheldNotes",
     "assemble_brief",
     "bead_comments_channel",
+    "bead_comments_reason",
     "commit_bodies_channel",
     "launch_prompt_channel",
     "prompts_naming_documents",

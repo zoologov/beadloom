@@ -185,6 +185,7 @@ def assemble_brief(
             branch=branch,
             commits=commits,
             since=measured_since,
+            bead_id=record.bead_id,
         ),
         findings=tuple(findings),
     )

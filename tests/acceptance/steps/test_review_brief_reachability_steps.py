@@ -142,6 +142,18 @@ def _empty_range(world: dict[str, Any], since: str) -> None:
     world["commits"] = []
 
 
+@given("the project's own flow file will not parse")
+def _unparsable_flow_config(world: dict[str, Any]) -> None:
+    """A `flow.yml` no loader can read, written where the project's own lives.
+
+    Malformed rather than merely wrong: an unclosed sequence fails in the YAML
+    parser, so the step does not depend on which key the schema validates first.
+    """
+    flow = world["project"] / ".beadloom" / "flow.yml"
+    flow.parent.mkdir(parents=True, exist_ok=True)
+    flow.write_text("architecture: [unclosed\n", encoding="utf-8")
+
+
 @given("git gave no answer for the reviewed range")
 def _no_git_answer(world: dict[str, Any]) -> None:
     world["commits"] = None
@@ -204,6 +216,17 @@ def _names_the_range(world: dict[str, Any], name: str) -> None:
 @then(parsers.parse('the "{name}" channel says only the reviewer can see it'))
 def _only_the_reviewer(world: dict[str, Any], name: str) -> None:
     assert "you" in _channel(world, name).reason.lower()
+
+
+@then(parsers.parse('the "{name}" channel names the bead it counted'))
+def _names_the_bead(world: dict[str, Any], name: str) -> None:
+    counted = world["record"].bead_id
+    assert counted in _channel(world, name).reason, _channel(world, name).reason
+
+
+@then(parsers.parse('the "{name}" channel says no other bead\'s comments are counted'))
+def _says_only_one_bead(world: dict[str, Any], name: str) -> None:
+    assert "no other bead" in _channel(world, name).reason.lower()
 
 
 @then("the two channels state themselves differently")
