@@ -33,6 +33,7 @@ One work item flows through the same wave sequence regardless of tool or stack:
 
 ```
 /task-init            scaffold the docs folder + a 4-role bead DAG
+      → explore       step 0.5: derive the `## Axes` section, BEFORE the type is chosen
   → /coordinator      orchestrate the waves, gated by bead dependencies
       → dev           TDD implementation
       → test          tests + coverage
@@ -42,6 +43,16 @@ One work item flows through the same wave sequence regardless of tool or stack:
       → Beadloom Gate (pre-push hook) runs `beadloom ci`; blocks the push on red
   → PR to main        CI re-runs the Gate as a required check (the true enforcement)
 ```
+
+**Five roles, four of them in the wave.** `explore` (BDL-068 S1.5) is launched by
+`/task-init` at step 0.5 and creates no bead, so the bead DAG stays four-role: it
+produces the input the type decision is made from, and the type decides which
+document set is scaffolded. The step is mandatory for every type and it runs
+before the type table is read, because the axis count is what says whether a work
+item is a bug. `beadloom docs quality` reports a simplified-route work item that
+carries no `## Axes` section (`routed-without-axes`) and one whose kept axes name
+more nodes than that route can hold (`route-not-supported-by-the-axes`), so the
+step is checked rather than trusted.
 
 The flow is **local-primary, CI-fallback**: the pre-push Gate catches drift on
 the author's machine before a push leaves it, while CI re-runs the same
@@ -112,8 +123,9 @@ agent's refresh and the deterministic gate are proposals/checks; the human merge
 The flow lives in a project's tool tree (`.claude/` for Claude Code, `.cursor/`
 for Cursor), in two kinds of unit:
 
-- **Role subagents** — `<tool>/agents/{dev,test,review,tech-writer}.md`. The
-  role protocols (TDD dev, test, read-only review, doc-refresh tech-writer),
+- **Role subagents** — `<tool>/agents/{dev,explore,review,tech-writer,test}.md`.
+  The role protocols (TDD dev, axis-deriving explore, test, read-only review,
+  doc-refresh tech-writer),
   launched as isolated subagents. As of **BDL-052** these are **composed**
   per-project from CORE + the repo's architecture + stack overlays (see the
   [role configurator](#the-role-configurator-bdl-052)) — they are no longer one
@@ -148,16 +160,17 @@ into the shipped core, and Beadloom's own project-specific rules live in its
 
 ### What each role is held to
 
-The role protocols are not four descriptions of the same job. Each carries duties the
-others do not, and BDL-061 S4 added three of them.
+The role protocols are not five descriptions of the same job. Each carries duties the
+others do not, BDL-061 S4 added three of them, and BDL-068 S1.5 added the fifth role.
 
 | Role | Duties the shipped CORE states |
 |------|--------------------------------|
+| `explore` | Read-only, and it runs BEFORE the work item has a type — `/task-init` step 0.5, not a wave. One fixed deliverable: the `## Axes` section `beadloom impact <target> --section` renders, every site a path and a line, the `In scope` column left undecided because that half is the person's. No narrative, no recommendation, and the axes are derived from the source rather than read out of a bead comment or a previous plan. |
 | `dev` | TDD (red → green → refactor); the `# beadloom:` annotation discipline that keeps the graph honest; architecture boundaries; cohesion-driven design. **BDD (S4):** acceptance criteria are Gherkin scenarios that RUN, written before the unit test and seen red first, each naming its bead and its node — or the work declares itself non-behavioural with a reason. |
 | `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice and the declared target is what gets checked. |
 | `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. **The brief first (S6):** step 1 is `beadloom review-brief <bead>`, both doc-freshness sources are derived from the change rather than from the author's note, and the account is read only after the verdict is recorded. |
 | `tech-writer` | Edits documentation only. Two staleness sources — `sync-check` and the dev's `API CHANGE:` notes — because a `reindex` can re-baseline hashes while the prose stays wrong. |
-| **all four** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. |
+| **all five** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. |
 
 Two of those duties have a mechanism behind them and one deliberately does not. The BDD
 duty is checked by the `scenario_coverage` rule
@@ -224,7 +237,7 @@ one implementation instead of three:
    truth).
 2. the **SHARED** core fragments (`SHARED_ROLE_FRAGMENTS`, BDL-061 S4), composed
    as a labelled `core:<name>` layer. Today that is `_writing`, the writing
-   standard, carried by all four roles instead of by `tech-writer` alone: the
+   standard, carried by every role instead of by `tech-writer` alone: the
    roles that produce intent documents had no standard at all. It is a layer and
    not a role, so `compose_role("_writing", …)` raises, and it is
    language-selectable like every other layer (`_writing.ru.md.txt` ships).
@@ -485,7 +498,7 @@ Both are described in full, with their measurements and their stated limits, in 
 `beadloom setup-agentic-flow` (in the `setup-*` family alongside
 `setup-rules` / `setup-mcp` / `setup-ai-techwriter`) drops, idempotently:
 
-- `<tool>/agents/{dev,test,review,tech-writer}.md` — **composed** from CORE +
+- `<tool>/agents/{dev,explore,review,tech-writer,test}.md` — **composed** from CORE +
   overlays for each configured tool (see [the configurator](#the-role-configurator-bdl-052));
   `.cursor/agents/*` plus the Cursor orchestrator pointer when `cursor` is
   configured.

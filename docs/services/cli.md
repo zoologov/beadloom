@@ -759,7 +759,7 @@ Check the project's planning documents against the shipped writing standard
 beadloom docs quality [--json] [--check NAME]... [--strict] [--project DIR]
 ```
 
-Nine checks, all `warn`:
+Eleven checks, all `warn`:
 
 | Check | Reports | Where it looks |
 |-------|---------|----------------|
@@ -772,8 +772,19 @@ Nine checks, all `warn`:
 | `empty-section` | a required section whose heading is there with nothing under it | the same, and not peer-relative: a heading answering nothing is a defect whatever the peers do |
 | `axes-without-a-seed` | an `## Axes` section stating axes without naming the seed they were derived from | the `## Axes` section |
 | `axis-without-a-scope-decision` | an axis row carrying the derivation's output and no decision | the same |
+| `routed-without-axes` | a work item on the simplified route (`bug`, `task`, `chore`) carrying no `## Axes` section in any of its documents | the work-item FOLDER, which is the unit that has a type |
+| `route-not-supported-by-the-axes` | a work item on the simplified route whose kept axes name more than one graph node | the same |
 
-The last four arrived with BDL-068 S1.4. The section requirements are DERIVED
+The middle four arrived with BDL-068 S1.4 and the last two with S1.5. The last
+two take the work-item FOLDER as their unit, because a route is a property of the
+item rather than of any one document it holds, and they are absolute rather than
+peer-relative: `missing-section` reported `BRIEF documents do not carry Axes
+(0/12)` against the KIND and nothing against any document, which is right for a
+convention an archive never adopted and wrong for the input to a decision. Only
+the simplified route is judged — the full route writes a PRD and an RFC and each
+passes an approval gate, so a mis-route there meets a person.
+
+The section requirements are DERIVED
 from the composed `/templates` command, so a project that appends a section to
 its own template layer makes it required by the same act. A required section no
 MAJORITY of a kind carries is reported once against the KIND, with its ratio
@@ -817,7 +828,7 @@ UTF-8 contract; one that does not decode is counted, printed as
 denominators. Counting a file nobody read as a file carrying nothing would turn
 an encoding accident into evidence about a project's templates.
 
-`--check` accepts the five check names above and nothing else; an unknown name
+`--check` accepts the eleven check names above and nothing else; an unknown name
 is an error and exits 1. `--json` carries `checks`, `read_nothing`, `kinds`,
 `kinds_read_by_nothing`, `unreadable` and `findings`.
 
@@ -844,6 +855,101 @@ beadloom docs quality --check pending-in-approved --json
 # Enforce it
 beadloom docs quality --strict
 ```
+
+### beadloom impact
+
+Who else writes this, who else calls it, and how many branches it has — derived
+from the source over a seed the command finds for itself (BDL-068 S1.2).
+
+```bash
+beadloom impact TARGET [--project DIR] [--root DIR] [--json] [--section]
+```
+
+TARGET is a path or a symbol name. The seed the answer is computed over is
+DERIVED from the target and named in the output together with the rule that found
+it, because the same derivation reports two writers under one seed and none under
+another — an answer that does not say what it was seeded with cannot be checked.
+A target no rule finds a sink for is reported as unresolved rather than answered
+over an empty set. Exits 1 when no file and no symbol matches TARGET.
+
+- `--root` — sweep this tree instead of the one derived from the target.
+- `--section` — render the answer as the `## Axes` section a work item's document
+  carries, with the `In scope` column left undecided.
+- `--json` — the whole answer as data: `seeds`, `co_writers`, `callers`,
+  `commands`, `boundary` and `unresolved`.
+
+**A branch count names the seat it was taken from.** Run on this repository:
+
+```
+$ beadloom impact src/beadloom/onboarding/scanner/bootstrap.py
+root swept: src/beadloom
+...
+- bootstrap_project (src/beadloom/onboarding/scanner/bootstrap.py:36): 3 branch(es), reaching a seed
+- init (src/beadloom/services/commands/setup.py:1255): 4 branch(es), reaching a seed, read from a caller's seat
+```
+
+Both numbers are right and they answer different questions. Three is the count of
+`bootstrap_project`, the function the target names, and it is the number BDL-067
+carried through nine review passes while the fourth branch it needed lived in
+`init` — a caller, one hop out. So the count alone is not the answer: the seat is
+part of it, and `--section` spells the same distinction in its rows
+(`init: 4 branch(es), 1 exit form(s), from a caller's seat`).
+
+`co_writers` and `callers` each carry `resolved` as well as their sites, because
+*no population* and *an empty population* are different statements. The swept
+root is printed as `root swept:` in every rendering and withdrawn as a claim when
+it is narrower than the project's source root
+(`sweep-narrower-than-the-project`). What that withdrawal does not yet reach is
+in the [Impact SPEC](../domains/application/features/impact/SPEC.md) under
+"Known ceilings". Read it before treating an empty axis as an absence.
+
+### beadloom scope-check
+
+Judge the paths a commit stages against the axes its work item declared
+(BDL-068 S1.6).
+
+```bash
+beadloom scope-check [--project DIR] [--since REF] [--branch NAME] [--porcelain] [--json]
+```
+
+The work item is the one the checked-out branch names, and its `## Axes` section
+is the scope a person approved. A bead may narrow freely inside that scope. A
+path that falls OUTSIDE it means the approval no longer covers the change, which
+is the re-plan trigger. Exit `2` when a path falls outside, `0` otherwise.
+
+**This reports. It does not prevent.** An agent with a shell can commit anything
+the file system allows. What the check raises is detectability — the crossing is
+named, with the axis it fell outside, at the moment it is made rather than at
+review.
+
+- `--since REF` — judge every path the branch changes against REF (`REF...HEAD`),
+  which is what a pull request contains, instead of only the staged ones.
+- `--branch NAME` — name the work item's branch instead of reading the
+  checked-out one.
+- `--porcelain` — one finding per line (`path:line`, check, excerpt), for a hook.
+- `--json` — the verdict plus `checked`, `reason`, `work_item`, `document`,
+  `scope`, `judged`, `unowned` and `undecided`.
+
+A clean run states its population rather than only its verdict. Measured on this
+branch, 2026-09-03:
+
+```
+$ beadloom scope-check --since origin/main
+Declared axes (BDL-068, against origin/main): Judged against the declared axes: 40 staged path(s) a node owns, 64 no node owns.
+```
+
+The 64 are counted and stated, never reported: a path no node owns — a document,
+a test, a graph YAML — is not a call site and has no axis to be outside of.
+Counting them as checked would be the false green the check exists to remove.
+
+There are five ways to have checked nothing — no branch, no work item, no graph
+index, no `## Axes` section and no answer from git — and each is reported as
+itself. A run that reports no findings and states no reason really did compare
+the paths.
+
+The rule, the two candidates measured against this repository's own history
+before either was written, and what an undecided row does are in the
+[Scope Check SPEC](../domains/doc-sync/features/scope-check/SPEC.md).
 
 ### beadloom axes
 
@@ -1310,11 +1416,12 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
-5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-08-24: `WARN | 243 document(s) read; measurable-goal 4, pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY`. The line prints the finding count and not the 27 accepted-without-witness statements the re-scope stopped deciding about; that limit is stated in the doc-quality SPEC.
+5. `docs-quality` — the eleven planning-document checks (the five writing-standard ones, the four shape ones and the two route ones) over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-09-03: `WARN | 259 document(s) read; measurable-goal 4, pending-in-approved 7, missing-section 102, routed-without-axes 12; NO CHECK READS: BRIEF, PLAN, SUMMARY`. The line prints the finding count and not the 27 accepted-without-witness statements the re-scope stopped deciding about; that limit is stated in the doc-quality SPEC.
 6. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
-7. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
-8. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
-9. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+7. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
+8. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
+9. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
+10. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 

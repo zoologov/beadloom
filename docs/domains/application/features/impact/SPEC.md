@@ -170,6 +170,28 @@ for another.
   The ceiling that remains: only the caller FUNCTIONS the answer already found are
   read, not every function in their files, and a caller of a caller is not read at
   all. The axis is one hop out, exactly as `co_writers` is.
+- **The narrowing gap is measured against the source root, not against the
+  project, so Python OUTSIDE `src/` is swept by nothing and declared by nothing.**
+  `_sweep_gaps` emits `sweep-narrower-than-the-project` when the swept root
+  differs from `source_root_of(project_root)`, and `source_root_of` returns
+  `src/<the one package>` when exactly one child of `src/` holds Python. On that
+  layout the two are equal, so the gap cannot fire however narrow the sweep
+  actually is. Reproduced 2026-09-03, macOS, foreground, on a tree of
+  `pyproject.toml`, `src/myapp/core/target.py` and `scripts/migrate.py`:
+  `impact src/myapp/core/target.py` printed `root swept: src/myapp` and
+  `who else calls this: none found.`, while `run_migration` calls the target from
+  `scripts/migrate.py:10` — and the `unresolved` population carried `no-seed`,
+  `no-graph-index` and `unresolved-terminator-name` and nothing about the sweep.
+  `callers.resolved` and `co_writers.resolved` are both `True` over that answer,
+  and the `## Axes` section `--section` writes carries the same silence in its
+  `Unresolved` field, which is what `scope-check` and `axes --refs` then read.
+  This is the commonest Python layout there is — `src/pkg` beside `tests/`,
+  `scripts/`, `tools/`, `noxfile.py`, `manage.py` — and it bites adopters rather
+  than this repository, which holds no production Python outside `src/beadloom`.
+  Filed as `beadloom-l4rn` / BDL-UX #225 with its red proof, by the re-review
+  that closed the PEP 420 critical above. The two are the same class one layout
+  apart. Until it is closed, an empty `callers` or `co_writers` axis is evidence
+  only about the swept root, and the swept root is the line to read first.
 - **A sweep is re-read on each run.** A cache would be a second thing that can
   disagree with the tree. Measured on this repository's own `src/beadloom` — 250
   modules, 1688 names — one answer takes 1.1 s, macOS, foreground. Reading the

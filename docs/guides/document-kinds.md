@@ -380,10 +380,10 @@ reported. Section matching is case-insensitive, whole-word and depth-independent
 | Kind | Used for | Ships with |
 |------|----------|------------|
 | `PRD` | epic, feature | Problem, Impact, Goals, Non-goals, User Stories, Acceptance Criteria |
-| `RFC` | epic, feature | Overview, Motivation, Technical Context, Proposed Solution, Alternatives, Risks, Open Questions |
+| `RFC` | epic, feature | Overview, Motivation, Technical Context, Axes, Proposed Solution, Alternatives, Risks, Open Questions |
 | `CONTEXT` | epic, feature | Goal, Key Constraints, Code Standards, Architectural Decisions, Related Files, Current Phase |
 | `PLAN` | epic, feature | Epic Description, Dependency DAG, Beads, Bead Details |
-| `BRIEF` | bug, task, chore | Problem, Solution, Beads, Acceptance Criteria, Non-behavioural declaration |
+| `BRIEF` | bug, task, chore | Problem, Solution, Axes, Beads, Acceptance Criteria, Non-behavioural declaration |
 | `ACTIVE` | every type | Current Bead, Progress, Results, Notes |
 
 The kind is the file's stem: `PRD.md` is a `PRD`. A project whose documents are named `prd.md`
@@ -395,7 +395,9 @@ holds the text; the document states the intent and points at it. See
 checkbox and is **labelled** as non-behavioural with a reason, so its absence from the suite is a
 stated decision rather than a gap.
 
-### The five checks
+### The eleven checks
+
+The first five are the writing standard, and they read the CONTENT of a document.
 
 | Check | Reports | Where it reads |
 |-------|---------|----------------|
@@ -404,6 +406,33 @@ stated decision rather than a gap.
 | `risk-mitigation` | a risk row with no mitigation, or one naming no action | any table with a Mitigation column |
 | `pending-in-approved` | a question still answered `Pending` | `## Open Questions`, in a document whose status is `Approved` or `Accepted` |
 | `unfilled-placeholder` | a shipped template token nobody replaced | the whole document, outside fenced and inline code |
+
+The next four arrived with BDL-068 S1.4 and read a document's SHAPE — whether the
+sections its kind carries are there, and whether an `## Axes` section is complete.
+
+| Check | Reports | Where it reads |
+|-------|---------|----------------|
+| `missing-section` | a section this kind's template carries AND a majority of its peers keep | every document of a kind `/templates` describes |
+| `empty-section` | a required heading with nothing under it | the same, and not peer-relative |
+| `axes-without-a-seed` | axes stated without naming the seed they were derived from | the `## Axes` section |
+| `axis-without-a-scope-decision` | an axis row carrying the derivation's output and no decision | the same |
+
+The last two arrived with BDL-068 S1.5 and take the work-item FOLDER as their
+unit, because a route is a property of the item rather than of any one document.
+
+| Check | Reports | Where it reads |
+|-------|---------|----------------|
+| `routed-without-axes` | a work item on the simplified route carrying no `## Axes` section anywhere | the folder |
+| `route-not-supported-by-the-axes` | a work item on the simplified route whose kept axes name more than one graph node | the folder |
+
+Only the simplified route (`bug`, `task`, `chore`) is judged by the last two. The
+full route writes a PRD and an RFC and each passes an approval gate, so a
+mis-route there meets a person. The simplified route writes one BRIEF and passes
+one gate, on work already scoped. `routed-without-axes` is absolute rather than
+peer-relative for a measured reason: at `2a5c0d1` `missing-section` reported
+`BRIEF documents do not carry Axes (0/12)` against the KIND and nothing against
+any document, which is the right treatment for a convention an archive never
+adopted and the wrong one for the input to a decision.
 
 ```bash
 beadloom docs quality                                  # the report, exit 0 with findings
