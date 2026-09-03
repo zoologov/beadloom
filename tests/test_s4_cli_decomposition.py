@@ -61,6 +61,10 @@ EXPECTED_COMMANDS = {
     "link",
     "lint",
     "mcp-serve",
+    # BDL-068 S3.1: the score a mutation run produced over the declared scope —
+    # the half `mutation-scope` shipped without, which is why a claimed mutation
+    # check was indistinguishable from a performed one.
+    "mutation",
     "prime",
     "reindex",
     "review-brief",

@@ -27,6 +27,7 @@ from beadloom.services.commands import (
     docs,
     guard,
     impact,
+    mutation,
     review_brief,
     setup,
     snapshot,
@@ -50,7 +51,17 @@ from beadloom.services.commands.index_ops import _detect_link_label
 from beadloom.services.commands.query import _format_markdown
 
 # Mark the side-effect-only imports as used (they register commands on import).
-_REGISTRATION_ONLY = (docs, guard, impact, review_brief, setup, snapshot, status, waves)
+_REGISTRATION_ONLY = (
+    docs,
+    guard,
+    impact,
+    mutation,
+    review_brief,
+    setup,
+    snapshot,
+    status,
+    waves,
+)
 
 __all__ = [
     "_bd_statuses_from_list",

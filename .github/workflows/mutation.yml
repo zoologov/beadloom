@@ -1,0 +1,109 @@
+# Mutation testing over the first declared slice (BDL-068 S3.1).
+#
+# WHY THIS IS NIGHTLY AND NOT A PR LEG — the number decided it, not a preference.
+# CONTEXT's Q3 stated the rule before the measurement: the job runs per PR if it
+# fits under the budget that withdrew `tests-windows` (~16-28 runner-minutes),
+# and nightly otherwise.
+#
+#   MEASURED 2026-09-03, and the room is part of the measurement: 3 989 mutants
+#   over `src/beadloom/graph/rules/`, 54 min 55 s wall clock at 1.42 mutations
+#   per second, with 6 workers on a 10-core Apple-silicon machine (Darwin arm64,
+#   CPython 3.13.7). Score 96.2%: 3 836 killed, 1 timeout, 152 survived, 0 with
+#   no covering test.
+#
+# 55 minutes is two to three times the budget that already declined a dimension,
+# and this runner is FASTER than `ubuntu-latest` (4 vCPU) rather than slower, so
+# the CI figure can only be worse. The second half of the `tests-windows`
+# reasoning applies with more force than it did there: the ubuntu legs finish in
+# ~4 minutes, so a leg of this length would not cost minutes so much as become
+# the pipeline's whole critical path. Nightly.
+#
+# NOT A REQUIRED STATUS CHECK, and this is the sentence to read before adding it
+# to one. A scheduled workflow produces no check-run on a pull request, so a
+# required context naming it never reports and `main` becomes unmergeable under
+# `strict: true` — the same trap `DEFAULT_STATUS_CHECK_CONTEXTS` documents for
+# the withdrawn Windows leg. `tests/test_mutation_ci_job.py` fails if this job's
+# name ever appears in that tuple.
+#
+# WHAT IS NOT CLAIMED: nothing in this workflow has run on a GitHub runner yet.
+# The pool, the copied room and the score above were all measured on one macOS
+# machine, and the first scheduled run is the verification, not this file.
+name: Mutation
+
+on:
+  schedule:
+    # 03:17 UTC — off the hour, so it does not queue behind everything else
+    # scheduled at midnight.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # Generous, because the measured wall clock is ~55 minutes on a faster
+    # machine and a timeout that trips is a run that reports nothing at all.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        # `mutation` is the extra that carries the runner. It is deliberately
+        # absent from `dev` and from `all`, so no other leg installs it.
+        run: >-
+          uv sync --extra dev --extra languages --extra tui --extra watch
+          --extra graphql --extra mutation
+
+      - name: Build the index the copied room reads
+        # mutmut copies `.beadloom/` into `mutants/` and runs the pool there.
+        # The index database is gitignored, so without this step the copy would
+        # carry a graph and no index, and the pool's tests would fail in a room
+        # they pass in — which aborts the run at the stats phase rather than
+        # scoring anything.
+        run: uv run beadloom reindex
+
+      - name: Run the mutants
+        # `mutmut run` exits non-zero whenever a mutant survives, which is a
+        # normal outcome and not this job's verdict. The verdict is the next
+        # step, over the counters this one leaves behind.
+        run: uv run mutmut run --max-children 4 || true
+
+      - name: Export the counters
+        run: uv run mutmut export-cicd-stats
+
+      - name: Score the slice
+        # The floor is set just under the measured baseline (96.2%): close
+        # enough that a real regression trips it, far enough that a handful of
+        # new survivors in a legitimately-changed rule does not. `--only` keeps
+        # the job answerable for the slice it ran and prints the declared
+        # targets it did not judge, rather than reporting them as failures or
+        # quietly dropping them from the declaration.
+        run: >-
+          uv run beadloom mutation
+          --stats mutants/mutmut-cicd-stats.json
+          --target src/beadloom/graph/rules/
+          --only src/beadloom/graph/rules/
+          --tool "mutmut 3.7"
+          --min-score 0.95
+
+      - name: Keep the counters and the surviving mutants
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ github.run_id }}
+          path: |
+            mutants/mutmut-cicd-stats.json
+            mutants/**/*.meta
+          retention-days: 14

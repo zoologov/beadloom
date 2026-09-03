@@ -63,3 +63,7 @@ site/ru/
 
 # dev-server logs from local dogfooding
 .vitepress-dev.log
+
+# mutmut working copy: the runner copies the package + tests into `mutants/`
+# and runs there (BDL-068 S3). Local evidence of a run, not shared state.
+mutants/
