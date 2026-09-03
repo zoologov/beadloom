@@ -284,7 +284,7 @@ class TestTheHoleIsInvisibleOnThisRepositoryAndOnAnAdopter:
         """Zero here, and zero is the honest number rather than a silence."""
         spaces = resolve_doc_spaces(REPO_ROOT)
 
-        assert spaces.classify(REPO_ROOT).outside_declared_root == ()  # type: ignore[attr-defined]
+        assert spaces.classify(REPO_ROOT).outside_declared_root == ()
 
     def test_an_adopter_whose_planning_documents_are_readmes_is_told(
         self, tmp_path: Path
@@ -376,11 +376,14 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         spaces = resolve_doc_spaces(REPO_ROOT)
         populations = _populations(REPO_ROOT, spaces)
 
-        # 190 -> 194 in BDL-062, -> 198 in BDL-066, -> 199 in BDL-067: each feature's own PRD, RFC,
-        # CONTEXT and PLAN. This literal has been hand-edited once per feature since
-        # it was written, which is the class `mr2l.72` exists to remove: a count a
-        # human maintains where the tool could compute it. Recorded in ROADMAP.md.
-        assert populations[SPACE_TO_BE] == 199
+        # 190 -> 194 in BDL-062, -> 198 in BDL-066, -> 199 in BDL-067, -> 203 in BDL-068:
+        # each feature's own PRD, RFC, CONTEXT and PLAN. This literal has been
+        # hand-edited once per feature since it was written, which is the class
+        # `mr2l.72` exists to remove: a count a human maintains where the tool could
+        # compute it. The BDL-068 increment is the measurement rather than the claim —
+        # the epic's own planning commit `409e977` moved it and left this case red,
+        # and nobody saw it, because `beadloom ci` does not run pytest.
+        assert populations[SPACE_TO_BE] == 203
         # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
         # then `docs/domains/application/features/review-brief/SPEC.md`, then
         # `docs/guides/parallel-waves.md` in the documentation pass `.24`. 96 -> 98 in
@@ -390,10 +393,23 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # when this repository gains a document, which is what makes it a denominator
         # rather than a constant. 100 -> 101 in BDL-067 `.24`, which documented the
         # `graph-files` component: the four readers of `.beadloom/_graph/` became one
-        # body, and a body with a single responsibility is a node with a DOC.
-        assert populations[SPACE_AS_IS] == 101
-        # 55 -> 56 in BDL-062, -> 57 in BDL-067: this feature's ACTIVE.md.
-        assert len(spaces.working_documents(REPO_ROOT)) == 57
+        # body, and a body with a single responsibility is a node with a DOC. 101 -> 102
+        # in BDL-068 `.1`, which lifted the three AST derivations into
+        # `application/source_derivation/` and documented them as a component.
+        # 102 -> 103 in BDL-068 `.2`, which documented `impact` — the feature an
+        # adopter runs over that component. 103 -> 105 in BDL-068 `.4`: the
+        # `axes-section` grammar and the `planning-report` composition, each a
+        # node with its own responsibility and therefore its own document.
+        # 105 -> 107 in BDL-068 `.5`: `work-item-routing` (the routes derived from
+        # the composed /task-init) and `work-item-type` (the two checks over a
+        # work-item folder), which are a derivation and a check and not one thing.
+        # 107 -> 109 in BDL-068 `.6`: `scope-check` (the paths a commit stages
+        # judged against a declared scope) and `declared-scope` (the branch, the
+        # index and the planning corpus joined for it), which are again a check
+        # and the composition that feeds it and not one thing.
+        assert populations[SPACE_AS_IS] == 109
+        # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
+        assert len(spaces.working_documents(REPO_ROOT)) == 58
 
 
 class TestEachDeclaredHalfReportsWhatItReached:

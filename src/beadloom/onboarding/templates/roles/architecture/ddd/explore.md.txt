@@ -1,0 +1,12 @@
+
+<!-- overlay:ddd — what the Node column names in a DDD graph, and when a route stops fitting. -->
+## ARCHITECTURE (Domain-Driven Design)
+
+The `Node` column names the graph node that OWNS the site — a domain, a feature within one, or a component of one. `beadloom impact` reads it from the graph and you do not decide it; discover the live map with `beadloom graph` / `beadloom ctx <ref-id>` and never hardcode a layer.
+
+Two facts about the boundary belong in the section because they are what a route is chosen on:
+
+- **Does the change leave the target's node?** Rows naming more than one node say it does.
+- **Does it leave the target's bounded context?** A change crossing `services → application → domains → infrastructure` in the wrong direction is not a scope question, it is a boundary violation — say so on the row's `Why` cell and let the plan deal with it.
+
+A change ranging over more than one node has no document in the simplified flow that records the crossing, so the count of distinct nodes in the table is the fact the type decision turns on. Report it; do not judge it.

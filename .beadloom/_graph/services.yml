@@ -322,6 +322,35 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/doc-shape/SPEC.md
 
+  # Feature: the `## Axes` section's grammar (BDL-068 S1.4). One home for what
+  # the section says, read by the checks and written by `impact --section`, so
+  # the writer and the reader cannot drift into two shapes with one name.
+  - ref_id: axes-section
+    kind: feature
+    summary: "The `## Axes` section of a work item's document: the seed it names, the scope decision it records, and the bead `refs:` generated from it"
+    source: src/beadloom/doc_sync/axes_section.py
+    docs:
+      - docs/domains/doc-sync/features/axes-section/SPEC.md
+
+  # Feature: the route a work item took, checked against the axes it was decided
+  # from (BDL-068 S1.5). The unit is the work-item FOLDER, not the document.
+  - ref_id: work-item-type
+    kind: feature
+    summary: "The route a work item took, checked against the axes it was decided from: no axes on the route that skips scope approval, and kept axes naming more nodes than that route holds"
+    source: src/beadloom/doc_sync/work_item_type.py
+    docs:
+      - docs/domains/doc-sync/features/work-item-type/SPEC.md
+
+  # Feature: the paths a commit stages, judged against the axes its work item
+  # declared (BDL-068 S1.6). Pure: paths, a declared scope and an ownership map
+  # in, a verdict out — the git and index halves are `declared-scope`'s.
+  - ref_id: scope-check
+    kind: feature
+    summary: "The paths a commit stages, judged against the axes its work item declared: a node an axis rules out of scope, or a bounded context no declared axis reaches"
+    source: src/beadloom/doc_sync/scope_check.py
+    docs:
+      - docs/domains/doc-sync/features/scope-check/SPEC.md
+
   # Feature: Doc Quality (BDL-061 S4b) — the writing standard, read back.
   - ref_id: doc-quality
     kind: feature
@@ -343,6 +372,16 @@ nodes:
     source: src/beadloom/application/gate.py
     docs:
       - docs/domains/application/features/ci-gate/SPEC.md
+
+  # Feature: `beadloom impact` — what a change touches, answered from the source
+  # over a seed the command DERIVES from the target. BDL-068 S1.2; the measurement
+  # that made seed derivation the first criterion is BDL-068 S1.3's, at af26750d.
+  - ref_id: impact
+    kind: feature
+    summary: "Who else commits through this sink, who else calls this, how many branches and exit forms the command has, over a seed derived from the target and named in the answer"
+    source: src/beadloom/application/impact/
+    docs:
+      - docs/domains/application/features/impact/SPEC.md
 
   - ref_id: flow-guards
     kind: feature
@@ -533,12 +572,42 @@ nodes:
 
   # Component: the shape a project's documents are held to (BDL-061 S4b). Joins
   # onboarding's composed templates to doc-sync's checks, which are peer domains.
+  # Component: one composition of every planning-document check (BDL-068 S1.4).
+  # The Gate step and the `docs quality` command each assembled the run before
+  # this; two assemblies of one report can disagree about what was checked.
+  - ref_id: planning-report
+    kind: component
+    summary: "One composition of every check that reads a planning document, so the Gate and the CLI report the same run"
+    source: src/beadloom/application/planning_report.py
+    docs:
+      - docs/domains/application/components/planning-report/DOC.md
+
   - ref_id: doc-shape-requirements
     kind: component
     summary: "Resolve required document sections and the shipped placeholder vocabulary for a project"
     source: src/beadloom/application/doc_shape.py
     docs:
       - docs/domains/application/components/doc-shape-requirements/DOC.md
+
+  # Component: the routes `/task-init` declares, derived from the composed
+  # command rather than restated in Python (BDL-068 S1.5).
+  - ref_id: work-item-routing
+    kind: component
+    summary: "The work-item types, their flows and the documents each writes, derived from the composed /task-init command"
+    source: src/beadloom/application/work_item_routing.py
+    docs:
+      - docs/domains/application/components/work-item-routing/DOC.md
+
+  # Component: which work item a commit belongs to, and the scope its `## Axes`
+  # declare (BDL-068 S1.6). The join `scope-check` cannot make for itself: the
+  # index that owns a path, git for the paths and the branch, and the planning
+  # corpus that says which folders are work items.
+  - ref_id: declared-scope
+    kind: component
+    summary: "The work item a branch names, and the scope its `## Axes` section declares — resolved through the graph index, git and the planning corpus"
+    source: src/beadloom/application/declared_scope.py
+    docs:
+      - docs/domains/application/components/declared-scope/DOC.md
 
   # Component: the adapter that feeds `node-intent` (BDL-061 `.87`). It reads the
   # TO-BE space through `doc-spaces`' declaration join rather than a second one.
@@ -566,6 +635,17 @@ nodes:
     source: src/beadloom/application/mutation_scope.py
     docs:
       - docs/domains/application/components/mutation-scope/DOC.md
+
+  # Component: the three AST derivations BDL-067 wrote as tests, lifted into
+  # production by BDL-068 S1.1 so `beadloom impact` and the checks after it can
+  # ask the same questions. A component rather than a feature: the capability an
+  # adopter runs is the command that will consume it, not this.
+  - ref_id: source-derivation
+    kind: component
+    summary: "Answer who else writes this, who else calls this and how many branches this has from the source, over a shape rather than a spelling"
+    source: src/beadloom/application/source_derivation/
+    docs:
+      - docs/domains/application/components/source-derivation/DOC.md
 
   - ref_id: doc-indexer
     kind: component
@@ -791,6 +871,21 @@ edges:
   - src: doc-shape
     dst: doc-sync
     kind: part_of
+  - src: axes-section
+    dst: doc-sync
+    kind: part_of
+  - src: work-item-type
+    dst: doc-sync
+    kind: part_of
+  - src: work-item-type
+    dst: axes-section
+    kind: depends_on
+  - src: work-item-type
+    dst: doc-quality
+    kind: depends_on
+  - src: axes-section
+    dst: doc-shape
+    kind: depends_on
   - src: doc-quality
     dst: doc-sync
     kind: part_of
@@ -800,10 +895,88 @@ edges:
   - src: doc-shape-requirements
     dst: application
     kind: part_of
+  - src: planning-report
+    dst: application
+    kind: part_of
+  - src: planning-report
+    dst: doc-quality
+    kind: depends_on
+  - src: planning-report
+    dst: doc-shape
+    kind: depends_on
+  - src: planning-report
+    dst: axes-section
+    kind: depends_on
+  - src: planning-report
+    dst: doc-shape-requirements
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-type
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-routing
+    kind: depends_on
+  - src: scope-check
+    dst: doc-sync
+    kind: part_of
+  - src: scope-check
+    dst: axes-section
+    kind: depends_on
+  - src: scope-check
+    dst: doc-quality
+    kind: depends_on
+  - src: declared-scope
+    dst: application
+    kind: part_of
+  - src: declared-scope
+    dst: scope-check
+    kind: depends_on
+  - src: declared-scope
+    dst: axes-section
+    kind: depends_on
+  - src: declared-scope
+    dst: impact
+    kind: depends_on
+  - src: declared-scope
+    dst: sync-check
+    kind: depends_on
+  - src: declared-scope
+    dst: doc-shape-requirements
+    kind: depends_on
+  - src: declared-scope
+    dst: flow-guards
+    kind: depends_on
+  - src: ci-gate
+    dst: declared-scope
+    kind: depends_on
+  - src: cli-commands
+    dst: declared-scope
+    kind: depends_on
+  - src: work-item-routing
+    dst: application
+    kind: part_of
+  - src: work-item-routing
+    dst: doc-shape
+    kind: depends_on
+  - src: work-item-routing
+    dst: flow-composer
+    kind: depends_on
+  - src: work-item-routing
+    dst: doc-templates
+    kind: depends_on
+  - src: work-item-routing
+    dst: role-composer
+    kind: depends_on
   - src: doc-spaces
     dst: application
     kind: part_of
   - src: mutation-scope
+    dst: application
+    kind: part_of
+  - src: impact
+    dst: application
+    kind: part_of
+  - src: source-derivation
     dst: application
     kind: part_of
   - src: scenario-binding

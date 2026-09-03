@@ -64,6 +64,7 @@ from beadloom.onboarding.flow_manifest import (
     record,
     state_of,
 )
+from beadloom.onboarding.role_composer import ROLE_NAMES
 from beadloom.onboarding.scanner import (
     _detect_project_name,
     blank_auto_regions,
@@ -74,7 +75,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 #: Role subagent files vendored byte-identical from the live ``.claude/agents/``.
-AGENT_FILES: tuple[str, ...] = ("dev", "test", "review", "tech-writer")
+#: This is :data:`~beadloom.onboarding.role_composer.ROLE_NAMES` itself and not
+#: a copy of it: until BDL-068 S1.5 the two were separate literals whose comments
+#: each claimed to mirror the other, with eight readers between them, so a fifth
+#: role reached the composer and not the scaffold — present to ``compose_role``
+#: and absent from the present/missing split ``config-check`` reports (BDL-UX
+#: #191's shape). The population is derived from the shipped CORE fragments;
+#: adding one adds the role here too, by the same act.
+AGENT_FILES: tuple[str, ...] = ROLE_NAMES
 
 #: Slash-skill command files vendored byte-identical from ``.claude/commands/``.
 COMMAND_FILES: tuple[str, ...] = ("coordinator", "task-init", "checkpoint", "templates")

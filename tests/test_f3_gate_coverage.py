@@ -573,6 +573,8 @@ class TestHonestGate:
             "docs-audit",
             "docs-quality",
             "doc-spaces",
+            # BDL-068 S1.6: the branch judged against its work item's axes.
+            "scope-check",
             "config-check",
             "doctor",
             "federate",

@@ -63,6 +63,23 @@ placeholders erased first. Two consequences follow from that one rule:
   for a node with public symbols — is conditional by construction and cannot be required of a
   node that has none.
 
+### The same derivation, over the PLANNING documents
+
+BDL-068 S1.4 extended the rule above to the other family of composed templates rather than
+building a second mechanism beside it. The BRIEF, RFC, PRD, CONTEXT, PLAN and ACTIVE skeletons
+are not `docs` artifacts at all — they are fenced blocks inside the composed `/templates`
+slash command, which is what the flow actually hands an author.
+
+`planning_skeletons()` reads each `## <KIND>.md` heading and the fenced blocks under it;
+`required_sections_by_document_kind()` runs the same `section_titles` extraction over them. Only
+the FENCED text is read: the prose around a skeleton is commentary, and reading it would make
+the commentary's own headings required of the document. A project fragment at
+`.beadloom/flow/commands/templates.md` that appends `## RUNBOOK.md` with its own headings makes
+them required by the same act — the same property the node templates already had.
+
+`## Axes` is required of a BRIEF and of an RFC because those two skeletons carry it. Nothing in
+code names the section.
+
 ### A doc composition carries no suppression notice
 
 `ArtifactKind.carries_suppressions` is `False` for `docs`. A declared suppression stands down a
@@ -81,13 +98,17 @@ notice would publish flow configuration as documentation.
 | `doc_template` | function |
 | `doc_flow_config` | function |
 | `render_doc` | function |
+| `PLANNING_TEMPLATE` | constant |
+| `section_titles` | function |
 | `required_sections` | function |
 | `required_sections_by_node_kind` | function |
+| `planning_skeletons` | function |
+| `required_sections_by_document_kind` | function |
 
 ## Dependencies
 
 - Depends on: `flow-composer` (`compose`), `flow-config`
-- Used by: `doc-generator`, `doc-shape-requirements`
+- Used by: `doc-generator`, `doc-shape-requirements`, `planning-report` (through the join in `application/doc_shape.py`)
 
 ## Parent
 
@@ -97,4 +118,6 @@ notice would publish flow configuration as documentation.
 
 `tests/test_doc_templates.py` — composition of every kind, the project layer, the derived
 sections, byte-identity of the extraction against the literals it replaced, and rendering for a
-project that is not Beadloom.
+project that is not Beadloom. `tests/test_the_axes_section_is_required_by_the_template.py` —
+the planning-document derivation: both kinds require `Axes`, only the fenced skeleton is read,
+and a project layer declaring its own document kind makes its sections required.

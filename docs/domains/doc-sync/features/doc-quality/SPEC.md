@@ -74,6 +74,16 @@ Stated here rather than discovered by a reader who trusted it.
 - **A `Pending` outside `## Open Questions` is not a finding.** PLAN's bead table marks unstarted
   beads `Pending`; that is a status, not an undecided design.
 
+### These five are not the whole of `docs quality`
+
+Since BDL-068 S1.4 the `docs-quality` surfaces report **nine** checks, assembled by
+`application/planning_report.py` so the Gate step and the CLI read one run. The four this
+module does not own are the structural pair (`missing-section`, `empty-section`, in
+[doc-shape](../doc-shape/SPEC.md)) and the axes pair (`axes-without-a-seed`,
+`axis-without-a-scope-decision`, in [axes-section](../axes-section/SPEC.md)). `CHECK_NAMES`
+here still means the five writing-standard checks; the composition's own `CHECK_NAMES` means
+all nine.
+
 ### The placeholder vocabulary is derived
 
 `unfilled-placeholder` is given its tokens by the caller, and the application layer derives them

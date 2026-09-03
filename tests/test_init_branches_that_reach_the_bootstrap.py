@@ -72,25 +72,28 @@ Known limits, stated rather than discovered later:
 
 from __future__ import annotations
 
-import ast
 import inspect
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, NoReturn
+from typing import NoReturn
 
 import pytest
 
 import beadloom
+from beadloom.application.source_derivation import (
+    CallSite,
+    call_sites_in,
+    callables_that_reach,
+    direct_callers_of,
+    functions_that_serialise_yaml_to_disk,
+    never_returns,
+)
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.commands import setup as init_command
 from tests.test_init_verdict_over_its_own_rules import THE_BRANCHES
-
-if TYPE_CHECKING:
-    from types import ModuleType
 
 #: The name of the function that takes the Gate's verdict, read off the function
 #: object instead of written out: a rename fails at import here rather than
@@ -129,35 +132,6 @@ THE_WRITERS_THE_SWEEP_FOUND = frozenset(
         "link",  # adds/removes `links:` on an existing node
     }
 )
-
-
-@dataclass(frozen=True)
-class GraphWritingCallSite:
-    """One call inside `init` that ends in a graph write, and what follows it.
-
-    ``guard`` is the chain of `if` conditions the call sits under, outermost
-    first, as the source spells them. It is the branch's identity: the empty
-    tuple is the fallthrough (the default interactive wizard), which is exactly
-    the branch a binding-shaped count cannot see.
-
-    The type serves both seeds. Under `THE_BOOTSTRAP` the call ends in
-    `bootstrap_project`; under `THE_GRAPH_COMMIT_POINT` it ends in any of the six
-    writers, which is a superset and is why the name says "graph writing" rather
-    than "bootstrap".
-    """
-
-    #: The name called, e.g. ``bootstrap_project`` or ``interactive_init``.
-    callee: str
-    #: The `if` conditions this call sits under, outermost first.
-    guard: tuple[str, ...]
-    #: Whether the Gate's verdict is reachable after this call in this branch.
-    takes_verdict: bool
-    #: Line number in the command's module, so a failure names a place.
-    lineno: int
-    #: The source of everything that still runs after the call in this branch.
-    #: A branch that takes no verdict has to say something to the adopter
-    #: instead, and this is what that claim is checked against.
-    follows: str = ""
 
 
 @dataclass(frozen=True)
@@ -202,15 +176,15 @@ THE_DEFERRED_BRANCHES: tuple[DeferredBranch, ...] = ()
 
 
 def _deferrals_naming_a_branch_that_is_gone(
-    sites: tuple[GraphWritingCallSite, ...], declared: tuple[DeferredBranch, ...]
+    sites: tuple[CallSite, ...], declared: tuple[DeferredBranch, ...]
 ) -> set[tuple[str, ...]]:
     """Declared guards that no unjudged branch of the source has."""
-    unjudged = {site.guard for site in sites if not site.takes_verdict}
+    unjudged = {site.guard for site in sites if not site.reaches_marker}
     return {branch.guard for branch in declared} - unjudged
 
 
 def _deferrals_that_tell_the_adopter_nothing(
-    sites: tuple[GraphWritingCallSite, ...], declared: tuple[DeferredBranch, ...]
+    sites: tuple[CallSite, ...], declared: tuple[DeferredBranch, ...]
 ) -> list[str]:
     """Declared deferrals whose branch no longer carries its own instruction."""
     by_guard = {site.guard: site for site in sites}
@@ -227,249 +201,27 @@ def _deferrals_that_tell_the_adopter_nothing(
     return silent
 
 
-def _called_names(node: ast.AST) -> set[str]:
-    """Every function name called anywhere inside *node*."""
-    names: set[str] = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Call):
-            names.add(_callee_name(child))
-    return names
+def _package_root() -> Path:
+    """The product's own source tree, which is what every scan here reads."""
+    return Path(inspect.getfile(beadloom)).parent
 
 
-def _callee_name(call: ast.Call) -> str:
-    """The bare name a call names, ignoring what it is an attribute of."""
-    if isinstance(call.func, ast.Name):
-        return call.func.id
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
-    return ""
+def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[CallSite, ...]:
+    """The derivation's reading of `init`, bound to this command's own names.
 
-
-def _functions_to_their_calls(package: ModuleType) -> dict[str, set[str]]:
-    """Map every function defined in *package*'s source to the names it calls."""
-    root = Path(inspect.getfile(package)).parent
-    calls: dict[str, set[str]] = {}
-    for path in sorted(root.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                calls.setdefault(node.name, set()).update(_called_names(node))
-    return calls
-
-
-def _callables_that_reach(package: ModuleType, seed: str) -> frozenset[str]:
-    """Names that end in a *seed* call, directly or through other functions.
-
-    A least fixed point over *package*: seeded with one name, then grown with
-    anything that calls something already in the set. `init` reaching any of
-    these names is `init` reaching *seed*.
+    `source_derivation.call_sites_in` answers "where, in this command, does a
+    call from *reaching* sit, and can *marker* still run after it". What this
+    module supplies is which command, which marker, and the module terminator
+    names are resolved through — all three read off the product's own objects, so
+    a rename fails at import here rather than leaving a scan that finds nothing.
     """
-    calls = _functions_to_their_calls(package)
-    reaching = {seed}
-    growing = True
-    while growing:
-        growing = False
-        for name, called in calls.items():
-            if name not in reaching and called & reaching:
-                reaching.add(name)
-                growing = True
-    return frozenset(reaching)
-
-
-def _direct_callers_of(package: ModuleType, name: str) -> frozenset[str]:
-    """The functions in *package* whose own body calls *name*."""
-    return frozenset(
-        caller for caller, called in _functions_to_their_calls(package).items() if name in called
+    return call_sites_in(
+        source,
+        reaching,
+        command=THE_COMMAND,
+        marker=THE_VERDICT,
+        resolving_in=init_command,
     )
-
-
-#: The two exits that end a Python function without returning from it and carry
-#: no return annotation at runtime, so they are resolved by IDENTITY rather than
-#: read off a signature. `sys.exit` is here because `init` used to call it — the
-#: wizard's `cancel` answer left through it and the walk below stepped over it,
-#: so the identical defect read guarded when the terminator was `sys.exit` and
-#: unguarded when it was `return` (the review of BDL-067 `.20`, major 2).
-#: `os._exit` is here because it is the same act with the same shape, and a
-#: terminator this walk does not know is not reported as a defect — it is read as
-#: a branch that takes its verdict, which is the failure mode that cost this epic
-#: a wave. Both are PROBED in `TestTheTerminatorClassifierItself` rather than
-#: assumed.
-THE_EXITS_THAT_CARRY_NO_ANNOTATION = (sys.exit, os._exit)
-
-#: How `typing.NoReturn` reaches this module. `services/commands/setup.py` uses
-#: `from __future__ import annotations`, so a return annotation there is a
-#: STRING at runtime and comparing against the object alone would silently match
-#: nothing.
-THE_NO_RETURN_ANNOTATIONS = frozenset(
-    {NoReturn, "NoReturn", "Never", "typing.NoReturn", "typing.Never"}
-)
-
-
-def _dotted_name(call: ast.Call) -> str:
-    """The callee as the source writes it: `sys.exit`, not `exit`.
-
-    `_callee_name` deliberately drops what a call is an attribute of, because
-    the reachability scan matches on bare names. This one keeps it, because the
-    question here is which object is being called and `exit` alone answers it for
-    two different functions.
-    """
-    parts: list[str] = []
-    node: ast.expr = call.func
-    while isinstance(node, ast.Attribute):
-        parts.append(node.attr)
-        node = node.value
-    if isinstance(node, ast.Name):
-        parts.append(node.id)
-    return ".".join(reversed(parts))
-
-
-def _never_returns(dotted: str, module: object = init_command) -> bool:
-    """Whether calling *dotted* ends the function it is called from.
-
-    Derived rather than listed. The name is resolved through the module the
-    command lives in and the object is ASKED: a callable annotated `NoReturn` is
-    the language's own statement that control does not come back, so a helper
-    written tomorrow joins the terminator set by being annotated rather than by
-    being added to a tuple in a test file. The two stdlib exits that predate
-    annotations are matched by identity above.
-
-    The ceiling, stated because it is real: a way out this classifier does not
-    recognise is read as a branch that continues, and a verdict written below it
-    then counts. The behavioural half — every answer the wizard offers, RUN, and
-    each one that leaves a graph file asserted to be judged — is
-    `tests/test_every_wizard_answer_is_judged.py`, and it answers the same
-    question without reading any terminator at all.
-    """
-    head, *rest = dotted.split(".")
-    target: object | None = getattr(module, head, None)
-    for part in rest:
-        if target is None:
-            return False
-        target = getattr(target, part, None)
-    if target is None:
-        return False
-    if any(target is exiting for exiting in THE_EXITS_THAT_CARRY_NO_ANNOTATION):
-        return True
-    annotation = getattr(target, "__annotations__", {}).get("return")
-    return annotation in THE_NO_RETURN_ANNOTATIONS
-
-
-def _ends_the_branch(statement: ast.stmt) -> bool:
-    """Whether nothing after *statement* runs in the branch it sits in."""
-    if isinstance(statement, ast.Return | ast.Raise):
-        return True
-    return (
-        isinstance(statement, ast.Expr)
-        and isinstance(statement.value, ast.Call)
-        and _never_returns(_dotted_name(statement.value))
-    )
-
-
-def _statement_trail(
-    node: ast.AST, parents: dict[ast.AST, ast.AST]
-) -> list[tuple[list[ast.stmt], int]]:
-    """The blocks *node* sits in, outermost first, each with its index in it."""
-    trail: list[tuple[list[ast.stmt], int]] = []
-    current = node
-    while current in parents:
-        parent = parents[current]
-        for field in ("body", "orelse", "finalbody"):
-            block = getattr(parent, field, None)
-            if isinstance(block, list):
-                at = next((i for i, s in enumerate(block) if s is current), None)
-                if at is not None:
-                    trail.append((block, at))
-                    break
-        current = parent
-    trail.reverse()
-    return trail
-
-
-def _guard_path(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> tuple[str, ...]:
-    """The `if` conditions *node* sits under, outermost first, as written."""
-    conditions: list[str] = []
-    current = node
-    while current in parents:
-        parent = parents[current]
-        if isinstance(parent, ast.If):
-            if any(s is current for s in parent.body):
-                conditions.append(ast.unparse(parent.test))
-            elif any(s is current for s in parent.orelse):
-                conditions.append(f"not ({ast.unparse(parent.test)})")
-        current = parent
-    return tuple(reversed(conditions))
-
-
-def _verdict_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
-    """Whether the verdict can still run after *node*, in execution order.
-
-    Walks what comes after the call: the rest of its own block first, then the
-    rest of each enclosing block. A statement that ends the branch at any of
-    those levels ends the walk — nothing after it in that branch runs, so a
-    verdict written below it is not a verdict this branch takes.
-
-    "Ends the branch" is `_ends_the_branch`, and it is three forms rather than
-    two. Until BDL-067 `.21` it was `Return | Raise`, and `init` terminated one
-    writing path with `sys.exit(0)`: the walk stepped over the wizard's `cancel`
-    answer and found the verdict below it, so a branch that wrote `services.yml`
-    and `rules.yml` and exited 0 read as guarded here for two waves.
-    """
-    for block, index in reversed(_statement_trail(node, parents)):
-        for statement in block[index + 1 :]:
-            if THE_VERDICT in _called_names(statement):
-                return True
-            if _ends_the_branch(statement):
-                return False
-    return False
-
-
-def _what_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> str:
-    """The source of everything that still runs after *node*, in this branch.
-
-    The same walk `_verdict_follows` does, unparsed instead of searched, so a
-    claim about what a branch TELLS the adopter can be read off the branch rather
-    than restated in a comment here.
-    """
-    written: list[str] = []
-    for block, index in reversed(_statement_trail(node, parents)):
-        for statement in block[index + 1 :]:
-            written.append(ast.unparse(statement))
-            if _ends_the_branch(statement):
-                return "\n".join(written)
-    return "\n".join(written)
-
-
-def _function_named(name: str, tree: ast.Module) -> ast.FunctionDef:
-    """The one function called *name* in *tree*. A missing one is a failure."""
-    found = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    ]
-    assert found, f"no function named {name!r} in the parsed source"
-    return found[0]
-
-
-def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
-    """Every call in *source*'s `init` that reaches the bootstrap, in order."""
-    command = _function_named(THE_COMMAND, ast.parse(source))
-    parents: dict[ast.AST, ast.AST] = {
-        child: parent
-        for parent in ast.walk(command)
-        for child in ast.iter_child_nodes(parent)
-    }
-    sites = [
-        GraphWritingCallSite(
-            callee=_callee_name(node),
-            guard=_guard_path(node, parents),
-            takes_verdict=_verdict_follows(node, parents),
-            lineno=node.lineno,
-            follows=_what_follows(node, parents),
-        )
-        for node in ast.walk(command)
-        if isinstance(node, ast.Call) and _callee_name(node) in reaching
-    ]
-    return tuple(sorted(sites, key=lambda site: site.lineno))
 
 
 def _the_commands_source() -> str:
@@ -480,7 +232,7 @@ def _the_commands_source() -> str:
 @pytest.fixture(scope="module")
 def reaching() -> frozenset[str]:
     """The names that end in a bootstrap, derived from the package's source."""
-    return _callables_that_reach(beadloom, THE_BOOTSTRAP)
+    return callables_that_reach(_package_root(), THE_BOOTSTRAP)
 
 
 @pytest.fixture(scope="module")
@@ -491,17 +243,17 @@ def writing() -> frozenset[str]:
     branch the narrow seed finds is found here too, and the branches that reach
     some OTHER writer are found only here.
     """
-    return _callables_that_reach(beadloom, THE_GRAPH_COMMIT_POINT)
+    return callables_that_reach(_package_root(), THE_GRAPH_COMMIT_POINT)
 
 
 @pytest.fixture(scope="module")
-def call_sites(reaching: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
+def call_sites(reaching: frozenset[str]) -> tuple[CallSite, ...]:
     """Every bootstrap-reaching call in the real `init`, in source order."""
     return _call_sites_in(_the_commands_source(), reaching)
 
 
 @pytest.fixture(scope="module")
-def writer_call_sites(writing: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
+def writer_call_sites(writing: frozenset[str]) -> tuple[CallSite, ...]:
     """Every call in the real `init` that ends in a graph-file write."""
     return _call_sites_in(_the_commands_source(), writing)
 
@@ -633,7 +385,7 @@ class TestTheEnumeratorItself:
 
         sites = _call_sites_in(A_FOURTH_BRANCH_WITHOUT_A_VERDICT, reaching)
 
-        assert [site.guard for site in sites if not site.takes_verdict] == [("rescan",)]
+        assert [site.guard for site in sites if not site.reaches_marker] == [("rescan",)]
 
     def test_it_accepts_a_fourth_branch_that_does_take_the_verdict(
         self, reaching: frozenset[str]
@@ -644,7 +396,7 @@ class TestTheEnumeratorItself:
 
         sites = _call_sites_in(A_FOURTH_BRANCH_WITH_A_VERDICT, reaching)
 
-        assert [site.guard for site in sites if not site.takes_verdict] == []
+        assert [site.guard for site in sites if not site.reaches_marker] == []
         assert ("rescan",) in [site.guard for site in sites]
 
     def test_it_does_not_count_a_verdict_the_return_above_it_makes_unreachable(
@@ -657,7 +409,7 @@ class TestTheEnumeratorItself:
 
         sites = _call_sites_in(A_VERDICT_BELOW_THE_RETURN, reaching)
 
-        assert [site.guard for site in sites if not site.takes_verdict] == [("non_interactive",)]
+        assert [site.guard for site in sites if not site.reaches_marker] == [("non_interactive",)]
 
     def test_it_does_not_count_a_verdict_a_sys_exit_above_it_makes_unreachable(
         self, reaching: frozenset[str]
@@ -677,7 +429,7 @@ class TestTheEnumeratorItself:
 
         sites = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
 
-        assert [site.guard for site in sites if not site.takes_verdict] == [
+        assert [site.guard for site in sites if not site.reaches_marker] == [
             ("non_interactive",)
         ]
 
@@ -693,8 +445,8 @@ class TestTheEnumeratorItself:
         by_return = _call_sites_in(A_VERDICT_BELOW_THE_RETURN, reaching)
         by_exit = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
 
-        assert [site.takes_verdict for site in by_return] == [
-            site.takes_verdict for site in by_exit
+        assert [site.reaches_marker for site in by_return] == [
+            site.reaches_marker for site in by_exit
         ]
 
     def test_the_writer_seed_finds_the_writers_the_sweep_found_by_hand(
@@ -709,7 +461,7 @@ class TestTheEnumeratorItself:
         arrive in silence, which is the defect this module is named after one
         level down.
         """
-        committing = _direct_callers_of(beadloom, THE_GRAPH_COMMIT_POINT)
+        committing = direct_callers_of(_package_root(), THE_GRAPH_COMMIT_POINT)
 
         assert committing == THE_WRITERS_THE_SWEEP_FOUND, (
             "the set of functions that commit a graph file has changed. Added: "
@@ -748,7 +500,7 @@ class TestTheEnumeratorItself:
             "the narrow seed now sees the writer branch, so this case no longer "
             "states the difference it was written for"
         )
-        assert [site.guard for site in by_writer if not site.takes_verdict] == [
+        assert [site.guard for site in by_writer if not site.reaches_marker] == [
             ("rescan",)
         ]
 
@@ -767,7 +519,7 @@ class TestTheTerminatorClassifierItself:
         with pytest.raises(SystemExit):
             sys.exit(0)
 
-        assert _never_returns("sys.exit")
+        assert never_returns("sys.exit", init_command)
 
     def test_a_callable_annotated_no_return_is_a_terminator(self) -> None:
         """The derivation, over a callable this module did not name anywhere.
@@ -779,11 +531,11 @@ class TestTheTerminatorClassifierItself:
         def stop() -> NoReturn:
             raise SystemExit(1)
 
-        assert _never_returns("stop", SimpleNamespace(stop=stop))
+        assert never_returns("stop", SimpleNamespace(stop=stop))
 
     def test_a_call_the_command_continues_past_is_not_a_terminator(self) -> None:
         """Anti-vacuity: a classifier that said yes to everything would pass."""
-        assert not _never_returns("click.echo")
+        assert not never_returns("click.echo", init_command)
 
     def test_a_name_the_command_module_does_not_have_is_not_a_terminator(self) -> None:
         """An unresolvable name is read as continuing, and that is the ceiling.
@@ -793,7 +545,7 @@ class TestTheTerminatorClassifierItself:
         behavioural axis in `tests/test_every_wizard_answer_is_judged.py` is
         what covers the forms this one cannot enumerate.
         """
-        assert not _never_returns("nothing_by_this_name.exit")
+        assert not never_returns("nothing_by_this_name.exit", init_command)
 
 
 class TestNoGraphFileIsWrittenPastTheCommitPoint:
@@ -807,12 +559,6 @@ class TestNoGraphFileIsWrittenPastTheCommitPoint:
     So the fact is checked rather than trusted.
     """
 
-    #: The names a function calls when it serialises YAML, and when it puts bytes
-    #: on disk. A function that does both without the commit point is a writer
-    #: the seed cannot see.
-    SERIALISES = frozenset({"dump", "safe_dump"})
-    WRITES = frozenset({"write_text", "write_bytes", "open"})
-
     #: The one function that legitimately does both. It writes
     #: `.beadloom/flow.yml` — the role-configurator's file, read by
     #: `setup-agentic-flow` — which is not a graph file and holds no node, so no
@@ -820,21 +566,16 @@ class TestNoGraphFileIsWrittenPastTheCommitPoint:
     THE_DECLARED_EXCEPTION = frozenset({"persist_flow_config"})
 
     def _functions_that_serialise_yaml_to_disk(self) -> dict[str, str]:
-        root = Path(inspect.getfile(beadloom)).parent
-        found: dict[str, str] = {}
-        for path in sorted(root.rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                    continue
-                called = _called_names(node)
-                if self.SERIALISES & called and self.WRITES & called:
-                    found[node.name] = f"{path.relative_to(root)}:{node.lineno}"
-        return found
+        """The derivation's answer, each function named with where it is."""
+        root = _package_root()
+        return {
+            name: f"{where.path.relative_to(root)}:{where.lineno}"
+            for name, where in functions_that_serialise_yaml_to_disk(root).items()
+        }
 
     def test_the_scan_finds_something_to_judge(self) -> None:
         """Anti-vacuity: a scan that matched nothing would pass the next case."""
-        assert _direct_callers_of(beadloom, THE_GRAPH_COMMIT_POINT), (
+        assert direct_callers_of(_package_root(), THE_GRAPH_COMMIT_POINT), (
             f"no function calls {THE_GRAPH_COMMIT_POINT!r}, so the wide seed is "
             "empty and every writer-seeded assertion below asserts nothing"
         )
@@ -875,7 +616,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
     """
 
     def test_the_scan_finds_branches_to_judge(
-        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+        self, writer_call_sites: tuple[CallSite, ...]
     ) -> None:
         """Anti-vacuity: an empty scan would pass every assertion below it."""
         assert writer_call_sites, (
@@ -885,8 +626,8 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
 
     def test_it_sees_branches_the_bootstrap_seeded_scan_does_not(
         self,
-        call_sites: tuple[GraphWritingCallSite, ...],
-        writer_call_sites: tuple[GraphWritingCallSite, ...],
+        call_sites: tuple[CallSite, ...],
+        writer_call_sites: tuple[CallSite, ...],
     ) -> None:
         """Measured on the real command, so the widening is not just intended.
 
@@ -902,7 +643,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         )
 
     def test_no_branch_writes_a_graph_file_without_a_verdict_or_a_declared_deferral(
-        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+        self, writer_call_sites: tuple[CallSite, ...]
     ) -> None:
         """A third writer reached from an unjudged branch fails here.
 
@@ -914,7 +655,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         unguarded = [
             f"{site.callee} at line {site.lineno} under {site.guard or '<no flag>'}"
             for site in writer_call_sites
-            if not site.takes_verdict and site.guard not in deferred
+            if not site.reaches_marker and site.guard not in deferred
         ]
 
         assert unguarded == [], (
@@ -923,7 +664,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         )
 
     def test_no_deferral_is_declared_for_a_branch_the_source_does_not_have(
-        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+        self, writer_call_sites: tuple[CallSite, ...]
     ) -> None:
         """A carve-out for a branch that was deleted excuses nothing and hides that."""
         stale = _deferrals_naming_a_branch_that_is_gone(
@@ -936,7 +677,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         )
 
     def test_every_deferred_branch_hands_the_work_back_to_the_adopter(
-        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+        self, writer_call_sites: tuple[CallSite, ...]
     ) -> None:
         """A deferral that says nothing is a silent skip under a better name.
 
@@ -953,7 +694,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         assert silent == [], silent
 
     def test_no_branch_defers(
-        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+        self, writer_call_sites: tuple[CallSite, ...]
     ) -> None:
         """BDL-067 `.17`, part 2(a), stated as the fact it is.
 
@@ -964,7 +705,7 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         re-added without a branch to match fails the second.
         """
         assert [
-            site.guard for site in writer_call_sites if not site.takes_verdict
+            site.guard for site in writer_call_sites if not site.reaches_marker
         ] == []
         assert THE_DEFERRED_BRANCHES == ()
 
@@ -991,7 +732,7 @@ class TestTheDeferralChecksStillBite:
         tells_the_adopter="beadloom reindex",
     )
 
-    def _sites(self, writing: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
+    def _sites(self, writing: frozenset[str]) -> tuple[CallSite, ...]:
         assert A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO != A_COMMAND_LIKE_INIT, (
             "the anchor the mutation edits is gone, so these cases judge the "
             "unmutated command and the branch they name never existed"
@@ -1048,7 +789,7 @@ class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:
     """Read off `init`'s own source, so a branch added later is counted here."""
 
     def test_the_scan_finds_branches_to_judge(
-        self, call_sites: tuple[GraphWritingCallSite, ...]
+        self, call_sites: tuple[CallSite, ...]
     ) -> None:
         """Anti-vacuity: an empty scan would pass every assertion below it."""
         assert call_sites, (
@@ -1057,7 +798,7 @@ class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:
         )
 
     def test_no_branch_reaches_the_bootstrap_without_taking_a_verdict(
-        self, call_sites: tuple[GraphWritingCallSite, ...]
+        self, call_sites: tuple[CallSite, ...]
     ) -> None:
         """The claim `.2` made about two branches, made about all of them.
 
@@ -1068,7 +809,7 @@ class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:
         unguarded = [
             f"{site.callee} at line {site.lineno} under {site.guard or '<no flag>'}"
             for site in call_sites
-            if not site.takes_verdict
+            if not site.reaches_marker
         ]
 
         assert unguarded == [], (
@@ -1087,7 +828,7 @@ class TestTheParametrisedCasesCoverTheBranchesTheSourceHas:
     """
 
     def test_every_branch_in_the_source_has_a_case(
-        self, call_sites: tuple[GraphWritingCallSite, ...]
+        self, call_sites: tuple[CallSite, ...]
     ) -> None:
         declared = {branch.guard for branch in THE_BRANCHES}
         found = {site.guard for site in call_sites}
@@ -1098,7 +839,7 @@ class TestTheParametrisedCasesCoverTheBranchesTheSourceHas:
         )
 
     def test_no_case_claims_a_branch_the_source_does_not_have(
-        self, call_sites: tuple[GraphWritingCallSite, ...]
+        self, call_sites: tuple[CallSite, ...]
     ) -> None:
         """A case for a branch that was deleted tests nothing and says it does."""
         declared = {branch.guard for branch in THE_BRANCHES}

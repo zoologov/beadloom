@@ -77,22 +77,86 @@ CI gate, `beadloom sync-check`, the MCP `sync_check` tool and the TUI dashboard.
 deliberately do not: `sync-update` (twice), because re-baselining a pair cannot fix a missing
 section, and `site_published`, because publishing a site does not judge one.
 
+### The same policy over the flow's planning documents
+
+BDL-068 S1.4 made the peer policy a function of its own — `peer_section_shape` — and ran it over
+a second corpus: the BRIEF, RFC, PRD, CONTEXT, PLAN and ACTIVE documents, against the sections
+their own composed skeletons carry. One implementation of "does a majority carry this", so the
+two corpora cannot disagree about what the rule is.
+
+`check_planning_sections` reports two things, and they answer different questions:
+
+| Check | Peer-relative | Why |
+|-------|---------------|-----|
+| `missing-section` | yes | a section the archive never adopted is reported once against the KIND, not once per document |
+| `empty-section` | no | a heading the author wrote with nothing under it is a defect whatever the peers do, and it is the one a presence check is satisfied by |
+
+Measured on this repository's 259 planning documents when this shipped: requiring every template
+heading of every document gives **767** findings, because the archive predates `language: en` and
+carries none of today's headings. Under the majority policy the same requirement gives **17**
+statements about a kind — including `BRIEF Axes (0/12)` and `RFC Axes (0/48)` — and **102** about
+a document. Every one of the 102 is a real departure from the shape its peers keep; they are old
+RFCs with no `## Overview` and old PRDs with no `## Impact`. All eleven planning checks are
+`warn`, so the Gate stays green on them.
+
+### An absence another check reports absolutely is withdrawn from the peer half only
+
+`BRIEF Axes (0/12)` is the measurement that made this necessary. A section **no** peer carries
+produces one kind-level statement and no document-level finding, which is right for a convention
+an archive never adopted and wrong for the input to a decision: `## Axes` was required by the
+template and reported by nothing. BDL-068 S1.5 gave it an absolute reporter in
+`doc_sync.work_item_type`, and `check_planning_sections` takes
+`absence_reported_elsewhere={kind: {section}}` so one fault keeps one reporter.
+
+The withdrawal is from the peer-relative half **alone**. The requirement itself stays, so a
+heading present with nothing under it is still `empty-section`'s finding — withdrawing the
+requirement removes the emptiness check with it, which is a coverage loss rather than a
+de-duplication. That is not a hypothetical: the first cut of S1.5 withdrew the requirement and
+the suite went red on exactly this case.
+
+### One markdown table reader
+
+`table_cells(line)` is the project's only reader of a markdown table row, and the `## Axes`
+grammar is expressed over it. The `## Axes` table and `/task-init`'s routing table are two
+tables read for two facts, and two parsers would make "what a row is" a thing that can disagree
+with itself. An alignment row is not a row of data and returns `None`, so no caller has to know
+it exists.
+
+### Emptiness is judged over the whole section, not over the heading's own lines
+
+`read_sections` records each heading's DEPTH and propagates content upward: a section whose
+content lives in its subsections is not empty. Judging the heading's own lines alone reported
+**155** documents on this repository whose `## Code Standards` is a heading over four `###`,
+which is why the rule is stated this way rather than the simpler way.
+
+The reader also skips fenced blocks. A `## ` inside a fence is a quoted template, and without
+that a BRIEF quoting its own skeleton would be credited with every section the skeleton names.
+
 ## Public API
 
 | Symbol | Kind |
 |--------|------|
 | `STATUS_INCOMPLETE` | constant |
 | `REASON_MISSING_SECTIONS` / `REASON_SECTION_NOT_IN_USE` | constant |
+| `MISSING_SECTION` / `EMPTY_SECTION` | constant |
+| `Section` / `SectionConvention` / `LostSections` / `PlanningShapeReport` | dataclass |
+| `read_sections` | function |
 | `document_sections` | function |
 | `carries_section` | function |
+| `table_cells` | function |
+| `peer_section_shape` | function |
 | `check_section_shape` | function |
+| `check_planning_sections` | function |
 
 ## Dependencies
 
 - Depends on: `infrastructure.doc_roots.resolve_docs_dir` — the documents are read from the
   documentation directory the project declared, rather than from a hardcoded `docs/`
-  (`beadloom-mr2l.75`). Otherwise pure markdown and SQL reads.
-- Used by: `sync-check`, the CI gate, `beadloom sync-check`
+  (`beadloom-mr2l.75`); and `doc_sync.doc_quality` for `QualityFinding` and `document_kind`, the
+  shape and the naming every planning-document finding already uses. Otherwise pure markdown and
+  SQL reads.
+- Used by: `sync-check`, the CI gate, `beadloom sync-check`, and `application.planning_report`
+  (the one composition behind the `docs-quality` gate step and `beadloom docs quality`)
 
 ## Parent
 
@@ -103,3 +167,7 @@ section, and `site_published`, because publishing a site does not judge one.
 `tests/test_missing_sections.py` — the outlier, the convention, the tie, the phrase match, the
 honest limits, both wirings of `check_sync`, the gate and CLI surfaces, and an adopter project
 whose own project layer defines the sections.
+`tests/test_the_axes_section_is_required_by_the_template.py` and
+`tests/acceptance/features/planning_document_shape.feature` — the same three population cases
+over planning documents, the empty section, the nested content that is not one, the fence that
+is not a section, and the document kind no template describes.

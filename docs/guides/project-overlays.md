@@ -2,7 +2,7 @@
 
 <!-- beadloom:watches=cli,flow.yml -->
 
-Every file the agentic flow puts in your repository — the four role protocols, the
+Every file the agentic flow puts in your repository — the five role protocols, the
 four slash commands and `CLAUDE.md` — is **composed** from layers rather than copied
 from a template. The last layer is yours.
 
@@ -65,9 +65,21 @@ Four kinds of artifact compose, and each has its own project fragment:
 | `claude` | `.claude/CLAUDE.md` | `.beadloom/flow/claude/CLAUDE.md` |
 | `docs` | the skeletons `beadloom docs generate` writes | `.beadloom/flow/docs/<kind>.md` |
 
-Role names are `dev`, `test`, `review`, `tech-writer`. Command names are
+Role names are `dev`, `explore`, `review`, `tech-writer`, `test`. Command names are
 `coordinator`, `task-init`, `checkpoint`, `templates`. Doc kinds are `overview`,
 `domain`, `service`, `feature` and `beadloom-readme`.
+
+`explore` arrived with BDL-068 S1.5, and the role population is no longer a list
+anyone maintains. `role_composer.roles_in()` reads it out of the shipped
+`templates/roles/core/*.md.txt` fragments over a shape — a fragment is a role when
+its front matter names its own file — so dropping a fragment in makes the role
+exist for every reader at once, including `config-check`, the scaffold and the
+Cursor orchestrator pointer. The order is sorted, which is why `test` is last:
+`ROLE_NAMES` was `('dev', 'test', 'review', 'tech-writer')` before and is now
+`('dev', 'explore', 'review', 'tech-writer', 'test')`. A project that composed a
+`.beadloom/flow/roles/<role>.md` fragment for the four keeps it. `explore` gets a
+project layer the same way the others do, and a project that wants none composes
+none.
 
 ### The docs layer does one thing the others do not
 
@@ -196,7 +208,7 @@ detectable.
 ### `rule` is a heading path, matched against what *you* compose
 
 Each `/`-separated segment must be named by a heading somewhere in your composed
-corpus: `CLAUDE.md`, the four slash commands and the four role protocols.
+corpus: `CLAUDE.md`, the four slash commands and the five role protocols.
 `Anti-patterns / Shell` is matched by `### Anti-patterns (shell)`.
 
 The corpus is *yours*, not Beadloom's. Measured on a scaffolded TypeScript project,

@@ -28,10 +28,18 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    nothing was excused, so a project that declares no exemption keeps its line.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
-5. **docs-quality** — the five writing-standard checks over the project's
-   planning documents (BDL-061 S4b): a goal with a measurable clause, a decision
-   carrying a reason, a risk carrying a mitigation, no `Pending` question inside
-   an `Approved` document, and no unfilled template placeholder. Every finding is
+5. **docs-quality** — every check that reads the project's planning documents,
+   assembled by `application/planning_report.py` so this step and
+   `beadloom docs quality` report ONE run (BDL-068 S1.4). Five writing-standard
+   checks (BDL-061 S4b): a goal with a measurable clause, a decision carrying a
+   reason, a risk carrying a mitigation, no `Pending` question inside an
+   `Approved` document, and no unfilled template placeholder. Two structural
+   ones: `missing-section` and `empty-section`, against the sections each
+   document kind's own composed skeleton carries. Two about the axes:
+   `axes-without-a-seed` and `axis-without-a-scope-decision`. A required section
+   no majority of a kind carries is reported once against the KIND, with its
+   ratio and no file location, because the fix is in the template rather than in
+   every document. Every finding is
    a `warn` and the step is `passed` unconditionally, so a project whose
    documents predate the checks does not go red on upgrade. A project with no
    planning document is a NAMED skip that states the globs it looked under.
@@ -45,9 +53,16 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    Measured on this repository, 2026-08-24, the step reports:
 
    ```
-   docs-quality WARN | 243 document(s) read; measurable-goal 4,
-                       pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
+   docs-quality WARN | 259 document(s) read; measurable-goal 4,
+                       pending-in-approved 7, missing-section 102;
+                       NOT CHECKED: axes-without-a-seed,
+                       axis-without-a-scope-decision;
+                       NO CHECK READS: BRIEF, PLAN, SUMMARY
    ```
+
+   Measured again on 2026-09-02, after S1.4. The two axes checks read **0**
+   documents because no planning document in this repository carries an
+   `## Axes` section yet, and the line says so rather than reporting them clean.
 
    **The line prints findings, not what the check stopped deciding about.** After
    `beadloom-mr2l.70` re-scoped `measurable-goal`, 27 of the 150 newly-accepted
@@ -119,7 +134,23 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+7. **scope-check** — did this branch leave the axes its work item declared?
+   (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
+   the tree is shared by several agents, so judging it would fail one agent's
+   push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
+   request contains and what the approval was spent on. The trunk is the
+   `options.trunk` the `working-branch` guard already reads, preferring
+   `origin/<trunk>` when that remote-tracking ref exists — measured on this
+   repository, a local `main` two commits behind the remote made another work
+   item's LANDED change read as this branch's work. `passed=True`
+   unconditionally, like `docs-quality` and `doc-spaces`: the check ships as
+   `warn` so a project whose work items predate `## Axes` does not go red on
+   upgrade. A run that found no branch, no work item, no index, no `## Axes`
+   section, no answer from git, or no changed path a node owns is a NAMED SKIP
+   with its reason — never a PASS, because a comparison over an empty
+   population has verified nothing. The summary states the findings, the paths
+   judged, the paths no node owns and the declared rows nobody decided.
+8. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -129,8 +160,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-8. **doctor** — graph integrity.
-9. **federate** — `federate --fail-on` when hub exports are supplied.
+9. **doctor** — graph integrity.
+10. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

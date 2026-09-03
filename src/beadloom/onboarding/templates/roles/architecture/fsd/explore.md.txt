@@ -1,0 +1,12 @@
+
+<!-- overlay:fsd — what the Node column names in an FSD graph, and when a route stops fitting. -->
+## ARCHITECTURE (Feature-Sliced Design)
+
+The `Node` column names the SLICE that owns the site (`features/x`, `entities/y`, `shared/z`), read from the graph by `beadloom impact`. Discover the live map with `beadloom graph` / `beadloom ctx <ref-id>`; do not infer a slice from a path by eye.
+
+Two facts about the boundary belong in the section because they are what a route is chosen on:
+
+- **Does the change leave the target's slice?** Rows naming more than one slice say it does.
+- **Does it cross a layer the wrong way** (`app → processes → pages → widgets → features → entities → shared`), or reach into another slice below its public `index.ts`? That is a boundary violation rather than a scope question — say so on the row's `Why` cell and let the plan deal with it.
+
+A change ranging over more than one slice has no document in the simplified flow that records the crossing, so the count of distinct slices in the table is the fact the type decision turns on. Report it; do not judge it.

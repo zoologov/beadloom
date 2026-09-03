@@ -39,10 +39,12 @@ standalone command that takes no verdict and reads no index afterwards. That is
 recorded as the vacuous cell rather than hidden inside a passing parametrisation.
 
 The instrument is not a second implementation. What runs after a call in its
-branch is `_statement_trail` in
-`tests/test_init_branches_that_reach_the_bootstrap.py`, imported rather than
+branch is `statement_trail` in
+`src/beadloom/application/source_derivation/branches.py`, imported rather than
 written again: two derivations of one fact are two things that can disagree, and
-this epic has spent three waves on pairs that did.
+this epic has spent three waves on pairs that did. It lived in
+`tests/test_init_branches_that_reach_the_bootstrap.py` until BDL-068 `.1` lifted
+it, and this module is the third caller that made it worth lifting.
 """
 
 from __future__ import annotations
@@ -56,11 +58,8 @@ import pytest
 
 import beadloom
 from beadloom.application.reindex import reindex
+from beadloom.application.source_derivation import callee_name, statement_trail
 from beadloom.onboarding.doc_generator import generate_skeletons
-from tests.test_init_branches_that_reach_the_bootstrap import (
-    _callee_name,
-    _statement_trail,
-)
 
 #: The writer this module is about, read off the function object so a rename
 #: fails at import here rather than leaving a scan that finds no call site and
@@ -158,7 +157,7 @@ def _calls_a_reindex(statement: ast.stmt, names: set[str]) -> bool:
     verdict walk, and stated here rather than left to be rediscovered.
     """
     return any(
-        isinstance(node, ast.Call) and _callee_name(node) in names
+        isinstance(node, ast.Call) and callee_name(node) in names
         for node in ast.walk(statement)
     )
 
@@ -179,10 +178,10 @@ def _call_sites_in(source: str, where: str) -> list[SkeletonCallSite]:
         for node in ast.walk(function):
             if not (
                 isinstance(node, ast.Call)
-                and _callee_name(node) == THE_SKELETON_WRITER
+                and callee_name(node) == THE_SKELETON_WRITER
             ):
                 continue
-            trail = _statement_trail(_statement_holding(node, parents), parents)
+            trail = statement_trail(_statement_holding(node, parents), parents)
             sites.append(
                 SkeletonCallSite(
                     caller=function.name,
@@ -208,7 +207,7 @@ def _call_sites_in(source: str, where: str) -> list[SkeletonCallSite]:
 def _statement_holding(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> ast.stmt:
     """The statement *node* is part of, so the trail is walked from a statement.
 
-    A call is an expression; `_statement_trail` walks blocks, whose members are
+    A call is an expression; `statement_trail` walks blocks, whose members are
     statements. Climbing to the enclosing statement first is what makes the two
     agree.
     """

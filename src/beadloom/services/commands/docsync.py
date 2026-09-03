@@ -569,6 +569,26 @@ if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
 
+# --- Declared axes, over the paths this commit stages ---
+# The work item is the one the BRANCH names: this hook runs before the commit
+# message is finalised, so the `[KEY]` prefix is not readable here. A run that
+# finds no branch, no work item, no index or no `## Axes` section prints its
+# reason on stderr and never blocks -- a check with nothing to compare against
+# must not read as a clean sheet.
+#
+# WARNS in both hook modes, including the blocking one, and that is a decision
+# rather than an omission: one work item in 64 carries a `## Axes` section
+# today, so a check that BLOCKED would meet a repository that cannot satisfy it
+# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
+# reports the same comparison where a reviewer reads it.
+axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
+if [ -n "$axes_outside" ]; then
+  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
+  echo "$axes_outside"
+  echo ""
+  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
+fi
+
 # --- What this commit did NOT judge ---
 echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."
@@ -616,6 +636,26 @@ fi
 
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
+fi
+
+# --- Declared axes, over the paths this commit stages ---
+# The work item is the one the BRANCH names: this hook runs before the commit
+# message is finalised, so the `[KEY]` prefix is not readable here. A run that
+# finds no branch, no work item, no index or no `## Axes` section prints its
+# reason on stderr and never blocks -- a check with nothing to compare against
+# must not read as a clean sheet.
+#
+# WARNS in both hook modes, including the blocking one, and that is a decision
+# rather than an omission: one work item in 64 carries a `## Axes` section
+# today, so a check that BLOCKED would meet a repository that cannot satisfy it
+# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
+# reports the same comparison where a reviewer reads it.
+axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
+if [ -n "$axes_outside" ]; then
+  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
+  echo "$axes_outside"
+  echo ""
+  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
 fi
 
 # --- What this commit did NOT judge ---

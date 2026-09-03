@@ -43,6 +43,30 @@ def section_requirements(project_root: Path) -> dict[str, tuple[str, ...]] | Non
     return required_sections_by_node_kind(config=config, project_root=project_root)
 
 
+def document_section_requirements(project_root: Path) -> dict[str, tuple[str, ...]]:
+    """Required sections per PLANNING document kind, or ``{}`` when unresolvable.
+
+    The same join :func:`section_requirements` performs for generated node
+    documentation, over the other family of composed templates. ``{}`` — nothing
+    is required, so nothing is reported — is returned for a malformed
+    ``flow.yml``, which ``config-check`` already names: raising here would turn
+    one configuration error into a document-quality run that names the wrong
+    file.
+    """
+    from beadloom.onboarding.doc_templates import (
+        doc_flow_config,
+        required_sections_by_document_kind,
+    )
+
+    try:
+        config = doc_flow_config(project_root)
+        return required_sections_by_document_kind(
+            config=config, project_root=project_root
+        )
+    except FlowConfigError:
+        return {}
+
+
 #: Where the flow's planning documents live, when a project declares nothing.
 #: The convention the shipped ``/task-init`` scaffolds into and
 #: ``active_table`` already reads (``.claude/development/docs/features/<KEY>/``).

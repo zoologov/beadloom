@@ -15,7 +15,7 @@ plain YAML in Git, then continuously checks the real code against it:
 - **Docs that can't go stale.** Beadloom tracks which docs describe which code and flags the ones that fall behind — on every commit, in CI, or on demand.
 - **Boundaries that are enforced.** You write architecture rules in YAML; `beadloom lint` blocks violations in CI, no matter who (or which AI tool) wrote the code.
 - **Contracts checked across services.** Federate per-repo graphs into one landscape and Beadloom reconciles what each service *says it provides* against what its consumers *actually use* — catching a broken contract before it ships.
-- **Context for AI agents.** `beadloom prime` hands an agent a compact (<2K-token) picture of the architecture, and `setup-agentic-flow` composes a full multi-agent workflow (dev → test → review → tech-writer) for Claude Code and Cursor.
+- **Context for AI agents.** `beadloom prime` hands an agent a compact (<2K-token) picture of the architecture, and `setup-agentic-flow` composes a full multi-agent workflow (explore, then dev → test → review → tech-writer) for Claude Code and Cursor.
 - **A self-governing model.** No shadow code: every source module must be a tracked graph node or explicitly exempt, enforced as a CI error.
 
 ## Requirements
@@ -206,9 +206,10 @@ doctor         PASS
 
 With `flow.yml` configured and `setup-agentic-flow` run, a feature flows through
 gated waves. The process roles live in your editor adapters (`.claude/commands/*`
-for Claude Code); the four work roles are subagents:
+for Claude Code); the five work roles are subagents:
 
 1. **`/task-init`** — scaffold the work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) and create the beads (tracked in `bd`).
+   - **explore** — step 0.5, mandatory and before the type is chosen: derive the `## Axes` section with `beadloom impact <path|symbol> --section` and paste it into the BRIEF or the RFC. The axis count is what says whether a work item is a bug, so the type is decided from a derivation rather than from how the request was phrased. This role creates no bead, so the bead DAG stays four-role.
 2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, and states the media a concurrent wave shares regardless:
    - **dev** — implement the bead (TDD), update its `SPEC.md`/`DOC.md`.
    - **test** — write/extend tests, verify coverage.

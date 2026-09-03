@@ -93,7 +93,13 @@ class TestAnUndecodableDocumentLeavesAReport:
 
 class TestTheRepositorysOwnPopulationIsUnchanged:
     def test_no_document_this_project_ships_becomes_unreadable_or_lost(self) -> None:
-        """33 references before the false-positive removal, 36 once BDL-067 landed."""
+        """33 before the false-positive removal, 36 with BDL-067, 50 with BDL-068.
+
+        The last increment is the epic's own PRD, committed in `409e977` with 14
+        scenario references and this literal left at 36. A count a human maintains
+        is a count that goes stale between the commit that moves it and the first
+        person to run the suite — `mr2l.72`'s class, restated by measurement.
+        """
         globs = (
             ".claude/development/docs/features/**/PRD.md",
             ".claude/development/docs/features/**/BRIEF.md",
@@ -103,7 +109,7 @@ class TestTheRepositorysOwnPopulationIsUnchanged:
 
         assert found.unreadable == ()
         assert found.dead_globs == ()
-        assert len(found.references) == 36
+        assert len(found.references) == 50
 
 
 # --------------------------------------------------------------------------- #

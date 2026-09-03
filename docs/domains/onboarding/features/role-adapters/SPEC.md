@@ -26,6 +26,11 @@ expected result rather than drift (BDL-UX #139, #152).
   body) plus a thin `.cursor/rules/beadloom-flow.md` orchestrator pointer (the
   coordinator-as-Cursor-mode entry point).
 
+The pointer's list of roles is **rendered over `ROLE_NAMES`**, not typed into it (BDL-068
+S1.5). It used to spell the four names as prose, so a fifth role reached the composer, the
+adapters and the drift-guard and was absent from the one file that tells a Cursor user which
+roles exist.
+
 ### Modules
 
 - **role_adapters.py** — `generate_adapters(config, project_root, preserve=…)`,

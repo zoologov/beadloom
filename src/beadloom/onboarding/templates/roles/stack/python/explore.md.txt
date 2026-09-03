@@ -1,0 +1,14 @@
+
+<!-- overlay:python — the target forms `beadloom impact` accepts in a Python tree. -->
+## STACK (Python)
+
+```bash
+beadloom impact src/pkg/module.py --section      # a module path
+beadloom impact write_yaml_atomic --section      # a symbol, wherever it is defined
+beadloom impact src/pkg/module.py --json         # the same computation, for a tool
+```
+
+- A target is a path **relative to the project root** or a bare symbol name. Both are project-relative in the output, so two runs from different working directories produce the same text.
+- `--root` narrows the tree that is swept; the default is derived from the target. Narrowing it changes the answer, so if you pass it, the `Derived by` line must say so — that line is generated, so simply do not edit it.
+- A module that does not parse is reported in the unresolved population rather than skipped. Do not fix it; carry it.
+- Run the command in the foreground and do not pipe it. A piped run that fails is a run whose failure you did not see.

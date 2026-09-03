@@ -25,7 +25,6 @@ callers, and it is a parameter of the shared policy rather than a second body.
 
 from __future__ import annotations
 
-import ast
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +34,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from beadloom.application.source_derivation import yaml_directory_readers_in
 from beadloom.onboarding.doc_generator import _load_graph_from_yaml, _patch_docs_field
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.onboarding.scanner.doc_classify import _existing_graph
@@ -214,6 +214,17 @@ def read(graph_dir):
     for path in graph_dir.glob("*.yml"):
         yaml.load(path.read_text(), Loader=yaml.SafeLoader)
 """,
+    # BDL-068 `.1`. The sixth spelling, and the one the lift closes: both verbs
+    # imported by name, so neither call is an attribute of anything. `.25`
+    # matched `call.func.attr` alone, which is a claim about how a call is
+    # PUNCTUATED rather than about what it does.
+    "both verbs imported by name": """
+from os import listdir
+from yaml import safe_load
+def read(graph_dir):
+    for name in listdir(graph_dir):
+        safe_load((graph_dir / name).read_text())
+""",
 }
 
 #: Bodies that hold ONE half of the shape and must NOT be reported. A detector
@@ -247,15 +258,13 @@ class TestTheSkipPolicyLivesInOneBody:
     (`A_FIFTH_READER_SPELLED_ANOTHER_WAY`), and each of them would carry a sixth
     skip policy into the product.
 
-    The trade-off, stated because widening a derivation is not free. The narrow
-    form UNDER-reports — measured above, five routes — and an under-reporting
-    derivation ships the defect. The wide form may OVER-report: a body that lists
-    a directory of documents and parses YAML front matter for some other purpose
-    would be named here. MEASURED on this tree: it names exactly the same one
-    body the narrow form does, so there is nothing to exempt today, and an
-    over-report fails in front of the person adding the body rather than at an
-    adopter. If a genuine non-reader is named later, the answer is an exemption
-    recorded with its reason, not a narrower shape.
+    BDL-068 `.1` lifted the derivation itself into
+    `application/source_derivation/body_shapes.py`, where the trade-off of
+    widening it is stated with the measurement that justified it. The cases here
+    are unchanged and are what holds that code to the shape: they are the tree it
+    goes red on. The sixth spelling — both verbs imported by name, so neither
+    call is an attribute of anything — was added with the lift and was RED
+    against `.25`'s detector before it.
     """
 
     #: Where `init`'s own readers live. `rules_gen` and `agents_md` parse
@@ -267,29 +276,9 @@ class TestTheSkipPolicyLivesInOneBody:
     )
     THE_ONE_BODY = Path("src/beadloom/onboarding/graph_files.py")
 
-    #: Listing a directory, by every name the standard library offers for it.
-    LISTS_A_DIRECTORY = frozenset({"glob", "rglob", "iterdir", "listdir", "scandir", "walk"})
-    #: Parsing YAML, by every loader PyYAML offers. `load` and `unsafe_load` are
-    #: in the set for the same reason `safe_load` is: what matters here is that
-    #: the body turns a graph file into data, and this project's own rule against
-    #: `yaml.load` is enforced elsewhere.
-    PARSES_YAML = frozenset(
-        {"safe_load", "safe_load_all", "load", "load_all", "full_load", "unsafe_load"}
-    )
-
     def _readers_in_source(self, source: str, label: str) -> list[str]:
-        tree = ast.parse(source)
-        found: list[str] = []
-        for fn in ast.walk(tree):
-            if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
-            attributes = {c.func.attr for c in calls if isinstance(c.func, ast.Attribute)}
-            walks = bool(attributes & self.LISTS_A_DIRECTORY)
-            parses = bool(attributes & self.PARSES_YAML)
-            if walks and parses:
-                found.append(f"{label}::{fn.name}")
-        return found
+        """The derivation's answer, labelled with where it was asked."""
+        return [f"{label}::{name}" for name in yaml_directory_readers_in(source)]
 
     def _readers_in(self, module: Path) -> list[str]:
         return self._readers_in_source(module.read_text(encoding="utf-8"), str(module))

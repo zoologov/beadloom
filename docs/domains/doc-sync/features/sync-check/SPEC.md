@@ -492,11 +492,30 @@ Module `src/beadloom/doc_sync/declared_docs.py` — the declared surface vs disk
 - `find_missing_declared_docs(conn, project_root) -> list[dict]` — declarations
   the tree no longer satisfies (re-exported from `engine`).
 
-Module `src/beadloom/doc_sync/git_baseline.py` — the baseline that cannot be lost:
+Module `src/beadloom/doc_sync/git_baseline.py` — the baseline that cannot be lost. It
+answers one KIND of question: *what does git say about this working copy?* BDL-068 S1.6
+widened it from the first two entries to the last three rather than opening a second
+subprocess call to `git` elsewhere in the product — two readers of one tool are two things
+that can disagree about what a path is relative to, and `_project_relative` is the answer to
+that.
 
 - `changed_paths(project_root) -> frozenset[str] | None` — project-relative paths
   differing from `HEAD`; `None` means *git could not answer*, never *nothing
   changed*.
+- `staged_paths(project_root) -> frozenset[str] | None` — the paths this commit
+  would record, for the commit-scoped run.
+- `paths_changed_since(project_root, ref) -> frozenset[str] | None` — the paths
+  this branch changes against *ref*, as `ref...HEAD`. The three-dot form, and
+  that is a measurement rather than a preference: it asks what this branch
+  changed since it LEFT the ref, which is what a pull request contains, while
+  the two-dot form also reports every commit that landed on the trunk meanwhile
+  as this branch's work. Measured on this repository with a local `main` two
+  commits behind the remote.
+- `current_branch(project_root) -> str | None` — the checked-out branch, through
+  `git branch --show-current` rather than `rev-parse --abbrev-ref HEAD`: the
+  second answers `HEAD` on a detached checkout, which reads as a branch named
+  `HEAD` rather than as the absence of one.
+- `ref_exists(project_root, ref) -> bool` — whether git resolves *ref* here.
 
 Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
 

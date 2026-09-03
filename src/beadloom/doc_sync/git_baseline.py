@@ -11,7 +11,13 @@ can be stale relative to a baseline created a second ago (BDL-UX #175).
 
 Git is the baseline that cannot be lost: it is committed by construction, it
 travels with the clone, and a rebuilt index cannot erase it. This module reads
-it, and it does exactly one thing — answer *which paths differ from ``HEAD``*.
+it, and it answers exactly one KIND of question: *what does git say about this
+working copy?* — which paths differ from ``HEAD``, which paths this commit
+stages, which paths a branch changes against a ref, and which branch is checked
+out. BDL-068 S1.6 widened it from the first two to the last two rather than
+opening a second subprocess call to ``git`` elsewhere in the product: two
+readers of one tool are two things that can disagree about what a path is
+relative to, and ``_project_relative`` is the answer to that.
 
 What it deliberately does NOT do: judge freshness. That is
 :func:`~beadloom.doc_sync.engine.check_sync`'s job, which pairs this answer with
@@ -115,6 +121,51 @@ def staged_paths(project_root: Path) -> frozenset[str] | None:
         return None
     paths = [field for field in raw.split("\0") if field]
     return frozenset(_project_relative(paths, prefix.strip()))
+
+
+def paths_changed_since(project_root: Path, ref: str) -> frozenset[str] | None:
+    """Project-relative paths this branch changes against *ref*, or ``None``.
+
+    ``ref...HEAD`` and not ``ref..HEAD``: the three-dot form asks what this
+    branch changed since it left *ref*, which is what a pull request contains
+    and what an approval was given for. The two-dot form would also report every
+    commit that landed on the trunk meanwhile as this branch's work — measured
+    on this repository, where a local ``main`` two commits behind the remote
+    made another work item's landed change look like this branch's.
+
+    ``None`` means git could not answer — no work tree, no ``git``, an unknown
+    ref — and callers must treat it as *not checked*, never as *no changes*.
+    """
+    prefix = _run_git(project_root, ["rev-parse", "--show-prefix"])
+    if prefix is None:
+        return None
+    if _run_git(project_root, ["rev-parse", "--verify", ref]) is None:
+        return None
+    raw = _run_git(
+        project_root, ["diff", "--name-only", "-z", "--diff-filter=ACMR", f"{ref}...HEAD"]
+    )
+    if raw is None:
+        return None
+    paths = [field for field in raw.split("\0") if field]
+    return frozenset(_project_relative(paths, prefix.strip()))
+
+
+def ref_exists(project_root: Path, ref: str) -> bool:
+    """Whether git resolves *ref* in this working copy."""
+    return _run_git(project_root, ["rev-parse", "--verify", "--quiet", ref]) is not None
+
+
+def current_branch(project_root: Path) -> str | None:
+    """The checked-out branch, or ``None`` outside a repo / on a detached HEAD.
+
+    ``git branch --show-current`` rather than ``rev-parse --abbrev-ref HEAD``:
+    the second answers ``HEAD`` on a detached checkout, which reads as a branch
+    named ``HEAD`` rather than as the absence of one.
+    """
+    name = _run_git(project_root, ["branch", "--show-current"])
+    if name is None:
+        return None
+    return name.strip() or None
 
 
 def _parse_porcelain_z(raw: str) -> list[str]:

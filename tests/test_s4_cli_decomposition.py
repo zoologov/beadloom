@@ -34,9 +34,17 @@ from beadloom.services.cli import (
 )
 
 # The complete, ordered command set the CLI exposes (the S4 split must not add,
-# drop, or rename any command — registration is behavior-preserving).
+# drop, or rename any command — registration is behavior-preserving). A LATER
+# slice may add one, and then this literal moves with it: `impact` joined in
+# BDL-068 `.2`.
 EXPECTED_COMMANDS = {
     "active-sync",
+    # BDL-068 S1.4: reads a work item's `## Axes` section back, so a bead's
+    # `refs:` is generated from the document rather than written beside it.
+    "axes",
+    # BDL-068 S1.6: the third command of the `## Axes` family — the section
+    # `impact` renders and `axes` reads back is what this one judges a commit against.
+    "scope-check",
     "ci",
     "config-check",
     "ctx",
@@ -47,6 +55,7 @@ EXPECTED_COMMANDS = {
     "federate",
     "graph",
     "guard",
+    "impact",
     "init",
     "install-hooks",
     "link",

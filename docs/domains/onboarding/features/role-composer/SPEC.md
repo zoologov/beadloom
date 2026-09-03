@@ -51,8 +51,33 @@ can only be stood down by a declared suppression (see `flow-suppression`).
 ### Modules
 
 - **role_composer.py** — `compose_role()`, `compose_all_roles(config)`,
-  `roles_templates_root()`, `ROLE_NAMES`, and the re-exported
-  `SHARED_ROLE_FRAGMENTS`.
+  `roles_templates_root()`, `roles_in()`, `fragment_role_name()`, `ROLE_NAMES`,
+  and the re-exported `SHARED_ROLE_FRAGMENTS`.
+
+### A role exists because a core fragment ships for it
+
+`ROLE_NAMES` is **derived**, not declared (BDL-068 S1.5). It used to be a literal, and so
+was `agentic_flow_setup.AGENT_FILES`, whose own comment said it mirrored this one — two homes
+for one fact with eight readers between them, plus a third list spelled as prose inside the
+Cursor orchestrator pointer. Adding a fifth role meant editing all three, and a fifth role
+added to one of them is exactly the fifth thing that can drift (BDL-UX #191's shape).
+
+`roles_in(core_dir)` reads the population out of `templates/roles/core/*.md.txt` over a SHAPE
+rather than a spelling: a fragment is a role when it opens with YAML front matter whose `name:`
+equals its own file name. That is already the stated difference between a role and the shared
+`_writing` LAYER, which carries no front matter at all, so keying on the `_` prefix would have
+been a convention a fragment can forget. A fragment naming a different role than its file is
+skipped rather than guessed at: the two spellings are what every reader keys on, and one that
+disagrees with itself would compose under one name and be written under another. That same rule
+is what keeps a localisation from being a second role — `scout.ru.md.txt` declares `name:
+scout`, which is not the name of its file. It was a separate guard until a mutant showed the
+guard could not be made to fail, and it was deleted rather than kept. The result is sorted,
+because a directory listing is not ordered and the adapters it generates must be byte-identical
+between runs.
+
+Dropping `explore.md.txt` into `roles/core/` therefore made `explore` a role in every reader
+by the same act — the composer, the adapters, the vendored scaffold, the present/missing split
+`config-check` reports and the Cursor pointer.
 
 ### Invariants
 
@@ -70,7 +95,13 @@ Module `src/beadloom/onboarding/role_composer.py`:
   `project_root` yields the shipped-only composition, the drift baseline for a
   repo with no project layer
 - `roles_templates_root()` → `Path`
-- `ROLE_NAMES` — `("dev", "test", "review", "tech-writer")`
+- `roles_in(core_dir)` → `tuple[str, ...]` — the roles a directory of CORE fragments ships,
+  sorted
+- `fragment_role_name(text)` → `str | None` — the role a fragment declares itself to be, or
+  `None` for a layer
+- `ROLE_NAMES` — derived from the shipped fragments; today
+  `("dev", "explore", "review", "tech-writer", "test")`, and
+  `agentic_flow_setup.AGENT_FILES` **is** this tuple rather than a copy of it
 - `SHARED_ROLE_FRAGMENTS` — `("_writing",)`. A shared fragment is a **layer, not
   a role**: it carries no front matter, is never written as an adapter, and
   `compose_role("_writing", …)` raises `FlowConfigError`

@@ -344,13 +344,41 @@ judges the commit rather than the tree — ruff and mypy run over the staged fil
 runs with `--staged`, and the hook prints how many modified files outside the commit it did not
 judge. What it cannot catch is a neighbour's hunk swept in through `git add`: that hunk is
 *inside* the commit, which is the region the gate judges, and the index does not record who wrote
-a line. The mechanism that could answer it — compare the staged paths against the committing
-bead's declared scope, which `waves.scope` already resolves — is filed as `beadloom-mr2l.81`
-with the four decisions that must precede it, rather than half-built.
+a line.
 
-Adopters must re-run `beadloom install-hooks` to pick the commit-scoped hook up. An installed
-hook keeps its old behaviour until they do, and `beadloom waves` now says so by name
-(`commit-gate: failed`) instead of leaving it to be noticed.
+**Part of that gap now has an instrument, and it reports rather than prevents.** BDL-068 S1.6
+shipped `beadloom scope-check`, which compares the paths a commit stages against the `## Axes`
+section the work item declared. It is not the mechanism `beadloom-mr2l.81` filed and the
+difference is deliberate: the unit is the WORK ITEM's axes, not the committing bead's scope. A
+bead may narrow freely inside an approved scope, so judging against the bead would fire on
+every legitimate cross-bead commit, while a path that leaves the *work item's* axes means the
+approval no longer covers the change. Nothing about it stops a determined agent — a shell can
+commit anything the file system allows. What it raises is detectability, at the moment the
+commit is made rather than at review.
+
+Where it runs, and what it does there:
+
+| Where | Scope | On a finding |
+|---|---|---|
+| the pre-commit hook | the staged paths | warns, in both hook modes, and never blocks |
+| `beadloom ci` (`scope-check` step) | `<trunk>...HEAD`, what the pull request contains | reports; the step passes |
+
+Both are `warn` for one measured reason: one work item in 64 on this repository carries an
+`## Axes` section today, so a check that blocked would meet a repository that cannot satisfy
+it and be answered with `--no-verify`. A run that found no branch, no work item, no index or
+no section is reported as SKIPPED with its reason, never as a pass — and neither surface
+catches a neighbour's hunk that lands inside the same approved axes, which is the half of
+BDL-UX #118 that stays open.
+
+`beadloom ci`'s step is branch-scoped rather than tree-scoped for the reason the whole guide
+turns on: the tree is shared, so judging it would fail one agent's push on a neighbour's edit.
+See [`beadloom scope-check`](../services/cli.md#beadloom-scope-check) for the flags and
+[Scope Check SPEC](../domains/doc-sync/features/scope-check/SPEC.md) for the rule.
+
+Adopters must re-run `beadloom install-hooks` to pick the commit-scoped hook up, and again to
+pick up the `scope-check` warning. An installed hook keeps its old behaviour until they do, and
+`beadloom waves` now says so by name (`commit-gate: failed`) instead of leaving it to be
+noticed.
 
 **A "field read and never compared" lint is not feasible, and the reason is that the three
 occurrences are alike only in prose.** The shape appeared three times in this epic: a validator

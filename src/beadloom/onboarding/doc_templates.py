@@ -150,18 +150,16 @@ def render_doc(
     return rendered
 
 
-def required_sections(
-    name: str,
-    *,
-    config: FlowConfig,
-    project_root: Path | None = None,
-) -> tuple[str, ...]:
-    """Section titles the composed template of *name* carries, in order."""
-    template = doc_template(name, config=config, project_root=project_root)
-    # Placeholders are erased first, for two reasons that point the same way: a
-    # heading that arrives THROUGH a placeholder is conditional and must not be
-    # required, and a heading the template writes right after one
-    # (``{{symbols_section}}## Dependencies``) is unconditional and must be.
+def section_titles(template: str) -> tuple[str, ...]:
+    """Section titles a template text carries as literal ``## `` headings, in order.
+
+    The one extraction behind every required-section answer, node documents and
+    planning documents alike. Placeholders are erased first, for two reasons
+    that point the same way: a heading that arrives THROUGH a placeholder is
+    conditional and must not be required, and a heading the template writes
+    right after one (``{{symbols_section}}## Dependencies``) is unconditional
+    and must be.
+    """
     skeleton = _PLACEHOLDER_RE.sub("", template)
     seen: list[str] = []
     for match in _HEADING_RE.finditer(skeleton):
@@ -169,6 +167,16 @@ def required_sections(
         if title not in seen:
             seen.append(title)
     return tuple(seen)
+
+
+def required_sections(
+    name: str,
+    *,
+    config: FlowConfig,
+    project_root: Path | None = None,
+) -> tuple[str, ...]:
+    """Section titles the composed template of *name* carries, in order."""
+    return section_titles(doc_template(name, config=config, project_root=project_root))
 
 
 def required_sections_by_node_kind(
@@ -187,6 +195,84 @@ def required_sections_by_node_kind(
             doc_kind, config=config, project_root=project_root
         )
         for node_kind, doc_kind in DOC_KIND_FOR_NODE_KIND.items()
+    }
+
+
+#: The ``compose`` artifact the PLANNING document skeletons live in: the
+#: ``/templates`` slash command, which is what the flow actually hands an author.
+#: Reading them there rather than shipping a second copy under ``docs/`` is what
+#: keeps the requirement and the skeleton one thing — the same reason
+#: :func:`beadloom.application.doc_shape.shipped_placeholders` composes it.
+PLANNING_TEMPLATE = ("commands", "templates")
+
+#: ``## BRIEF.md — Simplified Task Document`` — the heading that says the fenced
+#: blocks below it are a document kind's skeleton. Anchored at column 0, so a
+#: heading inside a nested fence (the PLAN skeleton carries a Mermaid block)
+#: cannot be mistaken for one.
+_DOC_KIND_HEADING_RE = re.compile(r"^## +([A-Z][A-Za-z-]*)\.md\b")
+
+
+def planning_skeletons(
+    *,
+    config: FlowConfig,
+    project_root: Path | None = None,
+) -> dict[str, str]:
+    """Document kind -> the skeleton text the ``/templates`` command hands an author.
+
+    A kind's skeleton is every fenced block under its ``## <KIND>.md`` heading.
+    The prose around them is commentary, and reading it would make the
+    commentary's own headings required of the document — which is why only the
+    fenced text is taken, exactly as ``shipped_placeholders`` reads the same
+    artifact for the same reason.
+    """
+    text = compose(*PLANNING_TEMPLATE, config=config, project_root=project_root).text
+    skeletons: dict[str, list[str]] = {}
+    kind: str | None = None
+    fenced = False
+    block: list[str] = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            if fenced and kind is not None:
+                skeletons.setdefault(kind, []).extend(block)
+            fenced = not fenced
+            block = []
+            continue
+        if fenced:
+            block.append(line)
+            continue
+        heading = _DOC_KIND_HEADING_RE.match(line)
+        if heading is not None:
+            kind = heading.group(1)
+        elif line.startswith("## "):
+            # Any other top-level heading ends the kind's part of the command —
+            # the architecture and stack overlays append their own, and their
+            # content is not a document skeleton.
+            kind = None
+    return {name: "\n".join(lines) for name, lines in skeletons.items()}
+
+
+def required_sections_by_document_kind(
+    *,
+    config: FlowConfig,
+    project_root: Path | None = None,
+) -> dict[str, tuple[str, ...]]:
+    """Required sections keyed by PLANNING document kind — ``BRIEF``, ``RFC``, ….
+
+    The same derivation :func:`required_sections_by_node_kind` performs for
+    generated node documents, over the other family of composed templates. A
+    project fragment that appends ``## Axes`` to the ``/templates`` command
+    makes the section required by the same act, and nothing else has to be told.
+
+    A kind whose skeleton carries no section at all is dropped rather than
+    returned empty: a requirement of nothing is not a requirement, and keeping
+    it would report the kind as judged when no check could enter it.
+    """
+    return {
+        kind: titles
+        for kind, skeleton in planning_skeletons(
+            config=config, project_root=project_root
+        ).items()
+        if (titles := section_titles(skeleton))
     }
 
 
