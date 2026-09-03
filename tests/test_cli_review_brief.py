@@ -36,6 +36,11 @@ _EXIT_WITHHELD = 3
 _AUTHOR_TEXT = "CHECKPOINT: sabotage table run, clause two is a constant tuple"
 
 
+#: A commit body's own words. The channel counts bodies; a report that printed
+#: one would be the very leak BDL-UX #219 measured.
+_BODY_TEXT = "the rounding moved to the boundary because two callers rounded twice"
+
+
 def _project(tmp_path: Path) -> Path:
     project = tmp_path / "proj"
     (project / ".beadloom").mkdir(parents=True)
@@ -86,6 +91,16 @@ def _repo_with_change(tmp_path: Path, changed: str = "src/billing/core.py") -> P
     _git(project, "add", changed)
     _git(project, "commit", "-m", "change", "--no-verify")
     return project
+
+
+def _commit_with_a_body(project: Path, body: str, path: str = "src/billing/rate.py") -> None:
+    """One more commit on the branch, whose message carries a body."""
+    target = project / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("rate = 2\n", encoding="utf-8")
+    _git(project, "add", path)
+    message = f"the second change\n\n{body}\n\nand a second line"
+    _git(project, "commit", "-m", message, "--no-verify")
 
 
 class _FakeBd:
@@ -145,6 +160,13 @@ def _comment(text: str, author: str = "v.zoologov") -> dict[str, Any]:
     }
 
 
+def _channel(stdout: str, name: str) -> dict[str, Any]:
+    """One channel of the `--json` reachability statement, by name."""
+    found = [c for c in json.loads(stdout)["reachability"] if c["channel"] == name]
+    assert found, f"the JSON names no channel {name!r}"
+    return dict(found[0])
+
+
 @pytest.fixture()
 def bd(monkeypatch: pytest.MonkeyPatch) -> Any:
     def _install(record: dict[str, Any], comments: list[dict[str, Any]]) -> None:
@@ -185,17 +207,19 @@ class TestWhatIsHandedOver:
     def test_the_withheld_comments_are_counted_in_both_shapes(
         self, tmp_path: Path, bd: Any
     ) -> None:
+        """The count survives the change from a withheld count to a reachability
+        statement — it is stated as what the bead-comments CHANNEL carries."""
         project = _repo_with_change(tmp_path)
         bd(_record(), [_comment(_AUTHOR_TEXT), _comment("COMPLETED: shipped")])
         human = CliRunner().invoke(
             main, ["review-brief", "a", "--since", "main", "--project", str(project)]
         )
-        assert "2 author comment(s) withheld" in human.output
+        assert "bead comments: 2 item(s)" in human.output
         machine = CliRunner().invoke(
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        assert json.loads(machine.stdout)["withheld"]["count"] == 2
+        assert _channel(machine.stdout, "bead comments")["carries"] == 2
 
     def test_the_notes_field_gives_the_scope_without_giving_its_prose(
         self, tmp_path: Path, bd: Any
@@ -424,6 +448,105 @@ class TestFindingsAndCodes:
             main, ["review-brief", "a", "--project", str(project)]
         )
         assert result.exit_code == _EXIT_UNDECIDABLE
+
+
+class TestWhatCanReachTheReviewer:
+    """The reachability statement, which only the COMMAND can get wrong.
+
+    What is asserted here is the wiring the application layer cannot do for
+    itself: the commit bodies of the reviewed range are read out of a real
+    repository, the branch is read off it, and both output shapes carry the same
+    channels. The derivation of the channels is the application's, and is pinned
+    beside it in `tests/test_review_brief_reachability.py`.
+    """
+
+    def test_the_commit_bodies_of_the_range_are_counted_without_being_quoted(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #219: the reviewer's own protocol sends it to this diff.
+
+        The channel says how much prose is waiting there; quoting it would be
+        the leak the report exists to make visible.
+        """
+        project = _repo_with_change(tmp_path)
+        _commit_with_a_body(project, _BODY_TEXT)
+        bd(_record(), [])
+        human = CliRunner().invoke(
+            main, ["review-brief", "a", "--since", "main", "--project", str(project)]
+        )
+        machine = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
+        )
+        channel = _channel(machine.stdout, "the commit bodies of the reviewed range")
+        assert channel["inspected"] is True
+        assert channel["carries"] == 2, channel["items"]
+        assert "2 body line(s)" in " ".join(channel["items"])
+        assert "the commit bodies of the reviewed range: 2 item(s)" in human.output
+        assert _BODY_TEXT not in human.output
+        assert _BODY_TEXT not in machine.output
+
+    def test_the_launch_prompt_is_named_in_both_shapes_as_one_nobody_here_can_see(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #204: the channel the count could not be about is not omitted."""
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [_comment(_AUTHOR_TEXT)])
+        human = CliRunner().invoke(
+            main, ["review-brief", "a", "--since", "main", "--project", str(project)]
+        )
+        machine = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
+        )
+        assert "the launch prompt: NOT INSPECTED" in human.output
+        channel = _channel(machine.stdout, "the launch prompt")
+        assert channel["inspected"] is False
+        assert channel["reason"].strip()
+
+    def test_a_channel_found_empty_does_not_read_like_one_nobody_could_inspect(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The Population rule one layer up, asserted on the rendered text.
+
+        The branch `features/x` names no work item in this project's planning
+        corpus, so the documents channel could not be inspected; the range holds
+        one commit, so the bodies channel was. Neither statement may be readable
+        as the other.
+        """
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [])
+        human = CliRunner().invoke(
+            main, ["review-brief", "a", "--since", "main", "--project", str(project)]
+        )
+        assert "the work item's documents: NOT INSPECTED" in human.output
+        assert "the commit bodies of the reviewed range: 1 item(s)" in human.output
+
+    def test_a_document_of_the_branch_s_work_item_is_reported_with_the_prompt_naming_it(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #212: `ACTIVE.md` reached a reviewer through a launch prompt.
+
+        The branch names the work item, the work item's folder holds the
+        document, and the composed role prompts are what say a role is sent to
+        it. Nothing in this test names `ACTIVE.md` to the report.
+        """
+        project = _repo_with_change(tmp_path)
+        _git(project, "switch", "-c", "features/ALPHA-1")
+        folder = project / ".claude" / "development" / "docs" / "features" / "ALPHA-1"
+        folder.mkdir(parents=True)
+        (folder / "ACTIVE.md").write_text(
+            "# ACTIVE\n\nthe author's own account\n", encoding="utf-8"
+        )
+        bd(_record(), [])
+        machine = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
+        )
+        channel = _channel(machine.stdout, "the work item's documents")
+        assert channel["inspected"] is True
+        entry = next(item for item in channel["items"] if "ACTIVE.md" in item)
+        assert "named by roles/" in entry, entry
 
 
 class TestSeamShape:

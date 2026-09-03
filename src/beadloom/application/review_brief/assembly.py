@@ -3,7 +3,9 @@
 One responsibility: turn a bead into the three things a reviewer needs before it
 forms a judgement — the assignment, the specification, the change — and turn the
 author's comments into a count. Whether that count may later become text is
-:mod:`beadloom.application.review_brief.release`'s decision, not this module's.
+:mod:`beadloom.application.review_brief.release`'s decision, not this module's,
+and what the reviewer can reach through channels this command does not control
+is :mod:`beadloom.application.review_brief.reachability`'s.
 
 The bead's scope is resolved by :func:`beadloom.application.waves.resolve_scope`
 rather than by a parser of this module's own. A bead declares its scope in one
@@ -36,6 +38,7 @@ from beadloom.application.review_brief.models import (
     SpecDocument,
     WithheldNotes,
 )
+from beadloom.application.review_brief.reachability import reachability_of
 from beadloom.application.waves import (
     UNRESOLVED_NO_DECLARATION,
     UNRESOLVED_REMEDIES,
@@ -46,8 +49,9 @@ from beadloom.infrastructure.repository import get_docs_for_ref, get_owning_ref_
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterable, Sequence
+    from pathlib import Path
 
-    from beadloom.application.review_brief.models import AuthorNote
+    from beadloom.application.review_brief.models import AuthorNote, Commit
     from beadloom.application.waves import BeadRecord
     from beadloom.graph.scenarios import Scenario
 
@@ -95,6 +99,9 @@ def assemble_brief(
     measured_since: str = "",
     notes: Sequence[AuthorNote] = (),
     scenarios: Sequence[Scenario] = (),
+    project_root: Path | None = None,
+    branch: str | None = None,
+    commits: Sequence[Commit] | None = None,
 ) -> ReviewBrief:
     """The reviewer's input for *record*, with the author's comments withheld.
 
@@ -112,6 +119,12 @@ def assemble_brief(
     as an empty change set: "nothing changed" and "nobody looked" reaching the
     reviewer as the same brief is the silent false-green this command exists to
     remove.
+
+    ``project_root``, ``branch`` and ``commits`` are what the REACHABILITY
+    statement is derived from, and each absence is reported as itself rather
+    than as an empty channel. ``commits`` follows ``changed_paths``' convention:
+    ``None`` is *git gave no answer*, and an empty sequence is *the range holds
+    no commits*, which are two different facts about what a reviewer can read.
 
     ``measured_since`` is the ref the caller measured that change against, and it
     is required by the ``changed-outside-scope`` finding rather than by the
@@ -166,5 +179,12 @@ def assemble_brief(
         change_measured=changed_paths is not None,
         scenarios=bound,
         withheld=WithheldNotes(count=len(notes)),
+        reachability=reachability_of(
+            notes=notes,
+            project_root=project_root,
+            branch=branch,
+            commits=commits,
+            since=measured_since,
+        ),
         findings=tuple(findings),
     )

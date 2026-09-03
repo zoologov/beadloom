@@ -66,6 +66,7 @@ independently and recorded; the hidden-profile risk is in the first pass.
 | Scenarios | the acceptance suite's `@bead:` tags | executable; it either runs or it does not |
 | Change | `git diff <base>...HEAD`, the working tree, and the untracked files | measured from the repository |
 | Withheld | a count, a reason, a release condition, a defeat notice | the account itself is not printed |
+| Reachability | four channels, each inspected or named as uninspectable | what the reviewer can reach, which is a different question from what this command holds |
 
 The `refs:` token is read from the title, the description, the design field and
 the `notes` field, because this epic's own beads declare their scope in `notes`
@@ -104,6 +105,55 @@ touched and none of the files it added — the half of a change most worth readi
 Ignored files stay out: git does not track them, so git has no opinion about
 them, and inventing one would put an index and a build directory in front of a
 reviewer as work.
+
+### What is reachable, per channel
+
+`0 withheld` is true of bead comments and is read as a statement about the
+reviewer's knowledge. It is not one. Three defeats of the withholding were
+measured, and every one of them was known only because a reviewer declared it
+unprompted:
+
+| Finding | The channel that defeated it |
+|---|---|
+| BDL-UX #212 | `ACTIVE.md`, which the launch prompt named because the playbook says a role subagent gets `CONTEXT.md` and `ACTIVE.md` |
+| BDL-UX #219 | the commit bodies of the reviewed range, which the review protocol itself sends the reviewer to |
+| BDL-UX #204 | the launch prompt, which this command cannot see at all |
+
+So the report states what is REACHABLE rather than what was withheld, over four
+channels:
+
+| Channel | Inspected from | When it cannot be inspected |
+|---|---|---|
+| bead comments | the tracker's answer for this bead | never; a tracker that will not answer is exit `2` |
+| the work item's documents | the folder the branch's work item names | no project root, no branch, or a branch naming no work item in the planning corpus |
+| the commit bodies of the reviewed range | `git log <base>..HEAD` | git gave no answer |
+| the launch prompt | nothing | always — nothing in this process can observe one |
+
+**A channel is DERIVED, never listed.** The document names come from the composed
+prompts themselves: every role in `ROLE_NAMES` (itself derived from the shipped
+CORE fragments) and every command fragment the package ships, composed for this
+project's `flow.yml` and **including its project layer**, then matched by shape —
+an upper-case name ending in `.md`. A team that names `DECISIONS.md` in
+`.beadloom/flow/roles/review.md` moves this report by that act and by no other. A
+hand-written list would satisfy every report test and go stale the first time a
+role file gained a document.
+
+The folder those documents live in comes from `work_item_of_branch`, whose
+population is the project's own planning corpus rather than this repository's
+convention, and the commit range comes from the review's own base ref.
+
+**A channel that was inspected and found empty never reads like one nobody could
+inspect.** `NOT INSPECTED — <reason>` and `0 item(s)` are different sentences, the
+same rule `beadloom impact` follows for a `Population` it could not resolve.
+
+**The report raises detectability and closes nothing.** The review protocol sends
+the reviewer to the diff and the commit bodies come with it — the better the
+commit message, the more completely the withholding is defeated. What the report
+buys is that a reviewer knows what to declare.
+
+**A commit body is counted, never quoted.** The channel carries each commit's
+subject and the number of non-empty body lines, so a report about a leak is not
+itself one.
 
 ### Exit codes
 
@@ -154,6 +204,26 @@ where the roles hold separate accounts the same code reports an independent
 verdict with nothing to say.
 
 ### Honest limits
+
+**The reachability report is a statement, not a check.** No channel makes a
+finding and no exit code moved: the launch prompt can never be inspected, so
+treating an uninspected channel as a finding would put every brief on exit `1`
+and the code would stop meaning anything.
+
+**The report cannot see whether a reachable channel was read.** It says
+`ACTIVE.md` is in the folder and that the composed role prompts send a reviewer
+there. Whether that reviewer opened it is observable only by the reviewer, which
+is why the duty to declare stays where the observation is.
+
+**A branch whose name is not exactly the work item's key inspects no documents.**
+`work_item_of_branch` matches a `/`-separated segment against the planning
+corpus, so `features/BDL-068` names the work item and `features/BDL-068-S2S3`
+names none — measured on this feature's own development branch, where the
+documents channel reads `NOT INSPECTED` for that reason. The channel states it
+rather than reporting an empty folder, and the rule is not restated here: a
+second reader of the branch-to-work-item convention is the two-sources-of-truth
+defect this epic exists to remove, so the convention is fixed in one place or
+not at all.
 
 **This withholds an input; it does not lock a door.** A reviewer with a shell can
 run `bd comments` directly, and a coordinator can paste the author's summary into
@@ -206,9 +276,10 @@ able to re-derive.
 
 | Module | Responsibility |
 |---|---|
-| `models.py` | the vocabulary: `ReviewBrief`, `AuthorNote`, `WithheldNotes`, `ChangedFile`, `SpecDocument`, `BoundScenario`, `ReleaseOutcome`, and the finding names |
+| `models.py` | the vocabulary: `ReviewBrief`, `AuthorNote`, `WithheldNotes`, `ChangedFile`, `SpecDocument`, `BoundScenario`, `ReleaseOutcome`, `Channel`, `Reachability`, `Commit`, and the finding names |
 | `assembly.py` | build the brief from the graph, the change inventory and the scenario suite |
 | `release.py` | recognise a recorded verdict and decide whether the account may be read |
+| `reachability.py` | derive what can reach the reviewer per channel, and name a channel it could not inspect |
 
 `models.py` holds no logic and `assembly.py` holds no policy about the release,
 because the two decisions fail independently: a brief can be assembled correctly
@@ -218,15 +289,25 @@ and released too early, or withheld correctly and assembled from the wrong scope
 
 ```python
 from beadloom.application.review_brief import (
-    assemble_brief,   # -> ReviewBrief: the change, the specification, a count
-    release_notes,    # -> ReleaseOutcome: the account, or the reason it is withheld
-    verdict_recorded, # -> str | None: the marker of the first recorded verdict
+    assemble_brief,           # -> ReviewBrief: the change, the specification, the reachability
+    release_notes,            # -> ReleaseOutcome: the account, or the reason it is withheld
+    verdict_recorded,         # -> str | None: the marker of the first recorded verdict
+    reachability_of,          # -> Reachability: the four channels
+    prompts_naming_documents, # -> {document: (prompt, ...)} derived from the composed prompts
 )
 ```
 
-`assemble_brief` takes the author's notes, the change inventory and the scenario
-suite as **data**, so the decision runs without `bd`, without git and without a
-repository, and so the application layer never reaches up into `services`.
+`assemble_brief` takes the author's notes, the change inventory, the scenario
+suite and the commit range as **data**, so the decision runs without `bd`,
+without git and without a repository, and so the application layer never reaches
+up into `services`. `commits` follows the change inventory's convention: `None`
+is *git gave no answer* and an empty sequence is *the range holds no commits*.
+
+`reachability.py` reaches sideways into `onboarding` to compose the prompts and
+into `declared_scope` to find the work item, the same join
+`work_item_routing.py` makes for `/task-init`: the composed prompts live in
+`onboarding`, the planning corpus is read in `application`, and neither domain
+may import the other.
 
 ## Related
 

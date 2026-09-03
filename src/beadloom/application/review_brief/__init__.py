@@ -8,6 +8,10 @@ withheld.
 
 from beadloom.application.review_brief.assembly import assemble_brief
 from beadloom.application.review_brief.models import (
+    CHANNEL_BEAD_COMMENTS,
+    CHANNEL_COMMIT_BODIES,
+    CHANNEL_LAUNCH_PROMPT,
+    CHANNEL_WORK_ITEM_DOCUMENTS,
     DEFEAT_NOTICE,
     FINDING_AMBIGUOUS_SCOPE,
     FINDING_NO_SCENARIO,
@@ -20,10 +24,23 @@ from beadloom.application.review_brief.models import (
     AuthorNote,
     BoundScenario,
     ChangedFile,
+    Channel,
+    Commit,
+    Reachability,
     ReleaseOutcome,
     ReviewBrief,
     SpecDocument,
     WithheldNotes,
+)
+from beadloom.application.review_brief.reachability import (
+    BEAD_COMMENTS_REASON,
+    LAUNCH_PROMPT_REASON,
+    bead_comments_channel,
+    commit_bodies_channel,
+    launch_prompt_channel,
+    prompts_naming_documents,
+    reachability_of,
+    work_item_documents_channel,
 )
 from beadloom.application.review_brief.release import (
     REFUSED_NO_VERDICT,
@@ -35,6 +52,11 @@ from beadloom.application.review_brief.release import (
 )
 
 __all__ = [
+    "BEAD_COMMENTS_REASON",
+    "CHANNEL_BEAD_COMMENTS",
+    "CHANNEL_COMMIT_BODIES",
+    "CHANNEL_LAUNCH_PROMPT",
+    "CHANNEL_WORK_ITEM_DOCUMENTS",
     "DEFEAT_NOTICE",
     "FINDING_AMBIGUOUS_SCOPE",
     "FINDING_NO_SCENARIO",
@@ -42,6 +64,7 @@ __all__ = [
     "FINDING_OUTSIDE_SCOPE",
     "FINDING_UNKNOWN_REF",
     "FINDING_UNMEASURED_CHANGE",
+    "LAUNCH_PROMPT_REASON",
     "REFUSED_NO_VERDICT",
     "RELEASE_CONDITION",
     "SELF_RECORDED_VERDICT",
@@ -51,11 +74,20 @@ __all__ = [
     "AuthorNote",
     "BoundScenario",
     "ChangedFile",
+    "Channel",
+    "Commit",
+    "Reachability",
     "ReleaseOutcome",
     "ReviewBrief",
     "SpecDocument",
     "WithheldNotes",
     "assemble_brief",
+    "bead_comments_channel",
+    "commit_bodies_channel",
+    "launch_prompt_channel",
+    "prompts_naming_documents",
+    "reachability_of",
     "release_notes",
     "verdict_recorded",
+    "work_item_documents_channel",
 ]
