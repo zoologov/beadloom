@@ -78,6 +78,14 @@ instrument spoke where a coordinator was already thinking about concurrency and 
 where it was not (BDL-UX #228); the room is named after the bead because two agents once each
 built one at a shared scratchpad path and one measured over the other's files (BDL-UX #235).
 
+It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
+media and for the same reason — the application layer keeps taking its input as data — and
+prints what every bead's declared `refs:` was held against: the work item, the document, how
+many nodes it approves, how many declared refs agree, how many the derivation did not reach
+and how many axis rows name no node. That block is printed for a clean plan too, because the
+counts are how a reader tells a plan whose declarations agreed from one whose declarations
+nothing could be compared against (BDL-UX #232).
+
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and
 the ones the run did not enter (BDL-068 S3.2). `--dimension <axis>` prints one axis, one value

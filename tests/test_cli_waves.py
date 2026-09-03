@@ -42,8 +42,36 @@ def _project(tmp_path: Path) -> Path:
     return project
 
 
+#: The work item the measured project's branch names, so the declarations the
+#: plan rests on are held against a recorded derivation rather than against
+#: nothing. Before BDL-UX #232 there was nothing to hold them against, and a
+#: concurrent wave whose declarations nobody compared reached exit 0.
+_WORK_ITEM = "KEY-1"
+
+
+def _work_item(project: Path) -> None:
+    """A planning document declaring both this project's nodes in scope."""
+    folder = project / ".claude" / "development" / "docs" / "features" / _WORK_ITEM
+    folder.mkdir(parents=True)
+    (folder / "RFC.md").write_text(
+        "# RFC\n\n## Axes\n\n"
+        "> **Derived by:** `beadloom impact` over `src/billing/core.py`\n"
+        "> **Seed:** `none`\n"
+        "> **Unresolved:** none\n\n"
+        "| Axis | Node | Sites | In scope | Why |\n|---|---|---|---|---|\n"
+        "| callers | `billing` | 1 | yes | the bead edits it |\n"
+        "| callers | `shipping` | 1 | yes | the other bead edits it |\n",
+        encoding="utf-8",
+    )
+
+
 def _measured_project(tmp_path: Path) -> Path:
-    """A project in which all three machine-observed media can be measured clean.
+    """A project in which every plan-time precondition can be measured clean.
+
+    A branch naming a work item whose `## Axes` keeps both nodes in scope, so
+    the fourth thing a clean plan rests on — that the declarations were held
+    against the derivation they should have been generated from — is measured
+    here too rather than defaulted past (BDL-UX #232).
 
     A real git repository with one commit, `.beadloom/` ignored so the index is
     not read as an uncommitted change, and a pre-commit hook carrying the scope
@@ -57,12 +85,14 @@ def _measured_project(tmp_path: Path) -> Path:
     (project / ".git" / "hooks" / "pre-commit").write_text(
         _HOOK_TEMPLATE_WARN, encoding="utf-8"
     )
+    _work_item(project)
     for args in (
         ["init"],
         ["config", "user.email", "t@example.com"],
         ["config", "user.name", "t"],
-        ["add", ".gitignore"],
+        ["add", ".gitignore", ".claude"],
         ["commit", "-m", "base", "--no-verify"],
+        ["switch", "-c", f"features/{_WORK_ITEM}"],
     ):
         subprocess.run(  # noqa: S603
             ["git", *args],  # noqa: S607

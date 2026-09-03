@@ -61,6 +61,7 @@ from beadloom.application.waves import (
     WaveEnvironment,
     WaveOverride,
     WavePlan,
+    WorkItemAxes,
     declared_refs,
     load_overrides,
     plan_waves,
@@ -104,6 +105,23 @@ def _wave(plan: WavePlan, bead_id: str) -> int:
     index = plan.wave_of(bead_id)
     assert index is not None, f"{bead_id} was not placed in any wave"
     return index
+
+
+def _approving(*nodes: str) -> WorkItemAxes:
+    """A recorded derivation keeping exactly *nodes* in scope.
+
+    Supplied wherever a case asserts a CLEAN plan, because a concurrent wave
+    whose declarations were held against no derivation is a finding — the same
+    rule, and for the same reason, as a shared medium nobody measured. And it
+    keeps exactly the nodes the case's beads declare, because a work item
+    approving a node no bead of a wave names is the OTHER finding (BDL-UX #232).
+    """
+    return WorkItemAxes(
+        work_item="KEY-1",
+        document="docs/KEY-1/RFC.md",
+        seed="none",
+        kept=frozenset(nodes),
+    )
 
 
 def _bead(
@@ -665,7 +683,12 @@ class TestThisSessionsOwnWaveFailuresReplayed:
             _bead("d3", "invoices"),
             _bead("d4", "reporting"),
         ]
-        plan = plan_waves(beads, conn=conn, environment=_measured())
+        plan = plan_waves(
+            beads,
+            conn=conn,
+            environment=_measured(),
+            axes=_approving("billing", "shipping", "invoices", "reporting"),
+        )
         assert len(plan.waves) == 1
         assert plan.waves[0].beads == ("d1", "d2", "d3", "d4")
         assert plan.waves[0].gate_owner in plan.waves[0].beads

@@ -57,12 +57,31 @@ written by a human as often as it is rendered and a human writes `doc_sync/axes_
 Only an existing FILE is resolved: the rendered field names the sweep root beside the target,
 and resolving a directory would put its whole domain inside the approval by accident.
 
+## The same read, rendered for the wave planner
+
+`work_item_axes()` returns what `scope_of_branch()` already read, in the vocabulary
+`beadloom waves` compares a bead's declared `refs:` against. A second RENDERING and never a
+second read: the commit gate and the wave plan judging one approval differently is the
+two-sources-of-truth class this epic exists to remove, and BDL-UX #232 is that class inside
+the planner itself.
+
+Two things are added that the commit gate has no use for. The rows the derivation attributed
+to **no node** — no declaration can name them, so no comparison can reach them — and the
+section's own `Unresolved` field, because a plan compared against an incomplete derivation
+has to say so and `beadloom impact` is measurably incomplete on this layout (BDL-UX #225).
+The undecided rows are also NAMED here rather than counted: `DeclaredScope` carries a count,
+which is all a commit gate needs, while a wave plan compares a named declaration against them.
+
+An unreadable work item comes back as a `WorkItemAxes` carrying the reason rather than as
+`None`, so the reason travels with the plan instead of being dropped at the edge.
+
 ## Interfaces
 
 | Name | Purpose |
 |------|---------|
 | `scope_check(project_root, *, branch, since)` | One run: the verdict, the work item and the reason for neither |
 | `scope_of_branch(project_root, *, branch)` | The declared scope, or the reason there is none |
+| `work_item_axes(project_root, *, branch)` | The same read in the wave planner's vocabulary, carrying its reason when there is nothing to read |
 | `work_item_of_branch(project_root, branch)` | The work-item folder a branch names |
 | `trunk_ref(project_root)` | The ref a branch's whole work is compared against |
 | `ScopeRun` | The verdict, the work item, the document, the scope and the reason |

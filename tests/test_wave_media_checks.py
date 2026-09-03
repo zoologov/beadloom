@@ -35,6 +35,7 @@ from beadloom.application.waves import (
     BeadRecord,
     MediumCheck,
     WaveEnvironment,
+    WorkItemAxes,
     check_media,
     finding_for,
     plan_waves,
@@ -51,6 +52,23 @@ CLEAN = WaveEnvironment(
     commit_gate=GATE_COMMIT_SCOPED,
     doc_baseline_stale_pairs=0,
 )
+
+
+def _approving(*nodes: str) -> WorkItemAxes:
+    """A recorded derivation keeping exactly *nodes* in scope.
+
+    Supplied wherever a case asserts a CLEAN plan, because a concurrent wave
+    whose declarations were held against no derivation is a finding — the same
+    rule, and for the same reason, as a shared medium nobody measured. And it
+    keeps exactly the nodes the case's beads declare, because a work item
+    approving a node no bead of a wave names is the OTHER finding (BDL-UX #232).
+    """
+    return WorkItemAxes(
+        work_item="KEY-1",
+        document="docs/KEY-1/RFC.md",
+        seed="none",
+        kept=frozenset(nodes),
+    )
 
 
 def _bead(bead_id: str, refs: str = "", title: str = "") -> BeadRecord:
@@ -306,6 +324,7 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             [_bead("a", "billing"), _bead("b", "shipping")],
             conn=conn,
             environment=environment,
+            axes=_approving("billing", "shipping"),
         )
         assert _check(plan.media_checks, MEDIUM_WORKING_TREE).status == STATUS_PASSED
         assert plan.exit_code == 0

@@ -20,19 +20,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.application.waves.derivation import (
+    compare_declarations,
+    derivation_findings,
+    unguarded_axes,
+)
 from beadloom.application.waves.independence import conflicts_among
 from beadloom.application.waves.media import SHARED_MEDIA
 from beadloom.application.waves.media_checks import check_media, finding_for
 from beadloom.application.waves.models import (
+    AXES_NOT_GATHERED,
     DECISION_PARALLEL,
     DECISION_SERIAL,
     REASON_OVERRIDE_SERIAL,
-    UNRESOLVED_REMEDIES,
     BeadScope,
     Conflict,
     OverrideOutcome,
     Wave,
     WavePlan,
+    WorkItemAxes,
+    remedy_for,
     sorted_pair,
 )
 from beadloom.application.waves.scope import resolve_scopes
@@ -186,6 +193,7 @@ def _findings(
     scopes: Sequence[BeadScope],
     outcomes: Sequence[OverrideOutcome],
     checks: Sequence[MediumCheck],
+    axes: WorkItemAxes,
 ) -> tuple[str, ...]:
     """Everything the plan rests on that a reader has to be told about."""
     found: list[str] = []
@@ -194,7 +202,7 @@ def _findings(
             continue
         named = scope.unknown_refs or scope.dropped_refs
         detail = f" ({', '.join(named)})" if named else ""
-        remedy = UNRESOLVED_REMEDIES.get(scope.unresolved or "", "declare `refs: <ref_id>`")
+        remedy = remedy_for(scope.unresolved, axes=axes)
         # What the finding may claim is what HAPPENED — no pairwise comparison was
         # made for this bead — not where the bead ended up. A `parallel` override
         # can legitimately place an unresolved bead beside another, and the older
@@ -254,6 +262,7 @@ def plan_waves(
     overrides: Sequence[WaveOverride] = (),
     today: date | None = None,
     environment: WaveEnvironment | None = None,
+    axes: WorkItemAxes | None = None,
 ) -> WavePlan:
     """Decide the wave shape for *records* against the indexed graph in *conn*.
 
@@ -261,6 +270,11 @@ def plan_waves(
     see. Leaving it out is allowed and is not silent: the media checks then come
     back ``unmeasured``, which is a finding, so a concurrent plan nobody measured
     reaches exit 1 rather than exit 0.
+
+    *axes* carries the derivation the work item recorded, and follows the same
+    rule for the same reason: leaving it out is allowed and is reported, so a
+    concurrent wave whose declarations were held against nothing does not read
+    like one whose declarations agreed (BDL-UX #232).
     """
     scopes = resolve_scopes(conn, records)
     computed = conflicts_among(conn, scopes, records)
@@ -281,12 +295,19 @@ def plan_waves(
         owned_paths=frozenset(path for scope in scopes for path in scope.files),
         environment=environment,
     )
+    recorded = axes if axes is not None else WorkItemAxes(reason=AXES_NOT_GATHERED)
+    agreements = compare_declarations(scopes, recorded)
+    gaps = unguarded_axes(waves, scopes, recorded)
     return WavePlan(
         waves=waves,
         scopes=scopes,
         conflicts=conflicts,
         overrides=outcomes,
         shared_media=SHARED_MEDIA,
-        findings=_findings(scopes, outcomes, checks),
+        findings=_findings(scopes, outcomes, checks, recorded)
+        + derivation_findings(waves, agreements, gaps, recorded),
         media_checks=checks,
+        axes=recorded,
+        agreements=agreements,
+        unguarded_axes=gaps,
     )
