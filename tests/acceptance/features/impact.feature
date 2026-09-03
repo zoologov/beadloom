@@ -67,3 +67,38 @@ Feature: impact answers from the source, and names the seed it answered from
     Given a project whose command commits through a helper two hops away
     When impact runs against the file holding that command with --json
     Then the JSON carries the seed, the rule and the unresolved population
+
+  # BDL-068 `.15`, from the epic's first CRITICAL verdict. Both findings below
+  # are false negatives in a NARROWING tool, and both fire on adopter trees
+  # rather than on this one: every package in this repository carries an
+  # `__init__.py`, so the suite, the Gate and the author's own dogfooding all
+  # read green over the defect. The scenarios therefore BUILD the layout instead
+  # of assuming the one this repository happens to have.
+
+  @bead:beadloom-0mdo.15
+  Scenario: A caller across a namespace package is found rather than reported as none
+    Given a project whose package carries no __init__.py file
+    When impact runs against the file in one of its subpackages
+    Then the callers include the function in the neighbouring subpackage
+    And the swept root is the namespace package rather than the subpackage
+
+  @bead:beadloom-0mdo.15
+  Scenario: One target spelled two ways gives one answer
+    Given a project whose package carries no __init__.py file
+    When impact runs against that file and again against the symbol it defines
+    Then both runs name the same callers
+
+  @bead:beadloom-0mdo.15
+  Scenario: A sweep pointed away from the target refuses the caller axis
+    Given a project whose package carries no __init__.py file
+    When impact runs against that file over a root that does not hold it
+    Then the callers axis reads unresolved rather than empty
+    And the unresolved population names the target that fell outside the sweep
+    And the unresolved population says the sweep is narrower than the project
+
+  @bead:beadloom-0mdo.15
+  Scenario: The branch axis is read from the caller's seat as well as the target's
+    Given a project whose command commits through a helper two hops away
+    When impact runs against the file the change was being made in
+    Then the branches of the command that calls the target are reported too
+    And every branch count says which seat it was taken from

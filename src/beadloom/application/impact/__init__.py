@@ -35,7 +35,12 @@ from beadloom.application.impact.answer import (
     package_root_of,
     source_root_of,
 )
-from beadloom.application.impact.axes import Branch, Command
+from beadloom.application.impact.axes import (
+    THE_CALLER_SEAT,
+    THE_TARGET_SEAT,
+    Branch,
+    Command,
+)
 from beadloom.application.impact.render import answer_to_dict, render_impact
 from beadloom.application.impact.seeds import (
     THE_EFFECT_RULES,
@@ -47,9 +52,11 @@ from beadloom.application.impact.seeds import (
 from beadloom.application.impact.unresolved import Unresolved
 
 __all__ = [
+    "THE_CALLER_SEAT",
     "THE_EFFECT_RULES",
     "THE_SEED_RULE",
     "THE_SEED_RULE_STATEMENT",
+    "THE_TARGET_SEAT",
     "Boundary",
     "Branch",
     "Command",

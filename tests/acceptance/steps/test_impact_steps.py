@@ -107,6 +107,31 @@ def measure(a, b):
     return 0
 '''
 
+#: A PEP 420 layout, built rather than assumed. `src/ns` carries no
+#: `__init__.py`; its two subpackages do. BDL-068 `.15` measured that the sweep
+#: stopped at the first subpackage on a tree of this shape and reported the
+#: caller one directory across as `none found.` — resolved, empty and wrong.
+_NAMESPACE_WRITER = '''\
+"""The file the change is being made in."""
+import yaml
+
+
+def helper(data, path):
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+'''
+
+_NAMESPACE_CALLER = '''\
+"""The caller, in the subpackage next door."""
+from ns.sub.writer import helper
+
+
+def run(flag, data, path):
+    if flag:
+        helper(data, path)
+    else:
+        helper({}, path)
+'''
+
 _MODULES = {
     "atomic": _ATOMIC,
     "bootstrap": _BOOTSTRAP,
@@ -142,11 +167,22 @@ def world(tmp_path: Path) -> dict[str, Any]:
     graph = root / ".beadloom" / "_graph"
     graph.mkdir(parents=True)
     (graph / "graph.yml").write_text(yaml.dump({"nodes": nodes}), encoding="utf-8")
-    return {"root": root, "argv": None, "result": None, "human": None}
+    return {
+        "root": root,
+        "home": tmp_path,
+        "argv": None,
+        "result": None,
+        "human": None,
+        "other": None,
+    }
 
 
-def _run(world: dict[str, Any], target: str, *, as_json: bool = True) -> None:
+def _run(
+    world: dict[str, Any], target: str, *, as_json: bool = True, root: str | None = None
+) -> None:
     argv = ["impact", target, "--project", str(world["root"])]
+    if root is not None:
+        argv += ["--root", str(world["root"] / root)]
     world["argv"] = [*argv, "--json"] if as_json else argv
     world["result"] = CliRunner().invoke(main, [*argv, "--json"])
     world["human"] = CliRunner().invoke(main, argv)
@@ -167,6 +203,23 @@ def given_command_project(world: dict[str, Any]) -> None:
 @given("a project whose module reaches no declared effect sink")
 def given_lonely_project(world: dict[str, Any]) -> None:
     assert (world["root"] / "src" / "pkg" / "lonely.py").exists()
+
+
+@given("a project whose package carries no __init__.py file")
+def given_namespace_project(world: dict[str, Any]) -> None:
+    """A PEP 420 tree, the layout this repository does not have anywhere."""
+    root = world["home"] / "namespaced"
+    for part in ("sub", "cli"):
+        (root / "src" / "ns" / part).mkdir(parents=True)
+        (root / "src" / "ns" / part / "__init__.py").write_text("", encoding="utf-8")
+    (root / "src" / "ns" / "sub" / "writer.py").write_text(
+        _NAMESPACE_WRITER, encoding="utf-8"
+    )
+    (root / "src" / "ns" / "cli" / "main.py").write_text(
+        _NAMESPACE_CALLER, encoding="utf-8"
+    )
+    assert not (root / "src" / "ns" / "__init__.py").exists()
+    world["root"] = root
 
 
 @given("the project is indexed")
@@ -192,6 +245,92 @@ def when_run_lonely(world: dict[str, Any]) -> None:
 @when("impact runs against the file holding that command with --json")
 def when_run_setup_json(world: dict[str, Any]) -> None:
     _run(world, "src/pkg/setup.py")
+
+
+@when("impact runs against the file in one of its subpackages")
+def when_run_namespace(world: dict[str, Any]) -> None:
+    _run(world, "src/ns/sub/writer.py")
+
+
+@when("impact runs against that file and again against the symbol it defines")
+def when_run_both_spellings(world: dict[str, Any]) -> None:
+    _run(world, "src/ns/sub/writer.py")
+    by_path = _payload(world)
+    _run(world, "helper")
+    world["other"] = by_path
+
+
+@when("impact runs against that file over a root that does not hold it")
+def when_run_narrowed(world: dict[str, Any]) -> None:
+    _run(world, "src/ns/sub/writer.py", root="src/ns/cli")
+
+
+@then("the callers include the function in the neighbouring subpackage")
+def then_caller_across_the_namespace(world: dict[str, Any]) -> None:
+    callers = _payload(world)["callers"]
+    assert callers["resolved"] is True
+    assert [site["name"] for site in callers["sites"]] == ["run"]
+    assert "src/ns/cli/main.py" in world["human"].output
+
+
+@then("the swept root is the namespace package rather than the subpackage")
+def then_swept_root_is_the_namespace(world: dict[str, Any]) -> None:
+    assert _payload(world)["root"] == "src/ns"
+
+
+@then("both runs name the same callers")
+def then_both_spellings_agree(world: dict[str, Any]) -> None:
+    by_symbol = _payload(world)
+    by_path = world["other"]
+    assert [site["name"] for site in by_symbol["callers"]["sites"]] == [
+        site["name"] for site in by_path["callers"]["sites"]
+    ]
+    assert by_symbol["callers"]["sites"]
+
+
+@then("the callers axis reads unresolved rather than empty")
+def then_callers_unresolved(world: dict[str, Any]) -> None:
+    callers = _payload(world)["callers"]
+    assert callers["resolved"] is False
+    assert f"- unresolved: {callers['reason']}" in world["human"].output
+
+
+@then("the unresolved population names the target that fell outside the sweep")
+def then_target_outside_reported(world: dict[str, Any]) -> None:
+    gap = next(
+        entry
+        for entry in _payload(world)["unresolved"]
+        if entry["kind"] == "target-outside-the-sweep"
+    )
+    assert "src/ns/sub/writer.py" in gap["detail"]
+    assert "src/ns/cli" in gap["where"]
+
+
+@then("the unresolved population says the sweep is narrower than the project")
+def then_narrower_sweep_reported(world: dict[str, Any]) -> None:
+    gap = next(
+        entry
+        for entry in _payload(world)["unresolved"]
+        if entry["kind"] == "sweep-narrower-than-the-project"
+    )
+    assert "src/ns/cli" in gap["detail"]
+    assert "src/ns" in gap["where"]
+
+
+@then("the branches of the command that calls the target are reported too")
+def then_caller_branches(world: dict[str, Any]) -> None:
+    commands = {command["name"]: command for command in _payload(world)["commands"]}
+    assert len(commands["run"]["branches"]) == 4
+    assert commands["run"]["seat"] == "caller"
+    assert commands["bootstrap_project"]["seat"] == "target"
+
+
+@then("every branch count says which seat it was taken from")
+def then_every_count_names_its_seat(world: dict[str, Any]) -> None:
+    commands = _payload(world)["commands"]
+    assert commands
+    assert all(command["seat"] in {"target", "caller"} for command in commands)
+    assert "caller's seat" in world["human"].output
 
 
 @then("the answer names the derived seed")

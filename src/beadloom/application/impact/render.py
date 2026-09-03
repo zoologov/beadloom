@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from beadloom.application.impact.axes import THE_TARGET_SEAT
+
 if TYPE_CHECKING:
     from beadloom.application.impact.answer import ImpactAnswer, Population
     from beadloom.application.impact.axes import Command
@@ -21,6 +23,11 @@ if TYPE_CHECKING:
 #: fallthrough is the branch a binding-shaped count cannot see, so it is spelled
 #: rather than left as an empty line.
 _FALLTHROUGH = "(fallthrough)"
+
+#: How a count taken over a caller of the target is spelled. A branch count with
+#: no seat is the shape BDL-067 was misled by, so the seat is written beside
+#: every count that is not the target's own.
+_FROM_A_CALLERS_SEAT = ", read from a caller's seat"
 
 
 def answer_to_dict(answer: ImpactAnswer) -> dict[str, Any]:
@@ -86,6 +93,7 @@ def _command_to_dict(command: Command) -> dict[str, Any]:
         "node": command.node,
         "domain": command.domain,
         "narrowed_to_the_seeds": command.narrowed_to_the_seeds,
+        "seat": command.seat,
         "branches": [
             {
                 "guard": list(branch.guard),
@@ -124,9 +132,10 @@ def render_impact(answer: ImpactAnswer) -> str:
         if not command.branches and not command.exits:
             continue
         scope = "reaching a seed" if command.narrowed_to_the_seeds else "every call"
+        seat = "" if command.seat == THE_TARGET_SEAT else _FROM_A_CALLERS_SEAT
         lines.append(
             f"- {command.name} ({command.path.as_posix()}:{command.lineno}): "
-            f"{len(command.branches)} branch(es), {scope}"
+            f"{len(command.branches)} branch(es), {scope}{seat}"
         )
         lines += [
             f"    - {' and '.join(branch.guard) or _FALLTHROUGH}: "
@@ -155,12 +164,17 @@ def render_impact(answer: ImpactAnswer) -> str:
 
 
 def _population_lines(population: Population) -> list[str]:
-    if not population.resolved:
-        return [f"- unresolved: {population.reason}"]
-    if not population.sites:
-        return ["- none found."]
-    return [
+    """One axis, read aloud — the caveat first, and then whatever it did find.
+
+    An unresolved axis that HAS sites is a partial answer, not an absent one, so
+    the sites are printed under the caveat rather than replaced by it. Hiding
+    them would trade the silence BDL-068 `.15` closed for a second one.
+    """
+    found = [
         f"- {site.name} — {site.path}:{site.lineno}"
         + (f" [{site.node}]" if site.node else " [no node]")
         for site in population.sites
     ]
+    if not population.resolved:
+        return [f"- unresolved: {population.reason}", *found]
+    return found or ["- none found."]

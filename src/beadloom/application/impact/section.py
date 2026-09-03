@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.application.impact.axes import THE_TARGET_SEAT
 from beadloom.doc_sync.axes_section import (
     AXES_HEADING,
     COLUMNS,
@@ -38,6 +39,9 @@ UNDECIDED = "?"
 
 #: What a node cell says when the derivation named no node for the row.
 _NO_NODE = "—"
+
+#: How a branch row taken over a caller of the target is spelled.
+_FROM_A_CALLERS_SEAT = ", from a caller's seat"
 
 
 def render_axes_section(answer: ImpactAnswer) -> str:
@@ -99,28 +103,34 @@ def _rows(answer: ImpactAnswer) -> list[str]:
 
 
 def _population_rows(axis: str, population: Population) -> list[str]:
-    if not population.resolved:
-        return [_row(axis, _NO_NODE, f"unresolved — {population.reason}")]
+    """The rows for one axis: the caveat, if there is one, and then the sites.
+
+    An unresolved axis keeps the sites it did find. A section that dropped them
+    would be a narrower artifact than the answer it renders, and the reader of
+    the section is the one deciding scope.
+    """
     by_node: dict[str, list[str]] = {}
     for site in population.sites:
         by_node.setdefault(site.node or _NO_NODE, []).append(
             f"{site.path}:{site.lineno}"
         )
-    if not by_node:
-        return [_row(axis, _NO_NODE, "no site found")]
-    return [
+    found = [
         _row(axis, node, f"{len(sites)} — `{sites[0]}`")
         for node, sites in sorted(by_node.items())
     ]
+    if not population.resolved:
+        return [_row(axis, _NO_NODE, f"unresolved — {population.reason}"), *found]
+    return found or [_row(axis, _NO_NODE, "no site found")]
 
 
 def _command_row(command: Command) -> str:
     narrowing = "" if command.narrowed_to_the_seeds else ", over every call"
+    seat = "" if command.seat == THE_TARGET_SEAT else _FROM_A_CALLERS_SEAT
     return _row(
         "branches",
         command.node or _NO_NODE,
         f"`{command.name}`: {len(command.branches)} branch(es), "
-        f"{len(command.exits)} exit form(s){narrowing}",
+        f"{len(command.exits)} exit form(s){narrowing}{seat}",
     )
 
 

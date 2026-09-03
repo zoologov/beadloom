@@ -12,6 +12,15 @@ Every entry names a KIND, so a consumer can act on the class rather than parse a
 sentence, and a place, so a human can go and look. The kinds are the ways this
 derivation is known to be blind:
 
+``target-outside-the-sweep``
+    A file the answer is about that does not lie under the swept root. Nothing
+    it defines was read, so the caller axis has no population at all rather than
+    an empty one.
+``sweep-narrower-than-the-project``
+    The swept root is not the project's source root, so every axis is an answer
+    about a subtree. BDL-068 `.15` measured what its absence did: on a PEP 420
+    tree the sweep narrowed to one subpackage and a caller one directory across
+    read as ``none found.``, cleanly, with nothing to say the answer was partial.
 ``no-seed``
     No declared effect rule found a sink the target reaches, so the co-writer
     axis has no population at all. Reported instead of an empty list.

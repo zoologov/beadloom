@@ -103,6 +103,8 @@ sentence, and a place, so a human can go and look.
 
 | kind | what it means |
 |---|---|
+| `target-outside-the-sweep` | a file this answer is about that does not lie under the swept root, so nothing it defines was read |
+| `sweep-narrower-than-the-project` | the swept root is not the project's source root, so every axis is an answer about a subtree |
 | `no-seed` | no declared effect rule found a sink this target reaches |
 | `no-graph-index` | there was no index to read ownership from |
 | `unparsed-module` | a file under the root no sweep could read |
@@ -117,6 +119,37 @@ standard library. Asking a project-local object would mean importing the tree
 under examination, and a derivation that runs the tree it is reading is a
 derivation that can change it.
 
+### How wide the sweep is, and how it says so
+
+The swept root is derived from the target and printed as `root swept:` in every
+rendering. BDL-068 `.15` is why it is also a claim the answer can withdraw.
+
+The walk up from the target does **not** require `__init__.py`. Requiring one was
+correct for this repository, where every package carries it, and wrong for a
+PEP 420 namespace package, where the walk stopped at the first subpackage: on a
+tree with `src/mypkg/` carrying no `__init__.py`, `impact src/mypkg/sub/writer.py`
+swept `src/mypkg/sub` and reported the caller in `src/mypkg/cli/main.py` as
+`none found.` — resolved, empty and wrong — while the same function spelled as a
+symbol swept `.` and found it. One tree, one derivation, two spellings, opposite
+answers, and the wrong one was the clean one. The walk now stops where a source
+tree stops: below a directory named `src`, below one carrying `pyproject.toml`,
+and never above the project root. `source_root_of` counts a child of `src/` that
+**holds** Python at any depth for the same reason.
+
+Two consequences are stated in the answer rather than left to be noticed:
+
+- `callers.resolved` is a **predicate** — false when a file this answer is about
+  does not lie under the swept root. It was the literal `True` before, which made
+  it the one axis that could never be unresolved while being the axis whose
+  completeness depends entirely on the swept root.
+- `sweep-narrower-than-the-project` is emitted whenever the swept root is not the
+  project's source root, carrying both paths, so a narrowed answer cannot read as
+  a complete one.
+
+**An unresolved axis still prints the sites it did find**, under the caveat rather
+than instead of it. A caveat that emptied a partial answer would trade one silence
+for another.
+
 ### Known ceilings
 
 - **A name is a name, not a resolved import.** Two same-named functions under one
@@ -124,16 +157,33 @@ derivation that can change it.
   as `name-defined-more-than-once` rather than left to be discovered.
 - **The branch reading is syntactic.** It reads that a call follows a branch, not
   what that call sees at runtime.
+- **The branch axis is computed for the target AND for the callers this answer
+  named, and each count carries its seat.** BDL-068 `.15` chose this over the
+  alternative — emitting an `unresolved` entry per caller whose branches were not
+  read — because an entry saying a number exists without printing it is what a
+  reader stops at, which is the failure this command was built against. Measured
+  on this repository: `impact src/beadloom/onboarding/scanner/bootstrap.py
+  --section` wrote `bootstrap_project: 3 branch(es)` and nothing else, while
+  `init` — named one row above as a caller — has four branches, and three was the
+  number this project carried for nine review passes. The same invocation now
+  writes `init: 4 branch(es), 1 exit form(s), from a caller's seat` beside it.
+  The ceiling that remains: only the caller FUNCTIONS the answer already found are
+  read, not every function in their files, and a caller of a caller is not read at
+  all. The axis is one hop out, exactly as `co_writers` is.
 - **A sweep is re-read on each run.** A cache would be a second thing that can
   disagree with the tree. Measured on this repository's own `src/beadloom` — 250
-  modules, 1688 names — one answer takes 1.1 s, macOS, foreground.
+  modules, 1688 names — one answer takes 1.1 s, macOS, foreground. Reading the
+  callers' branches costs one parse per caller file: for `bootstrap.py`, three
+  caller sites in two files, `impact_of` went from **1.48 s to 1.65 s**, mean of
+  three runs each, macOS Darwin 25.6.0, CPython 3.13.7, in the foreground with no
+  pipe. Measured on the tree, not in a clean room and not on a CI leg.
 
 ## Modules
 
 | Module | Responsibility |
 |---|---|
 | `seeds.py` | the seed rule, the declared effect table, and the sinks a target reaches |
-| `axes.py` | the four questions, computed over a seed set |
+| `axes.py` | the four questions, computed over a seed set, each branch count carrying the seat it was taken from |
 | `boundary.py` | which node owns a path, and the bounded context above it — `owner_of(path)` and, since BDL-068 S1.6, `context_of(node)` for a caller that starts from a DECLARED node and has no path to look it up by |
 | `unresolved.py` | what the derivation could not read, as a population |
 | `answer.py` | the vocabulary and the one orchestration every rendering reads |
@@ -149,6 +199,10 @@ from beadloom.application.impact import (
     render_impact,    # -> str: the same answer as text, seed first
     THE_SEED_RULE,    # the rule's name, carried in every answer
     THE_EFFECT_RULES, # the declared effects, each with its statement
+    THE_TARGET_SEAT,  # the seat a branch count was taken from: the target itself
+    THE_CALLER_SEAT,  # ... or a caller of it this answer already named
+    package_root_of,  # -> Path: how wide to sweep, derived from the target
+    source_root_of,   # -> Path: the project's own source root, to compare against
 )
 from beadloom.application.impact.section import render_axes_section  # -> str
 ```

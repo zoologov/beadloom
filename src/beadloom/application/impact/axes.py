@@ -38,6 +38,16 @@ if TYPE_CHECKING:
     from beadloom.application.source_derivation import FoundFunction
 
 
+#: The seat a command's branches were read from: the target itself.
+THE_TARGET_SEAT = "target"
+
+#: The seat a command's branches were read from: a caller of the target that
+#: this answer already named. The distinction is the whole of BDL-068 `.15`'s
+#: MAJOR 2 — a branch count is a property of the function it is taken over, and
+#: an answer that does not say which function that was is a number with no seat.
+THE_CALLER_SEAT = "caller"
+
+
 @dataclass(frozen=True)
 class Branch:
     """One path through a command, named by the conditions it sits under."""
@@ -68,6 +78,12 @@ class Command:
     #: means no seed was derived and every call was read, which is a different
     #: question with a different answer and must not be read as the same one.
     narrowed_to_the_seeds: bool
+    #: Which seat this count was taken from — :data:`THE_TARGET_SEAT` or
+    #: :data:`THE_CALLER_SEAT`. BDL-067 was told `bootstrap_project` had three
+    #: branches, which was true, while the four branches of the command CALLING
+    #: it were the ones the epic got wrong. Both counts now appear and each says
+    #: whose it is.
+    seat: str = THE_TARGET_SEAT
 
 
 def co_writers(
