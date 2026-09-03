@@ -574,3 +574,95 @@ class TestSeamShape:
         payload = json.loads(proc.stdout)
         assert isinstance(payload, list)
         assert {"text", "author"} <= set(payload[0])
+
+
+def _reachability_statements(human: str) -> list[str]:
+    """The one line per channel the human shape prints, in report order.
+
+    Read off the block rather than matched by name: the point of the assertions
+    below is that neither shape may drop a channel the report carries, and a
+    reader that looked for known names could not notice a missing one.
+    """
+    lines = human.splitlines()
+    heading = next(i for i, line in enumerate(lines) if line.startswith("REACHABLE —"))
+    statements: list[str] = []
+    for line in lines[heading + 1 :]:
+        if not line.strip():
+            break
+        if line.startswith("  ") and not line.startswith("    "):
+            statements.append(line.strip())
+    return statements
+
+
+class TestBothShapesCarryTheWholeStatement:
+    """BDL-068 S2, the rendering half: what `.18` pinned by two substrings.
+
+    Every assertion here is seeded from the report the command produced, so a
+    fifth channel — or a channel dropped from one shape only — is covered
+    without an edit. A `--json` consumer and a human reader must be able to
+    reach the same conclusion, which was the whole finding of BDL-UX #148.
+    """
+
+    def _both(self, project: Path) -> tuple[str, list[dict[str, Any]]]:
+        argv = ["review-brief", "a", "--since", "main", "--project", str(project)]
+        human = CliRunner().invoke(main, argv)
+        machine = CliRunner().invoke(main, [*argv, "--json"])
+        assert machine.exit_code in (_EXIT_CLEAN, _EXIT_FINDINGS), machine.output
+        return human.output, list(json.loads(machine.stdout)["reachability"])
+
+    def test_every_channel_the_report_carries_is_stated_in_both_shapes(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """A channel that reaches only one shape is a channel half the readers
+        never learn about, which is the omission #204 was."""
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [_comment(_AUTHOR_TEXT)])
+        human, channels = self._both(project)
+
+        statements = _reachability_statements(human)
+        assert len(channels) > 1, channels
+        assert len(statements) == len(channels), statements
+        for channel in channels:
+            assert any(
+                statement.startswith(f"{channel['channel']}:") for statement in statements
+            ), f"{channel['channel']} reaches the JSON and not the reader: {statements}"
+
+    def test_the_line_for_a_channel_nobody_could_inspect_carries_no_count(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The Population rule on the rendered line, for every channel that is
+        in that state rather than for the one the test author remembered."""
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [])
+        human, channels = self._both(project)
+
+        statements = {line.split(":", 1)[0]: line for line in _reachability_statements(human)}
+        unseen = [c for c in channels if not c["inspected"]]
+        assert len(unseen) >= 2, channels
+        for channel in unseen:
+            line = statements[channel["channel"]]
+            assert "NOT INSPECTED" in line, line
+            assert "item(s)" not in line, line
+            assert channel["items"] == [], channel
+
+    def test_nothing_withheld_is_no_longer_a_sentence_either_shape_can_print(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #204 was a true count read as a false claim. With no comments
+        at all the brief must still state what a reviewer can reach — a bare
+        zero beside no other channel is the sentence that was misread."""
+        project = _repo_with_change(tmp_path)
+        bd(_record(), [])
+        human, channels = self._both(project)
+
+        assert "WITHHELD" not in human
+        assert "withheld" not in json.loads(
+            CliRunner()
+            .invoke(
+                main,
+                ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
+            )
+            .stdout
+        )
+        assert next(c for c in channels if c["channel"] == "bead comments")["carries"] == 0
+        assert len(_reachability_statements(human)) == len(channels)
