@@ -1,15 +1,16 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
 > **Last updated:** 2026-09-04
-> **Phase:** Development — S1-S3 merged; S4 waves 1-2 landed, wave 3 in flight
+> **Phase:** Development — S1-S3 merged; S4 waves 1-4 landed, wave 5 next
 
 ---
 
 ## Current Bead
 
-**Bead:** S4 wave 3 landed — `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner
-`67t1`, combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
-`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 4 is `en0x`, then `gsal`, then `nn4c`.
+**Bead:** S4 wave 4 landed — `en0x` (`ded748d`), its own gate owner, combined tree measured
+green. Wave 3 landed: `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner `67t1`,
+combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
+`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 5 is `gsal`, then `nn4c`.
 Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
 `gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
 `flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
@@ -123,6 +124,41 @@ filed; this name is the free mitigation and later slices keep it.
     claim about the combined tree, which is `67t1`'s to make. Filed BDL-UX #236: a clean room's
     verdict is decided by which optional extras it installed, measured as 0, 1 and 82 mypy errors
     over one code base.
+  - [x] `en0x` / **#232 + #234** — the planner's own scope input was AUTHORED while everything
+    else this epic built is derived, and the printed remedy outran what its reason could tell.
+    **The fix is not to stop reading the declaration** (CONTEXT Q1): the declaration still
+    decides the shape, and what is added is the comparison against the derivation the work item
+    recorded, composed at the services edge from the SAME read `scope-check` makes so the
+    commit gate and the plan cannot disagree about one approval. Measured on the pair that
+    produced the defect: `beadloom waves beadloom-0mdo.21 beadloom-0mdo.26` reported 1 wave, 2
+    beads, 0 findings before and now reports `unguarded_axis` naming **`cli-commands`** among
+    the nine approved nodes neither bead declares — `cli-commands` owns `docs/services/cli.md`,
+    the document they collided in. The unit is Q2's: `0mdo.27` editing `cli-commands` outside
+    its own refs stays correct and raises nothing. **Three verdicts are deliberately not
+    findings** — a ref the table never names is the DERIVATION not reaching (#225, measured: no
+    node attributed to any of 148 caller sites under `tests/`), an axis row naming no node is
+    compared against nothing (the table-scale shape of `.32`'s 41-of-52 unowned paths), and a
+    row nobody ruled on belongs to `axis-without-a-scope-decision`. **The gap is reported per
+    WAVE and only where a wave holds a pair**, because the sentence it makes is about a
+    pairwise verdict; per plan it would print 9 findings on every single-bead plan of this epic,
+    and an always-red check is an ignored check. That is NOT `media_for(wave_size)`, which
+    `67t1` removed — that suppressed a STATEMENT about a medium shared whatever the width.
+    #234 measured on `beadloom-nn4c`, unchanged and unclaimed: the same correct reason now
+    carries a remedy stating BOTH sub-cases and the fact that nothing here can tell them apart,
+    so following it can no longer manufacture the authored scope #232 is filed against.
+    Green in a clean room over 18 files (8 626 passed; the 1 failure is the room's stated
+    property — no `.git`, so 420 pairs read `unverified` — and it is red at pure HEAD in an
+    identically-built control room); `beadloom ci` rc 0 there, in Darwin arm64 / **CPython
+    3.12.12**, which is not the tree's interpreter (#236's shape: a room's verdict is decided by
+    what it installed). **As its own gate owner:** the combined tree at `ded748d` is green —
+    8 657 passed, 0 failed, `beadloom ci` rc 0 foreground and unpiped, `HEAD` verified unchanged
+    before and after, and `mypy` clean against all four declared target versions. Every verdict
+    in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. The tree carries four files
+    from outside this bead (`onboarding/bootstrap.py`, `doc_classify.py`,
+    `services/commands/setup.py` and two tests), uncommitted before this bead began and left
+    that way. Four existing tests went red and were UPDATED rather than the rule weakened —
+    each now says what its declarations were held against — which is the same move `mr2l.80`
+    made when the environment default stopped meaning clean.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 
@@ -168,7 +204,7 @@ beads are created per slice, once the preceding slice's review closes.
 | `0mdo.32` | the residue of `mr2l.81`: the commit gate judges staged paths, so a neighbour's hunk inside a file the committer touched reads clean. Wire S1's `scope-check` into the hook | P1 |
 | `0mdo.33` | the residue of `mr2l.60`: the refusal rule is a literal backslash, so on Windows every edit is MALFORMED and the stated reason is false there. `os.sep`/`os.altsep` + a shape gate | P2 |
 | `gsal` / **#231** | the commit hook type-checks an undeclared surface (970 errors in 90 files), discards mypy's output, never blocks; a real `src/` error prints the same sentence | P1 |
-| `en0x` / **#232** | `waves` plans from an AUTHORED `refs:` line, so two beads editing one document read as independent. Measured: `.21` and `.26` both edited `docs/services/cli.md`, 0 findings | P1 |
+| `en0x` / **#232 + #234** | `waves` plans from an AUTHORED `refs:` line, so two beads editing one document read as independent. Measured: `.21` and `.26` both edited `docs/services/cli.md`, 0 findings. Also #234: the printed remedy did not follow the cause as far as the reason did | P1 |
 | `nn4c` / **#233** | the read-only guard test attributes by TIMING, and a `bd` export burst lands inside the measurement window and misses the control window. Least reliable exactly when the flow is most parallel | P1 |
 | `0mdo.34` | test — the surface as a shape, never a spelling | P1 |
 | `0mdo.35` | review | P1 |
