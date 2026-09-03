@@ -56,15 +56,28 @@ def _project_role_fragment(project: Path, role: str, text: str) -> None:
     fragment.write_text(text, encoding="utf-8")
 
 
+def _composed(project_root: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """The derivation's answer where a config that PARSES is the case under test.
+
+    `prompts_naming_documents` answers `None` for a project `flow.yml` that will
+    not parse — the repair for FINDING BDL-068.19-1, which
+    `test_review_brief_reachability_derivation.py` covers. Every case here
+    composes, so the absence is asserted once rather than at each call site.
+    """
+    naming = prompts_naming_documents(project_root)
+    assert naming is not None, "the project's flow.yml did not parse"
+    return naming
+
+
 class TestTheDocumentPopulationIsDerivedFromThePrompts:
     def test_the_shipped_prompts_name_the_documents_the_flow_writes(self) -> None:
         """Anti-vacuity: a derivation that found nothing would pass every other case."""
-        naming = prompts_naming_documents()
+        naming = _composed()
         assert {"CONTEXT.md", "ACTIVE.md", "PRD.md", "RFC.md", "PLAN.md"} <= set(naming)
 
     def test_a_document_is_attributed_to_the_prompts_that_name_it(self) -> None:
         """#212's channel, with the answer to "who sent the reviewer there"."""
-        naming = prompts_naming_documents()
+        naming = _composed()
         role_labels = {
             label for labels in naming.values() for label in labels if label.startswith("roles/")
         }
@@ -83,12 +96,12 @@ class TestTheDocumentPopulationIsDerivedFromThePrompts:
         """
         project = tmp_path / "proj"
         project.mkdir()
-        assert _NOVEL_DOCUMENT not in prompts_naming_documents(project)
+        assert _NOVEL_DOCUMENT not in _composed(project)
 
         _project_role_fragment(
             project, "review", f"Read `{_NOVEL_DOCUMENT}` before you judge.\n"
         )
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         assert naming[_NOVEL_DOCUMENT] == ("roles/review (project layer)",)
 
     def test_the_shape_matches_a_document_and_not_a_sentence(self, tmp_path: Path) -> None:
@@ -100,7 +113,7 @@ class TestTheDocumentPopulationIsDerivedFromThePrompts:
             "review",
             "Read notes.md, CONTEXT.mdx and NOTES.md before you judge.\n",
         )
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         assert "NOTES.md" in naming
         assert "notes.md" not in naming
         assert "CONTEXT.mdx" not in naming
@@ -109,7 +122,7 @@ class TestTheDocumentPopulationIsDerivedFromThePrompts:
         """The order is composed, not a directory listing, so it cannot drift."""
         project = tmp_path / "proj"
         project.mkdir()
-        assert prompts_naming_documents(project) == prompts_naming_documents(project)
+        assert _composed(project) == _composed(project)
 
 
 class TestTheWorkItemDocumentsChannel:

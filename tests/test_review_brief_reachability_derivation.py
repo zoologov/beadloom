@@ -104,6 +104,22 @@ def _seeded(project: Path, prompts: dict[str, tuple[str, str]]) -> dict[str, str
     return expected
 
 
+def _composed(
+    project_root: Path | None = None, *, config: FlowConfig | None = None
+) -> dict[str, tuple[str, ...]]:
+    """The derivation's answer where a config that PARSES is the case under test.
+
+    `prompts_naming_documents` answers `None` for a project `flow.yml` that will
+    not parse, and every case below this line composes. The absence is asserted
+    once here rather than narrowed away at each call site, so a case that stops
+    composing fails on this line and says why instead of failing further down on
+    a `None` nobody was asking about.
+    """
+    naming = prompts_naming_documents(project_root, config=config)
+    assert naming is not None, "the project's flow.yml did not parse"
+    return naming
+
+
 def _worlds(project: Path) -> dict[str, Reachability]:
     """The same report over the two worlds that differ in what could be answered.
 
@@ -157,7 +173,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
             project, {f"roles/{role} (project layer)": ("roles", role) for role in ROLE_NAMES}
         )
 
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         unread = {
             document: label
             for document, label in expected.items()
@@ -184,7 +200,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
             {f"commands/{name} (project layer)": ("commands", name) for name in commands},
         )
 
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         unread = {
             document: label
             for document, label in expected.items()
@@ -215,7 +231,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
             lambda kind, name, **_: Composition(kind=kind, name=name, fragments=fragments),
         )
 
-        labels = prompts_naming_documents()["TWICE-NAMED.md"]
+        labels = _composed()["TWICE-NAMED.md"]
         assert labels.count(f"roles/{ROLE_NAMES[0]}") == 1, labels
 
     def test_a_document_two_prompts_name_is_attributed_to_both_exactly_once(
@@ -233,7 +249,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
         _project_fragment(project, "roles", role, f"Read {document}. Then {document} again.\n")
         _project_fragment(project, "commands", command, f"Write {document}.\n")
 
-        labels = prompts_naming_documents(project)[document]
+        labels = _composed(project)[document]
         assert labels.count(f"roles/{role} (project layer)") == 1, labels
         assert labels.count(f"commands/{command} (project layer)") == 1, labels
 
@@ -253,8 +269,8 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
         window is unstated, one layer below the channels (FINDING BDL-068.19-3,
         reported and not repaired from a test bead).
         """
-        whole = prompts_naming_documents()
-        reduced = prompts_naming_documents(
+        whole = _composed()
+        reduced = _composed(
             config=FlowConfig(
                 tools=("claude",), architecture="ddd", stack=("no-such-stack",)
             )
@@ -294,7 +310,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
         document = f"{stem}.md"
         _project_fragment(project, "roles", ROLE_NAMES[0], f"Read {document} first.\n")
 
-        assert (document in prompts_naming_documents(project)) is read
+        assert (document in _composed(project)) is read
 
     def test_a_name_outside_the_latin_alphabet_is_not_read_as_a_document(
         self, tmp_path: Path
@@ -308,7 +324,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
             project, "roles", ROLE_NAMES[0], "設計.md を読む. Read ACTIVE.md.\n"
         )
 
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         assert "ACTIVE.md" in naming
         assert "設計.md" not in naming
 
@@ -324,7 +340,7 @@ class TestThePopulationOfPromptsIsDerivedAndNotListed:
         project.mkdir()
         _project_fragment(project, "roles", ROLE_NAMES[0], f"Read ACTIVE.md. {_PROSE}\n")
 
-        naming = prompts_naming_documents(project)
+        naming = _composed(project)
         assert "ACTIVE.md" in naming
         assert _PROSE not in repr(naming)
 
