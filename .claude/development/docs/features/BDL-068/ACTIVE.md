@@ -1,18 +1,17 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-03
-> **Phase:** Development — S1, S2 and S3 shipped and merged; S4 next
+> **Last updated:** 2026-09-04
+> **Phase:** Development — S1-S3 merged; S4 wave 1 landed, wave 2 in flight
 
 ---
 
 ## Current Bead
 
-**Bead:** S4 wave 1 — `0mdo.27` (the duty mechanism) and `0mdo.31` (#170, the guard surface)
-run concurrently in one working tree. `.31` owns the combined-tree gate; `.27` reports its own room.
-`0mdo.27` is DONE: `beadloom.onboarding.role_duties` checks a declared duty against the composed
-core of every role it names, in both directions, and `config-check` blocks on the findings. It
-declares no duty itself — `beadloom-67t1` (#228) writes the clean-room duty into the role cores and
-declares it, and the slice forbids shipping either half alone.
+**Bead:** S4 wave 2 — `0mdo.32` alone (`beadloom waves` serialised it against all five remaining
+beads), so it is its own gate owner. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`, `5fd9636`.
+Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
+`gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
+`flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
 **Goal of S4:** the guards' enforcement surface is narrower than their promise — derive each
 guard's surface from its own matcher, compare it against what exists, report the gap.
 **Branch:** `features/BDL-068` — **no suffix, deliberately**. BDL-UX #230: `declared_scope`
