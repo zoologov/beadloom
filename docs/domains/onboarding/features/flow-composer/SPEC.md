@@ -37,14 +37,24 @@ breaking the Beadloom gate":
 | 5 | `project` | `.beadloom/flow/<kind>/<name>.md` in the adopting repo | yes |
 
 **Shared CORE fragments** (`ArtifactKind.shared`, BDL-061 S4) are how one text
-reaches several artifacts without being copied into each. Today there is one —
-`SHARED_ROLE_FRAGMENTS = ("_writing",)`, the writing standard composed into all
-four roles. It used to live inside the `tech-writer` core, so the three roles
-that produce the TO-BE documents were held to no standard at all; four copies
-would have drifted the moment one was edited. A shared fragment is a **layer and
-not a role**: it has no front matter, is never written as an adapter, and
-`compose_role("_writing", …)` raises. Being a normal layer, it is
-language-selectable like every other one.
+reaches several artifacts without being copied into each. There are two —
+`SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms")` — and both exist for the same
+reason: several copies of one rule drift the moment one of them is edited.
+
+`_writing` is the writing standard. It used to live inside the `tech-writer`
+core, so the roles that produce the TO-BE documents were held to no standard at
+all. `_rooms` (BDL-068 S3.2) is the statement every role that reports a
+MEASUREMENT is held to: name the room a result was taken in, report a clean-room
+result in the words that say it was one, and read a room-naming verdict as
+answerable rather than as stronger. It also carries the limit of a clean room —
+that it is blind by construction to an interaction with a bead running beside
+you — which until then was stated only in the coordinator command, read by the
+loop that orchestrates rather than by the roles that measure.
+
+A shared fragment is a **layer and not a role**: it has no front matter, is
+never written as an adapter, and `compose_role("_writing", …)` raises. Being a
+normal layer, each is language-selectable like every other one
+(`_writing.ru.md.txt` and `_rooms.ru.md.txt` ship).
 
 ### Artifact kinds
 

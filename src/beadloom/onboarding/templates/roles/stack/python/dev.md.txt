@@ -15,8 +15,15 @@ Python 3.10+. Models, exceptions, and IO follow these idioms.
 ```bash
 uv run pytest                                  # tests
 uv run ruff check src/ tests/                  # lint
-uv run mypy src/                               # types (strict)
+uv run mypy src/                               # types (strict) — ONE room; say which
+for v in $(beadloom rooms --dimension python); do uv run mypy --python-version "$v" src/; done
+beadloom rooms                                 # the rooms declared, the one you are in, the ones you did not enter
 beadloom reindex && beadloom sync-check && beadloom lint --strict && beadloom doctor
-beadloom ci                                    # the full pre-push Gate (rc 0 required)
+beadloom ci                                    # the full pre-push Gate (rc 0 required); its verdict names its room
 ```
+The loop varies the TARGET version the checker is asked about, which is where an unnecessary
+suppression differs between legs. It does not vary the interpreter the checker RUNS under, so a
+difference in what is installed per interpreter is still measured only in CI — say that when you
+report the result, rather than reporting four legs you did not enter.
+
 Shell: always pass `-f` to `cp`/`mv`/`rm` (avoid interactive hangs).

@@ -83,7 +83,7 @@ You MUST emit the project's graph annotations **on the code you write**, by cons
 
 ### Validation / Gate loop (before handing back)
 1. Tests pass.
-2. Lint + type-check clean (the repo's configured tools).
+2. Lint + type-check clean (the repo's configured tools) — and each of them names the room it ran in. A type check against one interpreter is a claim about that interpreter, not about the legs; `beadloom rooms` says which rooms this project declares and which of them your run did not enter.
 3. Architecture/doc validation green: `beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict` (and `beadloom doctor`). Since S1, a pre-push **Gate** (`beadloom ci`) blocks pushes on red — leave the tree Gate-green.
 
 ### Checkpoints

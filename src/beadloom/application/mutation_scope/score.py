@@ -28,8 +28,6 @@ room a caller can spell wrongly.
 from __future__ import annotations
 
 import json
-import os
-import platform
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -127,13 +125,14 @@ def describe_room() -> str:
 
     Platform, machine, interpreter and the parallelism available to it. A
     mutation score is a ratio over whatever ran, and what runs differs by room.
+
+    One home since BDL-068 S3.2: the same sentence is printed beside a Gate
+    verdict and beside a mutation score, so :mod:`beadloom.application.rooms`
+    composes it and this function keeps the name its callers import.
     """
-    cores = os.cpu_count() or 1
-    return (
-        f"{platform.system()} {platform.machine()} · "
-        f"{platform.python_implementation()} {platform.python_version()} · "
-        f"{cores} cores"
-    )
+    from beadloom.application.rooms import current_room, room_line
+
+    return room_line(current_room())
 
 
 def read_run_counters(path: Path) -> MutationCounters:

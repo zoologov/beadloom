@@ -407,7 +407,9 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # judged against a declared scope) and `declared-scope` (the branch, the
         # index and the planning corpus joined for it), which are again a check
         # and the composition that feeds it and not one thing.
-        assert populations[SPACE_AS_IS] == 109
+        # 109 -> 110 in BDL-068 `.23`: `verdict-room`, the rooms a verdict can be
+        # taken in, derived from the packaging metadata and the CI workflows.
+        assert populations[SPACE_AS_IS] == 110
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

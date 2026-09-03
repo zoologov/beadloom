@@ -96,7 +96,11 @@ the run did not cover is still reported.
 
 The report carries the ROOM it was measured in — platform, machine, interpreter and cores —
 derived rather than typed by the caller (BDL-UX #227: the same suite skips fifteen tests on
-Linux that it does not skip on macOS, and a mutation score is a ratio over whatever ran).
+Linux that it does not skip on macOS, and a mutation score is a ratio over whatever ran). Since
+BDL-068 S3.2 `describe_room` composes that sentence in the
+[verdict-room component](../verdict-room/DOC.md), so a Gate verdict and a mutation score name
+one room in one wording; `beadloom rooms` says which rooms the project declares and which of
+them a run did not enter.
 
 Exit codes: `0` clean or nothing declared, `1` findings or a score under `--min-score`, `2` the
 invocation cannot be answered.
