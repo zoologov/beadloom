@@ -72,6 +72,14 @@ class TestTheVerdictCarriesItsRoom:
         assert "not entered" in outcome.stdout
 
     def test_the_json_report_carries_the_room(self, tmp_path: Path) -> None:
+        """The two declared legs are accounted for, without saying how many were missed.
+
+        `_declare_a_leg` writes two legs differing only in the interpreter, so a
+        run is inside at most one: both are outside on a developer machine and
+        one is outside on the `tests (3.10)` leg. Asserting the literal 2 made
+        this a claim about the machine it was authored on, and PR #60 measured
+        it: green on 3.12, 3.13 and both locale legs, red on 3.10.
+        """
         _clean_project(tmp_path)
         _declare_a_leg(tmp_path)
         runner = CliRunner()
@@ -80,7 +88,8 @@ class TestTheVerdictCarriesItsRoom:
         )
         payload = json.loads(outcome.stdout)
         assert payload["room"]["current"]["os"]
-        assert len(payload["room"]["not_entered"]) == 2
+        assert payload["room"]["not_entered"]
+        assert len(payload["room"]["not_entered"]) + len(payload["room"]["entered"]) == 2
 
     def test_the_github_report_carries_the_room_as_a_notice(
         self, tmp_path: Path

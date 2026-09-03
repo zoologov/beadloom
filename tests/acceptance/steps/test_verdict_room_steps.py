@@ -224,8 +224,23 @@ def _payload_room(payload: dict[str, Any]) -> str:
 
 @then("the verdict names how many declared rooms it did not enter")
 def _verdict_names_the_gap(world: dict[str, Any]) -> None:
-    assert "declared room(s) not entered by this run" in world["verdict"]
-    assert len(world["verdict_payload"]["room"]["not_entered"]) == 2
+    """The number the verdict prints is the number the census measured.
+
+    Not a literal two. The fixture declares two legs differing only in the
+    interpreter, so a run is inside at most one of them: two are outside on a
+    developer machine and one is outside on the 3.10 leg, and `== 2` was a claim
+    about the machine the assertion was authored on. It reddened `tests (3.10)`
+    on PR #60 while passing everywhere else, which is the shape this scenario
+    exists to remove — one level up from the scenario it was written beside.
+    """
+    census = world["verdict_payload"]["room"]
+    missed = census["not_entered"]
+    declared = len(missed) + len(census["entered"])
+    assert declared == 2, "the gate fixture declares two legs"
+    assert missed, "two legs differing only in the interpreter leave at least one outside"
+    assert f"{len(missed)} of {declared} declared room(s) not entered by this run" in (
+        world["verdict"]
+    )
 
 
 @then("the verdict states the same result it states without its room")

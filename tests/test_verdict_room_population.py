@@ -33,7 +33,15 @@ import click
 import pytest
 from click.testing import CliRunner, Result
 
-from beadloom.application.rooms import RUNNER_PLATFORMS, current_room, take_census
+from beadloom.application import rooms
+from beadloom.application.rooms import (
+    RUNNER_PLATFORMS,
+    Room,
+    current_room,
+    derive_declared_rooms,
+    take_census,
+)
+from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.cli import main
 from tests.acceptance.steps.room_judgement import (
     legs_entered_that_do_not_match,
@@ -516,3 +524,125 @@ class TestTheScenarioIsJudgedInsideADeclaredLegToo:
 
         # Act / Assert
         assert legs_not_entered_naming_no_difference(payload) == [dismissed]
+
+
+def _declared_rooms_of_this_repository() -> tuple[Room, ...]:
+    """The legs this project declares, read at collection from the workflows.
+
+    The parametrisation below is this population, so a leg added to `ci.yml` is
+    judged by the act that adds it and not by anyone remembering this file.
+    """
+    from pathlib import Path as _Path
+
+    return derive_declared_rooms(_Path(__file__).resolve().parents[1]).rooms
+
+
+def _a_run_standing_in(leg: Room) -> Room:
+    """A current room that is inside *leg* wherever the leg can be stood in.
+
+    Only the ROOM is fabricated. `current_room` takes no argument on purpose --
+    a room a caller can spell is a room a caller can spell wrongly -- so standing
+    somewhere else means replacing that one function, and nothing about the
+    derivation under test is doubled. A leg whose runner label names no platform
+    keeps this run's own, because no run can stand in it at all.
+    """
+    label = leg.dimensions.get("os", "")
+    platform_of_label = RUNNER_PLATFORMS.get(label.split("-", 1)[0].strip().lower())
+    here = dict(current_room().dimensions)
+    return Room(
+        dimensions={
+            **here,
+            "os": platform_of_label or here["os"],
+            "python": leg.dimensions.get("python", here["python"]),
+        },
+        source=f"a run standing in {leg.label}",
+    )
+
+
+class TestTheVerdictsArithmeticHoldsInEveryRoomItCanBeTakenIn:
+    """The gap a verdict names, judged in every room this project declares.
+
+    MEASURED, and this class exists because of it: `tests (3.10)` on PR #60 was
+    red on `assert len(not_entered) == 2` over a fixture declaring 3.10 and 3.11.
+    Two legs are outside a Darwin run and one is outside a 3.10 run, so the
+    literal was a claim about the machine the assertion was authored on. Nothing
+    in the suite could say so, because every local run is in 0 of the 21 declared
+    rooms and the number is only wrong in the other 21.
+
+    A run cannot enter 21 rooms to find that out, so the room is replaced and
+    the verdict is asked again. What is asserted is the arithmetic — every
+    declared leg is either entered or reported as not, at least one of two legs
+    differing only in the interpreter is outside, and the number the verdict
+    PRINTS is the number the census measured — which is the same claim at every
+    count instead of a different claim per room.
+    """
+
+    def _gate_project(self, tmp_path: Path) -> Path:
+        (tmp_path / ".beadloom" / "_graph").mkdir(parents=True, exist_ok=True)
+        generate_agents_md(tmp_path)
+        workflows = tmp_path / ".github" / "workflows"
+        workflows.mkdir(parents=True, exist_ok=True)
+        (workflows / "ci.yml").write_text(
+            "jobs:\n"
+            "  tests:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            '        python-version: ["3.10", "3.11"]\n',
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    @pytest.mark.parametrize(
+        "standing_in",
+        [
+            pytest.param(_a_run_standing_in(leg), id=leg.label)
+            for leg in _declared_rooms_of_this_repository()
+        ],
+    )
+    def test_the_gate_names_the_gap_the_census_measured(
+        self, standing_in: Room, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The verdict's number is the census's number, in every declared room."""
+        # Arrange
+        monkeypatch.setattr(rooms, "current_room", lambda: standing_in)
+        project = self._gate_project(tmp_path)
+        runner = CliRunner()
+
+        # Act
+        machine = runner.invoke(main, ["ci", "--project", str(project), "--format", "json"])
+        human = runner.invoke(main, ["ci", "--project", str(project), "--format", "rich"])
+
+        # Assert
+        census = json.loads(machine.stdout)["room"]
+        missed, entered = census["not_entered"], census["entered"]
+        assert len(missed) + len(entered) == 2, census
+        assert missed, "two legs differing only in the interpreter leave one outside"
+        assert f"{len(missed)} of 2 declared room(s) not entered by this run" in human.stdout
+
+    def test_a_room_inside_one_of_the_two_legs_reports_one_of_two(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The count the leg measured, reproduced rather than inferred.
+
+        The parametrised test above passes at either arithmetic, so on its own it
+        cannot show that the arithmetic ever differs. This one pins the number
+        that reddened `tests (3.10)`: standing inside the first leg, the verdict
+        says one of two, and the old literal said two.
+        """
+        # Arrange
+        inside = Room(
+            dimensions={**current_room().dimensions, "os": "Linux", "python": "3.10"},
+            source="a run standing in os=ubuntu-latest python=3.10",
+        )
+        monkeypatch.setattr(rooms, "current_room", lambda: inside)
+
+        # Act
+        outcome = CliRunner().invoke(
+            main, ["ci", "--project", str(self._gate_project(tmp_path)), "--format", "json"]
+        )
+
+        # Assert
+        census = json.loads(outcome.stdout)["room"]
+        assert census["entered"] == ["os=ubuntu-latest python=3.10"]
+        assert [c["room"] for c in census["not_entered"]] == ["os=ubuntu-latest python=3.11"]
