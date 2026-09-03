@@ -529,8 +529,8 @@ class TestNoProseNamesASiblingSymbolThatIsGone:
         )
         return prose
 
-    def _references(self) -> list[tuple[Path, str, str]]:
-        package = _package_root() / THE_PACKAGE
+    def _references(self, package: Path | None = None) -> list[tuple[Path, str, str]]:
+        package = package if package is not None else _package_root() / THE_PACKAGE
         modules = {path.stem for path in package.glob("*.py")}
         found: list[tuple[Path, str, str]] = []
         for path in sorted(package.glob("*.py")):
@@ -541,8 +541,9 @@ class TestNoProseNamesASiblingSymbolThatIsGone:
                         found.append((path, module, symbol))
         return found
 
-    def _symbols_of(self, module: str) -> set[str]:
-        path = _package_root() / THE_PACKAGE / f"{module}.py"
+    def _symbols_of(self, module: str, package: Path | None = None) -> set[str]:
+        root = package if package is not None else _package_root() / THE_PACKAGE
+        path = root / f"{module}.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         return {
             node.name
@@ -556,6 +557,19 @@ class TestNoProseNamesASiblingSymbolThatIsGone:
             if isinstance(target, ast.Name)
         }
 
+    def _dangling_in(self, package: Path | None = None) -> list[str]:
+        """Every sibling reference in *package* naming a symbol it has not got.
+
+        The package is a parameter for the reason `_writers_that_create_nodes`
+        takes one: the same scan has to run over a tree built to dangle, or
+        nothing ever demonstrates that it can reject.
+        """
+        return [
+            f"{path.name} names `{module}.{symbol}`"
+            for path, module, symbol in self._references(package)
+            if symbol not in self._symbols_of(module, package)
+        ]
+
     def test_the_scan_finds_a_reference_to_check(self) -> None:
         """Anti-vacuity: no references found would pass the case below it."""
         assert self._references(), (
@@ -564,12 +578,102 @@ class TestNoProseNamesASiblingSymbolThatIsGone:
         )
 
     def test_every_sibling_reference_resolves(self) -> None:
-        dangling = [
-            f"{path.name} names `{module}.{symbol}`"
-            for path, module, symbol in self._references()
-            if symbol not in self._symbols_of(module)
-        ]
+        dangling = self._dangling_in()
 
         assert dangling == [], (
             f"these docstrings name a symbol the module does not have: {dangling}"
         )
+
+
+class TestTheProseScanCanRejectAReferenceAndNotOnlyFindOne:
+    """The scan above, run over prose built to dangle — BDL-068 `.7`.
+
+    `.1` REFUSED to lift this scanner into production and said why, measured:
+    replacing its finding computation with ``dangling = []``, so the check could
+    never report anything, left the module at 27 passed. Its only assertion about
+    a dangling reference was an equality with the empty list over the real tree,
+    and no case anywhere fed it a body that dangles. Its anti-vacuity case proves
+    the scan FINDS references; nothing proved it could REJECT one. That is the
+    defect class this epic exists to remove, and `.1` handed the closing here.
+
+    Four shapes, because the scan is narrow by construction and the narrowness is
+    what makes its silence worth trusting: a reference to a sibling module's
+    missing symbol is reported; the same reference to a symbol that exists is
+    not; a reference to something that is not a sibling module is not read at
+    all; and a comment dangles as loudly as a docstring, because the surviving
+    cross-reference between the two writers of nodes was a comment.
+    """
+
+    #: The module referred to. `handled` exists and `renamed_away` does not,
+    #: which is `.17`'s shape exactly — a symbol renamed, the reference left.
+    _THE_SIBLING = "sibling"
+    _THE_SIBLING_BODY = "def handled():\n    return None\n"
+
+    _A_DOCSTRING_NAMING_A_SYMBOL_THAT_IS_GONE = (
+        '"""This module mirrors `sibling.renamed_away`."""\n'
+    )
+    _A_DOCSTRING_NAMING_A_SYMBOL_THAT_EXISTS = (
+        '"""This module mirrors `sibling.handled`."""\n'
+    )
+    _A_COMMENT_NAMING_A_SYMBOL_THAT_IS_GONE = (
+        "# kept in step with `sibling.renamed_away`\n"
+    )
+    _A_REFERENCE_TO_SOMETHING_THAT_IS_NOT_A_SIBLING_MODULE = (
+        '"""Reads `payload.get` off the mapping it was handed."""\n'
+    )
+
+    def _a_package_whose_prose_says(self, tmp_path: Path, prose: str) -> Path:
+        package = tmp_path / "scanned"
+        package.mkdir()
+        (package / f"{self._THE_SIBLING}.py").write_text(
+            self._THE_SIBLING_BODY, encoding="utf-8"
+        )
+        (package / "caller.py").write_text(
+            prose + "\n\ndef run():\n    return None\n", encoding="utf-8"
+        )
+        return package
+
+    def test_a_docstring_naming_a_symbol_the_sibling_lost_is_reported(
+        self, tmp_path: Path
+    ) -> None:
+        """The case `.1` measured to be missing, and the reason it refused the lift."""
+        scan = TestNoProseNamesASiblingSymbolThatIsGone()
+        package = self._a_package_whose_prose_says(
+            tmp_path, self._A_DOCSTRING_NAMING_A_SYMBOL_THAT_IS_GONE
+        )
+
+        assert scan._dangling_in(package) == ["caller.py names `sibling.renamed_away`"]
+
+    def test_a_comment_dangles_as_loudly_as_a_docstring(self, tmp_path: Path) -> None:
+        """The surviving cross-reference this check exists for was a comment."""
+        scan = TestNoProseNamesASiblingSymbolThatIsGone()
+        package = self._a_package_whose_prose_says(
+            tmp_path, self._A_COMMENT_NAMING_A_SYMBOL_THAT_IS_GONE
+        )
+
+        assert scan._dangling_in(package) == ["caller.py names `sibling.renamed_away`"]
+
+    def test_a_reference_that_resolves_is_not_reported(self, tmp_path: Path) -> None:
+        """The other direction: silent where the symbol is where the prose says."""
+        scan = TestNoProseNamesASiblingSymbolThatIsGone()
+        package = self._a_package_whose_prose_says(
+            tmp_path, self._A_DOCSTRING_NAMING_A_SYMBOL_THAT_EXISTS
+        )
+
+        assert scan._dangling_in(package) == []
+
+    def test_prose_naming_something_that_is_not_a_sibling_module_is_not_read(
+        self, tmp_path: Path
+    ) -> None:
+        """Why the narrowness earns the silence.
+
+        `payload.get` is an attribute of a mapping, not a symbol of a sibling
+        module, so it is outside the scan rather than a finding somebody has to
+        be excused from — which is what a sweep of all prose would have produced.
+        """
+        scan = TestNoProseNamesASiblingSymbolThatIsGone()
+        package = self._a_package_whose_prose_says(
+            tmp_path, self._A_REFERENCE_TO_SOMETHING_THAT_IS_NOT_A_SIBLING_MODULE
+        )
+
+        assert scan._references(package) == []

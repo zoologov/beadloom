@@ -243,7 +243,12 @@ def then_co_writers_unresolved(world: dict[str, Any]) -> None:
     co_writers = _payload(world)["co_writers"]
     assert co_writers["resolved"] is False
     assert co_writers["sites"] == []
-    assert "unresolved" in world["human"].output
+    # The human text is asserted on the LINE that carries the difference, not on
+    # the word: BDL-068 `.7` measured that `render_impact` always prints an
+    # `## unresolved (N)` heading, so `"unresolved" in output` held for every
+    # answer and could not fail. An empty population reads `- none found.`, an
+    # unresolved one reads its reason, and only the second may appear here.
+    assert f"- unresolved: {co_writers['reason']}" in world["human"].output
 
 
 @then("the unresolved population says no seed rule found a sink")

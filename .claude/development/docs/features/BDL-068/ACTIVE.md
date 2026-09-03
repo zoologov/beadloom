@@ -7,10 +7,26 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.7` — test. `.6` closed and the combined-tree gate for this wave was
-measured by it.
+**Bead:** `beadloom-0mdo.8` — review. `.7` closed; S1's whole wave is now built and tested.
 
-**The bead just closed.** `beadloom-0mdo.6` — the commit-scope check: a change outside the
+**The bead just closed.** `beadloom-0mdo.7` — the derivations as shapes, the unresolved
+population, and the two new checks.
+**Goal:** audit what `.1`–`.6` built rather than add to it, and close the two gaps they
+recorded and deliberately did not repair.
+**The census came before the writing, and it changed what got written.** `.1`'s vacuity method
+— blind a finding computation, re-run its module — was run over every real-tree finding list in
+the lifted package's eight consumer modules. All eight survive the blinding, which is expected:
+blinding an ASSERTION does not blind the DETECTOR. Seven of the eight have a detector
+demonstrated capable of rejecting on a synthetic input; the prose sibling-reference scanner
+`.1` refused to lift has none, so `.1`'s finding reproduces and nothing else in the package
+shares the property. Three gaps closed and one recorded: each verb of `PUTS_BYTES_ON_DISK` is
+now load-bearing and the vocabulary the commit point actually writes through is stated, the
+prose scanner is given four trees built to dangle, the unresolved report's direction is pinned
+at the two renderers where nothing reached it — and a routing row whose `Flow` cell spells
+neither word is dropped with no note, which is recorded as a gap rather than repaired because
+the obvious repair fires on the table's own alignment row.
+
+**Previously closed.** `beadloom-0mdo.6` — the commit-scope check: a change outside the
 work item's declared axes is a finding.
 **Goal:** compare the paths a commit stages against the axes a human approved, so a commit
 leaving the approval is a finding rather than something noticed afterwards.
@@ -53,6 +69,9 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 - [x] S1.6 — `beadloom scope-check`: the paths a commit stages, judged against the axes its
       work item declared; wired into the pre-commit hook and into the Gate as a branch-scoped
       step (dev)
+- [x] S1.7 — the derivations audited as shapes: every verb of the disk-write vocabulary made
+      load-bearing, the prose scanner `.1` refused to lift given trees built to dangle, and the
+      unresolved report's direction pinned at the renderers (test)
 - [ ] S1 — `impact` + `## Axes` + `Explore`
 - [ ] S2 — the review's independence
 - [ ] S3 — what we measure with
@@ -70,7 +89,7 @@ DERIVED from the shipped CORE fragments, so a role exists because a fragment shi
 | `beadloom-0mdo.4` | Done | `## Axes` in the BRIEF and RFC skeletons, required by the same act that adds it: `required_sections_by_document_kind` runs `doc_templates`' own heading extraction over the composed `/templates` command's fenced blocks. `doc_shape`'s peer-majority policy extracted into `peer_section_shape` and used over both corpora; `check_planning_sections` reports `missing-section` (peer-relative) and `empty-section` (not). `doc_sync/axes_section.py` holds the section's grammar — `axes-without-a-seed`, `axis-without-a-scope-decision` — and `application/impact/section.py` renders one from an `ImpactAnswer` using that grammar, so the writer and the reader are one shape. `application/planning_report.py` is now the ONE composition of all nine checks behind the gate step and `beadloom docs quality`. New CLI: `beadloom impact --section` and `beadloom axes <document> [--refs]`. Measured on this repository, foreground, no pipe: `missing-section` 102 over 256 read, `empty-section` 0 over 256, 17 kind-level conventions including `BRIEF Axes (0/12)` and `RFC Axes (0/48)`; the 767 findings a non-peer-relative policy would give is why the peer one was chosen. `empty-section` was 155 until a defect the run exposed — a section whose content lives in its subsections read as empty — was fixed by propagating content up the heading depth. 9 scenarios + 29 cases, every case demonstrated red by eleven mutants. Green on the tree, macOS: 7944 passed (baseline 7905), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. Green in a clean room over 33 files, with the pre-existing sync-baseline failure reproduced at HEAD alone. |
 | `beadloom-0mdo.5` | Done | `Explore` is a role FILE with a fixed deliverable — the `## Axes` section rendered by `beadloom impact --section`, every site a path and a line, the scope column left for the person, no narrative — read-only tools, `ddd`/`fsd` and `python` overlays. **A role exists because a core fragment ships for it:** `roles_in()` derives the population from `templates/roles/core/*.md.txt` over a shape (front matter naming its own file), so `ROLE_NAMES`, `AGENT_FILES` and the Cursor pointer are one fact instead of three. `/task-init` gains a mandatory step 0.5 stated BEFORE the type table, and the routing table is read back out of the composed command by `application/work_item_routing.py` — so the command cannot state a route the check does not police. `doc_sync/work_item_type.py` adds `routed-without-axes` and `route-not-supported-by-the-axes` over the work-item FOLDER. Measured on this repository, foreground, no pipe: `routed-without-axes` 12 findings over 12 work items — including BDL-067's own BRIEF, the item this slice exists because of — and `route-not-supported-by-the-axes` 0 over the same 12, which cannot fire until a work item carries axes and is verified red on fixtures instead. The `BRIEF Axes (0/12)` convention line is gone: the absence is now reported absolutely and withdrawn from the peer half alone, so `empty-section` still reads it. 11 scenarios (red before the code existed) + 43 cases, every case demonstrated red by sixteen mutants; two further mutants SURVIVED and both guards were DELETED rather than re-tested, because a guard nobody can make fail is a guard nobody can argue with. Green on the tree, macOS: 8023 passed (baseline 7944), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
 | `beadloom-0mdo.6` | Done | `beadloom scope-check` compares the paths a commit stages — or, with `--since`, the paths a branch changes against its trunk — against the `## Axes` its WORK ITEM declared. `doc_sync/scope_check.py` holds the check, pure: paths, a `DeclaredScope` and an ownership map in, a verdict out. `application/declared_scope.py` makes the join `scope-check` cannot make for itself — the branch names the work item (the pre-commit hook runs before the commit message is finalised, so the `[KEY]` prefix is unreadable there), the index owns the paths, and the planning corpus says which folders are work items. **The rule was measured before it was chosen:** the node-level rule is red on all three of this branch's code commits (11, 5 and 6 paths) because the table records what a change RANGES OVER while the surfaces it CHANGES are in the `Derived by` field; the bounded-context rule is silent on all three and outside for 115 of the 155 preceding commits that touch an owned path. A node an axis rules OUT of scope is reported by that axis's name; an undecided row neither widens nor narrows and its count travels with the verdict; a path no node owns is counted, never reported. Verified on REAL commits: silent over the branch's 36 owned paths against `origin/main`, red on `a4738b7c` for `src/beadloom/graph/linter.py` naming `callers`. One measured contract detail: `--since main` reported that path where `--since origin/main` was silent, because a local trunk two commits behind makes another work item's LANDED change read as this branch's — hence `ref...HEAD` and `origin/<trunk>`. Wired into both pre-commit hook templates (WARN in both, because one work item in 64 carries a section today) and as the branch-scoped Gate step `scope-check`. 9 scenarios (red at collection before the code existed) + 54 cases; every case demonstrated red by sixteen mutants, four of which SURVIVED the first pass and each exposed a real gap — including a two-dot/three-dot case that `--diff-filter=ACMR` masked until it was rebuilt on the shape `a4738b7` actually has. Green on the tree, macOS: 8087 passed (baseline 8026), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. |
-| `beadloom-0mdo.7` | Pending | blocked by `.3`, `.5`, `.6` — test |
+| `beadloom-0mdo.7` | Done | An AUDIT of what `.1`–`.6` built, not a quota. **The census came first:** `.1`'s vacuity method (blind the finding computation, re-run the module) was run over every real-tree finding list in the lifted package's eight consumer modules — eight survive the blinding, and seven of the eight have a detector demonstrated capable of REJECTING on a synthetic input, so `.1`'s prose sibling-reference scanner is the only one with that property and nothing else in the package shares it. **Three gaps closed.** (1) `PUTS_BYTES_ON_DISK` now has one synthetic writer per verb, where `write_bytes` and `open` were carried by nothing (the real package names one body and it writes with `write_text`), plus the shape that ACTUALLY holds and was nowhere stated: the commit point writes through `fdopen`, `write` and `replace`, which the set spells none of — so a widening is a red test naming the re-measurement it owes rather than a silent re-answer of every `impact` target. (2) The scanner `.1` refused to lift takes a package parameter and is given four trees built to dangle; blinding it was 0 red before and is 2 red now. (3) The unresolved report's DIRECTION at the two renderers, which nothing reached: one answer carries an unresolved population and a resolved-and-empty one, `sites` is `[]` on both sides, and the text and the JSON must keep them apart. Plus `.5`'s handed spellings — four launch forms found, two near-misses refused — and one GAP recorded rather than repaired: a routing row whose `Flow` cell spells neither word is dropped with no note, taking its document kinds and its work items out of `routed-without-axes`' population silently. 25 cases, eleven mutants, one re-applied because the first form did not run. `.6`'s two scope-check directions re-derived independently and reproduced exactly. Green on the tree: 8115 passed (baseline 8090), `ruff` and `mypy --strict` clean, `beadloom ci` rc 0. Green in a clean room over 3 files; and the clean-room measurement `.6` never took was taken in a pristine room at `803ef06`: Gate rc 0, 8071 passed with the one pre-existing environmental failure every sibling recorded. |
 | `beadloom-0mdo.8` | Pending | blocked by `.7` — review |
 | `beadloom-0mdo.9` | Pending | blocked by `.8` — tech-writer |
 | `beadloom-0mdo.10` .. `.14` | Pending | S2–S6, ordered by dependency; their beads are created when the preceding slice's review closes |
@@ -90,6 +109,20 @@ in this repository carries an `## Axes` section yet. BDL-068's own RFC deliberat
 one from this bead: an epic is not an `impact` target, its axes span six slices and several
 runs, and a guessed table is exactly what `.6` would then measure every commit against.
 
+
+**Handed up by `.7`, measured and not repaired.** A routing row whose `Flow` cell spells
+neither `simplified` nor `full` is dropped by `work_item_routing._routes_in` with no note, and
+`Routing.notes` — the field that exists for exactly this — stays empty. Measured on a
+three-row table: two routes returned, `notes` empty, `flow_of('spike')` indistinguishable from
+a type nobody declared. The consequence reaches a check, because the dropped type's document
+kinds leave `simplified_kinds` and every work item of that type leaves
+`check_work_item_types`' population, so the report reads as a clean run over a smaller corpus.
+It is this epic's own third clause — a derivation that resolved everything and one that
+silently omitted what it could not parse must not read the same — failing inside the epic's own
+instrument. Not repaired by a test bead for a measured reason: the obvious repair, a note per
+unreadable cell, fires on the table's own `|---|---|` alignment row, which `.5` already has a
+mutant for, so repairing it means re-measuring `.5`'s sixteen mutants. Pinned as a gap class
+with the instruction to DELETE rather than repair it when it goes red.
 
 **The structural decision this epic is run under.** Beads are created per slice, not for the
 epic. Writing 24 beads now would mean writing 20 of them before the first slice has taught
