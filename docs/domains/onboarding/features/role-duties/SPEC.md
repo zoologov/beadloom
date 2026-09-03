@@ -77,6 +77,15 @@ project fragment for a role that does not exist. It is derived by **subtraction*
 fragments the compositions actually read, so an overlay added later is covered without
 anyone editing a list.
 
+One class is excluded from the subtraction base: `templates/agentic_flow/agents/*.md.txt`,
+the byte-identical vendored snapshot of the live `.claude/agents/*.md`. It carries every
+marker its composed role carries, so it appeared five times over the moment a role core
+first declared a duty (`beadloom-67t1`), under a reason saying the duties in it reach no
+role — false twice, because the marker is inspected in its composed form and the file is
+dropped verbatim into an adopter's roles directory by the plain scaffold path. Excluding
+output is not the authored list this derivation exists to avoid; it is the derivation
+declining to report its own input back to itself.
+
 ### Modules
 
 - **role_duties.py** — `duty_report()`, `DutyReport`, `DutyDeclaration`, `DutyFinding`,

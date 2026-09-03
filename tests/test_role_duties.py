@@ -128,3 +128,28 @@ def test_every_duty_this_repository_declares_reaches_the_roles_it_names() -> Non
     report = duty_report(_REPO_ROOT)
 
     assert report.findings == ()
+
+
+def test_the_vendored_role_snapshot_is_not_reported_as_unreachable(
+    project: Path,
+) -> None:
+    """A byte-identical copy of a composed role is not a place a duty can hide.
+
+    `templates/agentic_flow/agents/*.md.txt` is the vendored snapshot of the
+    live `.claude/agents/*.md`, held byte-identical by
+    `tests/test_core_roles.py::TestVendoringDriftGuard` and dropped verbatim into
+    an adopter's `.claude/agents/` by the plain scaffold path. It carries every
+    marker the composed role carries, so subtraction listed all five the moment
+    a role core first declared a duty (`beadloom-67t1`) — under a `why` that says
+    the duties in it reach no role, which is false on both counts: the marker is
+    inspected in its composed form, and the file itself reaches an adopter's
+    roles directory.
+    """
+    report = duty_report(project)
+
+    vendored = [
+        entry
+        for entry in report.not_inspected
+        if "agentic_flow/agents/" in entry.source
+    ]
+    assert vendored == [], [entry.source for entry in vendored]
