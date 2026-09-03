@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+234. [2026-09-03] [LOW] `waves` prints one remedy for four unreadable-scope causes, and on the no-declaration case it prescribes the authored scope the tool exists to refuse
+
+    **Severity:** low (the verdict is right; the sentence after it sends the reader the wrong way)
+    **Command:** `beadloom waves`
+    **Tracker:** to be attached to `beadloom-en0x` (#232), which owns the scope parser
+    **Issue:** planning S4's wave, `beadloom-nn4c` was serialised against all six other beads with the reason `unresolved_scope: declaration_not_at_a_line_start` and the remedy "move the declaration to the start of its own line". That bead has **no declaration to move**. Its note is a paragraph explaining, in prose, why writing `refs: flow-guards` there would be an authored scope dressed as a derived one — and the parser matched the `refs:` inside that explanation. So the tool read a sentence *about* a declaration as a malformed declaration, and then told the reader to promote it to a real one. Following the printed remedy would have created exactly the defect #232 is filed against, in the same slice.
+    **Why it is worth an entry rather than a shrug:** the serialisation was CORRECT and the exit code was right. Only the remedy was wrong, which is the failure mode that survives longest — nobody re-reads a line that appears beside a correct verdict. The parser's four unreadable causes are already distinguished in the *reason* (`no declaration`, a name the graph lacks, a `refs:` inside a sentence, a second ref without a separator); the remedy does not follow the reason down that far.
+    **Expected:** the remedy is derived from the cause, like the reason already is. For `declaration_not_at_a_line_start` the honest remedy is two-branched: *if* you meant this as a declaration, move it to the start of its own line; *if* the line is prose about a declaration, the serialisation is the correct answer and nothing needs fixing. A tool that cannot tell prose about `refs:` from a careless `refs:` should say which of the two it cannot tell apart, not pick one.
+    **Found by:** the coordinator, on its own note, while planning BDL-068 S4 — the note deliberately said no scope could be derived (`impact` over `tests/` attributed a node to none of 148 sites, BDL-UX #225) and the tool answered as if the note were the scope.
+
 233. [2026-09-03] [MEDIUM] the read-only guard test reports a `bd` export burst as the guard's own write
 
     **Severity:** medium
