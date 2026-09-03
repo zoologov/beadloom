@@ -31,6 +31,17 @@ filed; this name is the free mitigation and later slices keep it.
     clean room over 12 files (8 316 passed, 1 pre-existing failure that is red at HEAD in the same
     room); `beadloom ci` rc 0 there, verdict taken in Darwin arm64 / CPython 3.13.7, 0 of 21
     declared rooms. Not a claim about the combined tree.
+  - [x] `0mdo.31` — **#170**, all three pieces. The matcher names `Bash`; a shell edit resolves to
+    the new `PathScope.UNDETERMINED`, matches no exclusion and carries its undetermined write set
+    into `not_covered`, so a `pass` on a shell command can no longer read as coverage; and
+    `guard --liveness` reports the binding's SURFACE beside the firings, derived from
+    `.claude/settings.json` and the `tools:` grant of every emitted role adapter. Measured on this
+    repository: 3 of 3 write paths bound, and 2 of 3 before the fix. Green in a clean room over 22
+    files (8 510 passed; the 1 failure is a stated property of the room — no `.git`, so
+    `sync-check` reports 402 pairs `no_baseline` and 0 stale). **As the wave's gate owner:** the
+    combined tree is green — 8 542 passed, 0 failed, `beadloom ci` rc 0 foreground and unpiped.
+    Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
+    Filed BDL-UX #235: the two rooms of this wave collided on one scratchpad path.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

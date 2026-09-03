@@ -26,7 +26,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from beadloom.application.guards.paths import ResolvedEditPath, resolve_edit_path
+from beadloom.application.guards.paths import (
+    ResolvedEditPath,
+    resolve_edit_path,
+    undetermined_target,
+)
+from beadloom.application.guards.shell_targets import derive_write_targets
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -108,6 +113,11 @@ class GuardRequest:
         return self.context.get("path") or None
 
     @property
+    def command(self) -> str | None:
+        """The shell command line the caller is about to run, when it supplied one."""
+        return self.context.get("command") or None
+
+    @property
     def resolved_path(self) -> ResolvedEditPath:
         """:attr:`path` resolved against the project root, with its scope.
 
@@ -123,7 +133,18 @@ class GuardRequest:
         returning only the relative string collapsed three different situations
         — absent, outside the project, refused — into one ``None`` that no
         caller could tell apart.
+
+        A caller that supplied a shell command and no path resolves to
+        :attr:`~beadloom.application.guards.paths.PathScope.UNDETERMINED`
+        (BDL-UX #170). An explicit ``path`` wins: it is a statement about one
+        file, while a command line only ever yields a lower bound on the files
+        it writes.
         """
+        if self.path is None and self.command is not None:
+            derived = derive_write_targets(self.command)
+            return undetermined_target(
+                derived.targets, unreadable=derived.unreadable
+            )
         return resolve_edit_path(self.path, self.project_root)
 
     @property

@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+235. [2026-09-03] [MEDIUM] the clean-room instruction names a fixed directory, so two agents in one wave build one room and both call it clean
+
+    **Severity:** medium (the whole product of a clean room is isolation, and the failure looks like a set of unrelated red tests rather than like a room problem)
+    **Command:** the clean-room convention every launch prompt carries (`git archive HEAD` + only your files), BDL-UX #181
+    **Context:** BDL-068 S4 wave 1, `beadloom-0mdo.27` and `beadloom-0mdo.31` running concurrently. Both agents are handed a session-scoped scratchpad directory, and the convention names the room after the concept rather than after the bead, so both built `<scratchpad>/cleanroom`. Reconstructed from mtimes: `.31`'s `git archive HEAD | tar -x` landed at 22:53, `.27` copied its own untracked files in at 23:16, `.31` copied its files at 23:26.
+    **Issue:** the run `.31` then took reported 8 failures. Five were `.27`'s — its acceptance steps, and two annotation-consistency checks over a graph node HEAD does not carry — and none of them was a defect in either bead. Rebuilding under a bead-unique name and re-running gave 1 failure, itself a stated property of the room (no `.git`, so `sync-check` has no baseline). So the polluted room cost one full 5-minute suite run and would have cost a wrong verdict: had the report been written from it, `.31` would have attributed `.27`'s work to itself, in the one measurement whose entire purpose is to separate them.
+    **Why it matters more than the wasted run:** this is the failure the gate-owner rule exists to catch, one layer below where the rule looks. The gate owner is told that a clean room cannot see interactions between beads on the TREE. Nobody said the rooms themselves could interact. An agent that follows the convention exactly, and correctly, gets a room containing its neighbour's work — and every check it runs there is honest about a tree that exists nowhere.
+    **Expected:** the room's path carries the bead id, and the convention says so — `<scratchpad>/room-<bead-id>`, not `<scratchpad>/cleanroom`. Stronger, and the form this project prefers: the room is created by a command that derives the path from the claimed bead and refuses a directory it did not create empty, so "is this room mine" is answered rather than assumed. A room that cannot say whose it is is not a clean room, it is a shared directory with a reassuring name.
+    **Related:** #181 (the clean-room duty itself), #228 (the duty reaches roles only through the coordinator's typing — a convention typed into a prompt is a convention that can be typed imprecisely).
+
 234. [2026-09-03] [LOW] `waves` prints one remedy for four unreadable-scope causes, and on the no-declaration case it prescribes the authored scope the tool exists to refuse
 
     **Severity:** low (the verdict is right; the sentence after it sends the reader the wrong way)

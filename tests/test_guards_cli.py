@@ -256,7 +256,7 @@ class TestLiveness:
     ) -> None:
         result = _run(["guard", "--liveness", "--project", str(tmp_path), "--json"])
         assert result.exit_code == 0, result.output
-        rows = {row["guard"]: row for row in json.loads(result.stdout)}
+        rows = {row["guard"]: row for row in json.loads(result.stdout)["guards"]}
         assert rows["bead-claimed"]["never_fired"] is True
         assert rows["working-branch"]["never_fired"] is True
 
@@ -266,7 +266,7 @@ class TestLiveness:
         stub_probes(beads=())
         _run(["guard", "bead-claimed", "--project", str(tmp_path)])
         result = _run(["guard", "--liveness", "--project", str(tmp_path), "--json"])
-        rows = {row["guard"]: row for row in json.loads(result.stdout)}
+        rows = {row["guard"]: row for row in json.loads(result.stdout)["guards"]}
         assert rows["bead-claimed"]["fired_count"] == 1
         assert rows["bead-claimed"]["last_outcome"] == "warn"
 

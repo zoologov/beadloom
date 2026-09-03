@@ -744,8 +744,8 @@ class TestEveryWayTheCommandCanTerminate:
         )
         after = _cli(["guard", "--liveness", "--project", str(root), "--json"]).output
 
-        rows_before = {row["guard"]: row for row in json.loads(before)}
-        rows_after = {row["guard"]: row for row in json.loads(after)}
+        rows_before = {row["guard"]: row for row in json.loads(before)["guards"]}
+        rows_after = {row["guard"]: row for row in json.loads(after)["guards"]}
         assert rows_after["bead-claimed"]["fired_count"] == (
             rows_before["bead-claimed"]["fired_count"] + 1
         )
@@ -1174,7 +1174,7 @@ class TestTheProjectIsDiscoveredNotTakenFromTheShell:
 
         _run_real(sub, ["guard", "working-branch"])
         report = _run_real(root, ["guard", "--liveness", "--json"])
-        rows = {row["guard"]: row for row in json.loads(report.stdout)}
+        rows = {row["guard"]: row for row in json.loads(report.stdout)["guards"]}
 
         assert rows["working-branch"]["never_fired"] is False
         assert rows["working-branch"]["fired_count"] == 1

@@ -36,6 +36,16 @@ NOT part of the shape, deliberately: a length limit (a long path resolves to
 exactly what it says; the OS enforces its own maximum) and percent-encoding
 (nothing here decodes it, so ``%2e%2e`` names a directory called ``%2e%2e``).
 
+**A harness that supplies a COMMAND rather than a path resolves to nothing, and
+the verdict says so.** The binding fires on the shell tool too (BDL-UX #170), and
+what a shell command writes is not decidable: the targets a declared write shape
+names are a *lower bound*, never the set. So such an edit is
+:attr:`PathScope.UNDETERMINED` — ``relative`` stays ``None``, which is what makes
+:meth:`~beadloom.application.guards.config.GuardSpec.exclusion_for` return
+nothing, and the derived targets travel in ``not_covered`` instead. Feeding a
+derived target to exclusion matching would exempt the writes the derivation could
+not see: ``sed -i docs/a.md && python3 write_src.py`` names one and performs two.
+
 **A path that resolves OUTSIDE the project root is matched against no
 exclusion, and the verdict says so.** The alternatives were rejected for being
 silent: inheriting a pattern gives an out-of-project write the same reassuring
@@ -55,8 +65,12 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from beadloom.application.guards.models import exception_detail
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 #: Stated in ``not_covered`` when the target resolved outside the project root.
 OUTSIDE_ROOT_NOT_COVERED = (
@@ -82,6 +96,28 @@ MALFORMED_REMEDIATION = (
 
 #: Used in messages when the harness supplied no path at all.
 UNNAMED_TARGET = "an unnamed file"
+
+#: Stated in ``not_covered`` when the harness supplied a shell command. The
+#: sentence is one clause about the command plus one about the derivation,
+#: because a reader who sees only "not derived" cannot tell whether the guard
+#: looked at a command at all.
+UNDETERMINED_NOT_COVERED = (
+    "every file this shell command writes — {seen}. A command line's write set "
+    "is not decidable, so no exclusion in flow.yml was applied to it"
+)
+
+#: The three ways the derivation can come up short, in the words of what it saw.
+NOTHING_DERIVED = "no write target could be derived from it"
+SOME_DERIVED = "it names {targets}, and any other write it performs was not derived"
+UNREADABLE_COMMAND = "it could not be read ({detail}), so no target was derived from it"
+
+#: How a shell command is named in a verdict a human reads.
+COMMAND_TARGET = "a shell command"
+COMMAND_TARGET_WITH_WRITES = "a shell command writing {targets}"
+
+#: How many derived targets are echoed back. The list comes from a model-supplied
+#: command line and lands in a firing record; the rest are counted, not printed.
+_DERIVED_LIMIT = 5
 
 #: Why one rule of the accepted shape refused this path. One sentence each,
 #: naming the offence rather than the rule, because the reader has to fix a path
@@ -118,6 +154,7 @@ class PathScope(str, Enum):
     INSIDE = "inside"
     OUTSIDE = "outside"
     MALFORMED = "malformed"
+    UNDETERMINED = "undetermined"
 
 
 @dataclass(frozen=True)
@@ -131,12 +168,20 @@ class ResolvedEditPath:
 
     ``rejection`` is populated **only** for :attr:`PathScope.MALFORMED`, and it
     says which rule of the accepted shape the path broke.
+
+    ``derived`` and ``unreadable`` are populated **only** for
+    :attr:`PathScope.UNDETERMINED`: the write targets a shell command line was
+    seen to name, and why the command line could not be read at all. They are
+    reported and never resolved — see the module docstring for why a derived
+    target may not stand in for the path.
     """
 
     scope: PathScope
     relative: str | None = None
     label: str = UNNAMED_TARGET
     rejection: str = ""
+    derived: tuple[str, ...] = ()
+    unreadable: str = ""
 
     @property
     def not_covered_note(self) -> str:
@@ -145,7 +190,49 @@ class ResolvedEditPath:
             return OUTSIDE_ROOT_NOT_COVERED.format(target=self.label)
         if self.scope is PathScope.MALFORMED:
             return MALFORMED_NOT_COVERED.format(label=self.label)
+        if self.scope is PathScope.UNDETERMINED:
+            return UNDETERMINED_NOT_COVERED.format(seen=self._derivation_note)
         return ""
+
+    @property
+    def _derivation_note(self) -> str:
+        """What the derivation over the command line came back with."""
+        if self.unreadable:
+            return UNREADABLE_COMMAND.format(detail=self.unreadable)
+        if self.derived:
+            return SOME_DERIVED.format(targets=_echo_targets(self.derived))
+        return NOTHING_DERIVED
+
+
+def _echo_targets(targets: tuple[str, ...]) -> str:
+    """The derived targets as a bounded, quoted list a human can read."""
+    shown = ", ".join(repr(target) for target in targets[:_DERIVED_LIMIT])
+    remaining = len(targets) - _DERIVED_LIMIT
+    return f"{shown} and {remaining} more" if remaining > 0 else shown
+
+
+def undetermined_target(
+    targets: Sequence[str], *, unreadable: str = ""
+) -> ResolvedEditPath:
+    """The resolution of an edit the harness described as a shell command.
+
+    Takes the derivation's output rather than the command, so that path
+    resolution stays free of shell knowledge: what a command line means is
+    :mod:`beadloom.application.guards.shell_targets`' question, and where a path
+    lands is this module's.
+    """
+    ordered = tuple(targets)
+    label = (
+        COMMAND_TARGET_WITH_WRITES.format(targets=_echo_targets(ordered))
+        if ordered
+        else COMMAND_TARGET
+    )
+    return ResolvedEditPath(
+        scope=PathScope.UNDETERMINED,
+        label=label,
+        derived=ordered,
+        unreadable=unreadable,
+    )
 
 
 def rejection_reason(raw: str) -> str:

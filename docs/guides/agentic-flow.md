@@ -452,16 +452,28 @@ guards:
 `beadloom setup-agentic-flow` writes `.claude/hooks/beadloom-guard.sh` — one
 `exec beadloom guard "$1" --hook claude-code`, with no logic of its own — and
 registers one `PreToolUse` entry per guard with the matcher
-`Edit|Write|MultiEdit|NotebookEdit`.
+`Edit|Write|MultiEdit|NotebookEdit|Bash`.
 
-Those four tool calls are the whole enforcement surface. **A file written through
-`Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — fires no guard at all**, and
-`--liveness` cannot tell such a session apart from a compliant one: an edit no
-guard was asked about leaves nothing behind to report. The limit belongs to the
-binding rather than to any verdict, which is why it is stated here instead of
-being folded into a verdict's `not_covered` (BDL-UX #170). Giving Beadloom its
-own event vocabulary, so that the adapter forwards *what happened* rather than
-*which guard to run*, is S3 work.
+`Bash` joined that list in BDL-068 S4. Before it, **a file written through the
+shell — `sed -i`, a heredoc, `python3 - <<EOF` — fired no guard at all**, and
+`--liveness` could not tell such a session apart from a compliant one: an edit no
+guard was asked about leaves nothing behind to report (BDL-UX #170).
+
+A shell command's write set is not decidable, so the binding says so rather than
+claiming it. Beadloom reads the targets a declared set of write shapes names — a
+redirection, `tee`, `sed -i`, the destination of `cp`/`mv`, `dd of=` — and treats
+them as a **lower bound**: they are reported in the verdict's `not_covered` and
+they never grant an exclusion, because `sed -i docs/a.md && python3 write_src.py`
+names one write and performs two.
+
+`beadloom guard --liveness` reports the binding's surface beside the firings: how
+many of the write paths your role adapters grant are named by a registered
+matcher, which are not, and which tools nothing here classifies. A guard healthy
+on a matcher covering one write path out of three is a third of a guard, and the
+firing rows alone cannot say so.
+
+Giving Beadloom its own event vocabulary, so that the adapter forwards *what
+happened* rather than *which guard to run*, is S3 work.
 
 ### Exit codes, and who is asking
 

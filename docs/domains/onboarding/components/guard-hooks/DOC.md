@@ -35,24 +35,34 @@ decision happens in the CLI, which is why a hook and a shell cannot disagree.
   silently downgraded a declared `block` to a non-blocking `warn` for any
   invocation from a subdirectory.
 - `GUARD_HOOK_RELPATH`, `SETTINGS_RELPATH`, `HOOK_EVENT` (`PreToolUse`),
-  `EDIT_MATCHER` (`Edit|Write|MultiEdit|NotebookEdit`) — the matcher is the
+  `EDIT_MATCHER` (`Edit|Write|MultiEdit|NotebookEdit|Bash`) — the matcher is the
   enforcement surface, so its value belongs in the reference rather than behind
   its name. See below for what it leaves out.
 
 ## The enforcement surface
 
 The registered entry pairs `EDIT_MATCHER` with one command per guard, so the
-guards see exactly four tool calls: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`.
+guards see five tool calls: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash`.
 
-**A file written through any other tool is unguarded.** `Bash` is the one that
-matters — `sed -i`, a heredoc, `python3 - <<EOF` all reach the filesystem without
-matching, so no guard is invoked and no firing is written. **`--liveness` cannot
-see the difference:** it reads the firing record, and an edit no guard was asked
-about leaves no record, so a session that wrote everything through `Bash` reports
-exactly like a session that complied. That is not a verdict the guard can qualify
-— nothing evaluated — which is why the limit is documented at the binding
-(BDL-UX #170 — review finding M3 is the same gap seen from the routing side, and
-both are S3 work).
+`Bash` was added in BDL-068 S4 (BDL-UX #170). Before it, a file written through
+the shell — `sed -i`, a heredoc, `python3 - <<EOF` — reached the filesystem
+without matching, so no guard was invoked and no firing was written, and
+`--liveness` could not see the difference: it reads the firing record, and an
+edit no guard was asked about leaves no record.
+
+**A file written through any tool the matcher does not name is still unguarded**,
+and that is now reported rather than left to a paragraph.
+`application/guards/surface.py` reads this file's matcher back off disk, reads the
+`tools:` grant of every emitted role adapter, and reports which of the granted
+write paths a registered matcher names. It is derived from the on-disk artifacts
+and not from `EDIT_MATCHER` for a reason this module owns: registration is a
+merge on the command string, so a project scaffolded before a matcher widened
+keeps the narrow one across the upgrade, and the constant would report a coverage
+the project does not have.
+
+Review finding M3 — giving Beadloom its own event vocabulary, so the adapter
+forwards what happened rather than which guard to run — is the same gap seen from
+the routing side and is S3 work.
 
 Two facts about the exit codes the adapter forwards, both now carried by the
 script's own comment:

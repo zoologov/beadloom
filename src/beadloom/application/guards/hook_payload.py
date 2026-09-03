@@ -25,6 +25,18 @@ if TYPE_CHECKING:
 #: Context key for the file an edit targets.
 PATH_KEY = "path"
 
+#: Context key for the shell command line an edit is performed by (BDL-UX #170).
+#: Separate from :data:`PATH_KEY` on purpose: a path names one file, a command
+#: line names at most a lower bound on the files it writes, and collapsing the
+#: two would let a derived target grant an exclusion written about a real one.
+COMMAND_KEY = "command"
+
+#: How much of a command line is carried into the context. The value is echoed
+#: into the verdict and stored in the firing record, and it comes from the model,
+#: so it is bounded. Truncation cannot make the verdict less honest — the
+#: derivation is already declared a lower bound — only less specific.
+COMMAND_LIMIT = 2000
+
 
 class HookPayloadError(ValueError):
     """A hook payload that is not readable as the named harness's event."""
@@ -48,6 +60,11 @@ def _claude_code_context(payload: Mapping[str, object]) -> dict[str, str]:
     tool name and the event name. Missing keys are omitted rather than guessed:
     a guard states an absent path in ``not_covered``, which is honest, whereas a
     guessed path would silently evaluate the wrong file.
+
+    The shell tool describes its edit as ``tool_input.command`` and never as a
+    path, which is why a whole class of edits to this repository fired no guard
+    at all (BDL-UX #170). The command is carried verbatim and bounded; what it
+    writes is decided downstream, where the answer can say that it is partial.
     """
     context: dict[str, str] = {}
     tool_input = payload.get("tool_input")
@@ -55,6 +72,9 @@ def _claude_code_context(payload: Mapping[str, object]) -> dict[str, str]:
         target = tool_input.get("file_path") or tool_input.get("notebook_path")
         if isinstance(target, str) and target:
             context[PATH_KEY] = target
+        command = tool_input.get("command")
+        if isinstance(command, str) and command:
+            context[COMMAND_KEY] = command[:COMMAND_LIMIT]
     tool_name = payload.get("tool_name")
     if isinstance(tool_name, str) and tool_name:
         context["tool"] = tool_name

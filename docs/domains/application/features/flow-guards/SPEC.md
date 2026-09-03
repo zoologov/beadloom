@@ -145,7 +145,7 @@ they did not check — never a new red build.
 
 **There is no `on:` key, and event routing is not Beadloom's today.** Which tool
 invocations count as an edit is decided entirely by the harness adapter — in
-Claude Code, the `Edit|Write|MultiEdit|NotebookEdit` matcher in
+Claude Code, the `Edit|Write|MultiEdit|NotebookEdit|Bash` matcher in
 `.claude/settings.json` —
 and which guards run is one settings entry per guard name. Beadloom is told
 "evaluate this guard for this context"; it is not told, and does not decide, what
@@ -158,37 +158,63 @@ when composition and adapters are reworked.
 
 A guard answers about the events the harness sends it, so what the harness never
 sends is what the guard never guards. The emitted adapter is registered on
-`PreToolUse` with the matcher `Edit|Write|MultiEdit|NotebookEdit`, one entry per
-guard name: those four tool calls are the whole surface.
+`PreToolUse` with the matcher `Edit|Write|MultiEdit|NotebookEdit|Bash`, one entry
+per guard name.
 
-**A write that reaches the filesystem any other way fires no guard.** A file
-edited through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — matches nothing
-in that list, so no guard is asked about it, no verdict exists, and no firing is
+`Bash` was absent until BDL-068 S4, and its absence is BDL-UX #170. A file edited
+through the shell — `sed -i`, a heredoc, `python3 - <<EOF` — matched nothing in
+the list, so no guard was asked about it, no verdict existed and no firing was
 recorded. It was found by dogfooding S1 on this repository, where a session
 working under an instruction to prefer `Bash` for edits left a whole class of
-writes to this very tree unguarded (BDL-UX #170).
+writes to this very tree unguarded, and `--liveness` could not tell that session
+apart from a compliant one: the report is computed from the firing record, the
+configuration and the project's files, and an edit nobody was asked about leaves
+nothing in any of the three.
 
-**`--liveness` cannot tell that apart from compliance.** The report is computed
-from the firing record, the configuration and the project's files, and an edit
-nobody was asked about leaves nothing in any of the three. A session that edited
-only through `Bash` produces the same report as a session that routed every edit
-through `Edit` and had nothing to warn about — and as a session that made no
-edits at all.
+Three things close it, and only the third generalises past this one matcher.
 
-This is a property of the **binding**, not of a verdict, which is why it is
-written here and not widened into `not_covered`. `not_covered` states what one
-evaluation did not check. An unguarded write has no evaluation to attach a note
-to, and a verdict that mentioned edits it was never told about would be
-inventing knowledge in the one field whose whole product is honesty. The rule
-this feature applies to every verdict — unknown is not zero — applies to its own
-surface, and the honest form of it is this paragraph.
+**A shell command's write set is a lower bound, never a set.**
+`shell_targets.derive_write_targets` reads the targets a declared set of write
+shapes names — a `>`/`>>`/`>|` redirection, `tee`, `touch`, `truncate`, `sed -i`,
+the destination of `cp`/`mv`/`install`/`ln`, and `dd of=` — over a `shlex`
+tokenization, so `>f`, `> f` and `1> f` are one shape rather than three
+spellings. What `sh -c "$CMD"` or an interpreter reading a heredoc writes is not
+derivable, and the module says so rather than reporting an empty set.
 
-Two pieces are named rather than promised. Making Beadloom own an event
-vocabulary, so the adapter forwards *what happened* instead of *which guard to
-run*, is S3's work — the same gap the review recorded as M3, seen from the other
-end. And BDL-UX #170 asks `--liveness` to report the share of write paths a
-binding could have seen, which is what would turn this section from a statement
-into a measurement.
+**A shell edit therefore resolves to `PathScope.UNDETERMINED`.** `relative` stays
+`None`, which is what makes `GuardSpec.exclusion_for` return nothing, so a
+derived target never grants an exemption: `sed -i docs/a.md && python3
+write_src.py` names one write this project can see and performs one it cannot,
+and an exclusion applied to the visible half would exempt the invisible one. The
+derived targets travel in `not_covered` instead, together with the statement that
+the rest was not derived. Widening the matcher without this would have made the
+false green *wider*, because more events would then report `pass` on a target
+nobody resolved.
+
+**`--liveness` reports the surface, not only the firings.** `surface.py` derives
+three facts and compares them: the matchers registered under the hook event, read
+back out of `.claude/settings.json` rather than out of `EDIT_MATCHER`, because
+the file on disk is what the harness obeys; the tool population, read out of the
+`tools:` line of every emitted role adapter, so a tool granted to a role later
+enters the report with no edit to the code; and which of those tools write, which
+is the one thing the module declares. A tool the declaration does not classify is
+reported as **unclassified**, never counted as a non-writer — a closed-world
+table would reproduce #170 exactly one tool later. A source that could not be
+read is reported as **unresolved** and suppresses the coverage fraction outright:
+"100% of the zero tools I found" is the most confident way to state the failure
+this section is about.
+
+**What none of that closes.** `scaffold_guard_hooks` merges on the command
+string, so a project scaffolded before this release keeps its narrower matcher
+across the upgrade — re-running the scaffolder adds nothing, because the command
+it would add is already registered. That is deliberate: the module does not
+rewrite an adopter's settings, and it is why the surface is derived from the file
+on disk. A stale matcher is a reported gap on the next `--liveness` rather than a
+silence, which is the whole difference this section is about.
+
+Making Beadloom own an event vocabulary, so the adapter forwards *what happened*
+instead of *which guard to run*, remains S3's work — the same gap the review
+recorded as M3, seen from the other end.
 
 **The surface has only ever been exercised on a POSIX harness**, and that is the
 same class of unknown one axis further out. The adapter, the matcher and every

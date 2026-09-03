@@ -118,12 +118,14 @@ from beadloom.application.guards.project_root import (
     ProjectLocation,
     locate_project_root,
 )
+from beadloom.application.guards.surface import build_surface
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from beadloom.application.guards.liveness import GuardLiveness
+    from beadloom.application.guards.surface import BindingSurface
 
 #: Stands in for the guard name when the invocation never named one.
 UNNAMED_GUARD = "(no guard named)"
@@ -246,6 +248,9 @@ class InvocationResult:
     exit_code: int
     verdict: GuardVerdict | None = None
     liveness: tuple[GuardLiveness, ...] = ()
+    #: The binding's enforcement surface, carried beside the firings because a
+    #: report of firings alone cannot say what the binding never saw (#170).
+    surface: BindingSurface | None = None
     project_root: Path | None = None
     recorded_at: Path | None = None
     not_recorded_because: str = ""
@@ -377,7 +382,9 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
             because=_BECAUSE_NO_REPORT,
             remediation=_USAGE_REMEDIATION,
         )
-    return InvocationResult(exit_code=0, liveness=rows, project_root=root)
+    return InvocationResult(
+        exit_code=0, liveness=rows, surface=build_surface(root), project_root=root
+    )
 
 
 def _evaluate(

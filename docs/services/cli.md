@@ -1846,12 +1846,15 @@ found alongside it: `scaffold()` re-resolved from disk *without* the flags, so
 
 It also writes the **flow-guard binding** (BDL-061 S1): `.claude/hooks/beadloom-guard.sh`
 — one `exec beadloom guard "$1" --hook claude-code` — and one `PreToolUse` entry per
-registered guard in `.claude/settings.json`, matched on `Edit|Write|MultiEdit|NotebookEdit`.
+registered guard in `.claude/settings.json`, matched on
+`Edit|Write|MultiEdit|NotebookEdit|Bash`.
 The guard names come from the registry, so a guard added in a later release is wired by
 re-running this command. Registration is a **merge**: existing hooks survive, re-running adds
 only the missing entries, and a `settings.json` that cannot be parsed is reported and left
-untouched. Those four tool calls are the whole enforcement surface — a file written through
-`Bash` fires no guard (see [`beadloom guard`](#beadloom-guard)).
+untouched. The merge is on the command string, so a project scaffolded before `Bash` joined the
+matcher (BDL-068 S4, BDL-UX #170) keeps the narrower one across the upgrade; `beadloom guard
+--liveness` reports that gap rather than leaving it silent (see
+[`beadloom guard`](#beadloom-guard)).
 
 The command makes the same whole-working-set `.gitignore` call `init` makes (see
 [`beadloom init`](#beadloom-init)), for a project initialised by a Beadloom older than
