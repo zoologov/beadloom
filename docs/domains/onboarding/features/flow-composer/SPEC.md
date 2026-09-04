@@ -38,12 +38,15 @@ breaking the Beadloom gate":
 
 **Shared CORE fragments** (`ArtifactKind.shared`, BDL-061 S4) are how one text
 reaches several artifacts without being copied into each. There are two —
-`SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms")` — and both exist for the same
+`SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms", "_landing")` — and all three exist for the same
 reason: several copies of one rule drift the moment one of them is edited.
 
 `_writing` is the writing standard. It used to live inside the `tech-writer`
 core, so the roles that produce the TO-BE documents were held to no standard at
-all. `_rooms` (BDL-068 S3.2) is the statement every role that reports a
+all. `_landing` (BDL-068 S5) is what the merge slot grants and what it does not,
+for every role that lands a commit in a tree it shares — the statement that was
+prose in one slash command while every launch prompt mandated the primitive it
+describes. `_rooms` (BDL-068 S3.2) is the statement every role that reports a
 MEASUREMENT is held to: name the room a result was taken in, report a clean-room
 result in the words that say it was one, and read a room-naming verdict as
 answerable rather than as stronger. It also carries the limit of a clean room —
@@ -54,7 +57,7 @@ loop that orchestrates rather than by the roles that measure.
 A shared fragment is a **layer and not a role**: it has no front matter, is
 never written as an adapter, and `compose_role("_writing", …)` raises. Being a
 normal layer, each is language-selectable like every other one
-(`_writing.ru.md.txt` and `_rooms.ru.md.txt` ship).
+(`_writing.ru.md.txt`, `_rooms.ru.md.txt` and `_landing.ru.md.txt` ship).
 
 ### Artifact kinds
 

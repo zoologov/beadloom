@@ -253,6 +253,7 @@ class TestOneContractForEveryCaller:
         assert {m["name"] for m in payload["shared_media"]} == {
             "working-tree",
             "commit-gate",
+            "landing-order",
             "doc-baseline",
             "tracker-ids",
         }

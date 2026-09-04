@@ -80,6 +80,7 @@ Serialised because:
 Plan-time precondition of each shared medium:
   working-tree: passed — no path differs from HEAD that no bead in this plan owns
   commit-gate: passed — the installed pre-commit hook judges the paths a commit stages
+  landing-order: passed — all 18 instruction(s) of `bd merge-slot` name the holder
   doc-baseline: passed — no doc pair is stale
   tracker-ids: passed — every bead's title agrees with the number the tracker allocated
 ```
@@ -166,6 +167,7 @@ each with a plan-time precondition that is actually checked:
 |---|---|---|---|
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181 |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` | BDL-UX #118 |
+| `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts | BDL-UX #194, #237 |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index | BDL-UX #182, #133 |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records | BDL-UX #171 |
 

@@ -163,6 +163,7 @@ class TestSerialisationReasons:
                 tree_changed_paths=(),
                 commit_gate=GATE_COMMIT_SCOPED,
                 doc_baseline_stale_pairs=0,
+                landing_lock_sites=(),
             ),
             axes=_approving("billing", "shipping"),
         )
@@ -319,7 +320,7 @@ class TestSharedMedia:
     ) -> None:
         plan = plan_waves([_bead("a", "billing"), _bead("b", "shipping")], conn=conn)
         assert plan.shared_media == SHARED_MEDIA
-        assert len(SHARED_MEDIA) == 4
+        assert len(SHARED_MEDIA) == 5
 
     def test_a_plan_that_runs_nothing_concurrently_names_the_same_media(
         self, conn: sqlite3.Connection

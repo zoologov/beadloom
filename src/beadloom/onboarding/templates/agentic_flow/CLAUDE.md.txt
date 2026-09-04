@@ -22,7 +22,7 @@ CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this 
 │
 ├─ .claude/commands/  — SLASH SKILLS, injected into the MAIN-LOOP session (you, now)
 │    /task-init    scaffold any work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) + create beads
-│    /coordinator  orchestrate multi-agent work (waves, gates, merge-slot) — MAIN-LOOP only
+│    /coordinator  orchestrate multi-agent work (waves, gates, landing lock) — MAIN-LOOP only
 │    /checkpoint   bd-comment + ACTIVE.md progress saves
 │    /templates    document templates used by /task-init
 │
@@ -164,7 +164,10 @@ bd dep add <id> <depends-on-id>
 **Multi-agent coordination (new in 1.0.4) — used by `/coordinator`:**
 - `bd swarm` — epic → DAG → waves (`create` / `validate` / `status`)
 - `bd gate` — async wait conditions (review→tech-writer; CI via `gh:run` / `gh:pr`)
-- `bd merge-slot` — serialize parallel merges (one agent merges at a time)
+- the merge slot — serialize parallel LANDINGS: `bd merge-slot acquire --holder <bead-id>`,
+  where exit 0 means you hold it, and `release --holder <bead-id>`, the only release form bd
+  verifies. It orders the commits and nothing else; keeping two agents out of one FILE is what
+  `beadloom waves` derives
 
 **IMPORTANT:**
 - `bd comments add` — for checkpoints (preserves history)
@@ -274,7 +277,7 @@ Coordinator MUST be activated before multi-bead work:
 1. Invoke `/coordinator` skill (main-loop only — see §0.0).
 2. Complete `/task-init` flow BEFORE creating any beads or writing code.
 3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly.
-4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / `merge-slot`.
+4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / the landing lock.
 
 Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (single source of truth; no slash-command wrappers).
 

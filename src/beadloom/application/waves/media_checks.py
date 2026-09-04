@@ -1,7 +1,7 @@
 """Whether each shared medium's plan-time precondition holds — one check per medium.
 
 :mod:`.media` STATES what a wave shares no matter how independent its beads' code
-is. Stating it was half the guarantee and the half that could not fail: the four
+is. Stating it was half the guarantee and the half that could not fail: the
 media were a constant tuple, so a wave asserted a property nothing verified
 (BDL-061.22, "clause two is printed, not enforced"). This module is the other
 half. Each medium gets a check that can come back ``failed``, and a medium nobody
@@ -9,19 +9,20 @@ measured comes back ``unmeasured`` rather than passing in silence — an absent
 answer that reads as a clean one is the defect this whole command exists for.
 
 **What these checks are, precisely.** They are PRECONDITIONS, measured before the
-wave runs: the tree it starts from, the hook that will judge its commits, the doc
-baseline it inherits, and the ids its beads already carry. They are not
+wave runs: the tree it starts from, the hook that will judge its commits, what its
+artifacts tell an agent about the landing lock, the doc baseline it inherits, and
+the ids its beads already carry. They are not
 verification of the wave's conduct. Nothing here can check that the gate owner
 actually ran the tree afterwards, because that happens after the plan exists and
 no plan can reach it. The sentence in :mod:`beadloom.application.waves` names
 that split rather than leaving a reader to discover it.
 
-**Where the observations come from.** Three of the four are facts about the
-machine — git, the installed hook, the doc index — and they arrive as a
-:class:`WaveEnvironment` gathered by the caller rather than read here, so this
-layer keeps taking its input as data and the checks stay runnable without a git
-binary, a repository, or a hook. The fourth needs nothing but the bead records
-the planner already holds.
+**Where the observations come from.** Four of the five are facts about files —
+git, the installed hook, the doc index, the composed flow artifacts — and they
+arrive as a :class:`WaveEnvironment` gathered by the caller rather than read
+here, so this layer keeps taking its input as data and the checks stay runnable
+without a git binary, a repository, a hook or a scaffolded flow. The fifth needs
+nothing but the bead records the planner already holds.
 """
 
 # beadloom:feature=wave-plan
@@ -31,9 +32,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from beadloom.application.waves.landing import LOCK_COMMAND, defect_detail
 from beadloom.application.waves.media import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
 )
@@ -225,6 +228,63 @@ def _check_doc_baseline(environment: WaveEnvironment) -> MediumCheck:
     )
 
 
+def _check_landing_order(environment: WaveEnvironment) -> MediumCheck:
+    """Whether every place this flow instructs the lock instructs the form that grants it.
+
+    The medium is the branch a wave lands into, and the precondition is not about
+    the tracker: ``bd merge-slot acquire`` refuses a held slot and exactly one of
+    thirty-two simultaneous acquires won, measured on bd 1.0.4. What grants
+    nothing is the CALL FORM the artifacts instruct, and that is a fact about
+    files this project owns — which is why it is checkable here and why BDL-UX
+    #194 and #237 were both filed against something nobody could fix.
+
+    A verdict over an empty population says so. This project has never scaffolded
+    a flow into a directory where the lock is instructed nowhere, but an adopter
+    has, and a pass that only means *we found nothing to judge* is the silence
+    this whole module exists to break.
+    """
+    sites = environment.landing_lock_sites
+    if sites is None:
+        return MediumCheck(
+            MEDIUM_LANDING_ORDER,
+            STATUS_UNMEASURED,
+            "the flow artifacts were not read, so what this wave's agents are "
+            f"told about `{LOCK_COMMAND}` is unknown",
+        )
+    if not sites:
+        return MediumCheck(
+            MEDIUM_LANDING_ORDER,
+            STATUS_PASSED,
+            f"no flow artifact instructs `{LOCK_COMMAND}`, so nothing tells an "
+            "agent it holds a lock it does not hold — the landings of this wave "
+            "are serialised by its derived scopes and by nothing else",
+        )
+    defective = tuple(site for site in sites if site.defects)
+    if not defective:
+        return MediumCheck(
+            MEDIUM_LANDING_ORDER,
+            STATUS_PASSED,
+            f"all {len(sites)} instruction(s) of `{LOCK_COMMAND}` name the "
+            "holder, so a hold names a bead and a release cannot free a "
+            "neighbour's",
+        )
+    named = "; ".join(
+        f"{site.source}:{site.line} `{site.invocation}` ({', '.join(site.defects)})"
+        for site in defective[:3]
+    ) + (" ..." if len(defective) > 3 else "")
+    reasons = "; ".join(
+        defect_detail(defect)
+        for defect in sorted({d for site in defective for d in site.defects})
+    )
+    return MediumCheck(
+        MEDIUM_LANDING_ORDER,
+        STATUS_FAILED,
+        f"{len(defective)} of {len(sites)} instruction(s) of `{LOCK_COMMAND}` "
+        f"grant an agent nothing it is told they grant — {named}. {reasons} "
+        "(BDL-UX #194, #237)",
+    )
+
+
 def check_media(
     records: Sequence[BeadRecord],
     *,
@@ -247,6 +307,7 @@ def check_media(
     return (
         _check_working_tree(observed, owned_paths),
         _check_commit_gate(observed),
+        _check_landing_order(observed),
         _check_doc_baseline(observed),
         _check_tracker_ids(records),
     )

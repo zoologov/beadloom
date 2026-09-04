@@ -2,7 +2,7 @@
 
 > **When to invoke:** during parallel work with multiple agents (an epic with independent beads)
 > **Focus:** task distribution, synchronization, quality gating
-> **Backbone:** bead dependencies + `bd ready` (waves, always) · `bd merge-slot` (serialized merges) · `bd gate` (CI/external waits) · `bd swarm` (optional convenience for epic-type parents: validate/status)
+> **Backbone:** bead dependencies + `bd ready` (waves, always) · the merge slot, held `--holder <bead-id>` (serialized landings) · `bd gate` (CI/external waits) · `bd swarm` (optional convenience for epic-type parents: validate/status)
 > **The coordinator is the MAIN-LOOP process, not a subagent** — it spawns role subagents via the `Agent` tool, and a subagent cannot spawn subagents. That is why it lives in `.claude/commands/` (skill injected into the main loop), not `.claude/agents/`.
 
 ---
@@ -48,7 +48,7 @@ When the RFC needs technical context: delegate to an Explore sub-agent in the ba
 1. **One bead = one agent** at a time. Do NOT batch multiple beads into one agent (keeps contexts small, failures isolated).
 2. **Synchronization through files + beads**, not chat. CONTEXT.md is the source of truth.
 3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready` lists N independent beads, spawn N subagents now. `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads).
-4. **Serialize landings** with `bd merge-slot` so the parallel agents never race on commits/merges — they run concurrently but land one at a time.
+4. **Serialize landings** with the merge slot, held `--holder <bead-id>`, so the parallel agents never race on commits/merges — they run concurrently but land one at a time. It orders the COMMITS; what keeps them out of one FILE is the disjoint scopes `beadloom waves` derived.
 
 ---
 
@@ -266,17 +266,38 @@ A background subagent may report that file-writing tools (`Edit`/`Write`, and so
 
 **Fallback:** if a subagent returns "blocked — could not edit files", the coordinator (main loop) does NOT silently drop the bead. Either (a) re-launch the subagent, or (b) **complete the bead inline in the main loop** using the subagent's analysis (it should still return its findings), then checkpoint + close the bead normally. For write-heavy beads (docs/finalization), inline execution by the main loop is an acceptable first choice when a prior subagent was write-blocked. Record the fallback honestly in the bead comment.
 
-### Merge serialization (bd merge-slot)
+### Merge serialization (the landing lock)
 
-When parallel agents land changes, serialize merges so they don't cascade conflicts:
+<!-- beadloom:duty=landing-lock roles=dev,explore,review,tech-writer,test -->
+
+When parallel agents land changes, serialize the LANDINGS so they don't cascade conflicts. What
+keeps two agents out of one FILE is a different guarantee — the disjoint scopes `beadloom waves`
+derived — and the two are worth stating separately. Conflating them is not hypothetical: it was
+found twice, independently, nine days apart, after three sets of concurrent waves had run on a
+lock that granted neither.
 
 ```bash
-bd merge-slot create                 # once per repo
-# each agent (or coordinator on its behalf), before committing/merging:
-bd merge-slot acquire --wait         # blocks/queues until the slot is free
+bd merge-slot create                            # once per repo
+# each agent (or the coordinator on its behalf), before committing/merging:
+bd merge-slot acquire --holder <bead-id>        # exit 0 means you hold it; anything else means you do not
 # ... commit/merge ...
-bd merge-slot release
+bd merge-slot release --holder <bead-id>        # the only release form bd verifies
 ```
+
+**Pass `--holder`, and read the exit code.** Measured on bd 1.0.4: the slot refuses a held
+acquire with exit 1, and one of 32 simultaneous acquires won each round — the primitive is
+sound. Three things about the DEFAULT call form are not:
+
+- the default holder is the tracker actor (`$BEADS_ACTOR` → `git user.name` → `$USER`), which
+  is one identity for every role on one machine, so the slot cannot tell a neighbour's hold
+  from the caller's own;
+- a release that names no holder frees whoever holds the slot and reports success;
+- `--wait` appends the caller to a queue nothing drains and returns at once, so an agent told
+  in prose that it blocks never looks at the exit code. This repository's queue still holds
+  five waiters from sessions that ended in May.
+
+`beadloom waves` checks this on every plan as the `landing-order` medium: it reads the composed
+flow artifacts and reports any instruction whose call form grants less than it is relied on for.
 
 ---
 
@@ -346,7 +367,8 @@ BEFORE WAVE COMMIT:
 □ uv run pytest — all pass
 □ beadloom reindex && sync-check && lint --strict && doctor — clean
 □ beadloom snapshot save <label>  (per-wave architecture record)
-□ Merges serialized via bd merge-slot (no concurrent landings)
+□ Landings serialized via the merge slot, acquired and released `--holder <bead-id>`
+□ `beadloom waves` reports `landing-order` as passed (no instruction that grants less than it claims)
 ```
 
 ---

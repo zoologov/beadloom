@@ -27,11 +27,11 @@ The guarantee the shape makes, in one sentence:
 The sentence has two halves because measurement says one half is not enough. The
 first half is code independence, which the graph decides. The second is the set
 of media a wave shares whatever shape it takes — one working tree, one
-pre-commit hook, one doc-freshness baseline, one tracker id space — and no
-choice of shape makes any of them independent.
+pre-commit hook, one landing order, one doc-freshness baseline, one tracker id
+space — and no choice of shape makes any of them independent.
 
 **The split the sentence names.** The second half was a constant tuple until
-BDL-061.80: the four media were printed with the evidence they came from, and
+BDL-061.80: the media were printed with the evidence they came from, and
 nothing checked any of them, so a wave asserted a property nothing verified. Each
 medium now carries a verdict that can come back `failed`, and a medium nobody
 measured comes back `unmeasured` rather than passing in silence. What is checked
@@ -219,6 +219,7 @@ evidence it comes from:
 |---|---|
 | `working-tree` | an agent's clean-room green is a claim about N files, not about the tree, and the room is built at `room-<bead-id>` so it can say whose it is |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
+| `landing-order` | one branch. What keeps two agents out of one FILE is the disjoint scopes the plan derived; what orders their COMMITS is the merge slot, and only in the form that grants it (BDL-UX #194, #237) |
 | `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
 | `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted |
 
@@ -236,9 +237,9 @@ per bead by `beadloom waves` and under `rooms` in `--json`. Two agents once each
 built a room at one shared session-scratchpad path, and one took a measurement
 over its neighbour's untracked files that looked exactly like a correct clean
 room (BDL-UX #235). The session scratchpad is a genuinely shared medium and is
-deliberately **not** one of the four: a medium here is one with a plan-time
+deliberately **not** one of the five: a medium here is one with a plan-time
 precondition a command can observe, and a scratchpad path exists only inside a
-running agent session. A fifth entry would be permanently `unmeasured` — a
+running agent session. An entry for it would be permanently `unmeasured` — a
 finding on every plan — or permanently true. What is observable is the remedy,
 so the remedy is what ships, in `room_for`, in the `working-tree` statement and
 in the role cores that carry the `clean-room` duty.
@@ -254,6 +255,7 @@ check — see below.
 |---|---|---|
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
+| `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records |
 
@@ -264,10 +266,10 @@ come to disagree about what one work item approved, and a work item nothing can
 be read from arrives as a `WorkItemAxes` carrying its reason rather than as an
 absence dropped at the edge.
 
-The three machine-observed media are gathered by the command and handed to
+The four file-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
-without a repository and without a hook — each absence arrives as a `None` the
-check reports, never as a silent zero. Every medium is checked at every wave
+without a repository, without a hook and without a scaffolded flow — each absence
+arrives as a `None` the check reports, never as a silent zero. Every medium is checked at every wave
 size: `not_applicable` was withdrawn as a verdict a plan's shape could produce
 (BDL-UX #228), because a check that switches itself off is silent exactly where
 nobody is already thinking about the risk. The constant survives in `models.py`
@@ -281,6 +283,47 @@ plan that serialises the beads it mis-wired is exactly the plan whose ids most
 need checking. Only the trailing number is compared: the title convention writes
 `BDL-061.<n>` while the tracker allocates `<project>.<n>`, so comparing whole ids
 would report every bead and comparing prefixes would report none.
+
+
+### The landing lock, and the two guarantees it is asked to give
+
+The `landing-order` medium exists because one primitive was asked for two
+guarantees and gave neither in the form this flow requested it. BDL-UX #194 and
+#237 are the same defect, filed nine days apart by two agents that had never met.
+
+**What was measured, on bd 1.0.4, in an isolated rig with every exit code read
+without a pipe.** The primitive is sound: `acquire` on a held slot exits 1 and
+names the holder, and across four rounds of eight simultaneous acquires exactly
+one won each round. `release --holder <name>` is owner-checked and refuses a
+caller that is not the holder. `--holder` accepts any string, so a bead id can
+hold the slot today, and `check --json` reports it back.
+
+**What granted nothing was the call form.** Three defects, all in the
+instructions rather than in the tracker:
+
+| Defect | What the form costs |
+|---|---|
+| `anonymous-holder` | an `acquire` with no `--holder` takes the tracker actor (`$BEADS_ACTOR` → `git user.name` → `$USER`), one identity for every role on one machine, so the holder cannot be told from the claimant |
+| `unguarded-release` | a `release` with no `--holder` frees whoever holds the slot, including a live neighbour, and reports success |
+| `queue-only-wait` | `--wait` appends the caller to a queue nothing drains and returns at once with exit 1; prose that calls it blocking is what stops an agent reading the exit code |
+| `unknown-form` | a subcommand this derivation has not measured — reported rather than passed, because an unjudged site that reads as clean is the class this instrument exists to remove |
+
+`landing.lock_sites(sources)` derives the population from `(label, text)` pairs
+and judges each invocation by its **flags**, never by the prose around it: a
+check that read English for the promise "blocks until free" would repeat the
+keyword-proximity class already filed three times against the docs audit. The
+command reads the composed flow artifacts — the agent directories from
+`TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES`, the project layer
+from `.beadloom/flow` — so a tool added to the flow is covered by the same act.
+
+The verdict states the size of the population it judged. A project that has never
+scaffolded a flow instructs the lock nowhere, and a pass over nothing says so
+rather than reading as a pass over something.
+
+**What this medium cannot check**, stated here rather than discovered later: it
+reads what an agent is TOLD, and cannot know what an agent DID. Nothing in a plan
+can observe whether the slot was taken before a commit, for the same reason
+nothing in a plan can observe whether the gate owner ran the combined tree.
 
 ### Overrides
 
@@ -349,6 +392,8 @@ not tell them apart.
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
+| `lock_sites(sources)` | every landing-lock invocation in the flow artifacts, and what its call form grants |
+| `defect_detail(defect)` | what one defective call form costs and the flag that fixes it |
 | `title_id_mismatches(records)` | every bead whose title numbers it differently |
 
 `plan_waves` takes bead records as **data**, never a tracker handle: the
@@ -363,6 +408,7 @@ every scenario runs without a `bd` binary on the machine.
 | `scope.py` | resolve a bead to the nodes and files it occupies |
 | `derivation.py` | hold each declaration against the derivation its work item recorded |
 | `independence.py` | decide whether one pair may run together, and say why not |
+| `landing.py` | what the landing lock grants, and which call form grants it |
 | `media.py` | what a wave shares no matter how independent its code is |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
@@ -372,8 +418,11 @@ every scenario runs without a `bd` binary on the machine.
 
 `tests/acceptance/features/wave_plan.feature` states the behaviour as executable
 scenarios; `tests/test_wave_plan.py` covers the reasons, the ordering and the
-override arithmetic; `tests/test_wave_media_checks.py` covers the four medium
-verdicts and the title-against-id comparison; `tests/test_cli_waves.py` covers
+override arithmetic; `tests/test_wave_media_checks.py` covers the five medium
+verdicts and the title-against-id comparison;
+`tests/acceptance/features/landing_lock.feature` and
+`tests/test_landing_lock_sites.py` cover the landing-lock derivation and hold
+this repository's own instructions to it; `tests/test_cli_waves.py` covers
 the command's two output shapes and its three exit codes;
 `tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
 and owns the five findings BDL-061.22 measured;

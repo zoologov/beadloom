@@ -11,9 +11,9 @@ reach:
 
 * the first clause under overlaps that are transitive, absent, or shaped like
   containment rather than equality;
-* the second clause's silencing conditions. The four media are a constant tuple
-  and a wave of one names none of them, so the question worth asking is whether
-  a wave that genuinely holds two can ever fail to name all four;
+* the second clause's silencing conditions. The media are a constant tuple and a
+  wave of one names none of them, so the question worth asking is whether a wave
+  that genuinely holds two can ever fail to name all of them;
 * the override path — the third exclusion mechanism this epic has shipped, after
   the guard exclusions (``.48``, whose dead entries went unreported) and the
   ``forbid_import`` exemptions (``.49``, whose ``until`` was never parsed);
@@ -48,6 +48,7 @@ from beadloom.application.waves import (
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
     REASON_BLOCKED_BY_BEAD,
@@ -146,6 +147,7 @@ def _measured() -> WaveEnvironment:
         tree_changed_paths=(),
         commit_gate=GATE_COMMIT_SCOPED,
         doc_baseline_stale_pairs=0,
+        landing_lock_sites=(),
     )
 
 
@@ -355,6 +357,7 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
             MEDIUM_COMMIT_GATE,
             MEDIUM_DOC_BASELINE,
             MEDIUM_TRACKER_IDS,
+            MEDIUM_LANDING_ORDER,
         }
         assert {medium.name for medium in SHARED_MEDIA} == exported
         assert len(SHARED_MEDIA) == len(exported)
@@ -383,7 +386,7 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
 
         The attack this answers: if the statement were derived from the last wave,
         or from an average, one undeclared bead pushed into its own wave would
-        turn the four media off for the two that really do run together.
+        turn the media off for the two that really do run together.
         """
         beads = [_bead("a", "billing"), _bead("b", "shipping"), _bead("mute")]
         plan = plan_waves(beads, conn=conn)

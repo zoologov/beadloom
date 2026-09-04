@@ -1288,9 +1288,10 @@ second ref written without a comma that the graph confirms is a node
 a wave shape is acted on, so a parser whose errors widen a wave is worse than no
 parser.
 
-**Every wave prints the four media it shares, whatever its width**, each with
+**Every wave prints the five media it shares, whatever its width**, each with
 the evidence it comes from: the working tree (#181, #235), the commit gate
-(#118), the doc baseline (#163, #182, #133) and the tracker's id space (#171).
+(#118), the landing order (#194, #237), the doc baseline (#163, #182, #133) and
+the tracker's id space (#171).
 Until BDL-068 S4 a wave of one printed `not_applicable` against three of them;
 that verdict is gone (`beadloom-67t1`). A plan is one slice of one epic, so a
 wave's width is not a claim that its bead is alone in the tree — and the
@@ -1310,8 +1311,10 @@ is is a shared directory with a reassuring name.
 measures a precondition per medium before the wave runs: that no path differs
 from `HEAD` which no bead in the plan owns (`git status`), that the installed
 pre-commit hook judges the paths a commit stages (`.git/hooks/pre-commit`), that
-no doc pair is stale already (the doc index), and that no bead's title numbers it
-differently from the id the tracker allocated (the bead records). A medium that
+every instruction of the landing lock in the composed flow artifacts names its
+holder and asks for no queue (the flow artifacts), that no doc pair is stale
+already (the doc index), and that no bead's title numbers it differently from the
+id the tracker allocated (the bead records). A medium that
 could not be observed is reported `unmeasured`, which is a finding: a concurrent
 wave nobody measured is not a clean plan, it is an unmeasured one. What is NOT
 checked is the wave's conduct afterwards -- nothing here can know whether the
@@ -1320,6 +1323,22 @@ gate owner ran the combined tree.
 The `tracker-ids` check runs even when the plan is fully serial, because a
 concurrent `bd create` shifts an id out from under the number an author already
 wrote into the title, and that happens before any wave runs (#171).
+
+The `landing-order` check reads what an agent is TOLD about the merge slot, not
+what the tracker does. Measured on bd 1.0.4 in an isolated rig with every exit
+code read without a pipe, the primitive is sound: `acquire` refuses a held slot
+with exit 1, and one of eight simultaneous acquires won in each of four rounds.
+Three things about the DEFAULT call form are not — an `acquire` with no
+`--holder` takes the tracker actor, which is one identity for every role on one
+machine; a `release` with no `--holder` frees whoever holds the slot and reports
+success; and `--wait` appends the caller to a queue nothing drains and returns at
+once. Each is reported per site, judged from the FLAGS of the invocation rather
+than from the prose around it, and a subcommand this check has not measured is
+reported as `unknown-form` rather than passing. The population is the composed
+flow artifacts an agent is handed — the agent directories, the slash commands and
+the project layer — so a project that has never scaffolded a flow instructs the
+lock nowhere and the verdict says that instead of reading as a pass over
+something.
 
 **The declaration is also held against the derivation the work item recorded**
 (BDL-068 S4, BDL-UX #232). A bead's `refs:` was the one input to this command
@@ -1395,6 +1414,7 @@ Serialised because:
 Plan-time precondition of each shared medium:
   working-tree: passed - no path differs from HEAD that no bead in this plan owns
   commit-gate: passed - the installed pre-commit hook judges the paths a commit stages
+  landing-order: passed - all 18 instruction(s) of `bd merge-slot` name the holder
   doc-baseline: passed - no doc pair is stale
   tracker-ids: passed - every bead's title agrees with the number the tracker allocated
 ```

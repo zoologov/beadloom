@@ -97,13 +97,14 @@ def test_the_report_names_its_limit_on_a_clean_run(project: Path) -> None:
 
     The project declares nothing of its own here. It is no longer a project that
     declares NOTHING: since BDL-UX #228 the shipped coordinator declares the
-    `clean-room` duty for all five roles, so every project running this flow
-    inherits one declaration and one carriage per role.
+    `clean-room` duty for all five roles, and since BDL-068 S5 the `landing-lock`
+    duty beside it, so every project running this flow inherits two declarations
+    and two carriages per role.
     """
     report = duty_report(project)
 
     assert report.findings == ()
-    assert {d.duty for d in report.declarations} == {"clean-room"}
+    assert {d.duty for d in report.declarations} == {"clean-room", "landing-lock"}
     prompts = [e for e in report.not_inspected if "prompt" in e.source]
     assert len(prompts) == 1
     assert "not an artifact" in prompts[0].why

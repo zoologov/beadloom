@@ -96,3 +96,26 @@ docs_audit:
     - path: docs/guides/architecture-model.md
       fact: version
       value: "3.0.0"
+    # application/README: `bd 1.0.4` is the version of the BEADS CLI the
+    # landing-lock measurement was taken against, not a claim about this
+    # project's version. `_extract_versions` matches every
+    # `\bv?\d+\.\d+\.\d+\b` outside a pin and has no notion of whose product a
+    # version belongs to, so a document that states which release of a
+    # DEPENDENCY a measurement was taken on cannot say so without being read as
+    # stale. That is a third form of BDL-UX #190/#205 — not an example token
+    # and not a past tense, but another product's number — and it is filed as
+    # #253. The version is load-bearing here: the sentence states what a tool
+    # was measured to do, and a measurement without the version it was taken
+    # against is the kind of claim this project rejects from everyone else.
+    # It goes inert only if the sentence is deleted, and
+    # `TestEverySuppressionStillSuppresses` reports it the day it does.
+    - path: docs/domains/application/README.md
+      fact: version
+      value: "1.0.4"
+    # services/cli.md: the same sentence in the `waves` reference, and the same
+    # reason. Two triples for one measurement in one bead is itself the
+    # measurement that says #253 is a class rather than an instance: every
+    # document that describes what a dependency was measured to do needs one.
+    - path: docs/services/cli.md
+      fact: version
+      value: "1.0.4"

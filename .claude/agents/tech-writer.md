@@ -132,6 +132,48 @@ sentence that implies you covered it.
   only.** `beadloom waves` names the owner for every wave, including a wave of one. If you are
   not the owner, do not write a sentence that implies you covered the tree; if you are, say
   "green on the tree" as a claim separate from your own room's.
+<!-- Shared by every role that lands a commit in a tree it shares. Edit once, here. -->
+
+## The landing lock — what it grants, and what it does not
+
+<!-- beadloom:carries=landing-lock -->
+
+Two things keep concurrent agents out of each other's work, and they are not the same
+thing. **What keeps two agents out of one FILE is the disjoint scopes `beadloom waves`
+derived** for the beads of a wave. **What keeps two commits from interleaving is the merge
+slot** — and only in the call form that grants it.
+
+The distinction is not pedantry. Conflating the two was found twice, independently, nine days
+apart, by two agents that had never met, and in between three sets of concurrent waves ran
+believing they held a lock that granted nothing. Those commits did not collide because the file
+sets were disjoint — which is the property the lock exists so that nobody has to rely on.
+
+Measured on bd 1.0.4: the slot itself is sound. `acquire` on a held slot exits 1, and of 32
+simultaneous acquires across four rounds exactly one won each round. What granted nothing was
+the way this flow asked for it.
+
+- **Name the holder, and name it with your bead's id.** The default holder is the tracker
+  actor — `$BEADS_ACTOR`, then `git user.name`, then `$USER` — which is ONE identity for
+  every role on one machine, so the slot cannot tell a neighbour's hold from your own. With
+  `--holder <bead-id>` the holder names a bead, and a bead has a status you can check.
+- **Read the exit code; there is nothing else to read.** A non-zero exit means you do NOT
+  hold the slot. Retry, or land later, but do not commit.
+- **Do not ask it to wait.** The `--wait` flag appends you to a queue that nothing drains and
+  returns at once. Nothing removes a waiter either, so the queue accumulates identities from
+  sessions that ended weeks ago. If you want to wait, write the loop and give it a bound.
+- **Release with your holder.** A release that names no holder frees whoever holds the slot,
+  including a live neighbour, and reports success. bd checks the holder only when you pass
+  one.
+
+```bash
+bd merge-slot acquire --holder <bead-id>   # exit 0 means you hold it; anything else means you do not
+# ... stage your own files by path, then commit ...
+bd merge-slot release --holder <bead-id>   # the only release form bd verifies
+```
+
+**And say which guarantee you are leaning on.** If you land while a neighbour is editing, the
+slot ordered your commits and nothing ordered your edits. That is the wave plan's job, and
+`beadloom waves` reports it as the `landing-order` medium on every plan, at every size.
 <!-- overlay:ddd — DDD doc layout (domain README + feature SPEC). -->
 ## ARCHITECTURE (Domain-Driven Design)
 

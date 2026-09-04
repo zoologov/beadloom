@@ -5,9 +5,9 @@
 # The scenarios below state the guarantee in two halves, because this session's
 # own evidence says one half is not enough. Code independence is the first half
 # (BDL-UX #155 A). The second is that a wave shares media the code graph knows
-# nothing about — the working tree, the commit gate, the doc baseline and the
-# tracker's id space — and each of those has already carried one bead's state
-# into another's result (#181, #118, #133/#182, #171).
+# nothing about — the working tree, the commit gate, the landing order, the doc
+# baseline and the tracker's id space — and each of those has already carried one
+# bead's state into another's result (#181, #118, #194/#237, #133/#182, #171).
 
 @bead:beadloom-mr2l.21 @node:wave-plan
 Feature: a wave shape is decided from the graph, and says what it does not decide
@@ -58,7 +58,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     Given a bead "alpha" declaring the node scope "billing"
     And a bead "beta" declaring the node scope "shipping"
     When the wave shape is decided
-    Then the wave names the working tree, the commit gate, the doc baseline and the tracker id space
+    Then the wave names the working tree, the commit gate, the landing order, the doc baseline and the tracker id space
     And exactly one bead of the wave owns the combined-tree result
 
   # BDL-061.80. Naming the media was the whole of the second clause until `.22`
@@ -130,7 +130,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the shared media were measured and are clean
     When the wave shape is decided
     Then no wave holds more than one bead
-    And the wave names the working tree, the commit gate, the doc baseline and the tracker id space
+    And the wave names the working tree, the commit gate, the landing order, the doc baseline and the tracker id space
     And every bead is told the clean room it owes, named after its own id
     And exactly one bead of the wave owns the combined-tree result
     And every medium the wave names carries a verdict of its own

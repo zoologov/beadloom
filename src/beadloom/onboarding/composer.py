@@ -105,10 +105,11 @@ def _artifact_kinds() -> dict[str, ArtifactKind]:
 #: written as an adapter, and ``compose_role`` refuses it.
 #:
 #: ``_writing`` holds the standard every role that writes a document is held to;
-#: ``_rooms`` holds the one every role that reports a MEASUREMENT is held to.
-#: Both are shared for the same reason: five copies of one rule drift the moment
-#: one of them is edited.
-SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms")
+#: ``_rooms`` holds the one every role that reports a MEASUREMENT is held to;
+#: ``_landing`` holds what the merge slot grants and what it does not, for every
+#: role that lands a commit in a tree it shares. All three are shared for the
+#: same reason: five copies of one rule drift the moment one of them is edited.
+SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms", "_landing")
 
 #: The artifact kinds ``compose`` understands.
 ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "docs")

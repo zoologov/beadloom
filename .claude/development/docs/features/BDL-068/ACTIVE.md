@@ -2,15 +2,27 @@
 
 > **Last updated:** 2026-09-04
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
-> docs), unmerged; S5 next
+> docs), unmerged; S5 under way, wave 1 landed
 
 ---
 
 ## Current Bead
 
-**Bead:** none — S4 is finished on the branch. `0mdo.36` (tech-writer) was the last of the
-slice and closed the docs pass; `0mdo.12`, the slice bead, closes with it. The next claimable
-work is S5 (`0mdo.13`), which depends on `0mdo.12` and on `0mdo.39` (#237).
+**Bead:** none — S5 wave 1 (`0mdo.39`, the landing lock) is closed. The next claimable work in
+S5 is `0mdo.51`, the derived `bd` call-site population, which blocks `.52`, `.53` and `.54`.
+S4 is finished on the branch: `0mdo.36` (tech-writer) was the last of that slice and closed its
+docs pass, and `0mdo.12`, the slice bead, closes with it.
+
+**S5 wave 1, and what it corrected about its own bead.** `0mdo.39` answered BDL-UX #194 and
+#237 — one defect filed twice, nine days apart, by two agents that had never met. Both entries
+name `bd merge-slot` as the broken thing, and the re-measurement says it is not. On bd 1.0.4 in
+an isolated `bd init` rig, every exit code read without a pipe: `acquire` refuses a held slot
+with exit 1, four rounds of eight simultaneous `acquire --holder` calls produced exactly one
+winner each round, and `release --holder <name>` is owner-checked. What granted nothing was the
+CALL FORM this project instructed — no `--holder`, so every agent was the one tracker actor; a
+bare `release`, which is the single form bd does not check; and `--wait`, which queues and
+returns, under prose of ours that called it blocking. Six of eight instruction sites were
+defective at the tree the bead started from and none of eighteen is now.
 
 **Where S4 ended.** Fifteen beads: eight dev beads over six waves, then the test bead
 (`0mdo.34`), then review (`0mdo.35`), then the four fix beads its first pass produced
@@ -454,6 +466,23 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     take it — and PLAN's slice statuses now come from the tracker rather than reading `Pending`
     for four shipped slices.
 - [ ] S5 — the tracker adapters
+  - [x] `0mdo.58` — S5's axes, derived at the slice's start.
+  - [x] `0mdo.39` — **#194 + #237**, the landing lock. A fifth shared medium, `landing-order`,
+    stated in `waves/media.py` and checked in `media_checks.py` over a new `waves/landing.py`
+    that derives every instruction of the lock in the composed flow artifacts and judges it by
+    the FLAGS of the invocation, never by the prose around it. Three defects, each measured on
+    bd 1.0.4 before it was encoded (`anonymous-holder`, `unguarded-release`, `queue-only-wait`),
+    plus `unknown-form` for a subcommand the derivation has not measured. The fix itself is
+    prose, because none of the call sites is Python: the shipped `coordinator.md.txt` and
+    `CLAUDE.md.txt`, this repository's project layer, and a new SHARED role fragment
+    `roles/core/_landing.md.txt` carrying the `landing-lock` duty that `config-check` now blocks
+    on — the mechanism `0mdo.27` built in S4, applied to the rule that made #194 rot in prose
+    for nine days. **Measured red then green on the same derivation:** 8 sites and 6 defective
+    over the flow artifacts at HEAD, 18 sites and 0 defective after. Green in a clean room over
+    28 files, and **as its own wave's gate owner**, green on the tree: 8 876 passed, 11 skipped,
+    1 xfailed, `mypy --strict` clean over 262 files, `beadloom ci` rc 0 in the foreground
+    without a pipe. Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared
+    rooms. Filed BDL-UX #253.
 - [ ] S6 — the flow's documents and roles
 
 ## What is in `main` now

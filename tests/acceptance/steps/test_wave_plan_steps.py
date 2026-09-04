@@ -28,6 +28,7 @@ from beadloom.application.waves import (
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
     REASON_SHARED_NODE,
@@ -103,11 +104,12 @@ def given_bead_with_scope_and_title(
 
 @given("the shared media were measured and are clean")
 def given_media_measured(world: dict[str, Any]) -> None:
-    """Somebody looked at the tree, the hook and the doc baseline, and said so."""
+    """Somebody read the tree, the hook, the doc baseline and the flow, and said so."""
     world["environment"] = WaveEnvironment(
         tree_changed_paths=(),
         commit_gate=GATE_COMMIT_SCOPED,
         doc_baseline_stale_pairs=0,
+        landing_lock_sites=(),
     )
 
 
@@ -226,14 +228,15 @@ def then_override_inert(world: dict[str, Any]) -> None:
 
 
 @then(
-    "the wave names the working tree, the commit gate, the doc baseline and the "
-    "tracker id space"
+    "the wave names the working tree, the commit gate, the landing order, the "
+    "doc baseline and the tracker id space"
 )
 def then_names_media(world: dict[str, Any]) -> None:
     named = {medium.name for medium in world["plan"].shared_media}
     assert named == {
         MEDIUM_WORKING_TREE,
         MEDIUM_COMMIT_GATE,
+        MEDIUM_LANDING_ORDER,
         MEDIUM_DOC_BASELINE,
         MEDIUM_TRACKER_IDS,
     }
