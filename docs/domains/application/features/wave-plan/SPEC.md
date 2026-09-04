@@ -308,11 +308,19 @@ instructions rather than in the tracker:
 | `queue-only-wait` | `--wait` appends the caller to a queue nothing drains and returns at once with exit 1; prose that calls it blocking is what stops an agent reading the exit code |
 | `unknown-form` | a subcommand this derivation has not measured — reported rather than passed, because an unjudged site that reads as clean is the class this instrument exists to remove |
 
-`landing.lock_sites(sources)` derives the population from `(label, text)` pairs
-and judges each invocation by its **flags**, never by the prose around it: a
-check that read English for the promise "blocks until free" would repeat the
-keyword-proximity class already filed three times against the docs audit. The
-command reads the composed flow artifacts — the agent directories from
+`landing.lock_sites(invocations)` judges each invocation by its **flags**, never
+by the prose around it: a check that read English for the promise "blocks until
+free" would repeat the keyword-proximity class already filed three times against
+the docs audit.
+
+**It no longer parses.** This module derived its own population until BDL-068 S5,
+when `beadloom-0mdo.51` generalised that grammar to every `bd` subcommand and
+homed it at the seam. There is now ONE grammar for "this text invokes `bd`"
+(`services.bd_seam.invocations.text_invocations`) and ONE judgement of the lock,
+here; `services.bd_seam.assumptions.lock_invocations` is the only bridge between
+them, and the application layer imports no `re` at all. Two derivations of one
+kind is the defect BDL-068 removes, so there is one. The population it is handed
+is still the composed flow artifacts — the agent directories from
 `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES`, the project layer
 from `.beadloom/flow` — so a tool added to the flow is covered by the same act.
 
@@ -392,7 +400,8 @@ not tell them apart.
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
-| `lock_sites(sources)` | every landing-lock invocation in the flow artifacts, and what its call form grants |
+| `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
+| `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
 | `defect_detail(defect)` | what one defective call form costs and the flag that fixes it |
 | `title_id_mismatches(records)` | every bead whose title numbers it differently |
 

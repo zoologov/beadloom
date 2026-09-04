@@ -55,6 +55,7 @@ is what holds that line.
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
 | `typed_surface.py` | `typed-surface` |
+| `bd_calls.py` | `bd-calls` |
 
 `config-check` prints two derivations beside the drift list, because neither has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
@@ -87,7 +88,7 @@ tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carry
 at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
 (BDL-UX #181).
 
-`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads four things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, and every instruction of the landing lock in the composed flow artifacts. The last population is DERIVED rather than listed -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
+`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads four things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, and every instruction of the landing lock in the composed flow artifacts. The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
 wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
 each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate
 owner and the shared media were printed only for a wave of more than one bead, so the
@@ -303,3 +304,16 @@ constant, so a second string added later is judged by the same claim.
 - `cli` — the registration shell this component is wired into
   ([docs/services/cli.md](../../cli.md))
 - `guard-probes`, `bd-seam` — the other two `services`-layer components
+
+`bd_calls.py` renders the derived `bd` call-site population that `bd_seam` computes. BDL-068's
+CONTEXT Q4 decided the shape: an External `bd` finding is answered by deriving our own call
+sites and stating what each assumes about the answer, never by a wrapper, because a wrapper is
+a second thing to keep in step with upstream and a derived population fails on a call site
+added later. `beadloom bd-calls` prints the population by channel, the verdict counts, the
+selected sites and the regions the derivation did not reach; `--assumption` and `--unsettled`
+narrow it, `--json` emits the same facts as data, and `--strict` turns an unsettled site into
+exit 1. The default is exit 0 over unsettled sites, because most of them are instructions to a
+person and the fix for an instruction is a role duty rather than an exit code. `--assumption`
+with a name the derivation does not judge exits 2 rather than printing an empty list, which
+would read as "no site makes that assumption". Measured on this repository: 278 sites, 12 in
+Python, 264 in instructing artifacts and 2 in `.git/hooks/`.

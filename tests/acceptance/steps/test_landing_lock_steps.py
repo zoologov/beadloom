@@ -26,11 +26,22 @@ from beadloom.application.waves import (
     plan_waves,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.services.bd_seam.assumptions import lock_invocations
+from beadloom.services.bd_seam.invocations import text_invocations
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 scenarios("../features/landing_lock.feature")
+
+
+def _sites(artifacts: list[tuple[str, str]]) -> tuple[Any, ...]:
+    """Text to judged sites, composed the way the services edge composes it.
+
+    The grammar lives at the seam since `beadloom-0mdo.51` and the judgement
+    stays here, so a step that starts from text runs both.
+    """
+    return lock_sites(lock_invocations(text_invocations(artifacts)))
 
 
 @pytest.fixture()
@@ -103,7 +114,7 @@ def given_no_artifact(world: dict[str, Any]) -> None:
 
 @when("the landing lock sites are derived")
 def when_sites_derived(world: dict[str, Any]) -> None:
-    world["sites"] = lock_sites(world["artifacts"])
+    world["sites"] = _sites(world["artifacts"])
 
 
 @when("the wave shape is decided")
@@ -114,7 +125,7 @@ def when_decided(world: dict[str, Any]) -> None:
             tree_changed_paths=environment.tree_changed_paths,
             commit_gate=environment.commit_gate,
             doc_baseline_stale_pairs=environment.doc_baseline_stale_pairs,
-            landing_lock_sites=lock_sites(world["artifacts"]),
+            landing_lock_sites=_sites(world["artifacts"]),
         )
     world["plan"] = plan_waves(
         world["beads"], conn=world["conn"], environment=environment

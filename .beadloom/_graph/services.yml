@@ -762,7 +762,7 @@ nodes:
   - ref_id: bd-seam
     kind: component
     summary: "Mockable seam over the `bd` (beads) CLI — funnels every bd invocation through one testable function"
-    source: src/beadloom/services/bd_seam.py
+    source: src/beadloom/services/bd_seam/
     docs:
       - docs/services/components/bd-seam/DOC.md
 

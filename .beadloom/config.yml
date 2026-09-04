@@ -119,3 +119,17 @@ docs_audit:
     - path: docs/services/cli.md
       fact: version
       value: "1.0.4"
+    # services/components/bd-seam/DOC.md: the same class again, and the count is
+    # now the argument. `beadloom-0mdo.51` needed a THIRD triple for the same one
+    # sentence-shape in the same slice — "measured on bd 1.0.4" — this time in the
+    # component doc of the seam whose whole subject is what a specific release of
+    # `bd` was measured to do. Three triples, three documents, one measurement:
+    # #253 is a class, and the shape of its fix is a fact that knows whose product
+    # a version belongs to rather than a suppression per document. Load-bearing
+    # here for a stronger reason than in the other two: the module records
+    # `BD_MEASURED_VERSION` and a test fails when a different `bd` is installed,
+    # so deleting the version from the prose would leave the doc describing a
+    # measurement it cannot attribute while the code still can.
+    - path: docs/services/components/bd-seam/DOC.md
+      fact: version
+      value: "1.0.4"

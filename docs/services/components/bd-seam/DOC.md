@@ -2,17 +2,26 @@
 
 Internal building block of the MCP server service.
 
-**Source:** `src/beadloom/services/bd_seam.py`
+**Source:** `src/beadloom/services/bd_seam/`
 
 ---
 
 ## Overview
 
-A single, thin, **mockable** seam over the `bd` (beads) CLI. The MCP
-process-tools (`task_init` / `complete_bead` / `checkpoint`) drive the beads
-issue tracker; rather than scattering `subprocess` calls across the handlers,
-every `bd` invocation funnels through `run_bd`. Tests patch `run_bd` (or the
-module-level `subprocess.run`) so the tools run without a real `bd` binary.
+The boundary between this project and the `bd` (beads) CLI, in two halves.
+
+`client.py` is a single, thin, **mockable** seam. The MCP process-tools
+(`task_init` / `complete_bead` / `checkpoint`) drive the beads issue tracker;
+rather than scattering `subprocess` calls across the handlers, every `bd`
+invocation funnels through `run_bd`. Tests patch `run_bd` (or
+`bd_seam.client.subprocess.run`) so the tools run without a real `bd` binary.
+
+`invocations.py`, `assumptions.py` and `population.py` derive the other half:
+**where** this project reaches `bd` and **what each call form assumes about the
+answer**. BDL-068's CONTEXT Q4 decided that shape — an External `bd` finding is
+answered by deriving our own call sites, never by a wrapper, because a wrapper is
+a second thing to keep in step with upstream and a derived population fails on a
+call site added later. `beadloom bd-calls` prints the report.
 
 ## Public surface
 
@@ -26,7 +35,55 @@ module-level `subprocess.run`) so the tools run without a real `bd` binary.
   and it comes back as a `BdResult`.
 - `_BD_TIMEOUT_S` — the per-invocation timeout (60s).
 
+### The derived call-site population
+
+- `text_invocations(sources, *, channel=...)` / `python_invocations(sources)` —
+  the one grammar, over `(label, text)` pairs. The text channel anchors on
+  **command position**; the Python channel reads argv from the AST and resolves
+  module-level string constants.
+- `BdInvocation` — `source`, `line`, `channel`, `text`, `words`, `flags`,
+  `unresolved_arguments`.
+- `call_sites(invocations)` → `BdCallSite`, which adds `subcommand` and
+  `assumptions`; `report_of(sites, unreached=...)` → `CallSiteReport`, which adds
+  `measured_against`.
+- `Assumption` — `name`, `verdict`, `detail`. The verdicts are `secured`,
+  `unsecured`, `holds` and `unmeasured`.
+- `lock_invocations(invocations)` — the bridge to `wave-plan`'s landing-lock
+  judgement, so a `merge-slot` form is parsed once here and judged once there.
+- `project_report(project_root)` — the whole population for a project, over four
+  channels: the composed flow, the shipped templates, the installed package's
+  Python, and `.git/hooks/`.
+- `BD_MEASURED_VERSION` — the release every verdict was taken against, `1.0.4`.
+
 ## Invariants
+
+- **A verdict names the release it was measured on.** Every entry in the
+  assumption table was taken on bd 1.0.4 with the streams read separately and the
+  exit codes read without a pipe, and `BD_MEASURED_VERSION` records it.
+  `tests/test_bd_call_sites.py::test_the_recorded_release_is_the_one_installed`
+  fails when a different `bd` is installed, naming what has to be re-measured.
+  That is not ceremony: four premises BDL-068 S5 inherited were re-measured and
+  destroyed — BDL-UX #194 and #237 (`bd merge-slot` grants no exclusion; it does,
+  and 32 concurrent acquires produced exactly one winner per round), #97
+  (`--suggest-next` names still-blocked beads; it does not, measured in both
+  directions) and `beadloom-l2f2` (`bd import -i` does not exist; it does, as a
+  documented legacy alias, and imported 137 issues at exit 0). An External defect
+  a later `bd` fixes must fail loudly rather than quietly guard nothing.
+- **An unjudged site never reads as a clean one.** A subcommand outside the
+  measured table carries `unmeasured-subcommand`, and a subcommand measured to
+  carry no breakable assumption carries none — those are different facts, and
+  today 48 of this repository's 278 sites are the first kind (`bd swarm` 26,
+  `bd gate` 22).
+- **The unreached region is part of the answer.** `beadloom-0mdo.58` measured the
+  reach before the population existed: a Python sweep sees about a twentieth of
+  the subject. `population.UNREACHED` names four regions with their reasons —
+  the coordinator's launch prompt, `.claude/development/` (which QUOTES call forms
+  as evidence and instructs nobody), a `bd` a person types, and string literals in
+  this project's Python, whose emitted scripts are read where they run instead.
+- **The grammar reads command position, not the word `bd`.** Measured over this
+  repository's 65 instructing artifacts, the anchored sweep returns 266
+  invocations and no prose; the unanchored one also reports `bd verifies`,
+  `bd checks the`, `bd is available` and `a bd comment with`.
 
 - **Text is decoded by a stated codec, never by the image's locale** (BDL-061.37).
   `bd` is run with `encoding="utf-8", errors="surrogateescape"`. `text=True`
@@ -57,4 +114,6 @@ The single funnel for the MCP process-tools (`task_init` / `complete_bead` /
 `checkpoint`) that drive the beads tracker. Tests patch `run_bd` (or the
 module-level `subprocess.run`) to run the tools without a real `bd` binary.
 
-> Component doc (BDL-051). Public surface verified against `bd_seam.py`.
+> Component doc (BDL-051; the population added by BDL-068 S5,
+> `beadloom-0mdo.51`). Public surface verified against
+> `src/beadloom/services/bd_seam/`.

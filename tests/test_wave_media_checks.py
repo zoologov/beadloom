@@ -34,6 +34,7 @@ from beadloom.application.waves import (
     STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    LockSite,
     MediumCheck,
     WaveEnvironment,
     WorkItemAxes,
@@ -44,10 +45,24 @@ from beadloom.application.waves import (
     title_id_mismatches,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.services.bd_seam.assumptions import lock_invocations
+from beadloom.services.bd_seam.invocations import text_invocations
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+
+def _lock_sites(sources: list[tuple[str, str]]) -> tuple[LockSite, ...]:
+    """Judge the lock instructions in *sources*, through the one shared grammar.
+
+    `beadloom-0mdo.51` moved the grammar to the seam and left the judgement here,
+    so a test that starts from TEXT composes the two the same way the services
+    edge does. Composing them here rather than mocking keeps these tests over the
+    real path.
+    """
+    return lock_sites(lock_invocations(text_invocations(sources)))
+
 
 CLEAN = WaveEnvironment(
     tree_changed_paths=(),
@@ -58,7 +73,7 @@ CLEAN = WaveEnvironment(
 
 #: One instruction of the landing lock in the form that grants nothing — the
 #: form four of this project's own five sites carried until BDL-068 S5.
-GRANTS_NOTHING = lock_sites([("a.md", "bd merge-slot acquire --wait\n")])
+GRANTS_NOTHING = _lock_sites([("a.md", "bd merge-slot acquire --wait\n")])
 
 
 def _approving(*nodes: str) -> WorkItemAxes:
@@ -428,3 +443,4 @@ class TestTheGuaranteeSentenceMatchesTheCode:
         text = waves_package.__doc__ or ""
         assert "CHECKS the medium's plan-time precondition" in text
         assert "cannot be, by anything holding a plan" in text
+

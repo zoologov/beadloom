@@ -1874,6 +1874,65 @@ The reading rule, why the declaration is parsed without a TOML parser, and the 2
 measurement behind the hook's scope are in the
 [Typed Surface DOC](../domains/application/components/typed-surface/DOC.md).
 
+### beadloom bd-calls
+
+Every place this project reaches `bd`, and what each call form assumes about the answer
+(BDL-068 S5, `beadloom-0mdo.51`).
+
+```bash
+beadloom bd-calls [--project DIR] [--assumption NAME] [--unsettled] [--strict] [--json]
+```
+
+**A report, not a wrapper.** BDL-068's CONTEXT Q4 decided it: an External `bd` finding is
+answered by deriving our own call sites, because a wrapper is a second thing to keep in step
+with upstream and a derived population fails on a call site added later.
+
+**Four channels, and the majority of them are not code.** The composed flow artifacts, the
+templates this project ships, the installed package's Python (via the seam's `run_bd`) and the
+scripts in `.git/hooks/` — which reaches `post-merge`, written by `bd init`, tracked nowhere
+and named nowhere under `src/`.
+
+**Four verdicts, because two are not enough.** `secured` (the call form makes the assumption
+true), `unsecured` (it relies on a default measurement shows is narrower than the question),
+`holds` (no flag can secure it and it is measured true on the recorded release) and
+`unmeasured` (a subcommand this derivation has not measured — never a clean site).
+
+Measured on this repository, against **bd 1.0.4**:
+
+```
+$ beadloom bd-calls
+278 `bd` call site(s), measured against bd 1.0.4: 2 hook, 264 instruction, 12 python
+
+    48  unmeasured-subcommand      unmeasured
+    42  untruncated-population     unsecured
+    36  exclusive-hold             secured
+    25  unblocked-is-ready         holds
+    17  allocated-id               unsecured
+    11  intended-id                unsecured
+```
+
+The three largest findings are worth naming. `bd ready` is unsecured on truncation at 40 sites
+and this flow calls it authoritative — its cap is 100 rows, announced on standard error, and
+`CLAUDE.md` tells every role to confirm against it. The 48 unmeasured sites are `bd swarm` (26)
+and `bd gate` (22), the two commands the coordinator orchestrates every wave with. And every
+`bd list` call in this project's Python names both of the filters `bd list` applies by default,
+which is BDL-UX #187 answered at the consumer.
+
+`--assumption` narrows to one assumption and `--unsettled` to the sites nothing settles.
+`--json` emits the same facts as data. `--strict` exits 1 when any site is unsettled; the
+default exits 0, because most unsettled sites are instructions to a person and the fix for an
+instruction is a role duty rather than an exit code. `--assumption` with a name the derivation
+does not judge exits 2 rather than printing an empty list, which would read as "no site makes
+that assumption".
+
+Every verdict is pinned to `BD_MEASURED_VERSION`, and a test fails when a different `bd` is
+installed. Four premises this population was built to check were re-measured and destroyed —
+BDL-UX #194 and #237, #97 and `beadloom-l2f2` — so a verdict carried across a release without
+re-measuring is how a withdrawn defect comes back as a guard over nothing.
+
+The grammar, the assumption table and the regions the derivation cannot reach are in the
+[bd Seam DOC](components/bd-seam/DOC.md).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).

@@ -39,7 +39,10 @@ each one's behaviour, never by a wrapper.
 
 **Over a shape, not a spelling.** A site is any invocation of the lock, whatever
 surrounds it, and the verdict comes from the FLAGS of that invocation rather
-than from the prose around it. Reading the prose for a promise ("blocks until
+than from the prose around it. The grammar that finds those invocations is not
+here: `beadloom-0mdo.51` generalised it to every ``bd`` subcommand and homed it
+at the seam, so this module receives :class:`LockInvocation` records and judges
+them. Reading the prose for a promise ("blocks until
 free") would be the keyword-proximity class this project has already filed three
 times against the docs audit. The cost of that choice is stated rather than
 hidden: a subcommand this module has not measured is reported as
@@ -51,7 +54,6 @@ is the defect the whole epic exists to remove.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -67,6 +69,7 @@ __all__ = [
     "HOLDER_FLAG",
     "LOCK_COMMAND",
     "WAIT_FLAG",
+    "LockInvocation",
     "LockSite",
     "defect_detail",
     "lock_sites",
@@ -120,14 +123,6 @@ _DETAIL: dict[str, str] = {
     ),
 }
 
-#: One invocation of the lock: the command, its subcommand, and the flags up to
-#: whatever ends the command line. The terminators are the ones a Markdown
-#: instruction actually uses — a closing backtick, a comment, a pipe, a
-#: separator — so a sentence continuing after the command does not become flags.
-_INVOCATION = re.compile(
-    r"\bbd\s+merge-slot\s+(?P<sub>[a-z][a-z-]*)(?P<flags>[^\n`|;&#]*)"
-)
-
 #: The subcommands whose behaviour was measured, and the defect each call form
 #: walks into when a flag is missing. ``check`` and ``create`` read and create;
 #: neither claims exclusion, so neither can be called wrongly here.
@@ -137,6 +132,28 @@ _MEASURED: dict[str, str | None] = {
     "check": None,
     "create": None,
 }
+
+
+@dataclass(frozen=True)
+class LockInvocation:
+    """One landing-lock invocation, already parsed, waiting to be judged.
+
+    The parsing is not done here. There is ONE grammar in this project for "this
+    text invokes ``bd``" and it lives at the seam, with the population it feeds
+    (`beadloom-0mdo.51`); this module owns the JUDGEMENT — which of the three
+    measured failures a call form walks into — and takes its input as data, the
+    way every other check in this package does. Two derivations of the same kind
+    is the defect the epic is removing, so there is one.
+
+    ``subcommand`` is the word after ``merge-slot`` and ``flags`` is every
+    ``-``-leading token of the invocation, with any ``=value`` already cut off.
+    """
+
+    source: str
+    line: int
+    text: str
+    subcommand: str
+    flags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -162,7 +179,7 @@ def defect_detail(defect: str) -> str:
     return _DETAIL.get(defect, f"unrecognised defect {defect!r}")
 
 
-def _defects_of(subcommand: str, flags: str) -> tuple[str, ...]:
+def _defects_of(subcommand: str, flags: tuple[str, ...]) -> tuple[str, ...]:
     """Which of the measured failures this invocation walks into."""
     if subcommand not in _MEASURED:
         return (DEFECT_UNKNOWN_FORM,)
@@ -175,30 +192,19 @@ def _defects_of(subcommand: str, flags: str) -> tuple[str, ...]:
     return tuple(found)
 
 
-def lock_sites(sources: Iterable[tuple[str, str]]) -> tuple[LockSite, ...]:
-    """Every landing-lock invocation in *sources*, with what its form grants.
+def lock_sites(invocations: Iterable[LockInvocation]) -> tuple[LockSite, ...]:
+    """Every landing-lock invocation in *invocations*, with what its form grants.
 
-    *sources* is ``(label, text)`` per artifact — taken as data, like every other
-    observation this package's checks read, so the derivation runs without a
-    repository, without a scaffolded flow and without ``bd``.
-
-    Order is the order the artifacts were handed over and then by line, so two
-    runs over one project produce the same list and a diff of two runs is a diff
-    of the instructions.
+    Order is the order they were handed over, so two runs over one project
+    produce the same list and a diff of two runs is a diff of the instructions.
     """
-    found: list[LockSite] = []
-    for label, text in sources:
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            for match in _INVOCATION.finditer(line):
-                subcommand = match.group("sub")
-                flags = match.group("flags")
-                found.append(
-                    LockSite(
-                        source=label,
-                        line=line_number,
-                        invocation=match.group(0).strip(),
-                        subcommand=subcommand,
-                        defects=_defects_of(subcommand, flags),
-                    )
-                )
-    return tuple(found)
+    return tuple(
+        LockSite(
+            source=invocation.source,
+            line=invocation.line,
+            invocation=invocation.text,
+            subcommand=invocation.subcommand,
+            defects=_defects_of(invocation.subcommand, invocation.flags),
+        )
+        for invocation in invocations
+    )

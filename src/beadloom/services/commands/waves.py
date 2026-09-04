@@ -149,46 +149,6 @@ def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
         conn.close()
 
 
-def _flow_artifacts(project_root: Path) -> list[tuple[str, str]]:
-    """Every composed flow artifact an agent is handed, as ``(label, text)``.
-
-    Derived from the flow's own declarations rather than listed: the agent
-    directories come from :data:`TOOL_AGENT_DIRS`, the slash commands from
-    :data:`COMMAND_FILES`, and the project layer is whatever ``.beadloom/flow``
-    holds. A tool added to either mapping is therefore read without anyone
-    editing this function — the same reason ``role-duties`` derives its role
-    population from the shipped fragments.
-
-    The composed file on disk is read rather than the composition, because what
-    decides an agent's behaviour is the file it is given. A template this
-    project ships reaches an agent only through a composition that lands here,
-    so fixing a template and never regenerating leaves the instruction wrong and
-    this check red, which is the correct verdict.
-    """
-    from beadloom.onboarding.agentic_flow_setup import COMMAND_FILES
-    from beadloom.onboarding.composer import PROJECT_FLOW_DIRNAME
-    from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS
-
-    candidates: list[Path] = [project_root / ".claude" / "CLAUDE.md"]
-    for agent_dir in TOOL_AGENT_DIRS.values():
-        candidates.extend(sorted((project_root / agent_dir).glob("*.md")))
-        candidates.extend(
-            project_root / agent_dir.parent / "commands" / f"{name}.md"
-            for name in COMMAND_FILES
-        )
-    candidates.extend(sorted((project_root / PROJECT_FLOW_DIRNAME).rglob("*.md")))
-    artifacts: list[tuple[str, str]] = []
-    for path in candidates:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            # An artifact that cannot be read is not one that instructs nothing;
-            # it is simply absent from the population, which the verdict counts.
-            continue
-        artifacts.append((str(path.relative_to(project_root)), text))
-    return artifacts
-
-
 def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
     """Measure the four media the graph cannot see, here at the services edge.
 
@@ -199,13 +159,18 @@ def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
     """
     from beadloom.application.waves import WaveEnvironment, lock_sites
     from beadloom.doc_sync.git_baseline import changed_paths
+    from beadloom.services.bd_seam.assumptions import lock_invocations
+    from beadloom.services.bd_seam.invocations import text_invocations
+    from beadloom.services.bd_seam.population import flow_artifacts
 
     changed = changed_paths(project_root)
     return WaveEnvironment(
         tree_changed_paths=None if changed is None else tuple(sorted(changed)),
         commit_gate=_commit_gate(project_root),
         doc_baseline_stale_pairs=_stale_pairs(db_path, project_root),
-        landing_lock_sites=lock_sites(_flow_artifacts(project_root)),
+        landing_lock_sites=lock_sites(
+            lock_invocations(text_invocations(flow_artifacts(project_root)))
+        ),
     )
 
 

@@ -39,6 +39,10 @@ from beadloom.services.cli import (
 # BDL-068 `.2`.
 EXPECTED_COMMANDS = {
     "active-sync",
+    # BDL-068 S5, `beadloom-0mdo.51`: the derived `bd` call-site population.
+    # CONTEXT Q4 answers an External `bd` finding by deriving our own call
+    # sites and stating what each assumes, never by a wrapper.
+    "bd-calls",
     # BDL-068 S1.4: reads a work item's `## Axes` section back, so a bead's
     # `refs:` is generated from the document rather than written beside it.
     "axes",
