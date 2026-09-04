@@ -228,6 +228,23 @@
 
     **Related:** the review-brief independence report (one tracker identity for every role), #235 and #236 (the other two conventions in this wave whose isolation was assumed rather than checked).
 
+
+    > **WITHDRAWN 2026-09-04 by `beadloom-0mdo.39`, and #194 with it. The primitive is sound; our call form was not.**
+    > Measured on bd 1.0.4 in an isolated rig with exit codes read WITHOUT a pipe: `acquire` on a held slot
+    > returns **rc 1**; 32 concurrent acquires over four rounds produced exactly one winner each round; and
+    > `release --holder` **is** owner-checked. Verified a second time by the coordinator, independently, on this
+    > repository.
+    > **Both errors were ours and both are this project's own recurring shapes.** `--wait` does not block —
+    > by design it enqueues and returns 0, which is what it says it does; exclusion is plain `acquire`, judged by
+    > its exit code. And the identity collapse was passing no `--holder`: the flag exists, our instruction never
+    > used it, so every caller was the machine's user instead of a bead.
+    > **We read the message text and not the status.** That is the pipe-masking family, and it produced two
+    > filed defects — one HIGH, one P0 — against a working external tool over nine days. The coordinator
+    > verifying this correction masked an exit code through `tail` on its first attempt and got the wrong answer,
+    > which is the fourth instance in this epic and is why the shape is recorded rather than the incident.
+    > The fix is in `beadloom-0mdo.39`: `acquire`/`release --holder <bead-id>` read by exit code, a new
+    > `landing-order` shared medium, and a `landing-lock` role duty. Measured on the same derivation:
+    > 8 instruction sites of which 6 were defective at HEAD, 18 of which 0 are now.
 236. [2026-09-04] [MEDIUM] a clean room's verdict is decided by which optional extras it installed, and the convention never names them
 
     **Severity:** medium (the verdict is reported as a claim about the code, and three different verdicts about the same code were measured in one hour)
@@ -814,6 +831,13 @@
 
     **The coordinator caused this**, by treating `acquire --wait` as idempotent. But a mutual-exclusion primitive that enqueues its own holder behind itself is a deadlock the caller cannot see: `bd merge-slot check` reports a live-looking holder and a growing queue, with nothing distinguishing that from a legitimately busy slot. Combined with the two defects above, an agent following the documented discipline exactly can be blocked indefinitely by a peer that has already finished.
 
+
+    > **WITHDRAWN 2026-09-04 — see #237's withdrawal note, which covers both.** This entry and #237 are the
+    > same defect filed nine days apart, and both were wrong about the same external tool. `acquire` refuses a
+    > held slot with rc 1 and `release --holder` is owner-checked; the actor chain analysed here is real and is
+    > not what governs the slot when `--holder` is passed. The reporting agent committed after a refusal because
+    > it read the printed line rather than the exit code — the failure was ours, at the call site, and the entry
+    > stands as a record of how confidently two independent observers can misdiagnose a tool nobody status-checked.
 193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
 
     **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
