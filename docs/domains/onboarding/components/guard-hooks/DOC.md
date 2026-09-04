@@ -35,24 +35,57 @@ decision happens in the CLI, which is why a hook and a shell cannot disagree.
   silently downgraded a declared `block` to a non-blocking `warn` for any
   invocation from a subdirectory.
 - `GUARD_HOOK_RELPATH`, `SETTINGS_RELPATH`, `HOOK_EVENT` (`PreToolUse`),
-  `EDIT_MATCHER` (`Edit|Write|MultiEdit|NotebookEdit`) — the matcher is the
+  `EDIT_MATCHER` (`Edit|Write|MultiEdit|NotebookEdit|Bash`) — the matcher is the
   enforcement surface, so its value belongs in the reference rather than behind
   its name. See below for what it leaves out.
 
 ## The enforcement surface
 
 The registered entry pairs `EDIT_MATCHER` with one command per guard, so the
-guards see exactly four tool calls: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`.
+guards see five tool calls: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash`.
 
-**A file written through any other tool is unguarded.** `Bash` is the one that
-matters — `sed -i`, a heredoc, `python3 - <<EOF` all reach the filesystem without
-matching, so no guard is invoked and no firing is written. **`--liveness` cannot
-see the difference:** it reads the firing record, and an edit no guard was asked
-about leaves no record, so a session that wrote everything through `Bash` reports
-exactly like a session that complied. That is not a verdict the guard can qualify
-— nothing evaluated — which is why the limit is documented at the binding
-(BDL-UX #170 — review finding M3 is the same gap seen from the routing side, and
-both are S3 work).
+`Bash` was added in BDL-068 S4 (BDL-UX #170). Before it, a file written through
+the shell — `sed -i`, a heredoc, `python3 - <<EOF` — reached the filesystem
+without matching, so no guard was invoked and no firing was written, and
+`--liveness` could not see the difference: it reads the firing record, and an
+edit no guard was asked about leaves no record.
+
+### What widening the matcher changed about the RECORD
+
+Binding the shell tool changed what `.beadloom/guard-firings.jsonl` holds, not only
+how often a line is appended to it. A file edit reports a path; a shell edit reports
+a command line, and until `beadloom-0mdo.43` that line was stored verbatim. Measured
+on this repository's own record the day the review found it: 1 927 of 1 999 firings in
+one rotated generation held a command line, 2.0 MB of one machine's shell history in a
+plaintext file inside the project directory — on an adopter's machine as much as on
+ours, and command lines are where credentials live in practice.
+
+A shell edit therefore contributes three context keys and never the line:
+`command_name` (the program, with any `VAR=value` prefix dropped), `command_writes`
+(the derived write targets, which are a lower bound) and `command_unreadable` (why a
+line could not be tokenized). That is everything the guard ever read of a command, so
+nothing downstream lost an input. Replaying the same 1 999 firings through the
+reduction: 557 bytes a record rather than 1 007, and 370 of them still name a write
+target.
+
+Reduction rather than redaction, because redaction is a denylist: masking `KEY=value`
+and `--header`-shaped operands covers the spellings somebody thought of, and the next
+credential arrives as a positional argument or inside a heredoc. What it costs is that
+a human reading a firing sees which program ran and not how it was invoked.
+
+**A file written through any tool the matcher does not name is still unguarded**,
+and that is now reported rather than left to a paragraph.
+`application/guards/surface.py` reads this file's matcher back off disk, reads the
+`tools:` grant of every emitted role adapter, and reports which of the granted
+write paths a registered matcher names. It is derived from the on-disk artifacts
+and not from `EDIT_MATCHER` for a reason this module owns: registration is a
+merge on the command string, so a project scaffolded before a matcher widened
+keeps the narrow one across the upgrade, and the constant would report a coverage
+the project does not have.
+
+Review finding M3 — giving Beadloom its own event vocabulary, so the adapter
+forwards what happened rather than which guard to run — is the same gap seen from
+the routing side and is S3 work.
 
 Two facts about the exit codes the adapter forwards, both now carried by the
 script's own comment:

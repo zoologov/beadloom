@@ -8,6 +8,28 @@ evaluation the CLI performs appends one JSON line to
 it is deliberately **not** the index: a check that writes to the artifact it
 inspects cannot be trusted about it.
 
+**What a line HOLDS, which is a separate question from how often one is written
+(``beadloom-0mdo.43``).** A firing carries the verdict and the evaluation
+context: for a file edit, the path the harness named; for a shell edit, the
+program the line ran and the write targets a declared shape named — never the
+command line itself (:mod:`~beadloom.application.guards.hook_payload` builds it
+and states the decision in full). Until this bead it carried the line verbatim, because
+widening the binding to the shell tool (BDL-UX #170) changed the record's
+contents while every sentence about it still described a record of paths.
+Measured on this repository the day it was found: 1 897 of 1 941 firings held a
+command line, 895 481 characters of one session's shell history in a plaintext
+file inside the project directory. The reduction happens at that door rather
+than here, so this module writes whatever the context holds and owes the
+decision no second implementation — but a reader deciding whether to commit this
+file is reading here, which is why the decision is stated here too.
+
+**What that does NOT reach: a record already written.** Lines appended before
+this change keep their command lines until the cap rotates them out of the
+active file and a second rollover replaces the archive. Nothing rewrites them —
+a check that edits its own evidence is the shape this module exists not to be —
+so a project that wants them gone deletes ``guard-firings.jsonl`` and
+``guard-firings.1.jsonl``, at the cost of the carried counts they hold.
+
 Append-only JSONL rather than a table: an append is atomic enough for parallel
 agents (``O_APPEND`` on one line), needs no schema migration, and a corrupt line
 costs exactly that line — :func:`read_firings` skips what it cannot parse rather
@@ -64,12 +86,15 @@ ARCHIVE_RELPATH = Path(".beadloom") / "guard-firings.1.jsonl"
 
 #: How many firings the ACTIVE record holds before it rolls over.
 #:
-#: Measured: ~9.5 KB after one day of dogfooding, on a repository where the
-#: binding saw only a fraction of the writes — call it 50 firings a day at
-#: ~200 bytes each. 2000 records is therefore about six weeks of full detail on
-#: an active project and about 400 KB to parse, which is the bound the report
-#: needed and a size a human can still grep. It is a threshold, not a target: a
-#: project that wants a longer tail keeps the archive.
+#: A count rather than a size, for the reason above; what one record costs has
+#: been measured twice on this repository and moved both times, which is why the
+#: figure is dated rather than stated as a property. At BDL-061.56, before the
+#: binding saw the shell tool: ~200 bytes a record. On the generation that
+#: rotated during ``beadloom-0mdo.43``, with every command line stored: 1 007
+#: bytes over 1 999 records, so the cap held 2.0 MB rather than the 400 KB the
+#: first measurement implied. The same 1 999 replayed through the reduction this
+#: bead added: 557 bytes a record, 1.1 MB at the cap. It is a threshold, not a
+#: target: a project that wants a longer tail keeps the archive.
 ACTIVE_FIRINGS_CAP = 2000
 
 #: Marks the carried-summary line, which is NOT a firing. :func:`read_firings`

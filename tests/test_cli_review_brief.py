@@ -587,7 +587,11 @@ class TestSeamShape:
             ["bd", "comments", "beadloom-mr2l.21", "--json"],  # noqa: S607
             cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]),
             capture_output=True,
-            text=True,
+            # JSON is UTF-8 by RFC 8259, and these comments carry em dashes. Left
+            # to the image this raised under `LC_ALL=C` (BDL-068 `.49`). CI never
+            # saw it because `bd` is not installed on the runner and the row skips.
+            encoding="utf-8",
+            errors="strict",
             check=False,
         )
         if proc.returncode != 0 or not proc.stdout.strip():

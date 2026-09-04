@@ -142,7 +142,7 @@ beadloom install-hooks
 
 Installs **both** hooks by default:
 
-- **pre-commit** (lighter) — judges **the commit, not the tree**: lint and type-check over the staged source files, `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
+- **pre-commit** (lighter) — judges **the commit, not the tree**: lint over the staged source files, a type check over the staged files inside the surface the project declares typed (derived per run from `[tool.mypy]`; a surface that could not be derived reads `NOT CHECKED` with its reason and never blocks), `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
 - **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → docs-quality → doc-spaces → config-check → doctor) over the whole tree and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
@@ -210,7 +210,7 @@ for Claude Code); the five work roles are subagents:
 
 1. **`/task-init`** — scaffold the work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) and create the beads (tracked in `bd`).
    - **explore** — step 0.5, mandatory and before the type is chosen: derive the `## Axes` section with `beadloom impact <path|symbol> --section` and paste it into the BRIEF or the RFC. The axis count is what says whether a work item is a bug, so the type is decided from a derivation rather than from how the request was phrased. This role creates no bead, so the bead DAG stays four-role.
-2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, and states the media a concurrent wave shares regardless:
+2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, names each wave's gate owner and each bead's clean room, and states the four media every wave shares whatever its width:
    - **dev** — implement the bead (TDD), update its `SPEC.md`/`DOC.md`.
    - **test** — write/extend tests, verify coverage.
    - **review** — read-only quality + boundary check (`beadloom review-brief`, `beadloom diff`, `lint`); the brief withholds the author's own comments until a verdict is recorded.

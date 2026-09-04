@@ -103,9 +103,11 @@ from beadloom.application.guards.contract import GuardProbes
 from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import record_firing
 from beadloom.application.guards.hook_payload import (
+    COMMAND_KEY,
     HookPayloadError,
     UnknownHarnessError,
     context_from_hook_payload,
+    shell_command_context,
 )
 from beadloom.application.guards.liveness import build_liveness
 from beadloom.application.guards.models import (
@@ -118,12 +120,14 @@ from beadloom.application.guards.project_root import (
     ProjectLocation,
     locate_project_root,
 )
+from beadloom.application.guards.surface import build_surface
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from beadloom.application.guards.liveness import GuardLiveness
+    from beadloom.application.guards.surface import BindingSurface
 
 #: Stands in for the guard name when the invocation never named one.
 UNNAMED_GUARD = "(no guard named)"
@@ -246,6 +250,9 @@ class InvocationResult:
     exit_code: int
     verdict: GuardVerdict | None = None
     liveness: tuple[GuardLiveness, ...] = ()
+    #: The binding's enforcement surface, carried beside the firings because a
+    #: report of firings alone cannot say what the binding never saw (#170).
+    surface: BindingSurface | None = None
     project_root: Path | None = None
     recorded_at: Path | None = None
     not_recorded_because: str = ""
@@ -377,7 +384,9 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
             because=_BECAUSE_NO_REPORT,
             remediation=_USAGE_REMEDIATION,
         )
-    return InvocationResult(exit_code=0, liveness=rows, project_root=root)
+    return InvocationResult(
+        exit_code=0, liveness=rows, surface=build_surface(root), project_root=root
+    )
 
 
 def _evaluate(
@@ -460,13 +469,24 @@ def _context(invocation: GuardInvocation) -> dict[str, str]:
 
 
 def _parse_context(pairs: tuple[str, ...]) -> dict[str, str]:
-    """Parse repeated ``--context k=v`` flags into a mapping."""
+    """Parse repeated ``--context k=v`` flags into a mapping.
+
+    ``command=`` goes through the same reduction as a harness payload rather
+    than into the mapping as it was typed (``beadloom-0mdo.43``). A shell caller
+    and a hook write to one file, so a line admitted here would be a second door
+    into the record that the first one's decision does not cover — and this
+    epic's whole subject is two things that can disagree about one fact.
+    """
     context: dict[str, str] = {}
     for pair in pairs:
         key, separator, value = pair.partition("=")
         if not separator or not key.strip():
             raise GuardUsageError(_CONTEXT_WHY.format(pair=pair))
-        context[key.strip()] = value
+        name = key.strip()
+        if name == COMMAND_KEY:
+            context.update(shell_command_context(value))
+            continue
+        context[name] = value
     return context
 
 

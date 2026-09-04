@@ -145,7 +145,7 @@ they did not check — never a new red build.
 
 **There is no `on:` key, and event routing is not Beadloom's today.** Which tool
 invocations count as an edit is decided entirely by the harness adapter — in
-Claude Code, the `Edit|Write|MultiEdit|NotebookEdit` matcher in
+Claude Code, the `Edit|Write|MultiEdit|NotebookEdit|Bash` matcher in
 `.claude/settings.json` —
 and which guards run is one settings entry per guard name. Beadloom is told
 "evaluate this guard for this context"; it is not told, and does not decide, what
@@ -158,47 +158,130 @@ when composition and adapters are reworked.
 
 A guard answers about the events the harness sends it, so what the harness never
 sends is what the guard never guards. The emitted adapter is registered on
-`PreToolUse` with the matcher `Edit|Write|MultiEdit|NotebookEdit`, one entry per
-guard name: those four tool calls are the whole surface.
+`PreToolUse` with the matcher `Edit|Write|MultiEdit|NotebookEdit|Bash`, one entry
+per guard name.
 
-**A write that reaches the filesystem any other way fires no guard.** A file
-edited through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — matches nothing
-in that list, so no guard is asked about it, no verdict exists, and no firing is
+`Bash` was absent until BDL-068 S4, and its absence is BDL-UX #170. A file edited
+through the shell — `sed -i`, a heredoc, `python3 - <<EOF` — matched nothing in
+the list, so no guard was asked about it, no verdict existed and no firing was
 recorded. It was found by dogfooding S1 on this repository, where a session
 working under an instruction to prefer `Bash` for edits left a whole class of
-writes to this very tree unguarded (BDL-UX #170).
+writes to this very tree unguarded, and `--liveness` could not tell that session
+apart from a compliant one: the report is computed from the firing record, the
+configuration and the project's files, and an edit nobody was asked about leaves
+nothing in any of the three.
 
-**`--liveness` cannot tell that apart from compliance.** The report is computed
-from the firing record, the configuration and the project's files, and an edit
-nobody was asked about leaves nothing in any of the three. A session that edited
-only through `Bash` produces the same report as a session that routed every edit
-through `Edit` and had nothing to warn about — and as a session that made no
-edits at all.
+Three things close it, and only the third generalises past this one matcher.
 
-This is a property of the **binding**, not of a verdict, which is why it is
-written here and not widened into `not_covered`. `not_covered` states what one
-evaluation did not check. An unguarded write has no evaluation to attach a note
-to, and a verdict that mentioned edits it was never told about would be
-inventing knowledge in the one field whose whole product is honesty. The rule
-this feature applies to every verdict — unknown is not zero — applies to its own
-surface, and the honest form of it is this paragraph.
+**A shell command's write set is a lower bound, never a set.**
+`shell_targets.read_shell_command` reads the targets a declared set of write
+shapes names — a `>`/`>>`/`>|` redirection, `tee`, `touch`, `truncate`, `sed -i`,
+the destination of `cp`/`mv`/`install`/`ln`, and `dd of=` — over a `shlex`
+tokenization, so `>f`, `> f` and `1> f` are one shape rather than three
+spellings. What `sh -c "$CMD"` or an interpreter reading a heredoc writes is not
+derivable, and the module says so rather than reporting an empty set.
 
-Two pieces are named rather than promised. Making Beadloom own an event
-vocabulary, so the adapter forwards *what happened* instead of *which guard to
-run*, is S3's work — the same gap the review recorded as M3, seen from the other
-end. And BDL-UX #170 asks `--liveness` to report the share of write paths a
-binding could have seen, which is what would turn this section from a statement
-into a measurement.
+**A shell command line is reduced before it is stored, and the line is not stored.**
+`hook_payload.shell_command_context` is the one door a model-supplied command line
+goes through — from the harness payload and from `--context command=...` alike — and
+what comes out is the three facts the guard reasons about: `command_name` (the
+program, with any leading `VAR=value` dropped), `command_writes` (the derived
+targets) and `command_unreadable` (why a line could not be tokenized). The context is
+echoed into the verdict and appended to the firing record, so a key admitted here is a
+value written to a plaintext file inside the project directory.
+
+Until `beadloom-0mdo.43` the line was stored verbatim, bounded only at 2 000
+characters. Widening the binding to `Bash` had changed what the record HOLDS and not
+only how often it is written, and nothing said so: `COMMAND_LIMIT`'s comment argued
+about verdict quality where the question was disclosure, this document described a
+record of paths, and the shipped `.gitignore` entry told every adopter that "a team
+that wants the audit trail deletes this line, once". Measured on this repository's own
+record: one rotated generation held 1 927 command lines in 1 999 firings, 2.0 MB of
+one machine's shell history; the same firings replayed through the reduction are 557
+bytes a record rather than 1 007, and 370 of them still name a write target.
+
+Reduction rather than redaction, and the choice is stated because either is defensible.
+Masking `KEY=value` and `--header`-shaped operands is a denylist, and a denylist is the
+spellings somebody thought of — the next credential is a positional argument, a heredoc
+body, or a flag nobody enumerated. Keeping only the derived facts decides what is kept,
+so an unanticipated spelling is outside it by construction. The cost: a human reading a
+firing sees which program ran, not how it was invoked. Nothing in Beadloom read the
+rest — `read_shell_command` was the line's only consumer.
+
+**It does not reach a record already written.** Lines appended before the change keep
+their command lines until the cap rotates them out and a second rollover replaces the
+archive; nothing rewrites them, because a check that edits its own evidence is what
+this feature refuses to be. A project that wants them gone deletes
+`guard-firings.jsonl` and `guard-firings.1.jsonl`, losing the carried counts with them.
+
+**A shell edit therefore resolves to `PathScope.UNDETERMINED`.** `relative` stays
+`None`, which is what makes `GuardSpec.exclusion_for` return nothing, so a
+derived target never grants an exemption: `sed -i docs/a.md && python3
+write_src.py` names one write this project can see and performs one it cannot,
+and an exclusion applied to the visible half would exempt the invisible one. The
+derived targets travel in `not_covered` instead, together with the statement that
+the rest was not derived. Widening the matcher without this would have made the
+false green *wider*, because more events would then report `pass` on a target
+nobody resolved.
+
+**`--liveness` reports the surface, not only the firings.** `surface.py` derives
+three facts and compares them: the matchers registered under the hook event, read
+back out of `.claude/settings.json` rather than out of `EDIT_MATCHER`, because
+the file on disk is what the harness obeys; the tool population, read out of the
+`tools:` line of every emitted role adapter, so a tool granted to a role later
+enters the report with no edit to the code; and which of those tools write, which
+is the one thing the module declares. A tool the declaration does not classify is
+reported as **unclassified**, never counted as a non-writer — a closed-world
+table would reproduce #170 exactly one tool later. A source that could not be
+read is reported as **unresolved** and suppresses the coverage fraction outright:
+"100% of the zero tools I found" is the most confident way to state the failure
+this section is about.
+
+**Three states, because an empty population is not an unreadable one.** The
+report above got the unreadable case right and printed the empty one as `0 of 0
+write path(s) bound` — the same false green one step later, in the instrument
+built to report that class (BDL-UX #239). Role adapters that exist and grant no
+write path are reached without doing anything wrong: a `tools:` grant written as
+a YAML block sequence, which this reader takes only in the comma form; a role
+file with no front matter; a project emitting read-only roles. So
+`BindingSurface.describe` prints `NOT CHECKED`, `NOTHING TO CHECK` or a fraction,
+in the vocabulary `typed_surface.SurfacePartition` established for the identical
+distinction, and `covered` is `None` in both of the first two — `0 of 0` is not a
+fraction, it is the absence of a denominator. `unresolved` and
+`nothing_to_check` are what tell the two apart, in the text report and in
+`--liveness --json` alike.
+
+**And the report names the question it answered.** This one is about the
+artifacts ON DISK, and a `read from:` line says so on every run. The neighbouring
+question — does the COMPOSITION Beadloom would write carry the thing? — is
+answered by `role_duties.duty_report` behind `config-check`. Both instruments
+landed in one wave of BDL-068 S4 answering "does a declared thing reach the role
+that must carry it?" of two different corpora, and neither said which, so on a
+project holding no role file one reported a duty delivered to five roles while
+the other reported the artifacts missing (BDL-UX #241). The divergence is kept —
+both questions are legitimate — and each report now states its own.
+
+**What none of that closes.** `scaffold_guard_hooks` merges on the command
+string, so a project scaffolded before this release keeps its narrower matcher
+across the upgrade — re-running the scaffolder adds nothing, because the command
+it would add is already registered. That is deliberate: the module does not
+rewrite an adopter's settings, and it is why the surface is derived from the file
+on disk. A stale matcher is a reported gap on the next `--liveness` rather than a
+silence, which is the whole difference this section is about.
+
+Making Beadloom own an event vocabulary, so the adapter forwards *what happened*
+instead of *which guard to run*, remains S3's work — the same gap the review
+recorded as M3, seen from the other end.
 
 **The surface has only ever been exercised on a POSIX harness**, and that is the
 same class of unknown one axis further out. The adapter, the matcher and every
 firing recorded to date come from macOS and Linux sessions; the path rules below
-are written for a Windows harness (that is what the backslash refusal is *for*)
-and have never run under one. A `windows-latest` leg was built for exactly this
-in BDL-061.39 and withdrawn on cost by the owner in `beadloom-mr2l.64`, so the
-gap is now permanent by decision rather than pending — see *Windows: unverified
-by decision* below, which states what is derived, what is measured by proxy and
-what nobody will look at.
+answer for a Windows harness and no harness on that platform has ever produced
+one of these events. A `windows-latest` leg was built for exactly this in
+BDL-061.39 and withdrawn on cost by the owner in `beadloom-mr2l.64`, so the gap
+is now permanent by decision rather than pending — see *Windows: unverified by
+decision* below, which states what is derived, what is measured by proxy and what
+nobody will look at.
 
 ### The project a guard answers about
 
@@ -440,21 +523,69 @@ false about the file.
 #### The accepted shape, and what happens outside it
 
 **A well-formed edit target is a string that contains no C0 control character
-and no `DEL` (`U+0000`–`U+001F`, `U+007F`), contains no backslash, does not begin
-with `~`, and can be encoded for this filesystem (`os.fsencode`); it is judged
-exactly as supplied, with nothing removed first.** Anything else is refused,
-unresolved, with a stated reason. (An absent or empty target is not a refusal at
-all: it is "the harness supplied no path", which the guard states in
-`not_covered` — "no path supplied" and "a malformed path" are different facts and
-the verdict says which one it saw.) Each rule removes a spelling that means one
-file to this guard and a different one to
-whoever performs the write: a NUL ends the name in the C layer beneath the
-writer, a backslash separates directories on the harness's platform and is an
-ordinary character on this one, `~` is expanded by a shell and not here, and a
-string the filesystem cannot encode names nothing at all. Deliberately not part
-of the shape: a length limit (a long path resolves to exactly what it says, and
-the OS enforces its own maximum) and percent-encoding (nothing here decodes it,
-so `%2e%2e` names a directory called `%2e%2e`).
+and no `DEL` (`U+0000`–`U+001F`, `U+007F`), contains no directory separator this
+platform does not use, does not begin with `~`, contains no component this
+platform's own name layer would rewrite, and can be encoded for this filesystem
+(`os.fsencode`); it is judged exactly as supplied, with nothing removed first.**
+Anything else is refused, unresolved, with a stated reason. (An absent or empty
+target is not a refusal at all: it is "the harness supplied no path", which the
+guard states in `not_covered` — "no path supplied" and "a malformed path" are
+different facts and the verdict says which one it saw.) Each rule removes a
+spelling that means one file to this guard and a different one to whoever
+performs the write: a NUL ends the name in the C layer beneath the writer, `~` is
+expanded by a shell and not here, and a string the filesystem cannot encode names
+nothing at all. Deliberately not part of the shape: a length limit (a long path
+resolves to exactly what it says, and the OS enforces its own maximum) and
+percent-encoding (nothing here decodes it, so `%2e%2e` names a directory called
+`%2e%2e`).
+
+**Two of those clauses are about the platform, and both used to be one
+character.** Until `beadloom-mr2l.60` was answered the rule refused a backslash
+unconditionally, and said why: it "separates directories on the harness's
+platform and is an ordinary file-name character on this one". Both clauses are
+true and they describe two different platforms, while the guard runs in the
+harness's own process tree, where there is one. The consequence was measured
+rather than argued — `paths.py` reads no `sys.platform` and no `os.name`, and the
+refusal returns before `os.fsencode` (monkeypatched to raise, and the verdict
+still came back), so it was one code path on every operating system: on Windows,
+where `os.path.join` produces exactly that spelling, **every** edit target was
+`MALFORMED` and every guarded edit an `error` at exit 2, with a remediation
+("supply the target as a POSIX path") the harness there cannot carry out.
+
+What the rule is about is the **separator**. A spelling this platform reads as
+one names the file the writer will touch; a spelling it does not names a file
+whose reading the guard cannot settle, and it refuses rather than choose. So the
+refused set is every separator spelling Python's own path modules declare
+(`ntpath.sep`, `ntpath.altsep`, `posixpath.sep`) minus this platform's own, taken
+from `os.sep` and `os.altsep`. On a POSIX machine that is the same single
+character as before, so nothing about this project's own behaviour moves; on
+Windows it is nothing, and `src\sub/app.py` — the mixed form a Windows harness
+produces when a POSIX-spelled relative path is joined onto a native one — is one
+unambiguous path there and is treated as one.
+
+**What the shape gate then owes on Windows, and never asked.** The Win32 name
+layer does not merely parse a name, it **rewrites** one: it strips a trailing dot
+or a trailing space, and it resolves a reserved device name (`CON`, `PRN`, `AUX`,
+`NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`) to a character device in whatever directory
+it appears and whatever extension follows — `docs/CON.md` is the console. Each is
+exactly the condition this module exists for, the guard recording one file while
+the writer touches another or none, and each is a stronger argument for a refusal
+than the backslash ever was. Deliberately **not** refused: the characters Win32
+forbids outright (`<>:"|?*`). A write to such a name fails, loudly, with nothing
+created, so the guard and the writer never end up looking at different files —
+and refusing it here would be the guard inventing a naming policy nobody
+declared. The boundary is *silent rewriting*, not *illegality*.
+
+**The platform is an argument, which is the only reason any of this is
+measured.** `rejection_reason` and `resolve_edit_path` take a `PathFlavour` — the
+stdlib's parser for a platform, the separator spellings that platform declares,
+and whether its name layer rewrites names — defaulting to the one derived from
+`os.sep`. Every rule above is therefore exercised for both platforms on whatever
+machine runs the suite, in `tests/test_windows_dimension.py` and in
+`tests/acceptance/features/guard_path_shape.feature`, and the Windows answers are
+measurements rather than predictions. There is no `tests-windows` leg and there
+will not be one; what the substitution cannot reach is written down under
+*Windows: unverified by decision* below.
 
 The shape is narrow because normalising was tried twice and failed twice, in the
 same place both times: the first fix taught the resolver about `..` and opened a
@@ -537,30 +668,42 @@ What **is** measured, without a Windows kernel and on every run of the suite
 (`tests/test_windows_dimension.py`): `PureWindowsPath` implements Windows path
 parsing on every platform, and `pathlib.Path` *is* that class on a real Windows
 build. So `os.path.join("src", "app.py")` there is `src\app.py`, which names
-exactly the file a Windows writer would touch — and the shape gate above refuses
-every backslash, unconditionally, before any call whose behaviour a platform
-could change. `src/` contains no `sys.platform` and no `os.name` branch
-anywhere, which is what makes that a measurement about Windows rather than an
-inference: the refusal is one code path everywhere. **The consequence, stated
-without softening: on a Windows harness every edit target would be `MALFORMED`
-and every guarded edit an `error` at exit 2.** It is fail-closed, so it is not a
-bypass — and a guard that refuses every edit is not usable there, and its stated
-remediation ("supply the target as a POSIX path") is not something the harness
-can do. The refusal's own justification is also false there: "separates
-directories on the harness's platform and is an ordinary file-name character on
-this one" describes two different platforms, and the guard runs in the harness's
-own process tree, where there is only one. Filed as `beadloom-mr2l.60`, open,
-and deliberately not repaired by a `sys.platform` branch — that would replace one
-unverified Windows claim with another.
+exactly the file a Windows writer would touch. Since `beadloom-0mdo.33` the
+platform is also an **argument** rather than an ambient fact — a `PathFlavour`
+carrying that platform's parser, its declared separator spellings and whether its
+name layer rewrites names — so every rule of the shape gate is exercised for both
+platforms on whatever machine runs the suite: the separator rule in both
+directions, the trailing dot and space, all twenty-two reserved device names, the
+case-insensitivity of that match, and the names that merely start with a device
+name and must **not** be refused. `src/` contains no `sys.platform` and no
+`os.name` branch anywhere, asserted through the module's syntax tree rather than
+its text, which is what keeps the flavour a value the suite can substitute rather
+than a branch only a Windows runner could enter.
 
-What is **not** measured and now will not be: everything that needs the
-operating system rather than the path parser — `Path.resolve` over real Windows
-links and junctions, the filesystem's own case-folding (a property of the
-volume), `os.fsencode`'s codec, and whether a Windows harness in fact hands the
-hook a backslashed `tool_input.file_path`. No mark in the suite pins any of it:
-a strict `xfail` that no runner can ever flip is a pin nobody can close, which
-reads like a tracked question and is not one, so the residue is written down
-here instead.
+**What this replaced, recorded because the defect is more instructive than the
+fix.** Until that bead the gate refused every backslash unconditionally, so on a
+Windows harness every edit target was `MALFORMED` and every guarded edit an
+`error` at exit 2 — fail-closed, so not a bypass, and unusable there all the
+same, with a remediation ("supply the target as a POSIX path") the harness cannot
+carry out. It shipped for a release because the rule was decidable by reading and
+nobody read it: a check whose stated reason is false on the one platform where it
+bites teaches its readers to stop reading reasons.
+
+What is **not** measured and now will not be: everything that needs the operating
+system rather than the path parser. `Path.resolve` over real Windows links and
+junctions; the filesystem's own case-folding (a property of the volume);
+`os.fsencode`'s codec; whether a Windows harness in fact hands the hook a
+backslashed `tool_input.file_path`; whether the Win32 layer strips a trailing dot
+and space in exactly the way the rule above assumes, and whether a write to
+`CON.md` reaches the console on that machine as documented rather than failing.
+One more, added with the flavour and belonging to it: a target the gate
+**refuses** is settled anywhere, because the refusal is lexical and returns before
+anything touches the filesystem, but a target it **accepts** under the Windows
+flavour is then resolved by whatever kernel is running — so `resolve_edit_path`'s
+answer for an accepted Windows spelling is measured only as far as the parse.
+No mark in the suite pins any of it: a strict `xfail` that no runner can ever flip
+is a pin nobody can close, which reads like a tracked question and is not one, so
+the residue is written down here instead.
 
 ### Shipped guards
 
@@ -575,6 +718,10 @@ Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`.
 `beadloom guard --liveness` reports, per guard, its effective strictness, how
 often it fired, its last outcome, and four ways a gate stops protecting
 anything — a gate that cannot demonstrate it ran is treated as not having run.
+
+A line holds the verdict and the evaluation context: for a file edit the path the
+harness named, for a shell edit the program and the derived write targets, never the
+command line — see the reduction above.
 
 The record is **gitignored by default** (BDL-061.35): it is machine-local and
 append-only, so committing it makes every guarded edit a working-tree change and
@@ -742,7 +889,8 @@ never louder.
 | `paths.py` | the accepted shape of an edit path, and resolving it against the project root |
 | `firing.py` | the append-only firing record |
 | `liveness.py` | which guards are actually protecting something |
-| `hook_payload.py` | translating a harness hook event into guard context |
+| `hook_payload.py` | the context vocabulary, and translating a harness hook event into it |
+| `shell_targets.py` | what a shell command line says about itself: its program, and the files it is seen to write |
 | `checks/` | the shipped guards, one module each |
 
 Checks read the world exclusively through the ports in `contract.py`. The

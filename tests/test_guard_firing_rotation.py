@@ -170,5 +170,5 @@ class TestTheReportSaysWhereTheCountCameFrom:
             main, ["guard", "--liveness", "--json", "--project", str(tmp_path)]
         )
         assert result.exit_code == 0, result.output
-        rows = {row["guard"]: row for row in json.loads(result.stdout)}
+        rows = {row["guard"]: row for row in json.loads(result.stdout)["guards"]}
         assert rows["working-branch"]["carried_count"] == ACTIVE_FIRINGS_CAP

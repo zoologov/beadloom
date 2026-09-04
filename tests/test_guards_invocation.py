@@ -1357,7 +1357,7 @@ class TestTheProjectIsTheOneTheRecordBelongsTo:
 
         assert _outcomes(root) == ["block"]
         report = _run_real(root, ["guard", "--liveness", "--json"])
-        rows = {row["guard"]: row for row in json.loads(report.stdout)}
+        rows = {row["guard"]: row for row in json.loads(report.stdout)["guards"]}
         assert rows["working-branch"]["never_fired"] is False
         assert rows["working-branch"]["fired_count"] == 1
 
@@ -1378,7 +1378,7 @@ class TestTheProjectIsTheOneTheRecordBelongsTo:
 
         _run_real(root, ["guard", "working-branch", "--context", "path=a.py"])
         report = _run_real(sub, ["guard", "--liveness", "--json"])
-        rows = {row["guard"]: row for row in json.loads(report.stdout)}
+        rows = {row["guard"]: row for row in json.loads(report.stdout)["guards"]}
 
         assert rows["working-branch"]["fired_count"] == 1
         assert not (sub / ".beadloom").exists()

@@ -194,6 +194,7 @@ def scope_check(
     and a run that could not find a branch, a work item, an index or a section
     says so rather than reporting a clean sheet.
     """
+    from beadloom.application.declared_scope import VERDICT_MARKER
     from beadloom.application.declared_scope import scope_check as run_scope_check
 
     run = run_scope_check(project or Path.cwd(), branch=branch, since=since)
@@ -201,10 +202,16 @@ def scope_check(
     if as_json:
         click.echo(json.dumps(_scope_payload(run), ensure_ascii=False, indent=2))
     elif porcelain:
+        # The verdict leads, on STDOUT, whether or not anything fell outside.
+        # It used to be a `NOT CHECKED` line on stderr, and the pre-commit hook
+        # reads this command as `2>/dev/null`: a run that found nothing outside
+        # and a run that could attribute no work item were both the empty string
+        # there, so the gate printed the same nothing for both and an
+        # unattributable commit read as clean. One stream, one statement, and a
+        # marker the reader splits on.
+        click.echo(f"{VERDICT_MARKER}{run.describe()}")
         for finding in run.verdict.findings:
             click.echo(f"{finding.path}:{finding.line}\t{finding.check}\t{finding.excerpt}")
-        if not run.checked:
-            click.echo(f"NOT CHECKED\t{run.reason}", err=True)
     else:
         click.echo(run.describe())
         for finding in run.verdict.findings:

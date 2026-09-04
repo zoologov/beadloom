@@ -466,6 +466,13 @@ nodes:
     docs:
       - docs/domains/onboarding/features/role-adapters/SPEC.md
 
+  - ref_id: role-duties
+    kind: feature
+    summary: "duty_report — the duties a composed flow declares, checked in both directions against the composed core of every role each one names"
+    source: src/beadloom/onboarding/role_duties.py
+    docs:
+      - docs/domains/onboarding/features/role-duties/SPEC.md
+
   - ref_id: flow-composer
     kind: feature
     summary: "compose(core, architecture, stack, project) — the one layered assembly behind role files, slash commands and CLAUDE.md; the project layer lives in .beadloom/flow/"
@@ -648,6 +655,18 @@ nodes:
     source: src/beadloom/application/rooms.py
     docs:
       - docs/domains/application/components/verdict-room/DOC.md
+
+  # Component: the surface a project declares typed, read from its own
+  # `[tool.mypy]` (BDL-068 S4, BDL-UX #231). A component rather than a feature:
+  # the capability an adopter runs is the commit gate that consumes it. Derived
+  # rather than listed because `beadloom-mr2l.82` listed it, and the mypy
+  # configuration then moved while the hook did not.
+  - ref_id: typed-surface
+    kind: component
+    summary: "The files a project declares type-checked, and the three sentences a check over them has: not checked, nothing to check, and this many of that many"
+    source: src/beadloom/application/typed_surface.py
+    docs:
+      - docs/domains/application/components/typed-surface/DOC.md
 
   # Component: the three AST derivations BDL-067 wrote as tests, lifted into
   # production by BDL-068 S1.1 so `beadloom impact` and the checks after it can
@@ -995,6 +1014,12 @@ edges:
   - src: mutation-scope
     dst: verdict-room
     kind: depends_on
+  - src: typed-surface
+    dst: application
+    kind: part_of
+  - src: cli-commands
+    dst: typed-surface
+    kind: depends_on
   - src: impact
     dst: application
     kind: part_of
@@ -1069,6 +1094,24 @@ edges:
   - src: role-adapters
     dst: onboarding
     kind: part_of
+  - src: role-duties
+    dst: onboarding
+    kind: part_of
+  - src: role-duties
+    dst: role-composer
+    kind: depends_on
+  - src: role-duties
+    dst: flow-composer
+    kind: depends_on
+  - src: role-duties
+    dst: flow-config
+    kind: depends_on
+  - src: role-duties
+    dst: agentic-flow-setup
+    kind: depends_on
+  - src: config-check
+    dst: role-duties
+    kind: depends_on
   - src: flow-composer
     dst: onboarding
     kind: part_of

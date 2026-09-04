@@ -98,10 +98,14 @@ GENERATED_WORKING_SET: tuple[IgnoreEntry, ...] = (
             "Evidence that a gate ran, appended on every guarded edit; ignored by "
             "default because it is machine-local and append-only - committing it makes "
             "every edit a working-tree change and every branch a conflict on the same "
-            "last line. A team that wants the audit trail deletes this line, once. The "
-            "size is bounded since BDL-061.56: the active record rolls over at 2000 "
-            "firings into `guard-firings.1.jsonl`, so both files together are bounded "
-            "and `beadloom guard --liveness` parses only the active one."
+            "last line. A team that wants the audit trail deletes this line, once - "
+            "and what it then commits is one line per guarded edit carrying the "
+            "verdict, the file an edit named, and for a shell edit the program that "
+            "ran and the files it was seen to write. Not the command line: that would "
+            "put your agents' shell history, and whatever their arguments carried, "
+            "into git. The size is bounded since BDL-061.56: the active record rolls "
+            "over at 2000 firings into `guard-firings.1.jsonl`, so both files together "
+            "are bounded and `beadloom guard --liveness` parses only the active one."
         ),
     ),
 )

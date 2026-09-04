@@ -435,15 +435,21 @@ class TestTheAcceptedPathShape:
     input is narrowed rather than the guessing extended.
 
     Accepted: a non-empty string with no C0 control character or DEL, no
-    backslash, no leading ``~``, and encodable for this filesystem. Anything else
-    is REFUSED — never repaired, never resolved, never matched against an
-    exclusion.
+    directory separator this platform does not use, no leading ``~``, no
+    component this platform's own name layer would rewrite, and encodable for
+    this filesystem. Anything else is REFUSED — never repaired, never resolved,
+    never matched against an exclusion.
+
+    The rows below are this platform's half of that sentence, so the backslash
+    rows are refusals here and would not be on a platform that separates with
+    one. The other half is measured by flavour in
+    :mod:`tests.test_windows_dimension` (beadloom-0mdo.33).
     """
 
     @pytest.mark.parametrize(
         ("label", "raw", "offence"),
         [
-            ("a Windows separator", "src\\app.py", "backslash"),
+            ("a separator spelling this platform does not use", "src\\app.py", "backslash"),
             ("a Windows absolute path", "C:\\Users\\a\\app.py", "backslash"),
             ("a NUL byte", "src/app.py\x00", "control character"),
             ("a newline", "src/app\n.py", "control character"),

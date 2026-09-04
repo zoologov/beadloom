@@ -13,7 +13,9 @@ Codes (the contract a caller may rely on):
   could not be read (it declared none, named a ref the graph does not have, wrote
   the declaration inside a sentence, or wrote a second ref the parser had to drop),
   an override past its exit condition, an override that changed nothing, a shared
-  medium whose precondition failed, a shared medium nobody measured. Visible,
+  medium whose precondition failed, a shared medium nobody measured, a bead
+  declaring a node its work item rules out of scope, and a concurrent wave whose
+  beads leave part of that work item's approved scope undeclared. Visible,
   never blocking — the shape is still usable.
 * ``2`` — no shape could be decided: no index, no answer from the tracker, a
   bead the tracker does not have, or a ``waves:`` block that would not parse.
@@ -32,6 +34,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -40,7 +43,11 @@ import click
 from beadloom.services.commands._root import main
 
 if TYPE_CHECKING:
-    from beadloom.application.waves import BeadRecord, WaveEnvironment, WavePlan
+    from beadloom.application.waves import (
+        BeadRecord,
+        WaveEnvironment,
+        WavePlan,
+    )
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
 _EXIT_CLEAN = 0
@@ -163,6 +170,8 @@ def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
 
 def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
     """The whole plan as data — the same facts the human shape prints."""
+    from beadloom.application.waves import room_for
+
     return {
         "beads": len(plan.scopes),
         "waves": [
@@ -173,9 +182,31 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             }
             for wave in plan.waves
         ],
+        "axes": {
+            "work_item": plan.axes.work_item,
+            "document": plan.axes.document,
+            "seed": plan.axes.seed,
+            "unresolved": plan.axes.unresolved,
+            "approved": sorted(plan.axes.approved),
+            "reason": plan.axes.reason,
+        },
+        "agreements": [
+            {
+                "bead": a.bead_id,
+                "ref": a.ref,
+                "verdict": a.verdict,
+                "detail": a.detail,
+            }
+            for a in plan.agreements
+        ],
+        "unguarded_axes": [
+            {"wave": g.wave, "beads": list(g.beads), "nodes": list(g.nodes)}
+            for g in plan.unguarded_axes
+        ],
         "scopes": [
             {
                 "bead": scope.bead_id,
+                "declared": list(scope.declared),
                 "refs": sorted(scope.refs),
                 "files": len(scope.files),
                 "unresolved": scope.unresolved,
@@ -204,6 +235,9 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             }
             for o in plan.overrides
         ],
+        "rooms": {
+            bead: room_for(bead) for wave in plan.waves for bead in wave.beads
+        },
         "shared_media": [
             {"name": m.name, "statement": m.statement, "evidence": m.evidence}
             for m in plan.shared_media
@@ -219,6 +253,8 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
 
 def _render(plan: WavePlan) -> None:
     """Print the decided shape, its reasons, and what it did not decide."""
+    from beadloom.application.waves import room_for
+
     click.echo(
         f"{len(plan.waves)} wave(s) for {len(plan.scopes)} bead(s), "
         f"{len(plan.conflicts)} serialisation(s), {len(plan.findings)} finding(s)."
@@ -226,8 +262,9 @@ def _render(plan: WavePlan) -> None:
     click.echo("")
     for wave in plan.waves:
         click.echo(f"Wave {wave.index}: {', '.join(wave.beads)}")
-        if len(wave.beads) > 1:
-            click.echo(f"  combined-tree gate: {wave.gate_owner}")
+        click.echo(f"  combined-tree gate: {wave.gate_owner}")
+        rooms = "; ".join(f"{bead} -> {room_for(bead)}" for bead in wave.beads)
+        click.echo(f"  clean room: {rooms}")
     if plan.conflicts:
         click.echo("")
         click.echo("Serialised because:")
@@ -246,18 +283,11 @@ def _render(plan: WavePlan) -> None:
             f"{outcome.override.reason} (until {outcome.override.until}{expiry}) "
             f"— {state}"
         )
+    _render_axes(plan)
     click.echo("")
-    if plan.shared_media:
-        click.echo(
-            "Shared by every wave of more than one bead, and NOT decided by code "
-            "independence:"
-        )
-        for medium in plan.shared_media:
-            click.echo(f"  {medium.name} ({medium.evidence}) — {medium.statement}")
-    else:
-        click.echo(
-            "No wave runs more than one bead, so nothing is shared concurrently."
-        )
+    click.echo("Shared by every wave, and NOT decided by code independence:")
+    for medium in plan.shared_media:
+        click.echo(f"  {medium.name} ({medium.evidence}) — {medium.statement}")
     if plan.media_checks:
         click.echo("")
         click.echo("Plan-time precondition of each shared medium:")
@@ -267,6 +297,42 @@ def _render(plan: WavePlan) -> None:
         click.echo("")
         for finding in plan.findings:
             click.echo(f"FINDING: {finding}", err=True)
+
+
+def _render_axes(plan: WavePlan) -> None:
+    """What the declarations above were held against, and what could not be.
+
+    Printed for every plan, including one the comparison produced no finding
+    for: the counts are how a reader tells a plan whose declarations agreed from
+    one whose declarations nothing could be compared against (BDL-UX #232).
+    """
+    from beadloom.application.waves import (
+        AXIS_AGREES,
+        AXIS_NOT_ATTRIBUTED,
+        AXIS_NOT_DERIVED,
+    )
+
+    axes = plan.axes
+    click.echo("")
+    if not axes.readable:
+        click.echo(f"Declared axes: NOT COMPARED — {axes.reason}")
+        return
+    counts = Counter(agreement.verdict for agreement in plan.agreements)
+    click.echo(
+        f"Declared axes ({axes.work_item}, {axes.document}): "
+        f"{len(axes.approved)} node(s) approved, "
+        f"{counts[AXIS_AGREES]} declared ref(s) agree, "
+        f"{counts[AXIS_NOT_DERIVED]} the derivation did not reach, "
+        f"{counts[AXIS_NOT_ATTRIBUTED]} axis row(s) name no node."
+    )
+    click.echo(f"  seed: {axes.seed or 'not stated'}")
+    if axes.unresolved:
+        click.echo(f"  the derivation could not reach: {axes.unresolved}")
+    for agreement in plan.agreements:
+        if agreement.verdict == AXIS_AGREES:
+            continue
+        subject = f"{agreement.bead_id} " if agreement.bead_id else ""
+        click.echo(f"  {subject}{agreement.ref}: {agreement.verdict} — {agreement.detail}")
 
 
 # beadloom:domain=application
@@ -287,6 +353,7 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
     bead that has not declared what it occupies is serialised against everything
     rather than assumed independent.
     """
+    from beadloom.application.declared_scope import work_item_axes
     from beadloom.application.waves import WaveConfigError, load_overrides, plan_waves
     from beadloom.infrastructure.db import open_db
     from beadloom.services.bd_seam import BdUnavailableError
@@ -305,10 +372,15 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
         sys.exit(_EXIT_UNDECIDABLE)
 
     environment = _environment(project_root, db_path)
+    axes = work_item_axes(project_root)
     conn = open_db(db_path)
     try:
         plan = plan_waves(
-            records, conn=conn, overrides=overrides, environment=environment
+            records,
+            conn=conn,
+            overrides=overrides,
+            environment=environment,
+            axes=axes,
         )
     finally:
         conn.close()

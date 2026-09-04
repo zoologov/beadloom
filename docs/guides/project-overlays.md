@@ -129,6 +129,14 @@ find is reported rather than read as zero. Declaring a scope you never run is
 therefore not silent either: each declared target is reported as measured by no
 run.
 
+One gap is open and stated rather than implied (BDL-UX #246): `beadloom ci` asks
+whether a mutant COULD run at a declared path and never whether one DID, and under
+`--only` the command prints *this run did not cover it* and *no run has ever
+covered it* as the same sentence. So a target declared and never measured still
+passes a green Gate. What would close it is a run recorded under `.beadloom/`, so
+the Gate can report a target whose last measurement is absent or stale; it is not
+built.
+
 ## Declaring a wave override
 
 `flow.yml` also records the human decisions that outrank `beadloom waves`, which decides

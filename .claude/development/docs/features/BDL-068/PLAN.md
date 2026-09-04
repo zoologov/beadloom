@@ -28,23 +28,26 @@ graph TD
 
 ## Beads
 
-Only S1's beads are created now. S2–S6 are carried as slice-level placeholders so the DAG is
-visible and the ordering is enforced by dependency rather than by memory.
+S2–S6 are carried here as slice-level rows so the DAG is visible and the ordering is enforced
+by dependency rather than by memory. Their beads are created per slice, once the preceding
+slice's review closes — the rule in CONTEXT, not a scheduling preference. S4's thirteen beads
+were created 2026-09-03 and are listed in `ACTIVE.md`, which is where a slice's bead-level
+state is kept; this table stays at slice granularity.
 
 | ID | Name | Priority | Depends On | Status |
 |----|------|----------|------------|--------|
-| S1.1 | Lift the three AST derivations out of `tests/` into a production package | P0 | - | Pending |
-| S1.2 | `beadloom impact <path\|symbol>` over the lifted derivations, with the unresolved population in the answer | P0 | S1.1 | Pending |
-| S1.3 | Validate the derivations retroactively against BDL-067's first dev bead | P0 | S1.1 | Pending |
-| S1.4 | `## Axes` in the BRIEF and RFC core templates; `doc-quality` reports its absence | P0 | S1.2 | Pending |
-| S1.5 | `Explore` role file, composed by `role-composer`, positioned in `/task-init` step 0.5 | P0 | S1.2 | Pending |
-| S1.6 | The commit-scope check: a change outside the work item's declared axes is a finding | P0 | S1.4 | Pending |
-| S1.7 | test — the derivations as shapes, the unresolved population, and the two new checks | P0 | S1.3, S1.5, S1.6 | Pending |
-| S1.8 | review | P0 | S1.7 | Pending |
-| S1.9 | tech-writer | P0 | S1.8 | Pending |
-| S2 | slice: the review's independence, reported rather than asserted (#204, #212, #219) | P0 | S1.8 | Pending |
-| S3 | slice: what we measure with — mutation runner, the platform axis, the clean-room limit | P0 | S1.8 | Pending |
-| S4 | slice: the guards' enforcement surface (#170, `mr2l.81`, `mr2l.60`, `mr2l.82`, `mr2l.92`) | P1 | S2, S3 | Pending |
+| S1.1 | Lift the three AST derivations out of `tests/` into a production package | P0 | - | Done — PR #59 |
+| S1.2 | `beadloom impact <path\|symbol>` over the lifted derivations, with the unresolved population in the answer | P0 | S1.1 | Done — PR #59 |
+| S1.3 | Validate the derivations retroactively against BDL-067's first dev bead | P0 | S1.1 | Done — PR #59 |
+| S1.4 | `## Axes` in the BRIEF and RFC core templates; `doc-quality` reports its absence | P0 | S1.2 | Done — PR #59 |
+| S1.5 | `Explore` role file, composed by `role-composer`, positioned in `/task-init` step 0.5 | P0 | S1.2 | Done — PR #59 |
+| S1.6 | The commit-scope check: a change outside the work item's declared axes is a finding | P0 | S1.4 | Done — PR #59 |
+| S1.7 | test — the derivations as shapes, the unresolved population, and the two new checks | P0 | S1.3, S1.5, S1.6 | Done — PR #59 |
+| S1.8 | review | P0 | S1.7 | Done — PR #59 |
+| S1.9 | tech-writer | P0 | S1.8 | Done — PR #59 |
+| S2 | slice: the review's independence, reported rather than asserted (#204, #212, #219) | P0 | S1.8 | Done — PR #60 |
+| S3 | slice: what we measure with — mutation runner, the platform axis, the clean-room limit | P0 | S1.8 | Done — PR #60 |
+| S4 | slice: the guards' enforcement surface (#170, `mr2l.81`, `mr2l.60`, `mr2l.82`, `mr2l.92`) | P1 | S2, S3 | In branch — `features/BDL-068` |
 | S5 | slice: the tracker adapters (#187, #194, #171, #165, #164, #97, #207, #210) | P1 | S4 | Pending |
 | S6 | slice: the flow's documents and roles (`mr2l.72`, `mr2l.91`, #191, #213, `iur5`, `ec1a`) | P2 | S5 | Pending |
 

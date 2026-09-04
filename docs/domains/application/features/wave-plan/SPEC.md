@@ -75,8 +75,22 @@ parser at all.
 |---|---|---|
 | `no_declared_refs` | nothing about its scope | declare `refs: <ref_id>` on a line of its own |
 | `ref_not_in_graph` | a name the graph does not have | name a real node, or add it |
-| `declaration_not_at_a_line_start` | `refs:` inside a sentence | move the declaration to the start of its own line |
+| `declaration_not_at_a_line_start` | `refs:` inside a sentence | both cases stated, because nothing here can tell them apart — see below |
 | `declaration_dropped_a_node` | a second ref without a comma | separate the names with a comma |
+
+**A remedy follows its cause down as far as the reason does.** The four are not a
+table lookup: `remedy_for(reason, axes=...)` reads what else is known, because
+one cause has two sub-cases and another has an answer only the work item's
+document can give. `declaration_not_at_a_line_start` covers both a declaration
+written carelessly mid-sentence and prose *about* declarations, and nothing here
+can tell the two apart, so both are stated and the ambiguity is stated with them.
+A bead that declares no scope on purpose and explains why in prose met the older
+one-sentence remedy and was told to promote its explanation to a real
+declaration — which would have manufactured exactly the authored scope the
+comparison below exists to remove (BDL-UX #234). And `no_declared_refs` sends the
+author to the `## Axes` section of the work item's document when there is one,
+rather than asking for a line to be invented, because that is where a `refs:`
+line is generated from.
 
 The last two were silent narrowings before `beadloom-mr2l.83`. A `refs:` written
 inside a sentence handed the bead the next word as a genuine, fully *resolved*
@@ -121,6 +135,64 @@ was compared with no bead's". A `parallel` override may legitimately place an
 unresolved bead beside another, and a finding claiming it was "serialised against
 every bead" was then contradicted by the wave list printed beside it.
 
+### The declaration, held against the derivation
+
+The scope every verdict above rests on is a line the bead's **author** wrote,
+while everything else this flow derives is computed and names the population it
+could not resolve. So two beads that edit one document read as independent
+whenever neither declaration happens to name the node that owns it. That is
+measured, not hypothetical: two beads declaring `review-brief` and
+`mutation-scope, ci-gate` both edited `docs/services/cli.md`, owned by a node
+neither named, and the plan reported 1 wave, 2 beads, 0 serialisations, 0
+findings (BDL-UX #232).
+
+The fix is not to stop reading the declaration. The declaration still decides the
+shape; what is added is the comparison the epic's own decision already states —
+the axes are **derived**, the work item's document records the derivation and the
+human's scope decision, a bead's `refs:` is **generated** from that document, and
+a disagreement between the three is a finding.
+
+The unit compared against is the **work item's** axes, never the bead's. A bead
+may narrow freely inside them: one bead of this epic edited a node its own `refs:`
+does not name and that was correct, because the node is a kept row of the work
+item's table. A check reading that as a finding would be noise on its first day.
+
+Each declared ref gets one of four verdicts, and only one of them is a finding:
+
+| Verdict | What it means | Finding |
+|---|---|---|
+| `agrees` | a kept row, or a `Derived by` target, names it | no |
+| `ruled_out_of_scope` | a row names it and rules it **out** — the approval does not cover it | yes |
+| `no_scope_decision` | a row names it and decides nothing; `axis-without-a-scope-decision` owns that fault | no |
+| `not_derived` | no row names it at all | no |
+
+`not_derived` is not an accusation, and keeping it apart from the other three is
+the point. This project has measured its own derivation under-reporting: seeded
+under `tests/`, `beadloom impact` attributed a node to none of the 148 caller
+sites it found (BDL-UX #225). "The derivation did not reach here" and "the
+declaration is wrong" are two answers, and printing them with one word would send
+an author to correct a line that is already right. The section's own `Unresolved`
+field is carried verbatim beside the verdicts taken under it.
+
+An axis row that attributes **no node** is reported as `not_attributed`: no
+declaration can name it and no comparison can reach it. It is the table's version
+of a changed path no node owns — measured at 41 of 52 over one branch's commits —
+and it is stated, never counted as agreement.
+
+The finding that would have caught the collision is `unguarded_axis`: a node the
+work item approves that **no bead of a wave declares**. It is reported per wave
+and only for a wave holding two beads or more, because that is the extent of what
+it may claim — the sentence is *the pairwise verdict for these beads did not
+compare these nodes*, and a wave of one bead makes no pair. Reported per plan
+instead, it would have printed one finding per undeclared axis for every bead of
+an epic whose table keeps ten, every time; an always-red check is an ignored
+check.
+
+A caller that gathers no axes at all gets `declarations_not_compared`, under the
+same rule and for the same reason `unmeasured` is a medium verdict rather than a
+lenient pass — but again only where a wave actually holds a pair, so a plan run
+off a work-item branch does not exit 1 on every run.
+
 ### The shape
 
 Beads are laid out greedily in tracker order (Kahn over the blocker relation,
@@ -140,24 +212,43 @@ bead.
 
 ### What a wave shares regardless of the shape
 
-Printed by every plan whose widest wave holds more than one bead, each with the
+Printed by every plan, whatever the width of its widest wave, each with the
 evidence it comes from:
 
 | Medium | Evidence |
 |---|---|
-| `working-tree` | an agent's clean-room green is a claim about N files, not about the tree |
+| `working-tree` | an agent's clean-room green is a claim about N files, not about the tree, and the room is built at `room-<bead-id>` so it can say whose it is |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
 | `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
 | `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted |
 
-A wave of one shares nothing concurrently — its clean room *is* the tree — and
-the plan says that rather than printing the list as a banner.
+The first version printed the list only for a wave of more than one bead, on the
+reasoning that a wave of one shares nothing concurrently. BDL-UX #228 measured
+what that cost: `wave_size` is the width of ONE plan, and a plan is one slice of
+one epic, so it says nothing about solitude — the `working-tree` check exists
+precisely to report paths owned by no bead in the plan, which is work from
+outside it in the same tree. Roughly twenty single-bead waves ran across two
+epics, and in every one of them the discipline travelled by the coordinator's
+launch prompt because the instrument was silent there.
+
+`room_for(bead_id)` names the clean room a bead owes — `room-<bead-id>`, printed
+per bead by `beadloom waves` and under `rooms` in `--json`. Two agents once each
+built a room at one shared session-scratchpad path, and one took a measurement
+over its neighbour's untracked files that looked exactly like a correct clean
+room (BDL-UX #235). The session scratchpad is a genuinely shared medium and is
+deliberately **not** one of the four: a medium here is one with a plan-time
+precondition a command can observe, and a scratchpad path exists only inside a
+running agent session. A fifth entry would be permanently `unmeasured` — a
+finding on every plan — or permanently true. What is observable is the remedy,
+so the remedy is what ships, in `room_for`, in the `working-tree` statement and
+in the role cores that carry the `clean-room` duty.
 
 ### What each medium is checked against
 
 One verdict per medium, in `plan.media_checks` and under `media_checks` in
-`--json`. `failed` and `unmeasured` are findings and reach exit 1; `passed` and
-`not_applicable` are not.
+`--json`. `failed` and `unmeasured` are findings and reach exit 1; `passed` is
+not. `STATUS_NOT_APPLICABLE` is still defined in `models.py` and is emitted by no
+check — see below.
 
 | Medium | Precondition checked | Observed from |
 |---|---|---|
@@ -166,13 +257,25 @@ One verdict per medium, in `plan.media_checks` and under `media_checks` in
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records |
 
+The work item's axes are gathered the same way and for the same reason:
+`work_item_axes(project_root)` in `declared-scope` renders the read the commit
+gate already makes into the planner's vocabulary, so the gate and the plan cannot
+come to disagree about what one work item approved, and a work item nothing can
+be read from arrives as a `WorkItemAxes` carrying its reason rather than as an
+absence dropped at the edge.
+
 The three machine-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
 without a repository and without a hook — each absence arrives as a `None` the
-check reports, never as a silent zero. They are reported `not_applicable` when no
-wave holds more than one bead, on the same rule that governs the statements.
+check reports, never as a silent zero. Every medium is checked at every wave
+size: `not_applicable` was withdrawn as a verdict a plan's shape could produce
+(BDL-UX #228), because a check that switches itself off is silent exactly where
+nobody is already thinking about the risk. The constant survives in `models.py`
+and in the package's `__all__`, emitted by nothing — a name kept for a caller that
+may still read it, not a state any plan reaches.
 
-The `tracker-ids` check runs whether or not the plan is concurrent. The
+The `tracker-ids` check has run whether or not the plan is concurrent since
+`beadloom-mr2l.80`, and is no longer the exception it was written as. The
 mis-numbering it looks for happens at bead *creation*, before any wave runs, so a
 plan that serialises the beads it mis-wired is exactly the plan whose ids most
 need checking. Only the trailing number is compared: the title convention writes
@@ -216,10 +319,14 @@ not tell them apart.
 
 - An unresolved scope never reads as an independent one, and every way the
   declaration cannot be read lands there.
+- A declaration compared against nothing never reads as one that agreed.
+- A ref the derivation did not reach is never reported as a wrong declaration,
+  and an axis row naming no node is never counted as agreement.
 - One composition of a bead's declaration, shared by every caller of the parser.
 - One reason per serialised pair, taken from a closed named vocabulary.
 - The same inputs produce the same shape, including the order within a wave.
-- A wave of more than one bead always names its shared media and its gate owner.
+- Every wave names its shared media, its gate owner and one room per bead,
+  whatever its width.
 - Every medium the plan names carries a verdict, and an unobserved one is
   `unmeasured` rather than `passed`.
 - A required override field is required by its content: a key present but blank
@@ -231,14 +338,17 @@ not tell them apart.
 
 | Entry point | Answers |
 |---|---|
-| `plan_waves(records, *, conn, overrides, today, environment)` | the whole shape, as a `WavePlan` |
+| `plan_waves(records, *, conn, overrides, today, environment, axes)` | the whole shape, as a `WavePlan` |
+| `compare_declarations(scopes, axes)` | one verdict per declared ref, plus one per axis row naming no node |
+| `unguarded_axes(waves, scopes, axes)` | per concurrent wave, the approved nodes none of its beads declares |
+| `remedy_for(reason, *, axes)` | what to do about an unresolved scope, given what else is known |
 | `resolve_scope(conn, record)` | what one bead occupies, or why that is unknown |
 | `parse_declaration(text)` | the refs a declaration names, the words it dropped, and whether it was anchored |
 | `compose_declaration(record)` | the tracker's four fields as the one string the parser reads |
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
-| `media_for(wave_size)` | what a wave of that size shares |
-| `check_media(records, *, concurrent, owned_paths, environment)` | one verdict per medium |
+| `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
+| `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `title_id_mismatches(records)` | every bead whose title numbers it differently |
 
 `plan_waves` takes bead records as **data**, never a tracker handle: the
@@ -249,8 +359,9 @@ every scenario runs without a `bd` binary on the machine.
 
 | Module | Responsibility |
 |---|---|
-| `models.py` | the vocabulary — records, scopes, conflicts, overrides, waves |
+| `models.py` | the vocabulary — records, scopes, conflicts, overrides, waves, and the words each named reason prints in |
 | `scope.py` | resolve a bead to the nodes and files it occupies |
+| `derivation.py` | hold each declaration against the derivation its work item recorded |
 | `independence.py` | decide whether one pair may run together, and say why not |
 | `media.py` | what a wave shares no matter how independent its code is |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
@@ -267,7 +378,8 @@ the command's two output shapes and its three exit codes;
 `tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
 and owns the five findings BDL-061.22 measured;
 `tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6
-decisions fails in.
+decisions fails in; `tests/test_wave_derivation.py` covers the four agreement
+verdicts, the per-wave gap and the remedies that read the work item's document.
 
 ## Related
 

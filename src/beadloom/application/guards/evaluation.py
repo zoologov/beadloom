@@ -38,9 +38,9 @@ from beadloom.application.guards.config import GuardConfigError, load_guards_con
 from beadloom.application.guards.contract import GuardProbes, GuardRequest
 from beadloom.application.guards.models import GuardOutcome, GuardVerdict
 from beadloom.application.guards.paths import (
-    MALFORMED_REMEDIATION,
     MALFORMED_WHY,
     PathScope,
+    malformed_remediation,
 )
 
 if TYPE_CHECKING:
@@ -132,7 +132,7 @@ def evaluate_guard(
             outcome=GuardOutcome.ERROR,
             why=MALFORMED_WHY.format(rejection=resolved.rejection),
             not_covered=(resolved.not_covered_note,),
-            remediation=MALFORMED_REMEDIATION,
+            remediation=malformed_remediation(),
             context=request.context,
         )
 

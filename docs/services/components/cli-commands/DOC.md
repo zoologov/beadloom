@@ -21,7 +21,7 @@ always did.
 The node's `source` is the **directory**, not a file. A component whose source
 is a package `__init__.py` records that file as its whole surface, and every
 symbol reader then sees an empty façade (BDL-UX #157). Pointing at the directory
-keeps all sixteen modules inside the node for `module-coverage` and for the
+keeps all seventeen modules inside the node for `module-coverage` and for the
 symbol counts.
 
 ## Presentation only
@@ -54,6 +54,31 @@ is what holds that line.
 | `impact.py` | `impact`, `axes`, `scope-check` |
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
+| `typed_surface.py` | `typed-surface` |
+
+`config-check` prints two derivations beside the drift list, because neither has a Gate
+step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
+owns no runner to hang a step on) and, whenever a project declares at least one duty, the
+population `role_duties.duty_report()` could not inspect. The second prints on the clean path
+as well as the blocking one: a check that speaks only when it finds something hands the reader
+a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
+declares no duty, where there is no verdict to qualify.
+
+The duty block also names the corpus it read — the COMPOSITION this flow would write, not the
+role files on disk — and counts the adapters that exist there, printing `NOTHING TO CHECK`
+when none do. Until BDL-068 S4's fix bead a project that had never run `setup-agentic-flow`
+was told a duty was checked over ten composed artifacts with no blocking drift, which is true
+of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
+exit code is unchanged: an unscaffolded project is not in drift.
+
+`guard.py` renders the binding surface above the firing rows, in three sentences rather than
+two. `NOT CHECKED` when a source could not be read, `NOTHING TO CHECK` when both were read and
+the granted tools include no write path, and the fraction otherwise — `0 of 0 write path(s)
+bound` was printed for the middle case and read as full coverage (BDL-UX #239). A `read from:`
+line names the artifacts on disk the answer was derived from, which is the same sentence
+`config-check`'s duty block prints about its own corpus and for the same reason: the two
+commands answer neighbouring questions of different things, and a reader who cannot tell which
+one is in front of them has two reports that look like they agree.
 
 `mutation.py` renders what `application.mutation_scope` decided: the score a run produced
 over the scope `.beadloom/flow.yml` declared. It reads the counters a runner wrote and
@@ -61,6 +86,22 @@ names none — Beadloom owns no mutation runner, so the module knows counter NAM
 tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carrying no run
 at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
 (BDL-UX #181).
+
+`waves.py` renders what `application.waves` decided, and renders it at every wave size. Each
+wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
+each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate
+owner and the shared media were printed only for a wave of more than one bead, so the
+instrument spoke where a coordinator was already thinking about concurrency and was silent
+where it was not (BDL-UX #228); the room is named after the bead because two agents once each
+built one at a shared scratchpad path and one measured over the other's files (BDL-UX #235).
+
+It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
+media and for the same reason — the application layer keeps taking its input as data — and
+prints what every bead's declared `refs:` was held against: the work item, the document, how
+many nodes it approves, how many declared refs agree, how many the derivation did not reach
+and how many axis rows name no node. That block is printed for a clean plan too, because the
+counts are how a reader tells a plan whose declarations agreed from one whose declarations
+nothing could be compared against (BDL-UX #232).
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and
@@ -70,17 +111,41 @@ that goes stale. It exits 2 when the named axis is carried by no declared room, 
 axes that exist: an empty answer would read as "this project has no such axis", which is the
 clean list an agent trusts and stops at.
 
+`typed_surface.py` renders what `application.typed_surface` derived: the files this project
+declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`
+takes staged paths on standard input and prints the ones inside the surface, led by the same
+`# ` verdict marker `scope-check --porcelain` uses, so the pre-commit hook splits a verdict from
+a payload on one shape. The verdict has three sentences and not two, because a surface that could
+not be derived, a surface with nothing staged inside it and a surface with files to check are
+three different facts: the pre-commit hook used to hand `mypy` every staged `.py` under `src/`
+or `tests/`, which is 970 errors in 90 files on this repository and not one of them a violation
+of a declared standard. The hook then reached that derivation through the same two directory
+names until `beadloom-0mdo.42` (BDL-UX #240) — so on a flat-layout project, where the package
+sits at the repository root, the filter admitted no package file and the leg's three sentences
+were unreachable. `staged_py` now selects by suffix, and each leg narrows that population by its
+own declaration.
+
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section
 back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the
 paths a commit stages against the section the work item declared. One document, written by
 the first, read by the second and enforced by the third. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
-or a section prints its reason rather than a clean sheet. The pre-commit hook
-`install-hooks` writes calls it with `--porcelain`; it WARNS in both hook modes, including
-the blocking one, because one work item in 64 carries a `## Axes` section today and a check
-that blocked would meet a repository that cannot satisfy it and be answered with
-`--no-verify`.
+or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
+marked `# ` and on standard output, whether the run compared anything or not: the reason used
+to go to standard error alone, and the pre-commit hook reads the command as `2>/dev/null`, so
+a clean run and an unattributable one were the same empty string there and the gate printed
+the same nothing for both (`beadloom-0mdo.32`, the residue of `beadloom-mr2l.81`). A finding
+line opens with a project-relative path, so the marker separates the two without either side
+parsing the other.
+
+The pre-commit hook `install-hooks` writes calls it with `--porcelain`; it WARNS in both hook
+modes, including the blocking one. Measured over the eleven commits of `features/BDL-068`
+before the reader was written — 52 paths, of which 11 have an owner in the graph and 41 have none, 0 findings — the
+false-positive rate is zero, and that is still not enough to block on: only two of those
+commits touched an owned path at all, and one work item in 64 carries a `## Axes` section
+today, so a check that blocked would meet a repository that cannot satisfy it and be answered
+with `--no-verify`.
 
 Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph

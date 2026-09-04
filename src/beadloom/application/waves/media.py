@@ -19,9 +19,35 @@ about:
   id beforehand, so a concurrent wave produces a well-formed, accepted, wrong
   dependency edge (BDL-UX #171).
 
-So the media are STATED by every wave that runs more than one bead, each with the
-evidence it comes from. A shape that quietly claimed independence in these four
-would be exactly the advisory answer this command exists to replace.
+So the media are STATED by every wave, at every size, each with the evidence it
+comes from. A shape that quietly claimed independence in these four would be
+exactly the advisory answer this command exists to replace.
+
+**Why every size, when the first version said a wave of one shares nothing**
+(BDL-UX #228). ``wave_size`` is the width of a wave in ONE plan, and a plan is
+one slice of one epic. It is therefore not a statement about solitude, and this
+module already knew that: :func:`~beadloom.application.waves.media_checks`
+fails the working tree on paths that differ from ``HEAD`` and are owned by **no
+bead in the plan** — work that arrived from outside it. Measured against the
+consequence: roughly twenty single-bead waves ran across two epics, and in every
+one of them the discipline travelled by the coordinator's launch prompt, because
+the instrument said ``not_applicable`` exactly where the coordinator was not
+already thinking about concurrency.
+
+**The scratchpad is a shared medium and is deliberately not one of these.** Two
+concurrent agents each built a clean room at the same session-scratchpad path,
+and one measurement was taken over its neighbour's untracked files while looking
+exactly like a correct clean room (BDL-UX #235). It is not enumerated here
+because a medium in this module is one with a plan-time precondition a command
+can OBSERVE — git, the installed hook, the doc index, the bead records — and a
+session scratchpad has none: its path exists only inside a running agent
+session, the same reason a launch prompt is ``not_inspected`` rather than a
+finding in :mod:`beadloom.onboarding.role_duties`. Adding it would buy a fifth
+verdict that is permanently ``unmeasured`` (a finding on every plan) or
+permanently true (a check that cannot fail), and this epic forbids both. What is
+observable is the REMEDY, so the remedy is what ships: :func:`room_for` names
+the room a bead owes, the working-tree statement carries it, and the role cores
+carry the same spelling.
 """
 
 # beadloom:feature=wave-plan
@@ -35,6 +61,11 @@ MEDIUM_COMMIT_GATE = "commit-gate"
 MEDIUM_DOC_BASELINE = "doc-baseline"
 MEDIUM_TRACKER_IDS = "tracker-ids"
 
+#: The prefix a clean room's directory carries, so the room names its owner.
+#: A constant because the role cores promise this exact spelling and a test
+#: binds the two — a rename here reddens the prose that offers it.
+ROOM_PREFIX = "room-"
+
 #: Stated in the order a wave meets them: it edits, it commits, it documents, and
 #: it files follow-up work.
 SHARED_MEDIA: tuple[SharedMedium, ...] = (
@@ -44,9 +75,11 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
             "One tree. An agent's green is green in a clean room over its own "
             "files, which is a different claim from green on the tree — report "
             "them in different words, and let the wave's gate owner measure the "
-            "tree."
+            f"tree. Build the room at `{ROOM_PREFIX}<bead-id>`, never at a "
+            "shared path: a room whose name cannot say whose it is is a shared "
+            "directory with a reassuring name."
         ),
-        evidence="BDL-UX #181",
+        evidence="BDL-UX #181, #235",
     ),
     SharedMedium(
         name=MEDIUM_COMMIT_GATE,
@@ -80,11 +113,12 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
 )
 
 
-def media_for(wave_size: int) -> tuple[SharedMedium, ...]:
-    """The media a wave of *wave_size* beads shares.
+def room_for(bead_id: str) -> str:
+    """The clean room *bead_id* owes — a directory nobody else will build.
 
-    A wave of one shares nothing with anybody: its clean room IS the tree, its
-    commit is the only commit, and no neighbour can move its baseline. Saying so
-    keeps the list a statement about concurrency rather than a banner.
+    The one mechanical half of the working-tree medium. A wave states the room
+    for each of its beads whatever its size, so a solo bead is told the same
+    thing a concurrent one is: the measurement it reports is a measurement of
+    this directory, and of nothing its neighbour left in a shared one.
     """
-    return SHARED_MEDIA if wave_size > 1 else ()
+    return f"{ROOM_PREFIX}{bead_id}"

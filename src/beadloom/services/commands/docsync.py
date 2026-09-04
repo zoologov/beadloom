@@ -502,8 +502,26 @@ _HOOK_COMMIT_SCOPE = (
 # new module is the largest unjudged thing a neighbour can leave in a shared tree
 # (BDL-061.22-4). The second status column is non-blank for a working-tree
 # modification and is `?` for an untracked path, so one call answers both.
+#
+# `staged_py` states WHICH KIND of file this commit stages and never where code
+# lives (BDL-UX #240). It selected `^(src|tests)/` until `beadloom-0mdo.42`, and
+# that spelling was the gate in front of a derivation: `beadloom-gsal` had just
+# replaced the hand-written typed surface with one read from the project's own
+# `[tool.mypy]`, and the filter reaching it still named two directories. On the
+# flat layout -- the package at the repository root, which is where a Python
+# project sits unless someone chose otherwise -- the regex admits no package file
+# at all, so with no `tests/` directory the typed leg printed NOTHING (no
+# verdict, no NOTHING TO CHECK, no NOT CHECKED) and with one it printed a
+# confident sentence about a population the package was not in. The ruff leg
+# beside it is gated by the same variable and was equally blind. This repository
+# is src-layout and could not observe either, which is why five waves did not.
+#
+# So each leg now narrows this population by its OWN declaration: the typed leg
+# asks `beadloom typed-surface --filter`, and ruff applies the configuration it
+# reads for itself. A path filter naming directories is a second list beside
+# those declarations, and a second list is a second thing to forget.
 
-staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src|tests)/.*[.]py$')
+staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '[.]py$')
 outside=$(git status --porcelain | awk 'substr($0, 2, 1) != " "' | wc -l | tr -d ' ')
 """
 )
@@ -532,6 +550,141 @@ if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
 fi
 """
 
+#: The declared-axes block, written once and used by both templates -- the same
+#: comparison in the warn hook and the blocking one, because a commit gate and a
+#: push gate disagreeing about what left the approval would be a second home for
+#: one answer.
+#:
+#: `beadloom-0mdo.32`, the residue of `beadloom-mr2l.81`. The call itself has
+#: been here since S1; what it did with the answer had a hole. The command was
+#: read as `2>/dev/null` and printed only when stdout came back non-empty, while
+#: the reason for having compared nothing went to stderr -- so a run that found
+#: nothing outside and a run that could attribute no work item were BOTH the
+#: empty string here, and the gate printed the same nothing for both. A commit
+#: nobody could attribute read as clean, which is the false green BDL-068 exists
+#: to remove and the visible consequence of BDL-UX #230 (`beadloom-bdnv`), where
+#: a branch named `features/BDL-068-S4` matches no work-item folder at all.
+#:
+#: Now the command leads its porcelain output with the verdict, marked so this
+#: block splits it from the findings without parsing either, and the verdict is
+#: printed whatever it says. The count it carries is a count of paths actually
+#: COMPARED: the paths no node owns are stated beside it rather than folded in,
+#: because a green count that reads as a checked count is the thing being fixed.
+_HOOK_DECLARED_AXES = r"""
+# --- Declared axes, over the paths this commit stages ---
+# The work item is the one the BRANCH names: this hook runs before the commit
+# message is finalised, so the `[KEY]` prefix is not readable here. A run that
+# finds no branch, no work item, no index or no `## Axes` section reports its
+# reason as the verdict and never blocks -- a check with nothing to compare
+# against must not read as a clean sheet.
+#
+# WARNS in both hook modes, including the blocking one, and that is a decision
+# rather than an omission. Measured over the eleven commits of `features/BDL-068`
+# before this block was written -- 52 paths, 11 a node owns, 41 no node owns, 0
+# findings -- the false-positive rate is zero, and that is still not enough to
+# block on: only two of those commits touched an owned path at all, and one work
+# item in this repository's sixty-four carries an `## Axes` section. A check that
+# BLOCKED would meet a repository that cannot satisfy it and be answered with
+# `--no-verify`, which is the failure BDL-UX #118 itself was. The branch-scoped
+# run in `beadloom ci` reports the same comparison where a reviewer reads it.
+axes_report=$(beadloom scope-check --porcelain 2>/dev/null)
+axes_verdict=$(echo "$axes_report" | sed -n 's/^# //p')
+axes_outside=$(echo "$axes_report" | grep -v '^# ')
+if [ -n "$axes_outside" ]; then
+  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
+  echo "$axes_outside" | sed 's/^/  /'
+  echo ""
+  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
+fi
+# An empty verdict means the command produced none -- beadloom absent from PATH,
+# or a failure that swallowed its own answer. That is a comparison that could not
+# be made, and it prints a different word from one that passed.
+if [ -z "$axes_verdict" ]; then
+  axes_verdict="Declared axes: NOT CHECKED -- beadloom scope-check returned no verdict here"
+fi
+echo "$axes_verdict"
+"""
+
+#: The type-check block, written once and rendered per mode -- the same surface
+#: question in the warn hook and the blocking one.
+#:
+#: `beadloom-gsal` (BDL-UX #231), and the second attempt at it: `beadloom-mr2l.82`
+#: scoped the same check by writing the surface INTO this template, the mypy
+#: configuration then moved and the template did not. So the surface is asked for
+#: at the moment the hook runs, from the declaration that decides it.
+#:
+#: What was here before ran `mypy` over every staged `.py` under `src/` or
+#: `tests/`, which is wider than anything this project declares typed:
+#: `pyproject` sets `packages = ["beadloom"]` and `uv run mypy tests/` reports
+#: 970 errors in 90 files, not one of them a violation of a declared standard.
+#: MEASURED over all 24 commits of `features/BDL-068` at `b7c9476..49c2ebe`,
+#: each against its own tree: 7 staged Python, the old block warned on 4 of the
+#: 7, and all 4 warnings were false. The same 4 would have been BLOCKED under
+#: the blocking template, which is why block mode was unusable here.
+#:
+#: Three properties, and each replaces a way the old block carried no
+#: information. The count is a count of files ACTUALLY handed to the checker,
+#: not of files staged. A commit whose typed population is EMPTY says so in
+#: different words from one that was checked and passed, because a check whose
+#: population is empty reading as a check that passed is the phantom this epic
+#: is named for. And a failure prints MYPY'S OWN OUTPUT: the old block kept
+#: `2>/dev/null`, which does not hide mypy's findings -- those go to stdout --
+#: but does hide the diagnostics of a mypy that could not START, so "found
+#: errors" and "could not run" printed the identical sentence.
+#:
+#: NOT CHECKED never blocks, in either mode. A surface that could not be derived
+#: is a check that did not happen, and turning a missing PATH entry into a
+#: refused commit is how a gate gets answered with `--no-verify`.
+def _hook_type_check(*, blocking: bool) -> str:
+    """The mypy block for one hook mode, scoped to the declared typed surface."""
+    on_error = (
+        '        echo "Error: mypy type errors in this commit \u2014 commit blocked"\n'
+        "        failed=1\n"
+        if blocking
+        else '        echo "Warning: mypy type errors in this commit"\n'
+    )
+    return _HOOK_TYPE_CHECK_BODY.replace("__ON_ERROR__\n", on_error)
+
+
+#: The body both modes share. `__ON_ERROR__` is the one line they differ on.
+_HOOK_TYPE_CHECK_BODY = r"""
+# --- Type check (mypy), over the staged files INSIDE the declared typed surface ---
+# The surface is DERIVED, never listed here: `beadloom typed-surface --filter`
+# reads the staged paths and answers from the project's own `[tool.mypy]`
+# declaration. A list in this template is a second thing to forget, and it was
+# forgotten once already (BDL-UX #231).
+#
+# The verdict leads the command's output marked with `# `, the same marker
+# `scope-check --porcelain` uses, so this splits verdict from payload on a shape
+# rather than on an agreement between two spellings.
+if [ -n "$staged_py" ]; then
+  if ! command -v uv >/dev/null 2>&1 || ! command -v beadloom >/dev/null 2>&1; then
+    echo "Typed surface: NOT CHECKED -- uv or beadloom is not on PATH here"
+  else
+    typed_report=$(echo "$staged_py" | beadloom typed-surface --filter 2>/dev/null)
+    typed_verdict=$(echo "$typed_report" | sed -n 's/^# //p')
+    typed_staged=$(echo "$typed_report" | grep -v '^# ')
+    # An empty verdict means the command produced none. That is a comparison
+    # that could not be made, and it prints a different word from one that passed.
+    if [ -z "$typed_verdict" ]; then
+      typed_verdict="Typed surface: NOT CHECKED -- beadloom typed-surface returned no verdict here"
+    fi
+    echo "$typed_verdict"
+    if [ -n "$typed_staged" ]; then
+      # `2>&1`, not `2>/dev/null`: a mypy that cannot start says why on stderr,
+      # and losing that is what made "found errors" and "could not run" the same
+      # sentence. The committer reads mypy's words, not ours.
+      mypy_out=$(echo "$typed_staged" | xargs uv run mypy 2>&1)
+      if [ $? -ne 0 ]; then
+        echo "$mypy_out"
+__ON_ERROR__
+      fi
+    fi
+  fi
+fi
+"""
+
+
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
@@ -544,16 +697,7 @@ if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
     echo "Warning: ruff lint violations in this commit"
   fi
 fi
-
-# --- Type check (mypy), over the staged files only ---
-if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
-  echo "Running mypy on the staged Python file(s)..."
-  echo "$staged_py" | xargs uv run mypy 2>/dev/null
-  if [ $? -ne 0 ]; then
-    echo "Warning: mypy type errors in this commit"
-  fi
-fi
-
+""" + _hook_type_check(blocking=False) + """
 # --- Doc sync check, over the pairs this commit stages ---
 stale=$(beadloom sync-check --staged --porcelain 2>/dev/null)
 exit_code=$?
@@ -568,27 +712,7 @@ fi
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
-
-# --- Declared axes, over the paths this commit stages ---
-# The work item is the one the BRANCH names: this hook runs before the commit
-# message is finalised, so the `[KEY]` prefix is not readable here. A run that
-# finds no branch, no work item, no index or no `## Axes` section prints its
-# reason on stderr and never blocks -- a check with nothing to compare against
-# must not read as a clean sheet.
-#
-# WARNS in both hook modes, including the blocking one, and that is a decision
-# rather than an omission: one work item in 64 carries a `## Axes` section
-# today, so a check that BLOCKED would meet a repository that cannot satisfy it
-# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
-# reports the same comparison where a reviewer reads it.
-axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
-if [ -n "$axes_outside" ]; then
-  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
-  echo "$axes_outside"
-  echo ""
-  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
-fi
-
+""" + _HOOK_DECLARED_AXES + """
 # --- What this commit did NOT judge ---
 echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."
@@ -611,17 +735,7 @@ if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
     failed=1
   fi
 fi
-
-# --- Type check (mypy), over the staged files only ---
-if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
-  echo "Running mypy on the staged Python file(s)..."
-  echo "$staged_py" | xargs uv run mypy 2>/dev/null
-  if [ $? -ne 0 ]; then
-    echo "Error: mypy type errors in this commit — commit blocked"
-    failed=1
-  fi
-fi
-
+""" + _hook_type_check(blocking=True) + """
 # --- Doc sync check, over the pairs this commit stages ---
 stale=$(beadloom sync-check --staged --porcelain 2>/dev/null)
 exit_code=$?
@@ -637,27 +751,7 @@ fi
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
-
-# --- Declared axes, over the paths this commit stages ---
-# The work item is the one the BRANCH names: this hook runs before the commit
-# message is finalised, so the `[KEY]` prefix is not readable here. A run that
-# finds no branch, no work item, no index or no `## Axes` section prints its
-# reason on stderr and never blocks -- a check with nothing to compare against
-# must not read as a clean sheet.
-#
-# WARNS in both hook modes, including the blocking one, and that is a decision
-# rather than an omission: one work item in 64 carries a `## Axes` section
-# today, so a check that BLOCKED would meet a repository that cannot satisfy it
-# and be answered with `--no-verify`. The branch-scoped run in `beadloom ci`
-# reports the same comparison where a reviewer reads it.
-axes_outside=$(beadloom scope-check --porcelain 2>/dev/null)
-if [ -n "$axes_outside" ]; then
-  echo "Warning: this commit touches path(s) outside the axes its work item declared:"
-  echo "$axes_outside"
-  echo ""
-  echo "Run: beadloom scope-check   (for the axis each path fell outside)"
-fi
-
+""" + _HOOK_DECLARED_AXES + """
 # --- What this commit did NOT judge ---
 echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."

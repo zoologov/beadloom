@@ -94,8 +94,8 @@ the source before the type is chosen, **so that** I am not told a bug is one mis
 when it is six instances of a class across four entry points.
 
 **Acceptance criteria** (each references a scenario in `tests/acceptance/features/`):
-- [ ] Scenario: `A work item without an Axes section is reported before its first dev bead`
-- [ ] Scenario: `The axes name the population the derivation could not resolve`
+- [x] Scenario: `A work item without an Axes section is reported before its first dev bead`
+- [x] Scenario: `The axes name the population the derivation could not resolve`
 
 ### US-2: A commit that leaves the declared scope is caught by the Gate, not by a reviewer
 
@@ -103,7 +103,7 @@ when it is six instances of a class across four entry points.
 finding, **so that** the axes are an instrument rather than a paragraph an agent may skim.
 
 **Acceptance criteria**:
-- [ ] Scenario: `A commit touching a call site outside the declared axes is reported`
+- [x] Scenario: `A commit touching a call site outside the declared axes is reported`
 
 ### US-3: The reviewer is told what it can reach, not what was withheld
 
@@ -112,8 +112,8 @@ carries the author's account, **so that** "0 withheld" stops being true about it
 and false about the question.
 
 **Acceptance criteria**:
-- [ ] Scenario: `The brief counts the author's account in the commit bodies of the reviewed range`
-- [ ] Scenario: `The brief counts the author's account in the epic document the prompt names`
+- [x] Scenario: `The commit bodies of the reviewed range are stated with the range they were read over`
+- [x] Scenario: `A document a composed role prompt names is reported as reachable, with the prompt that names it`
 
 ### US-4: A claimed mutation check is distinguishable from a performed one
 
@@ -122,8 +122,8 @@ and false about the question.
 bead comments.
 
 **Acceptance criteria**:
-- [ ] Scenario: `A declared mutation target outside the configured source paths is reported`
-- [ ] Scenario: `A mutation run reports a score for the slice it was scoped to`
+- [x] Scenario: `a target outside the configured source paths is reported`
+- [x] Scenario: `a mutation run reports a score for the slice it was scoped to`
 
 ### US-5: A guard reports the write paths it cannot see
 
@@ -132,19 +132,28 @@ bead comments.
 silence.
 
 **Acceptance criteria**:
-- [ ] Scenario: `A write through a path outside the guard's surface is reported`
+- [x] Scenario: `The report names a write path the binding cannot see`
 
 ## Acceptance Criteria (overall)
 
 Behaviour-bearing criteria are scenarios; the suite holds their text and this list references
 them by name. `beadloom lint` reports a referenced scenario the suite does not contain.
 
-- [ ] Scenario: `A work item without an Axes section is reported before its first dev bead`
-- [ ] Scenario: `The axes name the population the derivation could not resolve`
-- [ ] Scenario: `A commit touching a call site outside the declared axes is reported`
-- [ ] Scenario: `The brief counts the author's account in the commit bodies of the reviewed range`
-- [ ] Scenario: `A declared mutation target outside the configured source paths is reported`
-- [ ] Scenario: `A write through a path outside the guard's surface is reported`
+Every scenario box below is ticked on a measurement, not on a slice being declared done:
+`uv run pytest tests/acceptance` on `features/BDL-068` at S4's end passed 232 of 232 scenarios
+in 36 files, measured in Darwin arm64 / CPython 3.13.7 and in 0 of the 21 rooms this project
+declares, so it is a claim about this machine and about no CI leg. Three references were
+repointed at the same time, because they named scenarios the suite does not hold and `doctor`
+reported all five occurrences: the two US-3 criteria now name the reachability scenarios S2
+shipped, and the US-4 criterion now names `mutation_scope.feature`'s own spelling. The
+non-behavioural boxes stay open — S5 and S6 have not shipped.
+
+- [x] Scenario: `A work item without an Axes section is reported before its first dev bead`
+- [x] Scenario: `The axes name the population the derivation could not resolve`
+- [x] Scenario: `A commit touching a call site outside the declared axes is reported`
+- [x] Scenario: `The commit bodies of the reviewed range are stated with the range they were read over`
+- [x] Scenario: `a target outside the configured source paths is reported`
+- [x] Scenario: `The report names a write path the binding cannot see`
 
 **Non-behavioural criteria** stay checkboxes and are labelled, so the absence of a scenario is
 a stated decision rather than a gap:

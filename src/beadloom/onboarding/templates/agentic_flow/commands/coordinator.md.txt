@@ -124,8 +124,10 @@ beadloom waves <bead-id> ... --json         # the same facts, for a script
 A tracker knows which beads block which; only the architecture graph knows which
 **code** they occupy, and that is what decides whether parallel agents pay off or
 rot. The command returns the wave shape, one named reason per serialised pair,
-and — for every wave of more than one bead — the media that wave shares no matter
-what shape was chosen.
+and the media that wave shares no matter what shape was chosen. Every wave states
+them, whatever its width: a wave of one is one plan's width, not solitude, and
+roughly twenty single-bead waves across two epics carried the discipline by a
+launch prompt alone because the instrument said `not_applicable` there.
 
 **A bead declares its scope in the tracker**, in its own words, so that it can be
 placed at all. The declaration **opens a line** and its list runs to the end of
@@ -159,6 +161,8 @@ obligations below belong to a named bead.
 
 **Two obligations the shape hands to named beads rather than to habit:**
 
+<!-- beadloom:duty=clean-room roles=dev,explore,review,tech-writer,test -->
+
 - Each wave's `gate_owner` runs the combined-tree Gate once that wave has landed.
   Every agent verifying in its own clean room is correct and blind by
   construction to any interaction between beads — four agents once each reported
@@ -167,6 +171,14 @@ obligations below belong to a named bead.
   "green in a clean room over N files" is a different claim from "green on the
   tree". Reporting them with one word is what makes the discrepancy read as a
   contradiction.
+
+The marker above **declares** the duty for the five roles that perform it, and
+each of their composed cores **carries** it. `beadloom config-check` checks the
+binding in both directions and blocks on a finding, so a role that stops being
+told this stops the check rather than stopping quietly. Declaring it here, in the
+command that plans the waves, keeps the rule in the artifact that owns it —
+without the declaration the duty would reach the performers only by your typing
+it into every launch prompt, which is the channel no file-based check can see.
 
 **If a human overrules the shape, it is recorded, not remembered** — in
 `.beadloom/flow.yml`, with a reason and an exit condition, exactly like every

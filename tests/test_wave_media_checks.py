@@ -35,6 +35,7 @@ from beadloom.application.waves import (
     BeadRecord,
     MediumCheck,
     WaveEnvironment,
+    WorkItemAxes,
     check_media,
     finding_for,
     plan_waves,
@@ -51,6 +52,23 @@ CLEAN = WaveEnvironment(
     commit_gate=GATE_COMMIT_SCOPED,
     doc_baseline_stale_pairs=0,
 )
+
+
+def _approving(*nodes: str) -> WorkItemAxes:
+    """A recorded derivation keeping exactly *nodes* in scope.
+
+    Supplied wherever a case asserts a CLEAN plan, because a concurrent wave
+    whose declarations were held against no derivation is a finding — the same
+    rule, and for the same reason, as a shared medium nobody measured. And it
+    keeps exactly the nodes the case's beads declare, because a work item
+    approving a node no bead of a wave names is the OTHER finding (BDL-UX #232).
+    """
+    return WorkItemAxes(
+        work_item="KEY-1",
+        document="docs/KEY-1/RFC.md",
+        seed="none",
+        kept=frozenset(nodes),
+    )
 
 
 def _bead(bead_id: str, refs: str = "", title: str = "") -> BeadRecord:
@@ -87,7 +105,7 @@ class TestEveryMediumHasACheckThatCanFail:
 
     def test_every_stated_medium_is_also_checked(self) -> None:
         """A medium stated and not checked is exactly the defect `.80` closed."""
-        checks = check_media([_bead("a")], concurrent=True, environment=CLEAN)
+        checks = check_media([_bead("a")], environment=CLEAN)
         assert {c.medium for c in checks} == {m.name for m in SHARED_MEDIA}
 
     @pytest.mark.parametrize(
@@ -123,7 +141,7 @@ class TestEveryMediumHasACheckThatCanFail:
         self, medium: str, broken: WaveEnvironment
     ) -> None:
         """One observation per medium is enough to redden it, and only it."""
-        checks = check_media([_bead("a")], concurrent=True, environment=broken)
+        checks = check_media([_bead("a")], environment=broken)
         assert _check(checks, medium).status == STATUS_FAILED
         others = [c for c in checks if c.medium != medium]
         assert all(c.status == STATUS_PASSED for c in others)
@@ -135,32 +153,42 @@ class TestEveryMediumHasACheckThatCanFail:
         self, medium: str
     ) -> None:
         """UNKNOWN IS NOT ZERO, applied to the media themselves."""
-        checks = check_media([_bead("a")], concurrent=True)
+        checks = check_media([_bead("a")])
         assert _check(checks, medium).status == STATUS_UNMEASURED
         assert _check(checks, medium).is_finding
 
-    def test_a_serial_plan_reports_the_three_between_bead_media_not_applicable(
-        self,
-    ) -> None:
-        """Nothing is carried between beads when no wave holds two of them."""
-        checks = check_media([_bead("a")], concurrent=False)
+    def test_a_serial_plan_checks_the_between_bead_media_too(self) -> None:
+        """BDL-UX #228 — the counter-claim this test replaces.
+
+        It used to assert `not_applicable` for the three media that carry state
+        between beads whenever no wave held two of them, on the reasoning that
+        nothing is carried between beads there. The reasoning read the width of
+        ONE plan as solitude: `_check_working_tree` fails on paths owned by no
+        bead in the plan, which is this module already knowing that work from
+        outside the plan lands in the same tree, under the same hook, against the
+        same doc baseline.
+        """
+        checks = check_media([_bead("a")], environment=CLEAN)
         for medium in (MEDIUM_WORKING_TREE, MEDIUM_COMMIT_GATE, MEDIUM_DOC_BASELINE):
-            assert _check(checks, medium).status == STATUS_NOT_APPLICABLE
+            assert _check(checks, medium).status != STATUS_NOT_APPLICABLE
             assert not _check(checks, medium).is_finding
 
-    def test_a_serial_plan_still_checks_the_id_space(self) -> None:
-        """OBSERVATION `.22`-B, answered on the CHECK rather than on the statement.
+    def test_no_verdict_is_ever_not_applicable(self) -> None:
+        """No medium can be switched off by the shape of the plan (#228)."""
+        for environment in (None, CLEAN):
+            checks = check_media([_bead("a")], environment=environment)
+            assert all(check.status != STATUS_NOT_APPLICABLE for check in checks)
 
-        Serialising a wave withdraws the tracker-ids STATEMENT, because
-        `media_for` says nothing about a wave of one. The mis-wiring in #171
-        happened at bead creation, before any wave ran, so a plan that serialises
-        the beads it mis-wired is exactly the plan whose ids most need checking.
-        `.80` leaves `media_for` alone and makes the check unconditional; whether
-        the statement should follow is `.23`'s to rule on.
+    def test_a_serial_plan_still_checks_the_id_space(self) -> None:
+        """OBSERVATION `.22`-B, first answered on the check alone.
+
+        The mis-wiring in #171 happened at bead creation, before any wave ran, so
+        a plan that serialises the beads it mis-wired is exactly the plan whose
+        ids most need checking. `.80` made this one check unconditional while the
+        statement stayed conditional; #228 made every other check unconditional
+        too, so this is no longer the exception it was written as.
         """
-        checks = check_media(
-            [_bead("proj.41", title="[BDL-061.39] work")], concurrent=False
-        )
+        checks = check_media([_bead("proj.41", title="[BDL-061.39] work")])
         assert _check(checks, MEDIUM_TRACKER_IDS).status == STATUS_FAILED
 
     @pytest.mark.parametrize(
@@ -296,6 +324,7 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             [_bead("a", "billing"), _bead("b", "shipping")],
             conn=conn,
             environment=environment,
+            axes=_approving("billing", "shipping"),
         )
         assert _check(plan.media_checks, MEDIUM_WORKING_TREE).status == STATUS_PASSED
         assert plan.exit_code == 0
@@ -318,7 +347,6 @@ class TestTheCommitGateCheckReadsWhatIsInstalled:
     ) -> None:
         checks = check_media(
             [_bead("a")],
-            concurrent=True,
             environment=WaveEnvironment(commit_gate=gate),
         )
         check = _check(checks, MEDIUM_COMMIT_GATE)
@@ -354,7 +382,6 @@ class TestTheDocBaselineCheckStatesWhatTheWaveInherits:
     ) -> None:
         checks = check_media(
             [_bead("a")],
-            concurrent=True,
             environment=WaveEnvironment(doc_baseline_stale_pairs=stale),
         )
         assert _check(checks, MEDIUM_DOC_BASELINE).status == status

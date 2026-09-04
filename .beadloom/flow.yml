@@ -27,8 +27,30 @@ guards:
 # inside `scan_paths` and holds source a runner could mutate. CONTEXT's rule for
 # what belongs here: pure domain cores only, where a surviving mutant is a real
 # gap in the tests rather than an untested I/O branch.
+#
+# EVERY NAME HERE IS MUTATED BY THE RUNNER, and that is a test rather than an
+# intention (BDL-068.S4.x, `beadloom-0mdo.45`). Between S3 and 2026-09-04 this
+# list named three targets and `[tool.mutmut] only_mutate` named one, so two of
+# them could not be reached by any run of the nightly job however long it ran —
+# a name in the shipped declaration that nothing measures, which is the phantom
+# gate this epic exists to remove, sitting in the epic's own configuration.
+# `tests/test_mutation_runner_scope.py` now fails in BOTH directions.
+#
+# THE SIZE IS MEASURED, not chosen. Mutant counts from mutmut 3.7's own
+# generator, the same method checked against the 3 989 RFC Q3 measured:
+#
+#   3 989  graph/rules/            657  doc_quality.py     350  doc_shape.py
+#     324  role_duties.py          146  shell_targets.py    98  waves/derivation.py
+#     136  guards/surface.py
+#
+# One S4 module is deliberately absent — `application/typed_surface.py`, 241
+# mutants. CONTEXT records the reason with the count.
 mutation:
   targets:
+  - src/beadloom/application/guards/shell_targets.py
+  - src/beadloom/application/guards/surface.py
+  - src/beadloom/application/waves/derivation.py
   - src/beadloom/doc_sync/doc_quality.py
   - src/beadloom/doc_sync/doc_shape.py
   - src/beadloom/graph/rules/
+  - src/beadloom/onboarding/role_duties.py

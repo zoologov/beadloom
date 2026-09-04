@@ -34,6 +34,7 @@ from beadloom.application.doc_shape import planning_documents
 from beadloom.application.guards.config import GuardConfigError
 from beadloom.application.impact.answer import source_root_of
 from beadloom.application.impact.boundary import open_boundary
+from beadloom.application.waves.models import WorkItemAxes
 from beadloom.doc_sync.axes_section import (
     AXES_HEADING,
     AxesSection,
@@ -69,6 +70,15 @@ NO_INDEX = (
 
 #: git could not say which paths to judge.
 GIT_SILENT = "git could not say which paths this commit changes, so nothing was judged"
+
+#: What marks :meth:`ScopeRun.describe` in porcelain output, so a gate written in
+#: shell separates the verdict from the findings without parsing either. A
+#: finding line begins with a project-relative path and no path begins with
+#: ``"# "``, so the split is a property of the two shapes rather than a
+#: convention both ends have to remember. Declared here, beside the line it
+#: marks, because a marker the producer and the consumer each spell for
+#: themselves is two things that can disagree.
+VERDICT_MARKER = "# "
 
 #: The guard whose ``options.trunk`` names this project's trunk branch. Read
 #: from there rather than declared again: ``working-branch`` already asks the
@@ -110,7 +120,7 @@ class ScopeRun:
             return f"Declared axes: NOT CHECKED — {self.reason}"
         return (
             f"Declared axes ({self.work_item}, {self.scope}): "
-            f"{self.verdict.describe()}"
+            f"{self.verdict.population()}"
         )
 
 
@@ -276,3 +286,77 @@ def _target_nodes(
                 nodes.append(node)
             break
     return tuple(nodes)
+
+
+def work_item_axes(project_root: Path, *, branch: str | None = None) -> WorkItemAxes:
+    """The branch's work item, in the vocabulary the wave planner compares with.
+
+    A second RENDERING of the read :func:`scope_of_branch` already makes, never a
+    second read: the commit gate and the wave plan judging one approval
+    differently is the two-sources-of-truth class this epic exists to remove
+    (BDL-UX #232 is that class inside the planner itself). What is added here is
+    the part the commit gate has no use for — the rows the derivation attributed
+    to no node, and the derivation's own account of what it could not reach —
+    because a plan compared against an incomplete derivation must say so, and
+    ``beadloom impact`` is measurably incomplete on this layout (BDL-UX #225).
+
+    An unreadable work item comes back as a ``WorkItemAxes`` CARRYING the reason
+    rather than as ``None``: every caller then has one shape to render, and the
+    reason travels with the plan instead of being dropped at the edge.
+    """
+    name = branch if branch is not None else current_branch(project_root)
+    scope, reason = scope_of_branch(project_root, branch=name)
+    if scope is None:
+        return WorkItemAxes(reason=reason)
+    section = _section_of(project_root, scope.document)
+    return WorkItemAxes(
+        work_item=_key(scope),
+        document=scope.document,
+        seed=section.seed if section is not None else "",
+        unresolved=section.unresolved if section is not None else "",
+        kept=scope.kept,
+        targets=scope.targets,
+        ruled_out=frozenset(scope.ruled_out),
+        undecided=_undecided(section),
+        unattributed=_unattributed(section),
+    )
+
+
+def _section_of(project_root: Path, document: str) -> AxesSection | None:
+    """The ``## Axes`` section of the document *scope* was read from."""
+    path = project_root / document
+    if not path.is_file():
+        return None
+    return read_axes_section(path.read_text(encoding="utf-8"))
+
+
+def _undecided(section: AxesSection | None) -> frozenset[str]:
+    """Nodes a row names and decides nothing about.
+
+    ``DeclaredScope`` counts these and does not name them, because the commit
+    gate only has to know how many rows nobody ruled on. A wave plan compares a
+    NAMED declaration against them, so the names are read here from the same
+    section rather than recovered from the count.
+    """
+    if section is None:
+        return frozenset()
+    return frozenset(
+        axis.node for axis in section.axes if axis.node and axis.in_scope is None
+    )
+
+
+def _unattributed(section: AxesSection | None) -> tuple[str, ...]:
+    """Axis names whose row attributes no node, de-duplicated in table order.
+
+    The same shape ``beadloom-0mdo.32`` measured over this branch's own commits,
+    where 41 of 52 changed paths had no owning node: something the derivation
+    found and nothing can be compared against. Counted and stated, never read as
+    agreement.
+    """
+    if section is None:
+        return ()
+    names: list[str] = []
+    for axis in section.axes:
+        if not axis.node and axis.axis and axis.axis not in names:
+            names.append(axis.axis)
+    return tuple(names)

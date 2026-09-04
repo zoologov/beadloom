@@ -26,11 +26,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from beadloom.application.guards.paths import ResolvedEditPath, resolve_edit_path
+from beadloom.application.guards.hook_payload import shell_edit_from_context
+from beadloom.application.guards.paths import (
+    ResolvedEditPath,
+    resolve_edit_path,
+    undetermined_target,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
+
+    from beadloom.application.guards.shell_targets import ShellCommand
 
 
 @dataclass(frozen=True)
@@ -108,6 +115,19 @@ class GuardRequest:
         return self.context.get("path") or None
 
     @property
+    def shell_edit(self) -> ShellCommand | None:
+        """What the caller said about a shell command, when it described one.
+
+        The facts, never the line: the context carries the program name and the
+        write targets a declared shape named, because that is all this guard
+        ever read of a command and all a firing record has cause to keep
+        (``beadloom-0mdo.43``). The reduction happens at the two doors a command
+        arrives through — the harness payload and ``--context command=...`` —
+        which is why nothing here has a raw line to reduce.
+        """
+        return shell_edit_from_context(self.context)
+
+    @property
     def resolved_path(self) -> ResolvedEditPath:
         """:attr:`path` resolved against the project root, with its scope.
 
@@ -123,7 +143,16 @@ class GuardRequest:
         returning only the relative string collapsed three different situations
         — absent, outside the project, refused — into one ``None`` that no
         caller could tell apart.
+
+        A caller that supplied a shell command and no path resolves to
+        :attr:`~beadloom.application.guards.paths.PathScope.UNDETERMINED`
+        (BDL-UX #170). An explicit ``path`` wins: it is a statement about one
+        file, while a command line only ever yields a lower bound on the files
+        it writes.
         """
+        edit = self.shell_edit
+        if self.path is None and edit is not None:
+            return undetermined_target(edit.targets, unreadable=edit.unreadable)
         return resolve_edit_path(self.path, self.project_root)
 
     @property

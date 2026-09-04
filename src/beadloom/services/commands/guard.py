@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from beadloom.application.guards.invocation import InvocationResult
     from beadloom.application.guards.liveness import GuardLiveness
     from beadloom.application.guards.models import GuardVerdict
+    from beadloom.application.guards.surface import BindingSurface
 
 
 #: Why a ``--hook`` read failed when the caller left this process no stdin at all.
@@ -123,11 +124,66 @@ def _read_stdin() -> bytes:
     return stream.read().encode("utf-8", "surrogateescape")
 
 
-def _emit_liveness(rows: tuple[GuardLiveness, ...], *, output_json: bool) -> None:
-    """Print the liveness report for every registered guard."""
+def _surface_lines(surface: BindingSurface) -> list[str]:
+    """The enforcement-surface lines of the text report.
+
+    Printed before the guard rows because it is the question that qualifies
+    them: a guard reported healthy on a binding covering one write path out of
+    three is a third of a guard, and the rows alone cannot say so (BDL-UX #170).
+
+    The head line comes from the surface itself, in the three states it has, and
+    a ``read from:`` line names the artifacts it was derived from. The second is
+    there because `config-check` asks the neighbouring question of the
+    composition rather than of disk: both answers are legitimate and a reader
+    who cannot tell which one is in front of them has two reports that look like
+    they agree (BDL-UX #239, #241).
+    """
+    from beadloom.application.guards.surface import READ_FROM
+
+    lines = [surface.describe(), f"  read from: {READ_FROM}"]
+    if surface.unresolved:
+        lines.extend(f"  unresolved: {item}" for item in surface.unresolved)
+        # The tool rows are not printed: with a source unread, every row would
+        # be judged against a matcher list that is itself unknown, and a row
+        # saying "an edit through Edit fires no guard" would be a claim this run
+        # cannot make.
+        return lines
+    for row in surface.tools:
+        if row.writes is True and not row.bound:
+            lines.append(
+                f"  NOT SEEN: an edit through {row.tool} fires no guard "
+                f"(granted by {', '.join(row.granted_by)})"
+            )
+        elif row.writes is None:
+            lines.append(
+                f"  unclassified: nothing here says whether {row.tool} writes a "
+                f"file (granted by {', '.join(row.granted_by)})"
+            )
+    for tool in surface.named_but_not_granted:
+        lines.append(
+            f"  matched but not granted: {tool} is named by a matcher and by no "
+            "role adapter, so the entry protects nothing here"
+        )
+    return lines
+
+
+def _emit_liveness(
+    rows: tuple[GuardLiveness, ...],
+    surface: BindingSurface | None,
+    *,
+    output_json: bool,
+) -> None:
+    """Print the binding's surface, then the liveness report for every guard."""
     if output_json:
-        click.echo(json.dumps([row.to_dict() for row in rows], indent=2))
+        payload = {
+            "surface": surface.to_dict() if surface is not None else None,
+            "guards": [row.to_dict() for row in rows],
+        }
+        click.echo(json.dumps(payload, indent=2))
         return
+    if surface is not None:
+        for line in _surface_lines(surface):
+            click.echo(line)
     for row in rows:
         flags = []
         if row.never_fired:
@@ -187,7 +243,7 @@ def _emit_verdict(result: InvocationResult, verdict: GuardVerdict, *, output_jso
 def _emit(result: InvocationResult, *, output_json: bool) -> None:
     """Render whatever the invocation produced: a verdict, or the report it asked for."""
     if result.verdict is None:
-        _emit_liveness(result.liveness, output_json=output_json)
+        _emit_liveness(result.liveness, result.surface, output_json=output_json)
         return
     _emit_verdict(result, result.verdict, output_json=output_json)
 

@@ -247,6 +247,7 @@ def resolve_scope(conn: sqlite3.Connection, record: BeadRecord) -> BeadScope:
         unresolved=unresolved,
         unknown_refs=unknown,
         dropped_refs=dropped,
+        declared=names,
     )
 
 

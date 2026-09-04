@@ -47,7 +47,16 @@ SETTINGS_RELPATH = Path(".claude") / "settings.json"
 HOOK_EVENT = "PreToolUse"
 
 #: Tools whose invocation counts as "an edit is about to happen".
-EDIT_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
+#:
+#: ``Bash`` is here because it is a write path and was not (BDL-UX #170): a file
+#: written through ``python3 - <<EOF``, ``sed -i`` or a redirection went through
+#: the shell tool and fired no guard, while ``guard --liveness`` reported every
+#: guard healthy. What the binding covers is reported rather than assumed —
+#: :func:`beadloom.application.guards.surface.build_surface` derives this string
+#: back out of the emitted settings and compares it against the tools the emitted
+#: role adapters grant, so a write path added to a role later is a finding rather
+#: than a silence.
+EDIT_MATCHER = "Edit|Write|MultiEdit|NotebookEdit|Bash"
 
 _HOOK_SCRIPT = '''\
 #!/bin/sh

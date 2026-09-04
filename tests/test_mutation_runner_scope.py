@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
@@ -58,6 +59,12 @@ def _declared_targets() -> list[str]:
     return [str(target) for target in targets]
 
 
+def _target_sources(target: str) -> list[Path]:
+    """The Python files a declared target resolves to, as the runner walks them."""
+    path = REPO_ROOT / target
+    return sorted(path.rglob("*.py")) if path.is_dir() else [path]
+
+
 def _mutated_paths() -> list[str]:
     """The paths `only_mutate` selects, with the glob suffix removed."""
     patterns = _mutmut_config()["only_mutate"]
@@ -80,6 +87,30 @@ class TestTheTwoHomesAgree:
         failure `mutation-zero-mutants` exists to report, one config file over."""
         for path in _mutated_paths():
             assert (REPO_ROOT / path).exists(), path
+
+    def test_every_declared_target_is_mutated_by_the_runner(self) -> None:
+        """The direction the other test cannot see, and the one that went wrong.
+
+        `only_mutate` names a subset of `mutation.targets`, so the check above
+        passes while a declared target is reached by no run of this project's
+        job at all — not "awaiting a run", unreachable by configuration. That is
+        the phantom gate BDL-068 exists to remove, sitting in the epic's own
+        declaration: measured 2026-09-04, `doc_quality.py` and `doc_shape.py`
+        had been declared since S3 and `only_mutate` named `graph/rules/` alone.
+        """
+        patterns = _mutmut_config()["only_mutate"]
+        assert isinstance(patterns, list)
+        unreachable = [
+            str(path.relative_to(REPO_ROOT))
+            for target in _declared_targets()
+            for path in _target_sources(target)
+            if not any(fnmatch(str(path.relative_to(REPO_ROOT)), str(p)) for p in patterns)
+        ]
+        assert unreachable == [], (
+            f"{len(unreachable)} declared source file(s) match no `only_mutate` "
+            f"pattern, so no run of this project's job can mutate them and the "
+            f"shipped declaration names a scope nothing measures: {unreachable}"
+        )
 
     def test_the_mutated_paths_lie_under_a_source_path_the_runner_copies(self) -> None:
         """mutmut mutates a copy under `mutants/`; a path outside `source_paths`
@@ -122,7 +153,8 @@ class TestTheRunnerIsThisRepositorysOwn:
         assert offenders == []
 
 class TestThePoolTheRunnerSelectsFrom:
-    """The 73 test files that execute the slice, and what keeps the list honest.
+    """The 114 test files that execute the declared scope, and what keeps the
+    list honest.
 
     mutmut needs its pool statically, so the list is authored — the shape this
     epic distrusts. Two facts are therefore checked rather than hoped for: no

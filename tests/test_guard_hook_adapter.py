@@ -209,10 +209,10 @@ class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
 
         matchers = {entry["matcher"] for entry in settings["hooks"]["PreToolUse"]}
 
-        assert matchers == {"Edit|Write|MultiEdit|NotebookEdit"}
+        assert matchers == {"Edit|Write|MultiEdit|NotebookEdit|Bash"}
         # Nothing in the emitted adapter narrows or re-decides it.
         script = (tmp_path / GUARD_HOOK_RELPATH).read_text(encoding="utf-8")
-        for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"):
             assert tool not in _script_logic_lines(script)[0]
 
     def test_the_spec_quotes_the_matcher_the_scaffolder_actually_emits(self) -> None:

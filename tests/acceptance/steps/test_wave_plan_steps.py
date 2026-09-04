@@ -11,12 +11,20 @@ up — the acceptance suite runs inside ``uv run pytest``, not beside it.
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.waves import (
+    AXIS_NOT_ATTRIBUTED,
+    AXIS_NOT_DERIVED,
+    AXIS_RULED_OUT,
+    FINDING_DECLARED_OUTSIDE,
+    FINDING_NOT_COMPARED,
+    FINDING_UNGUARDED_AXIS,
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
@@ -30,7 +38,10 @@ from beadloom.application.waves import (
     BeadRecord,
     WaveEnvironment,
     WaveOverride,
+    WorkItemAxes,
     plan_waves,
+    remedy_for,
+    room_for,
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
@@ -62,6 +73,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "overrides": [],
         "plan": None,
         "environment": None,
+        "axes": None,
     }
 
 
@@ -156,6 +168,7 @@ def when_decided(world: dict[str, Any]) -> None:
         conn=world["conn"],
         overrides=world["overrides"],
         environment=world["environment"],
+        axes=world["axes"],
     )
 
 
@@ -272,3 +285,144 @@ def then_plan_clean(world: dict[str, Any]) -> None:
 def then_plan_not_clean(world: dict[str, Any]) -> None:
     assert world["plan"].findings
     assert world["plan"].exit_code == 1
+
+
+@then("no wave holds more than one bead")
+def then_no_concurrent_wave(world: dict[str, Any]) -> None:
+    assert max(len(wave.beads) for wave in world["plan"].waves) == 1
+
+
+@then("every bead is told the clean room it owes, named after its own id")
+def then_every_bead_owes_a_room(world: dict[str, Any]) -> None:
+    """One room per bead, and no two beads sharing a path.
+
+    BDL-UX #235: two concurrent agents each built a clean room at the same path
+    and one measurement was taken over its neighbour's untracked files. A room
+    whose name cannot say whose it is is a shared directory with a reassuring
+    name.
+    """
+    beads = [bead for wave in world["plan"].waves for bead in wave.beads]
+    rooms = [room_for(bead) for bead in beads]
+    assert len(set(rooms)) == len(beads)
+    for bead, room in zip(beads, rooms, strict=True):
+        assert bead in room
+
+
+# --- BDL-UX #232 / #234: the declaration held against the recorded derivation ---
+
+
+#: The names a Given spells inside double quotes.
+_QUOTED = re.compile(r'"([^"]+)"')
+
+
+def _axes(world: dict[str, Any], **changes: Any) -> None:
+    """Replace the work item's recorded axes, keeping what was already given."""
+    current = world["axes"] or WorkItemAxes(
+        work_item="BDL-000", document="docs/BDL-000/RFC.md", seed="none"
+    )
+    world["axes"] = replace(current, reason=None, **changes)
+
+
+@given(parsers.re(r'the work item keeps (?P<nodes>[^:]+) in scope$'))
+def given_work_item_keeps(world: dict[str, Any], nodes: str) -> None:
+    """One step for every length of list, so no two parsers race for one line."""
+    _axes(world, kept=frozenset(_QUOTED.findall(nodes)))
+
+
+@given(parsers.parse('the work item keeps "{kept}" in scope and rules "{out}" out'))
+def given_work_item_rules_one_out(world: dict[str, Any], kept: str, out: str) -> None:
+    _axes(world, kept=frozenset({kept}), ruled_out=frozenset({out}))
+
+
+@given(parsers.parse('the work item records an axis "{axis}" that names no node'))
+def given_unattributed_axis(world: dict[str, Any], axis: str) -> None:
+    _axes(world, unattributed=(axis,))
+
+
+@then(parsers.parse('the plan reports "{node}" as declared by no bead of that wave'))
+def then_unguarded(world: dict[str, Any], node: str) -> None:
+    plan = world["plan"]
+    assert any(node in gap.nodes for gap in plan.unguarded_axes)
+    assert any(
+        finding.startswith(FINDING_UNGUARDED_AXIS) and node in finding
+        for finding in plan.findings
+    )
+
+
+@then(
+    parsers.parse('the plan reports "{bead}" declaring "{ref}" outside the approved axes')
+)
+def then_declared_outside(world: dict[str, Any], bead: str, ref: str) -> None:
+    plan = world["plan"]
+    assert any(
+        a.bead_id == bead and a.ref == ref and a.verdict == AXIS_RULED_OUT
+        for a in plan.agreements
+    )
+    assert any(
+        finding.startswith(FINDING_DECLARED_OUTSIDE) and bead in finding
+        for finding in plan.findings
+    )
+
+
+@then(parsers.parse('the plan states "{ref}" as a node the derivation did not reach'))
+def then_not_derived(world: dict[str, Any], ref: str) -> None:
+    assert any(
+        a.ref == ref and a.verdict == AXIS_NOT_DERIVED
+        for a in world["plan"].agreements
+    )
+
+
+@then(parsers.parse('the plan reports no finding against "{bead}" for declaring it'))
+def then_no_finding_for_bead(world: dict[str, Any], bead: str) -> None:
+    """`impact` under-reports (BDL-UX #225), so an absent row accuses nobody."""
+    assert not any(
+        finding.startswith(FINDING_DECLARED_OUTSIDE) and bead in finding
+        for finding in world["plan"].findings
+    )
+
+
+@then(parsers.parse('the plan states the axis "{axis}" as compared against nothing'))
+def then_axis_not_compared(world: dict[str, Any], axis: str) -> None:
+    assert any(
+        a.ref == axis and a.verdict == AXIS_NOT_ATTRIBUTED
+        for a in world["plan"].agreements
+    )
+
+
+@then("the plan states that it compared the declarations against no derivation")
+def then_nothing_compared(world: dict[str, Any]) -> None:
+    plan = world["plan"]
+    assert plan.axes.reason
+    assert any(
+        finding.startswith(FINDING_NOT_COMPARED) and plan.axes.reason in finding
+        for finding in plan.findings
+    )
+
+
+def _remedy(world: dict[str, Any], bead: str) -> str:
+    scope = next(s for s in world["plan"].scopes if s.bead_id == bead)
+    return remedy_for(scope.unresolved, axes=world["plan"].axes)
+
+
+@then(parsers.parse('the remedy for "{bead}" says this check cannot tell the two apart'))
+def then_remedy_admits_ambiguity(world: dict[str, Any], bead: str) -> None:
+    remedy = _remedy(world, bead)
+    assert "cannot tell" in remedy
+    assert any(remedy in finding for finding in world["plan"].findings)
+
+
+@then(
+    parsers.parse(
+        'the remedy for "{bead}" states the prose case as well as the declaration case'
+    )
+)
+def then_remedy_states_both(world: dict[str, Any], bead: str) -> None:
+    """#234: the printed remedy told nn4c to promote a sentence it wrote on purpose."""
+    remedy = _remedy(world, bead)
+    assert "prose" in remedy
+    assert "start of its own line" in remedy
+
+
+@then(parsers.parse('the remedy for "{bead}" names the document the axes were read from'))
+def then_remedy_names_document(world: dict[str, Any], bead: str) -> None:
+    assert world["plan"].axes.document in _remedy(world, bead)

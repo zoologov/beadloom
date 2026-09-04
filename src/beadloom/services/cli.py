@@ -33,6 +33,7 @@ from beadloom.services.commands import (
     setup,
     snapshot,
     status,
+    typed_surface,
     waves,
 )
 from beadloom.services.commands._root import main
@@ -62,6 +63,7 @@ _REGISTRATION_ONLY = (
     setup,
     snapshot,
     status,
+    typed_surface,
     waves,
 )
 

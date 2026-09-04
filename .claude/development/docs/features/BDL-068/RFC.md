@@ -64,9 +64,12 @@ worse than the ignorance we have now.
 ## Axes
 
 Derived, never authored. An epic is not a single `impact` target: its axes are the UNION of its
-slices' axes, and each slice's rows are derived when that slice begins. The rows below are S1's,
-derived on 2026-09-02 after `c7591a8`. S2–S6 add theirs at their own start, which is the same rule
-as beads being created per slice.
+slices' axes, and each slice's rows are derived when that slice begins. The first nine rows are
+S1's, derived on 2026-09-02 after `c7591a8`. The twenty-eight under them are S4's and the last
+five are S2's and S3's, both derived on 2026-09-04 at `d0088ba`. A row is not repeated — a
+sweep that reaches an axis and node the table already names adds a second site count and no
+axis, and where that happened it is stated under the table. S5 and S6 add theirs at their own
+start, which is the same rule as beads being created per slice.
 
 > **Derived by:** `beadloom impact` over `onboarding/role_composer.py`, `doc_sync/axes_section.py`
 > and `services/commands/impact.py` — the three surfaces S1 changed
@@ -76,6 +79,55 @@ as beads being created per slice.
 > **Unresolved:** co-writers, on all three targets — no declared effect rule found a sink these
 > targets reach, so there is no commit point to ask who else writes through. Measured on
 > 2026-09-02 at `c7591a8`, macOS, `beadloom impact` in the foreground.
+
+> **Derived by:** `beadloom impact` over the twenty-eight Python source files S4 changed, which
+> `git diff --name-only main...HEAD` lists: `application/declared_scope.py`,
+> `application/guards/contract.py`, `application/guards/evaluation.py`,
+> `application/guards/hook_payload.py`, `application/guards/invocation.py`,
+> `application/guards/paths.py`, `application/guards/shell_targets.py`,
+> `application/guards/surface.py`, `application/review_brief/assembly.py`,
+> `application/typed_surface.py`, `application/waves/__init__.py`,
+> `application/waves/derivation.py`, `application/waves/media.py`,
+> `application/waves/media_checks.py`, `application/waves/models.py`,
+> `application/waves/planner.py`, `application/waves/scope.py`, `doc_sync/scope_check.py`,
+> `onboarding/config_sync.py`, `onboarding/guard_hooks.py`, `onboarding/role_duties.py`,
+> `services/cli.py`, `services/commands/docsync.py`, `services/commands/guard.py`,
+> `services/commands/impact.py`, `services/commands/setup.py`,
+> `services/commands/typed_surface.py` and `services/commands/waves.py`
+> **Seed:** S4's sweep resolves no seed on 25 of its 28 targets, under the same
+> `reaches-an-effect-sink` rule, so their co-writers axis is unresolved and not empty. Three
+> targets do resolve one and answer that axis, which S1 had none of:
+> `onboarding/config_sync.py` on `persist_flow_config` (`onboarding/flow_config.py:324`,
+> `serialises-yaml`), `services/commands/docsync.py` on `flow_signature`
+> (`doc_sync/surface.py:179`, `serialises-yaml`), and `services/commands/setup.py` on six, the
+> first being `each_graph_file` (`onboarding/graph_files.py:24`, `reads-a-yaml-directory`).
+> **Unresolved:** S4's 28 runs report 418 unresolved-terminator-name, 29
+> name-defined-more-than-once, 25 no-seed, 1 call-through-a-variable and 1 dynamic-dispatch,
+> counted as distinct name-and-file pairs.
+> **Measured on:** 2026-09-04 at `d0088ba`, in a room built with `git archive HEAD` at
+> `room-beadloom-0mdo.44`, macOS 25.6.0 arm64, CPython 3.13.7, `beadloom impact` in the
+> foreground, 28 runs. The same 28 runs on the working tree returned the same nodes and the
+> same site counts, so `beadloom-0mdo.43`'s uncommitted edits do not move this answer.
+
+> **Derived by:** `beadloom impact` over the sixteen Python source files S2 and S3 changed,
+> which `git diff --name-only 17eafb8 97e0504` lists: `application/gate.py`,
+> `application/mutation_scope/__init__.py`, `application/mutation_scope/scope.py`,
+> `application/mutation_scope/score.py`, `application/review_brief/__init__.py`,
+> `application/review_brief/assembly.py`, `application/review_brief/models.py`,
+> `application/review_brief/reachability.py`, `application/rooms.py`, `onboarding/composer.py`,
+> `services/cli.py`, `services/commands/federation.py`, `services/commands/mutation.py`,
+> `services/commands/review_brief.py`, `services/commands/rooms.py` and
+> `services/mcp_server.py`
+> **Seed:** The S2 and S3 sweep resolves no seed on 13 of its 16 targets. Three resolve one:
+> `application/gate.py` and `services/commands/federation.py` on two each, the first being
+> `flow_signature` (`doc_sync/surface.py:179`, `serialises-yaml`), and `services/mcp_server.py`
+> on five, the first being `each_graph_file` (`onboarding/graph_files.py:24`,
+> `reads-a-yaml-directory`).
+> **Unresolved:** The S2 and S3 sweep's 16 runs report 297 unresolved-terminator-name, 13
+> no-seed, 12 name-defined-more-than-once, 11 dynamic-dispatch and 1 call-through-a-variable.
+> **Measured on:** 2026-09-04 at `d0088ba`, in the same room. That is forty commits after those
+> slices closed, which is why the five rows below are recorded as this epic's union catching up
+> and not as S2's or S3's own derivation.
 
 | Axis | Node | Sites | In scope | Why |
 |------|------|-------|----------|-----|
@@ -88,11 +140,71 @@ as beads being created per slice.
 | callers | `work-item-type` | 1, `_collect` (`doc_sync/work_item_type.py:121`) | yes | `.5` routes the type decision through it |
 | callers | `impact` | 3, first `_rows` (`application/impact/section.py:92`) | yes | The command rendering its own section |
 | callers | `cli-commands` | 1, `axes` (`services/commands/impact.py:88`) | yes | The command surface |
+| co-writers | `agent-prime` | 4, first `bootstrap_project` (`onboarding/scanner/bootstrap.py:36`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| co-writers | `agentic-flow-setup` | 1, `scaffold` (`onboarding/agentic_flow_setup.py:360`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| co-writers | `cli-commands` | 3, first `link` (`services/commands/index_ops.py:203`) | yes | written by this epic — 11 of the 239 paths it changes are owned by it |
+| co-writers | `doc-generator` | 2, first `_load_graph_from_yaml` (`onboarding/doc_generator.py:28`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| co-writers | `doc-sync` | 1, `surface_signature` (`doc_sync/surface.py:199`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| co-writers | `graph-loader` | 1, `update_node_in_yaml` (`graph/loader.py:171`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| co-writers | `mcp-server` | 1, `handle_update_node` (`services/mcp_server.py:212`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| co-writers | `reindex` | 3, first `reindex` (`application/reindex/full.py:76`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `ai-techwriter` | 1, `main` (`ai_agents/ai_techwriter/cli.py:195`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `application` | 3, first `_routing` (`application/landscape_view.py:169`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `axes-section` | 1, `_row` (`doc_sync/axes_section.py:189`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `contracts` | 1, `_is_explicit_cross_repo` (`graph/contracts.py:430`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `declared-scope` | 4, first `describe` (`application/declared_scope.py:117`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `doc-roots` | 1, `_from_block` (`infrastructure/doc_roots.py:468`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `doc-shape-requirements` | 1, `shipped_placeholders` (`application/doc_shape.py:139`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `federation` | 1, `parse_ref` (`graph/federation/refs.py:65`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `flow-suppression` | 2, first `render_suppression_notice` (`onboarding/flow_suppression.py:130`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `graph` | 2, first `lint` (`graph/linter.py:103`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `ignore-block` | 1, `ensure_ignore_block` (`onboarding/ignore_block.py:157`) | yes | `beadloom-0mdo.43` rewrites the shipped ignore-block entry, because this slice changed what the file it invites a team to commit now holds |
+| callers | `mcp-server` | 1, `handle_bead_context` (`services/mcp_server.py:691`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `review-brief` | 2, first `assemble_brief` (`application/review_brief/assembly.py:93`) | yes | written by this epic — 4 of the 239 paths it changes are owned by it |
+| callers | `role-duties` | 1, `_performer` (`onboarding/role_duties.py:282`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `rule-engine` | 3, first `_contradiction` (`graph/rules/doc_area.py:431`) | yes | the `scenario-coverage` severity decision CONTEXT records on 2026-09-04 is implemented in `graph/rules/scenario_coverage.py` |
+| callers | `scenario-binding` | 1, `_keyword_or_step` (`graph/scenarios.py:287`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `scope-check` | 1, `_outside` (`doc_sync/scope_check.py:262`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `sdl` | 2, first `extract_surface` (`graph/sdl.py:44`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `site-generation` | 1, `_render_docs_overview` (`application/site.py:260`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `wave-plan` | 6, first `conflict_between` (`application/waves/independence.py:58`) | yes | written by this epic — 7 of the 239 paths it changes are owned by it |
+| callers | `agentic-flow-setup` | 3, first `templates_root` (`onboarding/agentic_flow_setup.py:125`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `doc-templates` | 2, first `doc_template` (`onboarding/doc_templates.py:100`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `mutation-scope` | 2, first `describe_room` (`application/mutation_scope/score.py:124`) | yes | written by this epic — 3 of the 239 paths it changes are owned by it |
+| callers | `role-composer` | 3, first `roles_templates_root` (`onboarding/role_composer.py:95`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
+| callers | `work-item-routing` | 1, `task_init_routing` (`application/work_item_routing.py:218`) | yes | written by this epic — 1 of the 239 paths it changes is owned by it |
 
-**The scope decision.** Every caller row is in scope for this epic because each is a surface a
-later slice edits — S4 is the guards, S6 is the composer and `config-check`. Nothing is excluded,
-which is a decision and not an omission: an epic that declared a narrower scope than its own
-slices would make `.6` red on its second commit.
+**The scope decision (S1).** Every caller row is in scope for this epic because each is a
+surface a later slice edits — S4 is the guards, S6 is the composer and `config-check`. Nothing
+is excluded, which is a decision and not an omission: an epic that declared a narrower scope
+than its own slices would make `.6` red on its second commit.
+
+**The scope decision (S4).** The rule, stated so a later slice can apply the same one: a row is
+`yes` when this epic WRITES the node and `no` when it only READS it. Which nodes it writes is
+measured rather than judged — the 239 paths BDL-068 changes since `17eafb8^` resolve to thirty
+owning nodes, and every `yes` row's `Why` carries that node's share of them. Two rows are `yes`
+on a commitment named elsewhere instead: `ignore-block`, which `beadloom-0mdo.43` edits because
+this slice changed what the shipped ignore entry invites a team to commit, and `rule-engine`,
+where the `scenario-coverage` severity decision CONTEXT records on 2026-09-04 is implemented.
+Fourteen of S4's twenty-eight rows are `no`, and that is what S1's blanket `yes` did not have:
+a `no` row makes a commit on that node a finding instead of a silence, whereas under S1's table
+`scope-check` reported "36 staged path(s) a node owns, 65 no node owns" with zero findings
+while none of the seven nodes S4 was editing was named anywhere. A later slice that needs one
+of the fourteen re-derives and moves the row with its reason, which is the same per-slice rule
+as the derivation itself. S4's sweep also reaches four nodes S1's rows already name — `ci-gate`
+(3 sites), `cli-commands` (58), `config-check` (1) and `flow-guards` (14) — and those rows are
+not repeated.
+
+**The scope decision (S2 and S3), taken on 2026-09-04.** Their rows were never derived when
+those slices began, which is the standing gap the S4 review named. They are added now rather
+than left open, because this section's job is to be the union this epic is judged against, and
+an incomplete union is a wrong verdict in the present: `beadloom waves` reported
+`mutation-scope: not_derived — no row of RFC.md names it` against `beadloom-0mdo.45`, whose
+declared scope is exactly that node. The sweep is dated and attributed to the tree it was
+actually run on rather than to the tree those slices began on, because a derivation restated as
+older than it is would be the defect this bead was opened to repair, one layer up. Nineteen of
+its twenty-four rows name an axis and node the table already carries and are not repeated. The
+five that are new are `yes` under the same measured rule.
 
 ## Proposed Solution
 
@@ -204,8 +316,8 @@ the state BDL-067 reached at its fourth cycle.
 
 | # | Question | Decision |
 |---|----------|----------|
-| Q1 | Does the `## Axes` declaration live in the document, or in the bead notes where `waves` already reads `refs:`? Two homes are two things that can disagree. | Pending — decided in PLAN |
-| Q2 | Does the commit-scope check compare against the axes of the claimed bead, or against the axes of the work item? A bead is narrower; a work item is what the human approved. | Pending |
+| Q1 | Does the `## Axes` declaration live in the document, or in the bead notes where `waves` already reads `refs:`? Two homes are two things that can disagree. | **The document** (2026-09-02). The derivation's output and the person's scope decision live in the `## Axes` section, and the bead's `refs:` is generated from it by `beadloom axes --refs`. One computation, two renderings, and a disagreement between them is a finding. |
+| Q2 | Does the commit-scope check compare against the axes of the claimed bead, or against the axes of the work item? A bead is narrower, and a work item is what the human approved. | **The work item's axes** (2026-09-02). A bead may narrow freely inside them, and a commit that leaves them means the approval no longer covers the change, which is the re-plan trigger. |
 | Q3 | Does the mutation job run per PR or nightly? `tests-windows` was withdrawn at ~16-28 runner-minutes per PR, which is the budget this must fit under. | **Nightly** (S3.1, 2026-09-03). Measured: 3 989 mutants over `graph/rules/` in 54 min 55 s at 1.42 mutations/second, six workers, on a 10-core Darwin arm64 machine running CPython 3.13.7. That is two to three times the budget, on hardware faster than `ubuntu-latest`, so the decision does not turn on the CI figure. Against ~4-minute ubuntu legs the job would also be the pipeline's whole critical path — the second half of the `tests-windows` reasoning. |
-| Q4 | For the External `bd` findings, is the deliverable a wrapper this project owns, or documented avoidance in every caller? | Pending |
-| Q5 | Is `Explore` a fourth role subagent, or a mode of an existing one? A fifth role file is a fifth thing that can drift out of `setup-agentic-flow`. | Pending |
+| Q4 | For the External `bd` findings, is the deliverable a wrapper this project owns, or documented avoidance in every caller? | **Neither a wrapper nor prose** (2026-09-02). Our own `bd` call sites are derived and each one's behaviour in the face of the finding is asserted, because a wrapper is a second thing to keep in step with upstream and a derived population fails on a call site added later. |
+| Q5 | Is `Explore` a fourth role subagent, or a mode of an existing one? A fifth role file is a fifth thing that can drift out of `setup-agentic-flow`. | **A role file** (2026-09-02), composed by the same composer as the other four. A mode has no protocol file, which is why the one `Explore` run in BDL-067 returned a trace of the defect and nothing about axes. |

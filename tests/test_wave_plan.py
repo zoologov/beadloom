@@ -25,11 +25,12 @@ from beadloom.application.waves import (
     WaveConfigError,
     WaveEnvironment,
     WaveOverride,
+    WorkItemAxes,
     declared_refs,
     load_overrides,
-    media_for,
     plan_waves,
     resolve_scope,
+    room_for,
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
@@ -70,6 +71,23 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
     _file(connection, "src/shipping/core.py")
     connection.commit()
     return connection
+
+
+def _approving(*nodes: str) -> WorkItemAxes:
+    """A recorded derivation keeping exactly *nodes* in scope.
+
+    Supplied wherever a case asserts a CLEAN plan, because a concurrent wave
+    whose declarations were held against no derivation is a finding — the same
+    rule, and for the same reason, as a shared medium nobody measured. And it
+    keeps exactly the nodes the case's beads declare, because a work item
+    approving a node no bead of a wave names is the OTHER finding (BDL-UX #232).
+    """
+    return WorkItemAxes(
+        work_item="KEY-1",
+        document="docs/KEY-1/RFC.md",
+        seed="none",
+        kept=frozenset(nodes),
+    )
 
 
 def _bead(bead_id: str, refs: str = "", blocked_by: frozenset[str] = frozenset()) -> BeadRecord:
@@ -132,10 +150,11 @@ class TestSerialisationReasons:
     def test_disjoint_scopes_share_a_wave(self, conn: sqlite3.Connection) -> None:
         """Independent subgraphs share a wave, and a measured wave is exit 0.
 
-        The environment is supplied because a concurrent wave whose shared media
-        nobody measured reaches exit 1 by design — the assertion below is about
-        the shape, so it says who measured what rather than relying on a default
-        that no longer means "clean".
+        The environment and the axes are supplied because a concurrent wave whose
+        shared media nobody measured, or whose declarations were held against no
+        derivation, reaches exit 1 by design — the assertion below is about the
+        shape, so it says who measured what rather than relying on a default that
+        no longer means "clean".
         """
         plan = plan_waves(
             [_bead("a", "billing"), _bead("b", "shipping")],
@@ -145,6 +164,7 @@ class TestSerialisationReasons:
                 commit_gate=GATE_COMMIT_SCOPED,
                 doc_baseline_stale_pairs=0,
             ),
+            axes=_approving("billing", "shipping"),
         )
         assert plan.wave_of("a") == plan.wave_of("b")
         assert plan.conflicts == ()
@@ -301,16 +321,37 @@ class TestSharedMedia:
         assert plan.shared_media == SHARED_MEDIA
         assert len(SHARED_MEDIA) == 4
 
-    def test_a_plan_that_runs_nothing_concurrently_names_none(
+    def test_a_plan_that_runs_nothing_concurrently_names_the_same_media(
         self, conn: sqlite3.Connection
     ) -> None:
+        """BDL-UX #228 — the counter-claim this replaces.
+
+        The first version returned no medium at all when no wave held more than
+        one bead. That read the width of ONE plan as solitude, and the silence
+        landed exactly where the coordinator was not already thinking about
+        concurrency: roughly twenty single-bead waves across two epics carried
+        the discipline by launch prompt alone.
+        """
         plan = plan_waves([_bead("a", "billing"), _bead("b", "billing")], conn=conn)
-        assert plan.shared_media == ()
+        assert all(len(wave.beads) == 1 for wave in plan.waves)
+        assert plan.shared_media == SHARED_MEDIA
 
     def test_every_medium_carries_its_evidence(self) -> None:
-        for medium in media_for(2):
+        for medium in SHARED_MEDIA:
             assert medium.evidence.startswith("BDL-UX #")
             assert len(medium.statement) > 40
+
+    def test_the_room_a_bead_owes_carries_that_bead_s_id(self) -> None:
+        """BDL-UX #235 — a room whose name cannot say whose it is is shared."""
+        assert room_for("beadloom-67t1") == "room-beadloom-67t1"
+        assert room_for("a") != room_for("b")
+
+    def test_every_bead_of_every_wave_is_given_a_room_of_its_own(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        plan = plan_waves([_bead("a", "billing"), _bead("b", "shipping")], conn=conn)
+        beads = [bead for wave in plan.waves for bead in wave.beads]
+        assert len({room_for(bead) for bead in beads}) == len(beads)
 
     def test_each_wave_names_a_gate_owner_from_its_own_members(
         self, conn: sqlite3.Connection

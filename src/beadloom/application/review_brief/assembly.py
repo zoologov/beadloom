@@ -41,7 +41,7 @@ from beadloom.application.review_brief.models import (
 from beadloom.application.review_brief.reachability import reachability_of
 from beadloom.application.waves import (
     UNRESOLVED_NO_DECLARATION,
-    UNRESOLVED_REMEDIES,
+    remedy_for,
     resolve_scope,
 )
 from beadloom.infrastructure.repository import get_docs_for_ref, get_owning_ref_id
@@ -145,7 +145,7 @@ def assemble_brief(
         # the reviewer is being handed a scope that is narrower than the bead's.
         findings.append(
             f"{FINDING_AMBIGUOUS_SCOPE}: {scope.unresolved} — "
-            f"{UNRESOLVED_REMEDIES.get(scope.unresolved, '')}"
+            f"{remedy_for(scope.unresolved)}"
         )
     if scope.unknown_refs:
         findings.append(f"{FINDING_UNKNOWN_REF}: {', '.join(scope.unknown_refs)}")

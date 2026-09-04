@@ -11,8 +11,12 @@
     "guard is a flow.yml edit plus a re-run of setup-agentic-flow, never a hand edit here.",
     "Exit codes map to the harness by design: 0 pass/skip, 1 warn (surfaced, not blocking),",
     "2 block. Both guards ship at `warn`, so nothing here stops work today; they report, and",
-    "they name what they did not check. The matcher is the shipped one and its surface is",
-    "narrower than the promise: a file written through Bash fires no guard at all (#170)."
+    "they name what they did not check. The matcher is the shipped one, and since BDL-068 S4",
+    "(#170) it names Bash as well: a file written through `python3 - <<EOF`, `sed -i` or a",
+    "redirection is an edit, and until that bead it fired no guard at all while --liveness",
+    "reported every guard healthy. `beadloom guard --liveness` now reads this matcher back",
+    "off disk and reports which of the write paths the emitted role adapters grant it can",
+    "see, so a narrower matcher here is a reported gap rather than a silence."
   ],
   "hooks": {
     "PreToolUse": [
@@ -23,7 +27,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit"
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"
       },
       {
         "hooks": [
@@ -32,7 +36,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit"
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"
       }
     ]
   }

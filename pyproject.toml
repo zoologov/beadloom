@@ -225,24 +225,35 @@ fail_under = 80
 # `tests-windows` over runner minutes.
 #
 # `source_paths` is the whole package because mutmut copies it into `mutants/`
-# and imports it there; `only_mutate` is what makes this the graph/rules/ slice.
-# The two are different jobs and only the second is the scope.
+# and imports it there; `only_mutate` is what selects the declared scope out of
+# it. The two are different jobs and only the second is the scope.
 #
 # THE SCOPE IS DECLARED TWICE ON PURPOSE and the two homes are held together by
-# a test: `.beadloom/flow.yml` carries `mutation.targets`, which is what ships
-# and what `config-check` reads, and this block is what the runner reads.
-# tests/test_mutation_runner_scope.py fails if they disagree.
+# a test IN BOTH DIRECTIONS: `.beadloom/flow.yml` carries `mutation.targets`,
+# which is what SHIPS and what `config-check` reads, and this block is what the
+# runner reads. tests/test_mutation_runner_scope.py fails if they disagree
+# either way. The second direction was added on 2026-09-04 because it had been
+# missing and something had walked through the hole: `only_mutate` named
+# `graph/rules/*` alone while the declaration named `doc_quality.py` and
+# `doc_shape.py` too, so those two were unreachable by any run rather than
+# awaiting one, and the job's `--only` suppressed the one finding that says so.
 #
 # THE TEST POOL IS DERIVED, NOT CHOSEN, and the derivation is written down so it
 # can be run again:
 #
-#   pytest --cov=beadloom.graph.rules --cov-context=test
+#   pytest --cov=<the declared module> --cov-context=test
 #   select distinct context from arc join context ...   # the coverage database
 #
 # 73 test files execute graph/rules/ (measured 2026-09-03 over 8 195 tests),
 # and a 74th imports the package at COLLECTION time, where a coverage context
 # does not reach -- it was added by the import check named below, on its first
 # run, which is the check earning its place.
+#
+# The six file targets were derived the same way on 2026-09-04, in one pass over
+# 8 813 passing tests: 41 test files execute doc_shape.py, 14 role_duties.py, 8
+# guards/surface.py, 7 waves/derivation.py, 6 doc_quality.py and 2
+# guards/shell_targets.py. Their union is 64 files, 21 of them already here, so
+# the pool grew by 41 -- 43 derived, minus the two exclusions named below.
 # They are listed below because mutmut needs the pool statically, and a list is
 # the thing this epic distrusts -- so two things are stated about it rather than
 # hoped for. FIRST, the failure direction: a killer test OUTSIDE the pool cannot
@@ -254,10 +265,31 @@ fail_under = 80
 #
 # ONE DERIVED ENTRY IS EXCLUDED, and the reason is the room rather than taste:
 # tests/test_bead15_s3b_coverage.py runs `sync-check` over the tree it is in, and
-# in `mutants/` that tree is a MUTATED copy — every rules module has a different
+# in `mutants/` that tree is a MUTATED copy — every mutated module has a different
 # hash, so the pairs are stale by construction and the test cannot pass there.
-# It executes graph/rules/, so dropping it costs whatever mutants it would have
-# killed, in the under-claiming direction.
+# It executes graph/rules/ and doc_shape.py, so dropping it costs whatever
+# mutants it would have killed, in the under-claiming direction. The 2026-09-04
+# derivation returned it a second time, through doc_shape.py, and it is still the
+# only entry excluded: the other 42 new entries were run in a room with no `.git`
+# and reported 1 failed, 971 passed, 17 skipped -- the one failure being this file.
+#
+# A SECOND ENTRY IS EXCLUDED, found by running the derived pool in `mutants/`
+# rather than by reasoning about it: tests/test_bead18_s5_relation.py reads
+# `.beads/issues.jsonl`, the tracker export, and `also_copy` does not carry
+# `.beads` -- 263 MB locally, holding an embedded database, for one file. Eight
+# of its cases fail there with FileNotFoundError. It reaches doc_shape.py, so
+# again the cost is in the under-claiming direction.
+#
+# THAT EXCLUSION WAS NOT PREDICTED BY THE CHEAPER ROOM, which is the reason to
+# run the expensive one: the same 43 files reported one failure in a `git
+# archive HEAD` room with no `.git`, and eight more in `mutants/`. A room that
+# reproduces one property of another room answers about that property only.
+#
+# ONE ENTRY CONTRIBUTES SKIPS RATHER THAN KILLERS, which is worth saying because
+# it looks like coverage: tests/test_a_commit_is_judged_against_the_declared_axes.py
+# reads named commits out of git history and skips each case whose commit is not
+# in the checkout. `mutants/` has no repository, so it skips there too. Again the
+# under-claiming direction.
 #
 # THE WHOLE SUITE WAS TRIED FIRST AND DOES NOT FIT THE ROOM. mutmut runs the
 # pool inside `mutants/`, over a MUTATED copy of the package and without a
@@ -275,27 +307,56 @@ fail_under = 80
 # 0 after (2026-09-03).
 [tool.mutmut]
 source_paths = ["src/beadloom"]
-only_mutate = ["src/beadloom/graph/rules/*"]
+only_mutate = [
+    "src/beadloom/application/guards/shell_targets.py",
+    "src/beadloom/application/guards/surface.py",
+    "src/beadloom/application/waves/derivation.py",
+    "src/beadloom/doc_sync/doc_quality.py",
+    "src/beadloom/doc_sync/doc_shape.py",
+    "src/beadloom/graph/rules/*",
+    "src/beadloom/onboarding/role_duties.py",
+]
 pytest_add_cli_args_test_selection = [
+    "tests/acceptance/steps/test_axes_section_steps.py",
     "tests/acceptance/steps/test_bootstrap_self_consistency_steps.py",
+    "tests/acceptance/steps/test_commit_gate_verdict_steps.py",
+    "tests/acceptance/steps/test_commit_scope_steps.py",
+    "tests/acceptance/steps/test_declared_axes_steps.py",
     "tests/acceptance/steps/test_doc_area_coherence_steps.py",
+    "tests/acceptance/steps/test_doc_spaces_steps.py",
+    "tests/acceptance/steps/test_document_shape_steps.py",
+    "tests/acceptance/steps/test_explore_role_steps.py",
     "tests/acceptance/steps/test_graph_summary_facts_steps.py",
+    "tests/acceptance/steps/test_guard_surface_steps.py",
+    "tests/acceptance/steps/test_role_duties_steps.py",
     "tests/acceptance/steps/test_rule_population_steps.py",
     "tests/acceptance/steps/test_scenario_coverage_steps.py",
+    "tests/acceptance/steps/test_sibling_baseline_steps.py",
     "tests/acceptance/steps/test_source_root_minority_steps.py",
+    "tests/acceptance/steps/test_verdict_room_steps.py",
     "tests/acceptance/steps/test_wave_plan_steps.py",
+    "tests/test_a_commit_is_judged_against_the_declared_axes.py",
     "tests/test_auto_link_docs.py",
     "tests/test_bdl062_seams.py",
     "tests/test_bead06_misc_fixes.py",
     "tests/test_bead14_s4_binding.py",
     "tests/test_bead22_wave_guarantee.py",
     "tests/test_bead57_config_check_sight.py",
+    "tests/test_bead76_an_excused_pair_says_so.py",
+    "tests/test_bead77_kind_and_root_disagree.py",
     "tests/test_bead83_failure_direction.py",
     "tests/test_bootstrap_clean_lint.py",
+    "tests/test_cli_config_check.py",
     "tests/test_cli_json_streams.py",
     "tests/test_cli_lint.py",
+    "tests/test_cli_reference_drift.py",
+    "tests/test_cli_sync_check.py",
+    "tests/test_cli_waves.py",
+    "tests/test_config_sync.py",
     "tests/test_cycle_rule.py",
     "tests/test_doc_area_coherence.py",
+    "tests/test_doc_quality.py",
+    "tests/test_docs_audit_coverage.py",
     "tests/test_e2e_wave3.py",
     "tests/test_every_wizard_answer_is_judged.py",
     "tests/test_exit_condition_expiry.py",
@@ -304,9 +365,13 @@ pytest_add_cli_args_test_selection = [
     "tests/test_flow_composition.py",
     "tests/test_gate.py",
     "tests/test_gate_three_states.py",
+    "tests/test_gate_verdict_room.py",
     "tests/test_graph_summary_facts.py",
+    "tests/test_guard_firing_rotation.py",
+    "tests/test_guard_surface.py",
     "tests/test_guards.py",
     "tests/test_guards_adversarial.py",
+    "tests/test_guards_cli.py",
     "tests/test_guards_config.py",
     "tests/test_guards_invocation.py",
     "tests/test_guards_liveness.py",
@@ -323,14 +388,19 @@ pytest_add_cli_args_test_selection = [
     "tests/test_init_verdict_over_its_own_rules.py",
     "tests/test_integration.py",
     "tests/test_integration_onboarding.py",
+    "tests/test_integration_reference_freshness.py",
     "tests/test_integration_v1.py",
     "tests/test_lifecycle_rules.py",
     "tests/test_linter.py",
     "tests/test_mcp_process_tools.py",
+    "tests/test_missing_sections.py",
     "tests/test_module_coverage_hardening.py",
+    "tests/test_mutation_scope.py",
     "tests/test_onboarding.py",
     "tests/test_reference_leg_syntax.py",
     "tests/test_reindex.py",
+    "tests/test_role_configurator_hardening.py",
+    "tests/test_role_duties.py",
     "tests/test_rule_engine.py",
     "tests/test_rule_liveness_all_types.py",
     "tests/test_rule_severity.py",
@@ -341,15 +411,26 @@ pytest_add_cli_args_test_selection = [
     "tests/test_s3_config_check_residual.py",
     "tests/test_s3_decomposition.py",
     "tests/test_s3_owns_nothing.py",
+    "tests/test_s4_the_instruments_agree.py",
     "tests/test_scaffold_findings_are_printed.py",
     "tests/test_scenario_coverage_rule.py",
     "tests/test_site_dashboard.py",
     "tests/test_source_root_minority.py",
+    "tests/test_sync_unverifiable.py",
     "tests/test_sync_update_check_does_not_write.py",
+    "tests/test_the_axes_section_is_required_by_the_template.py",
+    "tests/test_the_commit_gate_states_what_it_compared.py",
+    "tests/test_the_derivations_hold_as_shapes.py",
+    "tests/test_the_explore_role_is_composed_like_the_others.py",
     "tests/test_tui.py",
     "tests/test_verdict_downgrade.py",
+    "tests/test_verdict_room_population.py",
     "tests/test_virgin_scaffold_is_green.py",
+    "tests/test_wave_derivation.py",
+    "tests/test_wave_media_checks.py",
     "tests/test_wave_plan.py",
+    "tests/tui/test_dashboard_action_bar.py",
+    "tests/tui/test_screen_descriptions.py",
 ]
 also_copy = [
     ".beadloom",

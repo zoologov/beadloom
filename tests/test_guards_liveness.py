@@ -397,8 +397,12 @@ class TestLivenessOutput:
             main, ["guard", "--liveness", "--project", str(tmp_path), "--json"]
         )
 
-        rows = json.loads(result.stdout)
+        payload = json.loads(result.stdout)
+        rows = payload["guards"]
         assert {row["guard"] for row in rows} == set(GUARD_NAMES)
+        # The report answers two questions and says so in its shape: which guards
+        # fired, and what the binding could have seen at all (BDL-UX #170).
+        assert set(payload) == {"surface", "guards"}
         assert set(rows[0]) == {
             "guard",
             "declared",

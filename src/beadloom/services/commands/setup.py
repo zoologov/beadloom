@@ -551,6 +551,8 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"  ! {scope.target}: {scope.why}", err=True)
         click.echo(f"    -> {scope.remediation}", err=True)
 
+    _echo_duty_limits(project_root)
+
     if not blocking:
         # A warning is a real finding and is printed above; it does not block,
         # because a green project going red on upgrade is how a check gets
@@ -573,6 +575,70 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     _echo_closing_advice(blocking)
     _echo_weakened_verdicts(warnings)
     raise SystemExit(1)
+
+
+def _echo_duty_limits(project_root: Path) -> None:
+    """Name what the duty check could NOT see, whenever a project declares duties.
+
+    The findings themselves ride with the other drift and block through
+    ``check_config_drift``. This prints the other half — the population the
+    check cannot inspect — and it prints on a clean run too, which is the point:
+    a check that speaks only when it finds something hands the reader a clean
+    list, and a clean list is trusted and stopped at.
+
+    The channel that matters is the launch prompt. A duty carried only there is
+    unreachable by any file-based check, because a prompt is not an artifact —
+    which is the whole argument for moving a duty into a composed core rather
+    than a reason to leave it where it is.
+
+    Silent for a project that declares no duty: there is no verdict to qualify,
+    and a standing paragraph about a mechanism nobody uses is the noise that
+    gets a check switched off.
+    """
+    from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH, FlowConfigError
+    from beadloom.onboarding.role_duties import duty_report
+
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return
+    try:
+        report = duty_report(project_root)
+    except FlowConfigError:
+        # Reported as its own drift by `check_config_drift`; not doubled here.
+        return
+    if not report.declarations:
+        return
+    click.echo(
+        f"  Duties: {len(report.declarations)} declared, checked over "
+        f"{len(report.inspected)} composed artifact(s) — the COMPOSITION this "
+        "flow would write, not the role files on disk.",
+        err=True,
+    )
+    click.echo(f"    On disk: {_role_file_state(report.role_files)}", err=True)
+    click.echo(f"    Not inspected ({len(report.not_inspected)}):", err=True)
+    for entry in report.not_inspected:
+        click.echo(f"      {entry.source} — {entry.why}", err=True)
+
+
+def _role_file_state(role_files: tuple[str, ...]) -> str:
+    """The other half of the duty answer: what the composition reached.
+
+    Two sentences, because they are two facts. A project with role adapters is
+    told they are compared elsewhere, by the drift check that owns disk; a
+    project with none is told that the clean duty line above is a statement
+    about text nothing can currently receive (BDL-UX #241). The verdict
+    deliberately does not change: an unscaffolded project is not in drift, and
+    failing one would fail a state `config-check` has always held legitimate.
+    """
+    if not role_files:
+        return (
+            "NOTHING TO CHECK — no role adapter is written here, so the "
+            "composition above reaches no reader yet; `beadloom "
+            "setup-agentic-flow` writes them"
+        )
+    return (
+        f"{len(role_files)} role file(s), compared against their compositions by "
+        "the agent-config drift check above, not by the duty check"
+    )
 
 
 def _echo_scaffold_findings(result: ScaffoldResult) -> None:

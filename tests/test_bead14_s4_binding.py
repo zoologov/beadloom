@@ -617,7 +617,13 @@ def _run_pytest(args: list[str], *, cwd: Path, report: Path) -> tuple[int, list[
         ],
         cwd=cwd,
         capture_output=True,
-        text=True,
+        # These two streams are only ever quoted into a failure message, so the
+        # handler is tolerant while the codec is still stated: a child pytest
+        # writes UTF-8 under a UTF-8 locale and backslash escapes under the C
+        # one, and leaving the choice to the image is the defect BDL-068 `.49`
+        # measured on the `tests-locale (C)` leg.
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if not report.exists():  # pragma: no cover - only on a collection crash
