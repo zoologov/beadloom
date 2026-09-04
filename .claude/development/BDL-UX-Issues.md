@@ -35,6 +35,28 @@
 
 ## Open Issues
 
+245. [2026-09-04] [MEDIUM] the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one
+
+    **Severity:** medium (a correct verdict followed by advice that would switch off the parallelism the command exists to plan)
+    **Command:** `beadloom waves`, `beadloom axes <doc> --refs`
+    **Tracker:** `beadloom-0mdo.46`, routed to S6
+    **Context:** BDL-068 S4's fix cycle, immediately after the RFC's `## Axes` section was populated at epic scale for the first time.
+    **Issue:** on an `unguarded_axis` finding `waves` prints *"generate each bead's `refs:` from the `## Axes` section of <the RFC>"*. `beadloom axes <doc> --refs` prints ONE line generated from every row kept in scope — 24 nodes on this epic — and there is no per-bead selection; the help text confirms the unit is the work item. Performed exactly, the remedy hands every bead in the epic an identical 24-node scope, `shared_node` fires on every pair, and every wave becomes a wave of one.
+    **The root is a level confusion, not a typo:** a work item's axes are the UNION of its slices' — the RFC says so — while a bead's scope is a SUBSET chosen for that bead. One document holds the union; nothing holds the per-bead subset, and `--refs` cannot invent it. CONTEXT Q1 ("a bead's `refs:` is generated from the document") is right; the selection step between the two is what is missing.
+    **Same class as #234**, closed in this same epic: a correct verdict followed by a remedy that does not follow the cause down as far as the reason does. There it would have authored a scope; here it would disable every parallel wave. A remedy standing beside a correct verdict is the line nobody re-reads.
+    **Expected:** either the section records which rows belong to which bead, so `axes --refs <bead-id>` can answer, or the remedy stops prescribing an action that has no correct form and states instead which comparison it could not make. Do not ship it unchanged — it is advice to make the tool useless, printed by the tool.
+
+244. [2026-09-04] [MEDIUM] a second markdown table in `## Axes` contributes its header row as an approved node named `Node`
+
+    **Severity:** medium (a phantom entry in the list `scope-check` compares every commit against)
+    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
+    **Tracker:** `beadloom-0mdo.46`, routed to S6
+    **Context:** found by `beadloom-0mdo.44` while appending S4's 28 rows to BDL-068's `## Axes`. Measured after the append: `beadloom waves` reports `29 node(s) approved … 1 axis row(s) name no node`.
+    **Issue:** `read_axes_section` takes the header row of a SECOND table in the section as data, producing an approved node literally named `Node`.
+    **Why the document invites the second table:** the RFC's own per-slice union rule says each slice appends its rows with its own `Derived by` / `Measured on` line — which is naturally a new table, not more rows under one header. The parser's one-table-per-section assumption is contradicted by the document rule this project wrote for itself, and the contradiction can only appear once an epic reaches its second slice, which is why it survived S1.
+    **Why a phantom here is worse than elsewhere:** the approval list is what `scope-check` compares commits against. A name nobody chose is a name every commit is allowed to touch.
+    **Expected:** a row whose cells are a table header is not a row. Fix this before #245 is evaluated — that finding cannot be judged honestly while this one injects a node nobody wrote.
+
 243. [2026-09-04] [MEDIUM] re-copying changed files into a room that has already been reindexed manufactures a stale-doc failure that looks exactly like a defect
 
     **Severity:** medium (a false red in the measurement whose whole purpose is to be trusted, and the false red is indistinguishable from a true one)
