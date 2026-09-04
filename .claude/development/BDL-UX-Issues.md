@@ -46,6 +46,20 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
+253. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
+
+    **Severity:** high (an agent session wedges with no self-heal, and the state that wedges it is an ordinary mid-refactor moment)
+    **Command:** `beadloom guard bead-claimed`, the emitted `.claude/settings.json` `PreToolUse` binding
+    **Tracker:** routed to S6
+    **Context:** hit by `beadloom-0mdo.51` during BDL-068 S5, splitting `src/beadloom/services/bd_seam.py` into a package. `git mv` succeeded; the very next call — creating `__init__.py` — was blocked. Between the two the package does not import.
+    **Issue:** `guard_probes.py:79` reaches the tracker by importing `beadloom.services.bd_seam` from the editable install rooted at the working tree. While that import fails the guard cannot answer, and a guard that cannot answer **blocks**. Its own remediation reads *"fix the reported error, then re-run"* — it asks for a file write it has just disabled.
+    **Measured, from two independent sessions:** `Bash`, `Write` and `Edit` are all on the guard's surface and all return the same `ImportError`; `Read` is not, which is the only reason the proposed repair could be checked before asking a human to type it. There is no escape from inside: no env var, no marker and no path exclusion is reachable, because the failure is raised **before** any path or command analysis runs. **A human ran one heredoc in their own shell. Nothing else cleared it.**
+    **The uncomfortable half, and it is ours:** BDL-068 S4 widened the matcher to include `Bash` (`beadloom-0mdo.31`), which was correct and is the whole of #170. Before that, a shell write slipped past the guard and could have repaired it. So closing a real coverage hole converted a recoverable failure into a dead end, and the improvement is what removed the last exit.
+    **It is #170 asked in the other direction.** That entry asked *which write paths can this guard not see*. This asks *what does a guard do when it cannot answer about itself*. S4 taught four instruments to say `NOTHING TO CHECK`, `not compared`, `not_covered` and `unresolved`; this one says `ERROR` and stops the world.
+    **Not exotic.** Any refactor leaving the package momentarily unimportable wedges a session the same way: a module split, a renamed symbol, a syntax error saved mid-edit.
+    **Expected — the shape, not the instance.** A guard that cannot evaluate itself is `unresolved`, and an unresolved guard **warns and permits** rather than blocking, saying loudly that it checked nothing. A gate that blocks on its own inability is not strict, it is unavailable. If some inability must block, it must leave a reachable repair path, and `Read`-only is not one. Consider also isolating the probe from the tree it guards, so editing Beadloom cannot disarm the guard that watches the edit.
+    **Related:** #174 and #175 (a check reporting its own inability in a form nobody can act on) are the same family; #170 is its other direction.
+
 252. [2026-09-04] [MEDIUM] a composed role is missing from the entry-point document that enumerates roles, and no check asks whether it is there
 
     **Severity:** medium (an adopter's agent reads the entry point to learn what roles exist, and learns four of five)
