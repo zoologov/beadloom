@@ -8,10 +8,34 @@
 
 ## Current Bead
 
-**Bead:** none — S5 wave 1 (`0mdo.39`, the landing lock) is closed. The next claimable work in
-S5 is `0mdo.51`, the derived `bd` call-site population, which blocks `.52`, `.53` and `.54`.
-S4 is finished on the branch: `0mdo.36` (tech-writer) was the last of that slice and closed its
-docs pass, and `0mdo.12`, the slice bead, closes with it.
+**Bead:** none — S5 wave 2 (`0mdo.51`, the derived `bd` call-site population) is closed at
+`f703dc8`. `bd ready` lists `.52`, `.53` and `.54` as the next claimable work in S5; `bd close
+--suggest-next` also named `.13` and `.55`, which are still blocked, and that disagreement is
+itself one of the findings below. S4 is finished on the branch: `0mdo.36` (tech-writer) was the
+last of that slice and closed its docs pass, and `0mdo.12`, the slice bead, closes with it.
+
+**S5 wave 2, and the withdrawal it had to reverse.** `0mdo.51` derived every place this project
+reaches `bd` — 278 sites on this repository, measured against bd 1.0.4: 12 in Python, 264 in
+the artifacts that instruct an agent, 2 in `.git/hooks/`, which reaches the `post-merge` the
+RFC recorded as outside the repository. Node `bd-seam` became a package holding the seam and
+the population; `application/waves/landing.py` lost its own grammar and kept the merge-slot
+judgement, so the tree holds one derivation of this kind rather than two. `beadloom bd-calls`
+is the report.
+
+Three inherited premises fell — BDL-UX #194, #237 and `beadloom-l2f2`'s `bd import -i`, which
+exists as a documented legacy alias. **A fourth withdrawal, of #97, was made in this bead and
+was wrong**, and the closing step of the bead itself caught it: `bd close 0mdo.51
+--suggest-next` named `.55` and `.13`, which `bd dep tree` shows blocked by four and six open
+beads. The withdrawal rested on one dependency shape — a target with two blockers, one closed —
+where the command behaves correctly. Re-measured over ten shapes it names a still-blocked bead
+in four, and is silent in every shape where exactly one blocker had been closed. #97 stands,
+`bd ready` was correct in all ten, and the reversal exposed a real call site: `handle_complete_bead`
+returns the raw `--suggest-next` output to the MCP client as `next`, so an agent finishing a
+bead is handed a list that can name blocked beads with nothing saying so (`.52`'s to fix).
+
+The standing lesson, written here because it is this epic's own subject turned on itself:
+exercising both directions of one axis is not anti-vacuity when the defect lives on another. A
+withdrawal is a measurement and states its room exactly as a finding does.
 
 **S5 wave 1, and what it corrected about its own bead.** `0mdo.39` answered BDL-UX #194 and
 #237 — one defect filed twice, nine days apart, by two agents that had never met. Both entries
@@ -467,6 +491,22 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     for four shipped slices.
 - [ ] S5 — the tracker adapters
   - [x] `0mdo.58` — S5's axes, derived at the slice's start.
+  - [x] `0mdo.51` — **the slice's mechanism bead**: the derived `bd` call-site population,
+    homed at node `bd-seam` per CONTEXT Q4 (derive our own call sites, never wrap `bd`).
+    `invocations.py` holds one grammar over two channels — a text channel anchored on COMMAND
+    POSITION, which returns 266 invocations and no prose where an unanchored sweep also reports
+    `bd verifies` and `bd checks the`, and an AST channel that resolves module-level constants
+    so `guard_probes`' most careful call reads as resolved. `assumptions.py` holds the measured
+    table and four verdicts — `secured`, `unsecured`, `holds`, `unmeasured` — each pinned to bd
+    1.0.4, with a test that fails when a different `bd` is installed. `population.py` holds four
+    roots and the four regions the derivation cannot reach, named with their reasons. Findings:
+    `bd ready` is unsecured on truncation at 40 sites and this flow calls it authoritative (its
+    cap is 100, announced on stderr, measured 100 of 135); 48 sites are unmeasured and they are
+    `bd swarm` and `bd gate`, the two commands the coordinator orchestrates every wave with; and
+    every `bd list` call in this project's Python names both default filters, so #187 is
+    answered at the consumer while 42 prose sites are not. Three python sites are unsettled and
+    all three are owned — two by `.53` (#171), one by `.52` (#97). BDL-UX #253 needed a third
+    suppression triple for one sentence-shape, which is the evidence it is a class.
   - [x] `0mdo.39` — **#194 + #237**, the landing lock. A fifth shared medium, `landing-order`,
     stated in `waves/media.py` and checked in `media_checks.py` over a new `waves/landing.py`
     that derives every instruction of the lock in the composed flow artifacts and judges it by
