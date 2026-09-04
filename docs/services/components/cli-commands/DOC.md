@@ -119,7 +119,11 @@ a payload on one shape. The verdict has three sentences and not two, because a s
 not be derived, a surface with nothing staged inside it and a surface with files to check are
 three different facts: the pre-commit hook used to hand `mypy` every staged `.py` under `src/`
 or `tests/`, which is 970 errors in 90 files on this repository and not one of them a violation
-of a declared standard.
+of a declared standard. The hook then reached that derivation through the same two directory
+names until `beadloom-0mdo.42` (BDL-UX #240) — so on a flat-layout project, where the package
+sits at the repository root, the filter admitted no package file and the leg's three sentences
+were unreachable. `staged_py` now selects by suffix, and each leg narrows that population by its
+own declaration.
 
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section

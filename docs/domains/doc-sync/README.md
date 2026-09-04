@@ -131,8 +131,9 @@ beadloom install-hooks --remove
 ```
 
 **Pre-commit hook** judges THE COMMIT rather than the working tree (BDL-UX #118), and runs:
-- Ruff lint check over the staged `src/`/`tests/` Python files
-- Mypy type check over the same staged files
+- Ruff lint check over the Python files the commit stages, wherever they live
+- Mypy type check over the subset of those inside the surface `pyproject` declares typed
+  (`beadloom typed-surface --filter`), whose verdict the hook prints whatever it says
 - `beadloom sync-check --staged --porcelain` (stale doc detection, narrowed to the pairs this commit stages)
 - `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
 

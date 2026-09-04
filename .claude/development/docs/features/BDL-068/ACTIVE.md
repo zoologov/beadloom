@@ -8,8 +8,8 @@
 ## Current Bead
 
 **Bead:** S4's test wave landed — `0mdo.34` closed with its verdict (`23f612a`), and the fix
-beads it filed are running. `0mdo.41` (#239, #241) landed; `0mdo.42` (#240) runs after it,
-serialised on `cli-commands`, and `0mdo.35` (review) follows both.
+beads it filed are running. `0mdo.41` (#239, #241) and `0mdo.42` (#240) have both landed,
+serialised on `cli-commands`; `0mdo.35` (review) follows them.
 Wave 6 landed: `nn4c`, its own gate owner, combined tree measured green. Wave 5 landed:
 `gsal`, its own gate owner, combined tree measured green.
 Wave 4 landed: `en0x` (`ded748d`), its own gate owner, combined tree measured
@@ -280,6 +280,42 @@ filed; this name is the free mitigation and later slices keep it.
     `beadloom ci` rc 0 there. On the tree: 8 761 passed, `beadloom ci` rc 0 foreground and
     unpiped, `HEAD` verified unchanged either side. Every verdict Darwin arm64 / CPython
     3.13.7, 0 of the 21 declared rooms, so none of it is a claim about any CI leg.
+  - [x] `0mdo.42` / **#240** — a rule stated as a shape, reached through a filter stated as a
+    spelling. `beadloom-gsal` replaced the hook's hand-written typed surface with one derived
+    from `pyproject`, and the hook still selected the files it would ask about with
+    `grep -E '^(src|tests)/.*[.]py$'`. So the derivation was only ever asked about paths two
+    directory names admitted, and on the FLAT layout — the package at the repository root —
+    it admits none of the package. **The reproduction is sharper than the bead states, and the
+    difference is the finding:** total silence needs a commit staging nothing under `src/` or
+    `tests/` at all, and a flat project WITH a `tests/` directory stages test files the regex
+    does admit — so the leg speaks, and says `NOTHING TO CHECK -- 0 of 2 staged Python file(s)
+    are inside it, 2 outside` over a population the whole package is missing from. Silence is
+    the half a reader might eventually notice. A confident sentence over the wrong denominator
+    is the half nobody would. The same variable gates the ruff leg, which was equally blind.
+    **The fix is one line and removes a list rather than adding one:** `staged_py` states which
+    KIND of file the commit stages and never where code lives, and each leg narrows that
+    population by its own declaration — the typed leg through `typed-surface --filter`, ruff
+    through the configuration it reads for itself. `gsal`'s three sentences are unchanged and
+    are now REACHABLE on every layout. His fourth-population decision (a commit staging no
+    Python prints nothing, measured at 17 of this branch's first 24 commits) stands, and what
+    changed is what it rests on: it used to mean "no Python under `src/` or `tests/`". The
+    layout is now an ARGUMENT, the way `PathFlavour` made the platform one and
+    `tests/room_simulation.py` made the CI room one — five layouts through the real emitted
+    template and a real `/bin/sh`, of which this repository can show ONE, plus an
+    undeclared-surface layout so the `NOT CHECKED` sentence is reached before it is read.
+    20 red first, each layout for its own reason; 1 acceptance scenario on the existing feature
+    file. 6 hand-injected mutants, 5 red first time and **one survived**: a `^src/` reintroduced
+    into the ruff leg ALONE, because that assertion read the banner the leg prints before its
+    filter rather than the files the checker was handed. The stub now names what it was handed
+    and the mutant is red. Green in a clean room over 8 files at `room-beadloom-0mdo.42`
+    (8 754 passed; the 1 failure is the room's stated property — no `.git`, so `sync-check` has
+    no baseline — and it is red at pure HEAD in an identically built control room at
+    `control-beadloom-0mdo.42`, measured rather than asserted), `beadloom ci` rc 0 there.
+    That room is CPython 3.12.12 and the tree is 3.13.7, which is #236's shape.
+    As the gate owner of a wave of one, on the tree: 8 793 passed, 0 failed;
+    `beadloom ci` rc 0 foreground and unpiped; `HEAD` verified `e87bed7` either side.
+    Every verdict Darwin arm64, 0 of the 21 declared rooms, so none of it is a claim about
+    any CI leg.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

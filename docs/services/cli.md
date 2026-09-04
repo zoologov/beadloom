@@ -392,8 +392,9 @@ beadloom install-hooks --pre-push [--project DIR]
 beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 ```
 
-**Pre-commit hook** runs, in order: ruff lint over the staged files, mypy over the staged
-files **inside the surface the project declares typed** (derived per run by
+**Pre-commit hook** runs, in order: ruff lint over the Python files the commit stages
+(selected by suffix, so a package at the repository root is judged like one under `src/`),
+mypy over those staged files **inside the surface the project declares typed** (derived per run by
 [`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
 `NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),

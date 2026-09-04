@@ -40,3 +40,16 @@ Feature: the commit gate type-checks the surface the project declares typed, and
     When the hook runs on a commit whose typed file the checker rejects
     Then the checker's own diagnostic reaches the committer
     And the gate names how many files it type-checked
+
+  # BDL-068 S4, `beadloom-0mdo.42` (BDL-UX #240). The scenarios above are all
+  # taken on THIS repository's layout, and the defect below is invisible there:
+  # the hook selected the Python it judged with a `^(src|tests)/` path regex, so
+  # a project whose package sits at the repository root matched nothing and the
+  # leg printed no line at all -- neither a verdict, nor NOTHING TO CHECK, nor
+  # NOT CHECKED. The derivation `beadloom-gsal` landed was never asked.
+  @bead:beadloom-0mdo.42
+  Scenario: A project whose package sits at the repository root is judged, not passed over in silence
+    Given a pre-commit hook installed over a project whose package sits at the repository root
+    When the hook runs on a commit whose typed file the checker rejects
+    Then the checker's own diagnostic reaches the committer
+    And the gate names how many files it type-checked

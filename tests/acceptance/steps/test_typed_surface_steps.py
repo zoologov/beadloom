@@ -41,6 +41,19 @@ _STAGED = (
     "src/scripts/tool.py",
 )
 
+#: The same five files on the FLAT layout -- the package at the repository root,
+#: which is where a Python project sits unless someone chose otherwise. The
+#: counts below are identical by construction, so a scenario that reads "2 of 5"
+#: is making the same claim about both layouts and not two claims that happen to
+#: agree.
+_STAGED_FLAT = (
+    "beadloom/alpha.py",
+    "beadloom/beta.py",
+    "tests/test_alpha.py",
+    "tests/conftest.py",
+    "scripts/tool.py",
+)
+
 _DECLARED = """\
 [project]
 name = "demo"
@@ -59,20 +72,37 @@ name = "demo"
 src = ["src", "tests"]
 """
 
+#: The flat layout's declaration: the same package, and no `mypy_path`, because
+#: there is no source directory to point at.
+_DECLARED_FLAT = """\
+[project]
+name = "demo"
+
+[tool.mypy]
+strict = true
+packages = ["beadloom"]
+"""
+
 
 @pytest.fixture
 def state() -> dict[str, Any]:
     return {}
 
 
-def _project(tmp_path: Path, pyproject: str) -> Path:
+def _project(tmp_path: Path, pyproject: str, staged: tuple[str, ...] = _STAGED) -> Path:
+    """A project holding `staged`, with its directories taken from those paths.
+
+    The directories are derived from the staged paths rather than named here,
+    so a second layout is a second tuple and not a second set of `mkdir` calls
+    that could disagree with it.
+    """
     project = tmp_path / "proj"
-    (project / "src" / "beadloom").mkdir(parents=True)
-    (project / "src" / "scripts").mkdir(parents=True)
-    (project / "tests").mkdir()
+    project.mkdir(parents=True)
     (project / "pyproject.toml").write_text(pyproject, encoding="utf-8")
-    for rel in _STAGED:
-        (project / rel).write_text("x = 1\n", encoding="utf-8")
+    for rel in staged:
+        target = project / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x = 1\n", encoding="utf-8")
     return project
 
 
@@ -150,10 +180,12 @@ def _says_not_checked(state: dict[str, Any]) -> None:
 _STUB_UV = """\
 #!/bin/sh
 # `uv run mypy <paths...>` -- reject the one file the scenario says is rejected.
+# The path is read from `$REJECT` rather than written here, because the file the
+# scenario points at is where the layout puts it and the layout is an argument.
 shift 2
 for f in "$@"; do
-  if [ "$f" = "src/beadloom/alpha.py" ]; then
-    echo "src/beadloom/alpha.py:1: error: Incompatible return value type  [return-value]"
+  if [ "$f" = "$REJECT" ]; then
+    echo "$f:1: error: Incompatible return value type  [return-value]"
     echo "Found 1 error in 1 file (checked $# source files)"
     exit 1
   fi
@@ -164,10 +196,27 @@ exit 0
 
 @given("a pre-commit hook installed over a project with a declared typed surface")
 def _hook_installed(state: dict[str, Any], tmp_path: Path) -> None:
+    _install_hook(state, tmp_path, _DECLARED, _STAGED, "src/beadloom/alpha.py")
+
+
+@given("a pre-commit hook installed over a project whose package sits at the repository root")
+def _hook_installed_flat(state: dict[str, Any], tmp_path: Path) -> None:
+    """The flat layout, which no path in this repository has (BDL-UX #240)."""
+    _install_hook(state, tmp_path, _DECLARED_FLAT, _STAGED_FLAT, "beadloom/alpha.py")
+
+
+def _install_hook(
+    state: dict[str, Any],
+    tmp_path: Path,
+    pyproject: str,
+    staged: tuple[str, ...],
+    rejected: str,
+) -> None:
     from beadloom.services.commands.docsync import _HOOK_TEMPLATE_WARN
 
-    project = _project(tmp_path, _DECLARED)
+    project = _project(tmp_path, pyproject, staged)
     state["project"] = project
+    state["rejected"] = rejected
     bindir = tmp_path / "bin"
     bindir.mkdir()
     (bindir / "uv").write_text(_STUB_UV, encoding="utf-8")
@@ -203,6 +252,7 @@ def _run_hook(state: dict[str, Any]) -> None:
     )
     env = dict(os.environ)
     env["PATH"] = f"{state['bindir']}{os.pathsep}{env['PATH']}"
+    env["REJECT"] = state["rejected"]
     state["hook_run"] = subprocess.run(  # noqa: S603
         ["/bin/sh", str(state["hook"])],
         cwd=project,
@@ -217,7 +267,7 @@ def _run_hook(state: dict[str, Any]) -> None:
 def _diagnostic_reaches(state: dict[str, Any]) -> None:
     out = state["hook_run"].stdout
     assert "Incompatible return value type" in out, out
-    assert "src/beadloom/alpha.py:1" in out, out
+    assert f"{state['rejected']}:1" in out, out
 
 
 @then("the gate names how many files it type-checked")

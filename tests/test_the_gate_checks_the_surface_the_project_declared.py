@@ -16,8 +16,10 @@ it, and every property being pinned here is a property of what a committer sees.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -316,6 +318,7 @@ class TestTheHookTemplatesAskRatherThanList:
     @pytest.mark.parametrize(
         ("name", "template"),
         [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        ids=("warn", "block"),
     )
     def test_the_template_derives_the_surface(self, name: str, template: str) -> None:
         assert "beadloom typed-surface --filter" in template
@@ -323,6 +326,7 @@ class TestTheHookTemplatesAskRatherThanList:
     @pytest.mark.parametrize(
         ("name", "template"),
         [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        ids=("warn", "block"),
     )
     def test_the_template_hands_mypy_only_the_filtered_paths(
         self, name: str, template: str
@@ -333,6 +337,7 @@ class TestTheHookTemplatesAskRatherThanList:
     @pytest.mark.parametrize(
         ("name", "template"),
         [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        ids=("warn", "block"),
     )
     def test_the_template_prints_what_mypy_said(self, name: str, template: str) -> None:
         assert 'echo "$mypy_out"' in template
@@ -366,7 +371,14 @@ _STUB_UV = """\
 # `uv run <tool> <paths...>`. Only `mypy` judges anything: the ruff leg shares
 # this stub and must stay green, or a mypy assertion below would be passing for
 # the wrong reason. A rejection is written where mypy writes it -- stdout.
+#
+# The ruff branch NAMES what it was handed (`uv run ruff check <paths...>`, so
+# the paths start at $4). A leg narrowed by a spelling of its own is silent
+# rather than wrong, and silence is the whole subject of `beadloom-0mdo.42`: a
+# stub that only exits 0 lets that narrowing survive every assertion here.
 if [ "$2" != "mypy" ]; then
+  shift 3
+  echo "ruff was handed: $*"
   exit 0
 fi
 shift 2
@@ -386,13 +398,107 @@ exit 0
 _DECLARED = '[tool.mypy]\nstrict = true\npackages = ["demo"]\nmypy_path = "src"\n'
 
 
-def _hook_project(tmp_path: Path, pyproject: str) -> tuple[Path, Path]:
+@dataclass(frozen=True)
+class HookLayout:
+    """One project layout, as the facts the hook's typed leg has to answer over.
+
+    A LAYOUT IS AN ARGUMENT, for the reason
+    :class:`beadloom.application.guards.paths.PathFlavour` is one and
+    ``tests/room_simulation.py`` makes a CI leg one: a property that can only be
+    exercised on the shape the author happens to have is a property nobody has
+    measured. `beadloom-gsal` derived the typed surface from the project's own
+    declaration and left the GATE in front of that derivation spelled
+    ``^(src|tests)/``, and five waves passed over it because this repository is
+    src-layout and every fixture built here was too (BDL-UX #240).
+
+    ``inside`` is what the declaration puts in the typed surface, stated per
+    layout rather than computed, so a derivation that changed its mind would
+    disagree with this file instead of agreeing with itself.
+    """
+
+    name: str
+    pyproject: str
+    tree: tuple[str, ...]
+    inside: tuple[str, ...]
+
+    @property
+    def staged_python(self) -> tuple[str, ...]:
+        """Every Python file the commit stages -- the population, whatever its shape."""
+        return tuple(rel for rel in self.tree if rel.endswith(".py"))
+
+
+#: This repository's own shape, and the only one the leg had ever been tried on.
+SRC_LAYOUT = HookLayout(
+    name="src-layout",
+    pyproject=_DECLARED,
+    tree=("src/demo/__init__.py", "src/demo/alpha.py", "tests/test_alpha.py"),
+    inside=("src/demo/__init__.py", "src/demo/alpha.py"),
+)
+
+#: The flat layout: the package at the repository root, which is where a Python
+#: project sits unless someone chose otherwise. The staged tests DO match the old
+#: `^(src|tests)/` regex, so the leg here does not fall silent -- it speaks over
+#: a population that excludes the whole package, which is the sharper half of the
+#: same defect and the one a reader would never suspect.
+FLAT_LAYOUT = HookLayout(
+    name="flat-layout",
+    pyproject='[tool.mypy]\nstrict = true\npackages = ["demo"]\n',
+    tree=("demo/__init__.py", "demo/alpha.py", "tests/test_alpha.py"),
+    inside=("demo/__init__.py", "demo/alpha.py"),
+)
+
+#: The same layout before anyone adds a `tests/` directory, which is the state
+#: the bead reports: nothing staged matches the old regex and the leg prints no
+#: line at all -- not a verdict, not NOTHING TO CHECK, not NOT CHECKED.
+FLAT_LAYOUT_WITHOUT_TESTS = HookLayout(
+    name="flat-layout-without-tests",
+    pyproject='[tool.mypy]\nstrict = true\npackages = ["demo"]\n',
+    tree=("demo/__init__.py", "demo/alpha.py"),
+    inside=("demo/__init__.py", "demo/alpha.py"),
+)
+
+#: A source directory that is not called `src`. There is no list of the names a
+#: project may choose, which is the argument against having one.
+NAMED_SOURCE_DIR_LAYOUT = HookLayout(
+    name="a-source-directory-not-called-src",
+    pyproject='[tool.mypy]\nstrict = true\npackages = ["demo"]\nmypy_path = "lib"\n',
+    tree=("lib/demo/__init__.py", "lib/demo/alpha.py", "tests/test_alpha.py"),
+    inside=("lib/demo/__init__.py", "lib/demo/alpha.py"),
+)
+
+#: A single module at the root, declared through `files` rather than `packages` --
+#: a script-shaped project, and the smallest thing that can declare a surface.
+SINGLE_MODULE_LAYOUT = HookLayout(
+    name="a-single-module-at-the-root",
+    pyproject='[tool.mypy]\nstrict = true\nfiles = ["app.py"]\n',
+    tree=("app.py", "tests/test_app.py"),
+    inside=("app.py",),
+)
+
+#: A project declaring no typed surface at all, on the flat layout: the state
+#: whose sentence is NOT CHECKED, and it has to be reached before it can be read.
+UNDECLARED_LAYOUT = HookLayout(
+    name="no-declared-surface",
+    pyproject="[tool.ruff]\nline-length = 90\n",
+    tree=("demo/alpha.py",),
+    inside=(),
+)
+
+#: Five layouts, of which this repository can show one.
+EVERY_LAYOUT = (
+    SRC_LAYOUT,
+    FLAT_LAYOUT,
+    FLAT_LAYOUT_WITHOUT_TESTS,
+    NAMED_SOURCE_DIR_LAYOUT,
+    SINGLE_MODULE_LAYOUT,
+)
+
+_LAYOUT_IDS = [layout.name for layout in EVERY_LAYOUT]
+
+
+def _hook_project(tmp_path: Path, layout: HookLayout) -> tuple[Path, Path]:
     """A real repository with a real hook and a stubbed toolchain on PATH."""
-    project = _write(
-        tmp_path / "proj",
-        pyproject,
-        tree=("src/demo/__init__.py", "src/demo/alpha.py", "tests/test_alpha.py"),
-    )
+    project = _write(tmp_path / "proj", layout.pyproject, tree=layout.tree)
     bindir = tmp_path / "bin"
     bindir.mkdir()
     (bindir / "uv").write_text(_STUB_UV, encoding="utf-8")
@@ -454,7 +560,7 @@ class TestWhatACommitterActuallySees:
     def test_a_clean_typed_commit_states_the_count_it_checked(
         self, tmp_path: Path
     ) -> None:
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
         assert (
             "Typed surface (src/demo): 2 of 3 staged Python file(s) inside it, "
@@ -463,7 +569,7 @@ class TestWhatACommitterActuallySees:
         assert "mypy type errors" not in out
 
     def test_a_test_only_commit_reads_as_nothing_to_check(self, tmp_path: Path) -> None:
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         subprocess.run(
             ["git", "reset", "-q", "--", "src"],  # noqa: S607
             cwd=project,
@@ -477,17 +583,17 @@ class TestWhatACommitterActuallySees:
     def test_a_project_declaring_no_surface_reads_as_not_checked(
         self, tmp_path: Path
     ) -> None:
-        project, bindir = _hook_project(tmp_path, "[tool.ruff]\nline-length = 90\n")
+        project, bindir = _hook_project(tmp_path, UNDECLARED_LAYOUT)
         out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
         assert "Typed surface: NOT CHECKED -- pyproject.toml declares no" in out
 
     def test_beadloom_absent_from_path_reads_as_not_checked(self, tmp_path: Path) -> None:
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN, on_path=False).stdout
         assert "Typed surface: NOT CHECKED -- uv or beadloom is not on PATH here" in out
 
     def test_a_real_error_arrives_in_mypys_own_words(self, tmp_path: Path) -> None:
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         result = _run_hook(
             project, bindir, _HOOK_TEMPLATE_WARN, reject="src/demo/alpha.py"
         )
@@ -498,7 +604,7 @@ class TestWhatACommitterActuallySees:
     def test_the_blocking_mode_refuses_a_real_error_and_nothing_else(
         self, tmp_path: Path
     ) -> None:
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         clean = _run_hook(project, bindir, _HOOK_TEMPLATE_BLOCK)
         assert clean.returncode == 0, clean.stdout
         red = _run_hook(
@@ -511,12 +617,188 @@ class TestWhatACommitterActuallySees:
         self, tmp_path: Path
     ) -> None:
         """The 970: the old block handed these over and went red on every one."""
-        project, bindir = _hook_project(tmp_path, _DECLARED)
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         result = _run_hook(
             project, bindir, _HOOK_TEMPLATE_BLOCK, reject="tests/test_alpha.py"
         )
         assert result.returncode == 0, result.stdout
         assert "mypy type errors" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# BDL-068 S4, `beadloom-0mdo.42` (BDL-UX #240) — the gate in front of the
+# derivation, over every layout rather than over this repository's
+# ---------------------------------------------------------------------------
+
+
+def _typed_line(out: str) -> str | None:
+    """The typed leg's one line, or ``None`` when the leg said nothing at all."""
+    return next((ln for ln in out.splitlines() if ln.startswith("Typed surface")), None)
+
+
+class TestTheTypedLegSpeaksOnEveryLayout:
+    """The leg's population is the Python a commit stages, whatever its shape.
+
+    `beadloom-gsal` derived the typed surface from the project's own declaration
+    and reached that derivation through ``grep -E '^(src|tests)/.*[.]py$'``. So a
+    rule stated as a shape was gated by a rule stated as a spelling, and the
+    spelling decided whether the shape ran. On the flat layout the gate admits no
+    package file at all: with no ``tests/`` directory the leg prints NOTHING —
+    not a verdict, not NOTHING TO CHECK, not NOT CHECKED — and with one it prints
+    a confident sentence about a population the package is not in, which is the
+    half a reader would never suspect.
+    """
+
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_leg_says_something_on_every_layout(
+        self, layout: HookLayout, tmp_path: Path
+    ) -> None:
+        project, bindir = _hook_project(tmp_path, layout)
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        assert _typed_line(out) is not None, out
+
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_count_is_over_every_python_file_the_commit_stages(
+        self, layout: HookLayout, tmp_path: Path
+    ) -> None:
+        """The denominator is the commit's Python, not the part of it under `src/`."""
+        project, bindir = _hook_project(tmp_path, layout)
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        line = _typed_line(out)
+        assert line is not None, out
+        total = len(layout.staged_python)
+        outside = total - len(layout.inside)
+        assert (
+            f"{len(layout.inside)} of {total} staged Python file(s) inside it, "
+            f"{outside} outside." in line
+        ), line
+
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_hook_says_what_the_derivation_says_when_asked_directly(
+        self, layout: HookLayout, tmp_path: Path
+    ) -> None:
+        """One fact, one home: the hook renders the derivation and adds nothing.
+
+        The comparison is against `partition().describe()` rather than against a
+        string written here, so a change to the vocabulary moves both or fails.
+        """
+        project, bindir = _hook_project(tmp_path, layout)
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        expected = declared_typed_surface(project).partition(layout.staged_python)
+        assert _typed_line(out) == expected.describe(), out
+
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_declared_files_reach_the_checker_on_every_layout(
+        self, layout: HookLayout, tmp_path: Path
+    ) -> None:
+        """A rejection inside the surface reaches the committer wherever it lives."""
+        project, bindir = _hook_project(tmp_path, layout)
+        target = layout.inside[0]
+        result = _run_hook(project, bindir, _HOOK_TEMPLATE_BLOCK, reject=target)
+        assert f"{target}:1: error:" in result.stdout, result.stdout
+        assert result.returncode == 1, result.stdout
+
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_lint_leg_shares_the_repaired_population(
+        self, layout: HookLayout, tmp_path: Path
+    ) -> None:
+        """`staged_py` gates ruff too, so the silence was never the typed leg's alone.
+
+        Asserted over the files the checker was HANDED and not over the banner
+        the leg prints before it: the banner is printed whatever the filter then
+        admits, so a leg narrowed to nothing announces itself and checks nothing.
+        A mutant reintroducing `^src/` into this leg alone survived the banner
+        assertion this replaces.
+        """
+        project, bindir = _hook_project(tmp_path, layout)
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        assert "Running ruff check on the staged Python file(s)..." in out, out
+        handed = next(
+            (ln for ln in out.splitlines() if ln.startswith("ruff was handed: ")), None
+        )
+        assert handed is not None, out
+        assert set(handed.removeprefix("ruff was handed: ").split()) == set(
+            layout.staged_python
+        ), out
+
+    def test_an_undeclared_surface_on_the_flat_layout_reads_as_not_checked(
+        self, tmp_path: Path
+    ) -> None:
+        """The third state has to be REACHED before it can be read.
+
+        `gsal` gave the leg three sentences and this one was unreachable on any
+        layout the regex did not admit — a project with nothing under `src/` or
+        `tests/` and no `[tool.mypy]` printed neither its verdict nor its reason.
+        """
+        project, bindir = _hook_project(tmp_path, UNDECLARED_LAYOUT)
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        assert "Typed surface: NOT CHECKED -- pyproject.toml declares no" in out, out
+
+    def test_a_commit_staging_no_python_stays_silent(self, tmp_path: Path) -> None:
+        """The fourth population, and `gsal`'s decision about it, re-examined.
+
+        A commit with no Python in it has no subject for either leg, and 17 of
+        this branch's first 24 commits were that commit — printing a sentence
+        about a check with no subject seven times in ten is noise within a day.
+        The decision stands; what changes is what it now rests on. It used to
+        mean "no Python under `src/` or `tests/`", which on the flat layout is a
+        different statement from the one the silence was read as.
+        """
+        project, bindir = _hook_project(tmp_path, FLAT_LAYOUT)
+        subprocess.run(
+            ["git", "reset", "-q"],  # noqa: S607
+            cwd=project,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "pyproject.toml"],  # noqa: S607
+            cwd=project,
+            check=True,
+            capture_output=True,
+        )
+        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        assert _typed_line(out) is None, out
+        assert "Running ruff check" not in out, out
+
+
+class TestNoLegNamesADirectory:
+    """The template states which KIND of file it stages, never where code lives.
+
+    A path filter naming directories is a second list beside the declaration, and
+    a second list is a second thing to forget — the argument `beadloom-gsal` made
+    about the surface, applied to the gate that reaches it.
+    """
+
+    @staticmethod
+    def _staged_py_pattern(template: str) -> str:
+        """The regex `staged_py` selects with, taken out of the shell quoting."""
+        line = next(ln for ln in template.splitlines() if ln.startswith("staged_py="))
+        quoted = re.search(r"grep -E '(?P<pattern>[^']*)'", line)
+        assert quoted is not None, line
+        return quoted.group("pattern")
+
+    @pytest.mark.parametrize(
+        ("name", "template"),
+        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        ids=("warn", "block"),
+    )
+    def test_the_population_is_selected_by_suffix_and_not_by_directory(
+        self, name: str, template: str
+    ) -> None:
+        pattern = self._staged_py_pattern(template)
+        assert "/" not in pattern, f"{name}: the gate still names a directory: {pattern}"
+
+    @pytest.mark.parametrize(
+        ("name", "template"),
+        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        ids=("warn", "block"),
+    )
+    def test_the_pattern_still_selects_python(self, name: str, template: str) -> None:
+        """The control: a filter selecting everything would pass the test above."""
+        pattern = self._staged_py_pattern(template)
+        assert re.search(pattern, "demo/alpha.py"), name
+        assert not re.search(pattern, "docs/guide.md"), name
 
 
 # ---------------------------------------------------------------------------
@@ -624,10 +906,13 @@ class TestTheCommandsContract:
 
 
 #: The commits of `features/BDL-068` that staged Python at all, with the two
-#: counts the warn/block decision was taken over: paths matching the hook's
-#: `^(src|tests)/.*\.py$` filter, and how many of those are inside the surface
-#: `pyproject` declares. MEASURED at `b7c9476..49c2ebe`, each commit against its
-#: own tree in a linked worktree.
+#: counts the warn/block decision was taken over: paths matching the filter the
+#: hook carried AT THE TIME, `^(src|tests)/.*\.py$`, and how many of those are
+#: inside the surface `pyproject` declares. MEASURED at `b7c9476..49c2ebe`, each
+#: commit against its own tree in a linked worktree. `beadloom-0mdo.42` has since
+#: replaced that filter, and the counts below are deliberately still taken with
+#: it: they record the population a past decision was taken over, and rewriting
+#: them to today's filter would restate the decision as one nobody made.
 #:
 #: The mypy half of that measurement is NOT re-run here and is deliberately not:
 #: it takes 24 checkouts and 31 type-check runs. It is recorded instead --
@@ -656,8 +941,6 @@ class TestThePopulationTheDecisionWasTakenOver:
 
     @staticmethod
     def _staged(commit: str) -> list[str] | None:
-        import re
-
         result = subprocess.run(  # noqa: S603
             [  # noqa: S607
                 "git",

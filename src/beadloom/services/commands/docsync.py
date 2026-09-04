@@ -502,8 +502,26 @@ _HOOK_COMMIT_SCOPE = (
 # new module is the largest unjudged thing a neighbour can leave in a shared tree
 # (BDL-061.22-4). The second status column is non-blank for a working-tree
 # modification and is `?` for an untracked path, so one call answers both.
+#
+# `staged_py` states WHICH KIND of file this commit stages and never where code
+# lives (BDL-UX #240). It selected `^(src|tests)/` until `beadloom-0mdo.42`, and
+# that spelling was the gate in front of a derivation: `beadloom-gsal` had just
+# replaced the hand-written typed surface with one read from the project's own
+# `[tool.mypy]`, and the filter reaching it still named two directories. On the
+# flat layout -- the package at the repository root, which is where a Python
+# project sits unless someone chose otherwise -- the regex admits no package file
+# at all, so with no `tests/` directory the typed leg printed NOTHING (no
+# verdict, no NOTHING TO CHECK, no NOT CHECKED) and with one it printed a
+# confident sentence about a population the package was not in. The ruff leg
+# beside it is gated by the same variable and was equally blind. This repository
+# is src-layout and could not observe either, which is why five waves did not.
+#
+# So each leg now narrows this population by its OWN declaration: the typed leg
+# asks `beadloom typed-surface --filter`, and ruff applies the configuration it
+# reads for itself. A path filter naming directories is a second list beside
+# those declarations, and a second list is a second thing to forget.
 
-staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src|tests)/.*[.]py$')
+staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '[.]py$')
 outside=$(git status --porcelain | awk 'substr($0, 2, 1) != " "' | wc -l | tr -d ' ')
 """
 )

@@ -94,6 +94,25 @@ separator is read as the same path, so a staged path reported by git on Windows 
   The hook calls `--filter`, prints the verdict whatever it says, and hands only the filtered
   paths to `mypy`.
 
+## The gate that reaches this derivation
+
+A rule stated as a shape is worth what the filter in front of it admits. `beadloom-gsal` derived
+this surface from the project's own declaration and the pre-commit hook still selected the files
+it would ask about with `grep -E '^(src|tests)/.*[.]py$'` — a second list beside the declaration,
+which is the thing the derivation exists to remove. On the flat layout, where the package sits at
+the repository root, that regex admits no package file at all: a commit with no `tests/` directory
+printed no typed-surface line whatsoever — not a verdict, not `NOTHING TO CHECK`, not
+`NOT CHECKED` — and a commit with one printed a confident sentence about a population the package
+was not in. The ruff leg beside it reads the same variable and was equally blind.
+
+Since `beadloom-0mdo.42` (BDL-UX #240) the hook's `staged_py` states which **kind** of file the
+commit stages and never where code lives, and each leg narrows that population by its own
+declaration. This repository is src-layout and could not observe the defect, which is why five
+waves passed over it; `tests/test_the_gate_checks_the_surface_the_project_declared.py` now drives
+the real emitted template through a real `/bin/sh` over five layouts — src, flat, flat without a
+`tests/` directory, a source directory not called `src`, and a single module at the root declared
+through `files` — of which this repository can show one.
+
 ## What the gate does with a failure
 
 The hook runs `mypy` with `2>&1`, not `2>/dev/null`, and prints what came back. The old block
