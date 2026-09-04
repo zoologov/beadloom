@@ -123,7 +123,7 @@ bead comments.
 
 **Acceptance criteria**:
 - [ ] Scenario: `A declared mutation target outside the configured source paths is reported`
-- [ ] Scenario: `A mutation run reports a score for the slice it was scoped to`
+- [ ] Scenario: `a mutation run reports a score for the slice it was scoped to`
 
 ### US-5: A guard reports the write paths it cannot see
 
@@ -132,7 +132,7 @@ bead comments.
 silence.
 
 **Acceptance criteria**:
-- [ ] Scenario: `A write through a path outside the guard's surface is reported`
+- [ ] Scenario: `The report names a write path the binding cannot see`
 
 ## Acceptance Criteria (overall)
 
@@ -144,7 +144,7 @@ them by name. `beadloom lint` reports a referenced scenario the suite does not c
 - [ ] Scenario: `A commit touching a call site outside the declared axes is reported`
 - [ ] Scenario: `The brief counts the author's account in the commit bodies of the reviewed range`
 - [ ] Scenario: `A declared mutation target outside the configured source paths is reported`
-- [ ] Scenario: `A write through a path outside the guard's surface is reported`
+- [ ] Scenario: `The report names a write path the binding cannot see`
 
 **Non-behavioural criteria** stay checkboxes and are labelled, so the absence of a scenario is
 a stated decision rather than a gap:

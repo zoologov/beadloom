@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-09-02
-> **Last updated:** 2026-09-02
+> **Last updated:** 2026-09-04
 
 ---
 
@@ -78,6 +78,10 @@ instrument the other five are measured by.
 | 2026-09-02 | Q3 stays open by design, with its decision rule stated: the mutation job runs per PR if it fits under the budget that withdrew `tests-windows` (~16-28 runner-minutes), and nightly otherwise. Measured in S3 before the job is added. | A cost decision taken before the cost is measured is the kind of claim this project rejects from everyone else. |
 | 2026-09-03 | Q3 answered: the mutation job is NIGHTLY, and the first slice's score is 96.2% over 3 989 mutants. | Measured before the job was written, per the rule CONTEXT stated on 2026-09-02: 54 min 55 s wall clock with six workers on a 10-core Darwin arm64 machine (CPython 3.13.7), against the ~16-28 runner-minute budget that withdrew `tests-windows`. Two to three times the budget on hardware faster than the runner, so no CI measurement can move the answer. The job is scheduled and deliberately NOT a required status check: a scheduled workflow reports no check-run on a pull request, and requiring its context would make `main` unmergeable. |
 | 2026-09-02 | S1.3's measurement: `impact` DERIVES its seed from the target and names it in the answer. No invocation may take the commit point as an argument and no literal may name it. | Measured at `af26750d`, the tree BDL-067's first dev bead started from: seeded with `write_yaml_atomic` the lifted derivations list both writers and four branches of `init`; seeded with `bootstrap_project`, the function that bead was changing, they list no writers and three branches. Three is the number the epic carried throughout. The answer is a property of the seed, so a hardcoded seed would satisfy S1.2's acceptance while being the authored list this epic exists to remove. |
+| 2026-09-04 | `scenario-coverage` does not stay `warn` on this project for its DOCUMENT leg: a document that references a scenario name the suite does not carry becomes `error`, while the node-population leg stays `warn`. Neither moves today — the promotion carries a precondition and an implementation cost, and both are stated here. | The severity comment shipped in `rules.yml` is right about one leg only: "a finding about declared INTENT is not a finding about code, and `error` would turn every adopter's green project red on the upgrade that ships the rule". That holds for the node leg, which reports 29 feature nodes with no bound scenario. The document leg reports something else — a name a document states and the suite does not contain is wrong about a checkable fact — and it hid a broken promise through six waves and ten beads because a `warn` leaves `lint --strict` at rc 0. Precondition, measured on 2026-09-04: 34 document findings exist, 5 in this epic's PRD (S2's two and S3's one, each with a suite scenario carrying the behaviour under another name) and 26 in BDL-061's closed PRD, which is repaired or removed from `references:` with the exclusion stated. Cost: severity is per RULE, not per leg — `graph/rules/scenario_coverage.py` passes `rule.severity` to every finding — so this is a per-leg severity key and not a `rules.yml` edit. |
+| 2026-09-04 | US-5's acceptance criterion moves to the name the suite carries (`The report names a write path the binding cannot see`); the scenario is not renamed to the PRD's text. | The PRD states the convention that decides this: "the suite holds their text and this list references them by name", so the suite is the source of truth and the reference is what moves. The suite's name is also the truer one — the scenario builds a binding and reports the tool it cannot see, and performs no write, so "a write through a path outside the guard's surface" described something the scenario does not do. A second and smaller reason: `beadloom-0mdo.43` is editing `tests/acceptance/features/guard_surface.feature` in the same working tree, and renaming a scenario there would have put two agents in one file. |
+| 2026-09-04 | S2's and S3's axis rows are derived retroactively and added to the RFC, dated to the tree they were actually taken on rather than to the tree those slices began on. | The section is the scope an active check judges against, not a log, and an incomplete union gave a wrong verdict in the present: `beadloom waves` reported `mutation-scope: not_derived — no row of RFC.md names it` against `beadloom-0mdo.45`, whose entire declared scope is that node. Dating the sweep 2026-09-04 at `d0088ba` keeps "each slice's rows are derived when that slice begins" true for S5 and S6 and stops a sweep taken forty commits later being read as S2's or S3's own. |
+| 2026-09-04 | An axis row is `yes` when this epic WRITES the node and `no` when it only READS it, measured from the paths the epic changes. This replaces S1's "nothing is excluded" for every row derived after S1's. | S1's blanket `yes` left `scope-check` unable to fail: it approved a node set wide enough that S4 edited seven nodes no row named while the check reported "36 staged path(s) a node owns, 65 no node owns" and zero findings. CONTEXT's own constraint is that no check is added that cannot fail. The decision is therefore measured — the 239 paths BDL-068 changes since `17eafb8^` resolve to thirty owning nodes — and a later slice that needs one of the fourteen `no` rows re-derives and moves it, which is the per-slice rule already in force. |
 
 ## Related Files
 
@@ -89,8 +93,10 @@ Discover through `beadloom ctx <ref-id>` — every node the RFC names resolves t
 
 ## Current Phase
 
-- **Phase:** Development — S1
-- **Current bead:** `.3` closed; `.2` (`beadloom impact`) is next and runs against the
-  acceptance S1.3 rewrote.
-- **Blockers:** none. PR #58 landed on `main` as `a4738b7`, so the three lifted derivations are
-  no longer stacked on an open branch.
+- **Phase:** Development — S4, answering its review.
+- **Current bead:** the S4 review (`beadloom-0mdo.35`) recorded 0 critical and 4 major
+  findings. Three beads answer them: `.43` (what the firing record now holds), `.44` (the
+  derivations that never reached these documents) and `.45` (five new domain cores under no
+  mutation claim). S5's beads are created when those close, per the per-slice rule above.
+- **Blockers:** none. S1 landed on `main` as `17eafb8` (PR #59) and S2+S3 as `97e0504`
+  (PR #60). S4 is on `features/BDL-068` at `d0088ba` and is not yet in a pull request.
