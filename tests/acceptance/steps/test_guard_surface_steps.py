@@ -19,6 +19,9 @@ from pytest_bdd import given, scenarios, then, when
 
 from beadloom.application.guards.contract import ClaimedBead, GuardProbes
 from beadloom.application.guards.evaluation import evaluate_guard
+from beadloom.application.guards.firing import FIRINGS_RELPATH
+from beadloom.application.guards.hook_payload import shell_command_context
+from beadloom.application.guards.invocation import GuardInvocation, run_invocation
 from beadloom.application.guards.models import GuardOutcome
 from beadloom.application.guards.surface import build_surface
 from beadloom.onboarding.guard_hooks import (
@@ -52,10 +55,11 @@ def world(tmp_path: Path) -> dict[str, Any]:
 
 
 def _evaluate(world: dict[str, Any], command: str) -> None:
+    """Through the door the harness's command line goes through, not around it."""
     world["verdict"] = evaluate_guard(
         _GUARD,
         project_root=world["root"],
-        context={"tool": "Bash", "command": command},
+        context={"tool": "Bash", **shell_command_context(command)},
         probes=GuardProbes(tracker=_Claimed()),
     )
 
@@ -233,3 +237,56 @@ def _names_its_sources(world: dict[str, Any]) -> None:
     assert SETTINGS_RELPATH.as_posix() in read_from, read_from
     assert TOOL_AGENT_DIRS["claude"].as_posix() in read_from, read_from
     assert "ON DISK" in read_from, read_from
+
+
+#: A command line of the shape the review's finding is about: an environment
+#: assignment carrying a credential, a program, an operand, and a redirection
+#: into a file. Every part but the last is what the record must not keep.
+_SECRET = "ghp_00000000000000000000000000000000"  # noqa: S105 — a shape, not a token
+_WITH_A_SECRET = f"GITHUB_TOKEN={_SECRET} gh api repos/acme/private > out/report.json"
+
+
+class _Bash:
+    """The shell payload the harness sends, as the harness sends it."""
+
+    def __init__(self, command: str) -> None:
+        self.command = command
+
+    def __call__(self) -> bytes:
+        payload = {
+            "hook_event_name": HOOK_EVENT,
+            "tool_name": "Bash",
+            "tool_input": {"command": self.command},
+        }
+        return json.dumps(payload).encode("utf-8")
+
+
+@when("the harness reports a shell command that carries a secret and writes a file")
+def _harness_reports_a_secret_command(world: dict[str, Any]) -> None:
+    root: Path = world["root"]
+    (root / ".beadloom").mkdir(parents=True, exist_ok=True)
+    result = run_invocation(
+        GuardInvocation(
+            name=_GUARD,
+            declared_project=root,
+            harness="claude-code",
+            read_payload=_Bash(_WITH_A_SECRET),
+            probes_for=lambda _root: GuardProbes(tracker=_Claimed()),
+        )
+    )
+    assert result.recorded, result.not_recorded_because
+    world["record"] = (root / FIRINGS_RELPATH).read_text(encoding="utf-8")
+
+
+@then("the firing record names the file the command writes and the program it ran")
+def _record_names_the_write_and_the_program(world: dict[str, Any]) -> None:
+    context = json.loads(world["record"].splitlines()[-1])["context"]
+    assert context["command_writes"] == "out/report.json", context
+    assert context["command_name"] == "gh", context
+
+
+@then("no part of the command line is in the firing record")
+def _record_holds_no_command_line(world: dict[str, Any]) -> None:
+    record = world["record"]
+    for fragment in (_SECRET, "GITHUB_TOKEN", "repos/acme/private", "api"):
+        assert fragment not in record, fragment

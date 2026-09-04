@@ -316,6 +316,32 @@ filed; this name is the free mitigation and later slices keep it.
     `beadloom ci` rc 0 foreground and unpiped; `HEAD` verified `e87bed7` either side.
     Every verdict Darwin arm64, 0 of the 21 declared rooms, so none of it is a claim about
     any CI leg.
+  - [x] `0mdo.43` / **review Major 1** — the firing record held every agent shell command line
+    verbatim, and the shipped `.gitignore` entry invited teams to commit it. Verified against the
+    live record before and after, never against a fixture: the generation that rotated during
+    this bead holds 1 999 firings of which 1 927 stored the line they fired on — 2.0 MB, 1 007
+    bytes a record, 76 of those lines beginning with an environment assignment whose value the
+    record kept. The 271 firings written since the change hold 0 command lines, 271 programs and
+    42 derived write sets, at 580 bytes a record. **Reduction, not redaction**, per the bead's
+    own argument: the context carries `command_name`, `command_writes` and `command_unreadable`
+    and never the line, because redaction is a denylist and the next credential arrives as a
+    positional argument or inside a heredoc. The reduction sits at the one door the context is
+    built at, so `--context command=...` goes through it too — a shell caller and a hook write to
+    one file, and a second door the first one's decision does not cover is this epic's own
+    subject. Two defects were found on the way and fixed here: an environment prefix hid a
+    declared writer from the derivation (`TZ=UTC touch a.py` named nothing), and the record's own
+    cap comment still claimed ~200 bytes a record. All three misleading places moved, plus three
+    more the change made stale: `firing.py`'s docstring, `guard-hooks/DOC.md`, the `ignore_block`
+    entry's `why` — and `flow-guards/SPEC.md`, both domain READMEs. Green in a clean room over 14
+    files at `room-beadloom-0mdo.43` (8 769 passed; the 1 failure is the room's stated property —
+    no `.git`, so 41 pairs read `unverified` — and it is red at pure HEAD in an identically built
+    room), `beadloom ci` rc 0 there, room CPython 3.12.12 against the tree's 3.13.7. **Not the
+    gate owner**: `beadloom waves` names `0mdo.44` for this wave's combined tree, so nothing here
+    is a claim about it. On the tree, `lint --strict`, `sync-check`, `docs audit` and `doctor` are
+    each rc 0 and `mypy` is clean at all four declared target versions; the two failures in
+    `test_a_commit_is_judged_against_the_declared_axes.py` are red at pure HEAD (`b740177`) in a
+    worktree carrying no file of mine, so they belong to `0mdo.44`'s RFC axes change and not to
+    this bead. Darwin arm64, 0 of the 21 declared rooms.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

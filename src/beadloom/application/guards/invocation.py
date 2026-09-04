@@ -103,9 +103,11 @@ from beadloom.application.guards.contract import GuardProbes
 from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import record_firing
 from beadloom.application.guards.hook_payload import (
+    COMMAND_KEY,
     HookPayloadError,
     UnknownHarnessError,
     context_from_hook_payload,
+    shell_command_context,
 )
 from beadloom.application.guards.liveness import build_liveness
 from beadloom.application.guards.models import (
@@ -467,13 +469,24 @@ def _context(invocation: GuardInvocation) -> dict[str, str]:
 
 
 def _parse_context(pairs: tuple[str, ...]) -> dict[str, str]:
-    """Parse repeated ``--context k=v`` flags into a mapping."""
+    """Parse repeated ``--context k=v`` flags into a mapping.
+
+    ``command=`` goes through the same reduction as a harness payload rather
+    than into the mapping as it was typed (``beadloom-0mdo.43``). A shell caller
+    and a hook write to one file, so a line admitted here would be a second door
+    into the record that the first one's decision does not cover — and this
+    epic's whole subject is two things that can disagree about one fact.
+    """
     context: dict[str, str] = {}
     for pair in pairs:
         key, separator, value = pair.partition("=")
         if not separator or not key.strip():
             raise GuardUsageError(_CONTEXT_WHY.format(pair=pair))
-        context[key.strip()] = value
+        name = key.strip()
+        if name == COMMAND_KEY:
+            context.update(shell_command_context(value))
+            continue
+        context[name] = value
     return context
 
 

@@ -26,16 +26,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from beadloom.application.guards.hook_payload import shell_edit_from_context
 from beadloom.application.guards.paths import (
     ResolvedEditPath,
     resolve_edit_path,
     undetermined_target,
 )
-from beadloom.application.guards.shell_targets import derive_write_targets
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
+
+    from beadloom.application.guards.shell_targets import ShellCommand
 
 
 @dataclass(frozen=True)
@@ -113,9 +115,17 @@ class GuardRequest:
         return self.context.get("path") or None
 
     @property
-    def command(self) -> str | None:
-        """The shell command line the caller is about to run, when it supplied one."""
-        return self.context.get("command") or None
+    def shell_edit(self) -> ShellCommand | None:
+        """What the caller said about a shell command, when it described one.
+
+        The facts, never the line: the context carries the program name and the
+        write targets a declared shape named, because that is all this guard
+        ever read of a command and all a firing record has cause to keep
+        (``beadloom-0mdo.43``). The reduction happens at the two doors a command
+        arrives through — the harness payload and ``--context command=...`` —
+        which is why nothing here has a raw line to reduce.
+        """
+        return shell_edit_from_context(self.context)
 
     @property
     def resolved_path(self) -> ResolvedEditPath:
@@ -140,11 +150,9 @@ class GuardRequest:
         file, while a command line only ever yields a lower bound on the files
         it writes.
         """
-        if self.path is None and self.command is not None:
-            derived = derive_write_targets(self.command)
-            return undetermined_target(
-                derived.targets, unreadable=derived.unreadable
-            )
+        edit = self.shell_edit
+        if self.path is None and edit is not None:
+            return undetermined_target(edit.targets, unreadable=edit.unreadable)
         return resolve_edit_path(self.path, self.project_root)
 
     @property

@@ -50,6 +50,29 @@ without matching, so no guard was invoked and no firing was written, and
 `--liveness` could not see the difference: it reads the firing record, and an
 edit no guard was asked about leaves no record.
 
+### What widening the matcher changed about the RECORD
+
+Binding the shell tool changed what `.beadloom/guard-firings.jsonl` holds, not only
+how often a line is appended to it. A file edit reports a path; a shell edit reports
+a command line, and until `beadloom-0mdo.43` that line was stored verbatim. Measured
+on this repository's own record the day the review found it: 1 927 of 1 999 firings in
+one rotated generation held a command line, 2.0 MB of one machine's shell history in a
+plaintext file inside the project directory — on an adopter's machine as much as on
+ours, and command lines are where credentials live in practice.
+
+A shell edit therefore contributes three context keys and never the line:
+`command_name` (the program, with any `VAR=value` prefix dropped), `command_writes`
+(the derived write targets, which are a lower bound) and `command_unreadable` (why a
+line could not be tokenized). That is everything the guard ever read of a command, so
+nothing downstream lost an input. Replaying the same 1 999 firings through the
+reduction: 557 bytes a record rather than 1 007, and 370 of them still name a write
+target.
+
+Reduction rather than redaction, because redaction is a denylist: masking `KEY=value`
+and `--header`-shaped operands covers the spellings somebody thought of, and the next
+credential arrives as a positional argument or inside a heredoc. What it costs is that
+a human reading a firing sees which program ran and not how it was invoked.
+
 **A file written through any tool the matcher does not name is still unguarded**,
 and that is now reported rather than left to a paragraph.
 `application/guards/surface.py` reads this file's matcher back off disk, reads the

@@ -174,12 +174,45 @@ nothing in any of the three.
 Three things close it, and only the third generalises past this one matcher.
 
 **A shell command's write set is a lower bound, never a set.**
-`shell_targets.derive_write_targets` reads the targets a declared set of write
+`shell_targets.read_shell_command` reads the targets a declared set of write
 shapes names — a `>`/`>>`/`>|` redirection, `tee`, `touch`, `truncate`, `sed -i`,
 the destination of `cp`/`mv`/`install`/`ln`, and `dd of=` — over a `shlex`
 tokenization, so `>f`, `> f` and `1> f` are one shape rather than three
 spellings. What `sh -c "$CMD"` or an interpreter reading a heredoc writes is not
 derivable, and the module says so rather than reporting an empty set.
+
+**A shell command line is reduced before it is stored, and the line is not stored.**
+`hook_payload.shell_command_context` is the one door a model-supplied command line
+goes through — from the harness payload and from `--context command=...` alike — and
+what comes out is the three facts the guard reasons about: `command_name` (the
+program, with any leading `VAR=value` dropped), `command_writes` (the derived
+targets) and `command_unreadable` (why a line could not be tokenized). The context is
+echoed into the verdict and appended to the firing record, so a key admitted here is a
+value written to a plaintext file inside the project directory.
+
+Until `beadloom-0mdo.43` the line was stored verbatim, bounded only at 2 000
+characters. Widening the binding to `Bash` had changed what the record HOLDS and not
+only how often it is written, and nothing said so: `COMMAND_LIMIT`'s comment argued
+about verdict quality where the question was disclosure, this document described a
+record of paths, and the shipped `.gitignore` entry told every adopter that "a team
+that wants the audit trail deletes this line, once". Measured on this repository's own
+record: one rotated generation held 1 927 command lines in 1 999 firings, 2.0 MB of
+one machine's shell history; the same firings replayed through the reduction are 557
+bytes a record rather than 1 007, and 370 of them still name a write target.
+
+Reduction rather than redaction, and the choice is stated because either is defensible.
+Masking `KEY=value` and `--header`-shaped operands is a denylist, and a denylist is the
+spellings somebody thought of — the next credential is a positional argument, a heredoc
+body, or a flag nobody enumerated. Keeping only the derived facts decides what is kept,
+so an unanticipated spelling is outside it by construction. The cost: a human reading a
+firing sees which program ran, not how it was invoked. Nothing in Beadloom read the
+rest — `read_shell_command` was the line's only consumer.
+
+**It does not reach a record already written.** Lines appended before the change keep
+their command lines until the cap rotates them out and a second rollover replaces the
+archive; nothing rewrites them, because a check that edits its own evidence is what
+this feature refuses to be. A project that wants them gone deletes
+`guard-firings.jsonl` and `guard-firings.1.jsonl`, losing the carried counts with them.
 
 **A shell edit therefore resolves to `PathScope.UNDETERMINED`.** `relative` stays
 `None`, which is what makes `GuardSpec.exclusion_for` return nothing, so a
@@ -686,6 +719,10 @@ Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`.
 often it fired, its last outcome, and four ways a gate stops protecting
 anything — a gate that cannot demonstrate it ran is treated as not having run.
 
+A line holds the verdict and the evaluation context: for a file edit the path the
+harness named, for a shell edit the program and the derived write targets, never the
+command line — see the reduction above.
+
 The record is **gitignored by default** (BDL-061.35): it is machine-local and
 append-only, so committing it makes every guarded edit a working-tree change and
 every branch a conflict on the same last line. It is evidence, and a team may
@@ -852,7 +889,8 @@ never louder.
 | `paths.py` | the accepted shape of an edit path, and resolving it against the project root |
 | `firing.py` | the append-only firing record |
 | `liveness.py` | which guards are actually protecting something |
-| `hook_payload.py` | translating a harness hook event into guard context |
+| `hook_payload.py` | the context vocabulary, and translating a harness hook event into it |
+| `shell_targets.py` | what a shell command line says about itself: its program, and the files it is seen to write |
 | `checks/` | the shipped guards, one module each |
 
 Checks read the world exclusively through the ports in `contract.py`. The

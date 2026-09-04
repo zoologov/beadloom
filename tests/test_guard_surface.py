@@ -25,15 +25,20 @@ from beadloom.application.guards.contract import (
     GuardRequest,
 )
 from beadloom.application.guards.evaluation import evaluate_guard
+from beadloom.application.guards.firing import FIRINGS_RELPATH
 from beadloom.application.guards.hook_payload import (
-    COMMAND_KEY,
     COMMAND_LIMIT,
+    COMMAND_NAME_KEY,
+    COMMAND_UNREADABLE_KEY,
+    COMMAND_WRITES_KEY,
     PATH_KEY,
     context_from_hook_payload,
+    shell_command_context,
 )
+from beadloom.application.guards.invocation import GuardInvocation, run_invocation
 from beadloom.application.guards.models import GuardOutcome
 from beadloom.application.guards.paths import PathScope
-from beadloom.application.guards.shell_targets import derive_write_targets
+from beadloom.application.guards.shell_targets import read_shell_command
 from beadloom.application.guards.surface import (
     READ_TOOLS,
     WRITE_TOOLS,
@@ -107,15 +112,15 @@ class TestOneShapeNotManySpellings:
     def test_every_redirection_spelling_names_the_same_file(
         self, command: str
     ) -> None:
-        assert derive_write_targets(command).targets == ("out.txt",)
+        assert read_shell_command(command).targets == ("out.txt",)
 
     def test_a_descriptor_duplication_names_no_file(self) -> None:
         """`2>&1` writes nothing — reading `1` as a path would invent a target."""
-        assert derive_write_targets("printf x >> log 2>&1").targets == ("log",)
+        assert read_shell_command("printf x >> log 2>&1").targets == ("log",)
 
     def test_a_redirection_does_not_steal_a_command_s_operand(self) -> None:
         """In `cp a > log b`, `log` is the shell's and `b` is still cp's destination."""
-        assert derive_write_targets("cp a > log b").targets == ("b", "log")
+        assert read_shell_command("cp a > log b").targets == ("b", "log")
 
 
 class TestTheDeclaredWriterShapes:
@@ -138,24 +143,24 @@ class TestTheDeclaredWriterShapes:
     def test_a_declared_writer_names_its_target(
         self, command: str, expected: tuple[str, ...]
     ) -> None:
-        assert derive_write_targets(command).targets == expected
+        assert read_shell_command(command).targets == expected
 
     def test_sed_without_in_place_edits_nothing(self) -> None:
         """`sed 's/a/b/' f` prints; reading `f` as a write would be a false target."""
-        assert derive_write_targets("sed 's/a/b/' docs/x.md").targets == ()
+        assert read_shell_command("sed 's/a/b/' docs/x.md").targets == ()
 
     def test_a_copy_with_one_operand_names_no_destination(self) -> None:
-        assert derive_write_targets("cp a").targets == ()
+        assert read_shell_command("cp a").targets == ()
 
     def test_every_command_in_a_list_contributes(self) -> None:
-        derived = derive_write_targets("echo a > x.txt && sed -i 's/a/b/' y.md")
+        derived = read_shell_command("echo a > x.txt && sed -i 's/a/b/' y.md")
         assert derived.targets == ("x.txt", "y.md")
 
 
 class TestAnEmptyAnswerIsNotAClaim:
     def test_an_interpreter_reading_a_heredoc_derives_nothing(self) -> None:
         """The exact shape #170 was found on: the write is inside the program."""
-        derived = derive_write_targets(
+        derived = read_shell_command(
             "python3 - <<'EOF'\nopen('src/app.py', 'w').write('x')\nEOF"
         )
         assert derived.targets == ()
@@ -163,12 +168,12 @@ class TestAnEmptyAnswerIsNotAClaim:
 
     def test_a_command_that_cannot_be_tokenized_says_so(self) -> None:
         """Distinct from deriving nothing: nothing could be READ, which is worse."""
-        derived = derive_write_targets("echo 'unbalanced > out.txt")
+        derived = read_shell_command("echo 'unbalanced > out.txt")
         assert derived.targets == ()
         assert derived.unreadable
 
     def test_an_empty_command_derives_nothing_without_failing(self) -> None:
-        assert derive_write_targets("   ") == derive_write_targets("")
+        assert read_shell_command("   ") == read_shell_command("")
 
 
 class TestTheVerdictSaysTheReadingIsPartial:
@@ -177,7 +182,8 @@ class TestTheVerdictSaysTheReadingIsPartial:
     ) -> None:
         """`relative` is what exclusion matching is fed, so it must stay None."""
         request = GuardRequest(
-            project_root=tmp_path, context={"command": "echo a > src/app.py"}
+            project_root=tmp_path,
+            context=shell_command_context("echo a > src/app.py"),
         )
         resolved = request.resolved_path
         assert resolved.scope is PathScope.UNDETERMINED
@@ -188,7 +194,10 @@ class TestTheVerdictSaysTheReadingIsPartial:
         """A path is a statement about one file; a command line is a lower bound."""
         request = GuardRequest(
             project_root=tmp_path,
-            context={"path": "src/real.py", "command": "echo a > src/other.py"},
+            context={
+                "path": "src/real.py",
+                **shell_command_context("echo a > src/other.py"),
+            },
         )
         assert request.resolved_path.scope is PathScope.INSIDE
         assert request.resolved_path.relative == "src/real.py"
@@ -197,7 +206,7 @@ class TestTheVerdictSaysTheReadingIsPartial:
         verdict = evaluate_guard(
             "bead-claimed",
             project_root=tmp_path,
-            context={"tool": "Bash", "command": "make release"},
+            context={"tool": "Bash", **shell_command_context("make release")},
             probes=GuardProbes(tracker=_Claimed()),
         )
         assert verdict.outcome is GuardOutcome.PASS
@@ -209,7 +218,7 @@ class TestTheVerdictSaysTheReadingIsPartial:
         verdict = evaluate_guard(
             "bead-claimed",
             project_root=tmp_path,
-            context={"tool": "Bash", "command": "echo 'unbalanced"},
+            context={"tool": "Bash", **shell_command_context("echo 'unbalanced")},
             probes=GuardProbes(tracker=_Claimed()),
         )
         assert any("could not be read" in note for note in verdict.not_covered)
@@ -231,14 +240,23 @@ class TestTheVerdictSaysTheReadingIsPartial:
         verdict = evaluate_guard(
             "bead-claimed",
             project_root=tmp_path,
-            context={"command": "sed -i 's/a/b/' docs/x.md && python3 write_src.py"},
+            context=shell_command_context(
+                "sed -i 's/a/b/' docs/x.md && python3 write_src.py"
+            ),
             probes=GuardProbes(tracker=_Claimed()),
         )
         assert verdict.outcome is not GuardOutcome.SKIP
 
 
-class TestTheHarnessPayloadCarriesTheCommand:
-    def test_a_shell_event_arrives_as_a_command_and_not_as_a_path(self) -> None:
+class TestTheHarnessPayloadCarriesTheFacts:
+    """What the harness reports about a shell edit, and what survives the door.
+
+    `beadloom-0mdo.43`: the payload's command line is reduced to the facts the
+    guard reasons about, so the context — and therefore the firing record — can
+    carry no credential a spelling nobody enumerated put on the line.
+    """
+
+    def test_a_shell_event_arrives_as_facts_and_not_as_a_path(self) -> None:
         context = context_from_hook_payload(
             "claude-code",
             json.dumps(
@@ -249,8 +267,19 @@ class TestTheHarnessPayloadCarriesTheCommand:
                 }
             ),
         )
-        assert context[COMMAND_KEY] == "sed -i 's/a/b/' src/app.py"
+        assert context[COMMAND_NAME_KEY] == "sed"
+        assert context[COMMAND_WRITES_KEY] == "src/app.py"
         assert PATH_KEY not in context
+
+    def test_no_key_of_the_context_holds_the_command_line(self) -> None:
+        """The whole finding: what the record HOLDS, not how often it is written."""
+        command = "gh api repos/acme/private --jq '.secret'"
+        context = context_from_hook_payload(
+            "claude-code", json.dumps({"tool_input": {"command": command}})
+        )
+        assert context[COMMAND_NAME_KEY] == "gh"
+        assert not any(command in value for value in context.values())
+        assert not any("repos/acme/private" in value for value in context.values())
 
     def test_an_edit_event_still_arrives_as_a_path(self) -> None:
         context = context_from_hook_payload(
@@ -258,17 +287,94 @@ class TestTheHarnessPayloadCarriesTheCommand:
             json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "a.py"}}),
         )
         assert context[PATH_KEY] == "a.py"
-        assert COMMAND_KEY not in context
+        assert COMMAND_NAME_KEY not in context
 
-    def test_a_long_command_is_bounded_before_it_reaches_a_firing_record(
-        self,
-    ) -> None:
-        """The value is model-supplied and is stored; it is bounded at the door."""
-        command = "echo " + "x" * (COMMAND_LIMIT * 2)
+    def test_derived_facts_are_bounded_by_dropping_whole_paths(self) -> None:
+        """Half a path is a file nobody wrote; a shorter lower bound is still one."""
+        targets = [f"{'d' * 60}/{index}.txt" for index in range(200)]
+        command = "touch " + " ".join(targets)
         context = context_from_hook_payload(
             "claude-code", json.dumps({"tool_input": {"command": command}})
         )
-        assert len(context[COMMAND_KEY]) == COMMAND_LIMIT
+        written = context[COMMAND_WRITES_KEY].split("\n")
+        assert len(context[COMMAND_WRITES_KEY]) <= COMMAND_LIMIT
+        assert 0 < len(written) < len(targets)
+        assert set(written) <= set(targets)
+
+
+class TestTheOtherDoorTheSameLineArrivesThrough:
+    """`--context command=...` writes to the same record, so it is reduced too."""
+
+    def _fire(self, root: Path, command: str) -> dict[str, str]:
+        result = run_invocation(
+            GuardInvocation(
+                name="bead-claimed",
+                declared_project=root,
+                context_pairs=(f"command={command}",),
+                probes_for=lambda _root: GuardProbes(tracker=_Claimed()),
+            )
+        )
+        assert result.recorded, result.not_recorded_because
+        recorded = (root / FIRINGS_RELPATH).read_text(encoding="utf-8")
+        context = json.loads(recorded.splitlines()[-1])["context"]
+        assert isinstance(context, dict)
+        return context
+
+    def test_a_command_line_typed_on_the_command_line_is_reduced(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / ".beadloom").mkdir()
+        context = self._fire(tmp_path, "TOKEN=s3cret gh api x > out/report.json")
+        assert context[COMMAND_NAME_KEY] == "gh"
+        assert context[COMMAND_WRITES_KEY] == "out/report.json"
+        assert "s3cret" not in json.dumps(context)
+
+    def test_an_empty_command_describes_no_shell_edit(self, tmp_path: Path) -> None:
+        """As before the reduction: an empty value never meant "a shell edit"."""
+        (tmp_path / ".beadloom").mkdir()
+        assert COMMAND_NAME_KEY not in self._fire(tmp_path, "")
+
+
+class TestTheProgramTheLineRuns:
+    """The leading token, which is not the first word when a variable is set."""
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ("git commit -m 'x'", "git"),
+            ("GITHUB_TOKEN=ghp_x gh api repos/acme", "gh"),
+            ("TZ=UTC LC_ALL=C sed -i 's/a/b/' f.md", "sed"),
+            ("/usr/bin/tee out.txt", "/usr/bin/tee"),
+            ("(cd src && touch a.py)", "cd"),
+            ("> out.txt", ""),
+            ("FOO=bar", ""),
+        ],
+    )
+    def test_the_program_is_named_without_its_environment(
+        self, command: str, expected: str
+    ) -> None:
+        assert read_shell_command(command).name == expected
+
+    def test_an_environment_prefix_does_not_hide_a_declared_writer(self) -> None:
+        """While the assignment counted as the command word, `touch` was unknown."""
+        assert read_shell_command("TZ=UTC touch a.py").targets == ("a.py",)
+
+    def test_an_operand_that_looks_like_an_assignment_is_not_one(self) -> None:
+        """`of=` is dd's operand; only a word BEFORE the program is an assignment."""
+        read = read_shell_command("dd if=a of=b.img")
+        assert read.name == "dd"
+        assert read.targets == ("b.img",)
+
+    def test_a_line_that_cannot_be_read_names_no_program(self) -> None:
+        read = read_shell_command("echo 'unbalanced")
+        assert read.name == ""
+        assert read.unreadable
+
+    def test_an_unreadable_line_says_so_in_the_context(self) -> None:
+        context = shell_command_context("echo 'unbalanced")
+        assert context[COMMAND_NAME_KEY] == ""
+        assert context[COMMAND_UNREADABLE_KEY]
+        assert COMMAND_WRITES_KEY not in context
 
 
 class TestTheSurfaceIsDerivedFromTheEmittedArtifacts:

@@ -68,6 +68,14 @@ every guarded edit a working-tree change, and every branch a conflict on the sam
 line. The reason is written into the block itself, not only here — the adopter meets the
 line in their own file, not in our docs.
 
+**The invitation names what the file holds**, since `beadloom-0mdo.43`. "A team that wants
+the audit trail deletes this line, once" was written when the record held file paths;
+binding the shell tool (BDL-UX #170) made it hold command lines as well, and following the
+sentence unchanged would have committed an agent's shell history to git. Two things moved:
+the record now carries a shell edit's program and derived write targets rather than its
+command line (`application/guards/hook_payload.py`), and this entry's `why` states that,
+so an adopter deciding to commit the file is deciding about the contents it actually has.
+
 **What ignoring settles, and what settles the rest:** keeping a file out of git says nothing
 about its size. Since `beadloom-mr2l.56` the size is bounded in the guard domain rather than
 here — the record rolls over at 2000 firings — and this block's pattern is

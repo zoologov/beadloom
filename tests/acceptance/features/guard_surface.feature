@@ -70,3 +70,18 @@ Feature: the guard binding sees every write path, and reports the ones it does n
     Given a project whose roles are granted the shell tool and whose matcher omits it
     When the binding surface is reported
     Then the report names the artifacts on disk it was derived from
+
+  # Major 1 of the S4 review (`beadloom-0mdo.35`), fixed by `beadloom-0mdo.43`.
+  # Widening the matcher to `Bash` changed what the firing record HOLDS, not only
+  # how often it is written: it began storing the model-supplied command line
+  # verbatim. Measured on this repository's own record before the fix -- 1 897 of
+  # 1 941 firings carried one, 895 481 characters of shell history in a plaintext
+  # file inside the project directory, 76 of them beginning with an environment
+  # assignment whose value the record kept.
+
+  @bead:beadloom-0mdo.43
+  Scenario: The firing record holds what a command writes, not the command line
+    Given a bead is claimed
+    When the harness reports a shell command that carries a secret and writes a file
+    Then the firing record names the file the command writes and the program it ran
+    And no part of the command line is in the firing record

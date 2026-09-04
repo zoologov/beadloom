@@ -1,6 +1,6 @@
 # beadloom:domain=application
 # beadloom:feature=flow-guards
-"""The write targets a shell command line names — a lower bound (BDL-UX #170).
+"""What a shell command line says about itself — a lower bound (BDL-UX #170).
 
 The guard binding used to fire on ``Edit|Write|MultiEdit|NotebookEdit`` only, so
 a file written through ``python3 - <<EOF``, ``sed -i`` or a redirection went
@@ -26,10 +26,22 @@ The shapes below are chosen for one property: the target's *position* is fixed b
 the command's own interface rather than guessed from the string. Each is a shape
 and not a spelling — ``>f``, ``> f`` and ``1> f`` are one shape, and the
 tokenizer, not a regular expression, is what makes them one.
+
+**The program name is read here too, and the leading environment assignments are
+dropped whole (``beadloom-0mdo.43``).** The guard's context carries the name
+instead of the line, so what the record keeps of ``VAR=value prog args`` must be
+``prog``: reading the first token literally would keep exactly the value the
+reduction exists to leave out, and ``GITHUB_TOKEN=… gh api …`` is the shape the
+review's finding names. Measured on this repository's own record before the
+change: 76 of 1 897 stored command lines began with an assignment. The variable
+NAME is dropped with its value rather than kept — it is not something the guard
+reasons about, and a name is one edit away from being a value again
+(``AWS_SESSION_TOKEN`` is a name; ``pass=hunter2`` is the same shape).
 """
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass
 
@@ -45,11 +57,21 @@ _WRITE_REDIRECTIONS = frozenset({">", ">>", ">|"})
 
 
 @dataclass(frozen=True)
-class ShellWriteTargets:
-    """What a command line was seen to write, and why the reading may be short.
+class ShellCommand:
+    """What a command line was read to be, and why the reading may be short.
+
+    These three fields are the whole of what the guard learns from a shell
+    edit, which is why they are also the whole of what its context and its
+    firing record carry about one: a value nothing reasons about is a value
+    stored for no reason.
 
     Attributes
     ----------
+    name:
+        The program the first command runs, as the line spells it, with any
+        leading environment assignments dropped. ``""`` when no command word
+        could be read — a line that is only a redirection, or one that could
+        not be tokenized.
     targets:
         Paths a declared write shape names, deduplicated and sorted. A **lower
         bound** on the command's writes, never the set of them.
@@ -59,6 +81,7 @@ class ShellWriteTargets:
         "nothing could be read" are different facts about the same silence.
     """
 
+    name: str = ""
     targets: tuple[str, ...] = ()
     unreadable: str = ""
 
@@ -161,6 +184,38 @@ _WRITERS = {
 }
 
 
+#: A shell variable assignment prefixing a command: a POSIX name, then ``=``.
+#: Anchored, because ``of=b.img`` is ``dd``'s operand and not an assignment —
+#: only a word BEFORE the command word is one.
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _without_environment(words: list[str]) -> list[str]:
+    """One command's words with its leading ``VAR=value`` prefix removed.
+
+    Every reading of a command starts here, so the prefix is invisible to both
+    of them: ``TZ=UTC touch a.py`` is ``touch`` writing ``a.py``, and while the
+    assignment counted as the command word it was neither.
+    """
+    index = 0
+    while index < len(words) and _ASSIGNMENT.match(words[index]):
+        index += 1
+    return words[index:]
+
+
+def _program_name(commands: list[list[str]]) -> str:
+    """The program the first command runs, with its environment prefix dropped.
+
+    ``""`` when the line runs no command at all — ``> out`` is a redirection the
+    shell performs, and ``FOO=bar`` on its own sets a variable and runs nothing.
+    """
+    for words in commands:
+        stripped = _without_environment(words)
+        if stripped:
+            return stripped[0]
+    return ""
+
+
 def _tokenize(command: str) -> list[str]:
     """Split *command* into words and shell punctuation, honouring quoting."""
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
@@ -196,26 +251,35 @@ def _split_commands(tokens: list[str]) -> tuple[list[list[str]], list[str]]:
 
 def _command_targets(words: list[str]) -> list[str]:
     """Targets named by one command's own interface."""
-    reader = _WRITERS.get(words[0].rpartition("/")[2])
-    return reader(words) if reader is not None else []
+    invocation = _without_environment(words)
+    if not invocation:
+        return []
+    reader = _WRITERS.get(invocation[0].rpartition("/")[2])
+    return reader(invocation) if reader is not None else []
 
 
-def derive_write_targets(command: str) -> ShellWriteTargets:
-    """Files *command* is seen to write, as a lower bound on what it writes.
+def read_shell_command(command: str) -> ShellCommand:
+    """What *command* names: the program it runs and the files it is seen to write.
 
     An empty ``targets`` never means "this command writes nothing" — it means no
     declared shape named a file, which is the ordinary case for an interpreter
     invocation. Callers state that in ``not_covered`` rather than reading it as
     coverage.
+
+    One reading rather than two, because the name and the targets come out of the
+    same tokenization: deriving them separately would be two answers about one
+    line that a quoting change could make disagree.
     """
     if not command.strip():
-        return ShellWriteTargets()
+        return ShellCommand()
     try:
         tokens = _tokenize(command)
     except ValueError as exc:
-        return ShellWriteTargets(unreadable=str(exc))
+        return ShellCommand(unreadable=str(exc))
     commands, redirected = _split_commands(tokens)
     found = {target for target in redirected if target}
     for words in commands:
         found.update(target for target in _command_targets(words) if target)
-    return ShellWriteTargets(targets=tuple(sorted(found)))
+    return ShellCommand(
+        name=_program_name(commands), targets=tuple(sorted(found))
+    )
