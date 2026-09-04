@@ -35,6 +35,18 @@
 
 ## Open Issues
 
+247. [2026-09-04] [MEDIUM] the push Gate does not run the suite, and nothing in its output says the suite is not among the things it checked
+
+    **Severity:** medium (agent-facing; it cost this project a red PR across six legs, measured)
+    **Command:** `beadloom ci`, the pre-push hook
+    **Tracker:** routed to S6
+    **Issue:** `beadloom ci` runs reindex, lint, sync-check, docs-audit, docs-quality, doc-spaces, scope-check, config-check and doctor. It does not run `pytest`. That is a reasonable division — the Gate is about documents and architecture — and every step it *does* run is named in its output. What is missing is the other half of this project's own rule: the Gate never says the suite is not among them.
+    **Why the surrounding text invites the mistake:** CLAUDE.md calls the pre-push hook "the full `beadloom ci`" and the coordinator skill calls it "the authoritative blocking backstop" whose red "blocks the push". Read together, a green Gate at push time reads as the last line of defence before a PR. For tests it is not one.
+    **Measured, and by the coordinator that wrote most of this epic:** BDL-068 S4's docs wave introduced an inline code span spilling `<doc>` onto the next line in `docs/services/cli.md`. `beadloom ci` returned rc 0 twice over that tree. PR #61 opened and **all six test legs went red on that single test** — `tests/test_site_markdown_compiles.py::test_no_inline_code_span_spills_a_tag_onto_the_next_line`, which reproduces locally in 0.07 s. Roughly 55 runner-minutes to learn something one local command answers instantly. The same conflation had already cost a red tree earlier in the slice, at `8befa96`.
+    **This is the epic's own rule turned on the epic's own Gate.** S4 shipped `NOTHING TO CHECK` for an empty typed surface, `not compared` for an unowned path, `not_covered` for an unresolvable write target and `unresolved` for an unreadable population — four instruments taught to distinguish "checked and clean" from "not checked". The Gate itself makes no such distinction about the largest thing it does not do.
+    **Expected:** the Gate names the suite as not run, the way it already names the room it entered (`0 of 21 declared room(s)`). One line — `tests: NOT RUN — the suite is not a Gate step; run \`uv run pytest\`` — costs nothing and removes the reading. Whether the pre-push hook should additionally run the suite is a separate and more expensive question; do not conflate the two, and answer the cheap one first.
+    **Not a defect in the steps it runs.** Every one of them reported honestly. The gap is a promise the surrounding documents make on the Gate's behalf, which the Gate is silent about.
+
 246. [2026-09-04] [MEDIUM] a declared mutation target that no run ever covers passes every green Gate, and the one command that would say so is silenced by the flag its only caller passes
 
     **Severity:** medium (a declaration the Gate reports as satisfied while nothing measures it — a phantom gate with a name on it, in the feature built to remove phantom gates)

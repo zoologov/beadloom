@@ -1350,10 +1350,10 @@ a bead narrowing inside them raises nothing. A plan whose caller gathered no
 `## Axes` section reports `declarations_not_compared` rather than agreement.
 
 > The `unguarded_axis` remedy — *generate each bead's `refs:` from the `## Axes`
-> section* — is filed as BDL-UX #245 and routed to S6: `beadloom axes <doc>
-> --refs` prints one line generated from every kept row, and there is no per-bead
-> selection, so following it literally hands every bead an identical scope and
-> collapses every wave to a wave of one. The verdict is correct; the advice
+> section* — is filed as BDL-UX #245 and routed to S6.
+> `beadloom axes <doc> --refs` prints one line generated from every kept row,
+> and there is no per-bead selection, so following it literally hands every bead
+> an identical scope and collapses every wave to a wave of one. The verdict is correct; the advice
 > beside it is not yet.
 
 A human outranks the decision by declaring it in `.beadloom/flow.yml`, with a
