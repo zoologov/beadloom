@@ -1,30 +1,48 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
 > **Last updated:** 2026-09-04
-> **Phase:** Development — S1-S3 merged; S4 waves 1-6 landed, dev done; test next
+> **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
+> docs), unmerged; S5 next
 
 ---
 
 ## Current Bead
 
-**Bead:** S4's test wave landed — `0mdo.34` closed with its verdict (`23f612a`), and the fix
-beads it filed are running. `0mdo.41` (#239, #241) and `0mdo.42` (#240) have both landed,
-serialised on `cli-commands`; `0mdo.35` (review) follows them.
+**Bead:** none — S4 is finished on the branch. `0mdo.36` (tech-writer) was the last of the
+slice and closed the docs pass; `0mdo.12`, the slice bead, closes with it. The next claimable
+work is S5 (`0mdo.13`), which depends on `0mdo.12` and on `0mdo.39` (#237).
+
+**Where S4 ended.** Fifteen beads: eight dev beads over six waves, then the test bead
+(`0mdo.34`), then review (`0mdo.35`), then the four fix beads its first pass produced
+(`0mdo.41`, `.42`, `.43` with `.44`, `.45` with `.47` — the wave shapes `beadloom waves`
+decided, not chosen), then this docs pass. Review `0mdo.35` closed at **0
+critical, 0 major** — all four Majors closed by measurement — and explicitly did NOT arm the
+re-plan rule, because the RFC arms it on a second ISSUES verdict on one slice and this was S4's
+first. Ten Minors and three Nitpicks are open and unassigned; they are listed under
+*Review findings left open* below, so the next session does not have to re-read the verdict to
+find them.
+
+**What is in the branch and not in `main`.** `features/BDL-068` carries S4 as 47 commits ahead
+of `main` at the moment this was written. Nothing of S4 has been merged: S1 went in as PR #59
+and S2 + S3 as PR #60, and S4 will be its own PR. `beadloom ci` is rc 0 on the branch,
+measured in Darwin arm64 / CPython 3.13.7 and in 0 of the 21 rooms this project declares, so
+it is a claim about this machine and about no CI leg.
+
 Wave 6 landed: `nn4c`, its own gate owner, combined tree measured green. Wave 5 landed:
 `gsal`, its own gate owner, combined tree measured green.
 Wave 4 landed: `en0x` (`ded748d`), its own gate owner, combined tree measured
 green. Wave 3 landed: `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner `67t1`,
 combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
-`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 6 is `nn4c`, the last of S4.
+`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 6 is `nn4c`, the last of S4's dev waves.
 Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
 `gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
 `flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
 **Goal of S4:** the guards' enforcement surface is narrower than their promise — derive each
 guard's surface from its own matcher, compare it against what exists, report the gap.
 **Branch:** `features/BDL-068` — **no suffix, deliberately**. BDL-UX #230: `declared_scope`
-matches a branch segment that EQUALS a work-item key, so `features/BDL-068-S2S3` named no work
-item and `review-brief`'s work-item channel read NOT INSPECTED for the whole of S2/S3. The fix is
-filed; this name is the free mitigation and later slices keep it.
+matches a branch segment that EQUALS a work-item key, so `features/BDL-068-S2S3` named no
+work item and `review-brief`'s work-item channel read NOT INSPECTED for the whole of S2/S3.
+The fix is filed; this name is the free mitigation and later slices keep it.
 
 ## Progress
 
@@ -342,6 +360,25 @@ filed; this name is the free mitigation and later slices keep it.
     `test_a_commit_is_judged_against_the_declared_axes.py` are red at pure HEAD (`b740177`) in a
     worktree carrying no file of mine, so they belong to `0mdo.44`'s RFC axes change and not to
     this bead. Darwin arm64, 0 of the 21 declared rooms.
+  - [x] `0mdo.44` / **review Majors 2 and 3** — the derivations were performed and never reached
+    the documents. S4's twenty-eight `beadloom impact` runs existed as bead comments while the
+    RFC's `## Axes` section held S1's three targets alone, so the section `scope-check` compares
+    every commit against did not name the code S4 changed. The append is a UNION, per the RFC's
+    own per-slice rule, with its own `Derived by` / `Measured on` line: 42 rows, 27 kept, 44
+    derivation targets. The `yes`/`no` decision is a RULE and not a judgement — `yes` where the
+    epic WRITES the node, `no` where it only READS it — derived from the 239 paths the epic
+    changes resolving to thirty owning nodes, so a later slice applies the rule rather than a
+    taste. Fourteen new `no` rows narrowed the approval as well as widening it, which is why
+    `scope-check`'s findings on one pinned commit went 1 → 6 and not 1 → 0, and why `0mdo.47`
+    followed. **Two defects found by using the tools, neither in scope and both filed:**
+    `read_axes_section` takes a SECOND markdown table's header row as data, producing an approved
+    node literally named `Node` (BDL-UX #244) — worked around here by keeping one table — and
+    `scenario-coverage`'s reference matching is case-sensitive, which is a design question rather
+    than obviously a defect. Also repaired in the same file, same class: the RFC's `## Open
+    Questions` still read `Pending` for Q1, Q2, Q4 and Q5 in an Approved document while CONTEXT
+    had carried all four answers since 2026-09-02, and CONTEXT's `## Current Phase` still named
+    S1. `beadloom docs quality` reports 0 findings for BDL-068; `beadloom lint --strict` rc 0;
+    `beadloom scope-check --since main` rc 0. No source file was touched.
   - [x] `0mdo.45` / **review Major 4** — five new domain cores under no mutation claim,
     and three older targets under a claim nothing measured. The older half was the larger
     one and it was not a delay: `[tool.mutmut] only_mutate` named `graph/rules/*` alone
@@ -381,12 +418,48 @@ filed; this name is the free mitigation and later slices keep it.
     `Not judged by this run: doc_sync/doc_quality.py, doc_sync/doc_shape.py`. And the
     schedule is not punctual: zero runs existed 4 h 39 m after the `17 3 * * *` slot,
     and GitHub created the first cron run at 07:57 UTC.
+  - [x] `0mdo.47` / **the other half of review Major 3** — two `scope-check` tests pinned a
+    literal path list against a document the RFC obliges to grow every slice, so `0mdo.44`'s
+    append went red on the one event that is guaranteed to happen and is never a defect. The
+    replacement asserts MORE than the shape it replaced, 54 cases → 64, 96% over the modules under
+    test: five cases against the LIVE table stated as relations (findings non-empty; a subset of
+    the commit's own paths; every finding names an axis the document declares; every finding names
+    the document that ruled), six against a pinned six-row excerpt whose commit, paths and index
+    are all still real, and a guard holding the excerpt to the live document on
+    `(axis, node, in_scope)` with a failure message addressed to whoever appends S5's rows.
+    **The rejected alternative is the reusable sentence:** deriving the check's INPUT from the
+    document is legitimate, and deriving its OUTPUT is `check_commit_scope`'s body written a
+    second time — green while both copies are wrong the same way. A real mutation survivor was
+    found and killed on the way: deleting `if node in scope.inside: continue` left the whole file
+    green, because a kept node usually carries its own context, except where the section's context
+    and the path owner's come from different reads. **What the bead's own diagnosis got wrong,
+    recorded for S5:** "a larger approved set means fewer paths fall outside" is not what happened
+    — `.44` narrowed more than it widened, and `scope-check`'s findings on one pinned commit went
+    1 → 6. Green in a clean room over 1 file at `room-beadloom-0mdo.47` (8 628 passed; the 1
+    failure is the room's stated property — a `git archive` room carries no doc-sync verification
+    records). **As this wave's gate owner:** green on the tree — 8 819 passed, 0 failed, 337 s,
+    Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms. A first tree run had reported one
+    failure that then passed in isolation and in the re-run: `.45` wrote `flow.yml`,
+    `pyproject.toml` and a test file inside that 431 s window, so the population a long run
+    measures is not a fixed tree while a neighbour is writing to it, and "the tree was red" would
+    have been a true sentence about a tree that never existed as a whole.
+  - [x] `0mdo.36` — tech-writer, this pass. `sync-check` was rc 0 before it started and the file
+    and symbol pairs were all `ok`, so the drift it worked was the other kind: prose that stayed
+    behind while a `reindex` reset the baseline under it. `docs/services/cli.md` carried the
+    pre-`0mdo.43` ignore-block invitation, described `--liveness` with no surface report at all,
+    stated the path rule as a literal backslash, said a wave of one prints `not_applicable` for
+    three media, and did not mention the duty check or the declared-axes comparison. Those are
+    repaired; the PRD's three broken scenario references are repointed at the scenarios the suite
+    holds — the mapping `0mdo.44` named and deliberately left for someone with the standing to
+    take it — and PLAN's slice statuses now come from the tracker rather than reading `Pending`
+    for four shipped slices.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 
 ## What is in `main` now
 
-Four commands, each of one shape — derive the answer, name the reason, name what was not reached:
+Four commands, each of one shape — derive the answer, name the reason, name what was not
+reached:
 
 | Command | Answers | Refuses to |
 |---|---|---|
@@ -395,14 +468,15 @@ Four commands, each of one shape — derive the answer, name the reason, name wh
 | `beadloom mutation` | the score against the declared scope | turn an absence into a number — a missing counter is reported, not read as zero |
 | `beadloom rooms` | the room census derived from `ci.yml` and `pyproject`, and which rooms this run entered | omit the reason a room was not entered |
 
-Plus: the `Explore` role composed by `role-composer` and available as `subagent_type: explore`;
-`## Axes` a required section of BRIEF and RFC, with an empty section a finding and a row without a
-scope decision a finding; `review-brief` reporting reachability per channel and naming the launch
-prompt as one nothing can inspect.
+Plus: the `Explore` role composed by `role-composer` and available as `subagent_type:
+explore`; `## Axes` a required section of BRIEF and RFC, with an empty section a finding and
+a row without a scope decision a finding; `review-brief` reporting reachability per channel
+and naming the launch prompt as one nothing can inspect.
 
 ## Decisions taken at planning, not to be re-litigated per bead
 
-- **Q1** — the axes are DERIVED by `beadloom impact`; the document records the derivation and the
+- **Q1** — the axes are DERIVED by `beadloom impact`; the document records the derivation and
+  the
   human's scope decision; the bead's `refs:` is generated from the document. A disagreement
   between the three is a finding.
 - **Q2** — the commit-scope check compares against the WORK ITEM's axes, not the bead's.
@@ -414,9 +488,11 @@ prompt as one nothing can inspect.
 
 ## S4, as created
 
-`beadloom-0mdo.12` is the slice and depends on every row below, so it cannot close while one is open.
-Eight dev beads, then test → review → tech-writer. Created 2026-09-03 under the epic's rule that
-beads are created per slice, once the preceding slice's review closes.
+`beadloom-0mdo.12` is the slice and depends on every row below, so it cannot close while one
+is open. Eight dev beads, then test → review → tech-writer, created 2026-09-03 under the
+epic's rule that beads are created per slice once the preceding slice's review closes — and
+then the four fix beads the review's first pass produced, created 2026-09-04. Fifteen beads
+over eight waves.
 
 | Bead | What it is | P |
 |---|---|---|
@@ -432,25 +508,130 @@ beads are created per slice, once the preceding slice's review closes.
 | `0mdo.41` / **#239 + #241** | two of the slice's instruments answer one question in opposite ways and neither says which it answered; and an empty write-path population prints as `0 of 0 ... bound` | P1 |
 | `0mdo.42` / **#240** | the commit hook's typed leg is gated by a hand-written `^(src\|tests)/` regex and prints nothing at all on a flat-layout project | P1 |
 | `0mdo.35` | review | P1 |
+| `0mdo.43` / **review Major 1** | the firing record persists every agent shell command line verbatim, and the shipped ignore block invites teams to commit it | P0 |
+| `0mdo.44` / **review Majors 2 + 3** | the derivations were performed and never reached the documents — S4's axes and its one behaviour-bearing criterion | P1 |
+| `0mdo.45` / **review Major 4** | five new pure domain cores and no mutation claim over any of them | P1 |
+| `0mdo.47` / **review Major 3** | two `scope-check` tests pin a literal path list against a document the RFC obliges to grow every slice | P1 |
 | `0mdo.36` | tech-writer | P1 |
 
 **`mr2l.81`, `.60`, `.82`, `.92` were closed 2026-08-31 in a tracker cleanup as UNFINISHED work,
-not as done** — the close comment says so on each. `.82` and `.92` came back sharper as `gsal` and
-`nn4c`; `.81` and `.60` are carried here as `.32` and `.33`. A closed bead whose work never
-happened is the same false green this epic is about, one layer up in the tracker.
+not as done** — the close comment says so on each. `.82` and `.92` came back sharper as
+`gsal` and `nn4c`; `.81` and `.60` are carried here as `.32` and `.33`. A closed bead whose
+work never happened is the same false green this epic is about, one layer up in the tracker.
 
 **`.32` is mostly wiring now, and that is S1 paying off.** `.81` had to design the mechanism it
-needed; `beadloom scope-check` shipped it in S1, and CONTEXT Q1/Q2 already answered two of the four
-questions `.81` said had to be settled before building. What is left is the exempt set (measured
-against real commits BEFORE it goes live), warn-not-block, and `unjudged` for an unattributable commit.
+needed; `beadloom scope-check` shipped it in S1, and CONTEXT Q1/Q2 already answered two of
+the four questions `.81` said had to be settled before building. What is left is the exempt
+set (measured against real commits BEFORE it goes live), warn-not-block, and `unjudged` for
+an unattributable commit.
+
+## What S5 and S6 inherited from S4, and why each was routed out
+
+S4 closed nine BDL-UX entries: the six its dev beads were created for — #170 (`0mdo.31`), #228
+(`67t1`), #231 (`gsal`), #232 and #234 (`en0x`), #233 (`nn4c`) — and three it both filed and
+fixed, #239 and #241 (`0mdo.41`) and #240 (`0mdo.42`). It filed twelve new entries in all, #235
+through #246. The nine that remain were routed OUT deliberately. This is the part a resumed
+session is least able to reconstruct, because the
+reasons live in bead descriptions and in the issue log and nowhere together.
+
+**Inherited by S5** (`0mdo.13`, which depends on `0mdo.12` and on the bead below):
+
+| Entry | Bead | Why it is not S4's |
+|---|---|---|
+| **#237** — `bd merge-slot acquire --wait` returns at once and its holder is indistinguishable from its claimant | `0mdo.39`, P0, open | It is a `bd` adapter defect, which is exactly S5's subject, and CONTEXT Q4 already decided the shape of the answer: derive our own call sites, never wrap `bd`. Fixing it inside S4 would have built the wrapper Q4 declines. |
+
+**Inherited by S6** (`0mdo.14`, which depends on S5 and on the four beads below):
+
+| Entry | Bead | Why it is not S4's |
+|---|---|---|
+| **#235** — the clean-room convention names a fixed directory, so two agents in one wave build one room and both call it clean | `0mdo.37`, P1, open | The free half shipped in S4: `beadloom waves` now prints `room-<bead-id>` per bead and the duty text carries it. What is left is a command that CREATES the room and refuses a directory it did not create empty, which is new surface rather than a correction. |
+| **#236** — a clean room's verdict is decided by which optional extras it installed, and the convention never names them | `0mdo.38`, P1, open | Measured at 0, 1 and 82 mypy errors over one code base. The durable form is `beadloom rooms` reporting an extra-set dimension beside interpreter and platform, which is a change to S3's instrument and not to S4's guards. |
+| **#238** — nothing compares the ignore block on disk against the block this version emits | `0mdo.40`, P2, open | The INSTANCE was fixed in S4: this repository's `.gitignore` now carries the shipped glob. The CLASS is a new `config-check` leg. Splitting them is what keeps a repository repair from reading as a product fix. |
+| **#244** — a second markdown table in `## Axes` contributes its header row as an approved node named `Node` | `0mdo.46`, P1, open | Worked around in S4 by keeping one table, so no commit was judged against a phantom node. The parser fix touches `read_axes_section`, which S1 owns and which `0mdo.47`'s pinned excerpt now guards. |
+| **#245** — the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one | `0mdo.46`, P1, open | The VERDICT is correct and shipped; only the advice beside it is wrong. #244 must land first — #245 cannot be judged honestly while #244 injects a node nobody wrote. |
+
+**Inherited by S6 with no bead of its own:**
+
+- **#242** — a subagent's launch context carries a `git status` snapshot that is stale by
+  construction, and `en0x` published a sentence from it and withdrew it (`f45dd62`). Recorded as
+  a NOTE on `0mdo.14` rather than as a bead, because the answer is ours and not the harness's:
+  the role protocol states that a tree fact is derived at the moment it is stated, and
+  `0mdo.27`'s duty mechanism can carry that as a declared duty. It needs no separate DAG node.
+- **#243** — a room that is refreshed rather than rebuilt manufactures a stale-doc failure
+  shaped
+  exactly like a defect. No bead: #235's proposed command — create the room, refuse a directory
+  it did not create empty — closes #243 as well, so a second bead would be a second thing to keep
+  in step. The workaround in use is to rebuild the room after any edit, never to re-copy.
+- **#246** — a declared mutation target that no run ever covers passes every green Gate.
+  `0mdo.45` closed the instance (`[tool.mutmut] only_mutate` now names every declared target and
+  `tests/test_mutation_runner_scope.py` asserts both directions), and the CLASS — Beadloom
+  recording the run it just judged, so the Gate can report a target whose last measurement is
+  absent or stale — is routed to S6 with no bead yet. **This is the one gap in the routing:** an
+  adopter has no equivalent of the repository test that closes it here, and nothing in the DAG
+  currently holds that.
+
+## Review findings left open, unassigned
+
+`0mdo.35` closed at 0 critical and 0 major. Ten Minors and three Nitpicks stand, all author's
+discretion and none blocking. The tech-writer pass (`0mdo.36`) closed the two that were
+documentation defects and touched no code:
+
+- **M-c** — ACTIVE.md carried no row for `.43`, `.44`, `.45` or `.47`, no Progress entry for
+  `.44` or `.47`, and a Current Bead block five commits out of date. **Closed by this pass.**
+- **Minor 9** — the PRD's acceptance boxes were all unticked after four slices, and PLAN's rows
+  read `Pending` for nine shipped S1 beads and three shipped slices. **Closed by this pass**, on
+  a measurement: 232 of 232 acceptance scenarios pass. Three references that named scenarios the
+  suite does not hold were repointed at the same time.
+
+The rest are code or test findings and stay open. A doc edit must not make one of them look
+addressed, so each is named with what it still needs:
+
+- **M-a** — `tests/test_a_commit_is_judged_against_the_declared_axes.py`'s pinned-row guard
+  fires
+  on an EDIT or a REMOVAL and not on an ADDITION that flips the pinned commit's answer, which is
+  the one event S5 guarantees. Needs one more assertion: no live row names a pinned node with the
+  opposite decision.
+- **M-b** — `onboarding/ignore_block.py`'s rewritten `why` does not reach a project that already
+  carries the block, whose `guard-firings.1.jsonl` may still hold command lines. This pass
+  DOCUMENTED that limitation in `docs/domains/onboarding/components/ignore-block/DOC.md` and in
+  `docs/services/cli.md`; the code half — `ensure_ignore_block` reporting a block whose entry text
+  predates the change, or a release note — is untouched.
+- **M-d** — the 25-mutant CI/local delta is labelled "the room" and not diagnosed. The two
+  survivor sets are one set-difference apart, because the job already uploads `mutants/**/*.meta`
+  for 14 days. If those 25 are mutants no CI run can kill, the honest instrument is a named
+  exclusion rather than a lower floor.
+- **Minor 4** — `application/typed_surface.py:172-177`: `declared_typed_surface` documents
+  "Never
+  raises" and raises (`NotImplementedError: Non-relative patterns are unsupported`, re-measured on
+  3.13.7). It is in `_resolve_path`, the function cited as the reason `typed_surface.py` sits
+  outside the mutation scope.
+- **Minor 5** — `application/guards/shell_targets.py`: the `-t` family names a SOURCE file as a
+  write target. `read_shell_command("cp -t /dest a b")` -> `('b',)`.
+- **Minor 6** — `typed_surface.py:334` documents `None` and `[]` as different facts; the only
+  caller does `if not values: continue`.
+- **Minor 7** — `onboarding/role_duties.py:353` says "over merged declarations so one duty
+  yields
+  one verdict"; `declarations` is a flat list.
+- **Minor 8** — `role_duties.py:171`: `prefix` is `""` in both tuple entries and concatenated to
+  no effect.
+- **Nitpicks** — `typed_surface.py:135` rebuilds `set(inside)` per candidate; `describe` at
+  `:159-168` says "staged Python file(s)" about whatever it was handed; `waves/derivation.py` and
+  `services/commands/typed_surface.py` place the `# beadloom:` annotation after the module
+  docstring.
+
+**One observation, not a finding.** `tests/test_db.py::test_no_resource_warning` passes and
+emits `PytestUnraisableExceptionWarning: ResourceWarning: unclosed database` on a full-suite
+run. It does not reproduce in isolation and the review checked that it is not `.47`'s. A test
+named for the condition it detects, reporting that condition as a warning, is worth someone's
+attention.
 
 ## Standing conventions every launch prompt carries
 
 **#228 landed 2026-09-04.** The first two below are no longer prompt-level: the shipped
-coordinator command declares the `clean-room` duty for all five roles, `roles/core/_rooms.md.txt`
-and its Russian twin carry it, and `config-check` blocks on either half going missing. The room's
-path carries the bead id (#235) and `beadloom waves` prints it per bead for every wave. The rest
-are still carried by the prompt and by nothing else:
+coordinator command declares the `clean-room` duty for all five roles,
+`roles/core/_rooms.md.txt` and its Russian twin carry it, and `config-check` blocks on either
+half going missing. The room's path carries the bead id (#235) and `beadloom waves` prints it
+per bead for every wave. The rest are still carried by the prompt and by nothing else:
 
 - **"green in a clean room over N files" and "green on the tree" are different claims** — report
   them in different words (BDL-UX #181).
@@ -460,9 +641,11 @@ are still carried by the prompt and by nothing else:
   and the suite goes green over the wreckage (BDL-UX #224, unfixed).
 - **Checkpoint every few steps.** Nine agents across the two epics were cut off mid-work; the
   checkpoints made every resume cheap and their absence made one expensive.
-- **`beadloom waves` before every wave**, and commit the tracker export first — it reports a path
+- **`beadloom waves` before every wave**, and commit the tracker export first — it reports a
+  path
   owned by no bead in the plan as a working-tree finding, correctly, twice so far.
-- The wave's **gate owner** measures the combined tree; everyone else reports their own room only.
+- The wave's **gate owner** measures the combined tree; everyone else reports their own room
+  only.
 
 ## Coordinator errors recorded, because the pattern outlived each instance
 

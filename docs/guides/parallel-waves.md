@@ -41,8 +41,10 @@ run establishes is that the wave may start, not that it went well.
 **The wave's conduct afterwards is checked by nothing here, and cannot be.** No command holding
 a plan can know whether the gate owner ran the combined tree, whether an agent committed
 outside its own scope, or whether the doc pass that followed read what it re-attested. That is
-why every wave of more than one bead names a `gate_owner`: the step that no check can perform
-belongs to a named bead instead of to a coordinator's habit.
+why every wave names a `gate_owner`: the step that no check can perform belongs to a named bead
+instead of to a coordinator's habit. Every wave also gets one clean-room path per bead,
+`room-<bead-id>` — two agents in one wave once each built a room called `cleanroom` under a
+shared scratchpad, and one of them measured over its neighbour's untracked files (BDL-UX #235).
 
 ```bash
 beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
@@ -59,8 +61,14 @@ $ beadloom waves beadloom-mr2l.21 beadloom-mr2l.78 beadloom-mr2l.79
 3 wave(s) for 3 bead(s), 3 serialisation(s), 0 finding(s).
 
 Wave 1: beadloom-mr2l.21
+  combined-tree gate: beadloom-mr2l.21
+  clean room: beadloom-mr2l.21 -> room-beadloom-mr2l.21
 Wave 2: beadloom-mr2l.78
+  combined-tree gate: beadloom-mr2l.78
+  clean room: beadloom-mr2l.78 -> room-beadloom-mr2l.78
 Wave 3: beadloom-mr2l.79
+  combined-tree gate: beadloom-mr2l.79
+  clean room: beadloom-mr2l.79 -> room-beadloom-mr2l.79
 
 Serialised because:
   beadloom-mr2l.21 | beadloom-mr2l.78 — shared_node: sync-check
@@ -69,12 +77,10 @@ Serialised because:
 
 0 declared override(s).
 
-No wave runs more than one bead, so nothing is shared concurrently.
-
 Plan-time precondition of each shared medium:
-  working-tree: not_applicable — no wave runs more than one bead, so nothing is carried between beads through this medium
-  commit-gate: not_applicable — no wave runs more than one bead, so nothing is carried between beads through this medium
-  doc-baseline: not_applicable — no wave runs more than one bead, so nothing is carried between beads through this medium
+  working-tree: passed — no path differs from HEAD that no bead in this plan owns
+  commit-gate: passed — the installed pre-commit hook judges the paths a commit stages
+  doc-baseline: passed — no doc pair is stale
   tracker-ids: passed — every bead's title agrees with the number the tracker allocated
 ```
 
@@ -153,8 +159,8 @@ roles hold separate accounts the same code reports an independent verdict with n
 
 ## What a wave shares no matter what shape it takes
 
-Printed by every plan whose widest wave holds more than one bead, each with the evidence it came
-from, and each with a plan-time precondition that is actually checked:
+Printed by every plan, whatever the width of its waves, each with the evidence it came from and
+each with a plan-time precondition that is actually checked:
 
 | Medium | Precondition checked | Observed from | Evidence |
 |---|---|---|---|
@@ -163,9 +169,15 @@ from, and each with a plan-time precondition that is actually checked:
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index | BDL-UX #182, #133 |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records | BDL-UX #171 |
 
-`failed` and `unmeasured` are findings and reach exit 1. `passed` and `not_applicable` are not.
-The three machine-observed media read `not_applicable` when no wave holds more than one bead,
-because a wave of one shares nothing concurrently — its clean room *is* the tree.
+`failed` and `unmeasured` are findings and reach exit 1; `passed` is not.
+
+**Every medium is measured for every plan, a fully serial one included** (BDL-068 S4). Until
+then, the three machine-observed media read `not_applicable` when no wave held more than one
+bead, on the reasoning that a wave of one shares nothing concurrently. That reasoning does not
+hold: a plan is one slice of one epic, so a wave's width is not a claim that its bead is alone
+in the tree, and the `working-tree` check exists precisely to report paths that no bead in the
+plan owns — a question a wave of one can and does fail. `not_applicable` is gone as a verdict a
+plan's shape can produce.
 
 `tracker-ids` is checked even for a fully serial plan. The mis-numbering it looks for happens at
 bead creation, upstream of any wave, so a plan that serialises the beads it mis-wired is exactly

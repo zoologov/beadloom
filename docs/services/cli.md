@@ -116,7 +116,7 @@ unreadable file with it, before writing.
 
 Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
-**`--bootstrap` also appends an ignore block to the project's `.gitignore`, once** (BDL-061.35). Before it, Beadloom wrote an ignore entry nowhere, so an adopter collected untracked churn from the very first `reindex`. The block names the derived state only — `.beadloom/**/*.db{,-wal,-shm}` and `.beadloom/guard-firings.jsonl` — and each pattern carries its reason in the file; the graph under `.beadloom/_graph/` and `flow.yml` are source and stay committable. It is **written once and never rewritten**: a run that finds the marker does nothing, so deleting a line is a real override rather than an edit the next run undoes (a team that wants the guard firing record committed removes that line, once). Nothing is written outside a git working tree, a pattern the project already declares is not duplicated, and the project's own lines are untouched. The write is reported (`✓ Ignored: N generated path(s) …`), because silently editing someone's `.gitignore` is its own surprise.
+**`--bootstrap` also appends an ignore block to the project's `.gitignore`, once** (BDL-061.35). Before it, Beadloom wrote an ignore entry nowhere, so an adopter collected untracked churn from the very first `reindex`. The block names the derived state only — `.beadloom/**/*.db{,-wal,-shm}` and `.beadloom/guard-firings*.jsonl`, a glob so the rotated generation is ignored beside the active one — and each pattern carries its reason in the file; the graph under `.beadloom/_graph/` and `flow.yml` are source and stay committable. It is **written once and never rewritten**: a run that finds the marker does nothing, so deleting a line is a real override rather than an edit the next run undoes. **The firing-record entry states what a team would be committing** before it invites them to: one line per guarded edit carrying the verdict, the file an edit named, and for a shell edit the program that ran and the files it was seen to write — never the command line, which since `beadloom-0mdo.43` is reduced at the door the context is built at and reaches no record. The sentence was written when the record held paths only, and binding the shell tool (BDL-UX #170) made it hold command lines; following the old invitation would have put an agent's shell history into git. Because the block is never rewritten, **a project that already carries it keeps the older wording** — the entry a `beadloom init` from before this change wrote is not revisited, and neither are the records already on disk (BDL-UX #238 covers the class: nothing yet compares the block on disk against the block this version emits). Nothing is written outside a git working tree, a pattern the project already declares is not duplicated, and the project's own lines are untouched. The write is reported (`✓ Ignored: N generated path(s) …`), because silently editing someone's `.gitignore` is its own surprise.
 
 ### beadloom reindex
 
@@ -1153,6 +1153,19 @@ The remedy is unchanged and now actually terminates: move the additions into `.b
 
 Which of the two a divergence *is*, is decided by the flow manifest (`.beadloom/flow-manifest.json`): every write records the body's sha256, so `stale` (Beadloom wrote it, the composition moved — `error`, recompose), `hand_edited` (`error`, never rewritten) `missing` (we wrote it and it is gone — `error`) and `unverified` (nothing accounts for it, so the two cannot be told apart — `warn`) are separate findings and not one word. The `CLAUDE.md` body is JUDGED only when the file is Beadloom's: a manifest entry, or the `<!-- beadloom:composed` stamp the shipped core begins with — a project's own hand-written `CLAUDE.md` is never policed. Not judged is not the same as not mentioned: in a project that adopted the flow, a `CLAUDE.md` with neither signal is named at `unverified`/`warn` rather than passed over. Those two signals are independent on purpose: deleting the generated manifest used to downgrade a hand edit to `warn` and the command to exit 0, and deleting one scaffolded file used to switch the checks off for every other one. Neither does now — the deletions are themselves reported (BDL-061 `.57`). `config-check` also names, at `warn`, a project layer in effect (its prose is composed but not judged) and an `overlays.suppress` entry that has expired or that names no rule in the composed flow.
 
+**It also checks that a duty declared for a role reaches that role's composed core, in both directions** (BDL-068 S4). A duty an agent is obliged to perform, written somewhere the performer does not read, is the class this check exists for: the clean-room rule lived in the coordinator's prose and occurred zero times in the role cores the roles receive. Duties are **declared, never inferred** — `<!-- beadloom:duty=<id> roles=<a,b> -->` in a composed flow artifact, `<!-- beadloom:carries=<id> -->` in a fragment that composes into one — because a detector over English role prose would repeat the docs-audit keyword-proximity class. Four findings, all `error` and none `fixable` (the repair is prose in a role core, and `--fix` writes compositions): `undelivered` (declared for a role whose composed core carries it nowhere), `undeclared` (carried and declared by nothing), `unknown-role` (a declaration naming a role no CORE fragment ships) and `malformed` (a `duty=` marker with no `roles=` list, which names no performer).
+
+**The duty line names the corpus it judged**, which is the composition this flow would write and never the role files on disk:
+
+```
+Duties: 1 declared, checked over 10 composed artifact(s) — the COMPOSITION this flow would write, not the role files on disk.
+  On disk: 5 role file(s), compared against their compositions by the agent-config drift check above, not by the duty check
+  Not inspected (2):
+    the coordinator's launch prompt — a prompt is not an artifact, so a duty carried only there is unreachable by any file-based check
+```
+
+The sentence exists because on a project holding no role file this check reported a duty delivered to five roles at exit 0, while `beadloom guard --liveness` reported the artifacts missing — two instruments answering "does a declared thing reach the role that must carry it?" of two different corpora, neither saying which (BDL-UX #241). Both questions are legitimate and the divergence is kept; what changed is that each states its own. With no role files on disk the count reads `NOTHING TO CHECK`, and the verdict is unchanged — an unscaffolded project is not in drift. `not_inspected` is printed on a clean run as well as a blocking one, and it is derived by subtraction rather than listed.
+
 **A downgrade across an upgrade is itself a finding (BDL-061 S3b).** The
 constraint this project has always stated runs one way — *no adopter's green
 project turns red on upgrade* — and review `.11` measured the other direction: a
@@ -1223,11 +1236,17 @@ With no `--project`, the **project root is discovered** by walking up from the w
 
 `--context KEY=VALUE` is repeatable, and where a key is given twice **the last occurrence wins**. `--context path=...` is resolved against the project root before any exclusion is matched — `..` collapsed, symlinks followed — so a declared exclusion cannot be turned into an opt-out by respelling the path (`scripts/../src/app.py` is guarded, not skipped). A path resolving outside the project root is matched against no exclusion at all, and the verdict names it in `not_covered`.
 
-The path is model-supplied, so its **shape is narrowed rather than repaired**: a well-formed target carries no C0 control character or `DEL`, no backslash, no leading `~`, and is encodable for the filesystem, and it is judged exactly as supplied — nothing is stripped first, because `str.strip()` also removes nine C0 characters the same rule refuses, which turned a `block` into a `skip` quoting a pattern that does not cover the file. Anything else is refused with an `error` verdict naming the offending rule — never normalised into a guess, and never a traceback. Each rule removes a spelling that means one file to the guard and another to the writer (`src\app.py` skipped a `*.py` exclusion while the write landed on `src/app.py`; a NUL crashed the process out on exit 1, the non-blocking code, leaving no record at all).
+The path is model-supplied, so its **shape is narrowed rather than repaired**: a well-formed target carries no C0 control character or `DEL`, no separator spelling this platform does not read, no leading `~`, and is encodable for the filesystem, and it is judged exactly as supplied — nothing is stripped first, because `str.strip()` also removes nine C0 characters the same rule refuses, which turned a `block` into a `skip` quoting a pattern that does not cover the file. Anything else is refused with an `error` verdict naming the offending rule — never normalised into a guess, and never a traceback. Each rule removes a spelling that means one file to the guard and another to the writer (`src\app.py` skipped a `*.py` exclusion while the write landed on `src/app.py`; a NUL crashed the process out on exit 1, the non-blocking code, leaving no record at all).
+
+**The separator rule is about the separator, not about the backslash** (BDL-068 S4). The refused set is every separator spelling Python's own path modules declare — `ntpath.sep`, `ntpath.altsep`, `posixpath.sep` — minus this platform's own, read from `os.sep` and `os.altsep`. On a POSIX machine that is the same single character as before, so nothing moves here; on Windows it is nothing, where the literal-backslash rule had made **every** edit target `MALFORMED` while the reason it printed was false there. The Win32 name layer then owes three refusals the shape gate never made, each one a name that layer silently REWRITES: a trailing dot, a trailing space, and the twenty-two reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), which resolve to a character device in any directory and under any extension — `docs/CON.md` is the console. The characters Win32 forbids outright (`<>:"|?*`) are deliberately not refused: such a write fails loudly with nothing created, so the guard and the writer never look at different files. The boundary is silent rewriting, not illegality. The platform is a substitutable argument (`PathFlavour`), so both platforms' rules are measured on whichever machine runs the suite rather than behind an `xfail`.
 
 `--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The event is read as **bytes** and decoded as UTF-8 strictly, so a payload the harness could not encode is refused (`error`, exit 2) identically under every locale — reading it as text left the decode to `sys.stdin`, whose error handler is `surrogateescape` under `LC_ALL=C`/`PYTHONUTF8=1` (the default in most containers), and there the undecodable bytes silently became a file name the guard then evaluated (BDL-061.36). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
 
 `--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and four ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent), and `exit condition has passed: '<pattern>'` (its `until:` names a date that is behind us). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+
+**`--liveness` also reports the binding's SURFACE, above the firings** (BDL-068 S4, BDL-UX #170). The firings say how often a gate ran; the surface says what fraction of the write paths the emitted role adapters grant a registered matcher could have seen at all, so a write the binding never watched is a stated gap instead of a silence. It is derived — the matchers from `.claude/settings.json`, the tool population from the `tools:` line of every emitted role adapter — and it reports what it could not classify rather than assuming it harmless: a tool no declaration covers is `unclassified`, and a source it could not read is `unresolved`. The line names the corpus it answered about (`read from: .claude/settings.json + .claude/agents/*.md as they are ON DISK`), because `config-check`'s duty report answers the neighbouring question about the COMPOSITION and the two looked like they agreed (BDL-UX #241). **It has three sentences and not two**: `NOT CHECKED` when a source was unreadable, `NOTHING TO CHECK` when the population was read and holds no write path, and otherwise the fraction. `0 of 0 write path(s) bound` can no longer be printed, and `covered` is `null` in both non-fraction states in `--liveness --json`, so it cannot be parsed out either — an absent denominator is not a full one, and that false green was in the instrument built to report exactly that class (BDL-UX #239). On this repository the report reads `surface (claude): 3 of 3 write path(s) bound`, and it was 2 of 3 before `Bash` was named by the matcher.
+
+**What the record holds changed with it.** A shell edit's firing carries the program that ran and the write targets a declared set of write shapes names — `command_name` and `command_writes` — and never the command line, which is reduced at the one door the context is built at, so `--hook` and `--context command=…` cannot disagree. This is reduction rather than redaction: redacting `KEY=value` and header-shaped operands is a denylist, and the next credential arrives in a spelling nobody enumerated. Measured on this repository, one rotated generation held 1 999 firings of which 1 927 had stored the line they fired on — 2.0 MB of one machine's shell history at 1 007 bytes a record — against 557 bytes a record for the same firings replayed through the reduction. It does not reach a record already written; nothing rewrites the file it is evidence in.
 
 ### beadloom waves
 
@@ -1269,13 +1288,23 @@ second ref written without a comma that the graph confirms is a node
 a wave shape is acted on, so a parser whose errors widen a wave is worse than no
 parser.
 
-Every wave of more than one bead also prints the four media it shares no matter
-what shape is chosen, each with the evidence it comes from: the working tree
-(#181), the commit gate (#118), the doc baseline (#182, #133) and the tracker's
-id space (#171). Each wave names one bead as its `gate_owner` -- the bead that
-measures the combined tree once the wave has landed. It is assigned
-deterministically rather than wisely; the point is that the step belongs to a
-named bead instead of to a coordinator's habit.
+**Every wave prints the four media it shares, whatever its width**, each with
+the evidence it comes from: the working tree (#181, #235), the commit gate
+(#118), the doc baseline (#163, #182, #133) and the tracker's id space (#171).
+Until BDL-068 S4 a wave of one printed `not_applicable` against three of them;
+that verdict is gone (`beadloom-67t1`). A plan is one slice of one epic, so a
+wave's width is not a claim that its bead is alone in the tree — and the
+working-tree check exists precisely to report paths that no bead in the plan
+owns, which is a question a wave of one can fail.
+
+Each wave names one bead as its `gate_owner` -- the bead that measures the
+combined tree once the wave has landed. It is assigned deterministically rather
+than wisely; the point is that the step belongs to a named bead instead of to a
+coordinator's habit. Each bead is also given its own clean-room path,
+`room-<bead-id>`, printed per bead: two agents in one wave once each built a room
+called `cleanroom` under one shared scratchpad and one of them measured over its
+neighbour's untracked files (BDL-UX #235). A room whose name cannot say whose it
+is is a shared directory with a reassuring name.
 
 **Each of those media is also checked, and each check can fail.** The command
 measures a precondition per medium before the wave runs: that no path differs
@@ -1291,6 +1320,41 @@ gate owner ran the combined tree.
 The `tracker-ids` check runs even when the plan is fully serial, because a
 concurrent `bd create` shifts an id out from under the number an author already
 wrote into the title, and that happens before any wave runs (#171).
+
+**The declaration is also held against the derivation the work item recorded**
+(BDL-068 S4, BDL-UX #232). A bead's `refs:` was the one input to this command
+that a human authored, so two beads editing one document read as independent
+whenever neither declaration happened to name the node that owns it — measured,
+not hypothesised: `beadloom-0mdo.21` (`refs: review-brief`) and
+`beadloom-0mdo.26` (`refs: mutation-scope, ci-gate`) both edited
+`docs/services/cli.md`, and the plan reported 1 wave, 2 beads, 0 serialisations
+and 0 findings. The fix is not to stop reading the declaration: the declaration
+still decides the shape, and what is added is the comparison against the `##
+Axes` section of the work item's own document, composed at the services edge from
+the same read `beadloom scope-check` makes, so the commit gate and the plan
+cannot come to disagree about what one approval covered.
+
+The report prints one line per axis — `agrees`, `ruled_out_of_scope`,
+`no_scope_decision`, `not_derived` or `not_attributed` — and three of the five
+are deliberately NOT findings. A ref the table never names is the derivation not
+reaching (BDL-UX #225: seeded under `tests/`, `beadloom impact` attributed a node
+to none of the 148 caller sites it found); an axis row attributing no node is
+compared against nothing; and a row nobody ruled on belongs to
+`axis-without-a-scope-decision` in `docs-quality`, not here. The two that are
+findings are `declared_outside_the_axes` — a bead declares a ref the work item
+ruled out — and `unguarded_axis`, reported **per wave and only where a wave holds
+a pair**, naming the approved nodes none of the wave's beads declares. Per plan
+it would print a finding on every single-bead plan, and an always-red check is an
+ignored check. The unit is the WORK ITEM's axes and never the claimed bead's, so
+a bead narrowing inside them raises nothing. A plan whose caller gathered no
+`## Axes` section reports `declarations_not_compared` rather than agreement.
+
+> The `unguarded_axis` remedy — *generate each bead's `refs:` from the `## Axes`
+> section* — is filed as BDL-UX #245 and routed to S6: `beadloom axes <doc>
+> --refs` prints one line generated from every kept row, and there is no per-bead
+> selection, so following it literally hands every bead an identical scope and
+> collapses every wave to a wave of one. The verdict is correct; the advice
+> beside it is not yet.
 
 A human outranks the decision by declaring it in `.beadloom/flow.yml`, with a
 reason and an exit condition like every other stand-down in this tool:
@@ -1317,29 +1381,33 @@ $ beadloom waves proj-1 proj-2
 2 wave(s) for 2 bead(s), 1 serialisation(s), 0 finding(s).
 
 Wave 1: proj-1
+  combined-tree gate: proj-1
+  clean room: proj-1 -> room-proj-1
 Wave 2: proj-2
+  combined-tree gate: proj-2
+  clean room: proj-2 -> room-proj-2
 
 Serialised because:
   proj-1 | proj-2 - shared_node: billing
 
 0 declared override(s).
 
-No wave runs more than one bead, so nothing is shared concurrently.
-
 Plan-time precondition of each shared medium:
-  working-tree: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
-  commit-gate: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
-  doc-baseline: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  working-tree: passed - no path differs from HEAD that no bead in this plan owns
+  commit-gate: passed - the installed pre-commit hook judges the paths a commit stages
+  doc-baseline: passed - no doc pair is stale
   tracker-ids: passed - every bead's title agrees with the number the tracker allocated
 ```
 
-Every plan prints that block, a fully serial one included: three media are
-`not_applicable` because nothing runs concurrently, and `tracker-ids` is checked
-regardless.
+Every plan prints that block and every medium is measured in it, a fully serial
+plan included.
 
-`--json` carries the same facts: `waves[]` (with `gate_owner`), `scopes[]`,
-`conflicts[]`, `overrides[]`, `shared_media[]`, `media_checks[]` (`medium`,
-`status`, `detail`), `findings[]` and `exit_code`.
+`--json` carries the same facts: `waves[]` (`index`, `beads`, `gate_owner`),
+`rooms` (bead id to clean-room path), `beads[]`, `scopes[]`, `conflicts[]`,
+`overrides[]`, `shared_media[]`, `media_checks[]` (`medium`, `status`, `detail`),
+`axes` (the work item, its document, the seed and what the derivation could not
+reach), `agreements[]` (`bead`, `ref`, `verdict`, `detail`), `unguarded_axes[]`,
+`findings[]` and `exit_code`.
 
 ### beadloom review-brief
 
@@ -1626,11 +1694,29 @@ Floor: 0.95 — the score is at or over it.
 ```
 
 That 96.2% is one room's figure and was not taken on a CI runner.
-`.github/workflows/mutation.yml` runs the same command nightly under the same floor and is
-deliberately NOT a required status check: the run is two to three times the ~16-28
-runner-minute budget that withdrew this project's Windows leg, and a scheduled workflow
-produces no check-run on a pull request, so requiring its context would make `main`
-unmergeable.
+`.github/workflows/mutation.yml` runs the same command nightly and is deliberately NOT a
+required status check: the run is two to three times the ~16-28 runner-minute budget that
+withdrew this project's Windows leg, and a scheduled workflow produces no check-run on a pull
+request, so requiring its context would make `main` unmergeable.
+
+**The workflow has since run on a GitHub runner, and the numbers moved two decisions**
+(BDL-068 S4, run 33851288658, 2026-09-04, the first in this project's history). Over identical
+mutants it measured 95.56% against the 96.19% taken on the macOS machine — 25 more survivors,
+which is the room and not a regression — so the `graph/rules/` floor is recalibrated from
+`0.95` to `0.94` in the room the job actually enters. It took 1 h 29 min 18 s against
+54 min 55 s locally, a factor of 1.63, so `timeout-minutes` moves 180 → 240. The workflow now
+**runs the runner twice and scores twice**: `graph/rules/` keeps its own floor, and the whole
+declared scope — seven targets since S4 added four new domain cores — is judged separately at
+`--min-score 0.88` in a step marked `if: always()`. One aggregate floor would have let the
+rules slice fall from 96.19% to 94.1% before tripping. What the aggregate floor does not guard
+is stated in the workflow rather than implied: the six file targets are 1 711 of 5 700 mutants,
+so at 0.88 they could fall from 77.0% to 70.4% before anything trips, and a per-target floor
+needs counters this runner's export does not write.
+
+`beadloom ci` asks whether a mutant COULD run at a declared path and never whether one DID, and
+`beadloom mutation --only` prints "this run did not cover it" and "no run has ever covered it"
+as the same sentence. That is filed as BDL-UX #246 and routed to S6; until it lands, a declared
+target that no run ever covers passes every green Gate.
 
 The three findings, the counter vocabulary and the report's own invariants are in the
 [Mutation Scope DOC](../domains/application/components/mutation-scope/DOC.md).

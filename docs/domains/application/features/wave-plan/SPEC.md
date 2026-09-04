@@ -246,8 +246,9 @@ in the role cores that carry the `clean-room` duty.
 ### What each medium is checked against
 
 One verdict per medium, in `plan.media_checks` and under `media_checks` in
-`--json`. `failed` and `unmeasured` are findings and reach exit 1; `passed` and
-`not_applicable` are not.
+`--json`. `failed` and `unmeasured` are findings and reach exit 1; `passed` is
+not. `STATUS_NOT_APPLICABLE` is still defined in `models.py` and is emitted by no
+check — see below.
 
 | Medium | Precondition checked | Observed from |
 |---|---|---|
@@ -267,9 +268,11 @@ The three machine-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
 without a repository and without a hook — each absence arrives as a `None` the
 check reports, never as a silent zero. Every medium is checked at every wave
-size: `not_applicable` was removed as a verdict a plan's shape could produce
+size: `not_applicable` was withdrawn as a verdict a plan's shape could produce
 (BDL-UX #228), because a check that switches itself off is silent exactly where
-nobody is already thinking about the risk.
+nobody is already thinking about the risk. The constant survives in `models.py`
+and in the package's `__all__`, emitted by nothing — a name kept for a caller that
+may still read it, not a state any plan reaches.
 
 The `tracker-ids` check has run whether or not the plan is concurrent since
 `beadloom-mr2l.80`, and is no longer the exception it was written as. The

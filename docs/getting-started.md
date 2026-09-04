@@ -210,7 +210,7 @@ for Claude Code); the five work roles are subagents:
 
 1. **`/task-init`** — scaffold the work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) and create the beads (tracked in `bd`).
    - **explore** — step 0.5, mandatory and before the type is chosen: derive the `## Axes` section with `beadloom impact <path|symbol> --section` and paste it into the BRIEF or the RFC. The axis count is what says whether a work item is a bug, so the type is decided from a derivation rather than from how the request was phrased. This role creates no bead, so the bead DAG stays four-role.
-2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, and states the media a concurrent wave shares regardless:
+2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, names each wave's gate owner and each bead's clean room, and states the four media every wave shares whatever its width:
    - **dev** — implement the bead (TDD), update its `SPEC.md`/`DOC.md`.
    - **test** — write/extend tests, verify coverage.
    - **review** — read-only quality + boundary check (`beadloom review-brief`, `beadloom diff`, `lint`); the brief withholds the author's own comments until a verdict is recorded.
