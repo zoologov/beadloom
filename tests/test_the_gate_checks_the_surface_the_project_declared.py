@@ -774,16 +774,41 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         assert "Running ruff check" not in out, out
 
 
+#: The bytes the controls below feed their own reader, and the reason they are
+#: SUPPLIED rather than observed. The first version of this control ran the real
+#: hook and asserted that an ``ascii`` double must raise on its output. That
+#: premise is a property of the room: the hook's only non-ASCII byte comes from
+#: `beadloom scope-check`'s `Declared axes: NOT CHECKED \u2014 ...` line, which is
+#: a Python child choosing an encoder. MEASURED on one machine, one commit, one
+#: fixture -- under ``LC_ALL=C`` the child emits the raw ``e2 80 94`` (3 non-ASCII
+#: bytes in 537) and the control passes; under ``LC_ALL=en_US.ISO8859-1``
+#: ``console_streams.tolerate_unencodable_output`` degrades the em dash to the
+#: literal text ``\u2014`` and the whole 540-byte output is ASCII, so nothing can
+#: raise and the control reports DID NOT RAISE. That is BDL-061.42's own fix
+#: working exactly as designed, and it is why "run the real thing and expect
+#: undecodable bytes" is not an arrangement any control may rest on.
+_CONTROL_TEXT = "verdict \u2014 blocked\n"
+
+#: The same text as bytes. ``latin-1`` decodes all 256 values, so it MANGLES this
+#: silently; ``ascii`` REFUSES it. One payload therefore exercises both directions
+#: the two locale legs exist to separate, in every room.
+_CONTROL_BYTES = _CONTROL_TEXT.encode("utf-8")
+
+
 class TestTheRoomTheMatrixAboveDidNotVary:
     """The image's codec, as the second argument the matrix takes.
 
     ``beadloom-0mdo.42`` made the LAYOUT a substitutable input and left the ROOM
     fixed at this machine's. The reader above then decoded the hook's stdout in
-    whatever codec the image chose, and the hook carries an em dash in all three
-    of its blocking verdicts, so ``tests-locale (C)`` on PR #61 raised
-    ``UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2 in position 288``
-    on 33 rows of this file. Reproduced here byte for byte, at the same position,
-    with ``LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0``.
+    whatever codec the image chose, and that stdout carries an em dash, so
+    ``tests-locale (C)`` on PR #61 raised ``UnicodeDecodeError: 'ascii' codec
+    can't decode byte 0xe2 in position 288`` on 33 rows of this file. Reproduced
+    byte for byte at the same position with ``LC_ALL=C PYTHONUTF8=0
+    PYTHONCOERCECLOCALE=0``, and the byte was then traced rather than assumed: it
+    is `beadloom scope-check`'s ``Declared axes: NOT CHECKED -- ...`` line and not
+    one of the three em dashes in the template, which fire only on a rejection.
+    Which of the two produced it decides whether the payload is room-dependent,
+    and the controls at the foot of this class are what that distinction cost.
 
     The WRITER was measured before the reader was changed, because the two answers
     have different owners: ``install-hooks`` pins ``_HOOK_ENCODING`` at its own
@@ -801,6 +826,14 @@ class TestTheRoomTheMatrixAboveDidNotVary:
     byte 200 characters away leaves it intact. So ``latin-1`` is not redundant
     with ``ascii`` here, and it is not sufficient either -- which is why the
     project runs two locale legs and not one.
+
+    THE CONTROLS SUPPLY THEIR OWN BYTES, and that is the correction this class
+    cost rather than a refinement of it: the first version ran the real hook and
+    asserted an ``ascii`` double must raise on its output, which turned
+    ``tests-locale (en_US.ISO-8859-1)`` red while turning ``tests-locale (C)``
+    green. See :data:`_CONTROL_BYTES` for the measurement. A control that proves
+    an instrument works must not read the room, or it proves the instrument works
+    only where it happened to run.
     """
 
     @staticmethod
@@ -841,33 +874,83 @@ class TestTheRoomTheMatrixAboveDidNotVary:
         assert line is not None, (layout.name, ambient)
         assert f"{len(layout.staged_python)} staged Python file(s)" in line
 
-    def test_the_ambient_codec_double_can_actually_see_a_reader(
+    @staticmethod
+    def _emitting(tmp_path: Path, payload: bytes) -> list[str]:
+        """A child that writes exactly *payload* and consults no locale to do it.
+
+        ``write_bytes`` states no codec because it has none to state, and ``cat``
+        moves bytes. So the control's premise -- what this reader is handed -- is
+        an argument, in the shape :class:`HookLayout` gives the layout.
+        """
+        target = tmp_path / "payload"
+        target.write_bytes(payload)
+        return ["/bin/cat", str(target)]
+
+    @pytest.mark.parametrize(
+        ("ambient", "expected"),
+        [
+            ("utf-8", _CONTROL_TEXT),
+            ("latin-1", _CONTROL_BYTES.decode("latin-1")),
+        ],
+        ids=("utf-8-reads-it", "latin-1-mangles-it"),
+    )
+    def test_an_unstated_reader_takes_whatever_codec_the_double_supplies(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient: str, expected: str
+    ) -> None:
+        """Control, direction one: the double really decides, and it can mangle."""
+        assert _CONTROL_BYTES.decode("latin-1") != _CONTROL_TEXT, (
+            "the payload no longer distinguishes the codecs, so the row below "
+            "would pass whatever the double did"
+        )
+        under_ambient_codec(monkeypatch, self._reader_module(), ambient)
+
+        out = subprocess.run(  # noqa: S603
+            self._emitting(tmp_path, _CONTROL_BYTES),
+            capture_output=True,
+            # The defect itself, held down as a control. Ruff cannot flag it:
+            # `PLW1514` is selected in this project and reports a `noqa` here as
+            # UNUSED, which is the measurement behind the cost on this bead.
+            text=True,
+            check=False,
+        ).stdout
+
+        assert out == expected, (ambient, out)
+
+    def test_an_unstated_reader_is_refused_by_an_ascii_double(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The control: a reader that does NOT state its codec still fails here.
-
-        Without it the two rows above would pass on a double that had quietly
-        stopped intercepting -- the vacuous green this project's locale legs were
-        built to make impossible.
-        """
-        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
-        hook = project.parent / "unstated.sh"
-        hook.write_text(_HOOK_TEMPLATE_BLOCK, encoding=_HOOK_ENCODING)
+        """Control, direction two: the codec that RAISES rather than mangles."""
         under_ambient_codec(monkeypatch, self._reader_module(), "ascii")
 
         with pytest.raises(UnicodeDecodeError):
             subprocess.run(  # noqa: S603
-                ["/bin/sh", str(hook)],
-                cwd=project,
+                self._emitting(tmp_path, _CONTROL_BYTES),
                 capture_output=True,
-                # The defect itself, held down as a control. Ruff cannot flag
-                # it: `PLW1514` is selected in this project and reports the
-                # line as an UNUSED noqa, which is the measurement behind the
-                # cost recorded on this bead.
                 text=True,
-                env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
                 check=False,
             )
+
+    @pytest.mark.parametrize("ambient", AMBIENT_CODECS)
+    def test_a_reader_that_states_its_codec_is_unmoved_by_any_double(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient: str
+    ) -> None:
+        """And the control's other half: stating the codec is what the fix DID.
+
+        Without this row the three above would be consistent with a double that
+        ignores ``encoding=``, which is the one behaviour that would make the two
+        matrix rows pass for a reason that has nothing to do with the repair.
+        """
+        under_ambient_codec(monkeypatch, self._reader_module(), ambient)
+
+        out = subprocess.run(  # noqa: S603
+            self._emitting(tmp_path, _CONTROL_BYTES),
+            capture_output=True,
+            encoding="utf-8",
+            errors="strict",
+            check=False,
+        ).stdout
+
+        assert out == _CONTROL_TEXT, (ambient, out)
 
 
 class TestNoLegNamesADirectory:
