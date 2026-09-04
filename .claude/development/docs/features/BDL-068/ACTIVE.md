@@ -342,6 +342,45 @@ filed; this name is the free mitigation and later slices keep it.
     `test_a_commit_is_judged_against_the_declared_axes.py` are red at pure HEAD (`b740177`) in a
     worktree carrying no file of mine, so they belong to `0mdo.44`'s RFC axes change and not to
     this bead. Darwin arm64, 0 of the 21 declared rooms.
+  - [x] `0mdo.45` / **review Major 4** — five new domain cores under no mutation claim,
+    and three older targets under a claim nothing measured. The older half was the larger
+    one and it was not a delay: `[tool.mutmut] only_mutate` named `graph/rules/*` alone
+    while `mutation.targets` named three, so `doc_quality.py` and `doc_shape.py` were
+    unreachable by any run rather than awaiting one — and the job's
+    `--only src/beadloom/graph/rules/` told the single command that reports the gap to
+    print them as "not judged by this run". Three settings had to agree and one test
+    checked one direction of one pair. **Declared: four of the five**, by measured mutant
+    count — `role_duties.py` 324, `typed_surface.py` 241 (excluded), `shell_targets.py`
+    146, `guards/surface.py` 136, `waves/derivation.py` 98. The line is where the I/O
+    sits, not whether there is any: the four confine it to named collectors at the module
+    edge, which is `doc_quality.py`'s shape, while `_resolve_path` in `typed_surface.py`
+    decides its answer with `glob`/`is_dir`/`is_file`/`exists` interleaved with the
+    logic. **Measured, then declared:** 1 711 mutants over the six file targets, 1 314
+    killed, 4 timeout, 393 survived, 0 with no covering test — 77.03% in 9 min 34 s with
+    six workers on Darwin arm64 / CPython 3.13.7. With S3's unchanged 96.19% over
+    `graph/rules/` the whole declared scope is 5 155 of 5 700 = 90.44%. The job therefore
+    runs the runner **twice and scores twice**: one aggregate floor would have let the
+    rules slice fall from 96.19% to 94.1% before tripping, so the slice keeps its own
+    0.95 and the whole scope is judged at 0.89 in a step marked `if: always()`. The pool
+    is derived the same way S3's was — one coverage pass, 64 covering files, 43 new — and
+    its two exclusions were measured in the room they fail in rather than reasoned about:
+    a `git archive HEAD` room passed 42 of 43, and the actual `mutants/` copy then failed
+    a 43rd that the cheaper room had passed. Filed BDL-UX #246: `beadloom ci` checks
+    whether a mutant COULD run at a declared path and never whether one DID, and
+    `beadloom mutation --only` prints "this run did not cover it" and "no run has ever
+    covered it" as the same sentence — an adopter has no equivalent of the repository
+    test that closes it here. **The workflow has now run on a GitHub runner** — run
+    33851288658, 2026-09-04, success, the first in this project's history, and its own
+    header had said that run was the outstanding verification. It measured two numbers
+    that moved decisions: 1 h 29 min 18 s against 54 min 55 s on the macOS machine, a
+    factor of 1.63, so `timeout-minutes` goes 180 -> 240 for a scope projected at ~110
+    min; and 95.56% against 96.19% over identical mutants — 25 more survivors, which is
+    the room — so S3's 0.95 floor was leaving 0.56 points of headroom rather than the
+    ~1.2 it was set for, and the rules floor is recalibrated to 0.94 in the room the job
+    actually enters. The run also printed the phantom verbatim on the day it was fixed:
+    `Not judged by this run: doc_sync/doc_quality.py, doc_sync/doc_shape.py`. And the
+    schedule is not punctual: zero runs existed 4 h 39 m after the `17 3 * * *` slot,
+    and GitHub created the first cron run at 07:57 UTC.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 

@@ -1,4 +1,17 @@
-# Mutation testing over the first declared slice (BDL-068 S3.1).
+# Mutation testing over the declared scope (BDL-068 S3.1, widened S4.x).
+#
+# THE SCOPE IS EVERY NAME IN `mutation.targets`, and that is the point rather
+# than a detail. Between S3 and 2026-09-04 this job mutated one of the three
+# declared targets and told `beadloom mutation` to judge only that one, so the
+# other two were unreachable by any run AND unreported as unreachable.
+# `.beadloom/flow.yml`, `[tool.mutmut] only_mutate` and the `--target` list below
+# now name the same seven targets, and two tests fail when they stop agreeing.
+#
+#   MEASURED 2026-09-04, mutant counts from mutmut's own generator:
+#   3 989 graph/rules/ + 657 doc_quality.py + 350 doc_shape.py + 324
+#   role_duties.py + 146 shell_targets.py + 136 guards/surface.py + 98
+#   waves/derivation.py = 5 700, which is 42.9% more than the 3 989 the S3
+#   measurement below timed.
 #
 # WHY THIS IS NIGHTLY AND NOT A PR LEG — the number decided it, not a preference.
 # CONTEXT's Q3 stated the rule before the measurement: the job runs per PR if it
@@ -25,9 +38,25 @@
 # the withdrawn Windows leg. `tests/test_mutation_ci_job.py` fails if this job's
 # name ever appears in that tuple.
 #
-# WHAT IS NOT CLAIMED: nothing in this workflow has run on a GitHub runner yet.
-# The pool, the copied room and the score above were all measured on one macOS
-# machine, and the first scheduled run is the verification, not this file.
+# IT HAS NOW RUN ON A RUNNER, and the run moved two numbers in this file. Run
+# 33851288658 on 2026-09-04, the first ever: 1 h 29 min 18 s for the 3 989 rules
+# mutants on `ubuntu-latest` (Linux x86_64, CPython 3.13.15, 4 cores), against
+# 54 min 55 s on the 10-core Darwin machine — a factor of 1.63, and the reason
+# the timeout below moved. Score 95.56% there against 96.19% here: 3 811 killed
+# and 177 survived, where the macOS run killed 3 836 and left 152. Same suite,
+# same mutants, 25 more survivors, which is the room and not a regression.
+#
+# THAT IS WHY THE FLOORS ARE CALIBRATED IN THE ROOM THE JOB RUNS IN. S3 set 0.95
+# to sit ~1.2 points under a macOS measurement; in the room this job actually
+# enters it sat 0.56 points under, which is 22 mutants — tight enough that a
+# handful of new survivors in a legitimately-changed rule would trip it, the
+# exact outcome the original comment said it was avoiding.
+#
+# THE SCHEDULE IS NOT PUNCTUAL, and a nightly should not be read as one. The
+# first cron firing was created at 07:57 UTC against a `17 3 * * *` schedule —
+# 4 h 40 m late. GitHub documents scheduled workflows as delayable under load;
+# nothing here is wrong, and a reader expecting an 03:17 artifact should not
+# conclude the job failed.
 name: Mutation
 
 on:
@@ -47,9 +76,15 @@ permissions:
 jobs:
   mutation:
     runs-on: ubuntu-latest
-    # Generous, because the measured wall clock is ~55 minutes on a faster
-    # machine and a timeout that trips is a run that reports nothing at all.
-    timeout-minutes: 180
+    # A timeout that trips is a run that reports nothing at all, so this is set
+    # from the measurement with room to spare rather than from a round number.
+    # Projected for the widened scope on `ubuntu-latest`: 89 min for the rules
+    # slice (measured), plus 16 min for the 1 711 other mutants and 6 min for the
+    # second run's clean-test phase (both the macOS figures scaled by the 1.63
+    # this runner measured) — about 110 minutes. 240 leaves the same proportion
+    # of headroom that 180 left over the old 89, and a nightly with no dependent
+    # job pays nothing for a cap it never reaches.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v5
 
@@ -74,29 +109,106 @@ jobs:
         # scoring anything.
         run: uv run beadloom reindex
 
-      - name: Run the mutants
-        # `mutmut run` exits non-zero whenever a mutant survives, which is a
-        # normal outcome and not this job's verdict. The verdict is the next
-        # step, over the counters this one leaves behind.
-        run: uv run mutmut run --max-children 4 || true
+      # TWO RUNS, TWO VERDICTS, and the order is what makes both readable.
+      # `mutmut export-cicd-stats` recomputes over every mutant that HAS a
+      # result, so exporting between the runs gives one file about the rules
+      # slice alone and a second about the whole declared scope. One run and one
+      # aggregate floor would dissolve the guard S3 measured: with the six file
+      # targets pinned at their measured 77.0%, an aggregate floor of 0.89 lets
+      # `graph/rules/` fall from 96.2% to 94.1% before anything trips.
+      #
+      # `mutmut run` exits non-zero whenever a mutant survives, which is a normal
+      # outcome and not this job's verdict. The verdict is the scoring step, over
+      # the counters the run leaves behind.
+      - name: Run the mutants of the rules slice
+        run: >-
+          uv run mutmut run --max-children 4
+          'beadloom.graph.rules.*'
+          || true
 
-      - name: Export the counters
+      - name: Export the rules slice's counters
+        run: |
+          uv run mutmut export-cicd-stats
+          cp -f mutants/mutmut-cicd-stats.json mutants/rules-cicd-stats.json
+
+      - name: Run the mutants of the remaining declared targets
+        run: >-
+          uv run mutmut run --max-children 4
+          'beadloom.application.guards.shell_targets.*'
+          'beadloom.application.guards.surface.*'
+          'beadloom.application.waves.derivation.*'
+          'beadloom.doc_sync.doc_quality.*'
+          'beadloom.doc_sync.doc_shape.*'
+          'beadloom.onboarding.role_duties.*'
+          || true
+
+      - name: Export the counters of the whole declared scope
         run: uv run mutmut export-cicd-stats
 
-      - name: Score the slice
-        # The floor is set just under the measured baseline (96.2%): close
-        # enough that a real regression trips it, far enough that a handful of
-        # new survivors in a legitimately-changed rule does not. `--only` keeps
-        # the job answerable for the slice it ran and prints the declared
-        # targets it did not judge, rather than reporting them as failures or
-        # quietly dropping them from the declaration.
+      - name: Score the rules slice
+        # 0.94, RECALIBRATED IN THE ROOM AND NOT LOWERED TO FIT: the slice scores
+        # 95.56% on `ubuntu-latest` and 96.19% on macOS, and this job only ever
+        # runs on the former. S3's 0.95 was set to leave ~1.2 points of headroom
+        # under a number taken in the other room, and left 0.56 — 22 mutants.
+        # 0.94 leaves 1.56 points, or 62 mutants, which is what the original
+        # comment meant by "a handful of new survivors in a legitimately-changed
+        # rule".
+        #
+        # `--only` is honest here and was not honest before: this run genuinely
+        # covered one target, and the next step judges the other six.
         run: >-
           uv run beadloom mutation
-          --stats mutants/mutmut-cicd-stats.json
+          --stats mutants/rules-cicd-stats.json
           --target src/beadloom/graph/rules/
           --only src/beadloom/graph/rules/
           --tool "mutmut 3.7"
-          --min-score 0.95
+          --min-score 0.94
+
+      - name: Score the whole declared scope
+        # `if: always()` so a breach of the slice floor above still leaves this
+        # verdict on the record. A job that stops at its first red reports less
+        # than it measured.
+        if: always()
+        # EVERY DECLARED TARGET IS NAMED HERE and no `--only` narrows it.
+        # `--only` prints the targets a run did not cover as "not judged by this
+        # run" instead of as `mutation-target-unmeasured`, so a subset in the
+        # step that is supposed to judge everything suppresses the finding at the
+        # only place that raises it — which is what it did for `doc_quality.py`
+        # and `doc_shape.py` from S3 until 2026-09-04.
+        # `tests/test_mutation_ci_job.py` derives this list from
+        # `.beadloom/flow.yml` and fails when the two differ.
+        #
+        # THE FLOOR IS 0.88 AND IT IS COMPOSED FROM TWO MEASUREMENTS, which is
+        # said because it is weaker than a single one. mutmut's CI/CD stats file
+        # holds one set of counters for the whole run rather than one per file,
+        # so this number is a property of the scope and is re-derived whenever
+        # the scope changes.
+        #
+        #   the six file targets   77.03%  (1 711 mutants, 1 314 killed, 4
+        #                                   timeout, 393 survived, 0 with no
+        #                                   covering test; 9 min 34 s, six
+        #                                   workers, Darwin arm64, CPython 3.13.7)
+        #   graph/rules/           95.56%  (measured on this runner, 2026-09-04)
+        #   together             ~90.00%  (5 130 of 5 700)
+        #
+        # WHAT THIS FLOOR DOES NOT GUARD, stated so it is not read as tighter
+        # than it is: at 0.88 the six could fall from 77.0% to 70.4% before
+        # anything trips, because they are 1 711 of 5 700. Their own floor needs
+        # per-target counters, which this runner's export does not write. The
+        # rules slice has its own floor in the step above and does not depend on
+        # this one.
+        run: >-
+          uv run beadloom mutation
+          --stats mutants/mutmut-cicd-stats.json
+          --target src/beadloom/application/guards/shell_targets.py
+          --target src/beadloom/application/guards/surface.py
+          --target src/beadloom/application/waves/derivation.py
+          --target src/beadloom/doc_sync/doc_quality.py
+          --target src/beadloom/doc_sync/doc_shape.py
+          --target src/beadloom/graph/rules/
+          --target src/beadloom/onboarding/role_duties.py
+          --tool "mutmut 3.7"
+          --min-score 0.88
 
       - name: Keep the counters and the surviving mutants
         if: always()
@@ -105,5 +217,6 @@ jobs:
           name: mutation-${{ github.run_id }}
           path: |
             mutants/mutmut-cicd-stats.json
+            mutants/rules-cicd-stats.json
             mutants/**/*.meta
           retention-days: 14

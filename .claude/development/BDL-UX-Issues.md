@@ -35,6 +35,17 @@
 
 ## Open Issues
 
+246. [2026-09-04] [MEDIUM] a declared mutation target that no run ever covers passes every green Gate, and the one command that would say so is silenced by the flag its only caller passes
+
+    **Severity:** medium (a declaration the Gate reports as satisfied while nothing measures it — a phantom gate with a name on it, in the feature built to remove phantom gates)
+    **Command:** `beadloom ci`, `beadloom mutation --only`
+    **Tracker:** `beadloom-0mdo.45`, routed to S6
+    **Context:** BDL-068 S4's fix cycle. Measured on this repository, which is the one that shipped the feature: `doc_quality.py` and `doc_shape.py` were declared in `mutation.targets` in S3 and no run had covered either of them when this was written on 2026-09-04.
+    **Issue:** three separate settings must agree before a declared target is measured, and Beadloom can see only one of them. `beadloom ci` calls `check_mutation_scope` — could a mutant run at this path — and never `report_mutation_score` — did one — because a score needs a stats file the tree does not carry. So a target declared and never measured passes every Gate this project has ever taken. The command that does report it, `beadloom mutation`, has `--only`, which prints the targets a run did not cover as "not judged by this run" rather than as `mutation-target-unmeasured`; the only caller in this repository is the nightly job, and it passed exactly the `--only` that suppressed the finding for those two targets.
+    **Why the tool cannot simply check it:** whether a runner will mutate a path lives in the runner's own configuration — `[tool.mutmut] only_mutate` here — and reading that would make Beadloom own the runner, which CONTEXT Q5 declines. This repository's fix is therefore a repository test (`tests/test_mutation_runner_scope.py` now asserts both inclusions), and an adopter has nothing equivalent.
+    **Expected:** what the product CAN check without owning a runner is whether it has ever seen a score for a declared target. `beadloom mutation --stats` could record the run it just judged — targets, score, tool, room, timestamp — under `.beadloom/`, and the Gate could then report a declared target whose last measurement is absent, or older than a stated age. That turns "declared" into "declared and measured on <date>", which is the distinction the feature exists to make and currently cannot.
+    **Note:** `--only` itself is not the defect. A run that covers one slice of a larger scope is the normal state and saying so is right. The defect is that "this run did not cover it" and "no run has ever covered it" are printed as the same sentence.
+
 245. [2026-09-04] [MEDIUM] the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one
 
     **Severity:** medium (a correct verdict followed by advice that would switch off the parallelism the command exists to plan)
