@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+243. [2026-09-04] [MEDIUM] re-copying changed files into a room that has already been reindexed manufactures a stale-doc failure that looks exactly like a defect
+
+    **Severity:** medium (a false red in the measurement whose whole purpose is to be trusted, and the false red is indistinguishable from a true one)
+    **Command:** the clean-room convention (`git archive HEAD` + only your files), BDL-UX #181, #235, #236
+    **Context:** BDL-068 S4, `beadloom-0mdo.41`, met and measured rather than reasoned about.
+    **Issue:** an agent that has already built and reindexed its room, then edits a file and copies the new version in, gets a SECOND failure — `test_bead15_s3b_coverage`, `sync-check` exit 2, `stale: 2` — which does not reproduce at pure HEAD. The copy postdates the room's own doc-freshness baseline, so the room correctly reports the file as changed since it was last attested. Nothing is wrong with the change. The failure is produced by the room's lifecycle and is shaped exactly like a defect in the work being measured.
+    **Why it belongs with #235 and #236:** those three are the whole isolation story of a clean room and all three were assumed rather than checked — #235 the room may contain a neighbour, #236 the room's dependency set is unstated so its verdict is not reproducible, #243 the room is not re-enterable and nothing says so. A convention that is only correct when performed exactly once, without saying so, is a convention that will be performed twice.
+    **Expected:** a room is BUILT, never refreshed. The agent that met this rebuilt from scratch and the pristine room gave the same one-failure verdict as the first, which is the check that makes this an entry rather than a guess. The durable form is the one #235 already proposes: a command that creates the room and refuses a directory it did not create empty — which makes re-entry impossible rather than merely discouraged, and answers both entries at once.
+    **Workaround (in use):** rebuild the room after any edit. Do not re-copy, do not re-sync.
+
 242. [2026-09-04] [LOW] the launch context a subagent receives carries a `git status` snapshot that is stale by construction, and one agent published from it
 
     **Severity:** low (recoverable, and it was recovered) — but it produced a withdrawn public sentence, which is the outcome this project spends the most effort avoiding
