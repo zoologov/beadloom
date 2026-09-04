@@ -1991,6 +1991,24 @@
 97. [2026-05-29] [LOW] `bd close --suggest-next` reports still-blocked beads as "Newly unblocked" — During BDL-035, closing `beadloom-ji9.4` printed `Newly unblocked: beadloom-ji9.6`, but `bd ready` / `bd dep tree` show ji9.6 is still BLOCKED by ji9.2/.3/.5. `--suggest-next` appears to list beads where the closed issue was *a* blocker without checking whether *other* blockers remain — a false "ready" signal. Workaround: treat `--suggest-next` as candidates only; `bd ready` is authoritative.
     > **External.** Bug in `steveyegge/beads` CLI (1.0.4), not in beadloom. Captured during dogfooding; report upstream if desired.
 
+    > **SHARPENED 2026-09-04 by `beadloom-0mdo.51`, after that bead first withdrew the entry and then
+    > reversed itself.** The withdrawal was measured on ONE dependency shape — a target with two
+    > blockers, one of them closed — which is the single shape where the command behaves correctly.
+    > Over ten shapes it names a still-blocked bead in four, and is silent in every shape where
+    > exactly one blocker had just been closed. So the entry survives and is now specific: the defect
+    > is shape-dependent, not intermittent.
+    > **What caught the withdrawal was the bead's own closing step:** `bd close beadloom-0mdo.51
+    > --suggest-next` named `.55` and `.13`, which `bd dep tree` shows blocked by four and six open
+    > beads. The reversal landed in code, tests and docs in `f703dc8`.
+    > **The error's family is worth more than the entry.** "Both directions exercised" was true of the
+    > OUTCOME axis and blind to the SHAPE axis — the same failure, opposite sign, as the two agents who
+    > filed #194 and #237 against a working `bd merge-slot`: a conclusion measured over a population
+    > narrower than the claim, in a project whose whole subject is that distinction.
+    > **The reversal paid for itself:** it exposed `services/mcp_server.py:850`, where
+    > `handle_complete_bead` closes with `--suggest-next` and hands the raw stdout to the MCP client
+    > under `next`, unqualified. So our own tool passes bd's false signal through to an agent finishing
+    > a bead. Tracked on `beadloom-0mdo.52`.
+
 98. [2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions — `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity` flake fixed in commit a4c88fa. While investigating, the test also looks internally inconsistent (comment references "mno345 from Jan 10" absent from the sample; `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing, unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
     > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).
 
