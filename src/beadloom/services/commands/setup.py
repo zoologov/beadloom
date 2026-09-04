@@ -609,12 +609,36 @@ def _echo_duty_limits(project_root: Path) -> None:
         return
     click.echo(
         f"  Duties: {len(report.declarations)} declared, checked over "
-        f"{len(report.inspected)} composed artifact(s). "
-        f"Not inspected ({len(report.not_inspected)}):",
+        f"{len(report.inspected)} composed artifact(s) — the COMPOSITION this "
+        "flow would write, not the role files on disk.",
         err=True,
     )
+    click.echo(f"    On disk: {_role_file_state(report.role_files)}", err=True)
+    click.echo(f"    Not inspected ({len(report.not_inspected)}):", err=True)
     for entry in report.not_inspected:
-        click.echo(f"    {entry.source} — {entry.why}", err=True)
+        click.echo(f"      {entry.source} — {entry.why}", err=True)
+
+
+def _role_file_state(role_files: tuple[str, ...]) -> str:
+    """The other half of the duty answer: what the composition reached.
+
+    Two sentences, because they are two facts. A project with role adapters is
+    told they are compared elsewhere, by the drift check that owns disk; a
+    project with none is told that the clean duty line above is a statement
+    about text nothing can currently receive (BDL-UX #241). The verdict
+    deliberately does not change: an unscaffolded project is not in drift, and
+    failing one would fail a state `config-check` has always held legitimate.
+    """
+    if not role_files:
+        return (
+            "NOTHING TO CHECK — no role adapter is written here, so the "
+            "composition above reaches no reader yet; `beadloom "
+            "setup-agentic-flow` writes them"
+        )
+    return (
+        f"{len(role_files)} role file(s), compared against their compositions by "
+        "the agent-config drift check above, not by the duty check"
+    )
 
 
 def _echo_scaffold_findings(result: ScaffoldResult) -> None:

@@ -64,6 +64,22 @@ as well as the blocking one: a check that speaks only when it finds something ha
 a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
 declares no duty, where there is no verdict to qualify.
 
+The duty block also names the corpus it read — the COMPOSITION this flow would write, not the
+role files on disk — and counts the adapters that exist there, printing `NOTHING TO CHECK`
+when none do. Until BDL-068 S4's fix bead a project that had never run `setup-agentic-flow`
+was told a duty was checked over ten composed artifacts with no blocking drift, which is true
+of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
+exit code is unchanged: an unscaffolded project is not in drift.
+
+`guard.py` renders the binding surface above the firing rows, in three sentences rather than
+two. `NOT CHECKED` when a source could not be read, `NOTHING TO CHECK` when both were read and
+the granted tools include no write path, and the fraction otherwise — `0 of 0 write path(s)
+bound` was printed for the middle case and read as full coverage (BDL-UX #239). A `read from:`
+line names the artifacts on disk the answer was derived from, which is the same sentence
+`config-check`'s duty block prints about its own corpus and for the same reason: the two
+commands answer neighbouring questions of different things, and a reader who cannot tell which
+one is in front of them has two reports that look like they agree.
+
 `mutation.py` renders what `application.mutation_scope` decided: the score a run produced
 over the scope `.beadloom/flow.yml` declared. It reads the counters a runner wrote and
 names none — Beadloom owns no mutation runner, so the module knows counter NAMES and not a

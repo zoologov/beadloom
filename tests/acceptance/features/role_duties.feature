@@ -88,3 +88,17 @@ Feature: a duty declared for a role reaches that role's composed core
     When a role's core is composed
     Then it names the room a bead owes in the form the wave planner emits
     And it names the gate owner as the one who measures the combined tree
+
+  # BDL-UX #241, added by `beadloom-0mdo.41` after the slice's test bead measured
+  # the join: this check and the binding-surface report landed in one wave asking
+  # "does a declared thing reach the role that must carry it?" of two different
+  # things, and neither said which. The answer is not to make them the same.
+
+  @bead:beadloom-0mdo.41
+  Scenario: a duty checked over a composition no role file can receive says so
+    Given a flow whose coordinator declares the "example-duty" duty for dev and review
+    And the dev role's project layer carries the "example-duty" duty
+    And the review role's project layer carries the "example-duty" duty
+    When the agent-config check runs
+    Then the check names the composition as the corpus it read
+    And it reports that no role adapter is on disk to receive it

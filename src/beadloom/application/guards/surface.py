@@ -35,6 +35,24 @@ later.
 reported when either artifact could not be read: a fraction over a population
 nobody could enumerate is the false green this module exists to remove, and "100%
 of the zero tools I found" is the most confident way to state it.
+
+**An empty population is not an unreadable one, and neither one is a fraction.**
+Both sources can be read and grant no write path at all — a role file with no
+front matter, one whose ``tools:`` grant is a YAML block sequence this reader
+takes only in the comma form, a project emitting read-only roles. That produced
+``0 of 0 write path(s) bound``, which is the same false green one step later
+(BDL-UX #239). So there are three states, not two: NOT CHECKED, NOTHING TO CHECK
+and a fraction — the vocabulary
+:class:`~beadloom.application.typed_surface.SurfacePartition` already prints for
+the same distinction.
+
+**And the report says which question it answered.** This module reads the
+artifacts ON DISK, because that is what the harness obeys: the scaffolder merges
+hook entries on the command string, so a project scaffolded before this release
+keeps its narrower matcher across an upgrade and only disk can say so.
+``role_duties.duty_report`` asks the neighbouring question of the composition
+Beadloom would write. Both are legitimate; they landed in one wave answering in
+opposite directions, and what was missing was each naming its own (#241).
 """
 
 from __future__ import annotations
@@ -72,6 +90,16 @@ _CATCH_ALL_MATCHERS = frozenset({"", "*"})
 #: or unreadable. Names the path, because the reader's next action is to look at
 #: it.
 UNREADABLE_SOURCE = "{path}: {reason} — the tools it would have named are unknown"
+
+#: Which question this report answered, printed on every run beside the answer.
+#: Not decoration: the duty report asks the same question of the composition, and
+#: two commands that look like they agree and do not is worse than either answer
+#: (BDL-UX #239/#241).
+READ_FROM = (
+    f"{SETTINGS_RELPATH.as_posix()} + {TOOL_AGENT_DIRS[BOUND_HARNESS].as_posix()}"
+    "/*.md as they are ON DISK — what the harness obeys, not the composition "
+    "Beadloom would write for them"
+)
 
 
 @dataclass(frozen=True)
@@ -155,22 +183,63 @@ class BindingSurface:
         return tuple(sorted(named - granted))
 
     @property
-    def covered(self) -> tuple[int, int] | None:
-        """Write paths seen out of write paths granted, or ``None`` when unknown.
+    def nothing_to_check(self) -> bool:
+        """Every source read, and no write path among the tools they grant.
 
-        ``None`` whenever a source could not be read: a fraction is a claim
-        about a population, and an unread source means there is no population to
-        make it about.
+        The third state, and the reason it is one: an empty population is not an
+        unreadable one, and reporting it as ``0 of 0`` made the absence of a
+        denominator read as full coverage (BDL-UX #239). ``False`` when a source
+        could not be read, because then nothing is known about the population at
+        all — that case is ``unresolved`` and stays there.
         """
-        if self.unresolved:
+        return not self.unresolved and not self.write_paths
+
+    @property
+    def covered(self) -> tuple[int, int] | None:
+        """Write paths seen out of write paths granted, or ``None`` when there is none.
+
+        ``None`` in the two states that carry no fraction, and the report tells
+        them apart by ``unresolved`` and :attr:`nothing_to_check`: a source that
+        could not be read leaves no population to make a claim about, and a
+        population with no write path in it leaves no denominator to divide by.
+        """
+        if self.unresolved or self.nothing_to_check:
             return None
         return len(self.seen), len(self.write_paths)
+
+    def describe(self) -> str:
+        """One line stating the population, in the three states it has.
+
+        Deliberately three different sentences, in the vocabulary
+        :meth:`~beadloom.application.typed_surface.SurfacePartition.describe`
+        established three waves earlier for the identical distinction. A reader
+        who has to tell a fraction from an absent denominator by reading the
+        numbers is a reader who will not.
+        """
+        if self.unresolved:
+            return (
+                f"surface ({self.harness}): NOT CHECKED — "
+                f"{len(self.unresolved)} source(s) of the population could not "
+                "be read, so no fraction is claimed"
+            )
+        if self.nothing_to_check:
+            return (
+                f"surface ({self.harness}): NOTHING TO CHECK — the "
+                f"{len(self.tools)} tool(s) the role adapters grant include no "
+                "write path, so there is no population to bind"
+            )
+        return (
+            f"surface ({self.harness}): {len(self.seen)} of "
+            f"{len(self.write_paths)} write path(s) bound, "
+            f"matcher(s) {', '.join(repr(m) for m in self.matchers)}"
+        )
 
     def to_dict(self) -> dict[str, object]:
         """JSON-ready mapping for ``--liveness --json``."""
         covered = self.covered
         return {
             "harness": self.harness,
+            "read_from": READ_FROM,
             "matchers": list(self.matchers),
             "tools": [row.to_dict() for row in self.tools],
             "write_paths": list(self.write_paths),
@@ -179,6 +248,7 @@ class BindingSurface:
             "unclassified": list(self.unclassified),
             "named_but_not_granted": list(self.named_but_not_granted),
             "unresolved": list(self.unresolved),
+            "nothing_to_check": self.nothing_to_check,
             "covered": list(covered) if covered is not None else None,
         }
 

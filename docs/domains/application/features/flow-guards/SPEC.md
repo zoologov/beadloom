@@ -204,6 +204,30 @@ read is reported as **unresolved** and suppresses the coverage fraction outright
 "100% of the zero tools I found" is the most confident way to state the failure
 this section is about.
 
+**Three states, because an empty population is not an unreadable one.** The
+report above got the unreadable case right and printed the empty one as `0 of 0
+write path(s) bound` — the same false green one step later, in the instrument
+built to report that class (BDL-UX #239). Role adapters that exist and grant no
+write path are reached without doing anything wrong: a `tools:` grant written as
+a YAML block sequence, which this reader takes only in the comma form; a role
+file with no front matter; a project emitting read-only roles. So
+`BindingSurface.describe` prints `NOT CHECKED`, `NOTHING TO CHECK` or a fraction,
+in the vocabulary `typed_surface.SurfacePartition` established for the identical
+distinction, and `covered` is `None` in both of the first two — `0 of 0` is not a
+fraction, it is the absence of a denominator. `unresolved` and
+`nothing_to_check` are what tell the two apart, in the text report and in
+`--liveness --json` alike.
+
+**And the report names the question it answered.** This one is about the
+artifacts ON DISK, and a `read from:` line says so on every run. The neighbouring
+question — does the COMPOSITION Beadloom would write carry the thing? — is
+answered by `role_duties.duty_report` behind `config-check`. Both instruments
+landed in one wave of BDL-068 S4 answering "does a declared thing reach the role
+that must carry it?" of two different corpora, and neither said which, so on a
+project holding no role file one reported a duty delivered to five roles while
+the other reported the artifacts missing (BDL-UX #241). The divergence is kept —
+both questions are legitimate — and each report now states its own.
+
 **What none of that closes.** `scaffold_guard_hooks` merges on the command
 string, so a project scaffolded before this release keeps its narrower matcher
 across the upgrade — re-running the scaffolder adds nothing, because the command

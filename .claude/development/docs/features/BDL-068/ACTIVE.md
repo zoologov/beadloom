@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** S4 wave 6 landed — `nn4c`, its own gate owner, combined tree measured green.
-S4's eight dev beads are done and `0mdo.34` (test) is next. Wave 5 landed: `gsal`, its own
-gate owner, combined tree measured green.
+**Bead:** S4's test wave landed — `0mdo.34` closed with its verdict (`23f612a`), and the fix
+beads it filed are running. `0mdo.41` (#239, #241) landed; `0mdo.42` (#240) runs after it,
+serialised on `cli-commands`, and `0mdo.35` (review) follows both.
+Wave 6 landed: `nn4c`, its own gate owner, combined tree measured green. Wave 5 landed:
+`gsal`, its own gate owner, combined tree measured green.
 Wave 4 landed: `en0x` (`ded748d`), its own gate owner, combined tree measured
 green. Wave 3 landed: `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner `67t1`,
 combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
@@ -248,6 +250,36 @@ filed; this name is the free mitigation and later slices keep it.
     8 735 passed, 0 failed, `beadloom ci` rc 0, `HEAD` verified unchanged before and after,
     `mypy` clean against all four declared target versions and `ruff` clean. Every tree
     verdict in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
+  - [x] `0mdo.41` / **#239 + #241** — the one place S4's eight instruments disagree, made
+    visible rather than made the same. `.31` and `.27` landed in ONE wave answering "does a
+    declared thing reach the role that must carry it?" of two different corpora — the
+    artifacts on disk and the composition — and neither said which, so on a project holding
+    no role file one reported the artifacts missing and the other reported a duty delivered
+    to five roles at exit 0. **The divergence is kept**, because both questions are
+    legitimate and each instrument has a reason for the one it asks: `scaffold_guard_hooks`
+    merges on the command string, so only disk can say an upgraded project kept its narrower
+    matcher, and `--fix` writes compositions, so only the composition can say what the next
+    scaffold would deliver. What changed is that each names its corpus in the sentence it
+    prints — a `read from:` line under the surface verdict, and `the COMPOSITION this flow
+    would write, not the role files on disk` in the duty line, with the adapters on disk
+    COUNTED beside it and never read. **#239 is one word and a `None`:**
+    `BindingSurface.describe()` now has three sentences in `gsal`'s vocabulary — NOT CHECKED,
+    NOTHING TO CHECK, or the fraction — and `covered` is `None` in both non-fraction states,
+    so `0 of 0` cannot be printed or parsed out of `--liveness --json` either. The three
+    reproductions the test bead measured all reach the middle sentence; the block-sequence
+    `tools:` grant that produces the sharpest of them is deliberately NOT parsed, because a
+    report whose population is empty for ANY reason must not print a fraction and widening
+    the reader is a different defect. Exit codes unchanged throughout: an unscaffolded
+    project is not in drift. 6 tests appended to `test_s4_the_instruments_agree.py` (not a
+    second file — #224) and 3 acceptance scenarios in the two existing feature files, each
+    seen red first; 7 hand-injected mutants at the new seams, all 7 red, one of them a
+    finding about an assertion of mine that checked the empty case and not the counted one.
+    Green in a clean room over 15 files at `room-beadloom-0mdo.41` (8 722 passed; the 1
+    failure is the room's stated property — no `.git`, so no freshness baseline — and it is
+    red at pure HEAD in an identically built control room, measured rather than asserted),
+    `beadloom ci` rc 0 there. On the tree: 8 761 passed, `beadloom ci` rc 0 foreground and
+    unpiped, `HEAD` verified unchanged either side. Every verdict Darwin arm64 / CPython
+    3.13.7, 0 of the 21 declared rooms, so none of it is a claim about any CI leg.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 
@@ -296,6 +328,8 @@ beads are created per slice, once the preceding slice's review closes.
 | `en0x` / **#232 + #234** | `waves` plans from an AUTHORED `refs:` line, so two beads editing one document read as independent. Measured: `.21` and `.26` both edited `docs/services/cli.md`, 0 findings. Also #234: the printed remedy did not follow the cause as far as the reason did | P1 |
 | `nn4c` / **#233** | the read-only guard test attributes by TIMING, and a `bd` export burst lands inside the measurement window and misses the control window. Least reliable exactly when the flow is most parallel | P1 |
 | `0mdo.34` | test — the surface as a shape, never a spelling | P1 |
+| `0mdo.41` / **#239 + #241** | two of the slice's instruments answer one question in opposite ways and neither says which it answered; and an empty write-path population prints as `0 of 0 ... bound` | P1 |
+| `0mdo.42` / **#240** | the commit hook's typed leg is gated by a hand-written `^(src\|tests)/` regex and prints nothing at all on a flat-layout project | P1 |
 | `0mdo.35` | review | P1 |
 | `0mdo.36` | tech-writer | P1 |
 

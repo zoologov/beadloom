@@ -38,6 +38,18 @@ composed artifacts and nothing else, and :attr:`DutyReport.not_inspected` says
 so on every run alongside the fragments this project's configuration does not
 compose. That limit is the argument for moving a duty out of the prompt and into
 a composed core, not a reason to leave it there.
+
+**Which of the two questions this answers, said in the report.** A duty reaching
+a role has two halves: does the COMPOSITION carry it, and did that composition
+reach a file the role reads? This module answers the first, deliberately —
+``--fix`` writes compositions, and ``config_sync``'s drift check compares the
+artifacts on disk. But on a project that has never scaffolded the flow the two
+were indistinguishable in the output: a duty was reported delivered to five
+roles over a corpus no role could receive (BDL-UX #241). So
+:attr:`DutyReport.role_files` counts the adapters that exist on disk, and the
+command prints that count beside the verdict.
+:mod:`beadloom.application.guards.surface` answers the neighbouring question
+about disk and names its own sources for the same reason.
 """
 
 from __future__ import annotations
@@ -55,6 +67,7 @@ from beadloom.onboarding.composer import (
     templates_dir,
 )
 from beadloom.onboarding.flow_config import resolve_flow_config
+from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS
 from beadloom.onboarding.role_composer import ROLE_NAMES
 
 if TYPE_CHECKING:
@@ -133,13 +146,21 @@ class NotInspected:
 
 @dataclass(frozen=True)
 class DutyReport:
-    """What a project declares, what its roles carry, and what was not seen."""
+    """What a project declares, what its roles carry, and what was not seen.
+
+    ``role_files`` is the one field that is not about the composition: the role
+    adapters this flow's tools have ON DISK, counted and never read. It is here
+    because the rest of the report is a claim about text no role receives until
+    those files exist, and an empty tuple beside a clean verdict is the state
+    BDL-UX #241 was reproduced in.
+    """
 
     declarations: tuple[DutyDeclaration, ...]
     carried: tuple[tuple[str, str], ...]
     findings: tuple[DutyFinding, ...]
     inspected: tuple[str, ...]
     not_inspected: tuple[NotInspected, ...]
+    role_files: tuple[str, ...]
 
 
 def _fragment_label(source: str, project_root: Path) -> str:
@@ -424,6 +445,38 @@ def _marked_files(project_root: Path) -> Iterator[Path]:
             yield path.resolve()
 
 
+def _role_files_on_disk(project_root: Path, config: FlowConfig) -> tuple[str, ...]:
+    """Role adapters this flow's tools have written, which this check never reads.
+
+    Counted rather than parsed, and reported beside the verdict rather than
+    folded into it. The duty report answers a question about the COMPOSITION;
+    whether the composition reached a file is the drift check's question and the
+    two used to be indistinguishable in the output (BDL-UX #241).
+    """
+    found: list[str] = []
+    for tool in config.tools:
+        # Indexed, not `.get()`-with-a-fallback, exactly as `role_adapters`
+        # writes these files: `flow.yml` is validated against the same supported
+        # set, so a missing entry is a release defect and a KeyError says so. A
+        # tolerated miss would silently undercount, and an undercount here
+        # prints NOTHING TO CHECK over a directory full of role files.
+        relative_dir = TOOL_AGENT_DIRS[tool]
+        directory = project_root / relative_dir
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            # An unwritten roles directory is the state this reports on; an
+            # unreadable one is reported by `config-check`'s own drift pass,
+            # which owns file health.
+            continue
+        found.extend(
+            (relative_dir / path.name).as_posix()
+            for path in entries
+            if path.suffix == ".md"
+        )
+    return tuple(found)
+
+
 def duty_report(
     project_root: Path, config: FlowConfig | None = None
 ) -> DutyReport:
@@ -446,4 +499,5 @@ def duty_report(
         ),
         inspected=tuple(label for label, _ in composed),
         not_inspected=tuple(_uninspected(read, project_root, resolved)),
+        role_files=_role_files_on_disk(project_root, resolved),
     )

@@ -130,16 +130,24 @@ def _surface_lines(surface: BindingSurface) -> list[str]:
     Printed before the guard rows because it is the question that qualifies
     them: a guard reported healthy on a binding covering one write path out of
     three is a third of a guard, and the rows alone cannot say so (BDL-UX #170).
+
+    The head line comes from the surface itself, in the three states it has, and
+    a ``read from:`` line names the artifacts it was derived from. The second is
+    there because `config-check` asks the neighbouring question of the
+    composition rather than of disk: both answers are legitimate and a reader
+    who cannot tell which one is in front of them has two reports that look like
+    they agree (BDL-UX #239, #241).
     """
-    covered = surface.covered
-    if covered is None:
-        head = f"surface ({surface.harness}): not reported"
-        return [head, *(f"  unresolved: {item}" for item in surface.unresolved)]
-    seen, total = covered
-    lines = [
-        f"surface ({surface.harness}): {seen} of {total} write path(s) bound, "
-        f"matcher(s) {', '.join(repr(m) for m in surface.matchers)}"
-    ]
+    from beadloom.application.guards.surface import READ_FROM
+
+    lines = [surface.describe(), f"  read from: {READ_FROM}"]
+    if surface.unresolved:
+        lines.extend(f"  unresolved: {item}" for item in surface.unresolved)
+        # The tool rows are not printed: with a source unread, every row would
+        # be judged against a matcher list that is itself unknown, and a row
+        # saying "an edit through Edit fires no guard" would be a claim this run
+        # cannot make.
+        return lines
     for row in surface.tools:
         if row.writes is True and not row.bound:
             lines.append(

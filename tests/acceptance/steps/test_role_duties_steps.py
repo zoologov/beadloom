@@ -268,3 +268,17 @@ def _names_the_gate_owner(world: dict[str, Any]) -> None:
     for role, text in world["composed"].items():
         assert "gate owner" in text, role
         assert "combined tree" in text, role
+
+
+@then("the check names the composition as the corpus it read")
+def _names_the_composition(world: dict[str, Any]) -> None:
+    output = world["outcome"].output
+    assert "COMPOSITION" in output, output
+    assert "not the role files on disk" in output, output
+
+
+@then("it reports that no role adapter is on disk to receive it")
+def _names_the_empty_disk(world: dict[str, Any]) -> None:
+    output = world["outcome"].output
+    assert "NOTHING TO CHECK" in output, output
+    assert "no role adapter is written here" in output, output

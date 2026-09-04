@@ -207,3 +207,29 @@ def _unresolved_stated(world: dict[str, Any]) -> None:
 @then("it claims no coverage fraction")
 def _no_fraction(world: dict[str, Any]) -> None:
     assert world["surface"].covered is None, world["surface"].to_dict()
+
+
+@given("a project whose roles are granted only tools that write no file")
+def _binding_with_no_write_path(world: dict[str, Any]) -> None:
+    _emit_binding(world["root"], matcher=EDIT_MATCHER, tools="Read, Grep")
+
+
+@then("the report states that there was nothing to check")
+def _nothing_to_check(world: dict[str, Any]) -> None:
+    surface = world["surface"]
+    assert surface.nothing_to_check is True, surface.to_dict()
+    assert "NOTHING TO CHECK" in surface.describe(), surface.describe()
+
+
+@then("it does not say that a source could not be read")
+def _not_unresolved(world: dict[str, Any]) -> None:
+    assert world["surface"].unresolved == (), world["surface"].to_dict()
+
+
+@then("the report names the artifacts on disk it was derived from")
+def _names_its_sources(world: dict[str, Any]) -> None:
+    read_from = world["surface"].to_dict()["read_from"]
+    assert isinstance(read_from, str), read_from
+    assert SETTINGS_RELPATH.as_posix() in read_from, read_from
+    assert TOOL_AGENT_DIRS["claude"].as_posix() in read_from, read_from
+    assert "ON DISK" in read_from, read_from

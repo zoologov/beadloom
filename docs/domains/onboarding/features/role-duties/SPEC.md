@@ -77,6 +77,27 @@ project fragment for a role that does not exist. It is derived by **subtraction*
 fragments the compositions actually read, so an overlay added later is covered without
 anyone editing a list.
 
+### Which of the two questions this answers
+
+A duty reaching a role has two halves: does the **composition** carry it, and did that
+composition reach a **file** the role reads? This check answers the first, deliberately —
+`--fix` writes compositions, and `config_sync`'s vendored byte-compare is the claim about
+disk. The choice was nowhere stated, so on a project that has never run
+`setup-agentic-flow` the run printed `Duties: 1 declared, checked over 10 composed
+artifact(s)` and `no blocking drift`: a duty reported delivered to five roles over a corpus
+no role could receive (BDL-UX #241). `beadloom-0mdo.31`'s binding surface landed in the same
+wave answering the same question of the artifacts on **disk**, so the two instruments looked
+like they agreed and did not.
+
+Both questions are legitimate and the divergence is kept. What each report now does is name
+its own corpus: the duty line says it checked the COMPOSITION and not the role files on
+disk, and `DutyReport.role_files` counts the adapters that exist there so the command can
+print the other half. With none, it prints `NOTHING TO CHECK` and says the composition
+reaches no reader yet. The verdict deliberately does not change — an unscaffolded project is
+not in drift, and failing one would fail a state `config-check` has always held legitimate.
+The count is never parsed: reading those files is the drift check's job, and doing it twice
+is how the two answers would drift apart again.
+
 One class is excluded from the subtraction base: `templates/agentic_flow/agents/*.md.txt`,
 the byte-identical vendored snapshot of the live `.claude/agents/*.md`. It carries every
 marker its composed role carries, so it appeared five times over the moment a role core
@@ -88,7 +109,8 @@ declining to report its own input back to itself.
 
 ### Modules
 
-- **role_duties.py** — `duty_report()`, `DutyReport`, `DutyDeclaration`, `DutyFinding`,
+- **role_duties.py** — `duty_report()`, `DutyReport` (including `role_files`, the adapters
+  on disk this check counts and never reads), `DutyDeclaration`, `DutyFinding`,
   `NotInspected`, and the two marker spellings `DUTY_MARKER` / `CARRIES_MARKER`.
 
 ### Where the findings surface
@@ -105,16 +127,17 @@ They are never `fixable`: the repair is the duty's **text** in a role core, and 
 writes compositions, not prose. Offering it would be the BDL-UX #186 shape — recommending
 the command that will decline.
 
-`beadloom config-check` prints the not-inspected population whenever a project declares at
-least one duty, and stays silent for one that declares none: there is no verdict to
+`beadloom config-check` prints the corpus it read, the role files on disk and the
+not-inspected population whenever a project declares at least one duty, and stays silent for
+one that declares none: there is no verdict to
 qualify, and a standing paragraph about an unused mechanism is the noise that gets a check
 switched off.
 
 ## Acceptance
 
 `tests/acceptance/features/role_duties.feature` — both directions, the dead role, the
-anti-vacuity case, the launch-prompt limit, the fragment no composition includes, and the
-finding reaching `config-check`. Boundary guards in `tests/test_role_duties.py`.
+anti-vacuity case, the launch-prompt limit, the fragment no composition includes, the
+finding reaching `config-check`, and the composition no role file can receive. Boundary guards in `tests/test_role_duties.py`.
 
 ## Related
 

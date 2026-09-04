@@ -31,10 +31,19 @@ The four joins, with the beads that made them:
   ``config_sync``'s drift check is a claim about the artifact on disk. Delivery
   to a role that actually reads a file needs both, and the pair is asserted by
   neither bead.
+
+A fifth section was added by ``beadloom-0mdo.41`` after the test bead measured
+the join above and found the one place the eight instruments genuinely disagree:
+``.31`` answers its question off DISK and ``.27`` answers it off the
+COMPOSITION, and neither said which. Both questions are legitimate and this file
+does not make them the same — what it binds is that each report NAMES the one it
+answered, and that an empty population never prints as a covered one
+(BDL-UX #239, #241).
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 from typing import TYPE_CHECKING
@@ -47,9 +56,16 @@ from beadloom.application.declared_scope import (
     scope_check,
     work_item_axes,
 )
-from beadloom.application.guards.surface import WRITE_TOOLS
+from beadloom.application.guards.surface import WRITE_TOOLS, build_surface
+from beadloom.application.typed_surface import SurfaceRoot, TypedSurface
 from beadloom.application.waves.media import ROOM_PREFIX
-from beadloom.onboarding.guard_hooks import EDIT_MATCHER
+from beadloom.onboarding.guard_hooks import (
+    EDIT_MATCHER,
+    HOOK_EVENT,
+    SETTINGS_RELPATH,
+    hook_command,
+)
+from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS
 from beadloom.onboarding.role_duties import CARRIES_MARKER, duty_report
 from beadloom.services.cli import main
 from beadloom.services.commands.docsync import (
@@ -71,6 +87,12 @@ _OWN_WORK_ITEM = "BDL-068"
 #: The one duty this project declares, named so the room assertion below cannot
 #: quietly pass over a corpus that declares something else.
 _CLEAN_ROOM = "clean-room"
+
+#: The word three of this slice's instruments use for a population that was read
+#: and holds nothing. Asserted rather than agreed on by hand: `beadloom-gsal`
+#: introduced it for the typed leg, and `.31` and `.27` needed it three waves
+#: later for exactly the same distinction.
+_NOTHING_TO_CHECK = "NOTHING TO CHECK"
 
 
 # ---------------------------------------------------------------------------
@@ -436,3 +458,213 @@ class TestOneSpellingOfTheRoom:
             assert adapter.is_file(), adapter
             body = adapter.read_text(encoding="utf-8")
             assert spelling in body, (role, spelling)
+
+
+# ---------------------------------------------------------------------------
+# One question, and the sentence that says which one was answered
+# ---------------------------------------------------------------------------
+
+
+def _emit_binding(root: Path, *, matcher: str, front_matter: str) -> None:
+    """Write the two artifacts the binding surface is derived from.
+
+    Local to this file on purpose: `test_guard_surface.py` has a helper of its
+    own that takes the `tools:` grant as a comma string, and the case below is
+    precisely the grant that helper cannot express.
+    """
+    settings = root / SETTINGS_RELPATH
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    HOOK_EVENT: [
+                        {
+                            "matcher": matcher,
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": hook_command("bead-claimed"),
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agents = root / TOOL_AGENT_DIRS["claude"]
+    agents.mkdir(parents=True, exist_ok=True)
+    (agents / "dev.md").write_text(front_matter, encoding="utf-8")
+
+
+@pytest.fixture()
+def declared_but_unscaffolded(tmp_path: Path) -> Path:
+    """A project that declares the flow and has written none of it to disk.
+
+    `setup-agentic-flow` never run: `.beadloom/flow.yml` and nothing else. This
+    is the state BDL-UX #241 was reproduced in, and it is reached by running
+    `beadloom init` and stopping there.
+    """
+    (tmp_path / ".beadloom").mkdir()
+    (tmp_path / ".beadloom" / "flow.yml").write_text(
+        "tools:\n- claude\narchitecture:\n- ddd\nstack:\n- python\n",
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+class TestEachInstrumentSaysWhichQuestionItAnswered:
+    """The one place S4's eight instruments disagree, made visible instead of same.
+
+    `beadloom-0mdo.31` and `beadloom-0mdo.27` landed in the SAME WAVE and
+    answered "does a declared thing reach the role that must carry it?" in
+    opposite ways. `.31` reads the artifacts ON DISK and reports `unresolved`
+    when it cannot read one, with its reasoning recorded: the scaffolder merges
+    hook entries on the command string, so a project scaffolded before this
+    release keeps its narrower matcher across an upgrade, and only disk can say
+    so. `.27` judges the COMPOSITION, which is equally defensible — `--fix`
+    writes compositions and the drift check covers the artifact — but said
+    nowhere that it had made a choice.
+
+    Both questions are legitimate and this file does not make them the same. What
+    is asserted is that each instrument NAMES the question it answered in the
+    sentence it prints, so the divergence reads as a design decision rather than
+    as two commands that appear to agree and do not (BDL-UX #239, #241).
+    """
+
+    def test_the_binding_surface_names_the_artifacts_it_was_read_from(
+        self, scaffolded: Path
+    ) -> None:
+        """`.31`'s report says: disk, not the composition."""
+        result = CliRunner().invoke(
+            main, ["guard", "--liveness", "--project", str(scaffolded)]
+        )
+        assert result.exit_code == 0, result.output
+        assert SETTINGS_RELPATH.as_posix() in result.output, result.output
+        assert TOOL_AGENT_DIRS["claude"].as_posix() in result.output, result.output
+        assert "ON DISK" in result.output, result.output
+
+    def test_the_duty_line_names_the_corpus_it_was_read_from(
+        self, scaffolded: Path
+    ) -> None:
+        """`.27`'s report says: the composition, not the files on disk.
+
+        The disk half is asserted in BOTH directions. A first version of this
+        test checked only that the empty case says so, and a mutant returning an
+        empty file list unconditionally survived it — the scaffolded project
+        would then have been told its composition reached no reader, which is
+        the same false sentence pointed the other way.
+        """
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(scaffolded)]
+        )
+        assert result.exit_code == 0, result.output
+        assert "COMPOSITION" in result.output, result.output
+        assert "not the role files on disk" in result.output, result.output
+
+        on_disk = sorted((scaffolded / ".claude" / "agents").glob("*.md"))
+        assert on_disk, scaffolded
+        assert f"On disk: {len(on_disk)} role file(s)" in result.output, result.output
+        assert _NOTHING_TO_CHECK not in result.output, result.output
+
+    def test_an_empty_write_path_population_is_not_a_bound_one(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-UX #239, in the sharpest of its three reproductions.
+
+        The adapter is present, correct and grants `Bash` and `Edit` — as a YAML
+        block sequence, which `_declared_tools` reads only in the comma form. So
+        the population is empty while nothing is wrong on disk, and `0 of 0`
+        read as every write path bound. The parser is deliberately NOT widened
+        here: what the finding is about is the sentence, and a report whose
+        population is empty for ANY reason must not print a fraction.
+        """
+        _emit_binding(
+            tmp_path,
+            matcher=EDIT_MATCHER,
+            front_matter="---\nname: dev\ntools:\n  - Bash\n  - Edit\n---\n\nbody\n",
+        )
+        surface = build_surface(tmp_path)
+
+        assert surface.unresolved == (), surface.to_dict()
+        assert surface.write_paths == (), surface.to_dict()
+        assert surface.covered is None, surface.to_dict()
+        assert surface.nothing_to_check is True, surface.to_dict()
+        assert "0 of 0" not in surface.describe(), surface.describe()
+
+    def test_a_readable_empty_population_is_not_an_unreadable_one(
+        self, tmp_path: Path
+    ) -> None:
+        """The distinction the fix must not lose: two states, not one.
+
+        `.31` got the UNREADABLE case exactly right and its docstring states the
+        rule outright. Collapsing the empty case into `unresolved` would answer
+        #239 by making the report claim a source could not be read when every
+        source was read, which is a false statement in the other direction.
+        """
+        _emit_binding(
+            tmp_path,
+            matcher=EDIT_MATCHER,
+            front_matter="---\nname: dev\ntools: Read, Grep\n---\n\nbody\n",
+        )
+        readable = build_surface(tmp_path)
+        assert readable.nothing_to_check is True, readable.to_dict()
+        assert readable.unresolved == (), readable.to_dict()
+
+        (tmp_path / SETTINGS_RELPATH).unlink()
+        unreadable = build_surface(tmp_path)
+        assert unreadable.nothing_to_check is False, unreadable.to_dict()
+        assert unreadable.unresolved != (), unreadable.to_dict()
+        assert unreadable.covered is None, unreadable.to_dict()
+
+    def test_a_composition_no_role_file_can_receive_is_reported_as_such(
+        self, declared_but_unscaffolded: Path
+    ) -> None:
+        """BDL-UX #241: the reassuring line is printed by the unprotected state.
+
+        The exit code deliberately does not change. A project that has not
+        scaffolded the flow is not in drift, and turning that into a blocking
+        verdict would fail a repository for a state `config-check` has always
+        held to be legitimate. What changes is that the run says the composition
+        it checked reaches no file yet.
+        """
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(declared_but_unscaffolded)]
+        )
+        assert result.exit_code == 0, result.output
+        assert "no role adapter" in result.output, result.output
+
+    def test_the_three_instruments_spell_an_empty_population_one_way(
+        self, tmp_path: Path, declared_but_unscaffolded: Path
+    ) -> None:
+        """`gsal`'s typed leg, `.31`'s surface and `.27`'s duty line, one word.
+
+        `beadloom-gsal` shipped `NOTHING TO CHECK` as a third sentence beside a
+        verdict and `NOT CHECKED` three waves before either of the other two
+        needed it. Three modules spelling one distinction three ways is the class
+        this file exists to bind, so the word is asserted across all three rather
+        than left to agree by hand.
+        """
+        empty_typed = TypedSurface(
+            roots=(SurfaceRoot(path="src/demo", source="declared"),),
+        ).partition(("other/alpha.py",))
+        assert _NOTHING_TO_CHECK in empty_typed.describe(), empty_typed.describe()
+
+        # A directory of its own: `declared_but_unscaffolded` is built on the
+        # same `tmp_path`, and writing a role adapter into it would scaffold the
+        # very project whose emptiness the third assertion is about.
+        binding = tmp_path / "binding"
+        binding.mkdir()
+        _emit_binding(
+            binding,
+            matcher=EDIT_MATCHER,
+            front_matter="---\nname: dev\ntools: Read, Grep\n---\n\nbody\n",
+        )
+        assert _NOTHING_TO_CHECK in build_surface(binding).describe()
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(declared_but_unscaffolded)]
+        )
+        assert _NOTHING_TO_CHECK in result.output, result.output

@@ -51,3 +51,22 @@ Feature: the guard binding sees every write path, and reports the ones it does n
     When the binding surface is reported
     Then the report states why the binding could not be read
     And it claims no coverage fraction
+
+  # BDL-UX #239, added by `beadloom-0mdo.41`. The scenario above gets the
+  # UNREADABLE case right; an empty population is not an unreadable one, and it
+  # was printed as `0 of 0 write path(s) bound` -- the same false green one step
+  # later, in the instrument this slice built to report exactly that class.
+
+  @bead:beadloom-0mdo.41
+  Scenario: A population that was read and holds no write path is nothing to check
+    Given a project whose roles are granted only tools that write no file
+    When the binding surface is reported
+    Then the report states that there was nothing to check
+    And it claims no coverage fraction
+    And it does not say that a source could not be read
+
+  @bead:beadloom-0mdo.41
+  Scenario: The report names the artifacts its answer was read from
+    Given a project whose roles are granted the shell tool and whose matcher omits it
+    When the binding surface is reported
+    Then the report names the artifacts on disk it was derived from
