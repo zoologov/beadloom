@@ -35,6 +35,30 @@
 
 ## Open Issues
 
+252. [2026-09-04] [MEDIUM] a composed role is missing from the entry-point document that enumerates roles, and no check asks whether it is there
+
+    **Severity:** medium (an adopter's agent reads the entry point to learn what roles exist, and learns four of five)
+    **Command:** `beadloom setup-agentic-flow`, `beadloom config-check`
+    **Tracker:** routed to S6
+    **Context:** noticed by the owner reading `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, then measured.
+    **Measured:**
+
+    ```
+    explore.md.txt                          the role template exists
+    commands/coordinator.md.txt             explore x4
+    commands/task-init.md.txt               explore x4
+    .claude/agents/explore.md               composed
+
+    CLAUDE.md.txt      (shipped)            explore x0
+    .claude/CLAUDE.md  (composed, here)     explore x0
+    ```
+
+    **Issue:** `Explore` shipped in BDL-068 S1 as a composed role and is used by two slash skills. `CLAUDE.md` is the document that calls itself the entry point, whose §0.0 draws the role map and whose §4 is the Agent Roles table. Both list four roles. So the role exists, two skills invoke it, and the map an agent is told to read first does not know about it.
+    **What already checks, and what it checks instead:** `config-check` reports `On disk: 5 role file(s)` — it counts `explore` — and checks two things, neither of which is this. It compares composed adapters against the compositions this flow would write (drift), and it checks that a declared duty reaches the composed core of every role it names, in both directions (`beadloom-0mdo.27`, shipped in S4). Nothing asks whether every composed role is NAMED in the document that enumerates roles.
+    **Why it is the same family and still a third direction:** #228 was "a duty declared for a role does not reach that role's core". This is "a role that exists does not reach the document listing roles". `.27` built the duty↔core check; the role↔map check is one more edge of the same graph and was not built because nobody had added a role since the map was written.
+    **Expected:** `config-check` derives the role set from what `role-composer` composes and asserts that each one is named in the composed `CLAUDE.md`, reporting a role the map omits and a map entry no role backs. Both directions, like `.27`. Then fix this instance — `Explore` belongs in §0.0's map and §4's table, in the shipped template and therefore in every adopter's composed copy.
+    **Not a documentation chore.** Fixing only the text leaves the next role in the same position, which is precisely the argument `beadloom-0mdo.12` made for refusing to split a duty from its check.
+
 251. [2026-09-04] [LOW] `sync-check` reports nine surface-drift warnings on the tree that a freshly reindexed clean room reports as `[ok]`, and a tree reindex does not clear them
 
     **Severity:** low (warn-level, pre-existing, and untouched) — recorded because the two rooms disagree, not because the warnings matter
