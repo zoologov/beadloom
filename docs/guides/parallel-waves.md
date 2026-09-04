@@ -344,7 +344,8 @@ nobody made.
 Each of these is a limit somebody measured and chose to state, rather than a gap nobody noticed.
 
 **The `git add` half of BDL-UX #118 is not fixable at the hook layer.** The pre-commit hook now
-judges the commit rather than the tree — ruff and mypy run over the staged files, `sync-check`
+judges the commit rather than the tree — ruff runs over the staged files, mypy over the
+staged files inside the surface `pyproject` declares typed, `sync-check`
 runs with `--staged`, and the hook prints how many modified files outside the commit it did not
 judge. What it cannot catch is a neighbour's hunk swept in through `git add`: that hunk is
 *inside* the commit, which is the region the gate judges, and the index does not record who wrote

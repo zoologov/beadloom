@@ -140,7 +140,7 @@ It also states four things about its own scope: how much of the tree it did NOT 
 
 What it cannot do: a neighbour's hunk swept into a commit, inside a file the committer legitimately touches, is not caught and cannot be caught here — the swept hunk is inside the commit, which is the region the gate judges.
 
-In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit.
+In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit — with one stated exception: a type check whose surface could not be derived reads `NOT CHECKED` and never blocks in either mode, because a check that did not happen must not turn a missing `PATH` entry into a refused commit.
 
 **Pre-push hook** runs the full Beadloom Gate (`beadloom ci`): incremental reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor, plus the landscape gate when the project declares satellites. This is the authoritative blocking gate; it exits non-zero on any failure, preventing the push. Fail-safe: if `beadloom` is not on PATH, the hook is a no-op.
 

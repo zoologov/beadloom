@@ -1,16 +1,17 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
 > **Last updated:** 2026-09-04
-> **Phase:** Development — S1-S3 merged; S4 waves 1-4 landed, wave 5 next
+> **Phase:** Development — S1-S3 merged; S4 waves 1-5 landed, wave 6 (`nn4c`) next
 
 ---
 
 ## Current Bead
 
-**Bead:** S4 wave 4 landed — `en0x` (`ded748d`), its own gate owner, combined tree measured
+**Bead:** S4 wave 5 landed — `gsal`, its own gate owner, combined tree measured green.
+Wave 4 landed: `en0x` (`ded748d`), its own gate owner, combined tree measured
 green. Wave 3 landed: `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner `67t1`,
 combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
-`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 5 is `gsal`, then `nn4c`.
+`5fd9636`; wave 2 (`0mdo.32`) landed: `a198832`. Wave 6 is `nn4c`, the last of S4.
 Wave order from the graph, not chosen: `.32` → (`.33` + `67t1`, gate owner `67t1`) → `en0x` →
 `gsal` → `nn4c`. Six waves for seven beads, because the slice is nearly one area of code —
 `flow-guards` and `cli-commands` account for 14 of the 19 serialisation reasons.
@@ -104,6 +105,47 @@ filed; this name is the free mitigation and later slices keep it.
     comes from a second run on a settled tree with `HEAD` verified unchanged before and after. A
     combined-tree verdict taken across a write is the same class as a clean room that cannot see
     the bead beside it: it looks exactly like a correct measurement.
+  - [x] `gsal` / **#231** — the commit hook's type-check leg, and the bead's own account of it
+    needed one correction before anything could be fixed. **What is true:** the leg ran `mypy`
+    over every staged `.py` under `src/` or `tests/`, while `pyproject` declares
+    `packages = ["beadloom"]` and `ci.yml` runs `uv run mypy src/` — `uv run mypy tests/` is 970
+    errors in 90 files and not one is a violation of a declared standard. **What is not:** the
+    bead says the hook DISCARDS mypy's output via `2>/dev/null`. It does not — mypy writes its
+    findings to stdout, verified by splitting the streams. What `2>/dev/null` hides is the
+    diagnostics of a mypy that could not START, so the two indistinguishable states were "found
+    errors" and "could not run", not "found errors" and "silent". The defect is real and its
+    mechanism was misread, which is why the fix prints `2>&1` rather than merely re-enabling a
+    stream that was never off. **MEASURED over all 24 commits of this branch** at
+    `b7c9476..49c2ebe`, each against its own tree in a linked worktree: 7 staged Python at all,
+    63 paths between them, 31 of the 63 inside the declared surface. The old leg warned on 4 of
+    the 7 commits and all 4 warnings were false; a surface-scoped leg is clean on all 7, so its
+    false-positive rate over this branch is zero. The measurement gives a second finding free:
+    under the blocking template those same 4 commits would have been REFUSED, so block mode was
+    unusable on this repository. **The surface is derived, never listed** — `beadloom-mr2l.82`
+    listed it in the hook template, the mypy configuration then moved and the template did not,
+    which is the whole argument for `beadloom typed-surface` answering the question at the moment
+    the hook asks it. `[[tool.mypy.overrides]]` is outside the read by construction, and the
+    declaration is parsed without a TOML parser for `rooms.py`'s reason: `tomllib` is 3.11+ and
+    `tomli` is not a runtime dependency, so a parse would give a room-dependent answer from the
+    module whose subject is what a check covers. **WARN IN WARN MODE, BLOCK IN BLOCK MODE, and
+    `NOT CHECKED` never blocks in either.** The mode decides, because the population is now
+    exactly a standard the project declares and CI already enforces — unlike `.32`'s axes block,
+    which warns in both modes because one work item in 64 carries an `## Axes` section. A surface
+    that could not be derived is a check that did not happen, and turning a missing `PATH` entry
+    into a refused commit is how a gate comes to be answered with `--no-verify`. The verdict has
+    three sentences and not two: `NOT CHECKED` with its reason, `NOTHING TO CHECK` for an empty
+    typed population, and a count of the files actually handed to the checker. All four states
+    are verified through a real `/bin/sh` running the real emitted template. Three existing tests
+    went red and were UPDATED rather than weakened, and all three are the project's instruments
+    working: the literal CLI command set, the AS-IS node population (111 → 112), and
+    `test_cli_json_streams`, which caught this bead's own new test reading `result.output` where
+    Click merges stderr in. Green in a clean room over 23 files (8 680 passed; the 1 failure is
+    the room's stated property — no `.git`, so `sync-check` has no baseline — and it is red at
+    pure HEAD in an identically-built control room), in Darwin arm64 / **CPython 3.12.12**, which
+    is not the tree's interpreter. **As its own gate owner:** the combined tree is green — 8 719
+    passed, 0 failed, `beadloom ci` rc 0 with every step PASS or WARN, `mypy` clean against all
+    four declared target versions and `ruff` clean. Every tree verdict in Darwin arm64 / CPython
+    3.13.7, 0 of the 21 declared rooms.
   - [x] `0mdo.33` — **`mr2l.60`'s residue**, items 2, 3 and 5; its measurements stand and were not
     redone. The rule is now over the SEPARATOR rather than over one character: the refused set is
     every spelling `ntpath`/`posixpath` declare minus this platform's own (`os.sep`, `os.altsep`),

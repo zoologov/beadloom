@@ -83,6 +83,10 @@ EXPECTED_COMMANDS = {
     "sync-check",
     "sync-update",
     "tui",
+    # BDL-068 S4 (BDL-UX #231): the files this project declares type-checked, so
+    # the commit gate scopes its type check to the surface the project claims
+    # rather than to everything staged.
+    "typed-surface",
     "ui",
     "watch",
     "waves",

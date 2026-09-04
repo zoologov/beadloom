@@ -21,7 +21,7 @@ always did.
 The node's `source` is the **directory**, not a file. A component whose source
 is a package `__init__.py` records that file as its whole surface, and every
 symbol reader then sees an empty façade (BDL-UX #157). Pointing at the directory
-keeps all sixteen modules inside the node for `module-coverage` and for the
+keeps all seventeen modules inside the node for `module-coverage` and for the
 symbol counts.
 
 ## Presentation only
@@ -54,6 +54,7 @@ is what holds that line.
 | `impact.py` | `impact`, `axes`, `scope-check` |
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
+| `typed_surface.py` | `typed-surface` |
 
 `config-check` prints two derivations beside the drift list, because neither has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
@@ -93,6 +94,16 @@ per line, which is the form a completion checklist loops over instead of a spell
 that goes stale. It exits 2 when the named axis is carried by no declared room, and names the
 axes that exist: an empty answer would read as "this project has no such axis", which is the
 clean list an agent trusts and stops at.
+
+`typed_surface.py` renders what `application.typed_surface` derived: the files this project
+declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`
+takes staged paths on standard input and prints the ones inside the surface, led by the same
+`# ` verdict marker `scope-check --porcelain` uses, so the pre-commit hook splits a verdict from
+a payload on one shape. The verdict has three sentences and not two, because a surface that could
+not be derived, a surface with nothing staged inside it and a surface with files to check are
+three different facts: the pre-commit hook used to hand `mypy` every staged `.py` under `src/`
+or `tests/`, which is 970 errors in 90 files on this repository and not one of them a violation
+of a declared standard.
 
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section

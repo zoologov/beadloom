@@ -392,7 +392,10 @@ beadloom install-hooks --pre-push [--project DIR]
 beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 ```
 
-**Pre-commit hook** runs, in order: ruff lint, mypy, `beadloom sync-check`
+**Pre-commit hook** runs, in order: ruff lint over the staged files, mypy over the staged
+files **inside the surface the project declares typed** (derived per run by
+[`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
+`NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
 and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
 auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
@@ -1707,6 +1710,63 @@ The derivation, the floor-is-not-a-set rule and why the packaging metadata is re
 TOML parser are in the
 [Verdict Room DOC](../domains/application/components/verdict-room/DOC.md).
 
+### beadloom typed-surface
+
+The files this project declares type-checked, derived from its own mypy configuration
+(BDL-068 S4, BDL-UX #231).
+
+```bash
+beadloom typed-surface [--project DIR] [--filter] [--json]
+```
+
+**The surface is derived, never listed.** `[tool.mypy]`'s `packages`, `modules` and `files` are
+resolved against `mypy_path` (split on `:` and `,`, with the project root appended) into the
+directories and modules a type check covers. `[[tool.mypy.overrides]]` is outside that read by
+construction: an override changes which findings are reported, never which files are in the
+surface.
+
+Measured on this repository:
+
+```
+$ beadloom typed-surface
+Typed surface — derived from this project's own declaration, never listed
+
+  Covered (1):
+    src/beadloom    [tool.mypy] packages = 'beadloom'
+```
+
+`--filter` is the form the pre-commit hook consumes: staged paths in on standard input, the ones
+inside the surface out, led by a verdict line carrying the same `# ` marker
+[`scope-check --porcelain`](#beadloom-scope-check) leads with, so a hook written in `sh` splits
+verdict from payload on one shape rather than on two spellings agreeing.
+
+```
+$ printf 'src/beadloom/a.py\ntests/t.py\n' | beadloom typed-surface --filter
+# Typed surface (src/beadloom): 1 of 2 staged Python file(s) inside it, 1 outside.
+src/beadloom/a.py
+```
+
+The verdict has **three** sentences, not two. `Typed surface: NOT CHECKED -- <reason>` when no
+surface could be derived; `NOTHING TO CHECK -- 0 of N staged Python file(s) are inside it` when
+the surface exists and the commit staged nothing in it; and the count above when there is
+something to check. A check whose population is empty reading as a check that passed is the
+phantom gate BDL-068 exists to remove, so the second and third are different sentences rather
+than the same sentence with a zero in it.
+
+What the derivation could not resolve is reported rather than dropped: a package that resolves
+to no path, a `files` glob matching nothing or several roots, a declared `exclude` (not applied,
+because mypy does not apply it to files named on the command line, and that is how the hook
+invokes it), and a `mypy.ini` / `setup.cfg` / `tox.ini` beside the `pyproject.toml`.
+
+Exit `0` when the surface was derived — a commit staging nothing inside it also exits `0`,
+because an empty population is a fact and not a failure. Exit `2` when the surface could not be
+derived, with the reason on the verdict line and therefore on standard output, because the
+caller that needs it most is a hook that reads one stream.
+
+The reading rule, why the declaration is parsed without a TOML parser, and the 24-commit
+measurement behind the hook's scope are in the
+[Typed Surface DOC](../domains/application/components/typed-surface/DOC.md).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -2004,7 +2064,7 @@ Commands (re-exported from the package via the registration shell):
 - `status` -- show index statistics with health trends and context metrics (data gathered by `application/status.py:gather_status`); `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
+- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy over the declared typed surface -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
 - `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback

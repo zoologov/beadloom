@@ -411,7 +411,9 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # taken in, derived from the packaging metadata and the CI workflows.
         # 110 -> 111 in BDL-068 `.27`: `role-duties`, the duties a composed flow
         # declares checked against the composed core of every role each one names.
-        assert populations[SPACE_AS_IS] == 111
+        # 111 -> 112 in BDL-068 `gsal`: `typed-surface`, the files a project
+        # declares type-checked, derived from its own `[tool.mypy]`.
+        assert populations[SPACE_AS_IS] == 112
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

@@ -142,7 +142,7 @@ beadloom install-hooks
 
 Installs **both** hooks by default:
 
-- **pre-commit** (lighter) — judges **the commit, not the tree**: lint and type-check over the staged source files, `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
+- **pre-commit** (lighter) — judges **the commit, not the tree**: lint over the staged source files, a type check over the staged files inside the surface the project declares typed (derived per run from `[tool.mypy]`; a surface that could not be derived reads `NOT CHECKED` with its reason and never blocks), `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
 - **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → docs-quality → doc-spaces → config-check → doctor) over the whole tree and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
