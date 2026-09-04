@@ -35,6 +35,25 @@
 
 ## Open Issues
 
+251. [2026-09-04] [LOW] `sync-check` reports nine surface-drift warnings on the tree that a freshly reindexed clean room reports as `[ok]`, and a tree reindex does not clear them
+
+    **Severity:** low (warn-level, pre-existing, and untouched) — recorded because the two rooms disagree, not because the warnings matter
+    **Command:** `beadloom sync-check`, `beadloom reindex`
+    **Context:** observed by `beadloom-0mdo.58` while deriving S5's axes in a room built from `git archive HEAD` at `b350f6b` and reindexed there.
+    **Issue:** the tree reports nine surface-drift warnings; a clean room built from the same commit and reindexed reports `[ok]` for all nine. Re-running `reindex` on the tree does not clear them. So the freshness answer depends on which room asked, and the room that says less is the one built from the committed state.
+    **Why it is worth an entry at `warn`:** this project's whole verdict discipline rests on a clean room and the tree being two different claims about the same code, with the tree being the stricter one. Here the tree is stricter for a reason nobody has established, and "stricter for an unknown reason" is indistinguishable from "wrong" until someone looks. Same family as #163 and the S4 docs-wave finding, where `sync-check` was green over real prose drift: the freshness fact models something adjacent to the question.
+    **Expected:** establish which of the two answers is right, then either the tree stops reporting nine things the committed state does not carry, or the room stops missing them. Do not silence either side first.
+
+250. [2026-09-04] [MEDIUM] a node is approved into a work item's axes by having been SWEPT, so a `Derived by` field silently overrides an explicit `no`
+
+    **Severity:** medium (a path into the approval list that no one chose, in the list `scope-check` compares every commit against)
+    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
+    **Context:** found by `beadloom-0mdo.58` while deriving S5's axes — the first slice whose targets are files it READS rather than files it changes.
+    **Issue:** `WorkItemAxes.approved` is `kept | targets`, and `_agreement` checks `approved` first, so a row marked `no` in the scope column is still approved when it appears as a derivation target. `doc-spaces` and `intent-reader` are in BDL-068's approved set today for that reason alone — they were swept, not kept.
+    **Why the rule was right until it wasn't:** it assumed a slice changes what it derives from, which held for S1 through S4. S5's subject is where this project *calls* `bd`, so its `impact` targets include files it only reads. The assumption is now false and nothing announced the change.
+    **Same family as #244**, filed hours earlier: both are entries reaching the approval list without anyone writing them there. #244 arrives from a table header; this one arrives from a field meant to record provenance. The approval list is what `scope-check` judges every commit against, so a name nobody chose is a name every commit may touch.
+    **Expected:** `approved` follows the scope decision and nothing else. A target that was swept and ruled out is a target that was swept and ruled out; provenance is not consent.
+
 249. [2026-09-04] [MEDIUM] `ci.yml` names a locale macOS does not have, so anyone reproducing that leg locally measures the C row twice
 
     **Severity:** medium (the reproduction silently succeeds at measuring the wrong room, which is worse than failing to run)
