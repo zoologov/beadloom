@@ -1,13 +1,15 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
 > **Last updated:** 2026-09-04
-> **Phase:** Development — S1-S3 merged; S4 waves 1-5 landed, wave 6 (`nn4c`) next
+> **Phase:** Development — S1-S3 merged; S4 waves 1-6 landed, dev done; test next
 
 ---
 
 ## Current Bead
 
-**Bead:** S4 wave 5 landed — `gsal`, its own gate owner, combined tree measured green.
+**Bead:** S4 wave 6 landed — `nn4c`, its own gate owner, combined tree measured green.
+S4's eight dev beads are done and `0mdo.34` (test) is next. Wave 5 landed: `gsal`, its own
+gate owner, combined tree measured green.
 Wave 4 landed: `en0x` (`ded748d`), its own gate owner, combined tree measured
 green. Wave 3 landed: `0mdo.33` (`4fce7d2`) + `67t1` (`a5bf5ae`, `204fc95`), gate owner `67t1`,
 combined tree measured green. Wave 1 (`0mdo.27` + `0mdo.31`) landed: `9d73c99`,
@@ -205,6 +207,47 @@ filed; this name is the free mitigation and later slices keep it.
     weakened —
     each now says what its declarations were held against — which is the same move `mr2l.80`
     made when the environment default stopped meaning clean.
+  - [x] `nn4c` / **#233** — the read-only guard test attributed by TIMING, and the bead's
+    account of the timing was itself half a step behind the tracker. **What is true:**
+    `_moved_with_nothing_running` can only see a writer that is STILL WRITING when the
+    control window opens, which is a concurrent `beadloom lint` and is not a `bd` export —
+    so both observed failures named `.beads/issues.jsonl` and neither named `beadloom.db`.
+    **What is sharper than the bead:** the export is not a burst inside its own invocation.
+    It is **deferred**. Measured: four consecutive `bd update --priority` writes each left
+    the export unmoved when sampled immediately afterwards, and it had been rewritten by the
+    next sample with no `bd` command running in between; and `bd list`, the evaluation's only
+    tracker call, moved neither digest nor mtime in 3 of 3 runs. A deferred flush is strictly
+    worse for a control window than a synchronous one, because it lands at a moment nothing
+    in the session marks — the window has nothing to overlap with by construction. **The fix
+    attributes by FILE, and the partition is DERIVED rather than authored:**
+    `TestTheTrackerExportIsOutsideTheGuardsReach` records the argv the evaluation hands the
+    `bd` seam and holds it against `_READ_ONLY_BD_SUBCOMMANDS = {"list"}`, so giving a guard
+    a mutating tracker call turns it red and invalidates the partition loudly. The export
+    stays IN the comparison: a change there is detected, named, and charged to the process
+    that can write it. **Three outcomes now reach the reader in three words** — `charged`
+    (the guard's, red), `elsewhere` (another process's, decided by path, reported and not
+    fatal) and `unattributable` (the repository is moving, skip). Collapsing the second into
+    the third is what reported a neighbour's `bd comments add` as the guard's own write, and
+    a wave makes that likelier rather than rarer. **A measurement this bead made and then
+    threw away:** six live-test runs passed under a 0.3 s `bd update --claim` loop, and the
+    loop wrote nothing — re-claiming an already-claimed bead is a no-op — so the burst path
+    was exercised zero times and "six green runs under a burst loop" would have been evidence
+    of nothing. The reporting step was extracted as `_report` and driven deterministically
+    instead, including the anti-silencing case: a burst reported beside a guard write must
+    still fail on the guard write. **Bite verified by mutation, not asserted:** a one-line
+    append to `beadloom.db` at the top of `evaluate_guard` turned the live test red with the
+    right sentence; source restored (`git diff src/` empty) and the two injected bytes
+    truncated off the index (`PRAGMA integrity_check` ok before and after). The module goes
+    from 36 tests to 52, and all 16 new ones were seen red first; no `src/` change. Green in
+    a clean room over 3 files (8 696 passed; the 1
+    failure is the room's stated property — no `.git`, so no freshness baseline — and it is
+    red at pure HEAD in an identically-built control room), in Darwin arm64 / **CPython
+    3.12.12**, which is not the tree's interpreter. The room does not measure the live path at
+    all: `.beadloom/beadloom.db` is gitignored, so a `git archive` room has no index and the
+    test skips there. **As its own gate owner:** the combined tree at `c39928c` is green —
+    8 735 passed, 0 failed, `beadloom ci` rc 0, `HEAD` verified unchanged before and after,
+    `mypy` clean against all four declared target versions and `ruff` clean. Every tree
+    verdict in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
 - [ ] S5 — the tracker adapters
 - [ ] S6 — the flow's documents and roles
 
