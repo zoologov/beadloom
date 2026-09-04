@@ -253,11 +253,16 @@ def _run_hook(state: dict[str, Any]) -> None:
     env = dict(os.environ)
     env["PATH"] = f"{state['bindir']}{os.pathsep}{env['PATH']}"
     env["REJECT"] = state["rejected"]
+    # The hook is written as UTF-8 above and carries an em dash in its blocking
+    # verdicts, so the codec is stated here rather than taken from the image:
+    # under `LC_ALL=C` `text=True` raises before any step can assert anything
+    # (BDL-068 `.49`; measured on PR #61's `tests-locale (C)` leg).
     state["hook_run"] = subprocess.run(  # noqa: S603
         ["/bin/sh", str(state["hook"])],
         cwd=project,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="strict",
         env=env,
         check=False,
     )

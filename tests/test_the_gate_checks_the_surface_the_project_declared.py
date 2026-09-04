@@ -27,12 +27,16 @@ import pytest
 
 from beadloom.application.typed_surface import TypedSurface, declared_typed_surface
 from beadloom.services.commands.docsync import (
+    _HOOK_ENCODING,
     _HOOK_TEMPLATE_BLOCK,
     _HOOK_TEMPLATE_WARN,
     _hook_type_check,
 )
+from tests.ambient_codec import AMBIENT_CODECS, under_ambient_codec
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     from click.testing import Result
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -544,11 +548,19 @@ def _run_hook(
     )
     if not on_path:
         (bindir / "beadloom").unlink()
+    # The codec is the HOOK's, not the image's. `text=True` leaves it to
+    # `locale.getpreferredencoding(False)`, and the hook carries an em dash in
+    # every blocking verdict: `tests-locale (C)` on PR #61 raised
+    # `UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2 in position 288`
+    # on 33 rows of this file. `_HOOK_ENCODING` is imported rather than spelled
+    # so the reader cannot drift from the writer, and `errors` stays strict
+    # because a mangled verdict is the failure this reader exists to catch.
     return subprocess.run(  # noqa: S603
         ["/bin/sh", str(hook)],
         cwd=project,
         capture_output=True,
-        text=True,
+        encoding=_HOOK_ENCODING,
+        errors="strict",
         env=env,
         check=False,
     )
@@ -762,6 +774,102 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         assert "Running ruff check" not in out, out
 
 
+class TestTheRoomTheMatrixAboveDidNotVary:
+    """The image's codec, as the second argument the matrix takes.
+
+    ``beadloom-0mdo.42`` made the LAYOUT a substitutable input and left the ROOM
+    fixed at this machine's. The reader above then decoded the hook's stdout in
+    whatever codec the image chose, and the hook carries an em dash in all three
+    of its blocking verdicts, so ``tests-locale (C)`` on PR #61 raised
+    ``UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2 in position 288``
+    on 33 rows of this file. Reproduced here byte for byte, at the same position,
+    with ``LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0``.
+
+    The WRITER was measured before the reader was changed, because the two answers
+    have different owners: ``install-hooks`` pins ``_HOOK_ENCODING`` at its own
+    call site, exits 0 under that environment and writes three well-formed
+    ``e2 80 94`` sequences, and the hook's own ``echo`` is ``/bin/sh`` moving those
+    bytes with no encoder in the path. The defect is the reader's alone.
+
+    The rows below are :data:`tests.ambient_codec.AMBIENT_CODECS` for the reason
+    that module exists: an ambient codec cannot be arranged inside a running
+    process, so it is injected. Measured red before the fix, 7 of the 15 rows,
+    and the split is the point rather than the count: the BLOCKING row fails
+    under both non-UTF-8 codecs, because ``ascii`` RAISES and ``latin-1`` mangles
+    the em dash the assertion reads; the WARN row fails under ``ascii`` only,
+    because the typed line it reads carries no em dash of its own and a mangled
+    byte 200 characters away leaves it intact. So ``latin-1`` is not redundant
+    with ``ascii`` here, and it is not sufficient either -- which is why the
+    project runs two locale legs and not one.
+    """
+
+    @staticmethod
+    def _reader_module() -> ModuleType:
+        """The module whose ``subprocess`` calls are the subject: this one.
+
+        Every other caller of ``under_ambient_codec`` names a product module
+        because the reader under test lives there. Here the reader is
+        :func:`_run_hook`, so the module under test is this file.
+        """
+        return sys.modules[__name__]
+
+    @pytest.mark.parametrize("ambient", AMBIENT_CODECS)
+    def test_the_blocking_verdict_reaches_the_committer_under_every_ambient_codec(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient: str
+    ) -> None:
+        """MEASURED before the fix: ascii -> UnicodeDecodeError, latin-1 -> mojibake."""
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
+        under_ambient_codec(monkeypatch, self._reader_module(), ambient)
+
+        out = _run_hook(
+            project, bindir, _HOOK_TEMPLATE_BLOCK, reject="src/demo/alpha.py"
+        ).stdout
+
+        assert "\u2014 commit blocked" in out, (ambient, out)
+
+    @pytest.mark.parametrize("ambient", AMBIENT_CODECS)
+    @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
+    def test_the_typed_line_is_the_same_on_every_layout_in_every_room(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: HookLayout, ambient: str
+    ) -> None:
+        """The layout and the room are two axes, and the verdict crosses both."""
+        project, bindir = _hook_project(tmp_path, layout)
+        under_ambient_codec(monkeypatch, self._reader_module(), ambient)
+
+        line = _typed_line(_run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout)
+
+        assert line is not None, (layout.name, ambient)
+        assert f"{len(layout.staged_python)} staged Python file(s)" in line
+
+    def test_the_ambient_codec_double_can_actually_see_a_reader(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control: a reader that does NOT state its codec still fails here.
+
+        Without it the two rows above would pass on a double that had quietly
+        stopped intercepting -- the vacuous green this project's locale legs were
+        built to make impossible.
+        """
+        project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
+        hook = project.parent / "unstated.sh"
+        hook.write_text(_HOOK_TEMPLATE_BLOCK, encoding=_HOOK_ENCODING)
+        under_ambient_codec(monkeypatch, self._reader_module(), "ascii")
+
+        with pytest.raises(UnicodeDecodeError):
+            subprocess.run(  # noqa: S603
+                ["/bin/sh", str(hook)],
+                cwd=project,
+                capture_output=True,
+                # The defect itself, held down as a control. Ruff cannot flag
+                # it: `PLW1514` is selected in this project and reports the
+                # line as an UNUSED noqa, which is the measurement behind the
+                # cost recorded on this bead.
+                text=True,
+                env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
+                check=False,
+            )
+
+
 class TestNoLegNamesADirectory:
     """The template states which KIND of file it stages, never where code lives.
 
@@ -953,7 +1061,11 @@ class TestThePopulationTheDecisionWasTakenOver:
             ],
             cwd=REPO_ROOT,
             capture_output=True,
-            text=True,
+            # git writes path names as bytes; UTF-8 is what it produces for a
+            # non-ASCII one, and leaving the codec to the image is the same
+            # defect `_run_hook` above carries a comment about.
+            encoding="utf-8",
+            errors="strict",
             check=False,
         )
         if result.returncode != 0:
