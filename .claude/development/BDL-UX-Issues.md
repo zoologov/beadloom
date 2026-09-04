@@ -35,6 +35,17 @@
 
 ## Open Issues
 
+248. [2026-09-04] [MEDIUM] the room census carries platform and interpreter but not locale, so the one leg this project keeps tripping on cannot be entered from a developer machine
+
+    **Severity:** medium (the instrument that qualifies every verdict in two epics is measured over a narrower vocabulary than the rooms it counts against)
+    **Command:** `beadloom rooms`, `tests/room_simulation.py`
+    **Tracker:** `beadloom-0mdo.50`, routed to S6
+    **Context:** found by `beadloom-0mdo.49` while using the simulation to reproduce PR #61's red `tests-locale (C)` leg, and attributed by two controls rather than inferred.
+    **Issue:** BDL-068 S3 shipped `room_simulation.py` so a CI leg could be entered locally — it replaces `current_room` at `pytest_configure`, and S3's own bite test proved it reddens exactly `[Linux/3.10]` and `[Linux/3.11]` from a laptop. It carries the platform and interpreter dimensions. It does not carry locale: `current_room()` derives no `locale`, so `beadloom rooms` reports the C leg as unentered while the process genuinely is running under an ASCII filesystem encoding. The verdict errs in the safe direction — it under-claims — and it is still wrong, about the one leg this project has now been bitten by twice (BDL-061 S2; BDL-068 S4 / PR #61). Used suite-wide the plugin also manufactures 11 failures.
+    **Why it is worse than a missing field:** *"0 of the 21 declared rooms entered"* is the sentence every verdict across two epics has been qualified with. If the census cannot represent a dimension the CI matrix declares, that count is measured over a smaller vocabulary than the 21 it names — a population narrower than it appears, which is this epic's own subject inside the instrument the epic built to state it.
+    **Expected:** `current_room()` derives the locale the way it derives platform and interpreter; the simulation carries it, so the leg is enterable locally, which is the whole point of S3's deliverable and is presently true for two dimensions of three. Diagnose the 11 manufactured failures before recommending the plugin suite-wide — `beadloom-0mdo.49`'s bead comment carries the two controls that attributed them.
+    **Already measured, do not re-cost:** a suite-wide guard against reading a subprocess with no explicit encoding is not a new instrument. `tests/test_locale_independent_io.py::TestEveryTextIoSiteStatesItsEncoding` already is that guard, rooted at `src/beadloom`. Extending its root to `tests/` costs 26 triage decisions, counted rather than estimated.
+
 247. [2026-09-04] [MEDIUM] the push Gate does not run the suite, and nothing in its output says the suite is not among the things it checked
 
     **Severity:** medium (agent-facing; it cost this project a red PR across six legs, measured)
