@@ -35,6 +35,18 @@
 
 ## Open Issues
 
+249. [2026-09-04] [MEDIUM] `ci.yml` names a locale macOS does not have, so anyone reproducing that leg locally measures the C row twice
+
+    **Severity:** medium (the reproduction silently succeeds at measuring the wrong room, which is worse than failing to run)
+    **Command:** the `tests-locale` matrix in `.github/workflows/ci.yml`; `beadloom rooms`
+    **Tracker:** `beadloom-0mdo.50` (#248), same area
+    **Context:** measured by `beadloom-0mdo.49` while entering the 8-bit room to fix PR #61's red leg.
+    **Issue:** the matrix declares `en_US.ISO-8859-1`. That spelling is not a locale macOS has; setting it silently falls back to ASCII. So a developer reproducing the 8-bit leg with the name CI uses runs the **C** room a second time and reports it as the 8-bit one. The real 8-bit room on this platform is `en_US.ISO8859-1`, without the hyphen.
+    **Why it is not merely a typo:** the two rooms differ in exactly the behaviour the leg exists to test. Under C, `beadloom scope-check`'s `Declared axes: NOT CHECKED — …` line carries three non-ASCII bytes; under a real 8-bit locale, `console_streams.tolerate_unencodable_output` degrades the em dash to a literal ASCII `\u2014` and all 540 bytes become ASCII. A test whose premise depends on the child's bytes therefore behaves differently in the two rooms — which is how PR #61 shipped a leg that was green in one and red in the other.
+    **`ci.yml` already knows this can happen:** its anti-vacuity step exists to catch a locale that degraded rather than applied. That step protects the CI legs. Nothing protects the developer reproducing them, and the reproduction is where the room census claims its value.
+    **Expected:** the room's name is the one the platform answers to, or the census says which spelling it resolved and whether the locale applied or degraded. A room that silently becomes a different room is a phantom room, and `beadloom rooms` is the instrument that should refuse to report it as entered.
+    **Related:** #248 (the census carries no locale dimension at all), and the reason this was found rather than reasoned about — the fix that closed PR #61's leg was verified in three rooms, and this is the difference between two of them.
+
 248. [2026-09-04] [MEDIUM] the room census carries platform and interpreter but not locale, so the one leg this project keeps tripping on cannot be entered from a developer machine
 
     **Severity:** medium (the instrument that qualifies every verdict in two epics is measured over a narrower vocabulary than the rooms it counts against)
