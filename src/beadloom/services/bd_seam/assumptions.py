@@ -3,17 +3,26 @@
 **The bead this module answers had four premises and two of them were false.**
 BDL-UX #194 and #237 declared ``bd merge-slot`` no exclusion primitive; it is
 one, and every defect the two entries measured is a property of the call form
-this project instructed (`beadloom-0mdo.39`). BDL-UX #97 declared ``bd close
---suggest-next`` a false ready signal; on bd 1.0.4 it stayed silent while the
-target was still blocked by a second blocker and named it exactly when it became
-ready, both directions exercised. `beadloom-l2f2`'s premise — that the ``bd
+this project instructed (`beadloom-0mdo.39`). `beadloom-l2f2`'s premise — that the ``bd
 import -i`` in the post-merge hook does not exist — is false too: it is a
 documented legacy alias and it imported 137 issues at exit 0.
 
-So an inherited claim is not a fact, and the module records **the release every
-verdict was taken against**. A derived population with no version is a
-measurement with no room, and an External defect a later ``bd`` fixes must fail
-loudly rather than quietly guard nothing:
+**And one withdrawal in this module was itself wrong, which is the sharper
+lesson.** BDL-UX #97 was withdrawn here on a measurement that stayed silent while
+the target was still blocked and spoke exactly when it became ready — both
+directions of the OUTCOME, and one shape only. Closing `beadloom-0mdo.51`
+immediately afterwards named two beads that `bd dep tree` shows blocked by four
+and six open beads. Re-measured over ten dependency shapes, ``--suggest-next``
+lies in four of them and is silent in every shape where exactly ONE blocker had
+been closed — which is the single cell the first measurement picked. Exercising
+both directions of one axis is not anti-vacuity when the defect lives on
+another.
+
+So an inherited claim is not a fact, a claim of one's own is not a fact either,
+and the module records **the release every verdict was taken against**. A
+derived population with no version is a measurement with no room, and an
+External defect a later ``bd`` fixes must fail loudly rather than quietly guard
+nothing:
 ``tests/test_bd_call_sites.py`` compares :data:`BD_MEASURED_VERSION` against the
 ``bd`` on PATH and fails when they differ, naming what has to be re-measured.
 
@@ -46,6 +55,10 @@ Over a rig grown to 135 ready beads it returned 100 and printed ``Showing 100 of
 135 ready issues`` on stderr. This flow's own ``CLAUDE.md`` calls ``bd ready``
 authoritative and every role is told to confirm against it, which makes it the
 most-relied-upon assumption in the flow and the one nothing checked.
+
+``bd close --suggest-next`` names beads that remain blocked, so nothing at that
+call site can be relied on and the flow's own instruction to confirm against
+``bd ready`` is the remedy. ``bd ready`` was correct in all ten measured shapes.
 
 ``bd create`` allocates the id AT creation while our title convention authors it
 BEFORE: eight simultaneous ``--parent`` creates took ``.4`` through ``.11`` in an
@@ -232,13 +245,14 @@ _INTENDED_ID = _Rule(
 _UNBLOCKED_IS_READY = _Rule(
     assumption=ASSUMPTION_UNBLOCKED_IS_READY,
     securing_flags=(),
-    measured=True,
+    measured=False,
     detail=_pinned(
-        "BDL-UX #97 recorded `--suggest-next` naming still-blocked beads; it does "
-        "not. Closing one of two blockers printed no suggestion at all, and "
-        "closing the second named the bead exactly. Both directions exercised, "
-        "because a `--suggest-next` that never speaks passes the negative case "
-        "alone. The entry is withdrawn and this verdict is pinned to the release"
+        "BDL-UX #97 stands: `--suggest-next` names beads that are still blocked. "
+        "Measured over ten dependency shapes in a rig, it lied in four of them, "
+        "and on this repository closing `beadloom-0mdo.51` named `.55` and `.13`, "
+        "which `bd dep tree` shows blocked by four and six open beads. It is "
+        "silent in every shape where exactly ONE blocker had been closed. No flag "
+        "settles it — confirm against `bd ready`, which was correct in all ten"
     ),
 )
 

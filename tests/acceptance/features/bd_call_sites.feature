@@ -4,12 +4,13 @@
 # fails on a call site added later.
 #
 # Every verdict below is measured against ONE release of bd, and the report says
-# which. Four premises this slice inherited were re-measured and destroyed:
-# BDL-UX #194 and #237 (merge-slot grants no exclusion — it does), #97
-# (`--suggest-next` reports still-blocked beads — it does not) and beadloom-l2f2's
-# (`bd import -i` does not exist — it does, as a documented legacy alias). A
-# derivation that does not record the version it was taken against would turn a
-# fifth such correction into a silent guard over nothing.
+# which. Three premises this slice inherited were re-measured and destroyed:
+# BDL-UX #194 and #237 (merge-slot grants no exclusion — it does) and
+# beadloom-l2f2's (`bd import -i` does not exist — it does, as a documented legacy
+# alias). A FOURTH withdrawal, of #97, was made here and was WRONG, which is why
+# the version pin exists in both directions: a verdict carried across a release
+# without re-measuring, and a withdrawal taken on one dependency shape, fail the
+# same way.
 
 @bead:beadloom-0mdo.51 @node:bd-seam
 Feature: every place this project reaches bd is derived, and each one's assumption about the answer is stated
@@ -53,17 +54,28 @@ Feature: every place this project reaches bd is derived, and each one's assumpti
     When the bd call sites are derived
     Then the site assumes "allocated-id" and the assumption is "secured"
 
-  # BDL-UX #97, re-measured on bd 1.0.4 in an isolated rig: closing one of two
-  # blockers printed no suggestion at all, and closing the second named the bead
-  # exactly. Both directions were exercised, because a --suggest-next that never
-  # speaks would pass the negative case alone. So the assumption is true today
-  # and no flag secures it — which is a third verdict, not a clean site.
+  # `beadloom-l2f2` records `bd import -i` as a flag that does not exist. It does:
+  # upstream's help calls it a legacy alias for a named file, and it imported 137
+  # issues at exit 0. Nothing at the call site can secure an alias upstream may
+  # retire, so the verdict is a third one — true, and pinned to a release.
 
   Scenario: An assumption measured true is reported as holding, not as clean
+    Given an instruction artifact carrying "bd import -i backup.jsonl"
+    When the bd call sites are derived
+    Then the site assumes "legacy-alias" and the assumption is "holds"
+    And the assumption names the bd version it was measured against
+
+  # BDL-UX #97 stands, and this scenario exists because it was WITHDRAWN here on a
+  # measurement that was true and one-shaped. `--suggest-next` was silent while the
+  # target was blocked and spoke when it became ready — both directions of the
+  # outcome, one dependency shape. Over ten shapes it lies in four, and it is
+  # silent in every shape where exactly ONE blocker had been closed, which is the
+  # cell that first measurement picked. No flag settles it; `bd ready` does.
+
+  Scenario: An assumption no measurement supports is unsecured, whatever its subject
     Given an instruction artifact carrying "bd close <id> --suggest-next"
     When the bd call sites are derived
-    Then the site assumes "unblocked-is-ready" and the assumption is "holds"
-    And the assumption names the bd version it was measured against
+    Then the site assumes "unblocked-is-ready" and the assumption is "unsecured"
 
   # BDL-UX #171. bd 1.0.4 offers no `--expect-title`, so nothing at the call site
   # can check that the ids passed name the beads intended. That reads differently

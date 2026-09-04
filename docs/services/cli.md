@@ -1926,9 +1926,13 @@ does not judge exits 2 rather than printing an empty list, which would read as "
 that assumption".
 
 Every verdict is pinned to `BD_MEASURED_VERSION`, and a test fails when a different `bd` is
-installed. Four premises this population was built to check were re-measured and destroyed —
-BDL-UX #194 and #237, #97 and `beadloom-l2f2` — so a verdict carried across a release without
-re-measuring is how a withdrawn defect comes back as a guard over nothing.
+installed. Three premises this population was built to check were re-measured and destroyed —
+BDL-UX #194 and #237, and `beadloom-l2f2` — so a verdict carried across a release without
+re-measuring is how a withdrawn defect comes back as a guard over nothing. A fourth withdrawal,
+of #97, was made and then reversed by this same population: `--suggest-next` names a
+still-blocked bead in four of ten measured dependency shapes, and is silent in exactly the one
+shape the withdrawal was taken on. A verdict states the release it was measured against and the
+shape it was measured over, or it states nothing.
 
 The grammar, the assumption table and the regions the derivation cannot reach are in the
 [bd Seam DOC](components/bd-seam/DOC.md).

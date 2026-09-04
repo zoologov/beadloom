@@ -62,13 +62,22 @@ call site added later. `beadloom bd-calls` prints the report.
   exit codes read without a pipe, and `BD_MEASURED_VERSION` records it.
   `tests/test_bd_call_sites.py::test_the_recorded_release_is_the_one_installed`
   fails when a different `bd` is installed, naming what has to be re-measured.
-  That is not ceremony: four premises BDL-068 S5 inherited were re-measured and
+  That is not ceremony: three premises BDL-068 S5 inherited were re-measured and
   destroyed — BDL-UX #194 and #237 (`bd merge-slot` grants no exclusion; it does,
-  and 32 concurrent acquires produced exactly one winner per round), #97
-  (`--suggest-next` names still-blocked beads; it does not, measured in both
-  directions) and `beadloom-l2f2` (`bd import -i` does not exist; it does, as a
-  documented legacy alias, and imported 137 issues at exit 0). An External defect
-  a later `bd` fixes must fail loudly rather than quietly guard nothing.
+  and 32 concurrent acquires produced exactly one winner per round) and
+  `beadloom-l2f2` (`bd import -i` does not exist; it does, as a documented legacy
+  alias, and imported 137 issues at exit 0). An External defect a later `bd` fixes
+  must fail loudly rather than quietly guard nothing.
+- **A withdrawal is a measurement too, and one shape is not enough.** BDL-UX #97
+  was withdrawn in this module and the withdrawal was wrong. It rested on one
+  dependency shape — a target with two blockers, one closed — where
+  `--suggest-next` is silent while the target is blocked and speaks when it
+  becomes ready. Both directions of the OUTCOME; one shape. Re-measured over ten
+  shapes, varying already-closed blockers, remaining blockers and creation order,
+  it names a still-blocked bead in four of them, and it is silent in EVERY shape
+  where exactly one blocker had been closed. So `unblocked-is-ready` is
+  `unsecured`, #97 stands, and `bd ready` — correct in all ten shapes — is what
+  settles it, which is what `CLAUDE.md` already tells every role.
 - **An unjudged site never reads as a clean one.** A subcommand outside the
   measured table carries `unmeasured-subcommand`, and a subcommand measured to
   carry no breakable assumption carries none — those are different facts, and

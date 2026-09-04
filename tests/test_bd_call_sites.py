@@ -7,9 +7,16 @@ population, so a call site added later fails here rather than passing quietly.
 
 **Every verdict is against bd 1.0.4**, and
 :func:`test_the_recorded_release_is_the_one_installed` fails loudly when that
-stops being true. That test is the point of the version pin: four premises this
+stops being true. That test is the point of the version pin: three premises this
 slice inherited were re-measured and destroyed, and an External defect a later
 ``bd`` fixes must fail rather than guard nothing.
+
+**A fourth withdrawal was made in this bead and was wrong**, which is why
+:func:`test_a_defect_is_not_withdrawn_on_one_dependency_shape` exists. BDL-UX #97
+was withdrawn on a measurement that was true and one-shaped — silent while the
+target was blocked, speaking when it became ready, both directions of the
+OUTCOME and one dependency shape. Over ten shapes ``--suggest-next`` lies in
+four, and it is silent in exactly the shape that measurement used.
 """
 
 from __future__ import annotations
@@ -249,8 +256,13 @@ def test_a_module_that_cannot_be_parsed_is_skipped_rather_than_guessed_at() -> N
         ("bd create 'a' --json", (f"{ASSUMPTION_ALLOCATED_ID}={VERDICT_SECURED}",)),
         # BDL-UX #171's third item: nothing at the call site can settle it.
         ("bd dep add a b", (f"{ASSUMPTION_INTENDED_ID}={VERDICT_UNSECURED}",)),
-        # BDL-UX #97, withdrawn: measured true, pinned to the release.
-        ("bd close x --suggest-next", (f"{ASSUMPTION_UNBLOCKED_IS_READY}={VERDICT_HOLDS}",)),
+        # BDL-UX #97 STANDS: it names beads that are still blocked, and no flag
+        # settles it. Withdrawn once in this bead on one dependency shape; see
+        # `test_a_defect_is_not_withdrawn_on_one_dependency_shape` below.
+        (
+            "bd close x --suggest-next",
+            (f"{ASSUMPTION_UNBLOCKED_IS_READY}={VERDICT_UNSECURED}",),
+        ),
         # beadloom-l2f2, withdrawn: the alias exists.
         ("bd import -i f", (f"{ASSUMPTION_LEGACY_ALIAS}={VERDICT_HOLDS}",)),
         ("bd import f", ()),
@@ -278,6 +290,36 @@ def test_a_call_form_earns_the_verdict_its_flags_earn(
     line: str, expected: tuple[str, ...]
 ) -> None:
     assert _judge(line) == expected
+
+
+def test_a_defect_is_not_withdrawn_on_one_dependency_shape() -> None:
+    """BDL-UX #97 stands, and this test is the record of why it was withdrawn.
+
+    The withdrawal came from a rig where one target had two blockers and one was
+    closed: `--suggest-next` printed nothing while the target was blocked and
+    named it exactly when it became ready. Both directions of the OUTCOME, and
+    one dependency shape.
+
+    Closing `beadloom-0mdo.51` minutes later named `beadloom-0mdo.55` and
+    `beadloom-0mdo.13`, which `bd dep tree` shows blocked by four and six open
+    beads and which `bd ready` correctly excludes. Re-measured over ten shapes,
+    varying the number of already-closed blockers, the number remaining, and
+    whether the target was created before or after them, `--suggest-next` names a
+    still-blocked bead in four of the ten — and is silent in EVERY shape where
+    exactly one blocker had been closed, which is the cell the first measurement
+    picked.
+
+    So `unblocked-is-ready` is `unsecured` and not `holds`, and the sentence a
+    reader gets says the entry stands. `bd ready` was correct in all ten shapes,
+    which is what `CLAUDE.md` already tells every role — instruction that this
+    measurement now supports rather than contradicts.
+    """
+    sites = call_sites(text_invocations([("a.md", "bd close x --suggest-next")]))
+    verdicts = {a.name: a for a in sites[0].assumptions}
+    assumption = verdicts[ASSUMPTION_UNBLOCKED_IS_READY]
+    assert assumption.verdict == VERDICT_UNSECURED
+    assert "bd ready" in assumption.detail, "the remedy must reach the reader"
+    assert BD_MEASURED_VERSION in assumption.detail
 
 
 def test_the_landing_lock_is_judged_once_and_not_twice(tmp_path: Path) -> None:
@@ -321,12 +363,19 @@ def test_every_python_list_call_names_the_population_it_asked_for() -> None:
         }, f"{site.source}:{site.line} `{site.text}` reads a filtered view as complete"
 
 
-def test_the_python_sites_nothing_settles_are_the_two_that_are_owned() -> None:
-    """A third unsettled python call site is a regression, not a backlog item.
+def test_the_python_sites_nothing_settles_are_the_three_that_are_owned() -> None:
+    """A fourth unsettled python call site is a regression, not a backlog item.
 
-    The two are `beadloom-0mdo.53`'s: `_bd_create_bead` scrapes the allocated id
-    out of `--silent` stdout instead of asking for `--json`, and `handle_task_init`
-    wires `dep add` from ids it authored. Both are BDL-UX #171.
+    Two are `beadloom-0mdo.53`'s, both BDL-UX #171: `_bd_create_bead` scrapes the
+    allocated id out of `--silent` stdout instead of asking for `--json`, and
+    `handle_task_init` wires `dep add` from ids it authored.
+
+    The third is BDL-UX #97 arriving through our own surface. `handle_complete_bead`
+    closes with `--suggest-next` and returns `close.stdout.strip()` to the MCP
+    client under the key `next` — so an agent finishing a bead is handed a list
+    that can name beads which are still blocked, with nothing saying so and no
+    `bd ready` behind it. It became visible here only because this bead's own
+    withdrawal of #97 was reversed, which is the population doing its job.
     """
     report = project_report(_PROJECT_ROOT)
     unsettled = {
@@ -334,7 +383,7 @@ def test_the_python_sites_nothing_settles_are_the_two_that_are_owned() -> None:
         for site in report.sites
         if site.channel == CHANNEL_PYTHON and site.unsettled
     }
-    assert sorted(unsettled) == ["create", "dep add"], (
+    assert sorted(unsettled) == ["close", "create", "dep add"], (
         "a python call site's assumption is newly unsettled: "
         + "; ".join(f"{s.source}:{s.line} `{s.text}`" for s in unsettled.values())
     )
