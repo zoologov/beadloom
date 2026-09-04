@@ -35,6 +35,42 @@
 
 ## Open Issues
 
+242. [2026-09-04] [LOW] the launch context a subagent receives carries a `git status` snapshot that is stale by construction, and one agent published from it
+
+    **Severity:** low (recoverable, and it was recovered) — but it produced a withdrawn public sentence, which is the outcome this project spends the most effort avoiding
+    **Command:** none — the agent harness's launch context
+    **Context:** BDL-068 S4. Every subagent's launch context opens with a `git status` block captured when the SESSION started, not when the agent did. `beadloom-0mdo.34` measured its own: the block described branch `features/BDL-067` at `6fb5093` with three modified `src/` files, against a tree that was actually `features/BDL-068` at `3ec1db2` with none. Twenty-eight commits and five waves of drift.
+    **Issue:** `beadloom-en0x` described the room its combined-tree verdict was taken in using that block instead of re-deriving the state, published the sentence, then caught it and withdrew it in `f45dd62`. The block is labelled as a snapshot, which is honest; what it is not is inert, because it sits where an agent looks first and reads like current state.
+    **Why it belongs in this log rather than being shrugged off:** it is the same shape as everything else in BDL-068 — a fact that was true when it was written, presented without the reader being able to tell how stale it is. The difference is that the agent caught its own instance, which is what the flow is supposed to produce.
+    **Expected, and it is ours to do rather than the harness's:** the role protocol says a tree fact is DERIVED at the moment it is stated, never read from launch context. `beadloom-0mdo.27`'s duty mechanism can carry that as a declared duty, which makes it checkable rather than remembered. Routed as a note on the S6 slice, not as its own bead.
+
+241. [2026-09-04] [MEDIUM] `config-check` reports a duty delivered to five roles on a project holding no role files, and does not say which question it answered
+
+    **Severity:** medium (adopter-facing: the reassuring output is produced by the state in which nothing is protected)
+    **Command:** `beadloom config-check`
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** on a project with no role files on disk, `config-check` prints `Duties: 1 declared, checked over 10 composed artifact(s)` and `no blocking drift`. It judges the COMPOSITION rather than the artifact, which is a defensible choice — `--fix` writes compositions, and drift covers the scaffolded case — but the choice is nowhere stated and the printed sentence does not say which of the two questions it answered. On a scaffolded project the pair is sound; that was tested rather than assumed.
+    **The root, shared with #239:** `beadloom-0mdo.31` and `beadloom-0mdo.27` landed in the SAME WAVE of BDL-068 S4 and answered one question in opposite ways. `.31` reads the artifact on disk and reports `unresolved` when it is missing, with the reason recorded and the reasoning stated. `.27` judges the composition and does not state that it did. Neither agent could see the other. This is the one place the slice's eight instruments disagree, and #239 and #241 are its two consequences.
+    **Expected:** each instrument states which question it answered, in the sentence it prints. Then the divergence is a visible design choice instead of two commands that look like they agree.
+
+240. [2026-09-04] [MEDIUM] the commit hook's typed leg is gated by a hand-written `^(src|tests)/` regex and prints nothing at all on a flat-layout project
+
+    **Severity:** medium, and adopter-facing — **this repository cannot observe it**, being src-layout, which is why it survived the bead that built it
+    **Command:** the pre-commit hook's type-check leg (`beadloom install-hooks`)
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** the leg selects the files it will type-check with a literal `^(src|tests)/` path regex. A project whose package sits at the repository root — the flat layout, which is common and which `beadloom impact` already has a filed defect about (#225) — matches nothing, and the leg prints NOTHING. Not "no typed files staged", not a skip: silence.
+    **Why it is the slice's own shape, one level up:** `beadloom-gsal` fixed exactly this defect in the same leg — it replaced a hand-written typed surface with one derived from `pyproject`, citing `beadloom-mr2l.82` shipping a hand-written list that `pyproject` then moved out from under. The derivation landed and the GATE ON IT stayed a spelling. A rule stated as a shape, reached through a filter stated as a spelling.
+    **Expected:** the gate is derived from the same source as the surface. If `pyproject` says what is typed, nothing else needs to say where it lives.
+
+239. [2026-09-04] [MEDIUM] `guard --liveness` prints `0 of 0 write path(s) bound`, and an empty population reads as full coverage
+
+    **Severity:** medium (the phantom gate, in the instrument built during this slice to report exactly that class)
+    **Command:** `beadloom guard --liveness`
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** `surface.build_surface` correctly reports `unresolved` when a source cannot be READ — its docstring states the rule outright: "'100% of the zero tools I found' is the most confident way to state it". But an EMPTY population is not an unreadable one. Role adapters that exist and grant nothing produce `grants={}`, no error, and `covered == (0, 0)`; the renderer prints `surface (claude): 0 of 0 write path(s) bound, matcher(s) '...'` with no line saying the population was empty. Reproduced three ways, each a state an adopter reaches without doing anything wrong.
+    **Why it is worth the entry:** `beadloom-0mdo.31` shipped this instrument in BDL-068 S4 to answer "what fraction of edit events could this binding have seen?", and got the unreadable case exactly right while leaving the empty case reading as a pass. The check that exists to find phantom gates has one.
+    **Expected:** an empty population prints differently from a covered one. `0 of 0` is not a fraction, it is the absence of a denominator, and the report needs a word for that — the same distinction `beadloom-0mdo.32` shipped for unowned paths (`not compared`, never `agrees`) two waves earlier in the same slice.
+
 238. [2026-09-04] [LOW] this repository's own `.gitignore` drifted from the ignore block Beadloom emits, and nothing compares the two
 
     **Severity:** low here, medium for an early adopter (an upgrade adds a written file that the ignore block written at `init` time does not name)
