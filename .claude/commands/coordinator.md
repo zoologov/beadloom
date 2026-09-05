@@ -47,7 +47,9 @@ When the RFC needs technical context: delegate to an Explore sub-agent in the ba
 
 1. **One bead = one agent** at a time. Do NOT batch multiple beads into one agent (keeps contexts small, failures isolated).
 2. **Synchronization through files + beads**, not chat. CONTEXT.md is the source of truth.
-3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready` lists N independent beads, spawn N subagents now. `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads).
+<!-- beadloom:duty=tracker-answers roles=dev,explore,review,tech-writer,test -->
+
+3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready --limit 0` lists N independent beads, spawn N subagents now. `bd ready --limit 0` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next`, which named a still-blocked bead in sixteen of twenty-three dependency shapes measured on bd 1.0.4. `--limit 0` because the default caps at 100 and announces it on stderr only.
 4. **Serialize landings** with the merge slot, held `--holder <bead-id>`, so the parallel agents never race on commits/merges — they run concurrently but land one at a time. It orders the COMMITS; what keeps them out of one FILE is the disjoint scopes `beadloom waves` derived.
 
 ---

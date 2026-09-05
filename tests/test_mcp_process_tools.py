@@ -1002,6 +1002,8 @@ class TestCompleteBeadActiveTable:
             run_bd.side_effect = [
                 BdResult(0, show, ""),  # bd show (locate ACTIVE)
                 BdResult(0, "next: bd-2\n", ""),  # bd close
+                # bd ready — the confirmation `--suggest-next` needs (BDL-UX #97).
+                BdResult(0, "[]", ""),
             ]
             result = handle_complete_bead(project, bead="bd-1", run_tests=False)
 
@@ -1040,6 +1042,7 @@ class TestCompleteBeadActiveTable:
             run_bd.side_effect = [
                 BdResult(0, "[]", ""),  # bd show — no epic
                 BdResult(0, "next", ""),  # bd close
+                BdResult(0, "[]", ""),  # bd ready — the confirmation
             ]
             result = handle_complete_bead(project, bead="bd-1", run_tests=False)
 
@@ -1527,6 +1530,7 @@ class TestCompleteBeadActiveTableEndToEnd:
                 run_bd.side_effect = [
                     BdResult(0, show, ""),  # bd show — locate ACTIVE
                     BdResult(0, "next: bd-2\n", ""),  # bd close
+                    BdResult(0, "[]", ""),  # bd ready — the confirmation
                 ]
                 result = _dispatch_tool(
                     conn,
@@ -1594,6 +1598,7 @@ class TestCompleteBeadActiveTableEndToEnd:
                 run_bd.side_effect = [
                     BdResult(0, "[]", ""),  # bd show — no epic resolvable
                     BdResult(0, "next", ""),  # bd close
+                    BdResult(0, "[]", ""),  # bd ready — the confirmation
                 ]
                 result = _dispatch_tool(
                     conn,

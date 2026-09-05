@@ -61,7 +61,7 @@ Mutation testing answers that, and it is the only cheap answer there is.
 1. Tests pass + coverage >= 80% — in a named room. A suite that skips a case in your room and runs it in another produces two different coverage numbers about one tree.
 2. Architecture/doc validation green (`beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict`).
 3. Checkpoint: `bd comments add <bead-id> "TESTS: unit X, integration Y, coverage Z%, edge cases: <list>, known limitations: <…>"`.
-4. Close: `bd close <bead-id> --suggest-next` (append `--session "$CLAUDE_SESSION_ID"` only when set).
+4. Close: `bd close <bead-id> --suggest-next`, then confirm what it named with `bd ready --limit 0` — the suggestion can include still-blocked beads. Append `--session "$CLAUDE_SESSION_ID"` only when set.
 
 ### Return contract (coordinator)
 Return ONLY 2-3 lines: `"BEAD-XX: N tests, coverage Z%."` Detail → bead comments.
@@ -195,6 +195,38 @@ bd merge-slot release --holder <bead-id>   # the only release form bd verifies
 **And say which guarantee you are leaning on.** If you land while a neighbour is editing, the
 slot ordered your commits and nothing ordered your edits. That is the wave plan's job, and
 `beadloom waves` reports it as the `landing-order` medium on every plan, at every size.
+<!-- Shared by every role that reads an answer from the tracker. Edit once, here. -->
+
+## The tracker's answers — each covers a population, and it is not the one you asked for
+
+<!-- beadloom:carries=tracker-answers -->
+
+`bd` answers three of this flow's most-used questions with a population that is narrower or
+wider than the question named, and no answer has room to say so. Measured on bd 1.0.4, streams
+read separately and exit codes read without a pipe.
+
+- **`bd list --all` is the form that names the whole tracker.** Without it there are TWO
+  default filters and bd announces exactly one of them: the status filter omits every closed
+  bead and is silent on stdout AND stderr — 55 rows of 842 on this project's own tracker —
+  while the 50-row cap does print `Showing 50 issues; …`, on stderr, where a consumer that
+  merged its streams has already destroyed its own JSON.
+- **`bd ready --limit 0` is the form that returns every ready bead.** The default caps at 100
+  and says so on stderr only: 100 of 120 over a rig grown past it. This flow treats that
+  answer as authoritative, so it is the assumption every other one rests on.
+- **`bd close <bead-id> --suggest-next` produces CANDIDATES, never a work queue.** It names
+  beads the closed one blocked without checking whether other blockers remain. Measured over
+  twenty-three dependency shapes in twenty-three separate rigs, it named a still-blocked bead
+  in sixteen of them. The ready list was correct in all twenty-three.
+
+```bash
+bd close <bead-id> --suggest-next   # candidates; some of these can still be blocked
+bd ready --limit 0                  # authoritative, and --limit 0 because the default caps at 100
+```
+
+**Report the population you actually got, not the one you asked about.** A count taken from a
+filtered view is a claim about the filter. `beadloom bd-calls` derives every place this project
+reaches `bd` and states what each call form assumes about the answer; a site it calls
+`unsecured` is one whose answer can be narrower than it reads.
 <!-- overlay:ddd — DDD test placement + boundary-aware mocking. -->
 ## ARCHITECTURE (Domain-Driven Design)
 

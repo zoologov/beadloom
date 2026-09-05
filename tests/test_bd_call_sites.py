@@ -363,19 +363,23 @@ def test_every_python_list_call_names_the_population_it_asked_for() -> None:
         }, f"{site.source}:{site.line} `{site.text}` reads a filtered view as complete"
 
 
-def test_the_python_sites_nothing_settles_are_the_three_that_are_owned() -> None:
-    """A fourth unsettled python call site is a regression, not a backlog item.
+def test_the_python_sites_nothing_settles_are_the_two_that_are_owned() -> None:
+    """A third unsettled python call site is a regression, not a backlog item.
 
-    Two are `beadloom-0mdo.53`'s, both BDL-UX #171: `_bd_create_bead` scrapes the
-    allocated id out of `--silent` stdout instead of asking for `--json`, and
-    `handle_task_init` wires `dep add` from ids it authored.
+    Both are `beadloom-0mdo.53`'s and both are BDL-UX #171: `_bd_create_bead`
+    scrapes the allocated id out of `--silent` stdout instead of asking for
+    `--json`, and `handle_task_init` wires `dep add` from ids it authored.
 
-    The third is BDL-UX #97 arriving through our own surface. `handle_complete_bead`
-    closes with `--suggest-next` and returns `close.stdout.strip()` to the MCP
-    client under the key `next` — so an agent finishing a bead is handed a list
-    that can name beads which are still blocked, with nothing saying so and no
-    `bd ready` behind it. It became visible here only because this bead's own
-    withdrawal of #97 was reversed, which is the population doing its job.
+    **There were three.** The third was BDL-UX #97 arriving through our own
+    surface: `handle_complete_bead` closed with `--suggest-next` and returned
+    `close.stdout.strip()` to the MCP client under the key `next`, so an agent
+    finishing a bead was handed a list that can name still-blocked beads, with
+    nothing saying so and no `bd ready` behind it. It became visible here only
+    because this bead's withdrawal of #97 was reversed, and `beadloom-0mdo.52`
+    closed it: the handler now confirms the suggestion against
+    `bd ready --limit 0` and returns `next`, `next_candidates`,
+    `next_still_blocked` and `next_stated`. The count moving from three to two
+    is what a fixed call site looks like from here.
     """
     report = project_report(_PROJECT_ROOT)
     unsettled = {
@@ -383,7 +387,7 @@ def test_the_python_sites_nothing_settles_are_the_three_that_are_owned() -> None
         for site in report.sites
         if site.channel == CHANNEL_PYTHON and site.unsettled
     }
-    assert sorted(unsettled) == ["close", "create", "dep add"], (
+    assert sorted(unsettled) == ["create", "dep add"], (
         "a python call site's assumption is newly unsettled: "
         + "; ".join(f"{s.source}:{s.line} `{s.text}`" for s in unsettled.values())
     )

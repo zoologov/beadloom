@@ -159,15 +159,18 @@ class TestComposeApi:
         result = compose("roles", "dev", config=config, project_root=project)
         layers = [f.layer for f in result.fragments]
         # ``core:_writing`` is the shared writing standard, ``core:_rooms`` the
-        # shared room statement (BDL-061 S4, BDL-068 S3.2) and ``core:_landing``
-        # what the merge slot grants (BDL-068 S5, BDL-UX #194/#237), each
-        # composed into every role straight after its own core. All three are
-        # LAYERS and not roles: one text, one file, every consumer.
+        # shared room statement (BDL-061 S4, BDL-068 S3.2), ``core:_landing``
+        # what the merge slot grants (BDL-068 S5, BDL-UX #194/#237) and
+        # ``core:_tracker`` which population each of bd's answers covers (BDL-068
+        # S5, BDL-UX #187/#97), each composed into every role straight after its
+        # own core. All four are LAYERS and not roles: one text, one file, every
+        # consumer.
         assert layers == [
             "core",
             "core:_writing",
             "core:_rooms",
             "core:_landing",
+            "core:_tracker",
             "architecture:ddd",
             "stack:python",
             "project",

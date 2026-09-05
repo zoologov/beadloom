@@ -23,6 +23,12 @@ answered by deriving our own call sites, never by a wrapper, because a wrapper i
 a second thing to keep in step with upstream and a derived population fails on a
 call site added later. `beadloom bd-calls` prints the report.
 
+`answers.py` is the run-time half of the same question: **which population an
+answer that already came back covers**. The derivation judges a call FORM before
+it runs; this reads bd's own notice off stderr, bd's own suggestion block off
+stdout, and the argv we wrote. It re-implements no decision bd makes, which is
+what keeps it on the right side of Q4.
+
 ## Public surface
 
 - `run_bd(args, *, cwd=None)` — invoke `bd` with *args* (no leading `bd`) and
@@ -54,6 +60,24 @@ call site added later. `beadloom bd-calls` prints the report.
   channels: the composed flow, the shipped templates, the installed package's
   Python, and `.git/hooks/`.
 - `BD_MEASURED_VERSION` — the release every verdict was taken against, `1.0.4`.
+- `population_flags(subcommand)` — the flags that widen a subcommand's answer to
+  its whole population, or `None` when this derivation has not measured what
+  population that subcommand's answer covers.
+
+### The population an answer covers
+
+- `coverage_of(argv, stderr)` → `AnswerCoverage` — `subcommand`, `coverage`,
+  `shown`, `total`, `widening_flags`, plus `as_asked` and a `stated` sentence.
+  The coverages are `as-asked`, `filtered`, `truncated` and `unchecked`.
+- `ready_ids(stdout)` — the ids in a `bd ready --json` answer, or `None` when
+  that answer cannot be read at all.
+- `suggested_beads(stdout)` — the ids `--suggest-next` named, read from bd's own
+  `Newly unblocked:` block.
+- `confirmed_suggestion(close_stdout, ready)` → `ConfirmedSuggestion` —
+  `candidates`, `confirmed`, `still_blocked`, `compared`, and a `stated`
+  sentence. `ready=None` means the confirmation could not be made.
+- `COVERAGE`, `COVERAGE_AS_ASKED`, `COVERAGE_FILTERED`, `COVERAGE_TRUNCATED`,
+  `COVERAGE_UNCHECKED`, `NOT_COMPARED`, `NOTHING_TO_CHECK`, `READY_COMMAND`.
 
 ## Invariants
 
@@ -71,17 +95,43 @@ call site added later. `beadloom bd-calls` prints the report.
 - **A withdrawal is a measurement too, and one shape is not enough.** BDL-UX #97
   was withdrawn in this module and the withdrawal was wrong. It rested on one
   dependency shape — a target with two blockers, one closed — where
-  `--suggest-next` is silent while the target is blocked and speaks when it
-  becomes ready. Both directions of the OUTCOME; one shape. Re-measured over ten
-  shapes, varying already-closed blockers, remaining blockers and creation order,
-  it names a still-blocked bead in four of them, and it is silent in EVERY shape
-  where exactly one blocker had been closed. So `unblocked-is-ready` is
-  `unsecured`, #97 stands, and `bd ready` — correct in all ten shapes — is what
-  settles it, which is what `CLAUDE.md` already tells every role.
+  `--suggest-next` was silent while the target was blocked and spoke when it
+  became ready. Both directions of the OUTCOME; one shape.
+- **The mechanism has been characterised three times and no characterisation
+  survived the next measurement.** The correction to the withdrawal above
+  concluded `--suggest-next` is silent in every shape where exactly one blocker
+  had just closed; that reading rested on ten cells sharing ONE rig.
+  `beadloom-0mdo.52` re-measured twenty-three shapes in twenty-three separate
+  `bd init` rigs, which is the axis the shared rig could not hold constant, and
+  that shape names a still-blocked bead. Sixteen of the twenty-three are false
+  positives, on no shape rule any of the three sessions found. So this component
+  records the OBSERVATION and never the mechanism: on bd 1.0.4 `--suggest-next`
+  names beads that are still blocked, and `bd ready` was correct in all
+  twenty-three. `unblocked-is-ready` is therefore `unsecured` on the call form
+  alone, and `bd ready` is what settles it.
+- **An assumption no flag can reach is settled by the ARTIFACT, not by the
+  line.** `unblocked-is-ready` is `secured` when the artifact that instructs
+  `--suggest-next` also names `bd ready`, because the artifact is what a reader
+  reads: a subagent runs from `.claude/agents/<role>.md` alone, so a mitigation
+  that lives in `CLAUDE.md` never reaches it. Three of the four role cores were
+  in exactly that state before `beadloom-0mdo.52`, and the shared `_tracker`
+  fragment now composes the rule into every role. `call_sites` therefore runs two
+  passes — collect which subcommands each source names, then judge — because a
+  single pass could only secure a confirmation written ABOVE the call, which is a
+  fact about ordering rather than about what the artifact tells its reader. The
+  verdict states its own limit: that the two answers are actually COMPARED is not
+  something a derivation of call forms can see.
+- **An answer that came back states the population it covers.** `as-asked` is
+  deliberately not called `complete` — `bd list --status open` names a population
+  and bd honours it, and every open bead is not every bead. bd's own notice
+  outranks the call form: passing `--all` is an intention, and a silent stderr is
+  what makes it a measurement. `ready_ids` returns `None` for an unreadable
+  answer and `()` for an empty queue, because collapsing the two turns a failed
+  confirmation into "every candidate is still blocked".
 - **An unjudged site never reads as a clean one.** A subcommand outside the
   measured table carries `unmeasured-subcommand`, and a subcommand measured to
   carry no breakable assumption carries none — those are different facts, and
-  today 48 of this repository's 278 sites are the first kind (`bd swarm` 26,
+  today 48 of this repository's 348 sites are the first kind (`bd swarm` 26,
   `bd gate` 22).
 - **The unreached region is part of the answer.** `beadloom-0mdo.58` measured the
   reach before the population existed: a Python sweep sees about a twentieth of
@@ -124,5 +174,5 @@ The single funnel for the MCP process-tools (`task_init` / `complete_bead` /
 module-level `subprocess.run`) to run the tools without a real `bd` binary.
 
 > Component doc (BDL-051; the population added by BDL-068 S5,
-> `beadloom-0mdo.51`). Public surface verified against
-> `src/beadloom/services/bd_seam/`.
+> `beadloom-0mdo.51`, and the answer's coverage by `beadloom-0mdo.52`). Public
+> surface verified against `src/beadloom/services/bd_seam/`.

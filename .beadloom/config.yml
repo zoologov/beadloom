@@ -133,3 +133,18 @@ docs_audit:
     - path: docs/services/components/bd-seam/DOC.md
       fact: version
       value: "1.0.4"
+    # services/mcp.md: the FOURTH triple for the same sentence shape, and the
+    # fourth is what settles the argument the third one opened.
+    # `beadloom-0mdo.52` documented why `complete_bead` confirms `--suggest-next`
+    # against `bd ready`, which cannot be written without naming the release the
+    # defect was measured on — twenty-three dependency shapes on bd 1.0.4. Four
+    # documents, one dependency, one measurement, and each new document that
+    # describes what a dependency was measured to do will need a fifth. The fix
+    # is a fact that knows whose product a version belongs to, so `1.0.4` beside
+    # the word `bd` is never read as a claim about Beadloom's own version
+    # (BDL-UX #253). Until then the triple is load-bearing: deleting the release
+    # from the prose would leave the tool's documentation describing a
+    # confirmation whose reason it can no longer attribute.
+    - path: docs/services/mcp.md
+      fact: version
+      value: "1.0.4"

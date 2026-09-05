@@ -138,8 +138,9 @@ bd close <bead-id> --suggest-next
 bd ready
 bd ready --claim                  # atomically claim the next ready bead (1.0.4)
 
-# All tasks
-bd list
+# All tasks — `--all` because bd otherwise omits every closed bead, silently,
+# and caps the rest at 50 with a notice only on stderr (bd 1.0.4)
+bd list --all
 
 # Details + history
 bd show <id>
@@ -173,7 +174,7 @@ bd dep add <id> <depends-on-id>
 - `bd comments add` — for checkpoints (preserves history)
 - `bd update --append-notes` — for notes
 - NEVER work on a task without `--claim`
-- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready`** (it may list still-blocked beads; verified against bd 1.0.4)
+- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready --limit 0`** (it named a still-blocked bead in sixteen of twenty-three dependency shapes measured on bd 1.0.4; `--limit 0` because the default caps at 100)
 - `--session "$CLAUDE_SESSION_ID"` on close is optional (audit trail; only if the env var is set)
 
 ---

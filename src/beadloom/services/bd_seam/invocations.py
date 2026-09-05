@@ -55,6 +55,7 @@ __all__ = [
     "BdInvocation",
     "python_invocations",
     "text_invocations",
+    "tokens_of",
 ]
 
 #: The seam every ``bd`` call in this project's Python goes through. Spelled once
@@ -137,8 +138,14 @@ class BdInvocation:
     unresolved_arguments: int
 
 
-def _tokens_of(argv: Iterable[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Split *argv* into its leading subcommand words and its flags."""
+def tokens_of(argv: Iterable[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split *argv* into its leading subcommand words and its flags.
+
+    Public because :mod:`.answers` reads the same argv at RUN time that this
+    module reads at derivation time, and one grammar read two ways is the whole
+    point — a second reader would be the duplicate derivation `beadloom-0mdo.51`
+    removed from ``application/waves/landing.py`` hours before this was written.
+    """
     words: list[str] = []
     flags: list[str] = []
     reading_words = True
@@ -175,7 +182,7 @@ def text_invocations(
                 if closing is not None and closing in rest:
                     rest = rest[: rest.index(closing)]
                 rest = _REDIRECTION.sub("", rest).strip()
-                words, flags = _tokens_of(rest.split())
+                words, flags = tokens_of(rest.split())
                 if not words:
                     continue
                 found.append(
@@ -275,7 +282,7 @@ def python_invocations(sources: Iterable[tuple[str, str]]) -> tuple[BdInvocation
             if read is None:
                 continue
             argv, unresolved = read
-            words, flags = _tokens_of(argv)
+            words, flags = tokens_of(argv)
             if not words:
                 continue
             found.append(

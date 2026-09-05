@@ -107,9 +107,14 @@ def _artifact_kinds() -> dict[str, ArtifactKind]:
 #: ``_writing`` holds the standard every role that writes a document is held to;
 #: ``_rooms`` holds the one every role that reports a MEASUREMENT is held to;
 #: ``_landing`` holds what the merge slot grants and what it does not, for every
-#: role that lands a commit in a tree it shares. All three are shared for the
-#: same reason: five copies of one rule drift the moment one of them is edited.
-SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms", "_landing")
+#: role that lands a commit in a tree it shares; ``_tracker`` holds which
+#: population each of bd's answers covers, for every role that reads one. All
+#: four are shared for the same reason: five copies of one rule drift the moment
+#: one of them is edited. ``_tracker`` was added because three of the four role
+#: cores instructed `bd close --suggest-next` while the caveat that it names
+#: still-blocked beads lived only in `CLAUDE.md` — and a role core is what a
+#: subagent reads on its own (BDL-068 S5, BDL-UX #97 and #187).
+SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms", "_landing", "_tracker")
 
 #: The artifact kinds ``compose`` understands.
 ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "docs")

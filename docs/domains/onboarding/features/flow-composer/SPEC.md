@@ -37,9 +37,10 @@ breaking the Beadloom gate":
 | 5 | `project` | `.beadloom/flow/<kind>/<name>.md` in the adopting repo | yes |
 
 **Shared CORE fragments** (`ArtifactKind.shared`, BDL-061 S4) are how one text
-reaches several artifacts without being copied into each. There are two —
-`SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms", "_landing")` — and all three exist for the same
-reason: several copies of one rule drift the moment one of them is edited.
+reaches several artifacts without being copied into each. There are four —
+`SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms", "_landing", "_tracker")` — and all of them
+exist for the same reason: several copies of one rule drift the moment one of
+them is edited.
 
 `_writing` is the writing standard. It used to live inside the `tech-writer`
 core, so the roles that produce the TO-BE documents were held to no standard at
@@ -54,10 +55,22 @@ that it is blind by construction to an interaction with a bead running beside
 you — which until then was stated only in the coordinator command, read by the
 loop that orchestrates rather than by the roles that measure.
 
+`_tracker` (BDL-068 S5, BDL-UX #187 and #97) is which population each of bd's
+answers covers: `bd list` omits every closed bead silently and caps the rest at
+50 with a notice on stderr only, `bd ready` caps at 100 the same way, and
+`bd close --suggest-next` names beads that are still blocked — measured at
+sixteen of twenty-three dependency shapes on bd 1.0.4. It is a fragment rather
+than four edits because three of the four role cores instructed
+`--suggest-next` while the caveat lived only in `CLAUDE.md`, and a role core is
+what a subagent reads on its own. Every `bd` call form the fragment shows is
+spelled in its secured form: an instruction that explains a cap while
+demonstrating the capped call is the phantom gate this epic removes.
+
 A shared fragment is a **layer and not a role**: it has no front matter, is
 never written as an adapter, and `compose_role("_writing", …)` raises. Being a
 normal layer, each is language-selectable like every other one
-(`_writing.ru.md.txt`, `_rooms.ru.md.txt` and `_landing.ru.md.txt` ship).
+(`_writing.ru.md.txt`, `_rooms.ru.md.txt`, `_landing.ru.md.txt` and
+`_tracker.ru.md.txt` ship).
 
 ### Artifact kinds
 

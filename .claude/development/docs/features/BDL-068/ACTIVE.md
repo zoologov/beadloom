@@ -1,18 +1,42 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-04
+> **Last updated:** 2026-09-05
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
-> docs), unmerged; S5 under way, wave 1 landed
+> docs), unmerged; S5 under way, waves 1-3 landed
 
 ---
 
 ## Current Bead
 
-**Bead:** none — S5 wave 2 (`0mdo.51`, the derived `bd` call-site population) is closed at
-`f703dc8`. `bd ready` lists `.52`, `.53` and `.54` as the next claimable work in S5; `bd close
---suggest-next` also named `.13` and `.55`, which are still blocked, and that disagreement is
-itself one of the findings below. S4 is finished on the branch: `0mdo.36` (tech-writer) was the
-last of that slice and closed its docs pass, and `0mdo.12`, the slice bead, closes with it.
+**Bead:** none — S5 wave 3 (`0mdo.52`, BDL-UX #187 and #97) is closed. `bd ready --limit 0`
+lists `.53` and `.54` as the next claimable work in S5. S4 is finished on the branch:
+`0mdo.36` (tech-writer) was the last of that slice and closed its docs pass, and `0mdo.12`, the
+slice bead, closes with it.
+
+**S5 wave 3, and the third reading of one defect.** `0mdo.52` answered the two findings whose
+shape this epic has now shipped eight times: an answer whose population is not the question's
+must not be readable as the whole. `bd_seam/answers.py` reads what came BACK — bd's truncation
+notice off stderr, bd's `Newly unblocked:` block off stdout, and the argv we wrote — and states
+the coverage in a vocabulary with no clean reading for the unchecked case: `as-asked`,
+`filtered`, `truncated`, `unchecked`, plus `not compared` and `NOTHING TO CHECK` for a
+suggestion. `handle_complete_bead` no longer hands an agent bd's raw suggestion: it confirms
+against `bd ready --limit 0` and returns `next`, `next_candidates`, `next_still_blocked` and
+`next_stated`.
+
+**#97 was re-measured in twenty-three separate rigs and the previous CHARACTERISATION fell
+again.** `0mdo.51`'s correction concluded `--suggest-next` is silent in every shape where
+exactly one blocker had just closed — a reading taken over ten cells that shared ONE rig. Given
+its own rig per shape, that shape names a still-blocked bead. Sixteen of twenty-three are false
+positives, on no shape rule any of the three sessions found; `bd ready` was correct in all
+twenty-three. So the code records the OBSERVATION and not the mechanism, because claiming a
+mechanism is what got the previous two readings wrong.
+
+**And the prose finding the population made visible:** three of the four role cores instructed
+`bd close --suggest-next` with the caveat nowhere in the file, while it sat in `CLAUDE.md` —
+which a subagent reading its role core alone never opens. Fixed as a fourth SHARED fragment,
+`roles/core/_tracker.md.txt` (+ `.ru`), carrying a new `tracker-answers` duty the coordinator
+declares and `role_duties` checks in both directions. A sixth role added later carries the rule
+by the act that creates it.
 
 **S5 wave 2, and the withdrawal it had to reverse.** `0mdo.51` derived every place this project
 reaches `bd` — 278 sites on this repository, measured against bd 1.0.4: 12 in Python, 264 in
@@ -506,7 +530,34 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     every `bd list` call in this project's Python names both default filters, so #187 is
     answered at the consumer while 42 prose sites are not. Three python sites are unsettled and
     all three are owned — two by `.53` (#171), one by `.52` (#97). BDL-UX #253 needed a third
-    suppression triple for one sentence-shape, which is the evidence it is a class.
+    suppression triple for one sentence-shape, which is the evidence it is a class. `.52` has
+    since closed both of its own: the `close` site is fixed and the prose is answered by a
+    shared fragment. The `bd ready` truncation sites are NOT swept and the reason is recorded
+    under that bead.
+  - [x] `0mdo.52` — **#187 + #97**, the tracker's answers at our own call sites.
+    `bd_seam/answers.py` is the run-time half of `.51`'s derivation: `coverage_of(argv, stderr)`
+    reads bd's own truncation notice and the argv's population flags, and
+    `confirmed_suggestion(close_stdout, ready)` splits `--suggest-next`'s candidates by what
+    `bd ready` lists. Both notice forms were measured rather than quoted — `Showing 50 issues;
+    more results matched…` from `bd list` against this repository (50 of 843) and `Showing 100
+    of 120 ready issues.` from `bd ready` against a rig grown past the cap with
+    `bd create --graph`. The coverage is `as-asked` and deliberately not `complete`, because
+    `bd list --status open` names a population bd honours and every open bead is not every bead.
+    The derivation learned a securing shape no flag can express: `unblocked-is-ready` is
+    `secured` when the ARTIFACT that instructs the suggestion also names `bd ready`, judged in
+    two passes so a confirmation written above the call counts too, and the verdict states that
+    whether the two answers are actually COMPARED is not something a derivation of call forms
+    can see. **Measured red then green on the same derivation:** 25 `unblocked-is-ready` and 2
+    `complete-population` unsecured over this repository before, 0 and 0 after, across a
+    population that grew 278 → 348 sites. The concrete defect is closed —
+    `test_the_python_sites_nothing_settles_are_the_two_that_are_owned` replaces the three-site
+    version, and the two that remain are `.53`'s. **#97 re-measured in twenty-three separate
+    rigs: sixteen false positives, `bd ready` correct in all twenty-three.** Green in a clean
+    room over 40 files, and **as its own wave's gate owner**, green on the tree: 8 980 passed,
+    11 skipped, 1 xfailed, `beadloom ci` rc 0 read in the foreground without a pipe, `ruff`
+    clean, `mypy --strict` clean over 268 files against all four declared interpreter versions.
+    Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms entered.
+    BDL-UX #253 needed a FOURTH suppression triple for one sentence shape.
   - [x] `0mdo.39` — **#194 + #237**, the landing lock. A fifth shared medium, `landing-order`,
     stated in `waves/media.py` and checked in `media_checks.py` over a new `waves/landing.py`
     that derives every instruction of the lock in the composed flow artifacts and judges it by

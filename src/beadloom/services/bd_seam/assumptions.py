@@ -12,11 +12,20 @@ lesson.** BDL-UX #97 was withdrawn here on a measurement that stayed silent whil
 the target was still blocked and spoke exactly when it became ready — both
 directions of the OUTCOME, and one shape only. Closing `beadloom-0mdo.51`
 immediately afterwards named two beads that `bd dep tree` shows blocked by four
-and six open beads. Re-measured over ten dependency shapes, ``--suggest-next``
-lies in four of them and is silent in every shape where exactly ONE blocker had
-been closed — which is the single cell the first measurement picked. Exercising
-both directions of one axis is not anti-vacuity when the defect lives on
-another.
+and six open beads. Exercising both directions of one axis is not anti-vacuity
+when the defect lives on another.
+
+**The mechanism has now been characterised three times and no characterisation
+survived the next measurement.** `beadloom-0mdo.51`'s correction concluded
+``--suggest-next`` is silent in every shape where exactly one blocker had just
+closed; `beadloom-0mdo.52` re-measured twenty-three shapes in twenty-three
+SEPARATE ``bd init`` rigs — the axis .51 could not hold constant, because its ten
+cells shared one — and that shape names a still-blocked bead. Sixteen of the
+twenty-three are false positives, on no shape rule any of the three sessions
+found. So this module records the observation and NOT the mechanism: on bd 1.0.4
+``--suggest-next`` names beads that are still blocked, and ``bd ready`` was
+correct in all twenty-three. A guard can be built on that. Claiming a mechanism
+is what got the previous two readings wrong.
 
 So an inherited claim is not a fact, a claim of one's own is not a fact either,
 and the module records **the release every verdict was taken against**. A
@@ -51,14 +60,20 @@ lifts both, which its own help calls an override of the default filter and which
 was measured: ``bd list --all --json`` returned all 842 with a silent stderr.
 
 ``bd ready`` carries the same cap at a different number and no entry records it.
-Over a rig grown to 135 ready beads it returned 100 and printed ``Showing 100 of
-135 ready issues`` on stderr. This flow's own ``CLAUDE.md`` calls ``bd ready``
-authoritative and every role is told to confirm against it, which makes it the
-most-relied-upon assumption in the flow and the one nothing checked.
+Over a rig grown to 120 ready beads with ``bd create --graph`` it returned 100 and
+printed ``Showing 100 of 120 ready issues.`` on stderr. This flow's own
+``CLAUDE.md`` treats that answer as authoritative and every role is told to
+confirm against it, which makes it the most-relied-upon assumption in the flow
+and the one nothing checked.
 
-``bd close --suggest-next`` names beads that remain blocked, so nothing at that
-call site can be relied on and the flow's own instruction to confirm against
-``bd ready`` is the remedy. ``bd ready`` was correct in all ten measured shapes.
+``bd close --suggest-next`` names beads that remain blocked, so nothing on that
+LINE can settle it and the flow's own instruction to confirm against ``bd ready``
+is the remedy. That instruction is now checked rather than trusted: an artifact
+that instructs the suggestion and names ``bd ready`` nowhere is ``unsecured``,
+and the artifact is the unit because it is what a reader reads — a role core is
+read on its own by the subagent it configures, so a mitigation that lives in
+``CLAUDE.md`` never reaches it. Three of the four role cores were in exactly that
+state when `beadloom-0mdo.52` derived them.
 
 ``bd create`` allocates the id AT creation while our title convention authors it
 BEFORE: eight simultaneous ``--parent`` creates took ``.4`` through ``.11`` in an
@@ -115,6 +130,7 @@ __all__ = [
     "CallSiteReport",
     "call_sites",
     "lock_invocations",
+    "population_flags",
     "report_of",
     "subcommand_of",
 ]
@@ -160,6 +176,13 @@ ASSUMPTIONS: tuple[str, ...] = (
 #: The subcommand whose judgement lives in the application layer.
 LOCK_COMMAND_WORD = "merge-slot"
 
+#: The two assumptions that are about HOW MUCH of the tracker an answer covers,
+#: as opposed to what it says about the rows it returned. :func:`population_flags`
+#: is the run-time half of these, read by :mod:`.answers`.
+_POPULATION_ASSUMPTIONS = frozenset(
+    {ASSUMPTION_COMPLETE_POPULATION, ASSUMPTION_UNTRUNCATED_POPULATION}
+)
+
 
 @dataclass(frozen=True)
 class _Rule:
@@ -177,6 +200,11 @@ class _Rule:
     #: the subcommand makes the assumption; ``("-i",)`` means only the call form
     #: that uses the legacy alias does.
     applies_when: tuple[str, ...] = ()
+    #: A subcommand whose presence in the SAME ARTIFACT settles the assumption,
+    #: for the assumptions no flag can reach. The artifact is the unit because it
+    #: is what a reader reads: a role core is read on its own by the subagent it
+    #: configures, so a mitigation living in ``CLAUDE.md`` does not reach it.
+    confirmed_by: str = ""
 
 
 def _pinned(text: str) -> str:
@@ -245,14 +273,16 @@ _INTENDED_ID = _Rule(
 _UNBLOCKED_IS_READY = _Rule(
     assumption=ASSUMPTION_UNBLOCKED_IS_READY,
     securing_flags=(),
+    confirmed_by="ready",
     measured=False,
     detail=_pinned(
         "BDL-UX #97 stands: `--suggest-next` names beads that are still blocked. "
-        "Measured over ten dependency shapes in a rig, it lied in four of them, "
-        "and on this repository closing `beadloom-0mdo.51` named `.55` and `.13`, "
-        "which `bd dep tree` shows blocked by four and six open beads. It is "
-        "silent in every shape where exactly ONE blocker had been closed. No flag "
-        "settles it — confirm against `bd ready`, which was correct in all ten"
+        "Measured over twenty-three dependency shapes in twenty-three separate "
+        "rigs, it named a still-blocked bead in sixteen, and on this repository "
+        "closing `beadloom-0mdo.51` named `.55` and `.13`, which `bd dep tree` "
+        "shows blocked by four and six open beads. No flag settles it, so nothing "
+        "on this line can — name `bd ready` in the same artifact, which was "
+        "correct in all twenty-three shapes"
     ),
 )
 
@@ -417,8 +447,37 @@ def _lock_assumption(invocation: BdInvocation) -> Assumption:
     )
 
 
-def _assumptions_of(invocation: BdInvocation, subcommand: str) -> tuple[Assumption, ...]:
-    """Every assumption this invocation makes, with the verdict its form earns."""
+def population_flags(subcommand: str) -> tuple[str, ...] | None:
+    """The flags that widen *subcommand*'s answer to the whole population.
+
+    ``None`` when this derivation has not measured what population the
+    subcommand's answer covers — which includes every subcommand outside the
+    table AND the ones in it that carry no population question, such as a read
+    by id. :mod:`.answers` turns that ``None`` into
+    :data:`~beadloom.services.bd_seam.answers.COVERAGE_UNCHECKED` rather than
+    into a clean pass, so the two facts stay apart at run time exactly as
+    :data:`VERDICT_UNMEASURED` keeps them apart at derivation time.
+    """
+    rules = _MEASURED.get(subcommand)
+    if rules is None:
+        return None
+    widening: list[str] = []
+    for rule in rules:
+        if rule.assumption not in _POPULATION_ASSUMPTIONS:
+            continue
+        widening.extend(flag for flag in rule.securing_flags if flag not in widening)
+    return tuple(widening) or None
+
+
+def _assumptions_of(
+    invocation: BdInvocation, subcommand: str, alongside: frozenset[str]
+) -> tuple[Assumption, ...]:
+    """Every assumption this invocation makes, with the verdict its form earns.
+
+    *alongside* is the set of subcommands the SAME ARTIFACT invokes, which is
+    what settles an assumption no flag can reach. It is the artifact and not the
+    line because the artifact is the unit a reader reads.
+    """
     if _names_the_lock(invocation.words):
         return (_lock_assumption(invocation),)
     rules = _MEASURED.get(subcommand)
@@ -446,6 +505,22 @@ def _assumptions_of(invocation: BdInvocation, subcommand: str) -> tuple[Assumpti
                 )
             )
             continue
+        if rule.confirmed_by and rule.confirmed_by in alongside:
+            found.append(
+                Assumption(
+                    name=rule.assumption,
+                    verdict=VERDICT_SECURED,
+                    detail=_pinned(
+                        f"the artifact also invokes `bd {rule.confirmed_by}`, which is "
+                        "the confirmation this flow's own instruction names and which "
+                        "was correct in all twenty-three shapes measured. That the two "
+                        "answers are actually COMPARED is not something a derivation "
+                        "of call forms can see — it reads which commands an artifact "
+                        "names, not what it does with them"
+                    ),
+                )
+            )
+            continue
         found.append(
             Assumption(
                 name=rule.assumption,
@@ -457,9 +532,20 @@ def _assumptions_of(invocation: BdInvocation, subcommand: str) -> tuple[Assumpti
 
 
 def call_sites(invocations: Iterable[BdInvocation]) -> tuple[BdCallSite, ...]:
-    """Judge every invocation in *invocations* against the measured table."""
+    """Judge every invocation in *invocations* against the measured table.
+
+    Two passes, because one assumption is a property of the ARTIFACT rather than
+    of the line: the first collects which subcommands each source names, the
+    second judges. A single pass could only ever secure a confirmation written
+    ABOVE the call it confirms, which is a fact about ordering and not about
+    what the artifact tells its reader.
+    """
+    read = tuple(invocations)
+    alongside: dict[str, set[str]] = {}
+    for invocation in read:
+        alongside.setdefault(invocation.source, set()).add(subcommand_of(invocation.words))
     judged: list[BdCallSite] = []
-    for invocation in invocations:
+    for invocation in read:
         subcommand = subcommand_of(invocation.words)
         judged.append(
             BdCallSite(
@@ -470,7 +556,11 @@ def call_sites(invocations: Iterable[BdInvocation]) -> tuple[BdCallSite, ...]:
                 subcommand=subcommand,
                 flags=invocation.flags,
                 unresolved_arguments=invocation.unresolved_arguments,
-                assumptions=_assumptions_of(invocation, subcommand),
+                assumptions=_assumptions_of(
+                    invocation,
+                    subcommand,
+                    frozenset(alongside.get(invocation.source, ())),
+                ),
             )
         )
     return tuple(judged)
