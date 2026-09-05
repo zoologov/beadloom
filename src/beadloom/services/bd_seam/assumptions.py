@@ -242,7 +242,7 @@ _UNTRUNCATED_READY = _Rule(
     securing_flags=("--limit", "-n"),
     measured=False,
     detail=_pinned(
-        "`bd ready` caps at 100 rows and announces it on STDERR — 100 of 135 over "
+        "`bd ready` caps at 100 rows and announces it on STDERR — 100 of 120 over "
         "a rig grown past the cap. This flow calls `bd ready` authoritative and "
         "tells every role to confirm against it, so this is the assumption it "
         "relies on most. Pass `--limit 0`"

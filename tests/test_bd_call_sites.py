@@ -397,7 +397,7 @@ def test_the_most_relied_upon_assumption_in_this_flow_is_named_at_its_sites() ->
 
     `CLAUDE.md` tells every role to take work only from `bd ready` and to confirm
     `--suggest-next` against it. Measured on bd 1.0.4 over a rig grown past the
-    cap: 100 rows of 135, announced on stderr. The report must name those sites,
+    cap: 100 rows of 120, announced on stderr. The report must name those sites,
     because an assumption relied on everywhere and checked nowhere is precisely
     what this epic converts.
     """

@@ -128,6 +128,18 @@ of one per bead and one per edge.
   names beads that are still blocked, and `bd ready` was correct in all
   twenty-three. `unblocked-is-ready` is therefore `unsecured` on the call form
   alone, and `bd ready` is what settles it.
+- **A fourth characterisation was taken and it disagrees with the other three,
+  which is why the stance above is the right one.** `beadloom-0mdo.55`
+  re-measured sixteen shapes in sixteen separate `bd init` rigs on bd 1.0.4,
+  varying the number of blockers already closed, the number left open and
+  whether the target was created before or after them: `--suggest-next` named a
+  still-blocked target in five of the sixteen, and `bd ready --limit 0` was
+  correct in all sixteen. Individual cells contradict the earlier readings —
+  a target created last with one blocker closed and one still open names it
+  here and did not there — so three sessions have now produced three
+  incompatible shape rules and one stable observation. A guard built on the
+  observation holds; one built on a mechanism would have been wrong three
+  times.
 - **An assumption no flag can reach is settled by the ARTIFACT, not by the
   line.** `unblocked-is-ready` is `secured` when the artifact that instructs
   `--suggest-next` also names `bd ready`, because the artifact is what a reader
