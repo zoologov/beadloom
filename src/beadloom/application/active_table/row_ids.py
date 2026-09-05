@@ -22,6 +22,13 @@ four different remedies: an id under decoration (ours to read), an id followed b
 a title (the table's shape), a range of ids (one row, several beads), and a label
 that is not an id at all. One message for four populations is the same defect as
 one message for two, and this epic has shipped the distinction eight times.
+
+**And a row that did not resolve still says WHICH BEAD IT NAMES**, when its shape
+found one. Two of the shapes extract an id in order to write their message —
+``.1 Contract model`` and ``proj-x.3..8`` — and both used to throw it away, so
+the reconcile could not tell a table that has no row for a bead from a table
+whose row for it this run could not read. It reported both as the first, on 38
+of 79 beads measured on this repository (BDL-068 S5, review Major 1).
 """
 
 # beadloom:component=active-table
@@ -104,11 +111,20 @@ class RowId:
     a bare ``None``: a row that could not be resolved is a finding about the
     table or about the tracker's answer, and a reconcile that dropped it
     silently is the defect this module exists to close.
+
+    ``names`` is the bead a row NAMES without resolving to it: the id its shape
+    extracted, resolved against the same prefix and the same tracker answer as a
+    resolution would be. It is set only on a failure, and only when that id is a
+    bead the tracker reported — a head naming nothing the tracker holds would
+    invent a population. "The table carries no row for this bead" and "the table
+    carries a row this run could not read" are different findings with different
+    remedies, and this field is what lets a caller tell them apart.
     """
 
     bead_id: str | None = None
     shape: str | None = None
     reason: str | None = None
+    names: str | None = None
 
 
 def undecorate(cell: str) -> str:
@@ -157,7 +173,7 @@ def resolve_row_bead_id(
         return RowId(bead_id=text)
     if _SHORT_ID.match(text) is not None:
         return _resolve_short(text, bd_statuses, prefix)
-    return _unresolvable_shape(text)
+    return _unresolvable_shape(text, bd_statuses, prefix)
 
 
 def _resolve_short(
@@ -194,11 +210,17 @@ def _resolve_short(
     return RowId(bead_id=candidates[0])
 
 
-def _unresolvable_shape(text: str) -> RowId:
+def _unresolvable_shape(
+    text: str, bd_statuses: Mapping[str, str], prefix: str | None
+) -> RowId:
     """Name which of the three table-side shapes *text* is, and what to do about it.
 
     Ranges are tested before the id-and-text shape because ``proj-x.3..8`` has an
     id-shaped head and is not a row about one bead.
+
+    Both of the first two shapes extract an id to write their message, and that
+    id is carried out on ``names`` rather than discarded — see :func:`_head_names`
+    for what it is and is not taken to mean.
     """
     ranged = _RANGE.match(text)
     if ranged is not None:
@@ -208,6 +230,7 @@ def _unresolvable_shape(text: str) -> RowId:
                 f"`{text}` names more than one bead, and a row carries one status "
                 f"cell — give each bead its own row to have it reconciled"
             ),
+            names=_head_names(ranged.group("first"), bd_statuses, prefix),
         )
     with_text = _ID_THEN_TEXT.match(text)
     if with_text is not None:
@@ -218,6 +241,7 @@ def _unresolvable_shape(text: str) -> RowId:
                 f"as the id, so `{with_text.group('id')}` is not reconciled — move "
                 f"the title into a column of its own"
             ),
+            names=_head_names(with_text.group("id"), bd_statuses, prefix),
         )
     return RowId(
         shape=SHAPE_NO_ID,
@@ -226,3 +250,25 @@ def _unresolvable_shape(text: str) -> RowId:
             f"allocated, or the short form a table abbreviates it to (`.7`)"
         ),
     )
+
+
+def _head_names(head: str, bd_statuses: Mapping[str, str], prefix: str | None) -> str | None:
+    """The bead *head* names, or ``None`` when it names none the tracker reported.
+
+    Read through the same two rules a whole cell is read through, and through the
+    same code: a full id is itself, a short id is read against *prefix* and, with
+    no prefix, must be unique in the whole tracker. A resolution taken by a second
+    rule here could disagree with the first, which is the class of defect this
+    package exists to remove.
+
+    A range's LATER ids are not read. ``proj-x.3..8`` names ``proj-x.3``, which is
+    the id the shape itself extracted; the beads between the endpoints are ids the
+    table does not write, and enumerating them would be a guess about which
+    numbers the range covers. They stay in "carried by no row", which is what the
+    range's own remedy — give each bead its own row — asks the author for.
+    """
+    if head in bd_statuses:
+        return head
+    if _SHORT_ID.match(head) is None:
+        return None
+    return _resolve_short(head, bd_statuses, prefix).bead_id

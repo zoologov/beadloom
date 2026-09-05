@@ -135,6 +135,14 @@ split and giving it a second meaning is how two protocols stop being checkable t
 hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
 the text that is actually installed rather than over a copy of it (BDL-UX #207).
 
+The command's own report prints one echo per population and never one echo for two. `_echo_unresolved`
+names the rows it could not map onto a bead, `_echo_named_by_an_unresolved_row` the beads whose row it
+read and could not resolve, and `_echo_unlisted` the beads no row names at all. The middle one was
+missing until the S5 review measured its absence: nearly half the beads reported as carried by no row
+had a row `_echo_unresolved` had printed two lines above, so one run made two statements about the same
+row. The counts, and the run they were taken on, are in the
+[`active-table` component doc](../../../domains/application/components/active-table/DOC.md).
+
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section
 back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the

@@ -310,6 +310,8 @@ Reconcile ACTIVE.md bead-status tables from `bd` (the source of truth). For each
 
 No-op contract: if `bd` is unavailable OR there is no ACTIVE file with a bead-status table, this exits 0 and writes nothing (a non-flow repo is never affected).
 
+Every run states what it did NOT reconcile, in three lists rather than one. Rows it could not map onto a bead are reported by CELL with the shape that made each unresolvable. Beads the tracker holds under a table's epic are reported by BEAD, split in two: those a row NAMES and this run could not read (the cell is quoted; fix it), and those no row names at all (add a row). The split is BDL-068 S5's review Major 1 — the two were one list, so 38 of the 79 beads reported as carried by no row had a row the same run had already printed as `bead-and-text` or `more-than-one-bead`, and a reader acting on the message would add a row that was already there. No list is ever written into a table.
+
 `--stage` (fix mode) re-stages the corrected content of the paths this commit ALREADY stages and names every path it corrected and did not stage, under a fixed `  withheld: ` line. It never adds a path to a commit: the index at commit time is the set of paths the committer chose, and this command used to override that choice (BDL-UX #207). Under `--stage`, `bd export` runs only when the commit already carries `.beads/issues.jsonl` — a refresh that cannot be committed keeps no tracked artifact honest and dirties a shared working tree instead. The by-hand path (no `--stage`) exports as before.
 
 | Flag | Description |

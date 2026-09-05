@@ -2,16 +2,24 @@
 
 > **Last updated:** 2026-09-05
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
-> docs), unmerged; S5 under way, waves 1-5 landed
+> docs), unmerged; S5 under way, waves 1-5 landed and its review's first fix bead closed
 
 ---
 
 ## Current Bead
 
-**Bead:** none — S5 wave 5 (`0mdo.54`, BDL-UX #207 and #210) is closed. `bd ready --limit 0`
-lists `beadloom-l2f2` as the remaining claimable dev work in S5. S4 is finished on the
-branch: `0mdo.36` (tech-writer) was the last of that slice and closed its docs pass, and
-`0mdo.12`, the slice bead, closes with it.
+**Bead:** none — S5's fix wave has landed its first bead. `0mdo.61` (S5 review Major 1) is
+closed; `0mdo.62` (review Major 3, the seven undeclared mutation targets) runs next and touches
+no `active_table` file. S4 is finished on the branch: `0mdo.36` (tech-writer) was the last of
+that slice and closed its docs pass, and `0mdo.12`, the slice bead, closes with it.
+
+**S5's fix wave, and the report that contradicted itself.** The S5 review returned ISSUES with
+0 critical and 3 major, which is S5's FIRST issues verdict, so the slice cycles rather than
+re-plans. `0mdo.61` answered Major 1: `active-sync --check` reported 79 beads as having no row
+in their epic's table, and 38 of the 79 had a row the same run had already printed as
+unreadable. The bead-keyed report is now two lists with two remedies — 41 carried by no row, 38
+named by a row this run could not read, and 41 + 38 = 79, so nothing was suppressed to make a
+number smaller.
 
 **S5 wave 5, and the two findings that were entirely ours.** `0mdo.54` fixed a hook that staged
 what an agent had unstaged and a reconcile that could not read an id in a code span. Neither is
@@ -601,8 +609,9 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     answer and a caller that parses the reason string to count is a second reader of one fact.
     Measured on this repository: 211 → 238 resolved, 118 → 91 unresolved reported as three
     named shapes, 0 rewritten in both runs. The 27 gained are BDL-067's whole table.
-    `unlisted_beads` names the 79 beads no row of their epic's table carries and writes none of
-    them. **#207:** `--stage` re-stages only paths whose index entry differs from `HEAD` — what
+    `unlisted_beads` named the 79 beads no row of their epic's table carries and writes none of
+    them — a report the S5 review then found contradicting the run's own row diagnosis, and
+    which `0mdo.61` split in two below. **#207:** `--stage` re-stages only paths whose index entry differs from `HEAD` — what
     a commit actually contains — and names the rest under a fixed `  withheld: ` line; an
     unreadable scope stages nothing and says so, because an unknown scope is not an empty one.
     **The noise question was measured before it shipped:** `bd export` moved
@@ -681,6 +690,30 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     1 xfailed, `mypy --strict` clean over 262 files, `beadloom ci` rc 0 in the foreground
     without a pipe. Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared
     rooms. Filed BDL-UX #253.
+  - [x] `0mdo.61` — **S5 review Major 1**, one run making two statements about one row. The
+    reconcile filled `seen` only from rows that RESOLVED, so a row it could not read handed its
+    bead to "no row in their epic's table" while the same run printed that row under
+    `bead-and-text` or `more-than-one-bead`. A reader acting on the message adds a row that is
+    already there — the class `row_ids.py`'s own docstring exists to remove, in the package that
+    shipped the sentence. **Both fixes the reviewer offered were needed and only one of them is
+    a choice:** carrying the id the shape already found is the MECHANISM either answer needs,
+    and the question is what the run then says. Folding those beads into `seen` would leave 38
+    of them in no number the run prints, which is this epic's own subject one level up, so the
+    bead-keyed report is SPLIT: `beads_named_by_an_unresolved_row` (fix that cell) and
+    `unlisted_beads` (add a row). **Measured before and after on this repository's real tables,
+    `active-sync --check --json` at `27db92b`:** 79 carried by no row → 41 carried by no row and
+    38 named by a row this run could not read, 41 + 38 = 79, and the row-keyed numbers do not
+    move (329 read, 238 resolved, 91 unresolved, 0 rewritten). No bead left the report and none
+    entered it. A range is deliberately not expanded: `beadloom-eeo.3..8` names `.3`, and `.4`
+    through `.7` stay in "carried by no row" because the numbers between the endpoints are ids
+    the table does not write. Four acceptance scenarios and 21 unit tests, red first. In a clean
+    room over 11 files (`room-beadloom-0mdo.61`): 9 080 passed, 57 skipped, 1 xfailed, 1 failed
+    — `test_all_new_node_pairs_are_fresh`, reproduced RED at HEAD in `room-head-baseline-61`, a
+    room of the same shape, rather than inherited from `.53` and `.54`, which report the same
+    failure. **As its own wave's gate owner**, green on the tree: 9 127 passed, 11 skipped, 1
+    xfailed, `mypy --strict` clean over 274 files against all four declared interpreter targets,
+    `beadloom ci` rc 0 in the foreground without a pipe. Darwin arm64 / CPython 3.13.7, 0 of the
+    21 declared rooms.
 - [ ] S6 — the flow's documents and roles
 
 ## What is in `main` now

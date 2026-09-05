@@ -7,10 +7,18 @@ this package's primitives.
 
 **An empty finding list had two meanings that read identically**, which is why a
 run states its denominator: every row agreed with the tracker, or no row was ever
-compared (BDL-061.84). This module now names three populations rather than one —
+compared (BDL-061.84). This module now names four populations rather than one —
 the rows it resolved, the rows it could not and what each of them was
-(BDL-UX #210), and the beads the tracker holds under this table's epic that the
-table carries no row for at all.
+(BDL-UX #210), the beads the tracker holds under this table's epic that the table
+carries no row for at all, and the beads a row NAMES and this run could not read.
+
+**The last two were one, and the run contradicted itself over them.** ``seen``
+was filled only from rows that resolved, so every unresolved row handed its bead
+to "no row in their epic's table" while the same run printed the row under
+``bead-and-text`` or ``more-than-one-bead``. Measured on this repository at
+27db92b: 79 beads reported as carried by no row, 38 of which had a row whose
+first cell's head is exactly that bead's id. A reader acting on the message adds
+a row that is already there (BDL-068 S5, review Major 1).
 
 **It never writes a row it did not find.** A bead missing from a table is real
 drift and it is reported, not inserted: adding a row to somebody's document is
@@ -72,8 +80,14 @@ class ReconcileResult:
     can exit non-zero on drift.
 
     ``rows_read`` and ``rows_resolved`` are the denominator and the numerator of
-    the run. ``unresolved_rows`` names the difference and ``unlisted_beads``
-    names what no row of the table mentions at all, as ``(path, bead_id)``.
+    the run. ``unresolved_rows`` names the difference, by CELL.
+
+    The two bead-keyed lists are the same difference seen from the tracker's side,
+    and they are two because their remedies are two. ``unlisted_beads`` is
+    ``(path, bead_id)`` for a bead no row of the table names — add a row.
+    ``beads_named_by_an_unresolved_row`` is ``(path, bead_id, cell)`` for a bead a
+    row does name and this run could not read — fix that cell, and the shape in
+    ``unresolved_rows`` says how. No bead is in both.
     """
 
     changed_files: list[Path] = field(default_factory=list)
@@ -82,6 +96,9 @@ class ReconcileResult:
     rows_resolved: int = 0
     unresolved_rows: list[UnresolvedRow] = field(default_factory=list)
     unlisted_beads: list[tuple[Path, str]] = field(default_factory=list)
+    beads_named_by_an_unresolved_row: list[tuple[Path, str, str]] = field(
+        default_factory=list
+    )
 
     @property
     def is_inert(self) -> bool:
@@ -154,6 +171,7 @@ def _reconcile_one(
         return
     header_idx, status_col = located
     seen: set[str] = set()
+    named: dict[str, str] = {}
     changed = False
     for idx in range(header_idx + 2, len(lines)):
         cells = split_table_row(lines[idx])
@@ -170,6 +188,8 @@ def _reconcile_one(
             result.unresolved_rows.append(
                 UnresolvedRow(active_path, cells[0], row.shape or "", row.reason or "")
             )
+            if row.names is not None:
+                named.setdefault(row.names, cells[0])
             continue
         result.rows_resolved += 1
         seen.add(row.bead_id)
@@ -183,7 +203,9 @@ def _reconcile_one(
         lines[idx] = render_row(cells, newline="\n" if lines[idx].endswith("\n") else "")
         result.drifted_rows.append((active_path, row.bead_id, old_cell, wanted))
         changed = True
-    _record_unlisted(active_path, bd_statuses, result, prefix=prefix, seen=seen)
+    _record_beads_without_a_reconciled_row(
+        active_path, bd_statuses, result, prefix=prefix, seen=seen, named=named
+    )
     if not changed:
         return
     try:
@@ -193,25 +215,37 @@ def _reconcile_one(
     result.changed_files.append(active_path)
 
 
-def _record_unlisted(
+def _record_beads_without_a_reconciled_row(
     active_path: Path,
     bd_statuses: Mapping[str, str],
     result: ReconcileResult,
     *,
     prefix: str | None,
     seen: set[str],
+    named: Mapping[str, str],
 ) -> None:
-    """Name the epic's beads no row of this table resolved to.
+    """Name the epic's beads no row of this table reconciled, and say which kind.
+
+    *seen* is the beads a row RESOLVED to and *named* the beads a row NAMED and
+    this run could not read, mapped to the cell that names them. A bead in
+    neither has no row at all. The order of the three tests is the order of the
+    remedies: a bead this run compared needs nothing, a bead whose row is
+    unreadable needs that cell fixed, and only what is left needs a row written.
 
     Only when the table's epic is known: without a prefix there is no population
-    to subtract from, and reporting every bead in the tracker as unlisted would
-    be a wall nobody reads.
+    to subtract from, and reporting every bead in the tracker would be a wall
+    nobody reads.
     """
     if prefix is None:
         return
     for bead_id in _beads_of_epic(bd_statuses, prefix):
-        if bead_id not in seen:
-            result.unlisted_beads.append((active_path, bead_id))
+        if bead_id in seen:
+            continue
+        cell = named.get(bead_id)
+        if cell is not None:
+            result.beads_named_by_an_unresolved_row.append((active_path, bead_id, cell))
+            continue
+        result.unlisted_beads.append((active_path, bead_id))
 
 
 def reconcile_active_tables(
@@ -239,8 +273,11 @@ def reconcile_active_tables(
     unrecognised, are left untouched; rows that resolve to no bead at all are
     recorded in :attr:`ReconcileResult.unresolved_rows` with the shape and the
     reason, so a run that compared nothing cannot report the same as a run that
-    found nothing wrong. Only files with a changed cell are rewritten (everything
-    else byte-preserved). Best-effort: never raises.
+    found nothing wrong. A bead of the epic that no row reconciled is reported in
+    one of two lists — :attr:`ReconcileResult.unlisted_beads` when no row names it
+    and :attr:`ReconcileResult.beads_named_by_an_unresolved_row` when one does —
+    and never written into the table. Only files with a changed cell are rewritten
+    (everything else byte-preserved). Best-effort: never raises.
     """
     result = ReconcileResult()
     prefixes = epic_prefixes or {}

@@ -455,10 +455,17 @@ span, bold, or a Markdown link around an id resolves to that id (BDL-UX #210).
 A row that still resolves to nothing is reported with the shape that made it
 unresolvable — `no-bead-id`, `bead-and-text`, `more-than-one-bead`,
 `unknown-to-tracker` or `ambiguous-number` — because one sentence over five
-populations is a report nobody can act on. Beads the tracker holds that an epic's
-table carries no row for are named too, and never written: inserting a row into
-somebody's document is the same decision-for-an-agent as adding a path to their
-commit.
+populations is a report nobody can act on.
+
+Beads the tracker holds that an epic's table did not reconcile are named too, in
+two lists, because the two have two remedies: **a row this run could not read**
+(the cell is quoted — fix it, and the shape above says how) and **no row in their
+epic's table** (add a row). They were one list until BDL-068 S5, and the run
+contradicted itself over them: 38 of the 79 beads reported as carried by no row
+had a row whose first cell's head was exactly that bead's id, already printed as
+`bead-and-text` or `more-than-one-bead` by the same run. Neither list is ever
+written into a table: inserting a row into somebody's document is the same
+decision-for-an-agent as adding a path to their commit.
 
 This is the mechanism that keeps `ACTIVE.md` honest **by construction** — wired
 into the pre-commit hook (above), the coordinator no longer hand-edits
@@ -471,7 +478,8 @@ bead-status rows; the table is reconciled from `bd` on every commit.
 - `--json` — machine-readable output: `{ "changed_files": [...], "drifted_rows":
   [ { "path", "bead_id", "old", "new" }, ... ], "rows_read", "rows_resolved",
   "unresolved_rows": [ { "path", "cell", "shape", "reason" }, ... ],
-  "unresolved_by_shape", "unlisted_beads", "staging" }`.
+  "unresolved_by_shape", "unlisted_beads", "beads_named_by_an_unresolved_row":
+  [ { "path", "bead_id", "cell" }, ... ], "staging" }`.
 - `--no-export` — skip the `bd export` jsonl sync (fix mode only).
 - `--stage` — re-stage the reconciled `ACTIVE.md`(s) and the exported jsonl that
   **this commit already stages**, and name every path it corrected and did not.

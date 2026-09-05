@@ -101,16 +101,46 @@ resolve about fifty rows of this repository's finished epics and rewrite their
 status cells inside an unrelated commit. The shape is reported so the next
 decision is taken on a number rather than on a guess.
 
-### A bead with no row at all
+### A bead with no row, and a bead with a row this run could not read
 
-`unlisted_beads` names the beads the tracker holds under a table's epic that no
-row of that table resolved to — the other half of what BDL-062's reconcile missed,
-where three closed beads read `blocked` and three more were not listed at all.
-Measured here: 79 beads across 12 epics, at most 12 in any one. It is reported and
-**never written**: inserting a row into somebody's document is the same
-decision-for-an-agent as adding a path to their commit. It is computed only when
-the table's epic is known, because without a prefix there is no population to
-subtract from.
+These are two findings with two remedies, and they were one until BDL-068 S5's
+review found the run contradicting itself over them. `seen` was filled only from
+rows that RESOLVED, so every unresolved row handed its bead to "no row in their
+epic's table" while the same run printed the row that names it under
+`bead-and-text` or `more-than-one-bead`. Measured at `27db92b`: 79 beads reported
+as carried by no row, 38 of which had a row whose first cell's head is exactly
+that bead's id. A reader acting on the message adds a row that is already there.
+
+The two offending shapes extract an id in order to write their message —
+`_RANGE.group("first")` and `_ID_THEN_TEXT.group("id")` — and both used to throw
+it away. `RowId.names` now carries it, resolved through the same code a whole
+cell is resolved through, and the reconcile splits the bead-keyed report in two:
+
+| List | The bead | The remedy |
+|------|----------|------------|
+| `beads_named_by_an_unresolved_row` (`(path, bead_id, cell)`) | a row names it and this run could not read that row | fix the cell; the shape in `unresolved_rows` says how |
+| `unlisted_beads` (`(path, bead_id)`) | no row of the table names it | add a row |
+
+Measured before and after on this repository, with `active-sync --check --json`:
+79 carried by no row becomes 41 carried by no row and 38 named by a row this run
+could not read. The row-keyed numbers do not move (329 read, 238 resolved, 91
+unresolved, 0 rewritten), and 41 + 38 = 79: no bead left the report.
+
+`RowId.names` is set only on a failure and only when the id it found is a bead
+the tracker reported, because a head naming nothing the tracker holds has no bead
+to subtract. **A range is not expanded.** `proj-x.3..8` names `proj-x.3`; the
+numbers between the endpoints are ids the table does not write, and enumerating
+them would be a guess. They stay in `unlisted_beads`, which is what the range's
+own remedy — give each bead its own row — asks the author for.
+
+Both lists are the other half of what BDL-062's reconcile missed, where three
+closed beads read `blocked` and three more were not listed at all. Both are
+reported and **never written**: inserting a row into somebody's document is the
+same decision-for-an-agent as adding a path to their commit. Both are computed
+only when the table's epic is known, because without a prefix there is no
+population to subtract from. The human report prints neither on an `is_inert`
+run — a run that resolved no row at all compared nothing, and a per-bead list
+there restates that one fact once per bead — and `--json` carries both always.
 
 ## Public surface
 
@@ -122,7 +152,9 @@ subtract from.
   bd_statuses, *, prefix=None)`** — the forms of a bead id, and the mapping between
   them. `short_form("proj-x.22")` is `".22"`; `undecorate` removes the Markdown a
   document wrapped an id in; `resolve_row_bead_id` returns a `RowId` carrying
-  either a `bead_id` or a `shape` and a `reason`.
+  either a `bead_id` or a `shape` and a `reason`. On a failure `RowId.names`
+  carries the bead the row NAMES without resolving to it, when its shape found
+  one.
 - **`set_active_table_status(active_path, bead_id, status)`** — flips one bead's
   Status cell (the row's **last** cell) by **whole-token** match in the first
   cell, in either of the id's two forms (so `…mukc.1` never collaterally matches
@@ -154,8 +186,9 @@ subtract from.
 - **`ReconcileResult`** (dataclass) — the outcome: `changed_files` (paths
   rewritten), `drifted_rows` (`(path, bead_id, old_cell, new_cell)` per
   corrected cell), `rows_read` / `rows_resolved`, `unresolved_rows` (a
-  `UnresolvedRow(path, cell, shape, reason)` each) and `unlisted_beads`
-  (`(path, bead_id)`). The counts exist because an empty `drifted_rows` had
+  `UnresolvedRow(path, cell, shape, reason)` each), `unlisted_beads`
+  (`(path, bead_id)`) and `beads_named_by_an_unresolved_row`
+  (`(path, bead_id, cell)`). The counts exist because an empty `drifted_rows` had
   two meanings that read identically: every row agreed with the tracker, or no
   row was ever compared. `is_inert` is the second — rows read, none resolved —
   and `active-sync --check` exits 1 on it as well as on drift.
@@ -276,7 +309,8 @@ and the reconcile core's drift / no-op / byte-preservation cases);
 `tests/test_active_reconcile.py` plus
 `tests/acceptance/features/active_reconcile.feature` cover the decoration a
 document wraps an id in, the five unresolved shapes, the unlisted beads and the
-staging decision. The
+staging decision; `tests/test_active_row_named_beads.py` covers the split between
+a bead no row names and a bead a row names and this run could not read. The
 `active-sync` command's check / fix / no-op paths are covered by
 `tests/test_cli_active_sync.py` and `tests/test_cli_active_sync_hardening.py`,
 the pre-commit hook wiring by `tests/test_cli_hooks.py`, and the re-exported S4

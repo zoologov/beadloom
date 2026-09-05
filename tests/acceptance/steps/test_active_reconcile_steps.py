@@ -243,3 +243,34 @@ def _no_git_add(world: dict[str, Any]) -> None:
 @then("it reports the paths the reconcile withheld")
 def _reports_withheld(world: dict[str, Any]) -> None:
     assert "withheld" in world["hook"]
+
+
+@then(parsers.parse("the bead {number} is reported as named by a row this run could not read"))
+def _named_by_an_unresolved_row(world: dict[str, Any], number: str) -> None:
+    named = {bead_id for _, bead_id, _ in world["result"].beads_named_by_an_unresolved_row}
+    assert f"proj-e{number}" in named
+
+
+@then("the two populations name no bead in common")
+def _populations_are_disjoint(world: dict[str, Any]) -> None:
+    result = world["result"]
+    unlisted = {bead_id for _, bead_id in result.unlisted_beads}
+    named = {bead_id for _, bead_id, _ in result.beads_named_by_an_unresolved_row}
+    assert unlisted & named == set()
+
+
+@then(parsers.parse('the row quoted against the bead {number} is "{cell}"'))
+def _row_quoted_against(world: dict[str, Any], number: str, cell: str) -> None:
+    quoted = {
+        bead_id: row_cell
+        for _, bead_id, row_cell in world["result"].beads_named_by_an_unresolved_row
+    }
+    assert quoted[f"proj-e{number}"] == cell
+
+
+@then(parsers.parse("the bead {number} is reported in neither population"))
+def _in_neither_population(world: dict[str, Any], number: str) -> None:
+    result = world["result"]
+    bead_id = f"proj-e{number}"
+    assert bead_id not in {b for _, b in result.unlisted_beads}
+    assert bead_id not in {b for _, b, _ in result.beads_named_by_an_unresolved_row}

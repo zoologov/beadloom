@@ -1324,6 +1324,10 @@ def _rebased(
             for row in result.unresolved_rows
         ],
         unlisted_beads=[(rebase(p), bead_id) for (p, bead_id) in result.unlisted_beads],
+        beads_named_by_an_unresolved_row=[
+            (rebase(p), bead_id, cell)
+            for (p, bead_id, cell) in result.beads_named_by_an_unresolved_row
+        ],
     )
 
 
@@ -1365,6 +1369,10 @@ def _emit_active_sync(
                 {"path": str(p), "bead_id": bead_id}
                 for (p, bead_id) in result.unlisted_beads
             ],
+            "beads_named_by_an_unresolved_row": [
+                {"path": str(p), "bead_id": bead_id, "cell": cell}
+                for (p, bead_id, cell) in result.beads_named_by_an_unresolved_row
+            ],
         }
         if staging is not None:
             payload["staging"] = {
@@ -1385,6 +1393,7 @@ def _emit_active_sync(
         return
     click.echo(f"active-sync: resolved {result.rows_resolved} of {result.rows_read} row(s) read.")
     _echo_unresolved(result)
+    _echo_named_by_an_unresolved_row(result)
     _echo_unlisted(result)
     if not result.drifted_rows:
         click.echo("active-sync: ACTIVE tables already coherent.")
@@ -1427,8 +1436,33 @@ def _echo_unresolved(result: ReconcileResult) -> None:
 
 
 # beadloom:component=active-table
+def _echo_named_by_an_unresolved_row(result: ReconcileResult) -> None:
+    """Name the beads whose row this run read and could not resolve.
+
+    Printed BEFORE the unlisted beads, and separately from them, because the two
+    remedies are different and this command used to give the wrong one: a bead a
+    row names was reported as having no row, so a reader adding the row it was
+    told to add would add a second one (BDL-068 S5, review Major 1). The cell is
+    quoted so the reader can find the row; the shape and the remedy for it are in
+    the unresolved-rows report above.
+    """
+    if not result.beads_named_by_an_unresolved_row:
+        return
+    click.echo(
+        f"active-sync: {len(result.beads_named_by_an_unresolved_row)} bead(s) the "
+        f"tracker holds have a row this run could not read:"
+    )
+    shown = result.beads_named_by_an_unresolved_row[:_UNRESOLVED_SHOWN]
+    for path, bead_id, cell in shown:
+        click.echo(f"  {path}: {bead_id}: the row {cell!r} names it")
+    remainder = len(result.beads_named_by_an_unresolved_row) - _UNRESOLVED_SHOWN
+    if remainder > 0:
+        click.echo(f"  … and {remainder} more")
+
+
+# beadloom:component=active-table
 def _echo_unlisted(result: ReconcileResult) -> None:
-    """Name the beads the tracker holds that a table carries no row for.
+    """Name the beads the tracker holds that NO row of a table names.
 
     Reported and never written: inserting a row into somebody's document is the
     same decision-for-an-agent as adding a path to their commit.

@@ -121,3 +121,42 @@ Feature: the reconcile reads the id a row names and stages nothing the commit di
       Given the pre-commit hook this project installs
       Then it runs no git add of its own
       And it reports the paths the reconcile withheld
+
+  # BDL-068 S5 fix wave, from the S5 review's Major 1. The report above named a bead as
+  # having no row while the SAME run reported the row that names it, under
+  # `bead-and-text` or `more-than-one-bead`. Measured on this repository at 27db92b: 79
+  # beads reported as carried by no row, and 38 of the 79 had a row whose first cell's
+  # head is exactly that bead's id. A reader acting on the message adds a row that is
+  # already there.
+
+  Rule: a bead a row names is never reported as having no row
+
+    @bead:beadloom-0mdo.61 @node:active-table
+
+    Scenario: A run that could not read a row does not also report the row as missing
+      Given an ACTIVE table whose rows are ".1 Contract model"
+      And the tracker reports .1 and .2 of that epic as closed
+      When the tables are reconciled
+      Then the bead .1 is reported as named by a row this run could not read
+      And the bead .2 is reported as carried by no row
+      And the two populations name no bead in common
+
+    Scenario: The row a bead is named by is quoted, so the reader can find it
+      Given an ACTIVE table whose rows are ".1 Contract model"
+      And the tracker reports .1 of that epic as closed
+      When the tables are reconciled
+      Then the row quoted against the bead .1 is ".1 Contract model"
+
+    Scenario: A range names its first bead and is not expanded into the rest
+      Given an ACTIVE table whose rows are ".3-.8"
+      And the tracker reports .3 and .8 of that epic as closed
+      When the tables are reconciled
+      Then the bead .3 is reported as named by a row this run could not read
+      And the bead .8 is reported as carried by no row
+
+    Scenario: A bead whose row resolved is in neither population
+      Given an ACTIVE table whose rows are "`.1`"
+      And the tracker reports .1 of that epic as closed
+      When the tables are reconciled
+      Then 1 row resolved
+      And the bead .1 is reported in neither population
