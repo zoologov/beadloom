@@ -68,6 +68,21 @@ _TITLE_REFERENCE = re.compile(
 _ID_SUFFIX = re.compile(r"\.(\d+[a-z]?)$")
 
 
+def title_references(text: str) -> tuple[str, ...]:
+    """Every bead reference *text* states, in the order it states them.
+
+    The reader half of :func:`title_id_mismatches`, public because the same
+    grammar is needed where a number is WRITTEN and not only where it is
+    compared. `beadloom-0mdo.53` reads it at bead-CREATION time, which is where
+    the divergence BDL-UX #171 describes is created and where there is no
+    allocated id to compare against yet; this module reads it afterwards, which
+    is where the divergence is detected. One grammar read twice, which is the
+    rule `beadloom-0mdo.51` applied when it deleted the merge-slot regex from a
+    second module.
+    """
+    return tuple(match.group(0) for match in _TITLE_REFERENCE.finditer(text))
+
+
 def title_id_mismatches(records: Sequence[BeadRecord]) -> tuple[tuple[str, str], ...]:
     """Every ``(bead_id, reference)`` where a bead's title numbers it differently.
 

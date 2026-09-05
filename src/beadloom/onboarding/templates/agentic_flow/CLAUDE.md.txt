@@ -158,8 +158,10 @@ bd close <id> --suggest-next
 # Dependency graph
 bd graph --all
 
-# Add dependency
+# Add dependency, then READ THE ECHO — bd names both beads' full titles, and that
+# echo is the only check on an edge built from an id you wrote down yourself
 bd dep add <id> <depends-on-id>
+bd dep tree <id>                  # confirm the edge against the titles, not the ids
 ```
 
 **Multi-agent coordination (new in 1.0.4) — used by `/coordinator`:**

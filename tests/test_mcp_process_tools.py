@@ -12,17 +12,14 @@ Every ``bd`` invocation and ``run_ci_gate`` is MOCKED — no real ``bd``, no net
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import yaml
 
 from beadloom.services.bd_seam import BdResult, BdUnavailableError
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -132,30 +129,37 @@ class TestTaskInit:
         assert (d / "ACTIVE.md").is_file()
         assert not (d / "PRD.md").exists()
 
-    def test_builds_four_role_dag(self, project: Path) -> None:
+    def test_builds_four_role_dag_in_one_process(self, project: Path) -> None:
+        """The four roles and their three edges are created by ONE bd call.
+
+        BDL-UX #165 measured 60 beads and 59 edges at 69.45 s over 119 processes
+        against 1.15 s over one, so the scaffold plans rather than loops. The
+        edges live inside the plan, which is why there is no `bd dep add` here at
+        all — and that is also BDL-UX #171's root removed, since a plan edge
+        names two keys and no id.
+        """
         from beadloom.services.mcp_server import handle_task_init
 
         calls: list[list[str]] = []
+        plans: list[dict[str, object]] = []
 
         def _record(args: list[str], **_: object) -> BdResult:
             calls.append(args)
             if args[0] == "create":
-                idx = sum(1 for c in calls if c[0] == "create")
-                return BdResult(0, f"bd-{idx}\n", "")
+                plans.append(_graph_plan_of(args))
+                mapping = {role: f"bd-{i + 1}" for i, role in enumerate(_ROLE_KEYS)}
+                return BdResult(0, json.dumps({"ids": mapping}), "")
             return BdResult(0, "", "")
 
         with patch("beadloom.services.mcp_server.run_bd", side_effect=_record):
             handle_task_init(project, type_="feature", key="ABC-2")
 
-        roles = [c for c in calls if c[0] == "create"]
-        # 4 mandatory roles: dev, test, review, tech-writer.
-        assert len(roles) == 4
-        joined = " ".join(" ".join(c) for c in roles)
-        for role in ("dev", "test", "review", "tech-writer"):
-            assert role in joined
-        # Dependencies are wired (test←dev, review←test, tech-writer←review).
-        dep_calls = [c for c in calls if c[0] == "dep"]
-        assert len(dep_calls) == 3
+        assert len(calls) == 1
+        assert calls[0][:2] == ["create", "--graph"]
+        assert "--json" in calls[0]
+        assert not [c for c in calls if c[0] == "dep"]
+        nodes = plans[0]["nodes"]
+        assert [node["key"] for node in nodes] == list(_ROLE_KEYS)
 
     def test_bd_unavailable_returns_structured_error(self, project: Path) -> None:
         from beadloom.services.mcp_server import handle_task_init
@@ -169,18 +173,29 @@ class TestTaskInit:
         assert "bd" in result["error"]
 
 
+_ROLE_KEYS = ("dev", "test", "review", "tech-writer")
+
+
 def _fake_bd_create_factory(ids: list[str]) -> object:
-    counter = {"n": 0}
+    """Answer one `bd create --graph` the way bd 1.0.4 does: a key -> id mapping.
+
+    The scaffold makes ONE bd call and reads the ids out of its JSON answer, so a
+    fake that hands back one id per process no longer describes the seam.
+    """
 
     def _fake(args: list[str], **_: object) -> BdResult:
         if args[0] == "create":
-            i = counter["n"]
-            counter["n"] += 1
-            out = ids[i] if i < len(ids) else f"bd-{i + 1}"
-            return BdResult(0, out + "\n", "")
+            mapping = dict(zip(_ROLE_KEYS, ids, strict=False))
+            return BdResult(0, json.dumps({"ids": mapping, "schema_version": 1}), "")
         return BdResult(0, "", "")
 
     return _fake
+
+
+def _graph_plan_of(args: list[str]) -> dict[str, object]:
+    """The plan document a recorded `bd create --graph <path>` was handed."""
+    path = args[args.index("--graph") + 1]
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -422,43 +437,49 @@ class TestTaskInitHardening:
         assert "boom" in result["error"]
         assert result["doc_paths"]
 
-    def test_dependency_edges_wire_chain(self, project: Path) -> None:
-        """The 3 dep edges chain the roles dev<-test<-review<-tech-writer, each
-        pointing at the previous role's created id."""
+    def test_dependency_edges_wire_chain_by_key_and_never_by_id(
+        self, project: Path
+    ) -> None:
+        """The 3 edges chain dev<-test<-review<-tech-writer, named by ROLE KEY.
+
+        The edge the scaffold writes names two keys it chose, so the mis-wiring
+        BDL-UX #171 records — a valid, accepted, wrong edge built from an id
+        authored before the tracker allocated it — has nothing to go wrong with.
+        This reddens the day the scaffold goes back to wiring by id.
+        """
         from beadloom.services.mcp_server import handle_task_init
 
-        calls: list[list[str]] = []
+        plans: list[dict[str, object]] = []
 
         def _record(args: list[str], **_: object) -> BdResult:
-            calls.append(args)
             if args[0] == "create":
-                idx = sum(1 for c in calls if c[0] == "create")
-                return BdResult(0, f"id-{idx}\n", "")
+                plans.append(_graph_plan_of(args))
+                mapping = {role: f"id-{i + 1}" for i, role in enumerate(_ROLE_KEYS)}
+                return BdResult(0, json.dumps({"ids": mapping}), "")
             return BdResult(0, "", "")
 
         with patch("beadloom.services.mcp_server.run_bd", side_effect=_record):
             handle_task_init(project, type_="feature", key="ABC-10")
 
-        deps = [c for c in calls if c[0] == "dep"]
-        # ["dep", "add", <role_id>, <dep_id>] — each later role depends on prior.
-        assert deps == [
-            ["dep", "add", "id-2", "id-1"],
-            ["dep", "add", "id-3", "id-2"],
-            ["dep", "add", "id-4", "id-3"],
+        assert plans[0]["edges"] == [
+            {"from_key": "test", "to_key": "dev", "type": "blocks"},
+            {"from_key": "review", "to_key": "test", "type": "blocks"},
+            {"from_key": "tech-writer", "to_key": "review", "type": "blocks"},
         ]
+        assert "id-" not in json.dumps(plans[0])
 
     def test_bug_type_uses_simple_docs_and_task_bead(self, project: Path) -> None:
         """A `bug` work item gets BRIEF/ACTIVE (not the full PRD set) and `task`
         beads (the bead type for non epic/feature)."""
         from beadloom.services.mcp_server import handle_task_init
 
-        calls: list[list[str]] = []
+        plans: list[dict[str, object]] = []
 
         def _record(args: list[str], **_: object) -> BdResult:
-            calls.append(args)
             if args[0] == "create":
-                idx = sum(1 for c in calls if c[0] == "create")
-                return BdResult(0, f"bd-{idx}\n", "")
+                plans.append(_graph_plan_of(args))
+                mapping = {role: f"bd-{i + 1}" for i, role in enumerate(_ROLE_KEYS)}
+                return BdResult(0, json.dumps({"ids": mapping}), "")
             return BdResult(0, "", "")
 
         with patch("beadloom.services.mcp_server.run_bd", side_effect=_record):
@@ -467,8 +488,7 @@ class TestTaskInitHardening:
         d = project / ".claude" / "development" / "docs" / "features" / "BUG-1"
         assert (d / "BRIEF.md").is_file()
         assert not (d / "PRD.md").exists()
-        creates = [c for c in calls if c[0] == "create"]
-        assert all("--type" in c and "task" in c for c in creates)
+        assert all(node["type"] == "task" for node in plans[0]["nodes"])
 
     def test_idempotent_docs_not_overwritten(self, project: Path) -> None:
         """Re-running task_init does not clobber an existing doc's content."""

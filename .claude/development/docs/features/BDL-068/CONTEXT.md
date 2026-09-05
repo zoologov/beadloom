@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-09-02
-> **Last updated:** 2026-09-04
+> **Last updated:** 2026-09-05
 
 ---
 
@@ -89,6 +89,7 @@ instrument the other five are measured by.
 | 2026-09-04 | `application` stays RULED OUT of BDL-068's axes, and the three S5 declarations that named it are regenerated from the derived rows instead. | The declaration confused a layer with a node. Node `application` owns eighteen files and every one renders a view — `architecture_view.py`, `landscape_view.py`, `site_about.py`, `site_landscape.py`, `site_mermaid_guard.py` and the `site_dashboard/` package — and none of them reaches the tracker. Measured: `application` is not among the 31 nodes owning the 88 owned paths BDL-068 changes since `17eafb8^`. The application-layer files S5 touches are owned by nodes of their own (`active-table`, `flow-guards`, `ci-gate`, `doc-spaces`, `intent-reader`), so approving `application` would put eighteen view-rendering files inside the approval to buy a name no S5 surface needs. `beadloom waves` stated the remedy itself: widening the declaration is not the fix. |
 | 2026-09-04 | The derived `bd` call-site population `beadloom-0mdo.51` builds is homed at node `bd-seam`, not in a new module under `application`. | `services/bd_seam.py` is the single place this project's code reaches `bd` — the population is a property of that seam, and the sweep confirms it: fourteen caller sites in five nodes all reach the tracker through it. A new module placed under a node the axes rule out would reproduce, one layer up, the finding `beadloom-0mdo.58` was opened to answer. |
 | 2026-09-04 | This project keeps depending on `bd merge-slot`, in the call form that grants exclusion and in no other: `acquire --holder <bead-id>` read by exit code, and `release --holder <bead-id>`. The exclusion the flow relies on for FILES stays `beadloom waves`, and the instruction now says which guarantee is which. | Re-measured on bd 1.0.4 in an isolated rig with every exit code read without a pipe, because BDL-UX #194 and #237 both name the primitive as the broken thing. It is not: `acquire` refuses a held slot with exit 1, four rounds of eight simultaneous acquires produced exactly one winner each round, and `release --holder` is owner-checked. Every defect the two entries measured is a property of the call form this project instructs — no `--holder`, a bare `release`, and `--wait` under prose of ours that called it blocking. Withdrawing the primitive would discard a working mutex to answer a defect in our own prose; instructing it unchanged would keep telling every agent it holds a lock it does not hold. |
+| 2026-09-05 | A scaffolded bead DAG is created as ONE `bd create --graph` plan whose edges name plan-local keys, and the flat ids that path allocates are accepted in place of the `<parent>.<n>` shape `bd create --parent` gives. | The plan removes BDL-UX #171's root rather than guarding it: an edge names two keys the author chose, so no id is written down and there is none to get wrong. The id SHAPE is the cost, and it was measured rather than assumed — `bd create --graph` with `parent_id` sets the parent relation and allocates `rigB-p05`, while `bd create --parent` allocates `rigB-af8.1`, so a scaffolded bead loses the readable ordering its number carried. That ordering is what the convention wrote into titles in the first place, which is the defect; `bd dep tree` renders the DAG from the tracker, where the order is a fact rather than a copy. This changes nothing for the per-slice beads this epic creates with `bd create --parent`, whose remedy is `--json` and the title convention. |
 | 2026-09-04 | S5's axes are derived from thirteen Python targets, and the ~261 `bd` call sites that are prose are recorded as UNREACHABLE rather than absent. | `beadloom impact` sweeps Python source, and this project instructs `bd` far more often than it invokes it: 118 sites in its own harness, 133 in the templates it ships, 8 in hook bodies held as Python string literals, 2 in a provisioning shell script, and `.git/hooks/post-merge`, which `bd init` writes outside the repository and which `beadloom-l2f2`'s finding is about. Those counts come from a literal search for `bd <subcommand>`, so they are a lower bound and not a derivation. An unreachable region is unresolved, not empty — the same rule S4's axes state for `co-writers` — and deriving that population is exactly what `beadloom-0mdo.51` exists to do. |
 
 ## Related Files
@@ -102,8 +103,10 @@ Discover through `beadloom ctx <ref-id>` — every node the RFC names resolves t
 ## Current Phase
 
 - **Phase:** Development — S5, the tracker adapters.
-- **Current bead:** `beadloom-0mdo.39` closed S5 wave 1 — the landing lock, BDL-UX #237 and
-  #194. Before it, `beadloom-0mdo.58` derived S5's axes, which is the RFC's own per-slice rule
+- **Current bead:** `beadloom-0mdo.53` closed S5's third wave — BDL-UX #171 and #165, the
+  bead-creation path. Before it, `beadloom-0mdo.51` derived the `bd` call-site population and
+  `.52` gave every answer the population it covers. `beadloom-0mdo.39` closed S5 wave 1 — the
+  landing lock, BDL-UX #237 and #194. Before it, `beadloom-0mdo.58` derived S5's axes, which is the RFC's own per-slice rule
   and the thing S4 skipped: fourteen rows and a fourth derivation block are in the RFC, and
   every S5 bead's `refs:` is regenerated from them. The slice's five remaining beads are `.51`
   (the derived `bd` call-site population, which blocks `.52`, `.53` and `.54`), `.52` (#187,

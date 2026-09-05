@@ -29,6 +29,13 @@ it runs; this reads bd's own notice off stderr, bd's own suggestion block off
 stdout, and the argv we wrote. It re-implements no decision bd makes, which is
 what keeps it on the right side of Q4.
 
+`creation.py` is the one path that creates beads: **a bead's id comes from the
+tracker's answer, never from a number we authored**. It composes the plan document
+`bd create --graph` accepts, whose edges name plan-local keys, and reads the
+`key -> id` mapping bd answers with. That removes BDL-UX #171's root rather than
+guarding it, and it is BDL-UX #165's remedy in the same act — one process instead
+of one per bead and one per edge.
+
 ## Public surface
 
 - `run_bd(args, *, cwd=None)` — invoke `bd` with *args* (no leading `bd`) and
@@ -78,6 +85,18 @@ what keeps it on the right side of Q4.
   sentence. `ready=None` means the confirmation could not be made.
 - `COVERAGE`, `COVERAGE_AS_ASKED`, `COVERAGE_FILTERED`, `COVERAGE_TRUNCATED`,
   `COVERAGE_UNCHECKED`, `NOT_COMPARED`, `NOTHING_TO_CHECK`, `READY_COMMAND`.
+
+### Creating beads without authoring an id
+
+- `PlannedBead` — `key`, `title`, `bead_type`, `priority`, `parent_id`,
+  `depends_on`. `depends_on` holds PLAN-LOCAL KEYS and never ids.
+- `graph_plan(beads)` → the JSON document `bd create --graph` accepts; raises
+  `AuthoredNumberError` when a planned title states a bead number.
+- `allocated_ids(stdout)` — the `key -> id` mapping from `bd create --graph
+  --json`, or `None` when that answer cannot be read.
+- `created_id(stdout)` — the id from `bd create --json`, or `None`.
+- `plan_is_required(bead_count)`, `PLAN_THRESHOLD`, `EDGE_BLOCKS`,
+  `PLAN_SCHEMA_KEYS`.
 
 ## Invariants
 
@@ -139,6 +158,32 @@ what keeps it on the right side of Q4.
   the coordinator's launch prompt, `.claude/development/` (which QUOTES call forms
   as evidence and instructs nobody), a `bd` a person types, and string literals in
   this project's Python, whose emitted scripts are read where they run instead.
+- **A bead's id is allocated at creation, so nothing may author it first.**
+  Measured on bd 1.0.4: eight simultaneous `--parent` creates took `.4` through
+  `.11` out of launch order, and four took `.1` through `.4` out of launch order
+  in a second rig. `bd create --graph` racing those four returned four FLAT ids
+  and consumed no number from that sequence, so the plan form closes BDL-UX #171
+  for the path it covers for two independent reasons — no positional number is
+  allocated, and its edges name keys rather than ids. It closes nothing for
+  `bd create --parent`, which is answered by `--json` and by the convention
+  `graph_plan` refuses to break. `beadloom waves` makes the same comparison after
+  the fact through `title_id_mismatches`, and both read the one grammar
+  `title_references` exports.
+- **The echo is preserved, and the form that discards it is named.** `bd dep add`
+  echoes both beads' FULL TITLES — `✓ Added dependency: proj-027 (bead 59)
+  depends on proj-9to (bead 60)` — and reading that echo is the only reason #171's
+  mis-wired edge was caught in seconds. `bd dep add --file`, the bulk form a
+  reader of #165 reaches for next, prints `✓ Added 2 dependencies` and no titles
+  at all, which is why it carries its own `echoed-titles` assumption instead of
+  being treated as the faster spelling of the same command. The fast form of the
+  WIRING half discards the check; the fast form of the CREATION half removes the
+  need for it.
+- **A helper that composes an argv hides the call site from the derivation.**
+  `invocations` resolves a list literal handed to `run_bd` and cannot follow a
+  function call, so an `argv` builder in `creation.py` left the scaffold's own
+  `bd create` absent from the report — not unsecured, invisible. The argv is
+  spelled at the call site in `mcp_server.py` for that reason, and a test reddens
+  the day it is tidied back into a helper.
 - **The grammar reads command position, not the word `bd`.** Measured over this
   repository's 65 instructing artifacts, the anchored sweep returns 266
   invocations and no prose; the unanchored one also reports `bd verifies`,
@@ -174,5 +219,6 @@ The single funnel for the MCP process-tools (`task_init` / `complete_bead` /
 module-level `subprocess.run`) to run the tools without a real `bd` binary.
 
 > Component doc (BDL-051; the population added by BDL-068 S5,
-> `beadloom-0mdo.51`, and the answer's coverage by `beadloom-0mdo.52`). Public
-> surface verified against `src/beadloom/services/bd_seam/`.
+> `beadloom-0mdo.51`, the answer's coverage by `beadloom-0mdo.52`, and the
+> creation path by `beadloom-0mdo.53`). Public surface verified against
+> `src/beadloom/services/bd_seam/`.

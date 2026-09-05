@@ -1892,7 +1892,7 @@ templates this project ships, the installed package's Python (via the seam's `ru
 scripts in `.git/hooks/` — which reaches `post-merge`, written by `bd init`, tracked nowhere
 and named nowhere under `src/`.
 
-**Four verdicts, because two are not enough.** `secured` (the call form makes the assumption
+**Nine assumptions and four verdicts, because two of each are not enough.** `secured` (the call form makes the assumption
 true), `unsecured` (it relies on a default measurement shows is narrower than the question),
 `holds` (no flag can secure it and it is measured true on the recorded release) and
 `unmeasured` (a subcommand this derivation has not measured — never a clean site).
@@ -1901,22 +1901,37 @@ Measured on this repository, against **bd 1.0.4**:
 
 ```
 $ beadloom bd-calls
-278 `bd` call site(s), measured against bd 1.0.4: 2 hook, 264 instruction, 12 python
+349 `bd` call site(s), measured against bd 1.0.4: 2 hook, 335 instruction, 12 python
 
+    60  untruncated-population     secured
+    49  unblocked-is-ready         secured
     48  unmeasured-subcommand      unmeasured
-    42  untruncated-population     unsecured
     36  exclusive-hold             secured
-    25  unblocked-is-ready         holds
-    17  allocated-id               unsecured
-    11  intended-id                unsecured
+    31  untruncated-population     unsecured
+    17  complete-population        secured
+    15  allocated-id               secured
+     8  intended-id                secured
+     2  legacy-alias               holds
 ```
 
-The three largest findings are worth naming. `bd ready` is unsecured on truncation at 40 sites
-and this flow calls it authoritative — its cap is 100 rows, announced on standard error, and
-`CLAUDE.md` tells every role to confirm against it. The 48 unmeasured sites are `bd swarm` (26)
-and `bd gate` (22), the two commands the coordinator orchestrates every wave with. And every
-`bd list` call in this project's Python names both of the filters `bd list` applies by default,
-which is BDL-UX #187 answered at the consumer.
+The findings worth naming are the ones that remain. The 48 unmeasured sites are `bd swarm`
+(26) and `bd gate` (22), the two commands the coordinator orchestrates every wave with, and
+nobody has measured either. The 31 unsecured sites are prose mentions of `bd ready`, whose cap
+is 100 rows and is announced on standard error; the remedy now ships into every composed role
+by the `_tracker` fragment, so a reader of any role file is told. Every `bd list` call in this
+project's Python names both of the filters `bd list` applies by default, which is BDL-UX #187
+answered at the consumer, and every Python call site is settled.
+
+Two of the assumptions went to zero unsecured in `beadloom-0mdo.53`. `allocated-id` is settled
+by `--json`, which answers with the id bd allocated, and by `--graph`, whose plan names beads by
+key and allocates a flat id that takes no number from the positional sequence at all.
+`intended-id` is settled at the ARTIFACT rather than the line, like `unblocked-is-ready`: an
+artifact that instructs `bd dep add` and also names `bd dep tree` tells its reader how to check
+the edge it just built. A ninth assumption, `echoed-titles`, applies only to `bd dep add
+--file`: the one-by-one form echoes both beads' full titles and the bulk form prints a count and
+none, so the fast spelling of the wiring half discards the check that caught BDL-UX #171. No
+artifact of this project instructs the bulk form today, and that rule reddens on the day one
+does.
 
 `--assumption` narrows to one assumption and `--unsettled` to the sites nothing settles.
 `--json` emits the same facts as data. `--strict` exits 1 when any site is unsettled; the
@@ -1929,10 +1944,13 @@ Every verdict is pinned to `BD_MEASURED_VERSION`, and a test fails when a differ
 installed. Three premises this population was built to check were re-measured and destroyed —
 BDL-UX #194 and #237, and `beadloom-l2f2` — so a verdict carried across a release without
 re-measuring is how a withdrawn defect comes back as a guard over nothing. A fourth withdrawal,
-of #97, was made and then reversed by this same population: `--suggest-next` names a
-still-blocked bead in four of ten measured dependency shapes, and is silent in exactly the one
-shape the withdrawal was taken on. A verdict states the release it was measured against and the
-shape it was measured over, or it states nothing.
+of #97, was made and then reversed by this same population. Its mechanism has now been
+characterised three times and no characterisation survived the next measurement: given one rig
+per shape rather than ten shapes sharing one, `--suggest-next` named a still-blocked bead in
+sixteen of twenty-three, on no shape rule any of the three sessions found. What is stable is the
+observation — it names beads that are still blocked, and `bd ready` was correct in all
+twenty-three. A verdict states the release it was measured against and the shape it was measured
+over, or it states nothing.
 
 The grammar, the assumption table and the regions the derivation cannot reach are in the
 [bd Seam DOC](components/bd-seam/DOC.md).

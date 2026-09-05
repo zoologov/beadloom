@@ -336,7 +336,7 @@ This is the one launch prompt where being helpful is the defect. If a measuremen
 
 When the review subagent returns:
 - **OK** → coordinator proceeds to the docs wave.
-- **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id>`; `bd dep add <fix-bead> <review-bead>`), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
+- **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id> --json`, which answers with the id it allocated — never write that number into the bead's own title; then `bd dep add <fix-bead> <review-bead>` and read the titles it echoes), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
 
 A re-review after a fix cycle does NOT re-impose the withholding: the verdict already on the bead releases the author's account to `beadloom review-brief <bead-id> --release`. The independence that mattered was established on the first pass.
 

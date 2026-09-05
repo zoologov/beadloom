@@ -124,10 +124,37 @@ Draft  →  Approved  →  Done
 5. Update both to `Status: Approved`
 6. **Create beads in tracker** (ONLY after PLAN is Approved):
    - One-time per clone: ensure `git config beads.role maintainer` is set (see CLAUDE.md §0 Setup).
-   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"` (use `--type epic` if you want `bd swarm` orchestration — swarm requires an epic-type parent; feature parents still work via bead dependencies)
-   - Create sub-beads with mandatory structure (see below): `bd create --type task --parent <parent-id>`
-   - Set up dependencies: `bd dep add <blocked> <blocker>`
-   - **Faster alternative (1.0.4):** create the whole bead DAG in one shot from a JSON plan — `bd create --graph <plan.json>` (define nodes + dependencies in the file).
+   - Create the parent bead and take its id from bd's answer, never from a number you
+     wrote first: `bd create --type feature --title "[ISSUE-KEY] Name" --json` (use
+     `--type epic` if you want `bd swarm` orchestration — swarm requires an epic-type
+     parent; feature parents still work via bead dependencies)
+   - **Create the sub-beads as ONE plan, not one bead per process**, and wire every edge
+     by plan-local KEY:
+
+     ```bash
+     bd create --graph plan.json --json    # -> {"ids": {"dev": "proj-fac", ...}}
+     ```
+
+     where `plan.json` is `{"nodes": [{"key": "dev", "title": "...", "type": "task",
+     "parent_id": "<parent-id>"}], "edges": [{"from_key": "test", "to_key": "dev",
+     "type": "blocks"}]}`. Measured on bd 1.0.4: a 60-bead DAG with 59 edges cost 69.45 s
+     over 119 processes created one at a time, against 1.15 s over one process from a
+     plan. A node key spelled `parent` instead of `parent_id` is silently ignored — exit
+     0, no parent set.
+   - **Never write a bead's number into its own title.** The number is ALLOCATED at
+     creation and a title written before it is a second copy that can disagree: four
+     `--parent` creates launched simultaneously took `.1` through `.4` out of launch
+     order.
+     The plan form removes the question — its edges name keys and it allocates a flat id
+     that takes no number from that sequence — and `--json` answers it for a single
+     create.
+   - Wiring an edge afterwards, when the DAG changes: `bd dep add <blocked> <blocker>`,
+     and **READ THE ECHO**. bd names both beads' FULL TITLES — `✓ Added dependency:
+     proj-027 (bead 59) depends on proj-9to (bead 60)` — and reading that echo is the
+     only reason a mis-wired edge was ever caught in seconds rather than surviving the
+     wave. Confirm the result with `bd dep tree <parent-id>`. The bulk `--file` form of
+     the same command prints `✓ Added 2 dependencies` and no titles at all, so it buys
+     speed by discarding the check; wire by key inside the plan instead.
 7. **Immediately proceed to Step 4** (no additional approval needed)
 
 **Process gate:** Do NOT create beads before PLAN is Approved. If PLAN is rejected or modified, no stale beads to clean up.
@@ -185,10 +212,13 @@ graph LR
 4. Create beads in tracker, with each bead's `refs:` generated from the section
    rather than typed — `beadloom axes .claude/development/docs/features/{ISSUE-KEY}/BRIEF.md --refs`:
    ```bash
-   bd create --type {type} --title "{ISSUE-KEY}: [Name]" --description "..."
-   # If multiple subtasks:
-   bd create --type task --title "BEAD-01: [Name]" --parent <parent-id>
+   bd create --type {type} --title "{ISSUE-KEY}: [Name]" --description "..." --json
+   # If multiple subtasks: one plan, one process, every edge named by key
+   bd create --graph plan.json --json
    ```
+
+   The title carries the work-item key and never a bead number — the number is
+   allocated at creation, so a title written before it is a second copy of one fact.
 5. Show to user
 6. **WAIT for explicit approval**
 7. Update `Status: Approved`
@@ -227,12 +257,14 @@ All documents MUST use templates from `/templates`. No improvisation.
 - [ ] CONTEXT.md created with `Status: Draft`
 - [ ] PLAN.md created with `Status: Draft` (beads described, NOT created yet)
 - [ ] CONTEXT.md + PLAN.md → **user approved** → `Status: Approved`
-- [ ] Parent bead created: `bd create --type feature`
-- [ ] Dev sub-beads created: `bd create --type task --parent <parent-id>`
-- [ ] Test sub-bead created (depends on all dev beads)
-- [ ] Review sub-bead created (depends on test bead)
-- [ ] Tech-writer sub-bead created (depends on review bead)
-- [ ] Dependencies set: `bd dep add`
+- [ ] Parent bead created, its id read from bd's answer: `bd create --type feature --json`
+- [ ] Sub-bead DAG created as ONE plan, edges named by key: `bd create --graph plan.json --json`
+- [ ] Dev sub-beads in the plan (one per BEAD)
+- [ ] Test sub-bead in the plan (depends on all dev beads)
+- [ ] Review sub-bead in the plan (depends on the test bead)
+- [ ] Tech-writer sub-bead in the plan (depends on the review bead)
+- [ ] No bead title carries a bead number
+- [ ] DAG confirmed against the titles the tracker echoes: `bd dep tree <parent-id>`
 - [ ] ACTIVE.md created
 - [ ] User confirmed start of development
 

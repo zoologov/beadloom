@@ -128,9 +128,14 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
         statement=(
             "One id space, allocated at creation. Do not write a bead's number "
             "into its own title, and verify every dependency edge against the "
-            "titles the tracker echoes rather than against the ids you intended."
+            "titles the tracker echoes rather than against the ids you intended. "
+            "A creation of more than one bead goes through ONE plan, whose edges "
+            "name plan-local keys — on that path no id is authored, so there is "
+            "nothing to diverge; a `dep add` wired by hand is where the echo is "
+            "the only check, and the bulk `--file` form of it prints a count and "
+            "no titles at all."
         ),
-        evidence="BDL-UX #171",
+        evidence="BDL-UX #171, #165",
     ),
 )
 

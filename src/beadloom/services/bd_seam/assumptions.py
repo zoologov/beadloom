@@ -112,6 +112,7 @@ __all__ = [
     "ASSUMPTIONS",
     "ASSUMPTION_ALLOCATED_ID",
     "ASSUMPTION_COMPLETE_POPULATION",
+    "ASSUMPTION_ECHOED_TITLES",
     "ASSUMPTION_EXCLUSIVE_HOLD",
     "ASSUMPTION_INTENDED_ID",
     "ASSUMPTION_LEGACY_ALIAS",
@@ -159,6 +160,7 @@ ASSUMPTION_INTENDED_ID = "intended-id"
 ASSUMPTION_EXCLUSIVE_HOLD = "exclusive-hold"
 ASSUMPTION_UNBLOCKED_IS_READY = "unblocked-is-ready"
 ASSUMPTION_LEGACY_ALIAS = "legacy-alias"
+ASSUMPTION_ECHOED_TITLES = "echoed-titles"
 ASSUMPTION_UNMEASURED_SUBCOMMAND = "unmeasured-subcommand"
 
 #: Every assumption this module knows how to judge.
@@ -170,6 +172,7 @@ ASSUMPTIONS: tuple[str, ...] = (
     ASSUMPTION_EXCLUSIVE_HOLD,
     ASSUMPTION_UNBLOCKED_IS_READY,
     ASSUMPTION_LEGACY_ALIAS,
+    ASSUMPTION_ECHOED_TITLES,
     ASSUMPTION_UNMEASURED_SUBCOMMAND,
 )
 
@@ -248,25 +251,47 @@ _UNTRUNCATED_READY = _Rule(
 
 _ALLOCATED_ID = _Rule(
     assumption=ASSUMPTION_ALLOCATED_ID,
-    securing_flags=("--json",),
+    securing_flags=("--json", "--graph"),
     measured=False,
     detail=_pinned(
         "the id is allocated AT creation while a title convention authors it "
         "before — eight simultaneous `--parent` creates took `.4` through `.11` "
-        "out of launch order. `bd create --json` returns the allocated id, which "
-        "is BDL-UX #171's own Expected item and exists today"
+        "out of launch order, and four took `.1` through `.4` out of launch order "
+        "again in a second rig. Two call forms settle it: `--json` returns the "
+        "allocated id, which is BDL-UX #171's own Expected item and exists today, "
+        "and `--graph` names the beads by plan-local key and answers with the id "
+        "it gave each — allocating a FLAT id that takes no number from the "
+        "positional sequence at all"
     ),
 )
 
 _INTENDED_ID = _Rule(
     assumption=ASSUMPTION_INTENDED_ID,
     securing_flags=(),
+    confirmed_by="dep tree",
     measured=False,
     detail=_pinned(
         "`bd dep add` accepts any two ids that exist and keeps the graph acyclic, "
         "so a mis-wired edge is well-formed. There is no `--expect-title`, so "
-        "NOTHING at this call site can check it — verify the titles bd echoes, or "
-        "verify with `bd dep tree` afterwards (BDL-UX #171)"
+        "NOTHING on this line can check it — read the titles bd echoes, name "
+        "`bd dep tree` in the same artifact, or wire by plan-local key inside "
+        "`bd create --graph`, where no id is authored at all (BDL-UX #171)"
+    ),
+)
+
+_ECHOED_TITLES = _Rule(
+    assumption=ASSUMPTION_ECHOED_TITLES,
+    securing_flags=(),
+    confirmed_by="dep tree",
+    measured=False,
+    applies_when=("--file",),
+    detail=_pinned(
+        "`bd dep add` echoes both beads' full titles — `✓ Added dependency: "
+        "proj-027 (bead 59) depends on proj-9to (bead 60)` — and reading that echo "
+        "is the only reason #171's mis-wired edge was caught in seconds. The bulk "
+        "form prints `✓ Added 2 dependencies` and no titles at all, so the fast "
+        "spelling of the wiring half discards the check while the fast spelling of "
+        "the CREATION half, `bd create --graph`, removes the need for it"
     ),
 )
 
@@ -307,7 +332,7 @@ _MEASURED: dict[str, tuple[_Rule, ...]] = {
     "list": (_COMPLETE, _UNTRUNCATED_LIST),
     "ready": (_UNTRUNCATED_READY,),
     "create": (_ALLOCATED_ID,),
-    "dep add": (_INTENDED_ID,),
+    "dep add": (_INTENDED_ID, _ECHOED_TITLES),
     "close": (_UNBLOCKED_IS_READY,),
     "dep tree": (),
     "show": (),

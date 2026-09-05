@@ -221,7 +221,7 @@ evidence it comes from:
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
 | `landing-order` | one branch. What keeps two agents out of one FILE is the disjoint scopes the plan derived; what orders their COMMITS is the merge slot, and only in the form that grants it (BDL-UX #194, #237) |
 | `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
-| `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted |
+| `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted; a creation of more than one bead goes through one plan whose edges name plan-local keys, and a hand-wired `dep add` is where the echoed titles are the only check (BDL-UX #171, #165) |
 
 The first version printed the list only for a wave of more than one bead, on the
 reasoning that a wave of one shares nothing concurrently. BDL-UX #228 measured
@@ -283,6 +283,17 @@ plan that serialises the beads it mis-wired is exactly the plan whose ids most
 need checking. Only the trailing number is compared: the title convention writes
 `BDL-061.<n>` while the tracker allocates `<project>.<n>`, so comparing whole ids
 would report every bead and comparing prefixes would report none.
+
+This check is the DETECTING half, and `beadloom-0mdo.53` added the preventing
+half at the other end of the same fact. `title_references(text)` is the reader
+both use: it is public here, and `services/bd_seam/creation.py` calls it to refuse
+a creation plan whose title states a number the tracker has not allocated yet. One
+grammar read twice — where a number is written and where it is compared — rather
+than two readers that can come to disagree, which is the duplication
+`beadloom-0mdo.51` deleted from the landing lock. The two halves answer different
+moments: at creation there is no id to compare against, so any number in a title
+is a promise nothing can check, and refusing costs nothing; by the time a wave is
+planned the beads exist and only the comparison is left.
 
 
 ### The landing lock, and the two guarantees it is asked to give
@@ -404,6 +415,7 @@ not tell them apart.
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
 | `defect_detail(defect)` | what one defective call form costs and the flag that fixes it |
 | `title_id_mismatches(records)` | every bead whose title numbers it differently |
+| `title_references(text)` | every bead reference a title states — the reader both halves of #171 share |
 
 `plan_waves` takes bead records as **data**, never a tracker handle: the
 application layer does not import the `bd` seam (which lives in `services`), and

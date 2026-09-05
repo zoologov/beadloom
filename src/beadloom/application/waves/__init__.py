@@ -68,6 +68,7 @@ from beadloom.application.waves.media_checks import (
     check_media,
     finding_for,
     title_id_mismatches,
+    title_references,
 )
 from beadloom.application.waves.models import (
     AXES_NOT_GATHERED,
@@ -211,5 +212,6 @@ __all__ = [
     "resolve_scopes",
     "room_for",
     "title_id_mismatches",
+    "title_references",
     "unguarded_axes",
 ]

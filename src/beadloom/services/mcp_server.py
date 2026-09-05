@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mcp
@@ -41,10 +43,15 @@ from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
 from beadloom.services.bd_seam import BdUnavailableError, run_bd
 from beadloom.services.bd_seam.answers import confirmed_suggestion, ready_ids
+from beadloom.services.bd_seam.creation import (
+    AuthoredNumberError,
+    PlannedBead,
+    allocated_ids,
+    graph_plan,
+)
 
 if TYPE_CHECKING:
     import sqlite3
-    from pathlib import Path
 
     from mcp.server.context import ServerRequestContext
 
@@ -565,19 +572,54 @@ def _scaffold_docs(project_root: Path, *, type_: str, key: str) -> list[str]:
     return created
 
 
-def _bd_create_bead(
-    *, project_root: Path, key: str, role: str, type_: str
-) -> str:
-    """Create one role bead via `bd create`; return its id (or raise on failure)."""
-    title = f"[{key}] {role}: {role} work"
-    result = run_bd(
-        ["create", title, "--type", type_, "--silent"],
-        cwd=str(project_root),
+def _role_plan(*, key: str, bead_type: str) -> tuple[PlannedBead, ...]:
+    """The mandatory four-role DAG as a creation plan, wired by role name.
+
+    Every edge names two ROLE KEYS the plan chose, so this path writes no bead id
+    anywhere and there is none to get wrong — which is BDL-UX #171's root taken
+    out rather than guarded against.
+    """
+    return tuple(
+        PlannedBead(
+            key=role,
+            title=f"[{key}] {role}: {role} work",
+            bead_type=bead_type,
+            depends_on=deps,
+        )
+        for role, deps in _ROLE_DAG
     )
+
+
+def _create_role_dag(project_root: Path, plan: tuple[PlannedBead, ...]) -> dict[str, str]:
+    """Create *plan* in ONE ``bd`` process and return the ids bd allocated.
+
+    One process rather than one per bead and one per edge: BDL-UX #165, measured
+    on bd 1.0.4 at 69.45 s over 119 processes against 1.15 s over one for a
+    60-bead DAG. The plan file is written outside the project so a scaffold
+    leaves no artifact behind, and bd is given an absolute path.
+    """
+    document = graph_plan(plan)
+    with tempfile.TemporaryDirectory() as workspace:
+        plan_path = Path(workspace) / "plan.json"
+        plan_path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+        # Spelled as a literal, not composed by a helper: `bd_seam.invocations`
+        # resolves a list handed to `run_bd` and cannot follow a function call, so
+        # a tidier argv builder would make this creation site invisible to the
+        # derivation that judges it.
+        result = run_bd(
+            ["create", "--graph", str(plan_path), "--json"], cwd=str(project_root)
+        )
     if not result.ok:
-        msg = f"bd create failed for role {role}: {result.stderr.strip()}"
+        msg = f"bd create --graph failed: {result.stderr.strip()}"
         raise RuntimeError(msg)
-    return result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else ""
+    ids = allocated_ids(result.stdout)
+    if ids is None:
+        msg = (
+            "bd created the plan but its answer could not be read, so the ids it "
+            "allocated are unknown — check the beads with `bd list --all --limit 0`"
+        )
+        raise RuntimeError(msg)
+    return ids
 
 
 def handle_task_init(
@@ -590,8 +632,12 @@ def handle_task_init(
 
     Creates ``.claude/development/docs/features/<key>/`` with the per-type doc
     skeletons (PRD/RFC/CONTEXT/PLAN/ACTIVE for epic/feature; BRIEF/ACTIVE
-    otherwise) and a deterministic role DAG (dev → test → review → tech-writer)
-    via the mockable ``bd`` seam. Returns created bead ids + doc paths.
+    otherwise) and the deterministic role DAG (dev → test → review → tech-writer)
+    through the mockable ``bd`` seam. Returns the ids bd allocated + doc paths.
+
+    The DAG is created as ONE plan in ONE process, and its edges name role keys
+    rather than ids. That is both of BDL-UX #171's and #165's roots: no id is
+    authored on this path, and seven processes became one.
 
     This is a single deterministic operation — it does NOT orchestrate or spawn
     agents; the coordinator/harness does that.
@@ -599,22 +645,12 @@ def handle_task_init(
     doc_paths = _scaffold_docs(project_root, type_=type_, key=key)
     bead_type = "feature" if type_ in _FULL_TYPES else "task"
     try:
-        role_ids: dict[str, str] = {}
-        bead_ids: list[str] = []
-        for role, _deps in _ROLE_DAG:
-            bead_id = _bd_create_bead(
-                project_root=project_root, key=key, role=role, type_=bead_type
-            )
-            role_ids[role] = bead_id
-            bead_ids.append(bead_id)
-        # Wire the standard dependencies: each role depends on the previous one.
-        for role, deps in _ROLE_DAG:
-            for dep_role in deps:
-                run_bd(
-                    ["dep", "add", role_ids[role], role_ids[dep_role]],
-                    cwd=str(project_root),
-                )
+        plan = _role_plan(key=key, bead_type=bead_type)
+        role_ids = _create_role_dag(project_root, plan)
+        bead_ids = [role_ids[bead.key] for bead in plan if bead.key in role_ids]
     except BdUnavailableError as exc:
+        return {"status": "ERROR", "error": str(exc), "doc_paths": doc_paths}
+    except AuthoredNumberError as exc:
         return {"status": "ERROR", "error": str(exc), "doc_paths": doc_paths}
     except RuntimeError as exc:
         return {"status": "ERROR", "error": str(exc), "doc_paths": doc_paths}

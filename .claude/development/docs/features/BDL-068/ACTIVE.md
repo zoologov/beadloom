@@ -8,10 +8,34 @@
 
 ## Current Bead
 
-**Bead:** none — S5 wave 3 (`0mdo.52`, BDL-UX #187 and #97) is closed. `bd ready --limit 0`
-lists `.53` and `.54` as the next claimable work in S5. S4 is finished on the branch:
-`0mdo.36` (tech-writer) was the last of that slice and closed its docs pass, and `0mdo.12`, the
-slice bead, closes with it.
+**Bead:** none — S5 wave 4 (`0mdo.53`, BDL-UX #171 and #165) is closed. `bd ready --limit 0`
+lists `.54` and `beadloom-l2f2` as the remaining claimable work in S5. S4 is finished on the
+branch: `0mdo.36` (tech-writer) was the last of that slice and closed its docs pass, and
+`0mdo.12`, the slice bead, closes with it.
+
+**S5 wave 4, and a root removed rather than guarded.** `0mdo.53` answered #171 by making an
+authored id impossible on the path this project scaffolds with. `bd_seam/creation.py` composes
+the plan `bd create --graph` accepts: beads are named by KEY, edges name two keys, and the
+tracker answers with the id it allocated for each, so no id is written down anywhere.
+`handle_task_init` went from four `bd create --silent` processes plus three `bd dep add`
+processes — each wired from an id scraped out of stdout — to ONE `bd create --graph … --json`
+call. Measured on bd 1.0.4: a 60-bead DAG with 59 edges costs 69.45 s over 119 processes and
+1.15 s over one, a factor of 60, which is #165.
+
+**Whether the plan CLOSES #171 or only narrows it was measured, and the reason is not the one
+the bead predicted.** Four `bd create --parent` launched simultaneously took `.1` through `.4`
+out of launch order; a `bd create --graph` run racing them returned four FLAT ids and consumed
+no number from that sequence at all. So the plan form closes it for the path it covers for two
+independent reasons — no positional number is allocated, and its edges name keys — and closes
+nothing for `bd create --parent`, which is how every per-slice bead of this epic is created and
+whose remedy is `--json` plus the convention.
+
+**The echo is preserved, and the form that discards it is now named.** `bd dep add` still names
+both beads' full titles on 1.0.4, which is the only reason #171's mis-wired edge was caught in
+seconds. `bd dep add --file` — the bulk form a reader of #165 reaches for next — prints
+`✓ Added 2 dependencies` and no titles, so the fast spelling of the WIRING half destroys the
+check while the fast spelling of the CREATION half removes the need for it. That is a new
+`echoed-titles` assumption rather than a sentence in a doc.
 
 **S5 wave 3, and the third reading of one defect.** `0mdo.52` answered the two findings whose
 shape this epic has now shipped eight times: an answer whose population is not the question's
@@ -534,6 +558,32 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     since closed both of its own: the `close` site is fixed and the prose is answered by a
     shared fragment. The `bd ready` truncation sites are NOT swept and the reason is recorded
     under that bead.
+  - [x] `0mdo.53` — **#171 + #165**, the bead-creation path. `bd_seam/creation.py` is the one
+    place a bead is created: `PlannedBead` names beads by key and holds `depends_on` as
+    plan-local keys, `graph_plan` writes the document `bd create --graph` accepts, and
+    `allocated_ids` / `created_id` read bd's JSON answers instead of scraping `--silent`
+    stdout. The CONVENTION is enforced where the divergence is created — `graph_plan` refuses a
+    plan whose title states a bead number, because at creation there is no id to agree with and
+    the number is a promise nothing can check. It reads `title_references`, now public in
+    `waves/media_checks.py`, so the writing half and the comparing half share ONE grammar.
+    **Measured red then green on the derived report:** `allocated-id` 17 unsecured → 0 (15
+    secured) and `intended-id` 11 unsecured → 0 (8 secured) over this repository, and all 12
+    Python sites settled — `test_the_python_sites_nothing_settles_are_the_two_that_are_owned`
+    becomes `test_no_python_call_site_of_ours_is_left_unsettled` and asserts ZERO, so no number
+    has to be revised to keep it honest. **One thing I nearly got wrong and it is this epic's
+    own subject:** the first version put the argv behind a `graph_argv()` helper, and the
+    scaffold's creation site vanished from the population entirely — not unsecured, ABSENT,
+    because `invocations` resolves a list literal handed to `run_bd` and cannot follow a call.
+    The literal is spelled at the call site with the reason beside it and a test reddens if it
+    is tidied back. `.52`'s backticked-mention limit hit for a THIRD time, in my own sentence
+    explaining #171; rewritten to take the command out of command position rather than
+    appending a flag to a mention. Green in a clean room over 22 files (8 976 passed, 57
+    skipped, 1 xfailed, 1 failed — `test_all_new_node_pairs_are_fresh`, reproduced RED at HEAD
+    in `room-head-baseline-53`, a room of the same shape, rather than inherited from `.52`).
+    **As its own wave's gate owner**, green on the tree: 9 022 passed, 11 skipped, 1 xfailed;
+    `beadloom ci` rc 0 read in the foreground without a pipe; `ruff` clean; `mypy --strict`
+    clean over 269 files against all four declared interpreter targets. Every verdict taken in
+    Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms entered.
   - [x] `0mdo.52` — **#187 + #97**, the tracker's answers at our own call sites.
     `bd_seam/answers.py` is the run-time half of `.51`'s derivation: `coverage_of(argv, stderr)`
     reads bd's own truncation notice and the argv's population flags, and

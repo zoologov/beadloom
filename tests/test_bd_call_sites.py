@@ -363,33 +363,32 @@ def test_every_python_list_call_names_the_population_it_asked_for() -> None:
         }, f"{site.source}:{site.line} `{site.text}` reads a filtered view as complete"
 
 
-def test_the_python_sites_nothing_settles_are_the_two_that_are_owned() -> None:
-    """A third unsettled python call site is a regression, not a backlog item.
+def test_no_python_call_site_of_ours_is_left_unsettled() -> None:
+    """An unsettled python call site is a regression, not a backlog item.
 
-    Both are `beadloom-0mdo.53`'s and both are BDL-UX #171: `_bd_create_bead`
-    scrapes the allocated id out of `--silent` stdout instead of asking for
-    `--json`, and `handle_task_init` wires `dep add` from ids it authored.
+    **There were three, and each was closed by the bead that owned it.** The
+    first was BDL-UX #97 arriving through our own surface: `handle_complete_bead`
+    closed with `--suggest-next` and returned `close.stdout.strip()` to the MCP
+    client under the key `next`, so an agent finishing a bead was handed a list
+    that can name still-blocked beads, and `beadloom-0mdo.52` made it confirm
+    against `bd ready --limit 0`. The other two were BDL-UX #171 in the scaffold:
+    `_bd_create_bead` scraped the allocated id out of `--silent` stdout instead
+    of asking for it, and `handle_task_init` wired `dep add` from ids it had
+    authored. `beadloom-0mdo.53` replaced both with ONE `bd create --graph` whose
+    edges name plan-local keys, so the `dep add` site does not exist any more and
+    the ids are read from bd's own JSON answer.
 
-    **There were three.** The third was BDL-UX #97 arriving through our own
-    surface: `handle_complete_bead` closed with `--suggest-next` and returned
-    `close.stdout.strip()` to the MCP client under the key `next`, so an agent
-    finishing a bead was handed a list that can name still-blocked beads, with
-    nothing saying so and no `bd ready` behind it. It became visible here only
-    because this bead's withdrawal of #97 was reversed, and `beadloom-0mdo.52`
-    closed it: the handler now confirms the suggestion against
-    `bd ready --limit 0` and returns `next`, `next_candidates`,
-    `next_still_blocked` and `next_stated`. The count moving from three to two
-    is what a fixed call site looks like from here.
+    Zero is now the assertion, which is the strongest form this can take: any
+    site added later with a call form that does not settle its assumption
+    reddens here, and no number has to be revised to keep it honest.
     """
     report = project_report(_PROJECT_ROOT)
-    unsettled = {
-        f"{site.subcommand}": site
-        for site in report.sites
-        if site.channel == CHANNEL_PYTHON and site.unsettled
-    }
-    assert sorted(unsettled) == ["create", "dep add"], (
+    unsettled = [
+        site for site in report.sites if site.channel == CHANNEL_PYTHON and site.unsettled
+    ]
+    assert unsettled == [], (
         "a python call site's assumption is newly unsettled: "
-        + "; ".join(f"{s.source}:{s.line} `{s.text}`" for s in unsettled.values())
+        + "; ".join(f"{s.source}:{s.line} `{s.text}`" for s in unsettled)
     )
 
 
