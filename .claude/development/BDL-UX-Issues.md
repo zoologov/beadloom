@@ -46,7 +46,20 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
-253. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
+254. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
+
+    > **Renumbered from #253 to #254 on 2026-09-05, by the S5 review's Major 2.** Two entries were
+    > filed as #253 on the same day by two agents working the same slice: the LOW dependency-release
+    > entry above and this one. The LOW entry keeps the number — it already had five citations in
+    > `.beadloom/config.yml` and three in `ACTIVE.md`, all committed, while this one had none in any
+    > file. **Commit `050d63ac`'s subject still says #253 and means this entry**; that is history and
+    > is left alone rather than rewritten.
+    > **This is the third instance of one class in this project**, after the duplicate #211 and the
+    > #216-#232 run of bead titles carrying numbers the log never received. It is also exactly the
+    > defect `beadloom-0mdo.53` closed for the TRACKER hours earlier — a number authored before it is
+    > allocated, kept in two places — reappearing in the log, which has no allocator at all. The RFC
+    > already names it as S6's subject (`mr2l.91`); S5 is the slice that produced the duplicate the
+    > check was proposed for, which is the argument for building it rather than a reason to wait.
 
     **Severity:** high (an agent session wedges with no self-heal, and the state that wedges it is an ordinary mid-refactor moment)
     **Command:** `beadloom guard bead-claimed`, the emitted `.claude/settings.json` `PreToolUse` binding
