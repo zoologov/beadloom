@@ -1159,6 +1159,19 @@
     **Expected:** correct the message to the real invocation, and warn only when the import genuinely failed. Verify the flag set against the pinned bd version rather than assuming it. Same family as #140.
     > Tracked as a bead (P3).
 
+
+    > **WITHDRAWN 2026-09-05. The command exists; the entry was wrong.** Measured twice — by
+    > `beadloom-0mdo.51` while re-measuring every S5 premise, and independently by the coordinator:
+    > `bd import --help` lists `-i, --input string   Read JSONL from a specific file` and documents
+    > `bd import -i backup.jsonl` in its own examples as *"Legacy alias for a specific file"*. It
+    > imported 137 issues at rc 0. `.git/hooks/post-merge:51` and `:53` use exactly that form, so the
+    > hook's remediation line is correct and always was.
+    > **Third premise of this project's own log to fall in two days**, after #194 and #237 — all three
+    > filed against a working external tool, all three by readers who did not run the thing they were
+    > describing. The pattern is not carelessness about `bd`; it is a log entry written from a failure's
+    > *appearance* and never re-derived. Whatever S6 does about routing should notice that an entry can
+    > sit for months being wrong in a direction nobody rechecks.
+    > `beadloom-l2f2` is closed as not-reproducing rather than fixed.
 163. [2026-08-20] [MEDIUM] `sync-update` can re-attest a doc nobody read — re-baselining silences `sync-check` without evidence
 
     **Severity:** medium (the freshness guarantee quietly weakens to "the hashes were reset", which is not what a green sync-check is read to mean)
