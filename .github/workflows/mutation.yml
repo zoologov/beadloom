@@ -134,12 +134,19 @@ jobs:
       - name: Run the mutants of the remaining declared targets
         run: >-
           uv run mutmut run --max-children 4
+          'beadloom.application.active_table.row_ids.*'
+          'beadloom.application.active_table.staging.*'
           'beadloom.application.guards.shell_targets.*'
           'beadloom.application.guards.surface.*'
           'beadloom.application.waves.derivation.*'
+          'beadloom.application.waves.landing.*'
           'beadloom.doc_sync.doc_quality.*'
           'beadloom.doc_sync.doc_shape.*'
           'beadloom.onboarding.role_duties.*'
+          'beadloom.services.bd_seam.answers.*'
+          'beadloom.services.bd_seam.assumptions.*'
+          'beadloom.services.bd_seam.creation.*'
+          'beadloom.services.bd_seam.invocations.*'
           || true
 
       - name: Export the counters of the whole declared scope
@@ -200,13 +207,20 @@ jobs:
         run: >-
           uv run beadloom mutation
           --stats mutants/mutmut-cicd-stats.json
+          --target src/beadloom/application/active_table/row_ids.py
+          --target src/beadloom/application/active_table/staging.py
           --target src/beadloom/application/guards/shell_targets.py
           --target src/beadloom/application/guards/surface.py
           --target src/beadloom/application/waves/derivation.py
+          --target src/beadloom/application/waves/landing.py
           --target src/beadloom/doc_sync/doc_quality.py
           --target src/beadloom/doc_sync/doc_shape.py
           --target src/beadloom/graph/rules/
           --target src/beadloom/onboarding/role_duties.py
+          --target src/beadloom/services/bd_seam/answers.py
+          --target src/beadloom/services/bd_seam/assumptions.py
+          --target src/beadloom/services/bd_seam/creation.py
+          --target src/beadloom/services/bd_seam/invocations.py
           --tool "mutmut 3.7"
           --min-score 0.88
 

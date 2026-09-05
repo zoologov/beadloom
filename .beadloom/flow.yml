@@ -47,10 +47,17 @@ guards:
 # mutants. CONTEXT records the reason with the count.
 mutation:
   targets:
+  - src/beadloom/application/active_table/row_ids.py
+  - src/beadloom/application/active_table/staging.py
   - src/beadloom/application/guards/shell_targets.py
   - src/beadloom/application/guards/surface.py
   - src/beadloom/application/waves/derivation.py
+  - src/beadloom/application/waves/landing.py
   - src/beadloom/doc_sync/doc_quality.py
   - src/beadloom/doc_sync/doc_shape.py
   - src/beadloom/graph/rules/
   - src/beadloom/onboarding/role_duties.py
+  - src/beadloom/services/bd_seam/answers.py
+  - src/beadloom/services/bd_seam/assumptions.py
+  - src/beadloom/services/bd_seam/creation.py
+  - src/beadloom/services/bd_seam/invocations.py

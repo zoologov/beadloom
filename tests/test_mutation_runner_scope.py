@@ -153,16 +153,15 @@ class TestTheRunnerIsThisRepositorysOwn:
         assert offenders == []
 
 class TestThePoolTheRunnerSelectsFrom:
-    """The 114 test files that execute the declared scope, and what keeps the
-    list honest.
+    """The test files that execute the declared scope, and what keeps the list
+    honest.
 
     mutmut needs its pool statically, so the list is authored — the shape this
     epic distrusts. Two facts are therefore checked rather than hoped for: no
-    entry names a file that has since moved, and no test importing the rules
-    package directly sits outside the pool. Neither catches a killer that
-    reaches the slice through `beadloom lint`, and that gap has a known
-    direction: a killer outside the pool leaves its mutant alive, so the score
-    under-claims.
+    entry names a file that has since moved, and no test importing ANY declared
+    target directly sits outside the pool. Neither catches a killer that reaches
+    a target through `beadloom lint`, and that gap has a known direction: a
+    killer outside the pool leaves its mutant alive, so the score under-claims.
     """
 
     def test_every_pool_entry_is_a_test_file_that_exists(self) -> None:
@@ -172,20 +171,43 @@ class TestThePoolTheRunnerSelectsFrom:
                 f"select nothing for the mutants it was meant to kill"
             )
 
-    def test_no_test_importing_the_rules_package_sits_outside_the_pool(self) -> None:
+    def test_no_test_importing_a_declared_target_sits_outside_the_pool(self) -> None:
         """The lower bound the pool can be checked against without coverage.
 
         The population is read from each file's IMPORT statements rather than
         from its text: a check spelled as a substring match matches its own
         source and reports itself, which this one did on the first run.
+
+        DERIVED FROM `mutation.targets` since 2026-09-05, where it named the
+        rules package alone. A check written against one target cannot see a
+        scope that widens, and this scope widened twice: S4 added six file
+        targets and S5 added seven more, and on both occasions the pool was
+        derived by a coverage pass whose result nothing afterwards held. The
+        generalisation was measured before it was adopted — over the seven
+        targets declared before this bead it reports zero files outside the
+        pool, so it strengthens the check without demanding a wider pool than
+        the coverage derivation already produced.
+
+        What it still cannot see is unchanged: a killer that reaches a target
+        through `beadloom lint` rather than through an import is invisible here,
+        and its absence from the pool leaves its mutant alive. The score
+        under-claims; it can never over-claim.
         """
         pool = set(_pool())
-        importers = {
-            str(path.relative_to(REPO_ROOT))
-            for path in (REPO_ROOT / "tests").rglob("test_*.py")
-            if _imports_the_rules_package(path)
-        }
-        assert importers <= pool, sorted(importers - pool)
+        outside: dict[str, list[str]] = {}
+        for module in _declared_modules():
+            importers = {
+                str(path.relative_to(REPO_ROOT))
+                for path in (REPO_ROOT / "tests").rglob("test_*.py")
+                if _imports(path, module)
+            }
+            if importers - pool:
+                outside[module] = sorted(importers - pool)
+        assert outside == {}, (
+            f"{sum(len(files) for files in outside.values())} test file(s) import a "
+            f"declared mutation target and are not in the pool the runner selects "
+            f"from, so no mutant of that target can be killed by them: {outside}"
+        )
 
     def test_the_pool_is_not_empty(self) -> None:
         """An empty pool selects the whole suite, which does not run in the copied
@@ -193,19 +215,25 @@ class TestThePoolTheRunnerSelectsFrom:
         assert len(_pool()) > 1
 
 
-def _imports_the_rules_package(path: Path) -> bool:
-    """Whether *path* imports `beadloom.graph.rules`, by its import statements."""
+def _declared_modules() -> list[str]:
+    """Each declared target as the dotted module path a test would import."""
+    return [
+        target.rstrip("/").removeprefix("src/").removesuffix(".py").replace("/", ".")
+        for target in _declared_targets()
+    ]
+
+
+def _imports(path: Path, module: str) -> bool:
+    """Whether *path* imports *module*, by its import statements."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except SyntaxError:  # pragma: no cover - a test file that does not parse
         return False
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-            "beadloom.graph.rules"
-        ):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(module):
             return True
         if isinstance(node, ast.Import) and any(
-            alias.name.startswith("beadloom.graph.rules") for alias in node.names
+            alias.name.startswith(module) for alias in node.names
         ):
             return True
     return False
