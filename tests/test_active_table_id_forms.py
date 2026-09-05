@@ -22,6 +22,9 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from beadloom.application.active_table import (
+    SHAPE_AMBIGUOUS,
+    SHAPE_UNKNOWN_TO_TRACKER,
+    SHAPE_WITH_TEXT,
     reconcile_active_tables,
     resolve_row_bead_id,
     set_active_table_status,
@@ -48,39 +51,40 @@ class TestResolvingTheFormTheTableIsWrittenIn:
     """``.22`` and ``beadloom-mr2l.22`` are the same bead written two ways."""
 
     def test_a_full_id_resolves_to_itself(self) -> None:
-        resolved, reason = resolve_row_bead_id("proj-x.22", {"proj-x.22": "closed"})
+        row = resolve_row_bead_id("proj-x.22", {"proj-x.22": "closed"})
 
-        assert (resolved, reason) == ("proj-x.22", None)
+        assert (row.bead_id, row.reason) == ("proj-x.22", None)
 
     def test_a_short_id_resolves_against_the_only_prefix_the_tracker_uses(self) -> None:
-        resolved, reason = resolve_row_bead_id(".22", {"proj-x.22": "closed"})
+        row = resolve_row_bead_id(".22", {"proj-x.22": "closed"})
 
-        assert (resolved, reason) == ("proj-x.22", None)
+        assert (row.bead_id, row.reason) == ("proj-x.22", None)
 
     def test_a_short_id_matches_its_whole_number_and_not_a_longer_one(self) -> None:
         """``.2`` is not ``.22``. A suffix compared as text is the same defect again."""
-        resolved, reason = resolve_row_bead_id(".2", {"proj-x.22": "closed"})
+        row = resolve_row_bead_id(".2", {"proj-x.22": "closed"})
 
-        assert resolved is None
-        assert reason is not None
-        assert ".2" in reason
+        assert row.bead_id is None
+        assert row.reason is not None
+        assert ".2" in row.reason
+        assert row.shape == SHAPE_UNKNOWN_TO_TRACKER
 
     def test_two_prefixes_carrying_the_same_number_are_ambiguous_not_guessed(self) -> None:
-        resolved, reason = resolve_row_bead_id(
-            ".22", {"proj-x.22": "closed", "proj-y.22": "open"}
-        )
+        row = resolve_row_bead_id(".22", {"proj-x.22": "closed", "proj-y.22": "open"})
 
-        assert resolved is None
-        assert reason is not None
-        assert "proj-x.22" in reason
-        assert "proj-y.22" in reason
+        assert row.bead_id is None
+        assert row.reason is not None
+        assert "proj-x.22" in row.reason
+        assert "proj-y.22" in row.reason
+        assert row.shape == SHAPE_AMBIGUOUS
 
     def test_a_cell_that_is_not_a_bead_id_says_that_rather_than_nothing(self) -> None:
         """A first cell carrying a title (``.1 Contract model``) is a real shape here."""
-        resolved, reason = resolve_row_bead_id(".1 Contract model", {"proj-x.1": "closed"})
+        row = resolve_row_bead_id(".1 Contract model", {"proj-x.1": "closed"})
 
-        assert resolved is None
-        assert reason is not None
+        assert row.bead_id is None
+        assert row.reason is not None
+        assert row.shape == SHAPE_WITH_TEXT
 
 
 # --------------------------------------------------------------------------- #
@@ -139,7 +143,7 @@ class TestTheReconcileReadsTheTableThisProjectWrites:
 
         assert result.rows_read == 1
         assert result.rows_resolved == 0
-        assert [row[1] for row in result.unresolved_rows] == [".1 Contract model"]
+        assert [row.cell for row in result.unresolved_rows] == [".1 Contract model"]
 
     def test_the_counts_are_of_rows_read_not_of_rows_that_drifted(self, tmp_path: Path) -> None:
         active = _features_dir(tmp_path, "BDL-009") / "ACTIVE.md"
@@ -168,18 +172,18 @@ class TestAShortIdIsReadAgainstItsOwnEpic:
     def test_the_epic_prefix_decides_which_of_two_beads_a_row_names(self) -> None:
         statuses = {"proj-a.17": "closed", "proj-b.17": "open"}
 
-        resolved, reason = resolve_row_bead_id(".17", statuses, prefix="proj-a")
+        row = resolve_row_bead_id(".17", statuses, prefix="proj-a")
 
-        assert (resolved, reason) == ("proj-a.17", None)
+        assert (row.bead_id, row.reason) == ("proj-a.17", None)
 
     def test_a_number_the_epic_does_not_have_is_not_borrowed_from_another(self) -> None:
         statuses = {"proj-b.17": "open"}
 
-        resolved, reason = resolve_row_bead_id(".17", statuses, prefix="proj-a")
+        row = resolve_row_bead_id(".17", statuses, prefix="proj-a")
 
-        assert resolved is None
-        assert reason is not None
-        assert "proj-a.17" in reason
+        assert row.bead_id is None
+        assert row.reason is not None
+        assert "proj-a.17" in row.reason
 
     def test_the_reconcile_scopes_each_file_to_its_own_epic(self, tmp_path: Path) -> None:
         active = _features_dir(tmp_path, "BDL-061") / "ACTIVE.md"

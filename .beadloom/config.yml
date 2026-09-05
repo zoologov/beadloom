@@ -148,3 +148,17 @@ docs_audit:
     - path: docs/services/mcp.md
       fact: version
       value: "1.0.4"
+    # active-table/DOC.md: the FIFTH triple for this sentence shape, and the
+    # first whose dependency is not `bd`. `beadloom-0mdo.54` measured what
+    # `git commit -- <paths>` does about a staged path it does not name, and what
+    # a pre-commit hook's `git add` does inside that commit, on git 2.49.0. Both
+    # answers are the reason BDL-UX #207's fix is shaped as it is, and neither is
+    # quotable without the release it was taken on. So #253 is not a `bd`-shaped
+    # problem at all: it is any document that records what a DEPENDENCY was
+    # measured to do, and `_extract_versions` matches every
+    # `\bv?\d+\.\d+\.\d+\b` with no notion of whose product a version
+    # belongs to. It goes inert only if the measurement is deleted from the
+    # prose, and `TestEverySuppressionStillSuppresses` reports it the day it does.
+    - path: docs/domains/application/components/active-table/DOC.md
+      fact: version
+      value: "2.49.0"

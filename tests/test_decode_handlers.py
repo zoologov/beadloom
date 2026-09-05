@@ -461,7 +461,7 @@ class NarrowDecode:
 #: here fails :func:`test_every_narrow_handler_is_judged`; a row whose block is
 #: gone fails it too.
 JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
-    "application/active_table.py::_reconcile_one#1": NarrowDecode(
+    "application/active_table/reconcile.py::_reconcile_one#1": NarrowDecode(
         reads="the epic's ACTIVE.md, a planning document beadloom itself rewrites",
         catches="OSError",
         reason=(
@@ -471,7 +471,7 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "application/active_table.py::set_active_table_status#1": NarrowDecode(
+    "application/active_table/table.py::set_active_table_status#1": NarrowDecode(
         reads="the same ACTIVE.md, read to rewrite one status cell in its table",
         catches="OSError",
         reason=(

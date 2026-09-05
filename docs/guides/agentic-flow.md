@@ -628,10 +628,12 @@ construction** instead of by discipline:
   `.beads/issues.jsonl`. See the
   [CLI reference](../services/cli.md#beadloom-active-sync) for the
   `--epic`/`--check`/`--json`/`--no-export` flags.
-- **The pre-commit hook runs it as a guarded auto-fix step.** After the lint /
-  mypy / sync-check steps, the hook calls `active-sync` and restages the touched
-  `features/**/ACTIVE.md` + `.beads/issues.jsonl`, so the committed table matches
-  `bd` on every commit — the coordinator no longer maintains rows by hand. The
+- **The pre-commit hook runs it as a guarded auto-fix step, and it decides
+  nothing for you.** After the lint / mypy / sync-check steps, the hook calls
+  `active-sync --stage`, which re-stages the corrected content of the paths your
+  commit **already** stages and prints every correction it therefore withheld. It
+  adds no path to your commit: it used to, and an agent that had deliberately
+  unstaged another agent's tracker export got it back anyway (BDL-UX #207). The
   step **never blocks** the commit and runs only when both `bd` and `beadloom`
   are installed.
 - **Safe no-op for every adopter.** With no `ACTIVE.md` table, no `bd`, or an
@@ -639,7 +641,7 @@ construction** instead of by discipline:
   so a repo that has not adopted the flow is never affected; it works
   out-of-the-box.
 
-The reconcile core (`application/active_table.py`) is the **same** tolerant,
+The reconcile core (`application/active_table/`) is the **same** tolerant,
 fail-safe parser/updater the `checkpoint` / `complete_bead` MCP process-tools use
 to flip a single row — so single-row updates and full reconcile share one format
 (the `active-table` [component](../domains/application/components/active-table/DOC.md)).

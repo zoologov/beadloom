@@ -782,8 +782,8 @@ nodes:
 
   - ref_id: active-table
     kind: component
-    summary: "Shared ACTIVE.md bead-status table parser/updater + reconcile-from-bd core (tolerant, fail-safe; MCP S4 tools + active-sync build on it)"
-    source: src/beadloom/application/active_table.py
+    summary: "The ACTIVE.md bead-status table: the id a row names, the reconcile against bd, and what a reconcile may stage (tolerant, fail-safe)"
+    source: src/beadloom/application/active_table/
     docs:
       - docs/domains/application/components/active-table/DOC.md
 

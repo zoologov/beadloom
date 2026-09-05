@@ -126,6 +126,15 @@ sits at the repository root, the filter admitted no package file and the leg's t
 were unreachable. `staged_py` now selects by suffix, and each leg narrows that population by its
 own declaration.
 
+`docsync.py` also holds the two hook TEMPLATES, and since BDL-068 S5 the coherence block in
+them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
+content of the paths a commit already carries and prints the ones it withheld; the block runs no
+`git add` of its own and selects those lines with `grep`, deliberately not with the
+`sed -n 's/^# //p'` shape the verdict legs beside it use — that shape is the verdict/payload
+split and giving it a second meaning is how two protocols stop being checkable together. The
+hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
+the text that is actually installed rather than over a copy of it (BDL-UX #207).
+
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section
 back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the

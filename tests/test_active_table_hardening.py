@@ -238,8 +238,10 @@ def test_mcp_server_reexport_aliases_are_the_moved_primitives() -> None:
     import beadloom.services.mcp_server as mcp
 
     assert mcp._set_active_table_status is set_active_table_status
-    assert mcp._split_table_row.__module__ == "beadloom.application.active_table"
-    assert mcp._is_separator_cells.__module__ == "beadloom.application.active_table"
+    # The module the primitives live in is a package now (BDL-068 S5): asserting
+    # the exact module name pinned a layout rather than the sharing that matters.
+    assert mcp._split_table_row.__module__.startswith("beadloom.application.active_table")
+    assert mcp._is_separator_cells.__module__.startswith("beadloom.application.active_table")
 
 
 def test_mcp_set_status_alias_flips_active_table_row(tmp_path: Path) -> None:

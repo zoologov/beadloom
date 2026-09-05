@@ -137,7 +137,7 @@ beadloom install-hooks --remove
 - `beadloom sync-check --staged --porcelain` (stale doc detection, narrowed to the pairs this commit stages)
 - `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
 
-It also states four things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), how much of the COMMIT it compared against the work item's declared axes and how much of it no node owns (`beadloom scope-check --porcelain`, whose verdict the hook prints whatever it says — including `NOT CHECKED` and the reason, which used to reach only stderr and be discarded), which paths `active-sync --stage` added to the commit while it was in flight, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run, and the old one is the silent one.
+It also states four things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), how much of the COMMIT it compared against the work item's declared axes and how much of it no node owns (`beadloom scope-check --porcelain`, whose verdict the hook prints whatever it says — including `NOT CHECKED` and the reason, which used to reach only stderr and be discarded), which paths `active-sync --stage` corrected and did NOT add to the commit, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run, and the old one is the silent one.
 
 What it cannot do: a neighbour's hunk swept into a commit, inside a file the committer legitimately touches, is not caught and cannot be caught here — the swept hunk is inside the commit, which is the region the gate judges.
 
@@ -308,7 +308,9 @@ beadloom active-sync [--epic EPIC] [--check] [--json] [--no-export] [--stage] [-
 
 Reconcile ACTIVE.md bead-status tables from `bd` (the source of truth). For each epic's ACTIVE.md, rewrites the bead-status table's Status cells to match `bd` (rich coordinator notes are preserved when the state agrees). Default = fix mode (writes + syncs the tracked `.beads/issues.jsonl` via `bd export`); `--check` reports drift without writing (exit 1 on drift).
 
-No-op contract: if `bd` is unavailable OR there is no ACTIVE file with a bead-status table, this exits 0 and writes nothing (a non-flow repo is never affected). With `--stage` (fix mode), `git add` is run on EXACTLY the reconciled ACTIVE.md paths + the exported jsonl — nothing else.
+No-op contract: if `bd` is unavailable OR there is no ACTIVE file with a bead-status table, this exits 0 and writes nothing (a non-flow repo is never affected).
+
+`--stage` (fix mode) re-stages the corrected content of the paths this commit ALREADY stages and names every path it corrected and did not stage, under a fixed `  withheld: ` line. It never adds a path to a commit: the index at commit time is the set of paths the committer chose, and this command used to override that choice (BDL-UX #207). Under `--stage`, `bd export` runs only when the commit already carries `.beads/issues.jsonl` — a refresh that cannot be committed keeps no tracked artifact honest and dirties a shared working tree instead. The by-hand path (no `--stage`) exports as before.
 
 | Flag | Description |
 |------|----------|
@@ -316,7 +318,7 @@ No-op contract: if `bd` is unavailable OR there is no ACTIVE file with a bead-st
 | `--check` | Report drift without writing; exit 1 if any drift, 0 if clean. |
 | `--json` | Machine-readable JSON output. |
 | `--no-export` | Skip the `bd export` jsonl sync (fix mode only). |
-| `--stage` | `git add` EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl (fix mode only); never stages unrelated files. Best-effort (no git → skip). |
+| `--stage` | Re-stage the reconciled ACTIVE.md(s) + the exported jsonl that this commit ALREADY stages (fix mode only). Never adds a path to a commit; the ones it corrected and withheld are named. Best-effort (no git → skip). |
 | `--project` | Project root (default: current directory). |
 
 ## Testing

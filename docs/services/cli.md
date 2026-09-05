@@ -446,9 +446,19 @@ Status cell to match the bead's current `bd` status (`closed → ✓ done`,
 bead with an open blocker). A richer coordinator note is preserved when its state
 already agrees (e.g. `✓ done (PASS-WITH-FIXES)` is left intact for a `closed`
 bead). Only Status cells change — prose, the Progress Log, and other columns are
-byte-preserved. The reconcile core (`application/active_table.py`,
+byte-preserved. The reconcile core (`application/active_table/`,
 `reconcile_active_tables` / `bd_status_to_cell`) is the same one the MCP S4
 process-tools (`checkpoint` / `complete_bead`) use.
+
+A row's first cell is read for the id it NAMES, not for the text it IS: a code
+span, bold, or a Markdown link around an id resolves to that id (BDL-UX #210).
+A row that still resolves to nothing is reported with the shape that made it
+unresolvable — `no-bead-id`, `bead-and-text`, `more-than-one-bead`,
+`unknown-to-tracker` or `ambiguous-number` — because one sentence over five
+populations is a report nobody can act on. Beads the tracker holds that an epic's
+table carries no row for are named too, and never written: inserting a row into
+somebody's document is the same decision-for-an-agent as adding a path to their
+commit.
 
 This is the mechanism that keeps `ACTIVE.md` honest **by construction** — wired
 into the pre-commit hook (above), the coordinator no longer hand-edits
@@ -459,14 +469,31 @@ bead-status rows; the table is reconciled from `bd` on every commit.
 - `--check` — report drift on a throwaway copy without writing; **exit 1** if any
   row would change, **exit 0** when clean. Never writes and never exports.
 - `--json` — machine-readable output: `{ "changed_files": [...], "drifted_rows":
-  [ { "path", "bead_id", "old", "new" }, ... ] }`.
+  [ { "path", "bead_id", "old", "new" }, ... ], "rows_read", "rows_resolved",
+  "unresolved_rows": [ { "path", "cell", "shape", "reason" }, ... ],
+  "unresolved_by_shape", "unlisted_beads", "staging" }`.
 - `--no-export` — skip the `bd export` jsonl sync (fix mode only).
+- `--stage` — re-stage the reconciled `ACTIVE.md`(s) and the exported jsonl that
+  **this commit already stages**, and name every path it corrected and did not.
+  It never adds a path to a commit. Fix mode only; best-effort (no git → skip).
 - `--project DIR` — project root (default: current directory).
 
 In fix mode (no `--check`), after rewriting it best-effort runs
 `bd export -o .beads/issues.jsonl` — but only when that file is already
 git-tracked — so the tracked tracker artifact stays honest across
 branch/squash-merge. `--no-export` skips that step.
+
+**`--stage` does not decide what your commit is.** It used to `git add` every
+path the reconcile had written, which put another agent's tracker export back
+into a commit it had been deliberately taken out of (BDL-UX #207). The commit's
+scope is the set of paths whose index entry differs from `HEAD`; `--stage`
+re-stages the corrected content of a path inside that set and prints every
+correction outside it under a `  withheld: ` line, which is what the pre-commit
+hook shows. Under `--stage`, `bd export` runs only when the commit already
+carries `.beads/issues.jsonl`: a refresh that cannot be committed keeps no
+tracked artifact honest and dirties a shared working tree instead. Measured over
+the sixteen commits of `features/BDL-068`, the export moved that file in sixteen,
+so without the gate the hook would print one line on every commit.
 
 **No-op contract.** `active-sync` exits **0 and writes nothing** when there is no
 `ACTIVE.md` with a bead-status table, OR when `bd` is unavailable, OR when

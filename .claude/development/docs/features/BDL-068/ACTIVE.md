@@ -2,16 +2,48 @@
 
 > **Last updated:** 2026-09-05
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
-> docs), unmerged; S5 under way, waves 1-3 landed
+> docs), unmerged; S5 under way, waves 1-5 landed
 
 ---
 
 ## Current Bead
 
-**Bead:** none — S5 wave 4 (`0mdo.53`, BDL-UX #171 and #165) is closed. `bd ready --limit 0`
-lists `.54` and `beadloom-l2f2` as the remaining claimable work in S5. S4 is finished on the
+**Bead:** none — S5 wave 5 (`0mdo.54`, BDL-UX #207 and #210) is closed. `bd ready --limit 0`
+lists `beadloom-l2f2` as the remaining claimable dev work in S5. S4 is finished on the
 branch: `0mdo.36` (tech-writer) was the last of that slice and closed its docs pass, and
 `0mdo.12`, the slice bead, closes with it.
+
+**S5 wave 5, and the two findings that were entirely ours.** `0mdo.54` fixed a hook that staged
+what an agent had unstaged and a reconcile that could not read an id in a code span. Neither is
+a `bd` defect; both are Beadloom code meeting the tracker and getting it wrong.
+
+**#210 was live on this branch's own epic.** BDL-067's ACTIVE.md writes every one of its 27 bead
+ids as a Markdown code span, and the reconcile resolved none of them and blamed the id in all
+27. Measured on this repository at `5846b20`: 329 rows read, 211 resolved, 118 unresolved —
+every one under the same sentence, over four different faults with four different remedies.
+After: 238 resolved, 91 unresolved, reported as 38 `bead-and-text`, 50 `no-bead-id` and 3
+`more-than-one-bead`. Nothing was rewritten in either run, which is the honest outcome — those
+rows already said what the tracker says; what changed is that the mechanism now knows it. The
+other half of the finding is answered too: 79 beads the tracker holds have no row in their
+epic's table, named and never written, because inserting a row into somebody's document is the
+same decision-for-an-agent as adding a path to their commit.
+
+**#207's fix forced one decision, and the number decided it.** `active-sync --stage` now
+re-stages only the paths a commit already carries and names the rest. Left there, it would have
+printed one withheld line on every commit: measured over the sixteen commits of
+`features/BDL-068`, `bd export` moved `.beads/issues.jsonl` in SIXTEEN of sixteen. So under
+`--stage` the export runs only when the commit already carries it — a refresh that cannot be
+committed keeps no tracked artifact honest and dirties a shared tree instead, and this project
+already commits the export where it belongs (four of those sixteen are `chore: tracker export`
+and nothing else). The by-hand path exports as before.
+
+**And the escape hatch was measured rather than assumed.** On git 2.49.0, `git commit --
+<paths>` DOES exclude a staged path it does not name, so naming your files to git is a real
+defence against an index somebody else wrote into. It is not a defence against a hook: a
+pathspec commit builds a temporary index and a `git add` run from pre-commit writes into that
+one, so the hooked file landed in the commit and was left staged in the real index afterwards.
+The hook defeated the one instruction an agent could have followed. That corrects a sentence
+the suite carried since BDL-061.22.
 
 **S5 wave 4, and a root removed rather than guarded.** `0mdo.53` answered #171 by making an
 authored id impossible on the path this project scaffolds with. `bd_seam/creation.py` composes
@@ -558,6 +590,31 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     since closed both of its own: the `close` site is fixed and the prose is answered by a
     shared fragment. The `bd ready` truncation sites are NOT swept and the reason is recorded
     under that bead.
+  - [x] `0mdo.54` — **#207 + #210**, the two findings of this slice that are entirely ours.
+    `application/active_table.py` became a PACKAGE of five modules, moved with `git mv`, one
+    responsibility each: the id a row names, the markdown table, the state a Status cell
+    states, the reconcile core, and what a reconcile may stage. **#210:** `undecorate` reduces
+    a Markdown link to its text and deletes every code-span and emphasis character wherever it
+    stands — only backtick and asterisk, because an underscore can appear in a tracker id and
+    stripping it to read `_.22_` would corrupt `proj_x.22`. `resolve_row_bead_id` returns a
+    `RowId(bead_id, shape, reason)` rather than a 2-tuple, because the shape IS part of the
+    answer and a caller that parses the reason string to count is a second reader of one fact.
+    Measured on this repository: 211 → 238 resolved, 118 → 91 unresolved reported as three
+    named shapes, 0 rewritten in both runs. The 27 gained are BDL-067's whole table.
+    `unlisted_beads` names the 79 beads no row of their epic's table carries and writes none of
+    them. **#207:** `--stage` re-stages only paths whose index entry differs from `HEAD` — what
+    a commit actually contains — and names the rest under a fixed `  withheld: ` line; an
+    unreadable scope stages nothing and says so, because an unknown scope is not an empty one.
+    **The noise question was measured before it shipped:** `bd export` moved
+    `.beads/issues.jsonl` in SIXTEEN of the sixteen commits on this branch, so the naive fix
+    would print one line on every commit. Under `--stage` the export therefore runs only when
+    the commit already carries it. **And the shell was executed, not just asserted** — the
+    shipped `_HOOK_COHERENCE` block was extracted and run against a fake `beadloom` on `PATH`
+    in both directions: two withheld lines printed, none was silent. One defect found in the
+    report I was extending: `--check` reconciles a throwaway copy and every path it printed
+    pointed inside a directory deleted before the report was shown. Red verified by mutation in
+    both halves — `undecorate` reduced to `strip()` fails 19 of 53; the old staging answer fails
+    7 of 77.
   - [x] `0mdo.53` — **#171 + #165**, the bead-creation path. `bd_seam/creation.py` is the one
     place a bead is created: `PlannedBead` names beads by key and holds `depends_on` as
     plan-local keys, `graph_plan` writes the document `bd create --graph` accepts, and

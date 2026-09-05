@@ -2,7 +2,7 @@
 
 Internal building block of the application layer.
 
-**Source:** `src/beadloom/application/active_table.py`
+**Source:** `src/beadloom/application/active_table/`
 
 ---
 
@@ -14,11 +14,26 @@ process-tools (`checkpoint` / `complete_bead`, in `services/mcp_server.py`) and
 the `active-sync` command (BDL-053, in `services/commands/docsync.py`) share one
 tolerant, fail-safe parser/updater rather than each carrying its own copy.
 
-The module is deliberately **pure with respect to `bd`**: it never shells out to
-the beads CLI. Callers query `bd` and inject the resulting status map; this layer
-only parses and rewrites the markdown. That keeps it trivially testable and makes
-the no-op contract (no `bd`, no ACTIVE table → nothing happens) the caller's
+The reconcile core is deliberately **pure with respect to `bd`**: it never shells
+out to the beads CLI. Callers query `bd` and inject the resulting status map; this
+layer only parses and rewrites the markdown. That keeps it trivially testable and
+makes the no-op contract (no `bd`, no ACTIVE table → nothing happens) the caller's
 responsibility, not a hidden side effect here.
+
+### Five modules, one responsibility each
+
+It was a single `active_table.py` until BDL-068 S5, and its own docstring already
+needed an "and" to describe itself. The file moved with `git mv`, so the history
+follows it, and `__init__.py` re-exports the whole public surface — no import path
+outside the package changed.
+
+| Module | Its one responsibility |
+|--------|------------------------|
+| `row_ids.py` | The bead id a row names, and what the row names when it names none |
+| `table.py` | The markdown table: its rows, its Status column, one cell write |
+| `statuses.py` | The state a Status cell states, and the `bd` status it comes from |
+| `reconcile.py` | The reconcile core, pure with respect to `bd` |
+| `staging.py` | What a reconcile may stage, which is never more than the commit already carries |
 
 ## The bead-status table format
 
@@ -50,16 +65,64 @@ repository holds eight beads numbered `.17` in eight epics. Without a prefix the
 short id must be unique in the whole tracker; an ambiguity is reported, never
 guessed. Every cell that resolves to no bead is returned with a stated reason.
 
+### And it is written inside whatever Markdown wraps it in
+
+A cell is text in a document before it is a key in a lookup, so an author writes
+`` `.10` `` or `**.10**` the way they write every other identifier in the same
+file. `undecorate` reduces a link to its text and deletes every code-span and
+emphasis character wherever it stands. Only two characters are stripped —
+backtick and asterisk — because an underscore can appear in a tracker id, and
+removing it to read `_.22_` would silently corrupt `proj_x.22`.
+
+Measured on this repository at `5846b20`, before the fix: 329 rows read, 211
+resolved, 118 unresolved, and 27 of the 118 were BDL-067's own table, every row
+of which writes its id as a code span. After: 238 resolved, 91 unresolved, and no
+cell rewritten in either run — those rows already said what the tracker says.
+A reconcile inert on the commonest way to write an id in Markdown does not prevent
+hand-drift; it certifies it (BDL-UX #210).
+
+### A row that did not resolve says which of five things it was
+
+All 118 carried one sentence over four different facts with four different
+remedies. `resolve_row_bead_id` returns a `RowId(bead_id, shape, reason)` and the
+shape is one of `SHAPES`:
+
+| Shape | The cell | What to do about it |
+|-------|----------|---------------------|
+| `no-bead-id` | `BEAD-01`, `01`, `b0xl` | Nothing — it names no bead |
+| `bead-and-text` | `.7 review` | Move the title into a column of its own |
+| `more-than-one-bead` | `.73`–`.76`, `proj-x.3..8` | Give each bead its own row |
+| `unknown-to-tracker` | `.99` under an epic that has no `.99` | A finding about the tracker's answer |
+| `ambiguous-number` | `.22`, with no known epic and two beads numbered `.22` | Write the full id |
+
+A `bead-and-text` cell is deliberately **not** resolved to its head. The whole
+cell is the row's id, and reading `.1 Contract model` as the bead `.1` would
+resolve about fifty rows of this repository's finished epics and rewrite their
+status cells inside an unrelated commit. The shape is reported so the next
+decision is taken on a number rather than on a guess.
+
+### A bead with no row at all
+
+`unlisted_beads` names the beads the tracker holds under a table's epic that no
+row of that table resolved to — the other half of what BDL-062's reconcile missed,
+where three closed beads read `blocked` and three more were not listed at all.
+Measured here: 79 beads across 12 epics, at most 12 in any one. It is reported and
+**never written**: inserting a row into somebody's document is the same
+decision-for-an-agent as adding a path to their commit. It is computed only when
+the table's epic is known, because without a prefix there is no population to
+subtract from.
+
 ## Public surface
 
 - **`split_table_row(line)`** / **`is_separator_cells(cells)`** — markdown table
   row primitives. `split_table_row` returns the stripped inner cells of a `| … |`
   line (or `None` if the line is not a table row); `is_separator_cells` is `True`
   for a header-separator row (cells are only `-`/`:`).
-- **`short_form(bead_id)`** / **`resolve_row_bead_id(cell, bd_statuses, *,
-  prefix=None)`** — the two forms of a bead id, and the mapping between them.
-  `short_form("proj-x.22")` is `".22"`; `resolve_row_bead_id` returns
-  `(bead_id, None)` or `(None, reason)`.
+- **`short_form(bead_id)`** / **`undecorate(cell)`** / **`resolve_row_bead_id(cell,
+  bd_statuses, *, prefix=None)`** — the forms of a bead id, and the mapping between
+  them. `short_form("proj-x.22")` is `".22"`; `undecorate` removes the Markdown a
+  document wrapped an id in; `resolve_row_bead_id` returns a `RowId` carrying
+  either a `bead_id` or a `shape` and a `reason`.
 - **`set_active_table_status(active_path, bead_id, status)`** — flips one bead's
   Status cell (the row's **last** cell) by **whole-token** match in the first
   cell, in either of the id's two forms (so `…mukc.1` never collaterally matches
@@ -90,11 +153,59 @@ guessed. Every cell that resolves to no bead is returned with a stated reason.
   rewritten; every other file is byte-preserved.
 - **`ReconcileResult`** (dataclass) — the outcome: `changed_files` (paths
   rewritten), `drifted_rows` (`(path, bead_id, old_cell, new_cell)` per
-  corrected cell), `rows_read` / `rows_resolved`, and `unresolved_rows`
-  (`(path, cell, reason)`). The counts exist because an empty `drifted_rows` had
+  corrected cell), `rows_read` / `rows_resolved`, `unresolved_rows` (a
+  `UnresolvedRow(path, cell, shape, reason)` each) and `unlisted_beads`
+  (`(path, bead_id)`). The counts exist because an empty `drifted_rows` had
   two meanings that read identically: every row agreed with the tracker, or no
   row was ever compared. `is_inert` is the second — rows read, none resolved —
   and `active-sync --check` exits 1 on it as well as on drift.
+  `unresolved_by_shape` is the count a reader can act on: "118 unresolved" is a
+  number nobody acts on, and "27 of them are a decoration we cannot read" is one
+  somebody fixes in an hour.
+- **`stageable(candidates, pending)`** / **`decide_staging(candidates,
+  already_staged)`** / **`StagingDecision`** — what a reconcile may stage. See
+  "Staging is the committer's decision" below.
+- **`paths_this_commit_stages(root)`** / **`paths_the_index_has_not_taken(root)`**
+  / **`stage_paths(root, paths)`** — the three git reads and the one git write,
+  each a named collector at the module edge, so everything above them is a
+  decision over a set somebody hands in.
+
+## Staging is the committer's decision
+
+`active-sync --stage` used to `git add` every path the reconcile had written. In
+BDL-062 an agent unstaged `.beads/issues.jsonl` on purpose, because it was another
+agent's tracker export, and the pre-commit hook put it back and said so. This
+project instructs every agent to *commit only your own files, by explicit path,
+never `git add -A`* — and that instruction cannot survive a tool that stages after
+the decision was taken (BDL-UX #207).
+
+**The commit's own scope decides.** It is the set of paths whose index entry
+differs from `HEAD`, which is what a commit actually contains: a path staged with
+content identical to `HEAD` puts nothing in the commit, so correcting it and
+staging it would add a change nobody asked for. `decide_staging` re-stages the
+corrected content of a path inside that set and NAMES every correction outside it;
+a scope that could not be read stages nothing and says so, because an unknown
+scope is not an empty one.
+
+**`stageable` drops what staging would not change.** A path whose working tree
+already matches the index gains nothing from a `git add` and loses nothing from a
+withholding, so no line is printed about it.
+
+**The escape hatch works, once nothing stages behind it.** Measured on git 2.49.0
+in two isolated rigs: `git commit -- <paths>` DOES exclude a path that is staged
+and unnamed. It is not a defence against a hook, because a pathspec commit builds
+a temporary index and a `git add` run from pre-commit writes into that one — the
+hooked file landed in the commit and was left staged in the real index afterwards.
+So the hook defeated the one instruction an agent could have followed.
+
+**Why not `beadloom scope-check`.** It answers a different question — does this
+commit leave the work item's approved axes — over a population that excludes
+exactly these two files: its rule reports nothing about a path no graph node owns,
+and neither an `ACTIVE.md` nor `.beads/issues.jsonl` is owned.
+
+**What no hook can see.** A path already in the index looks the same whether the
+committer put it there or another tool did. Commit `050d63ac` on `features/BDL-068`
+carries a neighbouring bead's `git mv` for that reason, with no hook involved.
 
 Best-effort throughout: **never raises, never corrupts the file**. Prose,
 headings, the Progress Log, and non-Status columns are always left untouched.
@@ -104,8 +215,12 @@ headings, the Progress Log, and non-Status columns are always left untouched.
 - **`services/commands/docsync.py` — `active-sync` command (and helpers).** The same
   module also carries the pre-commit and pre-push hook TEMPLATES, whose subject is
   `guard-hooks` rather than this component; the one line of them that belongs here is the
-  coherence block, which runs `active-sync --stage` so the commit is coherent by
-  construction and names the paths it added.
+  coherence block, which runs `active-sync --stage` and prints the paths it withheld.
+  The block runs no `git add` of its own, and it selects the withheld lines with
+  `grep` rather than with the `sed -n 's/^# //p'` shape the two porcelain legs beside
+  it use: that shape is this project's verdict/payload split and means something, and
+  borrowing its spelling for an unrelated extraction gives one protocol a second
+  meaning.
   Queries `bd list --all --json -n 0` (via the mockable
   `services/bd_seam.run_bd` seam) — `--all` and the lifted row cap are load-
   bearing: `bd list` defaults to open beads capped at 50 rows, which on this
@@ -127,16 +242,22 @@ headings, the Progress Log, and non-Status columns are always left untouched.
   per verdict (`[exempt]` among them since `beadloom-mr2l.76`, where an excused
   pair printed `[ok]`), and the `--json` summary counts every verdict so they
   sum to the total.
-  The `--stage` flag runs `git add` on EXACTLY the reconciled ACTIVE.md paths
-  plus the exported jsonl (via `_stage_reconciled`), never staging unrelated
-  files. It nonetheless ADDS paths to a commit that is already in flight, and a
-  commit made with an explicit pathspec does not exclude them — measured on
-  BDL-061.22's own commit, which named one file and landed two. Since
-  BDL-061.80 the installed pre-commit hook lists what this step added, because
-  the hook's unjudged count states the remainder and nothing stated the
-  addition. The `--check` mode runs reconcile on a throwaway sandbox copy
-  (`_active_sync_check`) so it never writes to the real tree; it exits 1 on
-  drift, 0 when clean.
+  The `--stage` flag (via `_restage_within_this_commit`) re-stages the corrected
+  content of the paths the commit already carries and names the rest under a
+  fixed `  withheld: ` line. It adds no path to a commit. Under `--stage`,
+  `bd export` runs only when the commit already carries `.beads/issues.jsonl`:
+  the export exists to keep the TRACKED artifact honest across a branch or
+  squash-merge and achieves that only when the refresh is committed, so once the
+  refresh can no longer be staged into somebody else's commit, running it anyway
+  would dirty a shared working tree for nothing. That gate is measured rather
+  than assumed — over the sixteen commits of `features/BDL-068`, `bd export`
+  moved the file in sixteen, so without it the hook would print one line on every
+  commit, and four of those sixteen are `chore: tracker export` and nothing else.
+  The by-hand path (no `--stage`) exports exactly as before. The `--check` mode
+  runs reconcile on a throwaway sandbox copy (`_active_sync_check`) so it never
+  writes to the real tree, and `_rebased` maps the result's paths back to the real
+  files — a finding that names a file the reader cannot open is a finding nobody
+  acts on. It exits 1 on drift, 0 when clean.
 - **`services/mcp_server.py` — S4 process-tools.** `checkpoint` and
   `complete_bead` flip a single bead's row via the re-exported
   `set_active_table_status`.
@@ -150,7 +271,12 @@ no-op contract.
 
 The pure core is covered by `tests/test_active_table.py` and
 `tests/test_active_table_hardening.py` (table primitives, the `bd`-status map,
-and the reconcile core's drift / no-op / byte-preservation cases). The
+and the reconcile core's drift / no-op / byte-preservation cases);
+`tests/test_active_table_id_forms.py` covers the two forms of an id, and
+`tests/test_active_reconcile.py` plus
+`tests/acceptance/features/active_reconcile.feature` cover the decoration a
+document wraps an id in, the five unresolved shapes, the unlisted beads and the
+staging decision. The
 `active-sync` command's check / fix / no-op paths are covered by
 `tests/test_cli_active_sync.py` and `tests/test_cli_active_sync_hardening.py`,
 the pre-commit hook wiring by `tests/test_cli_hooks.py`, and the re-exported S4

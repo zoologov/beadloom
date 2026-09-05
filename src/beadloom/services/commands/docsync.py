@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from types import ModuleType
     from typing import Any
 
-    from beadloom.application.active_table import ReconcileResult
+    from beadloom.application.active_table import ReconcileResult, StagingDecision
     from beadloom.doc_sync.engine import Attestation
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
@@ -526,26 +526,42 @@ outside=$(git status --porcelain | awk 'substr($0, 2, 1) != " "' | wc -l | tr -d
 """
 )
 
-#: The coherence block, and the one thing it has to say about itself. `active-sync
-#: --stage` ADDS paths to a commit that is already in flight, and this project
-#: measured it doing so on its own S6 test commit: the hook printed a confident
-#: count of what it did not judge and said nothing about the file it had just put
-#: IN. The count states the remainder; this states the addition.
+#: The coherence block, and the decision it no longer takes for the committer.
+#:
+#: `active-sync --stage` used to ADD paths to a commit already in flight, and the
+#: block below used to announce the addition after the fact. BDL-UX #207 is what
+#: that cost: an agent unstaged `.beads/issues.jsonl` deliberately, because it was
+#: ANOTHER agent's tracker export, and this hook put it back. The project's own
+#: instruction -- commit only your own files, by explicit path -- cannot survive a
+#: tool that stages after the decision was taken, so the instruction was never the
+#: thing to strengthen.
+#:
+#: Now `--stage` re-stages only the corrected content of paths the commit ALREADY
+#: carries and names what it withheld, which is what this block prints. There is
+#: no `git add` here and no addition to detect: the promise is asserted in the
+#: suite, over the shipped hook text and over the staging decision itself, rather
+#: than by a second check in the hook that would be a second thing to keep in step.
+#:
+#: The withheld lines are selected with `grep` and printed whole, deliberately not
+#: with the `sed -n 's/^# //p'` shape the two porcelain legs above use. That shape
+#: is this project's verdict/payload split and means something; borrowing its
+#: spelling for an unrelated extraction is how one protocol acquires a second
+#: meaning, and `test_the_two_halves_of_the_split_are_paired_in_every_template`
+#: said so the first time this block was written.
 _HOOK_COHERENCE = """\
 # --- ACTIVE / tracker coherence ---
 # Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
-# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction. `--stage` stages
-# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
-# concurrently-edited doc in the same subtree.
+# blocks the commit. It reconciles the bead-status tables against the tracker and
+# refreshes the tracked issues.jsonl, then re-stages ONLY those of them this
+# commit already stages. A correction to a path you did not stage is named here
+# and left in the working tree for you to decide about.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  staged_before=$(git diff --cached --name-only)
-  beadloom active-sync --stage >/dev/null 2>&1
-  staged_added=$(git diff --cached --name-only | grep -vxF "$staged_before")
-  if [ -n "$staged_added" ]; then
-    echo "beadloom active-sync ADDED these path(s) to this commit:"
-    echo "$staged_added" | sed 's/^/  /'
+  withheld=$(beadloom active-sync --stage 2>/dev/null | grep '^  withheld: ')
+  if [ -n "$withheld" ]; then
+    echo "beadloom active-sync corrected path(s) this commit does not stage."
+    echo "They were NOT added to it:"
+    echo "$withheld"
   fi
 fi
 """
@@ -852,12 +868,23 @@ def install_hooks(
         return
 
     if do_pre_commit:
-        template = _HOOK_TEMPLATE_BLOCK if mode == "block" else _HOOK_TEMPLATE_WARN
+        template = pre_commit_hook_body(blocking=mode == "block")
         _write_hook(hooks_dir / "pre-commit", template, stat)
         click.echo(f"Installed pre-commit hook (mode: {mode}).")
     if do_pre_push:
         _write_hook(hooks_dir / "pre-push", _HOOK_TEMPLATE_PRE_PUSH, stat)
         click.echo("Installed pre-push hook (Beadloom Gate, blocking).")
+
+
+# beadloom:component=cli-commands
+def pre_commit_hook_body(*, blocking: bool) -> str:
+    """The pre-commit hook text this project installs, in one of its two modes.
+
+    Public because the promise the hook makes is asserted over the text that is
+    actually written, not over a copy of it: a test that reads a duplicate of the
+    template is a test of the duplicate (BDL-UX #207).
+    """
+    return _HOOK_TEMPLATE_BLOCK if blocking else _HOOK_TEMPLATE_WARN
 
 
 def _write_hook(hook_path: Path, template: str, stat_mod: ModuleType) -> None:
@@ -1049,37 +1076,71 @@ def _export_jsonl(project_root: Path) -> bool:
     return True
 
 
+#: The tracked tracker export, named once so the two places that reason about it
+#: cannot spell it differently.
+_TRACKER_EXPORT = ".beads/issues.jsonl"
+
+
 # beadloom:component=active-table
-def _stage_reconciled(
+def _restage_within_this_commit(
     project_root: Path,
     changed_files: list[Path],
     *,
-    exported_jsonl: bool,
-) -> None:
-    """``git add`` EXACTLY the reconciled ACTIVE.md paths (+ the exported jsonl).
+    no_export: bool,
+) -> StagingDecision:
+    """Re-stage the corrected paths this commit ALREADY carries, and no others.
 
-    Replaces the old broad ``git add -u .claude/development/docs/features`` in the
-    hook, which over-staged any concurrently-edited sibling doc in that subtree.
-    Best-effort and guarded: no paths → no-op; no git / failure → silently skip
-    (never raises, never stages anything beyond the supplied paths).
+    **This no longer adds a path to a commit (BDL-UX #207).** It used to ``git
+    add`` every path the reconcile had written, which put the tracker export back
+    into a commit an agent had deliberately taken it out of. The paths it
+    corrected and did not stage are returned so the caller names them: a tool
+    that declines without saying so is the same fault as one that stages without
+    saying so.
+
+    **And ``bd export`` runs here only when this commit carries the export**, for
+    a reason that follows from the fix rather than working around it. The export
+    exists to keep the TRACKED artifact honest across a branch or a squash-merge,
+    and it achieves that only when the refresh is committed. Once the refresh can
+    no longer be staged into somebody else's commit, running it anyway would dirty
+    a shared working tree for nothing and put one withheld line on every commit.
+    That number is measured rather than feared: over the sixteen commits of
+    ``features/BDL-068``, ``bd export`` moved the file in SIXTEEN. A line printed
+    on every commit is a line nobody reads by the second day, and this project
+    already commits the export where it belongs — four of those sixteen are
+    ``chore: tracker export`` and nothing else.
     """
-    import subprocess
+    from beadloom.application.active_table import (
+        decide_staging,
+        paths_the_index_has_not_taken,
+        paths_this_commit_stages,
+        stage_paths,
+        stageable,
+    )
 
-    paths = [str(p) for p in changed_files]
-    if exported_jsonl:
-        paths.append(".beads/issues.jsonl")
-    if not paths:
-        return
+    scope = paths_this_commit_stages(project_root)
+    candidates = [_repo_relative(project_root, path) for path in changed_files]
+    commit_carries_export = not no_export and scope is not None and _TRACKER_EXPORT in scope
+    if commit_carries_export and _export_jsonl(project_root):
+        candidates.append(_TRACKER_EXPORT)
+    decision = decide_staging(
+        stageable(candidates, paths_the_index_has_not_taken(project_root)), scope
+    )
+    stage_paths(project_root, decision.staged)
+    return decision
+
+
+# beadloom:component=active-table
+def _repo_relative(project_root: Path, path: Path) -> str:
+    """*path* as git names it — relative to the repository root when it is inside.
+
+    The reconcile discovers ACTIVE.md files by globbing under *project_root*, so
+    the paths it reports are already rooted there; a path from somewhere else is
+    passed through unchanged rather than guessed at.
+    """
     try:
-        # Fixed argv (no shell); `--` guards the explicit, reconciled paths only.
-        subprocess.run(  # noqa: S603
-            ["git", "add", "--", *paths],  # noqa: S607
-            cwd=project_root,
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
 
 
 # beadloom:component=active-table
@@ -1102,8 +1163,9 @@ def _stage_reconciled(
     "--stage",
     "stage",
     is_flag=True,
-    help="git add EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl "
-    "(fix mode only); never stages unrelated files. Best-effort (no git → skip).",
+    help="Re-stage the reconciled ACTIVE.md(s) + the exported jsonl that this "
+    "commit ALREADY stages (fix mode only). Never adds a path to a commit; the "
+    "ones it corrected and withheld are named. Best-effort (no git → skip).",
 )
 @click.option(
     "--project",
@@ -1129,9 +1191,13 @@ def active_sync(
 
     No-op contract: if ``bd`` is unavailable OR there is no ACTIVE file with a
     bead-status table, this exits 0 and writes nothing (a non-flow repo is never
-    affected). With ``--stage`` (fix mode), ``git add`` is run on EXACTLY the
-    reconciled ACTIVE.md paths + the exported jsonl — nothing else (so a
-    concurrently-edited sibling doc is never collaterally staged).
+    affected).
+
+    ``--stage`` (fix mode) re-stages the corrected content of the paths this
+    commit ALREADY stages, and NAMES every path it corrected and did not stage.
+    It never adds a path to a commit: the index at commit time is the set of
+    paths the committer chose, and this command used to override that choice
+    (BDL-UX #207).
     """
     from beadloom.application.active_table import reconcile_active_tables
 
@@ -1161,26 +1227,30 @@ def active_sync(
     result = reconcile_active_tables(
         project_root, bd_statuses, epic=epic, epic_prefixes=prefixes
     )
-    exported = False if no_export else _export_jsonl(project_root)
+    decision: StagingDecision | None = None
     if stage:
-        _stage_reconciled(project_root, result.changed_files, exported_jsonl=exported)
-    _emit_active_sync(result, output_json=output_json, check=False)
+        decision = _restage_within_this_commit(
+            project_root, result.changed_files, no_export=no_export
+        )
+    elif not no_export:
+        _export_jsonl(project_root)
+    _emit_active_sync(result, output_json=output_json, check=False, staging=decision)
 
 
 # beadloom:component=active-table
 def _has_active_table(project_root: Path, epic: str | None) -> bool:
     """True when at least one in-scope ACTIVE.md contains a bead-status table."""
     from beadloom.application.active_table import (
-        _discover_active_files,
-        _find_status_column,
+        discover_active_files,
+        find_status_column,
     )
 
-    for path in _discover_active_files(project_root, epic):
+    for path in discover_active_files(project_root, epic):
         try:
             lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
         except OSError:
             continue
-        if _find_status_column(lines) is not None:
+        if find_status_column(lines) is not None:
             return True
     return False
 
@@ -1205,8 +1275,12 @@ def _active_sync_check(
             shutil.copytree(src, sandbox / ".claude" / "development" / "docs" / "features")
         from beadloom.application.active_table import reconcile_active_tables
 
-        result = reconcile_active_tables(
-            sandbox, bd_statuses, epic=epic, epic_prefixes=epic_prefixes
+        result = _rebased(
+            reconcile_active_tables(
+                sandbox, bd_statuses, epic=epic, epic_prefixes=epic_prefixes
+            ),
+            sandbox,
+            project_root,
         )
     _emit_active_sync(result, output_json=output_json, check=True)
     if result.drifted_rows or result.is_inert:
@@ -1220,11 +1294,46 @@ def _active_sync_check(
 
 
 # beadloom:component=active-table
+def _rebased(
+    result: ReconcileResult, sandbox: Path, project_root: Path
+) -> ReconcileResult:
+    """Name the real files, not the throwaway copy `--check` reconciled.
+
+    `--check` runs over a temporary tree so it can never write, and every path in
+    the result therefore pointed inside a directory that is deleted before the
+    report is printed. A finding that names a file the reader cannot open is a
+    finding nobody acts on.
+    """
+    from beadloom.application.active_table import ReconcileResult, UnresolvedRow
+
+    def rebase(path: Path) -> Path:
+        try:
+            return project_root / path.relative_to(sandbox)
+        except ValueError:
+            return path
+
+    return ReconcileResult(
+        changed_files=[rebase(p) for p in result.changed_files],
+        drifted_rows=[
+            (rebase(p), bead_id, old, new) for (p, bead_id, old, new) in result.drifted_rows
+        ],
+        rows_read=result.rows_read,
+        rows_resolved=result.rows_resolved,
+        unresolved_rows=[
+            UnresolvedRow(rebase(row.path), row.cell, row.shape, row.reason)
+            for row in result.unresolved_rows
+        ],
+        unlisted_beads=[(rebase(p), bead_id) for (p, bead_id) in result.unlisted_beads],
+    )
+
+
+# beadloom:component=active-table
 def _emit_active_sync(
     result: ReconcileResult,
     *,
     output_json: bool,
     check: bool,
+    staging: StagingDecision | None = None,
 ) -> None:
     """Print the reconcile outcome (JSON or human-readable).
 
@@ -1243,10 +1352,27 @@ def _emit_active_sync(
             "rows_read": result.rows_read,
             "rows_resolved": result.rows_resolved,
             "unresolved_rows": [
-                {"path": str(p), "cell": cell, "reason": reason}
-                for (p, cell, reason) in result.unresolved_rows
+                {
+                    "path": str(row.path),
+                    "cell": row.cell,
+                    "shape": row.shape,
+                    "reason": row.reason,
+                }
+                for row in result.unresolved_rows
+            ],
+            "unresolved_by_shape": result.unresolved_by_shape,
+            "unlisted_beads": [
+                {"path": str(p), "bead_id": bead_id}
+                for (p, bead_id) in result.unlisted_beads
             ],
         }
+        if staging is not None:
+            payload["staging"] = {
+                "staged": list(staging.staged),
+                "withheld": list(staging.withheld),
+                "scope_unreadable": staging.scope_unreadable,
+                "stated": staging.stated,
+            }
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     if result.is_inert:
@@ -1255,16 +1381,20 @@ def _emit_active_sync(
             f"bd — nothing was compared, so this is not a coherent table:"
         )
         _echo_unresolved(result)
+        _echo_staging(staging)
         return
     click.echo(f"active-sync: resolved {result.rows_resolved} of {result.rows_read} row(s) read.")
     _echo_unresolved(result)
+    _echo_unlisted(result)
     if not result.drifted_rows:
         click.echo("active-sync: ACTIVE tables already coherent.")
+        _echo_staging(staging)
         return
     verb = "would update" if check else "updated"
     click.echo(f"active-sync: {verb} {len(result.drifted_rows)} row(s):")
     for path, bead_id, old, new in result.drifted_rows:
         click.echo(f"  {path}: {bead_id}  {old!r} -> {new!r}")
+    _echo_staging(staging)
 
 
 #: How many unresolved rows are named before the list states its remainder. An
@@ -1275,15 +1405,60 @@ _UNRESOLVED_SHOWN = 5
 
 # beadloom:component=active-table
 def _echo_unresolved(result: ReconcileResult) -> None:
-    """Name the rows the reconcile could not map onto a bead, with their reasons."""
+    """Name the rows the reconcile could not map onto a bead, with their reasons.
+
+    The COUNT leads by shape, because a total is a number nobody acts on: on this
+    repository the 118 unresolved rows were four different faults with four
+    different remedies, reported under one sentence (BDL-UX #210).
+    """
     if not result.unresolved_rows:
         return
-    click.echo(f"active-sync: {len(result.unresolved_rows)} row(s) resolved to no bead:")
-    for path, cell, reason in result.unresolved_rows[:_UNRESOLVED_SHOWN]:
-        click.echo(f"  {path}: {cell!r} — {reason}")
+    by_shape = result.unresolved_by_shape
+    named = ", ".join(f"{count} {shape}" for shape, count in sorted(by_shape.items()))
+    click.echo(
+        f"active-sync: {len(result.unresolved_rows)} row(s) resolved to no bead "
+        f"({named}):"
+    )
+    for row in result.unresolved_rows[:_UNRESOLVED_SHOWN]:
+        click.echo(f"  {row.path}: {row.cell!r} — {row.reason}")
     remainder = len(result.unresolved_rows) - _UNRESOLVED_SHOWN
     if remainder > 0:
         click.echo(f"  … and {remainder} more")
+
+
+# beadloom:component=active-table
+def _echo_unlisted(result: ReconcileResult) -> None:
+    """Name the beads the tracker holds that a table carries no row for.
+
+    Reported and never written: inserting a row into somebody's document is the
+    same decision-for-an-agent as adding a path to their commit.
+    """
+    if not result.unlisted_beads:
+        return
+    click.echo(
+        f"active-sync: {len(result.unlisted_beads)} bead(s) the tracker holds have "
+        f"no row in their epic's table:"
+    )
+    for path, bead_id in result.unlisted_beads[:_UNRESOLVED_SHOWN]:
+        click.echo(f"  {path}: {bead_id}")
+    remainder = len(result.unlisted_beads) - _UNRESOLVED_SHOWN
+    if remainder > 0:
+        click.echo(f"  … and {remainder} more")
+
+
+# beadloom:component=active-table
+def _echo_staging(staging: StagingDecision | None) -> None:
+    """State what `--stage` staged and what it corrected and did not stage.
+
+    The withheld paths are printed one per line under a fixed `  withheld: `
+    prefix so the pre-commit hook can show them without parsing the rest
+    (BDL-UX #207).
+    """
+    if staging is None:
+        return
+    click.echo(f"active-sync: {staging.stated}.")
+    for path in staging.withheld:
+        click.echo(f"  withheld: {path}")
 
 
 # beadloom:domain=doc-sync

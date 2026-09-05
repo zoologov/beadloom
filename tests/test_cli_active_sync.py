@@ -320,7 +320,12 @@ def test_check_mode_does_not_export(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# --stage — git add EXACTLY the reconciled ACTIVE.md(s) + the jsonl, nothing else
+# --stage — re-stage what this commit already carries, and NEVER add to it
+#
+# BDL-UX #207 moved this contract. `--stage` used to `git add` every path the
+# reconcile had written, which put `.beads/issues.jsonl` back into a commit an
+# agent had deliberately taken it out of. It now re-stages the corrected content
+# of paths the index already holds and names the rest.
 # ---------------------------------------------------------------------------
 
 
@@ -345,9 +350,25 @@ def _init_repo(tmp_path: Path) -> None:
     _git(tmp_path, "config", "user.name", "t")
 
 
-def test_stage_stages_only_reconciled_active_not_unrelated_doc(tmp_path: Path) -> None:
-    """The over-staging bug pinned: a concurrently-edited sibling doc in the same
-    features subtree must NOT be staged — only the reconciled ACTIVE.md is."""
+def _put_in_this_commit(tmp_path: Path, path: Path) -> str:
+    """Make *path* part of the commit in flight, the way a committer does.
+
+    A commit's scope is the set of paths whose INDEX entry differs from HEAD, so
+    a `git add` of a file identical to HEAD puts nothing in the commit. The file
+    is therefore given a working-tree change of its own before it is staged.
+    """
+    path.write_text(path.read_text(encoding="utf-8") + "\n<!-- edited -->\n", encoding="utf-8")
+    relative = "/".join(path.relative_to(tmp_path).parts)
+    _git(tmp_path, "add", relative)
+    return relative
+
+
+def test_stage_restages_the_active_this_commit_already_carries(tmp_path: Path) -> None:
+    """A path the commit already stages is re-staged with its corrected content.
+
+    And a concurrently-edited sibling doc in the same features subtree is not
+    touched, which is the older over-staging bug this file has always pinned.
+    """
     active = _write_active(tmp_path, "DEMO")
     # An unrelated, concurrently-modified doc in the SAME features subtree.
     unrelated = active.parent / "CONTEXT.md"
@@ -357,6 +378,31 @@ def test_stage_stages_only_reconciled_active_not_unrelated_doc(tmp_path: Path) -
     _git(tmp_path, "commit", "-q", "-m", "baseline")
     # Now dirty the unrelated doc in the working tree (NOT staged).
     unrelated.write_text("concurrent edit\n", encoding="utf-8")
+    # The committer put the ACTIVE.md in this commit themselves.
+    rel_active = _put_in_this_commit(tmp_path, active)
+
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path), "--no-export"]
+        )
+    assert result.exit_code == 0, result.output
+    rel_unrelated = "/".join(unrelated.relative_to(tmp_path).parts)
+    staged = _staged_paths(tmp_path)
+    assert rel_active in staged, staged
+    assert rel_unrelated not in staged, staged
+    assert "withheld" not in result.output
+
+
+def test_stage_does_not_add_an_active_this_commit_left_out(tmp_path: Path) -> None:
+    """The correction is made in the working tree and NOT put into the commit."""
+    active = _write_active(tmp_path, "DEMO")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
 
     beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
     with patch(
@@ -368,13 +414,12 @@ def test_stage_stages_only_reconciled_active_not_unrelated_doc(tmp_path: Path) -
         )
     assert result.exit_code == 0, result.output
     rel_active = "/".join(active.relative_to(tmp_path).parts)
-    rel_unrelated = "/".join(unrelated.relative_to(tmp_path).parts)
-    staged = _staged_paths(tmp_path)
-    assert rel_active in staged, staged
-    assert rel_unrelated not in staged, staged
+    assert _staged_paths(tmp_path) == set()
+    assert f"withheld: {rel_active}" in result.output
 
 
-def test_stage_stages_exported_jsonl(tmp_path: Path) -> None:
+def _export_rig(tmp_path: Path) -> tuple[Path, Path]:
+    """A repo whose ACTIVE.md drifts and whose tracked jsonl `bd export` rewrites."""
     active = _write_active(tmp_path, "DEMO")
     beads_dir = tmp_path / ".beads"
     beads_dir.mkdir()
@@ -382,7 +427,10 @@ def test_stage_stages_exported_jsonl(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-q", "-m", "baseline")
+    return active, beads_dir
 
+
+def _fake_bd(beads_dir: Path) -> object:
     beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
 
     def fake_run_bd(args: list[str], *, cwd: str | None = None) -> BdResult:
@@ -394,15 +442,52 @@ def test_stage_stages_exported_jsonl(tmp_path: Path) -> None:
             return _result_ok("")
         return _result_ok("")
 
-    with patch("beadloom.services.bd_seam.run_bd", side_effect=fake_run_bd):
+    return fake_run_bd
+
+
+def test_stage_restages_the_exported_jsonl_this_commit_already_carries(
+    tmp_path: Path,
+) -> None:
+    active, beads_dir = _export_rig(tmp_path)
+    rel_active = _put_in_this_commit(tmp_path, active)
+    _put_in_this_commit(tmp_path, beads_dir / "issues.jsonl")
+
+    with patch("beadloom.services.bd_seam.run_bd", side_effect=_fake_bd(beads_dir)):
         result = CliRunner().invoke(
             main, ["active-sync", "--stage", "--project", str(tmp_path)]
         )
     assert result.exit_code == 0, result.output
     staged = _staged_paths(tmp_path)
-    rel_active = "/".join(active.relative_to(tmp_path).parts)
     assert ".beads/issues.jsonl" in staged, staged
     assert rel_active in staged, staged
+
+
+def test_stage_does_not_put_back_a_jsonl_the_committer_unstaged(tmp_path: Path) -> None:
+    """BDL-UX #207 itself, in the shape it was reported in.
+
+    An agent stages the export and then removes it on purpose, because it is
+    another agent's tracker state. It does not come back into the commit — and
+    under `--stage` the export is not even RUN, because a refresh that cannot be
+    committed keeps no tracked artifact honest and dirties a shared tree instead.
+    """
+    active, beads_dir = _export_rig(tmp_path)
+    rel_active = _put_in_this_commit(tmp_path, active)
+    _put_in_this_commit(tmp_path, beads_dir / "issues.jsonl")
+    _git(tmp_path, "restore", "--staged", ".beads/issues.jsonl")
+    before = (beads_dir / "issues.jsonl").read_text(encoding="utf-8")
+
+    with patch(
+        "beadloom.services.bd_seam.run_bd", side_effect=_fake_bd(beads_dir)
+    ) as mocked:
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path)]
+        )
+    assert result.exit_code == 0, result.output
+    staged = _staged_paths(tmp_path)
+    assert ".beads/issues.jsonl" not in staged, staged
+    assert rel_active in staged, staged
+    assert (beads_dir / "issues.jsonl").read_text(encoding="utf-8") == before
+    assert [call.args[0][0] for call in mocked.call_args_list] == ["list"]
 
 
 def test_stage_no_export_does_not_stage_jsonl(tmp_path: Path) -> None:
@@ -418,6 +503,7 @@ def test_stage_no_export_does_not_stage_jsonl(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-q", "-m", "baseline")
+    _put_in_this_commit(tmp_path, active)
 
     beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
     with patch(
@@ -432,6 +518,7 @@ def test_stage_no_export_does_not_stage_jsonl(tmp_path: Path) -> None:
     rel_active = "/".join(active.relative_to(tmp_path).parts)
     assert rel_active in staged, staged
     assert ".beads/issues.jsonl" not in staged, staged
+    assert "withheld: .beads/issues.jsonl" not in result.output
 
 
 def test_stage_noop_when_nothing_reconciled(tmp_path: Path) -> None:
