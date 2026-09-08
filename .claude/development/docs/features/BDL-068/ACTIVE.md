@@ -10,7 +10,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.60` — **complete.** BDL-UX #254: a guard that cannot evaluate itself
+**Bead:** none — `beadloom-0mdo.60` is **closed**. BDL-UX #254: a guard that cannot evaluate itself
 blocked the write that would repair it. It ran as S6 wave 1, alone and first, because S6's
 subject is the flow's own role templates and composed cores — exactly the kind of edit that
 leaves an artifact momentarily unreadable — so every wave running before this landed carried
@@ -41,6 +41,10 @@ reason to reopen the hole.
 
 **The second question the bead asked is answered and not fixed:** the probe stays inside the
 tree it guards. Both decisions are in CONTEXT.md, dated 2026-09-08.
+
+**Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion —
+`bd close --suggest-next` named `.14`, the slice bead, which the ready list does not hold
+because it still carries other blockers.
 
 **S5 is finished on the branch.** `0mdo.57` (tech-writer) closed the slice's
 docs pass and `0mdo.13`, the slice bead, closes with it. The full S5 set is `.58` (axes), `.39`,
