@@ -32,11 +32,20 @@ working tree that set contains the neighbour's work, which is #235 reached by a
 second route.
 
 **What a room cannot tell you.** It carries no ``.git``, so a doc-freshness check
-inside it has no baseline; and it isolates the swept SOURCE, not the environment
-— :func:`room_invocation` names the interpreter this run is using, and which
-optional extras that interpreter has installed is a separate question (BDL-UX
-#236). A room's verdict is a claim about the files in it and never about the
-combined tree, which is the wave gate owner's measurement.
+inside it has no baseline; and it isolates the swept SOURCE, not the environment.
+A room's verdict is a claim about the files in it and never about the combined
+tree, which is the wave gate owner's measurement.
+
+**What the record now states, and why it is not the same as controlling it.**
+BDL-UX #236: measured on this repository at ``6c4d0a9``, over one code base at
+one commit, ``mypy src/`` reports 0 errors under ``.[all,dev]`` and 82 under
+``.[dev]``, and under the second the whole ``tui`` suite leaves the run — three of
+its four modules skip and the fourth stops the collection with an error. So the
+marker records the extras the invocation's interpreter has, derived by
+:func:`~beadloom.application.rooms.installed_extras` — the same derivation
+``beadloom rooms`` reports, because two answers to one question are two things
+that can disagree. The room does NOT build an environment of its own: which
+extras a verdict SHOULD be taken under is a decision, and BDL-UX #256 owns it.
 """
 
 # beadloom:feature=wave-plan
@@ -53,6 +62,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from beadloom.application.rooms import ExtraSet, installed_extras
 from beadloom.application.waves.media import room_for
 
 #: The file that makes a room able to say whose it is. A directory without one
@@ -96,6 +106,10 @@ class RoomBuild:
     commit: str | None = None
     carried: tuple[str, ...] = ()
     invocation: tuple[str, ...] = ()
+    #: The optional extras the invocation's interpreter has, or ``None`` when
+    #: the derivation could not answer. ``None`` is not "no extras": a report
+    #: printing the second for the first is the defect this field closes.
+    extras: str | None = None
 
 
 def room_path(parent: Path, bead_id: str) -> Path:
@@ -197,10 +211,11 @@ def build_room(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.mkdir()  # exclusive by construction: a room is created, never entered
 
+    extras = installed_extras(root)
     try:
         _archive_head(root, path)
         carried = _carry(root, path, carry)
-        _write_marker(bead_id, root, path, commit, carried)
+        _write_marker(bead_id, root, path, commit, carried, extras)
     except (OSError, subprocess.SubprocessError, tarfile.TarError):
         # A half-built room is worse than none: it is a directory the next
         # attempt would refuse, for a reason that has nothing to do with a
@@ -219,6 +234,7 @@ def build_room(
         commit=commit,
         carried=carried,
         invocation=room_invocation(path, project_root=root),
+        extras=extras.label if extras.resolved else None,
     )
 
 
@@ -383,16 +399,22 @@ def _carry(root: Path, path: Path, carry: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _write_marker(
-    bead_id: str, root: Path, path: Path, commit: str, carried: tuple[str, ...]
+    bead_id: str,
+    root: Path,
+    path: Path,
+    commit: str,
+    carried: tuple[str, ...],
+    extras: ExtraSet,
 ) -> None:
     """Record who the room belongs to and what a measurement in it is true of.
 
     Two interpreters are recorded and they are not the same one. The invocation
     names the environment the SUITE will run under; ``built_by`` is the process
     that made the room, which under a ``uv`` tool install is a different
-    interpreter entirely. Which optional extras either has installed is the part
-    the record does not answer (BDL-UX #236); naming them is what makes the gap
-    statable rather than invisible.
+    interpreter entirely. The extras are recorded beside them because they, and
+    not the files, decided 82 mypy errors against 0 on one code base (BDL-UX
+    #236) — a report that cannot be reproduced from what it prints is a claim
+    rather than a measurement.
     """
     from beadloom import __version__
 
@@ -408,6 +430,15 @@ def _write_marker(
             "built_by": {
                 "executable": sys.executable,
                 "version": ".".join(str(part) for part in sys.version_info[:3]),
+            },
+            "extras": {
+                "distribution": extras.distribution,
+                "resolved": extras.resolved,
+                "label": extras.label if extras.resolved else None,
+                "installed": list(extras.installed),
+                "absent": [
+                    {"extra": a.extra, "needs": list(a.absent)} for a in extras.absent
+                ],
             },
         },
         "beadloom": __version__,

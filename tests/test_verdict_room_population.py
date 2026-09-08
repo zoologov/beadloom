@@ -311,7 +311,16 @@ class TestTheCensusSurvivesAProjectThatDeclaresBadly:
         # Assert
         assert census.current.dimensions["os"]
         assert census.comparisons == ()
-        assert len(census.unresolved) == 2
+        # Three absences with three causes, asserted by cause rather than by
+        # count: the interpreters are not enumerated, no workflow declares a
+        # leg, and no distribution is named, so the extras a verdict would be
+        # taken under cannot be stated either (BDL-UX #236).
+        reasons = [entry.why for entry in census.unresolved]
+        assert len(reasons) == 3
+        assert any("interpreters this project supports" in why for why in reasons)
+        assert any("no workflow file declares a leg" in why for why in reasons)
+        assert any("optional extras" in why for why in reasons)
+        assert not census.extras.resolved
 
     def test_packaging_metadata_that_is_a_directory_is_unresolved(
         self, tmp_path: Path

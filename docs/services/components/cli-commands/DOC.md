@@ -123,8 +123,10 @@ tracker, not about the room), `2` no room was built. A tracker that answers and 
 bead is a refusal rather than a finding, because a room named after a bead nobody holds cannot
 say whose it is; a tracker that cannot be reached is a finding, because refusing there would
 make the command unusable wherever `bd` is not installed. The room's own limits are printed
-beside its path — no `.git`, so a freshness check inside has no baseline, and a verdict that is
-a claim about its files and never about the combined tree (BDL-UX #235, #243, #181).
+beside its path — no `.git`, so a freshness check inside has no baseline, a verdict that is a
+claim about its files and never about the combined tree, and the optional extras its
+invocation's interpreter has, because those and not the files decided 82 mypy errors against 0
+on one code base (BDL-UX #235, #243, #181, #236).
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and
@@ -132,7 +134,11 @@ the ones the run did not enter (BDL-068 S3.2). `--dimension <axis>` prints one a
 per line, which is the form a completion checklist loops over instead of a spelled-out list
 that goes stale. It exits 2 when the named axis is carried by no declared room, and names the
 axes that exist: an empty answer would read as "this project has no such axis", which is the
-clean list an agent trusts and stops at.
+clean list an agent trusts and stops at. Since BDL-068 S6 the census carries an `extras` axis —
+the optional extras a leg installs against the ones this run has — and this renderer prints the
+project's own extras with the distributions each absent one needs. The values of an axis are
+printed in a stable order: they come from a set, so an axis whose values are not versions was
+previously printed in the hash order of that set, which differs between processes.
 
 `typed_surface.py` renders what `application.typed_surface` derived: the files this project
 declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`

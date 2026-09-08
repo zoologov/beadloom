@@ -99,13 +99,18 @@ def _print_dimension(census: RoomCensus, dimension: str) -> None:
         for c in census.comparisons
         if dimension in c.room.dimensions
     }
-    for value in sorted(values, key=_version_key):
+    for value in sorted(values, key=lambda value: (_version_key(value), value)):
         click.echo(value)
     sys.exit(_EXIT_CLEAN)
 
 
 def _version_key(value: str) -> tuple[int, ...] | tuple[()]:
-    """Order ``3.9`` before ``3.10``, and leave anything else to its own order."""
+    """Order ``3.9`` before ``3.10``, leaving a non-version to the caller's tie-break.
+
+    The tie-break is the value itself, and it is not decoration: the values come
+    from a set, so an axis whose values are all non-versions — `os`, `locale`,
+    `extras` — was printed in hash order, which differs between processes.
+    """
     parts = value.split(".")
     if all(p.isdigit() for p in parts):
         return tuple(int(p) for p in parts)
@@ -124,6 +129,7 @@ def _human(census: RoomCensus) -> str:
     ]
     lines.extend(_declared_lines(census))
     lines.extend(_supported_lines(census))
+    lines.extend(_extras_lines(census))
     lines.extend(_unresolved_lines(census))
     return "\n".join(lines)
 
@@ -169,6 +175,27 @@ def _supported_lines(census: RoomCensus) -> list[str]:
     return lines
 
 
+def _extras_lines(census: RoomCensus) -> list[str]:
+    """The optional extras this environment has, and the ones it has not.
+
+    The absent ones name the distribution that decided them, because a verdict
+    taken without an extra is not wrong — it is narrower than it reads, and a
+    reader can only tell which by knowing what was missing.
+    """
+    extras = census.extras
+    if not extras.resolved:
+        return []
+    lines = [
+        f"  Extras of `{extras.distribution}` installed here: {extras.label}",
+    ]
+    lines.extend(
+        f"    not installed: {absent.extra} — needs {', '.join(absent.absent)}"
+        for absent in extras.absent
+    )
+    lines.append("")
+    return lines
+
+
 def _unresolved_lines(census: RoomCensus) -> list[str]:
     """What the derivation could not turn into a room, named rather than dropped."""
     if not census.unresolved:
@@ -192,6 +219,15 @@ def _payload(census: RoomCensus) -> dict[str, object]:
             }
             for c in census.comparisons
         ],
+        "extras": {
+            "distribution": census.extras.distribution,
+            "resolved": census.extras.resolved,
+            "label": census.extras.label if census.extras.resolved else None,
+            "installed": list(census.extras.installed),
+            "absent": [
+                {"extra": a.extra, "needs": list(a.absent)} for a in census.extras.absent
+            ],
+        },
         "supported": list(census.supported),
         "floor": census.floor,
         "supported_without_a_leg": list(census.supported_without_a_leg),

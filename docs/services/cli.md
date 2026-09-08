@@ -1504,6 +1504,7 @@ $ beadloom clean-room proj-1 --at /tmp/rooms --carry src/billing.py
 room-proj-1 built at /tmp/rooms/room-proj-1
   from commit 4f2c1ab9…, holder recorded as proj-1
   carried from the working tree: src/billing.py
+  extras the invocation's interpreter has: all+dev+graphql+languages+tui+watch
   tracker status: in_progress
 
 Measure in the room, not in the tree:
@@ -1512,7 +1513,9 @@ Measure in the room, not in the tree:
 
 What this room cannot answer: it carries no .git, so a freshness check inside it has no
 baseline; and its verdict is a claim about these files only, never about the combined
-tree — that measurement belongs to the wave's gate owner. Report it in those words.
+tree — that measurement belongs to the wave's gate owner. Report it in those words, with
+the extras above: on this project one code base gave 0 mypy errors under `[all,dev]` and
+82 under `[dev]` (BDL-UX #236).
 ```
 
 The `PYTHONPATH` line is a measured trap rather than a formality: with an editable
@@ -1520,6 +1523,18 @@ install, running the suite from inside the room under the project's environment 
 the **tree's** source, and the first run that did it was caught from a warning path rather
 than from a failure — a green that is a measurement of the tree wearing a room's name.
 The import line is the check, and it must print a path under the room.
+
+**The extras line is the second half of that trap (BDL-UX #236).** A room's name isolates its
+FILES; which optional extras its interpreter has is a separate question, and it decides the
+verdict. Measured on this project at `6c4d0a9`, over one code base at one commit: `mypy src/`
+reported 0 errors under `.[all,dev]` and 82 under `.[dev]`, and under the second the whole
+`tui` suite left the run — three of its four modules skipped and the fourth stopped the
+collection with an error. The room therefore
+STATES the extras its invocation's interpreter has — the same derivation
+[`beadloom rooms`](#beadloom-rooms) reports, and recorded in `.beadloom-room.json` under
+`interpreter.extras` so a report can be checked against the room it was taken in. It does not
+BUILD an environment: which extras a verdict should be taken under is a decision, not a
+derivation.
 
 Exit codes: `0` the room was built and the tracker says the bead is `in_progress`; `1` the
 room was built and its ownership is unconfirmed (the bead is not in progress, or the
@@ -1532,16 +1547,16 @@ Refusals are named rather than described, so a caller can branch on them: `alrea
 `file_outside_the_project` and `unknown_bead`.
 
 `--json` carries the same facts: `bead`, `room`, `built`, `refusal`, `detail`, `commit`,
-`carried[]`, `invocation[]`, `claim`, `findings[]` and `exit_code`.
+`carried[]`, `invocation[]`, `extras`, `claim`, `findings[]` and `exit_code`.
 
 The room's `.beadloom-room.json` records the bead, the room's name, the project, the
-commit, the build time, the carried files, two interpreters and the Beadloom version. The
-two are not the same one: the invocation names the environment the SUITE runs under — the
-project's own `.venv` when it keeps one — while `built_by` is the process that made the
-room, which under a `uv` tool install is a different interpreter with neither `pytest` nor
-the project's development dependencies. **What the record does not carry is which optional
-extras either has installed**, which is the separate question BDL-UX #236 is open on:
-naming the interpreters is what makes that gap statable rather than invisible.
+commit, the build time, the carried files, two interpreters, the extras and the Beadloom
+version. The two interpreters are not the same one: the invocation names the environment the
+SUITE runs under — the project's own `.venv` when it keeps one — while `built_by` is the
+process that made the room, which under a `uv` tool install is a different interpreter with
+neither `pytest` nor the project's development dependencies. `interpreter.extras` carries
+`distribution`, `resolved`, `label`, `installed[]` and `absent[]`; `resolved: false` means the
+interpreter holds no distribution of that name, and it is not the same answer as no extras.
 
 ### beadloom review-brief
 
@@ -1912,7 +1927,10 @@ beadloom rooms [--project DIR] [--dimension AXIS] [--json]
 from every job of every `.github/workflows/*.y*ml`, each matrix expanded as a product and a
 `matrix.<axis>` expression in `runs-on` resolved through it. The module owns a runner-label
 vocabulary (`ubuntu` / `macos` / `windows`) and no room list, so a leg added to a workflow is
-covered by the same act that adds it. A hand-written list satisfies every test beside it and
+covered by the same act that adds it. Since BDL-068 S6 a leg's **optional extras** are derived
+the same way — from the install step the job declares (`uv sync --extra …`, `--all-extras`, or a
+`pip install` of a local path with a bracket) against what the project's own distribution
+declares in its installed metadata. A hand-written list satisfies every test beside it and
 goes stale the first time a leg moves: this repository's own
 `DEFAULT_STATUS_CHECK_CONTEXTS` has drifted from what CI reports three times, and a required
 check that never reports makes `main` unmergeable.
@@ -1921,28 +1939,39 @@ check that never reports makes `main` unmergeable.
 see which declared rooms the run covers and which it does not. It is not a step and carries
 no status.
 
-Measured on this repository, 2026-09-03, with rows elided:
+Measured on this repository, 2026-09-08, with rows and reasons elided:
 
 ```
 $ beadloom rooms
 Rooms — derived from this project's declaration, never from a list
 
-  This run is in: Darwin arm64 · CPython 3.13.7 · 10 cores
+  This run is in: Darwin arm64 · CPython 3.13.7 · 10 cores · extras all+dev+graphql+languages+mutation+tui+watch
 
   Declared rooms: 21, entered by this run: 0
-    [  ] os=ubuntu-latest python=3.13    .github/workflows/ci.yml: tests
-         os: the leg is ubuntu-latest (Linux) and this run is Darwin
-    [  ] locale=C os=ubuntu-latest    .github/workflows/ci.yml: tests-locale
-         locale: this run cannot describe the dimension `locale`, which the leg declares as C; os: ...
-    [  ] os=ubuntu-latest    .github/workflows/mutation.yml: mutation
+    [  ] extras=all+dev+graphql+languages+tui+watch os=ubuntu-latest python=3.13    .github/workflows/ci.yml: tests
+         extras: this run has mutation and the leg does not; os: the leg is ubuntu-latest (Linux) and this run is Darwin
+    [  ] extras=dev+languages os=ubuntu-latest    .github/workflows/ci.yml: site-build
+         extras: the leg installs all, graphql, mutation, tui, watch and this run has not; os: ...
+    [  ] extras=all+dev+graphql+languages+mutation+tui+watch os=ubuntu-latest    .github/workflows/mutation.yml: mutation
          os: the leg is ubuntu-latest (Linux) and this run is Darwin
     ... and 9 more
 
   Interpreters this project supports: 3.10, 3.11, 3.12, 3.13 (floor >=3.10)
 
-  Unresolved (1):
+  Extras of `beadloom` installed here: all+dev+graphql+languages+mutation+tui+watch
+    not installed: search — needs fastembed, sqlite-vec
+
+  Unresolved (2):
+    .github/workflows/ci.yml: gate — the job installs the project through a local action, so the optional extras its verdict is taken under are declared somewhere this report does not follow
     .github/workflows/ci.yml: ai-techwriter — the runner label `self-hosted+ai-techwriter` names no platform this report knows, so no run can be said to have entered it
 ```
+
+**The extras axis found a difference nothing had named.** This development environment carries
+`mutation`, which only `mutation.yml` installs, so it differs from every `tests` leg by an extra
+that was invisible before the dimension existed. That is BDL-UX #236: measured at `6c4d0a9`, one
+code base at one commit gave **0 mypy errors under `.[all,dev]` and 82 under `.[dev]`**, and the
+whole `tui` suite left the run under the second, three modules skipping and one erroring. A verdict that does not
+state its extras cannot be reproduced from what it prints.
 
 A local run is in **0 of the 21 rooms this project declares**, and that is the point rather
 than a caveat: nine "green on the tree" reports across BDL-067 were taken in exactly this
@@ -1960,15 +1989,19 @@ manufacture coverage.
   loops over instead of spelling out a set that goes stale. The Python overlay's type-check
   step is `for v in $(beadloom rooms --dimension python)`, and the honest limit of that local
   form is that it varies the TARGET version only — the interpreter the checker runs under is
-  still one, which is a difference only CI measures.
+  still one, which is a difference only CI measures. `--dimension extras` prints the distinct
+  environments the legs declare, four on this repository.
 - `--json` — `current`, `declared` (each with `dimensions`, `source`, `entered` and `why`),
-  `supported`, `floor`, `supported_without_a_leg` and `unresolved`.
+  `extras` (`distribution`, `resolved`, `label`, `installed`, and `absent` as
+  `{extra, needs}` pairs), `supported`, `floor`, `supported_without_a_leg` and `unresolved`.
 
 Exit `0` when the census was taken; a project declaring no leg also exits `0`, because this
 command grades nothing. Exit `2` when `--dimension` names an axis no declared room carries,
 and the refusal names the axes that exist (`no declared room carries a 'nonesuch' axis; the
-axes declared are: locale, os, python`). An empty answer would read as "this project has no
-such axis", which is the clean list an agent trusts and stops at.
+axes declared are: extras, locale, os, python`). An empty answer would read as "this project has
+no such axis", which is the clean list an agent trusts and stops at. Values of one axis are
+printed in a stable order — an axis whose values are not versions was previously printed in the
+hash order of a set, which differs between processes.
 
 The derivation, the floor-is-not-a-set rule and why the packaging metadata is read without a
 TOML parser are in the

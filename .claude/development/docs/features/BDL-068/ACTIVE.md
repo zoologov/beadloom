@@ -10,10 +10,17 @@
 
 ## Current Bead
 
-**Bead:** none claimed. S6 wave 2 is complete — `beadloom-0mdo.37` and `beadloom-0mdo.68` both
-closed, and the wave's gate owner reports `beadloom ci` rc 0 on the combined tree, taken in the
-foreground without a pipe. `bd close --suggest-next` named `.69` and `.14`; `bd ready --limit 0`
-names neither, because `.69` still has three open blockers (`.38`, `.40`, `.46`).
+**Bead:** `beadloom-0mdo.38` — BDL-UX #236, a clean room's verdict is decided by which optional
+extras it installed and the convention never names them. S6 wave 3, running alone and its own
+combined-tree gate owner. Wave 2 is complete: `beadloom-0mdo.37` and `beadloom-0mdo.68` both
+closed, and that wave's gate owner reported `beadloom ci` rc 0 on the combined tree, taken in the
+foreground without a pipe.
+
+**What `.38` changed, in one sentence:** the optional extras an environment installed are a
+DIMENSION of the room, derived on both sides — from the project distribution's own installed
+metadata for this run, and from a job's install step for a leg — so `beadloom rooms`, every
+`beadloom ci` verdict and every `.beadloom-room.json` state them, and a clean-room report can be
+reproduced from what it prints.
 
 **The bead that closed last, `beadloom-0mdo.68`.** BDL-UX #213: `decision-reason` fired on a
 table of claims and measurements. The reported cause was header vocabulary; the measured cause
@@ -877,6 +884,27 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     the previously failing tree tests pass once `.37` landed. Every verdict taken in Darwin arm64
     / CPython 3.13.7, 0 of the 21 declared rooms; `mypy` clean against all four declared target
     versions, run under one interpreter.
+  - [x] `.38` — BDL-UX **#236**, a room's extras. Wave 3, alone, and its own gate owner. The
+    extras an environment installed are now a DIMENSION of the room: what this run has comes
+    from the analysed project's distribution as the running interpreter holds it, what a leg
+    installs comes from the install step its job declares, and the two are compared on what an
+    environment SATISFIES rather than on what somebody typed — so a leg installing
+    `dev,languages,tui,watch,graphql` also satisfies `all` and is one room, not two.
+    Reproduced first, at `6c4d0a9` in one clean room over one code base: `mypy src/` gives
+    **0 errors under `.[all,dev]` and 82 under `.[dev]`**, and under the second the whole `tui`
+    suite leaves the run — three of its four modules skip and the fourth stops the collection.
+    The dimension found a difference nobody had named on the machine that added it: this
+    development environment carries `mutation`, which only `mutation.yml` installs, so it
+    differs from every `tests` leg by an extra that was invisible before. **#256 is not
+    absorbed and is now smaller**: its first half — a room resolving `beadloom` to the main
+    tree — is already closed by `.37`'s `PYTHONPATH` invocation, verified in this bead's room;
+    what remains is building the environment, and the cost of doing so was measured rather than
+    assumed (`uv venv` 0.04 s, `uv pip install -e '.[all,dev]'` 3.6 s warm-cache, 160 MB
+    apparent). 44 tests (5 scenarios, 39 unit). Green in a clean room over 13 carried files:
+    9 206 passed, the 1 failure the room's stated no-`.git` property. **As its own gate owner:**
+    the combined tree is green — 9 254 passed, `beadloom ci` rc 0 taken in the foreground
+    without a pipe. Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms; `mypy` clean
+    against all four declared target versions, run under one interpreter.
 
 ## What is in `main` now
 
@@ -967,7 +995,7 @@ reasons live in bead descriptions and in the issue log and nowhere together.
 | Entry | Bead | Why it is not S4's |
 |---|---|---|
 | **#235** — the clean-room convention names a fixed directory, so two agents in one wave build one room and both call it clean | `0mdo.37`, P1, **done** | Closed with **#243**, which the same fix answers. `beadloom clean-room` derives the path from the bead and refuses a directory it did not create empty, so a neighbour's room cannot be entered and a room cannot be re-entered. The role cores still describe the by-hand convention and are a follow-up (`beadloom-vyjp`), because those templates are outside this bead's axes and inside `0mdo.59`'s and `0mdo.67`'s surface. |
-| **#236** — a clean room's verdict is decided by which optional extras it installed, and the convention never names them | `0mdo.38`, P1, open | Measured at 0, 1 and 82 mypy errors over one code base. The durable form is `beadloom rooms` reporting an extra-set dimension beside interpreter and platform, which is a change to S3's instrument and not to S4's guards. |
+| **#236** — a clean room's verdict is decided by which optional extras it installed, and the convention never names them | `0mdo.38`, P1, **done** | The durable form shipped: `extras` is a dimension of the room, derived from the project distribution's installed metadata for this run and from a job's install step for a leg, compared on what an environment SATISFIES rather than on what was typed. Re-measured at `6c4d0a9`: 0 mypy errors under `.[all,dev]` and 82 under `.[dev]`. **#256 is not absorbed**; its import-path half is already closed by `0mdo.37`'s invocation, verified here, and what remains for `0mdo.74` is building the environment rather than stating it. |
 | **#238** — nothing compares the ignore block on disk against the block this version emits | `0mdo.40`, P2, open | The INSTANCE was fixed in S4: this repository's `.gitignore` now carries the shipped glob. The CLASS is a new `config-check` leg. Splitting them is what keeps a repository repair from reading as a product fix. |
 | **#244** — a second markdown table in `## Axes` contributes its header row as an approved node named `Node` | `0mdo.46`, P1, open | Worked around in S4 by keeping one table, so no commit was judged against a phantom node. The parser fix touches `read_axes_section`, which S1 owns and which `0mdo.47`'s pinned excerpt now guards. |
 | **#245** — the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one | `0mdo.46`, P1, open | The VERDICT is correct and shipped; only the advice beside it is wrong. #244 must land first — #245 cannot be judged honestly while #244 injects a node nobody wrote. |

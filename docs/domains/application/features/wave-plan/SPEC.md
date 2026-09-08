@@ -285,11 +285,28 @@ Beadloom installed as a `uv` tool runs under one with neither `pytest` nor the
 project's development dependencies, so the first invocation handed back could not
 be run at all.
 
-The room records its owner, the commit, the carried files and both interpreters —
-the one the invocation names and the one that built the room — in
-`.beadloom-room.json`. It does not record which optional extras either has
-installed, which is the open question BDL-UX #236 states, and naming them is what
-makes that gap statable rather than invisible.
+The room records its owner, the commit, the carried files, both interpreters —
+the one the invocation names and the one that built the room — and the optional
+extras the invocation's interpreter has, in `.beadloom-room.json`.
+
+The extras are recorded because they, and not the files, decide the verdict
+(BDL-UX #236). Measured on this repository at `6c4d0a9`, over one code base at
+one commit: `mypy src/` reported 0 errors under `.[all,dev]` and 82 under
+`.[dev]`, and under the second the whole `tui` suite leaves the run — three of its
+four modules skip and the fourth stops the collection with an error. A room's name isolates its FILES; which
+extras its interpreter has is a second question, and a report that cannot be
+reproduced from what it prints is a claim rather than a measurement. The
+derivation is `application.rooms.installed_extras` — the same one `beadloom
+rooms` reports, because two answers to one question are two things that can
+disagree — and `resolved: false` records that nothing could look, which is never
+the same answer as no extras.
+
+The room does NOT build an environment of its own. Which extras a verdict should
+be taken under is a decision rather than a derivation, and BDL-UX #256 owns it.
+Measured before deciding, on this machine with a warm `uv` cache: `uv venv` takes
+0.04 s and `uv pip install -e '.[all,dev]'` 3.6 s, for a room of 160 MB apparent
+size (APFS clones, so the marginal bytes are near zero on this filesystem and are
+not on one without cloning). Cost is therefore not what left it out.
 
 ### What each medium is checked against
 
@@ -440,6 +457,8 @@ not tell them apart.
   path refuses and leaves it byte-for-byte as it was.
 - A rebuild deletes only a directory whose recorded owner is the bead it was
   asked for.
+- A room STATES the optional extras its invocation's interpreter has, and never
+  reports "no extras" for "nothing looked".
 - Every medium the plan names carries a verdict, and an unobserved one is
   `unmeasured` rather than `passed`.
 - A required override field is required by its content: a key present but blank
@@ -465,6 +484,7 @@ not tell them apart.
 | `build_room(*, bead_id, project_root, parent, carry, rebuild)` | build it from `HEAD` plus the named files, or refuse and say why |
 | `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
 | `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
+| `RoomBuild.extras` | the optional extras the invocation's interpreter has, or `None` when nothing could look |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
@@ -508,7 +528,10 @@ decisions fails in; `tests/test_wave_derivation.py` covers the four agreement
 verdicts, the per-wave gap and the remedies that read the work item's document;
 `tests/acceptance/features/clean_room.feature` states the room's ownership and
 its once-only build as executable scenarios, and `tests/test_cli_clean_room.py`
-covers `beadloom clean-room`'s two output shapes and its three exit codes.
+covers `beadloom clean-room`'s two output shapes and its three exit codes;
+`tests/acceptance/features/room_extras.feature` states that a room records the
+extras its interpreter has, and `tests/test_room_extras.py` covers the
+derivation those records come from.
 
 ## Related
 

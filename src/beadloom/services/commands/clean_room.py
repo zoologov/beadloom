@@ -102,6 +102,7 @@ def _payload(
         "commit": build.commit,
         "carried": list(build.carried),
         "invocation": list(build.invocation),
+        "extras": build.extras,
         "claim": status or None,
         "findings": findings,
         "exit_code": code,
@@ -118,6 +119,10 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     click.echo(f"  from commit {build.commit}, holder recorded as {build.bead_id}")
     carried = ", ".join(build.carried) if build.carried else "none"
     click.echo(f"  carried from the working tree: {carried}")
+    click.echo(
+        "  extras the invocation's interpreter has: "
+        + (build.extras or "not resolved — no verdict here can state them")
+    )
     click.echo(f"  tracker status: {status or 'not answered'}")
     click.echo("")
     click.echo("Measure in the room, not in the tree:")
@@ -128,7 +133,9 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
         "What this room cannot answer: it carries no .git, so a freshness check "
         "inside it has no baseline; and its verdict is a claim about these files "
         "only, never about the combined tree — that measurement belongs to the "
-        "wave's gate owner. Report it in those words."
+        "wave's gate owner. Report it in those words, with the extras above: on "
+        "this project one code base gave 0 mypy errors under `[all,dev]` and 82 "
+        "under `[dev]` (BDL-UX #236)."
     )
     for finding in findings:
         click.echo(f"FINDING: {finding}", err=True)
