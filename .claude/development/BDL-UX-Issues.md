@@ -210,6 +210,19 @@
     **Expected:** `current_room()` derives the locale the way it derives platform and interpreter; the simulation carries it, so the leg is enterable locally, which is the whole point of S3's deliverable and is presently true for two dimensions of three. Diagnose the 11 manufactured failures before recommending the plugin suite-wide — `beadloom-0mdo.49`'s bead comment carries the two controls that attributed them.
     **Already measured, do not re-cost:** a suite-wide guard against reading a subprocess with no explicit encoding is not a new instrument. `tests/test_locale_independent_io.py::TestEveryTextIoSiteStatesItsEncoding` already is that guard, rooted at `src/beadloom`. Extending its root to `tests/` costs 26 triage decisions, counted rather than estimated.
 
+
+    > **CLOSED 2026-09-08 by `beadloom-0mdo.50`, which also corrected this entry's own attribution.**
+    > `current_room()` now derives the locale, so a run under `LC_ALL=C` is a run in that room and
+    > says so, and `room_simulation.py` carries the dimension. `ci.yml`'s matrix value is deliberately
+    > left unchanged (#249 is about the reproduction, not the leg).
+    > **The "11 manufactured failures" in this entry were not the plugin's.** They came from one
+    > malformed room spelling — 13 against 3 on the same tree, one word different. Suite-wide with the
+    > plugin is 9 363 passed / 0 failed. `beadloom-0mdo.49` attributed them to the plugin, the
+    > coordinator wrote that into this entry and repeated it in three launch prompts, and nobody
+    > re-derived it until the bead that had to.
+    > **That is the fourth time in this epic a claim about a tool survived on being repeated rather
+    > than re-measured** — after #194, #237 and #164, all filed against a working `bd`. The difference
+    > here is that it was caught inside the epic, by the bead the claim would have misdirected.
 247. [2026-09-04] [MEDIUM] the push Gate does not run the suite, and nothing in its output says the suite is not among the things it checked
 
     **Severity:** medium (agent-facing; it cost this project a red PR across six legs, measured)
