@@ -46,6 +46,17 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
+258. [2026-09-08] [MEDIUM] one test can never pass in a clean room, so every clean-room verdict in this epic carried a permanent red that everyone learned to discount
+
+    **Severity:** medium (it is the always-red check this project already has a principle about, sitting inside the discipline the project uses to verify everything else)
+    **Command:** the clean-room convention; `beadloom clean-room` since `beadloom-0mdo.37`
+    **Tracker:** routed to S6
+    **Context:** measured by `beadloom-0mdo.40` in S6 wave 4, which checked rather than repeated the sentence everyone had been writing.
+    **Issue:** `tests/test_bead15_s3b_coverage.py::test_all_new_node_pairs_are_fresh` **cannot pass in any clean room**. Doc-freshness baselines live in the gitignored index database, and no `git archive` carries them. It is not a property of a particular room or of a particular bead's files — it reproduces at HEAD with **zero** carried files.
+    **Why it is worth an entry rather than a footnote:** roughly thirty agent reports across BDL-067 and BDL-068 say some version of *"green in a clean room over N files; the one failure is the room's stated no-`.git` property"*. That sentence is true and it has been written so often that it stopped being read. This project holds, in its own words, that **an always-red check is an ignored check, and an intermittently-red one is worse** — recorded on BDL-UX #233. Here the always-red one has been trained into the report format itself.
+    **The cost is not the test.** It is that "one failure, the expected one" is now the shape of a correct clean-room verdict, so a *second* failure has to be noticed against a background that already contains one. Several agents in this epic did notice — `beadloom-0mdo.41` and `.61` both reproduced their extra failure at HEAD in a control room to prove it was not theirs — which is exactly the work the discount makes necessary every time.
+    **Expected:** either the room can carry what the test needs (a baseline built inside it, which `beadloom clean-room` is now the single place to arrange), or the test declares that a room is not its environment and skips there **with a reason** — the distinction this epic has shipped twelve times. What it must stop being is a failure that everyone knows to ignore.
+
 257. [2026-09-08] [HIGH] `waves` derived two beads' scopes as disjoint while one document belonged to both, and the landing lock ordered the commits it could not order the edits of
 
     **Severity:** high (it is the guarantee the wave plan exists to give, and the one it was believed to give while the lock was believed broken)
