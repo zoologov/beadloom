@@ -3,13 +3,46 @@
 > **Last updated:** 2026-09-08
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
-> pass landed. S6 is next and runs in full.
+> pass landed. S6 has started and runs in full: its axes bead `.72` closed, and `.60` — the
+> first dev wave, run alone at the front by coordinator decision — is complete.
 
 ---
 
 ## Current Bead
 
-**Bead:** none — **S5 is finished on the branch.** `0mdo.57` (tech-writer) closed the slice's
+**Bead:** `beadloom-0mdo.60` — **complete.** BDL-UX #254: a guard that cannot evaluate itself
+blocked the write that would repair it. It ran as S6 wave 1, alone and first, because S6's
+subject is the flow's own role templates and composed cores — exactly the kind of edit that
+leaves an artifact momentarily unreadable — so every wave running before this landed carried
+the hazard for no gain. `beadloom waves` had placed it in wave 3; the coordinator narrowed the
+plan and recorded why on `.14`.
+
+**What it changed, in one sentence:** two outcomes now mean "the guard did not answer", and
+they are told apart by what it could not answer ABOUT — `error` for a target the guard refuses
+to interpret (still exit 2, still stops that edit) and `unresolved` for an inability the guard
+has about itself (exit 1 under a harness, 3 from a shell, and it says on stderr that the edit
+went through unchecked).
+
+**Measured, not argued.** The wedge was reproduced in the clean room `room-beadloom-0mdo.60`
+against the real console-script entry point and a real `PreToolUse` payload, by removing
+`src/beadloom/services/bd_seam/__init__.py` — `.51`'s exact intermediate state. Before:
+`ERROR … ImportError: cannot import name 'BdUnavailableError'`, exit 2, remediation "the edit
+is blocked until the guard can answer". After, same room, same removal: `UNRESOLVED`, exit 1,
+and the line "this edit was NOT checked and was allowed through". Two neighbouring classes
+wedge identically and were measured in the same room — a `flow.yml` that will not parse (which
+is the file the fix must be written to) and a syntax error saved mid-edit in the probe's import
+chain — and both now permit. The line that did not move was measured too: a hook payload that
+is not JSON and a target carrying a NUL both still exit 2.
+
+**The matcher was not narrowed.** `EDIT_MATCHER` is still
+`Edit|Write|MultiEdit|NotebookEdit|Bash`. BDL-UX #170 stays closed, and the cost of closing it
+— that the last shell exit went with it — is stated in the SPEC rather than treated as a
+reason to reopen the hole.
+
+**The second question the bead asked is answered and not fixed:** the probe stays inside the
+tree it guards. Both decisions are in CONTEXT.md, dated 2026-09-08.
+
+**S5 is finished on the branch.** `0mdo.57` (tech-writer) closed the slice's
 docs pass and `0mdo.13`, the slice bead, closes with it. The full S5 set is `.58` (axes), `.39`,
 `.51`, `.52`, `.53` and `.54` (dev, over five waves), `.55` (test), `.56` (review), `.61` and
 `.62` (the two fix beads its review's first pass produced) and `.57`. The review's second pass
@@ -780,6 +813,13 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     carry the honest half as well: the merge slot orders commits and orders nothing else, and
     what keeps two agents out of one file is the disjoint scopes `beadloom waves` derived.
 - [ ] S6 — the flow's documents and roles
+  - [x] `.72` — S6's axes, derived at the slice's start (nineteen Python targets; the 862
+    `beadloom <subcommand>` instructions in the flow's own documents recorded as `unresolved`)
+  - [x] `.60` — BDL-UX #254, the verdict on a guard's own inability. Wave 1, alone and first.
+    `unresolved` added as a sixth outcome; `is_unanswered` made the one predicate the liveness
+    rule and the rotation summary both read; the emitted hook adapter's comment now enumerates
+    the three codes an invocation through it can return. Verified by reproducing the wedge,
+    applying the fix and reproducing the same state again.
 
 ## What is in `main` now
 

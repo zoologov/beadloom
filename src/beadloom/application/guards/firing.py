@@ -186,12 +186,12 @@ def _fold(previous: Carried, records: tuple[FiringRecord, ...]) -> dict[str, obj
     firing rotated twice is still counted once — the alternative is a count that
     silently resets every cap.
     """
-    from beadloom.application.guards.models import GuardOutcome
+    from beadloom.application.guards.models import is_unanswered
 
     guards: dict[str, CarriedGuard] = dict(previous.guards)
     for record in records:
         held = guards.get(record.guard)
-        answered = int(record.outcome != GuardOutcome.ERROR.value)
+        answered = int(not is_unanswered(record.outcome))
         first_at = record.at if held is None or not held.first_at else held.first_at
         if held is not None and record.at and record.at < first_at:
             first_at = record.at

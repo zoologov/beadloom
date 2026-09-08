@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A guard that cannot evaluate itself no longer blocks the write that would repair it**
+  (BDL-UX #254). `beadloom guard` now has a sixth outcome, `unresolved`, and the two outcomes
+  that mean "the guard did not answer" are told apart by what it could not answer ABOUT.
+  `error` is a target the guard refuses to interpret — an undecodable hook payload, a malformed
+  path — where the guard ran and genuinely does not know which file is being written; it still
+  exits 2 and still stops that edit. `unresolved` is an inability the guard has about itself —
+  its own code will not import, `.beadloom/flow.yml` will not parse, a guard name is not
+  registered, the command line could not be used, no project could be located, the evaluation
+  crashed, exited or was interrupted — and it **warns and permits**: exit 1 through a `--hook`
+  harness, exit 3 from a shell.
+
+  **This is a behaviour change for anyone reading the guard's exit code.** The whole
+  self-inability class previously exited 2 through a harness, and its crash and no-project
+  members exited 2 from a shell as well.
+
+  The reason is a measurement rather than a position: every repair for that class is a **file
+  write**, and the guard is bound to every tool that makes one — `Bash` included since BDL-UX
+  #170 was closed. Hit live in this project's own S5 slice, when `git mv` left a package
+  without its `__init__.py` and the module the tracker probe imports became unimportable:
+  `Bash`, `Write` and `Edit` all returned the same `ImportError` at the blocking code, `Read`
+  was the only tool outside the surface, and the remediation printed on every attempt read "fix
+  the reported error, then re-run" — the write that verdict had just disabled. It was cleared
+  by typing a heredoc in a shell outside the session, because nothing inside one could. A gate
+  that blocks on its own inability is not strict, it is unavailable.
+
+  **Permitting is not passing.** The outcome is named on stderr, carries a line stating that
+  the edit was not checked and was allowed through, is written to `guard-firings.jsonl`, and
+  does not clear `never-fired` in `beadloom guard --liveness` — so a guard nothing can run
+  keeps reading as a dead gate. The enforcement surface was **not** narrowed: `EDIT_MATCHER` is
+  still `Edit|Write|MultiEdit|NotebookEdit|Bash`.
+
+  The emitted hook adapter (`.claude/hooks/beadloom-guard.sh`) changes with it: its comment now
+  enumerates the three codes an invocation through it can return and what each means for the
+  edit. Re-run `beadloom setup-agentic-flow` to pick it up.
+
 - **`beadloom init` no longer reports success over a graph that fails the rules it just
   wrote** (BDL-UX #192). Every entry point that writes a file under `.beadloom/_graph/` —
   `--yes` in any mode, `--bootstrap`, `--import` and the default interactive wizard — now

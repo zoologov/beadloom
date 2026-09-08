@@ -72,6 +72,13 @@ was told a duty was checked over ten composed artifacts with no blocking drift, 
 of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
 exit code is unchanged: an unscaffolded project is not in drift.
 
+`guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
+not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the
+edit was allowed through unchecked. The sentence is `PERMITTED_UNGUARDED` and it lives in the
+application layer, so a second harness renderer cannot phrase it differently. It is printed
+before the remediation because a permitted edit read as a failed one is the misreading this
+outcome exists to prevent (BDL-UX #254).
+
 `guard.py` renders the binding surface above the firing rows, in three sentences rather than
 two. `NOT CHECKED` when a source could not be read, `NOTHING TO CHECK` when both were read and
 the granted tools include no write path, and the fraction otherwise — `0 of 0 write path(s)

@@ -282,17 +282,21 @@ _EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
         3,
     ),
     (
-        # Exit 2 since BDL-061.33. Every other row that answers 3 is reachable
-        # from a shell, where 3 keeps a declared-configuration defect distinct
-        # from a guard that fired; this one names a harness, and 3 does not block
-        # in one. The hooked twin of each 3-row is derived from this table in
-        # ``tests/test_guards_fail_closed.py`` rather than written out again.
+        # Exit 1 since BDL-UX #254, having been 3 until BDL-061.33 and 2 between
+        # them. Every other row that answers 3 is reachable from a shell, where 3
+        # keeps a declared-configuration defect distinct from a guard that fired;
+        # this one names a harness, and a harness reads only the code. It is an
+        # `unresolved` verdict — the guard could not evaluate itself, because it
+        # cannot translate the payload this binding sends — and the repair is an
+        # edit to the binding, which the blocking code forbade. The hooked twin
+        # of each 3-row is derived from this table in
+        # ``tests/test_guards_unresolved.py`` rather than written out again.
         "a harness nobody supports",
         "bead-claimed",
         ["--hook", "no-such-harness"],
         _BLOCKING_WITH_EXCLUSION,
         "",
-        2,
+        1,
     ),
     (
         "a hook payload that is not JSON",
@@ -333,12 +337,16 @@ _EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
     # :data:`_INJECTED_FAILURES` instead.
     ("an empty guard name", "", [], _BLOCKING_WITH_EXCLUSION, "", 3),
     (
+        # Exit 3 since BDL-UX #254: an unlocatable project is an inability the
+        # guard has about ITSELF, and this row is a shell caller. Nothing is
+        # manufactured either way — the "creates nothing" half of BDL-061.32 is
+        # asserted on this same row below and did not move.
         "a --project that is not a project",
         "bead-claimed",
         ["--project", NOT_A_PROJECT, "--context", "path=app.py"],
         _BLOCKING_WITH_EXCLUSION,
         "",
-        2,
+        3,
     ),
     (
         "a hook payload of zero bytes",
@@ -424,7 +432,14 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
     def test_no_row_exits_one_unless_the_verdict_is_a_warning(
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
     ) -> None:
-        """Exit 1 is the WARN code, which a harness reads as "carry on"."""
+        """Exit 1 is carried on past, so only a verdict that meant to be is allowed it.
+
+        Two outcomes may take it: ``warn``, a guard that fired and does not stop
+        work, and ``unresolved``, a guard that could not evaluate itself and says
+        so rather than blocking the write that repairs it (BDL-UX #254). Any
+        other outcome arriving here is an edit that needed a decision and got a
+        shrug.
+        """
         root, elsewhere = _project(tmp_path, flow), tmp_path / "elsewhere"
         elsewhere.mkdir(exist_ok=True)
         args = [*_row_argv(root, elsewhere, name, rest), "--json"]
@@ -433,7 +448,7 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
         if result.exit_code != 1:
             return
-        assert json.loads(result.stdout)["outcome"] == "warn", label
+        assert json.loads(result.stdout)["outcome"] in {"warn", "unresolved"}, label
 
     def test_the_liveness_report_records_nothing_though_a_project_was_located(
         self, tmp_path, stub_probes
@@ -1244,13 +1259,22 @@ class TestAFailureNobodyEnumeratedIsStillAVerdict:
     def test_a_failure_at_the_evaluation_seam_is_a_recorded_error(
         self, tmp_path, monkeypatch, stub_probes, label, failure, fragment
     ) -> None:
-        """Each of the three: exit 2, one recorded ``error``, and a stated reason.
+        """Each of the three: one recorded ``unresolved``, and a stated reason.
 
         A ``sys.exit`` deeper in the stack is the shape of every past hole — a
         lower layer that terminates the process picks the exit code and writes
         nothing, which is what ``_fail()`` did on six argument-parsing paths.
         An interrupt is that same shape one exception class further out, and it
         escaped until BDL-061.31 widened the last-resort handler.
+
+        The code moved from 2 to 3 at BDL-UX #254 and the outcome from ``error``
+        to ``unresolved``: an exception inside the evaluation is the guard unable
+        to run itself, and the live instance was an ``ImportError`` raised by
+        ``services/guard_probes.py:79`` while a ``git mv`` had left the package
+        it reaches the tracker through without an ``__init__.py``. These rows are
+        shell callers, hence 3; the hooked twin answers 1 and is asserted in
+        ``tests/test_guards_unresolved.py``. What did NOT move is the whole point
+        of this class: the failure is a recorded verdict rather than a traceback.
         """
 
         def fail(_request: object) -> None:
@@ -1263,8 +1287,8 @@ class TestAFailureNobodyEnumeratedIsStillAVerdict:
             lambda: _cli(["guard", "bead-claimed", "--project", str(root)])
         )
 
-        assert result.exit_code == 2, f"{label}: {result.output}"
-        assert _outcomes(root) == ["error"], label
+        assert result.exit_code == 3, f"{label}: {result.output}"
+        assert _outcomes(root) == ["unresolved"], label
         assert fragment in read_firings(root)[-1].why, read_firings(root)[-1].why
 
     def test_a_stdin_that_cannot_be_read_is_a_recorded_error(
@@ -1386,17 +1410,28 @@ class TestTheProjectIsTheOneTheRecordBelongsTo:
 
 
 @real_binary
-class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
-    """No project, no silent skip — and no project root invented as a side effect."""
+class TestAGuardThatCannotFindTheProjectSaysSoAndCreatesNothing:
+    """No project, no silent skip — and no project root invented as a side effect.
 
-    def test_it_answers_error_on_the_blocking_code(self, tmp_path) -> None:
+    The class was ``...BlocksAndCreatesNothing`` until BDL-UX #254. Not finding a
+    project is an inability the guard has about ITSELF, not an answer about the
+    edit: there is no configuration saying this tree is guarded, and the repair
+    (`beadloom init`, or a `--project` the caller cannot add to a hook's fixed
+    command line) is a write. So the verdict is ``unresolved`` at 3 from a shell,
+    and it is still loud, still recorded, and still manufactures nothing — which
+    is the half of BDL-061.32 that never moved and that every test below asserts.
+    """
+
+    def test_it_answers_unresolved_without_taking_the_blocking_code(
+        self, tmp_path
+    ) -> None:
         outside = tmp_path / "not-a-project"
         outside.mkdir()
 
         result = _run_real(outside, ["guard", "bead-claimed"])
 
-        assert result.returncode == 2, result.stderr
-        assert b"ERROR" in result.stderr, result.stderr
+        assert result.returncode == 3, result.stderr
+        assert b"UNRESOLVED" in result.stderr, result.stderr
         assert b"Traceback" not in result.stderr
 
     def test_it_creates_no_beadloom_directory(self, tmp_path) -> None:
@@ -1418,8 +1453,8 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
             outside, ["guard", "bead-claimed", "--project", str(tmp_path / "nowhere")]
         )
 
-        assert result.returncode == 2, result.stderr
-        assert b"ERROR" in result.stderr, result.stderr
+        assert result.returncode == 3, result.stderr
+        assert b"UNRESOLVED" in result.stderr, result.stderr
         assert not (tmp_path / "nowhere").exists()
 
     def test_a_project_directory_that_is_not_a_project_is_the_same_answer(
@@ -1436,8 +1471,8 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
 
         result = _run_real(outside, ["guard", "bead-claimed", "--project", str(outside)])
 
-        assert result.returncode == 2, result.stderr
-        assert b"ERROR" in result.stderr, result.stderr
+        assert result.returncode == 3, result.stderr
+        assert b"UNRESOLVED" in result.stderr, result.stderr
         assert list(outside.iterdir()) == []
 
     def test_a_project_directory_the_process_may_not_read_is_the_same_answer(
@@ -1467,9 +1502,9 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
         finally:  # a mode of 000 would defeat the temporary directory's cleanup
             unreadable.chmod(0o755)
 
-        assert result.returncode == 2, result.stderr
+        assert result.returncode == 3, result.stderr
         assert b"Usage:" not in result.stderr, result.stderr
-        assert json.loads(result.stdout)["outcome"] == "error", result.stdout
+        assert json.loads(result.stdout)["outcome"] == "unresolved", result.stdout
 
     def test_the_liveness_report_says_so_too(self, tmp_path) -> None:
         outside = tmp_path / "not-a-project"
@@ -1477,7 +1512,7 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
 
         result = _run_real(outside, ["guard", "--liveness"])
 
-        assert result.returncode == 2, result.stderr
+        assert result.returncode == 3, result.stderr
         assert list(outside.iterdir()) == []
 
 
@@ -1964,7 +1999,7 @@ class TestTheBoundaryWithoutTheCli:
         assert result.verdict.context == {}
         assert result.recorded is True
 
-    def test_an_unlocatable_project_answers_error_and_records_nothing(
+    def test_an_unlocatable_project_is_unresolved_and_records_nothing(
         self, tmp_path
     ) -> None:
         from beadloom.application.guards.invocation import (
@@ -1979,8 +2014,8 @@ class TestTheBoundaryWithoutTheCli:
         result = run_invocation(GuardInvocation(name="bead-claimed", start_dir=plain))
 
         assert result.verdict is not None
-        assert result.verdict.outcome.value == "error"
-        assert result.exit_code == 2
+        assert result.verdict.outcome.value == "unresolved"
+        assert result.exit_code == 3
         assert result.recorded is False
         assert result.not_recorded_because == NOT_RECORDED_NO_PROJECT
         assert not (plain / ".beadloom").exists()
@@ -2020,8 +2055,8 @@ class TestTheBoundaryWithoutTheCli:
         )
 
         assert result.verdict is not None
-        assert result.verdict.outcome.value == "error"
-        assert result.exit_code == 2
+        assert result.verdict.outcome.value == "unresolved"
+        assert result.exit_code == 3
         assert "the filesystem said no" in result.verdict.why
         assert result.recorded is False
 
@@ -2034,6 +2069,25 @@ class TestTheBoundaryWithoutTheCli:
 #   not quoted as though the caller typed it, and an internal exception repr does
 #   not stand where a stated cause belongs (BDL-061.34, carried from .32).
 # ---------------------------------------------------------------------------
+
+
+#: The docstring heading that introduces the recording predicate's cases.
+_RECORDING_HEADING = "**Recording is one predicate, stated once**"
+
+
+def _recording_section(doc: str) -> str:
+    """The part of the boundary docstring that enumerates the recording cases.
+
+    Scoped to one section rather than counting every ``* **`` line in the module
+    docstring, because that spelling is not unique to this list: BDL-UX #254 added
+    a second bulleted list — the two classes of failure and what each one does to
+    the edit — and the count went from four to six without a branch being added.
+    A check that asks for one spelling is a check the next paragraph walks into.
+    """
+    after = doc.split(_RECORDING_HEADING, 1)
+    if len(after) == 1:
+        return ""
+    return after[1].split("\n**", 1)[0]
 
 
 class TestTheNotRecordedReasonNamesTheCaseItActuallyIs:
@@ -2144,7 +2198,7 @@ class TestTheNotRecordedReasonNamesTheCaseItActuallyIs:
         ]
         bullets = [
             line
-            for line in (boundary.__doc__ or "").splitlines()
+            for line in _recording_section(boundary.__doc__ or "").splitlines()
             if line.startswith("* **")
         ]
 
@@ -2208,8 +2262,8 @@ class TestAFailureStatesItsCauseRatherThanItsRepr:
         )
 
         assert result.verdict is not None
-        assert result.verdict.outcome.value == "error"
-        assert result.exit_code == 2
+        assert result.verdict.outcome.value == "unresolved"
+        assert result.exit_code == 3
         assert "could not be evaluated" not in result.verdict.why
         assert "could not be read" in result.verdict.why
         assert "the project could not be located" in result.verdict.not_covered[0]

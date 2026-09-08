@@ -25,80 +25,111 @@ to a tool by an adapter that contains no logic of its own.
 | Field | Meaning |
 |---|---|
 | `guard` | the registered guard name |
-| `outcome` | `pass` / `warn` / `block` / `skip` / `error` |
+| `outcome` | `pass` / `warn` / `block` / `skip` / `error` / `unresolved` |
 | `why` | what was observed — never a restatement of the outcome |
 | `not_covered` | what this evaluation did **not** verify |
 | `remediation` | the command that resolves a `warn` / `block` |
 | `context` | the evaluation context echoed back |
 
 Exit codes carry the outcome, so a shell adapter needs no parsing: `0` for
-`pass`/`skip`, `1` for `warn`, `2` for `block`. `3` is reserved for a usage or
-configuration error reported to a **shell** caller — deliberately not `2`, which
+`pass`/`skip`, `1` for `warn`, `2` for `block`. `3` is reserved for an
+`unresolved` verdict reported to a **shell** caller — deliberately not `2`, which
 is Click's own usage code and would otherwise be indistinguishable from a genuine
 block. An invocation that names a harness (`--hook`) reports that same class at
-`2`, because there the exit code answers one question only and `3` answers it
-"the edit proceeds" (BDL-061.33, below).
+`1`, because there the exit code answers one question only.
 
-**Which failures earn `3` rather than `2`** is one line, not a list of cases: `3`
-is for a defect in the project's *declared configuration* (a `guards:` block that
-will not parse, an exclusion with no reason, a guard name nobody registered) and
-for a command line that could not be used at all (no guard named, `--liveness`
-with a name, a malformed `--context` pair, an unsupported `--hook` harness). Both
-are stable defects that fail identically on every invocation until a human edits
-a file, and neither is about a particular edit. Everything that goes wrong while
-trying to answer about *this* edit — a hook payload that cannot be decoded or
-parsed, a project that cannot be located, an exception anywhere — is an `error`
-verdict at exit `2`. That is a change of position for the payload cases, and its
-reason is that the payload comes from the harness at edit time: a truncated pipe
-or a schema change used to exit `3`, which the harness treats as non-blocking, so
-the gate switched itself off loudly while failing open.
+**Two outcomes mean "the guard did not answer", and the difference between them
+is what it could not answer about.** That one question decides whether an edit
+stops, and it is not how severe the failure looks.
 
-`error` is the outcome for **the guard could not answer** — a refused path, a
-`guards:` block that will not parse, or any failure inside the evaluation. It is
-a verdict rather than an exception because a verdict is recorded, and an
-evaluation missing from the firing record is invisible to `--liveness`. It exits
-`2`: measured against the adapter this project ships, Claude Code blocks the tool
-call on exit 2 and on nothing else, so an outcome that must stop work has exactly
-one code available. `1` would be worse than useless here — it is the `warn` code,
-which the harness reads as "carry on", and that is precisely how a crashing guard
-let an edit through (BDL-061.27, F2). A configuration error keeps exit `3` for a
-shell caller, so a broken `flow.yml` is still not mistaken for a guard that fired.
+- **About this EDIT** — a hook payload that cannot be decoded or parsed, a target
+  whose shape the guard refuses to resolve. The guard ran and has a real answer:
+  it does not know which file is being written. That is an `error` verdict at
+  exit `2`. It stops this edit and stops nothing else — a different target clears
+  it, and no repair anywhere is waiting on it.
+- **About ITSELF** — its own code will not import, its `guards:` block will not
+  parse, an exclusion carries no reason, a guard name is not registered, the
+  command line could not be used, no project could be located, the evaluation
+  crashed, exited or was interrupted. The guard has no answer about anything.
+  That is an `unresolved` verdict: it **warns and permits**, at `1` under a
+  harness and `3` from a shell.
 
-**Which caller gets `3` (BDL-061.33).** The adapter this project emits binds to a
-harness that stops the tool call on exit `2` and on nothing else, so while `3`
-was unconditional everything kept at it was loud on stderr and let the edit
-through. Measured through the real binary, five cases answer `error` at `3`: an
-unregistered guard name, a `guards:` block that will not parse, `--liveness`
-given a name, a malformed `--context` pair, and an unsupported `--hook` harness.
-The second is the one an adopter meets, because `.beadloom/flow.yml` is the one
-file of this feature edited by hand: a mistyped line there disabled every bound
-guard while each invocation printed that it could not answer.
+**Why the second class permits (BDL-UX #254).** Every inability in it is repaired
+by a **file write**, and the guard is bound to every tool that makes one —
+`Bash` included since BDL-UX #170 was closed. Measured live in BDL-068 S5: a
+`git mv` left `services/bd_seam` a package with no `__init__.py`,
+`services/guard_probes.py:79` imports it to reach the tracker, so every guard
+raised `ImportError` and answered `error` at `2`. Two independent sessions found
+`Bash`, `Write` and `Edit` all blocked and only `Read` outside the surface, and a
+read repairs nothing. The remediation printed on every attempt read "fix the
+reported error, then re-run" — the write the same verdict had just disabled. The
+owner cleared it by typing a heredoc in a shell outside the session, because
+nothing inside one could. A gate that blocks on its own inability is not strict,
+it is unavailable.
 
-The class is therefore answered at **`3` from a shell and `2` under `--hook`**,
-which keeps both true things:
+**The surface is not narrowed, and that is the point.** Widening the matcher to
+include `Bash` closed a real coverage hole — before it, a shell write slipped
+past the guard, which is the whole of BDL-UX #170. Closing it removed the last
+exit, and the cost of that is worth stating rather than treating the improvement
+as regrettable. What moved is the verdict on inability, never the coverage.
 
-- the distinction `3` draws — a defect in the *declared configuration* against a
-  failure to answer about *this edit* — survives for the caller it means
-  something to, and stays out of Click's `2`;
+**Permitting is not passing.** `unresolved` has its own outcome name, its own
+line on stderr carrying `PERMITTED_UNGUARDED` — "this edit was NOT checked and
+was allowed through" — its own firing record, and it does not clear `never-fired`
+in `--liveness`. A guard that keeps failing to run keeps reading as a dead gate.
+`1` from an escaping exception, which is what BDL-061.27 (F2) closed, and `1`
+from an `unresolved` verdict are not the same answer: one was a traceback nobody
+recorded, the other names itself in three places.
+
+**Which caller gets `3` (BDL-061.33, revised by BDL-UX #254).** The code for this
+class has moved twice, and both moves are measurements rather than positions.
+
+1. It was `3` unconditionally. The adapter this project emits binds to a harness
+   that stops the tool call on exit `2` and on nothing else, so `3` was loud on
+   stderr and let the edit through. Measured through the real binary, five cases
+   answered at `3`: an unregistered guard name, a `guards:` block that will not
+   parse, `--liveness` given a name, a malformed `--context` pair, and an
+   unsupported `--hook` harness. The second is the one an adopter meets, because
+   `.beadloom/flow.yml` is the one file of this feature edited by hand: a mistyped
+   line there disabled every bound guard while each invocation printed that it
+   could not answer. That is fail-open, and BDL-061.33 sent the class to `2`.
+2. `2` made the repair unreachable, measured above. The class is now `unresolved`
+   at **`1` under `--hook` and `3` from a shell**.
+
+What made `3` fail-open was never the permission — it was the silence. `3` said
+"I could not answer" in a vocabulary the harness had no entry for, so an adopter
+saw a green session. The verdict is now named, printed and recorded, so the same
+permission is answerable.
+
+The split by caller keeps both true things:
+
+- the distinction `3` draws — a guard that could not run against a guard that
+  fired — survives for the caller it means something to, and stays out of Click's
+  `2`;
 - nothing that cannot answer reaches a harness with a code that harness ignores.
 
-Mapping the whole class to `2` was the other candidate. It is simpler, but it
-spends the distinction on a caller that has no use for it and changes the code
-every shell and CI caller already reads. Having the *emitted script* map instead
-was the third: it puts logic in an adapter, which is the one thing this feature
-forbids, and every future harness would re-implement it — the same fail-open, one
-tool later. The adapter already declares its harness; that declaration selects
-the mapping, and the mapping stays in Beadloom where it is tested. A harness
-whose name Beadloom cannot translate blocks too: an unsupported `--hook` is a
-defect in the binding itself, and Beadloom cannot learn the exit vocabulary of a
-tool it does not support, so it uses the code it knows stops work.
+Mapping the whole class to one code was the other candidate. It is simpler, but
+it spends the distinction on a caller that has a use for it. Having the *emitted
+script* map instead was the third: it puts logic in an adapter, which is the one
+thing this feature forbids, and every future harness would re-implement it — the
+same fail-open, one tool later. The adapter already declares its harness; that
+declaration selects the mapping, and the mapping stays in Beadloom where it is
+tested.
+
+A harness whose name Beadloom cannot translate is `unresolved` too: an
+unsupported `--hook` is a defect in the binding itself, and the repair is an edit
+to the binding, which a block forbids. The limit is stated because it is real —
+Beadloom cannot learn the exit vocabulary of a tool it does not support, so it
+cannot know that such a tool carries on past `1` either. What it knows is that
+every harness it does support does, and that a code which stops work makes the
+defect unrepairable in every harness at all.
 
 This is not a green project turning red on upgrade. A project whose `flow.yml`
 parses sees no change at all; a project whose `flow.yml` does not parse had no
 enforcement to lose. There is deliberately **no per-harness table**: every
-harness Beadloom supports blocks on `2`, and a one-entry table with a default
-reads as a capability that exists. The day a harness disagrees, its blocking code
-becomes an entry beside its payload translator.
+harness Beadloom supports blocks on `2` and carries on past `1`, and a one-entry
+table with a default reads as a capability that exists. The day a harness
+disagrees, its non-blocking code becomes an entry beside its payload translator.
 
 ### Configuration
 
@@ -318,10 +349,15 @@ answers "where does this firing belong" is the one that answers "which `flow.yml
 governs this edit". `.git/` nests (submodules, worktrees) and would name a root
 Beadloom knows nothing about.
 
-**A guard that cannot locate a project answers `error`, which blocks, and writes
-nothing.** It does not create `.beadloom/` where it stands, and it does not
-create one where it was pointed: a silent `skip` at exit 0 was the shape of this
-defect, and manufacturing the directory was its self-entrenching half.
+**A guard that cannot locate a project answers `unresolved` and writes nothing.**
+It does not create `.beadloom/` where it stands, and it does not create one where
+it was pointed: a silent `skip` at exit 0 was the shape of this defect, and
+manufacturing the directory was its self-entrenching half. Not finding a project
+is an inability about the guard itself and not an answer about the edit — no
+configuration says this tree is guarded at all, and the repair (`beadloom init`,
+or a `--project` a hook's fixed command line has no way to add) is a write. The
+outcome moved from `error` to `unresolved` at BDL-UX #254; the "writes nothing"
+half is BDL-061.32's and never moved.
 
 **`--project` must name a directory that carries the marker** (BDL-061.31).
 Until then any `is_dir()` was honoured, and that made the flag a second route to
@@ -403,19 +439,21 @@ Click, which turned it into exit **1** — the *warn* code the shipped adapter
 reads as "carry on" — with no verdict and no record. That is the one combination
 this slice exists to prevent, in a different exception class.
 
-Both sides, because the fix is not free. Catching it means **Ctrl-C during a
-guarded edit now BLOCKS that edit**: the interrupt becomes a recorded `error` at
-exit 2, not a silent pass at exit 1. Against catching it: an interrupt is the
-operator's escape hatch, and turning it into a blocking verdict takes an escape
-hatch away and writes a firing the operator did not ask for. For catching it,
-which is the decision: SIGINT is delivered to the whole foreground process
-group, so the harness's own tool call is interrupted along with the guard and
-there is usually no edit left to let through; the verdict is the *honest* one,
-because an interrupted guard genuinely did not check anything; and the
-alternative makes an interrupt indistinguishable from a passing `warn`, which is
-the failure mode every fix cycle in this slice has been about. `_record`'s
-handler is as wide, for the same reason: an interrupt landing on the write is a
-missing record either way, and the difference is only whether the reader is told.
+What catching it buys is a **verdict and a record** where there was a traceback:
+the interrupt becomes a recorded `unresolved` that names itself on stderr, rather
+than the silent exit 1 an escaping `KeyboardInterrupt` produced. BDL-061.31 also
+made it BLOCK, at exit 2, and stated the cost — an interrupt is the operator's
+escape hatch, and turning it into a blocking verdict takes an escape hatch away.
+BDL-UX #254 measured what blocking on any inability of the guard's own costs and
+moved the whole class, this row with it: an interrupted guard could not evaluate
+itself, so it warns and permits. That row was never the expensive half — SIGINT
+is delivered to the whole foreground process group, so the harness's own tool
+call is interrupted along with the guard and there is usually no edit left to
+decide about. The sentence that had to survive did survive: an interrupt is still
+not indistinguishable from a passing `warn`, because `unresolved` is its own
+outcome, is recorded, and does not clear `never-fired`. `_record`'s handler is as
+wide, for the same reason: an interrupt landing on the write is a missing record
+either way, and the difference is only whether the reader is told.
 
 **The render step cannot choose the exit code.** Printing the verdict happens
 after the boundary has decided and recorded, so it is wrapped: a failure there
@@ -750,7 +788,7 @@ count rests on a summary rather than on readable lines says so —
 
 | Flag | Means | Computed from |
 |---|---|---|
-| `never-fired` | no firing that reached a verdict (an `error` record does not count) | the firing record |
+| `never-fired` | no firing that reached a verdict (an `error` or `unresolved` record does not count) | the firing record |
 | `excluded-everywhere` | every strictness is `off`, or nothing escapes the exclusions | the configuration alone |
 | `matches no file in the project: '<pattern>'` | a declared exclusion matches nothing that exists right now | the project's files |
 | `exit condition has passed: '<pattern>'` | a declared exclusion's `until:` names a date that is behind us | the configuration alone |
@@ -769,10 +807,16 @@ declaring an exclusion requires a `.beadloom/flow.yml`, which no realistic
 exclusion covers, so a whole-tree flag computed from real files would be `False`
 in every project that has one.
 
-`never-fired` counts only firings that reached a verdict. An `error` is recorded
-and shown as the last outcome, so a broken guard is visible, but it does not
-clear the flag: a gate that has run three times and answered none of them is not
-a live gate.
+`never-fired` counts only firings that reached a verdict. An `error` or an
+`unresolved` is recorded and shown as the last outcome, so a broken guard is
+visible, but neither clears the flag: a gate that has run three times and
+answered none of them is not a live gate. `unresolved` matters here more than
+`error` does, because it is the outcome that PERMITS the edit — if it cleared
+this flag, a guard nothing can run would read as a live one, which is the exact
+silence this report exists to break. The two outcomes are separated by one
+predicate, `is_unanswered`, rather than by two comparisons in two modules: an
+outcome added to the liveness rule and not to the rotation summary is how a
+guard that never answered starts reading as one that did.
 
 `exit condition has passed` is the half a tree cannot answer (BDL-061.49). An
 `until:` that LEADS with an ISO date (`2026-09-01`, optionally followed by the

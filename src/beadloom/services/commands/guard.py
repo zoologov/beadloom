@@ -214,7 +214,10 @@ def _emit_liveness(
 
 def _emit_verdict(result: InvocationResult, verdict: GuardVerdict, *, output_json: bool) -> None:
     """Print *verdict* on the stream its outcome dictates, and say if it went unrecorded."""
-    from beadloom.application.guards.models import GuardOutcome
+    from beadloom.application.guards.models import (
+        PERMITTED_UNGUARDED,
+        GuardOutcome,
+    )
 
     if output_json:
         payload: dict[str, object] = {
@@ -228,12 +231,20 @@ def _emit_verdict(result: InvocationResult, verdict: GuardVerdict, *, output_jso
         GuardOutcome.WARN,
         GuardOutcome.BLOCK,
         GuardOutcome.ERROR,
+        GuardOutcome.UNRESOLVED,
     )
     click.echo(
         f"{verdict.guard}: {verdict.outcome.value.upper()} — {verdict.why}", err=to_stderr
     )
     for item in verdict.not_covered:
         click.echo(f"  not checked: {item}", err=to_stderr)
+    # The permitted line is printed for `unresolved` alone, and it is printed
+    # BEFORE the remediation: an outcome that lets the edit through has to say so
+    # where the reader is already looking, or a permitted edit reads as a failed
+    # one (BDL-UX #254). The sentence itself lives in the application layer, so a
+    # second harness renderer cannot phrase it differently.
+    if verdict.outcome is GuardOutcome.UNRESOLVED:
+        click.echo(f"  {PERMITTED_UNGUARDED}", err=to_stderr)
     if verdict.remediation:
         click.echo(f"  fix: {verdict.remediation}", err=to_stderr)
     if not result.recorded:

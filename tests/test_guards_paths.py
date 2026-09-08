@@ -695,6 +695,11 @@ class TestNoInvocationEndsWithoutARecord:
 
         The shape gate closes the two failures we know about; this closes the
         third one nobody has typed yet.
+
+        It is ``unresolved`` at the warn code since BDL-UX #254: an exception
+        inside the evaluation is the guard unable to run itself, and the live
+        instance was an ``ImportError`` from a half-moved package. The record is
+        what this class is about, and it did not move.
         """
         def explode(*_args: object, **_kwargs: object) -> None:
             msg = "a future defect nobody has written yet"
@@ -714,21 +719,24 @@ class TestNoInvocationEndsWithoutARecord:
         assert result.exception is None or isinstance(result.exception, SystemExit), (
             result.output
         )
-        assert result.exit_code == 2, result.output
-        assert [record.outcome for record in records] == ["error"], records
+        assert result.exit_code == 1, result.output
+        assert [record.outcome for record in records] == ["unresolved"], records
         assert "a future defect nobody has written yet" in records[-1].why
 
-    def test_a_config_error_reaching_a_hook_is_recorded_and_blocks(
+    def test_a_config_error_reaching_a_hook_is_recorded_and_permits(
         self, tmp_path, write_flow_yml, monkeypatch
     ) -> None:
-        """A broken flow.yml is recorded, and through a hook it exits 2.
+        """A broken flow.yml is recorded, and through a hook it does not block.
 
-        It exited 3 until BDL-061.33, and 3 blocks nothing in the harness this
-        adapter binds to — so the single file of this feature an adopter edits by
-        hand could switch every bound guard off by a mistyped line. Exit 3 still
-        exists for a shell caller (BDL-061.2), where a configuration defect must
-        stay distinguishable from a guard that fired and no edit is waiting on
-        the answer; see ``tests/test_guards_fail_closed.py`` for both halves.
+        The code has moved twice and the record has not, which is what this class
+        exists to hold. It exited 3, and 3 blocks nothing in the harness this
+        adapter binds to, so a mistyped line could switch every bound guard off
+        in silence (BDL-061.33). It then exited 2, and blocking made the file
+        that has to be fixed unfixable from inside a session (BDL-UX #254). It
+        now exits the warn code with an ``unresolved`` verdict that names itself
+        on stderr — permitted, and not quiet about it. Exit 3 still exists for a
+        shell caller (BDL-061.2); see ``tests/test_guards_unresolved.py`` for
+        both halves.
         """
         write_flow_yml(
             "guards:\n  bead-claimed:\n    exclusions:\n      - path: 'x/**'\n"
@@ -739,8 +747,8 @@ class TestNoInvocationEndsWithoutARecord:
 
         result = self._run(tmp_path, monkeypatch, payload)
 
-        assert result.exit_code == 2, result.output
-        assert [record.outcome for record in self._records(tmp_path)] == ["error"]
+        assert result.exit_code == 1, result.output
+        assert [record.outcome for record in self._records(tmp_path)] == ["unresolved"]
 
     def test_an_unregistered_guard_name_records_nothing(
         self, tmp_path, monkeypatch, guard_project

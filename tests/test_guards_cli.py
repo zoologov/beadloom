@@ -390,15 +390,25 @@ class TestRealProbes:
 
 
 class TestHookHarnessValidation:
-    def test_unknown_harness_blocks_and_names_the_ones_it_knows(
+    def test_unknown_harness_is_unresolved_and_names_the_ones_it_knows(
         self, tmp_path, stub_probes
     ) -> None:
-        """Exit 2 since BDL-061.33: a wiring defect in the binding is not a free pass.
+        """A wiring defect in the binding, said out loud rather than acted on.
 
-        It exited 3, and 3 is a code a harness carries on past — so an adapter
-        naming a harness Beadloom cannot translate produced an unguarded edit on
-        every invocation. Beadloom cannot know the exit vocabulary of a tool it
-        does not support, so it answers with the code it knows stops work.
+        The code has moved twice and the reason each time is worth keeping. It
+        exited 3, which a harness carries on past, so an adapter naming a harness
+        Beadloom cannot translate produced a silently unguarded edit
+        (BDL-061.33). It then exited 2, on the ground that Beadloom cannot know
+        the exit vocabulary of a tool it does not support and should use the code
+        it knows stops work. BDL-UX #254 measured what that costs: the repair for
+        this defect is an edit to the binding, and blocking an edit is how the
+        binding becomes unrepairable from inside the session.
+
+        So it is ``unresolved`` at the warn code, and the honest limit is stated
+        rather than hidden: for a harness Beadloom does not support, Beadloom
+        does not know that 1 is carried past either. What it does know is that 1
+        is carried past by every harness it DOES support, and that the message
+        naming the supported set is on stderr where a human sees it.
         """
         stub_probes(beads=())
         result = CliRunner().invoke(
@@ -406,5 +416,6 @@ class TestHookHarnessValidation:
             ["guard", "bead-claimed", "--project", str(tmp_path), "--hook", "emacs"],
             input="{}",
         )
-        assert result.exit_code == 2, result.output
+        assert result.exit_code != 2, result.output
+        assert "UNRESOLVED" in result.stderr, result.stderr
         assert "claude-code" in result.stderr
