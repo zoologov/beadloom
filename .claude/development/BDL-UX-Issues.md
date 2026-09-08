@@ -46,6 +46,28 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
+257. [2026-09-08] [HIGH] `waves` derived two beads' scopes as disjoint while one document belonged to both, and the landing lock ordered the commits it could not order the edits of
+
+    **Severity:** high (it is the guarantee the wave plan exists to give, and the one it was believed to give while the lock was believed broken)
+    **Command:** `beadloom waves`, `bd merge-slot`
+    **Tracker:** to be attached to `beadloom-en0x`'s successor work; routed to S6
+    **Context:** BDL-068 S6 wave 2. `beadloom-0mdo.37` and `beadloom-0mdo.68` ran concurrently on a plan `waves` reported as **0 serialisations**, and both edited `docs/domains/application/README.md`. `.37` committed the file whole in `fe02a46`, so `.68`'s hunk — the Gate's fourth silence — landed inside `.37`'s commit. Reported by `.68` unprompted.
+    **The sentence that matters, in the finding agent's own words:** *"This is the guarantee the landing lock does not give — it ordered the commits, and nothing ordered the edits."* The content is correct and in the tree; the attribution is not.
+    **Why it is not #232 again:** #232 was `waves` planning from an **authored** `refs:` line, and `beadloom-en0x` closed it — the scope is derived now. This is the derived scope being **narrower than the change**: `waves` resolves a bead to the nodes and files its *code* occupies, and a domain README belongs to a node whose code neither bead touched. So two beads can hold disjoint code scopes and one shared document, and the plan says 0 serialisations truthfully about the wrong population.
+    **It is sharper than it looks because of what else moved this week.** BDL-UX #194 and #237 were withdrawn on 2026-09-04 when the merge slot turned out to work: `acquire` refuses a held slot at rc 1. So the project spent three epics believing the lock was broken and the scopes sound, and both beliefs were inverted — the lock works and orders commits; the scopes are sound about code and silent about documents.
+    **Expected:** the derived scope reaches the documents a node owns, or the plan says which population it compared and which it did not. `beadloom waves` already prints four shared media it cannot decide by code independence; a fifth line naming the documents two beads share would be the same shape. Do not answer it by widening `refs:` — that is the authored scope #232 was filed against.
+
+256. [2026-09-08] [HIGH] a clean room can resolve the package under test to the MAIN tree, so a correctly-named room returns a verdict about a tree it does not contain
+
+    **Severity:** high (the failure #235 was filed for, surviving the fix that was believed to close it)
+    **Command:** the clean-room convention; `beadloom clean-room` as of `beadloom-0mdo.37`
+    **Tracker:** routed to S6, beside `beadloom-0mdo.38` (#236)
+    **Context:** measured by `beadloom-0mdo.68` in BDL-068 S6 wave 2, in a room whose directory name was already bead-unique.
+    **Issue:** the run used `uv run --project <main tree> pytest` from inside the room, and the editable install resolved `beadloom` to the **main tree's** `src`. The room then reported a failure caused by the *neighbour's* uncommitted CLI command — a clean-room verdict about a tree the room did not contain.
+    **Why it is worse than #235 was:** #235 was two agents sharing a directory, and the fix was to make the directory unshareable — `beadloom-0mdo.37` shipped exactly that hours earlier, with an exclusive `mkdir`. This failure passes through a correct, exclusive, bead-named room. The isolation the name provides is of the *files*; nothing was isolating the *interpreter's import path*, and no report distinguishes the two.
+    **The room needs its own environment:** `uv venv` plus `uv pip install -e .[all,dev]` inside it. Measured: with `.[dev]` alone, four TUI tests error on collection — which is BDL-UX #236 (a room's verdict is decided by extras the convention never names) meeting this one, and is why the two belong in the same slice.
+    **Expected:** `beadloom clean-room` owns the environment as well as the directory, since `beadloom-0mdo.37` has just made it the single place that answers this question. A room that resolves the code under test to somewhere else is not a room, and the verdict it returns cannot be told from a real one by reading it.
+
 255. [2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly
 
     **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)
