@@ -10,11 +10,16 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.50` — BDL-UX #248 and #249, the locale dimension of a room. S6, alone,
-and its own gate owner. In progress: the census derives the locale, `beadloom rooms` refuses to
-report a locale that did not apply as a room the run entered, and the 11 failures
-`beadloom-0mdo.49` attributed to `tests/room_simulation.py` are re-measured as 13 under one
-malformed spelling of the room and 3 under a well-formed one.
+**Bead:** none claimed. `beadloom-0mdo.50` closed as `d32c718` — BDL-UX #248 and #249, alone and
+its own gate owner. The census derives the locale as the CODEC in force, `beadloom rooms` refuses
+to report a locale that did not apply as a room the run entered, and the 11 failures
+`beadloom-0mdo.49` attributed to `tests/room_simulation.py` re-measure as 13 under one malformed
+spelling of the room and 3 under a well-formed one — after which the plugin is green suite-wide.
+
+**Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion.
+`bd close --suggest-next` named `.14` and `.69`; the ready list holds neither, because `.69` still
+has open blockers and `.14` is the slice bead. That is the twenty-sixth dependency shape this
+project has checked that call form against.
 
 **Before it, S6 wave 5 completed** — `.46` landed alone and, as its own gate owner,
 reports the combined tree green: `beadloom ci` rc 0 taken in the foreground without a pipe, and
