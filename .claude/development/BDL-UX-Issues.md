@@ -46,6 +46,17 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
+255. [2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly
+
+    **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)
+    **Command:** `beadloom impact <path>`
+    **Tracker:** routed to S6
+    **Context:** found by `beadloom-0mdo.72` while deriving S6's axes — that is, by using the instrument for the job the slice exists to do.
+    **Issue:** given a path that exists and is not Python, `impact` exits 1 with an unhandled `SyntaxError` out of `ast.parse` at `src/beadloom/application/impact/axes.py:129`. An **absent** path is handled and reported cleanly. So the failure is worse for the case that is more likely to be a real request: a reader pointing the tool at `CLAUDE.md`, the issue log or a role template gets a traceback, while a typo gets a sentence.
+    **Why it matters beyond a rough edge:** it is why S6's own axes derivation reaches **0 of its subject's 862** `beadloom <subcommand>` instruction sites across 68 non-Python artifacts and 11 170 lines. The slice about the flow's own documents cannot ask the derivation about a document at all. S5's equivalent ratio was 14 of ~261; this is zero of everything.
+    **This project's own rule applies to its own tool:** a target the derivation cannot read is `unresolved` and says so — the distinction this epic has now shipped ten times. A traceback is not that distinction; it is the absence of one.
+    **Expected:** a non-Python target is a verdict, not a crash. Whether `impact` should eventually derive anything from a markdown or YAML artifact is a separate and larger question — answer the crash first, and state the second rather than sliding into it.
+
 254. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
 
     > **Renumbered from #253 to #254 on 2026-09-05, by the S5 review's Major 2.** Two entries were

@@ -66,11 +66,12 @@ worse than the ignorance we have now.
 Derived, never authored. An epic is not a single `impact` target: its axes are the UNION of its
 slices' axes, and each slice's rows are derived when that slice begins. The first nine rows are
 S1's, derived on 2026-09-02 after `c7591a8`. The twenty-eight under them are S4's and the next
-five are S2's and S3's, both derived on 2026-09-04 at `d0088ba`. The last fourteen are S5's,
-derived on 2026-09-04 at `b350f6b`. A row is not repeated — a sweep that reaches an axis and
-node the table already names adds a second site count and no axis, and where that happened it
-is stated under the table. S6 adds its rows at its own start, which is the same rule as beads
-being created per slice.
+five are S2's and S3's, both derived on 2026-09-04 at `d0088ba`. The fourteen after those are
+S5's, derived on 2026-09-04 at `b350f6b`. The last eighteen are S6's, derived on 2026-09-08 at
+`853481e`. A row is not repeated — a sweep that reaches an axis and node the table already
+names adds a second site count and no axis, and where that happened it is stated under the
+table. Each slice adds its rows at its own start, which is the same rule as beads being created
+per slice.
 
 > **Derived by:** `beadloom impact` over `onboarding/role_composer.py`, `doc_sync/axes_section.py`
 > and `services/commands/impact.py` — the three surfaces S1 changed
@@ -172,6 +173,65 @@ being created per slice.
 > working tree's in both places. `diff -rq` reports every tracked file under `src/` identical
 > between the two, so the distinction does not move this answer today.
 
+> **Derived by:** `beadloom impact` over the nineteen Python files S6's fifteen beads change,
+> each of which is named in a bead's own description: `application/rooms.py`,
+> `application/waves/media.py`, `application/waves/models.py`, `services/commands/rooms.py`,
+> `onboarding/config_sync.py`, `onboarding/ignore_block.py`, `doc_sync/axes_section.py`,
+> `services/commands/impact.py`, `application/gate.py`, `onboarding/role_composer.py`,
+> `application/guards/invocation.py`, `services/guard_probes.py`, `doc_sync/scanner.py`,
+> `doc_sync/audit.py`, `infrastructure/console_streams.py`, `services/commands/docs.py`,
+> `onboarding/agentic_flow_setup.py`, `onboarding/role_adapters.py` and
+> `doc_sync/doc_quality.py`. The nineteen runs return 139 caller sites, 20 co-writer sites and
+> 256 commands at the target seat.
+> **Seed:** fifteen of the nineteen targets resolve no seed under `reaches-an-effect-sink`.
+> Four resolve one — `services/commands/docs.py` four, `application/gate.py` two,
+> `onboarding/config_sync.py` one and `onboarding/agentic_flow_setup.py` one — and every seed
+> is `each_graph_file` (`onboarding/graph_files.py:24`, `reads-a-yaml-directory`),
+> `flow_signature` (`doc_sync/surface.py:179`, `serialises-yaml`), `read_declared_docs`
+> (`application/reindex/indexing.py:40`, `reads-a-yaml-directory`) or `persist_flow_config`
+> (`onboarding/flow_config.py:324`, `serialises-yaml`). All four declared effects are about
+> YAML, so this sweep's co-writers axis answers who else writes the graph files and the flow
+> config and says nothing about who else writes the markdown documents and role adapters that
+> are S6's subject. That axis added no row: the seven nodes it resolves are already in the
+> table and are not repeated.
+> **Unresolved:** the region this derivation cannot reach, which is larger for S6 than for any
+> earlier slice and is the reason this block is stated before the rows rather than after them.
+> S6's subject is the flow's own documents and roles, and `beadloom impact` sweeps Python. The
+> flow's documents carry 862 `beadloom <subcommand>` instructions by literal spelling, which is
+> a spelling and therefore a lower bound and not a derivation: 326 in
+> `.claude/development/BDL-UX-Issues.md`, 206 in the shipped `templates/agentic_flow/`, 120 in
+> this repository's own composed role adapters, 109 in the shipped `templates/roles/`, 52 in
+> `.claude/CLAUDE.md`, 38 in the four slash-command skills, 10 in the roadmap and 1 in
+> `.beadloom/flow/claude/CLAUDE.md`. The derivation binds none of them,
+> because none of them is a Python call. A further 266 spellings sit inside `src/**/*.py` and
+> are remediation strings, command help text and hook-template string literals rather than call
+> sites — reachable as a file and invisible as a call, which is the shape S5's block already
+> names. Counted as artifacts rather than as instructions, S6 writes or judges 68 markdown,
+> YAML and JSON files totalling 11 170 lines that no sweep reaches, against the 19 Python files
+> that every row below comes from. Where S5 measured 14 derivable call sites of its subject
+> against about 261 in prose, S6's derivation reaches 0 of its subject's 862 instruction sites
+> and covers only the machine half each bead builds. That gap is `unresolved`, not empty: no
+> `no` row below covers `.claude/CLAUDE.md`, the shipped `CLAUDE.md.txt`, the role cores, the
+> issue log or `ROADMAP.md`, and a commit to any of them is judged by no axis in this table
+> except through the `onboarding` row.
+> Measured rather than assumed, because the derivation was pointed at that region and asked:
+> `beadloom impact src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` exits 1 with 0
+> bytes on stdout and an unhandled `SyntaxError: invalid character '—' (U+2014)` raised at
+> `ast.parse` in `application/impact/axes.py:129`, and the role core
+> `templates/roles/core/dev.md.txt` gives the same failure. The control separates the two
+> cases: a path that does not exist is reported as `Error: no file and no symbol named …`,
+> so the command handles an absent target and dies on a present non-Python one. That is
+> recorded as a finding of this derivation rather than fixed here.
+> Its own population over the source it did reach: the nineteen runs report 214
+> unresolved-terminator-name, 32 name-defined-more-than-once and 14 dynamic-dispatch as
+> distinct name-and-file pairs, and fifteen of the nineteen targets resolve no seed.
+> **Measured on:** 2026-09-08 at `853481e`, over a room built with `git archive HEAD` at
+> `room-beadloom-0mdo.72` and reindexed there, macOS 26.6.2 arm64, CPython 3.13.7, `beadloom
+> impact` in the foreground, 19 runs and 3 control runs. The room isolates the swept source and
+> the index, not the tool, for the reason S5's block states; `diff -rq` excluding `__pycache__`
+> reports every tracked file under `src/` identical between room and tree, so the distinction
+> does not move this answer today.
+
 | Axis | Node | Sites | In scope | Why |
 |------|------|-------|----------|-----|
 | co-writers | — | unresolved (no seed on any of the three targets) | no | Nothing can be taken into scope until a seed resolves, so the decision is `no` and not `n/a` — an undecided row is what the check reads as a derivation nobody acted on. When a later slice's target does reach a sink, this row is re-derived and decided then. It is recorded rather than dropped so the blank is not read as "nothing writes here" |
@@ -230,6 +290,24 @@ being created per slice.
 | branches | `ci-gate` | 36 at the target seat, first `_run_doctor_checks` (`application/gate.py:73`); widest `run_ci_gate`, 1 branch | yes | written by this epic — 1 of the 88 owned paths it changes is owned by it |
 | branches | `doc-spaces` | 22 at the target seat, first `_related_refs` (`application/doc_spaces.py:259`); widest `check_spaces`, 5 branches | no | the second channel, read and not written — no path this epic changes is owned by it |
 | branches | `intent-reader` | 2 at the target seat, `read_intent` (`application/intent_reader.py:50`) with 2 branches and 2 exit forms | no | the second channel, read and not written — no path this epic changes is owned by it |
+| callers | `ai-techwriter-setup` | 6, first `_read_asset` (`onboarding/ai_techwriter_setup.py:54`) | no | read by this change and not written by it — no path this epic changes is owned by it |
+| callers | `bd-seam` | 1, `shipped_templates` (`services/bd_seam/population.py:115`) | yes | written by this epic — 7 of the 110 owned paths it changes are owned by it |
+| callers | `doc-shape` | 1, `check_planning_sections` (`doc_sync/doc_shape.py:283`) | yes | written by this epic — 1 of the 110 owned paths it changes is owned by it |
+| callers | `doc-spaces` | 2, first `_working_reach` (`application/doc_spaces.py:634`) | no | read by this change and not written by it — no path this epic changes is owned by it, which is what its branches row above already decided |
+| callers | `docs-audit` | 1, `run_audit` (`doc_sync/audit.py:559`) | yes | `beadloom-0mdo.63` rewrites the version-claim decision here; no path this epic changes is owned by it yet, so this row is `yes` on a named write target and not on the measurement |
+| branches | `verdict-room` | 20 at the target seat, first `label` (`application/rooms.py:103`); widest `_compare`, 6 branches | yes | written by this epic — 1 of the 110 owned paths, and `beadloom-0mdo.38` and `.50` rewrite `current_room` so a room states the extras it installed and the locale it ran under |
+| branches | `wave-plan` | 14 at the target seat, first `room_for` (`application/waves/media.py:143`); widest `spell_approved`, 2 branches | yes | written by this epic — 8 of the 110 owned paths, and `beadloom-0mdo.37` derives the room path from `room_for` while `.46` rewrites the `unguarded_axis` remedy in `waves/models.py` |
+| branches | `config-check` | 26 at the target seat, first `changed` (`onboarding/config_sync.py:173`); widest `refresh_agentic_flow_files`, 1 branch | yes | written by this epic — 1 of the 110 owned paths, and three S6 beads add a check here: `.40` the ignore block, `.59` the role map, `beadloom-ec1a` the orphaned tool adapters |
+| branches | `ignore-block` | 5 at the target seat, first `_git_root` (`onboarding/ignore_block.py:126`); widest `_git_root`, 1 branch | yes | written by this epic — 1 of the 110 owned paths, and `beadloom-0mdo.40` compares the block on disk against what this module emits rather than against a copy of it |
+| branches | `axes-section` | 11 at the target seat, first `names_a_seed` (`doc_sync/axes_section.py:116`); widest `_read_body`, 4 branches | yes | written by this epic — 1 of the 110 owned paths, and `beadloom-0mdo.46` fixes BDL-UX #244 in `_read_body`, the function that takes a second table's header as data |
+| branches | `docs-audit` | 26 at the target seat, first `verified_facts` (`doc_sync/audit.py:177`); widest `_parse_version`, 10 branches | yes | `beadloom-0mdo.63`'s subject is `_parse_version`, which reads every semver token as a claim about this project's version, so "measured on bd 1.0.4" can only be written with a suppression |
+| branches | `doc-sync` | 17 at the target seat, first `is_count_fact` (`doc_sync/scanner.py:202`); widest `_iter_number_tokens`, 4 branches | yes | written by this epic — 1 of the 110 owned paths, and `_iter_number_tokens` is the extractor `beadloom-mr2l.44` narrowed once already and `.63` must narrow again for a named dependency |
+| branches | `doc-quality` | 23 at the target seat, first `checks_that_read_nothing` (`doc_sync/doc_quality.py:225`); widest `_bullets`, 5 branches | yes | `beadloom-0mdo.68` rewrites `decision-reason` so a claim-and-measurement table is `not classified` rather than a finding, and `.66`'s duplicate-number check over the issue log is a document check of the same kind |
+| branches | `role-composer` | 5 at the target seat, first `roles_templates_root` (`onboarding/role_composer.py:95`); widest `compose_role`, 4 branches | yes | written by this epic — 1 of the 110 owned paths, and `.59` derives the role set from what this composes rather than from a directory listing, which is the same source `beadloom-iur5` needs |
+| branches | `role-adapters` | 4 at the target seat, first `_write` (`onboarding/role_adapters.py:92`); widest `generate_adapters`, 3 branches | yes | written by this epic — 1 of the 110 owned paths, and `beadloom-0mdo.67` decides whether `generate_adapters` gets the `preserve=` treatment `config-check --fix` already has |
+| branches | `agentic-flow-setup` | 15 at the target seat, first `templates_root` (`onboarding/agentic_flow_setup.py:125`); widest `scaffold`, 1 branch | yes | written by this epic — 1 of the 110 owned paths, and `.67` and `beadloom-iur5` both change what a re-run of the scaffold does to a file a human edited |
+| branches | `console-streams` | 1 at the target seat, `tolerate_unencodable_output` (`infrastructure/console_streams.py:54`) with 1 branch and 1 exit form | yes | `beadloom-0mdo.65` relaxes the handler test so `surrogateescape` counts as CPython's default rather than an operator's choice; no path this epic changes is owned by it yet, so this row is `yes` on a named write target |
+| branches | `onboarding` | unresolved — no sweep reaches it: `beadloom impact` parses Python and all 24 of this node's changed paths are markdown templates, and pointing the command at one of them raises `SyntaxError` rather than reporting `unresolved` | yes | written by this epic — 24 of the 110 owned paths, the largest share of any node, and the only node whose source covers the shipped `CLAUDE.md` template, the role cores and the vendored agent snapshots that `.59` and `beadloom-iur5` rewrite |
 
 **The scope decision (S1).** Every caller row is in scope for this epic because each is a
 surface a later slice edits — S4 is the guards, S6 is the composer and `config-check`. Nothing
@@ -272,6 +350,41 @@ and three on a named commitment: `bd-seam` and `guard-probes` for `beadloom-0mdo
 and `active-table` for `.54`. Six rows are `no`, four of them the two channels this slice reads
 without writing — `doc-spaces` and `intent-reader` read the committed `.beads/issues.jsonl`
 export, and `tui` and `agent-prime` reach the swept files for display and priming.
+
+**The scope decision (S6), taken on 2026-09-08.** Same measured rule as S4 and S5, re-measured
+on this tree: BDL-068 changes 325 live paths since `17eafb8^`, 110 of them owned, and those 110
+resolve to 33 owning nodes. `beadloom scope-check --since 17eafb8^` reports the same 110, which
+is how the count below is checked rather than asserted. A row is `yes` when the node is among
+the 33, or when one of S6's fifteen beads names it as a write target in its own description; a
+row is `no` otherwise. Sixteen of the eighteen rows are `yes` and twelve of those on the
+measurement: `onboarding` 24 paths, `wave-plan` 8, `bd-seam` 7, and one path each for
+`config-check`, `ignore-block`, `axes-section`, `role-composer`, `role-adapters`,
+`agentic-flow-setup`, `verdict-room`, `doc-sync` and `doc-shape`. Four are `yes` on a named
+commitment alone, because no path this epic has changed yet is owned by them: the two
+`docs-audit` rows for `beadloom-0mdo.63`, `doc-quality` for `.68` and `.66`, and
+`console-streams` for `.65`. Two rows are `no` —
+`ai-techwriter-setup` and `doc-spaces`, each of which reaches a swept file and is written by no
+path this epic changes.
+
+**`onboarding` is IN SCOPE, and it is the opposite case to `application`.** S5 ruled `application`
+out because the declaration confused a layer with a node: that node owns eighteen view-rendering
+files and this epic has written none of them. `onboarding` is a domain node too, and it is `yes`
+for the reason `application` was `no` — it owns 57 tracked files, 52 of them the shipped
+`.md.txt` templates, and 24 of those 52 are among the 110 paths this epic changes, which is the
+largest share of any node in the table. It is also the ONLY node whose source covers the shipped
+`CLAUDE.md` template, the composed role cores and the vendored agent snapshots, so a narrower
+declaration does not exist: no node's source names `templates/`. The cost is stated rather than
+hidden — approving `onboarding` approves 57 files to name a population S6 genuinely writes, and
+the alternative is `beadloom-0mdo.59` and `beadloom-iur5` editing the shipped templates under no
+axis at all, which is the S4 finding this bead exists to prevent.
+
+**A node approved by having been swept is a node this block also decided.** BDL-UX #250 is open:
+`WorkItemAxes.approved` is `kept | targets`, so a node owning a file a `Derived by` field names
+is inside the approval whatever its row says. S5 hit it because its targets were files it reads.
+S6's sixteen target-owning nodes are all files it writes, and every one of them carries a `yes`
+row above, so this block adds no new instance — the widening and the rows agree here. That is
+worth recording as the assumption holding again rather than as the defect being absent: the rule
+still does not express the decision, and `beadloom-0mdo.46` carries the fix.
 
 **`application` stays RULED OUT, and widening it was never the fix.** `beadloom waves` reported
 `declared_outside_the_axes` against `beadloom-0mdo.51`, `.52` and `.53`, each of which carried a
