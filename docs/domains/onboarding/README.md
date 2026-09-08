@@ -228,7 +228,7 @@ Module `src/beadloom/onboarding/agentic_flow_setup.py`:
 - `sync_agentic_flow(live_claude_root)` -- refresh the packaged **agent** assets from the live `.claude/agents/`. It no longer snapshots `CLAUDE.md` or the commands: writing our own file back into the shipped template pinned the distributed artifact to this project's local text (BDL-UX #177)
 - `templates_root()` / `vendored_flow_root()` -- locate the packaged scaffold assets
 - `AGENT_FILES` / `COMMAND_FILES` -- the role + slash-command file stems
-- `SUPERSEDED_COMMAND_FILES` -- the stems an older layout left in `.claude/commands/` (the four roles + `epic-init`)
+- `SUPERSEDED_COMMAND_FILES` -- the stems an older layout left in `.claude/commands/` (the five roles + `epic-init`)
 - `ScaffoldResult` -- dataclass: files written/skipped + CLAUDE.md path + changed sections + `orphans` + `migration_notes`
 
 > `ScaffoldResult.orphans` and `.migration_notes` are populated and have **no caller**: `beadloom setup-agentic-flow` prints neither, so the orphan list and the "move your additions to `.beadloom/flow/…`" guidance reach a library caller and not the person running the command (BDL-UX #188).

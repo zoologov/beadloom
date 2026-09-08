@@ -24,13 +24,20 @@ commands and `CLAUDE.md` rather than reimplemented per artifact. The order is:
 1. **CORE** — the universal, stack/tool-neutral role protocol
    (`templates/roles/core/<role>.md.txt`), the single source of truth.
 2. the **shared CORE fragments** (`SHARED_ROLE_FRAGMENTS`) — a text every role
-   carries, composed straight after its own core. Today that is the **writing
-   standard** (`templates/roles/core/_writing.md.txt`, BDL-061 S4): it used to
-   live inside the `tech-writer` core, so the three roles that produce the TO-BE
-   documents — PRD, RFC, CONTEXT, PLAN, review report — were held to no standard
-   at all. It ships once and is language-selectable like any other layer, so a
-   team writing in Russian is held to the standard in Russian (BDL-UX #136); the
-   `ru` fragment ships.
+   of the kind carries, composed straight after its own core. Today there are
+   four. The **writing standard** (`templates/roles/core/_writing.md.txt`,
+   BDL-061 S4) used to live inside the `tech-writer` core, so the three roles
+   that produce the TO-BE documents — PRD, RFC, CONTEXT, PLAN, review report —
+   were held to no standard at all. `_rooms` (BDL-068 S3.2) is the statement
+   that a measurement is true of the room it was taken in. `_landing` and
+   `_tracker` (BDL-068 S5) carry the `landing-lock` and `tracker-answers`
+   duties: what the merge slot grants for a role that lands a commit in a
+   shared tree, and which population each of `bd`'s answers covers for a role
+   that reads one. Both used to be stated in the coordinator command or
+   nowhere — the loop that orchestrates rather than the roles that commit and
+   close. Each ships once and is language-selectable like any other layer, so a
+   team writing in Russian is held to the standard in Russian (BDL-UX #136);
+   all four `ru` fragments ship.
 3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers)
    (`templates/roles/architecture/<arch>/<role>.md.txt`): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary.
@@ -102,11 +109,16 @@ Module `src/beadloom/onboarding/role_composer.py`:
 - `ROLE_NAMES` — derived from the shipped fragments; today
   `("dev", "explore", "review", "tech-writer", "test")`, and
   `agentic_flow_setup.AGENT_FILES` **is** this tuple rather than a copy of it
-- `SHARED_ROLE_FRAGMENTS` — `("_writing",)`. A shared fragment is a **layer, not
-  a role**: it carries no front matter, is never written as an adapter, and
-  `compose_role("_writing", …)` raises `FlowConfigError`
+- `SHARED_ROLE_FRAGMENTS` — `("_writing", "_rooms", "_landing", "_tracker")`. A
+  shared fragment is a **layer, not a role**: it carries no front matter, is
+  never written as an adapter, and `compose_role("_writing", …)` raises
+  `FlowConfigError`
 
 ## Testing
 
 Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`,
-`tests/test_shared_writing_standard.py`, `tests/test_role_bdd_mutation_duties.py`
+`tests/test_shared_writing_standard.py`, `tests/test_role_bdd_mutation_duties.py`,
+`tests/test_role_core_names_the_room.py` and
+`tests/test_the_explore_role_is_composed_like_the_others.py` (the shared
+fragments reaching every role), and `tests/test_s5_the_instruments_agree.py`
+(the `_landing` and `_tracker` texts against the behaviour they describe)

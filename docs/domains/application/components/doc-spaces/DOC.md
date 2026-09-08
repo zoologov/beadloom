@@ -182,7 +182,7 @@ found no problem, so the report says which of the two it is.
 
 - `services/commands/docs.py` — `beadloom docs spaces`.
 - `application/gate.py` — the `doc-spaces` step, which reports and never blocks.
-- `services/bd_seam.py` supplies the tracker records the service layer converts
+- `services/bd_seam/` supplies the tracker records the service layer converts
   with `beads_by_epic`.
 - `application/intent_reader.py` reads `read_epic_intents` a second time for a
   second purpose — delivering an epic's declaration to `beadloom ctx` — through

@@ -148,6 +148,28 @@ docs_audit:
     - path: docs/services/mcp.md
       fact: version
       value: "1.0.4"
+    # The three USER-FACING guides, added by S5's documentation pass
+    # (`beadloom-0mdo.57`): the fifth, sixth and seventh triples for one sentence
+    # shape. Until this pass the four above were all reference documents, so the
+    # class could still be read as a property of reference prose. It is not — the
+    # landing-order medium cannot be explained to an adopter without saying that
+    # `bd merge-slot` was re-measured and found sound, and a re-measurement that
+    # does not name the release it was taken on is the claim this project rejects
+    # from everyone else. Seven documents, one dependency, one measurement, and
+    # every guide written about a measured dependency will need an eighth. That
+    # count is the argument for #253's actual fix — a fact that knows whose
+    # product a version belongs to — rather than for a triple per document. Each
+    # goes inert only if its sentence is deleted, and
+    # `TestEverySuppressionStillSuppresses` reports it the day it does.
+    - path: docs/guides/multi-agent-development.md
+      fact: version
+      value: "1.0.4"
+    - path: docs/guides/multi-agent-development.ru.md
+      fact: version
+      value: "1.0.4"
+    - path: docs/guides/parallel-waves.md
+      fact: version
+      value: "1.0.4"
     # active-table/DOC.md: the FIFTH triple for this sentence shape, and the
     # first whose dependency is not `bd`. `beadloom-0mdo.54` measured what
     # `git commit -- <paths>` does about a staged path it does not name, and what

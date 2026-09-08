@@ -32,11 +32,11 @@ declared `refs:` to nodes and files and serialises a pair for one named reason:
 `override_serial`. This half is a decision, not advice. An advisory shape is prose that a model
 may act on or ignore, which is the failure the enforced-flow work exists to remove.
 
-**The four shared media are measured as a precondition, before the wave runs.** One working
-tree, one pre-commit hook, one doc-freshness baseline and one tracker id space are shared no
-matter which shape is chosen. Each carries a verdict that can come back `failed`, and a medium
-nobody observed comes back `unmeasured`, which is a finding rather than a silent pass. What the
-run establishes is that the wave may start, not that it went well.
+**The five shared media are measured as a precondition, before the wave runs.** One working
+tree, one pre-commit hook, one landing order, one doc-freshness baseline and one tracker id
+space are shared no matter which shape is chosen. Each carries a verdict that can come back
+`failed`, and a medium nobody observed comes back `unmeasured`, which is a finding rather than
+a silent pass. What the run establishes is that the wave may start, not that it went well.
 
 **The wave's conduct afterwards is checked by nothing here, and cannot be.** No command holding
 a plan can know whether the gate owner ran the combined tree, whether an agent committed
@@ -174,12 +174,44 @@ each with a plan-time precondition that is actually checked:
 `failed` and `unmeasured` are findings and reach exit 1; `passed` is not.
 
 **Every medium is measured for every plan, a fully serial one included** (BDL-068 S4). Until
-then, the three machine-observed media read `not_applicable` when no wave held more than one
-bead, on the reasoning that a wave of one shares nothing concurrently. That reasoning does not
+then, the three machine-observed media of the day — `landing-order` was added in S5 and the
+count refers to the four media that existed — read `not_applicable` when no wave held more
+than one bead, on the reasoning that a wave of one shares nothing concurrently. That reasoning does not
 hold: a plan is one slice of one epic, so a wave's width is not a claim that its bead is alone
 in the tree, and the `working-tree` check exists precisely to report paths that no bead in the
 plan owns — a question a wave of one can and does fail. `not_applicable` is gone as a verdict a
 plan's shape can produce.
+
+### The landing lock orders commits, and orders nothing else
+
+`landing-order` (BDL-068 S5) is the medium whose evidence had to be re-measured before it
+could be stated. BDL-UX #194 and #237 were filed nine days apart by two agents that had never
+met, and both concluded that `bd merge-slot` was not an exclusion primitive. Re-measured in an
+isolated rig on bd 1.0.4, with every exit code read in the foreground without a pipe, the
+primitive is sound: `acquire` on a held slot exits 1, and across four rounds of eight
+simultaneous acquires exactly one caller won each round. Both entries are withdrawn. What was
+wrong was this project's call form, and the correction is what the medium now checks.
+
+- **The slot orders commits.** It does not keep two agents out of one file. That is what the
+  disjoint scopes this plan derives are for, and every concurrent wave this project ran before
+  2026-09-04 was serialised by those scopes and by the file sets happening to be disjoint,
+  while believing it held a lock that granted nothing.
+- **`acquire --holder <bead-id>`, read by exit code.** The default holder is the tracker actor
+  — `$BEADS_ACTOR`, then `git user.name`, then `$USER` — one identity for every role on one
+  machine, so the slot cannot tell a neighbour's hold from your own. A non-zero exit means you
+  do not hold it.
+- **`release --holder <bead-id>` is the only release bd checks.** A release naming no holder
+  frees whoever holds the slot, including a live neighbour, and reports success.
+- **`--wait` does not wait.** It appends the caller to a queue nothing drains and returns at
+  once, and nothing removes a waiter, so the queue accumulates identities from sessions that
+  ended weeks ago.
+
+The check reads the composed flow artifacts an agent is HANDED, never the templates they were
+composed from: a template fixed and never recomposed leaves the instruction wrong on disk, and
+red is the correct verdict for that. It judges the FLAGS of each invocation and never the prose
+around it. A subcommand the derivation has not measured is reported as `unknown-form` rather
+than passed. The wider population — every place this project reaches `bd` at all, and what each
+call form assumes about the answer — is [`beadloom bd-calls`](../services/cli.md#beadloom-bd-calls).
 
 `tracker-ids` is checked even for a fully serial plan. The mis-numbering it looks for happens at
 bead creation, upstream of any wave, so a plan that serialises the beads it mis-wired is exactly

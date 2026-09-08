@@ -26,7 +26,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `watcher.py` — file watcher for auto-reindex on change
 - `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → optional federate)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
-- `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each of the four media every wave shares whatever its width, and hold each bead's declaration against the `## Axes` section its work item recorded, a cohesion-split package
+- `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each of the five media every wave shares whatever its width, and hold each bead's declaration against the `## Axes` section its work item recorded, a cohesion-split package
 - `review_brief/` — the reviewer's input behind `beadloom review-brief` (BDL-061 S6): assemble the assignment, the declared scope, the specification documents, the bound scenarios and the changed files, and withhold the bead's own comments until a verdict is recorded
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
@@ -328,7 +328,8 @@ under `.beadloom/flow/`:
                                       ▼
                               composer.py  compose(kind, name, config=, project_root=)
                                       │   1. CORE fragment (stack-neutral)
-                                      │   2. SHARED core fragments (core:_writing)
+                                      │   2. SHARED core fragments (core:_writing,
+                                      │      core:_rooms, core:_landing, core:_tracker)
                                       │   3. ONE architecture overlay (ddd|fsd)
                                       │   4. sorted stack overlays
                                       │   5. .beadloom/flow/<kind>/<name>.md   ← the project
@@ -348,13 +349,13 @@ under `.beadloom/flow/`:
 
 - **`flow_config.py`** — `FlowConfig` (frozen) + `resolve_flow_config` (flag → `flow.yml` → default) + `detect_stack`; strict validation. Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`. `language` is validated for shape, not against a closed list; `overlays.suppress` is validated through `flow_suppression`.
 - **`composer.py`** — `compose(kind, name, *, config, project_root)` for the four kinds `roles` / `commands` / `claude` / `docs` (BDL-061 S4b moved the document skeletons out of `doc_generator.py`'s string literals into `templates/docs/`; `docs` is the one kind composed with `carries_suppressions=False`, because a suppression stands down a rule addressed to an agent and a generated README has none). Deterministic: the same inputs always yield the same bytes, with no dependence on the clock or on ambient state. That property is what licenses `config-check` to compare against a composition rather than against stored bytes. The CORE fragments live at `onboarding/templates/roles/core/<role>.md.txt`, `onboarding/templates/agentic_flow/commands/<cmd>.md.txt` and `onboarding/templates/agentic_flow/CLAUDE.md.txt`; the overlays live under `onboarding/templates/{roles,commands,claude}/{architecture/<arch>,stack/<stack>}/`. The commands and `CLAUDE.md` kept their vendored location as the CORE and gained an overlay root beside it, because moving them would have churned the whole scaffold for no signal.
-- **`role_composer.py`** — `compose_role(role, *, architecture, stack, language, suppressions, project_root)`, the roles-shaped door onto `compose`; FSD at parity with DDD. `SHARED_ROLE_FRAGMENTS = ("_writing",)` (BDL-061 S4) composes the writing standard into all four roles as a labelled `core:_writing` layer, so the roles that produce intent documents are held to the same bar as the one that produces reality documents — one text rather than four copies, and language-selectable like every other layer.
+- **`role_composer.py`** — `compose_role(role, *, architecture, stack, language, suppressions, project_root)`, the roles-shaped door onto `compose`; FSD at parity with DDD. `SHARED_ROLE_FRAGMENTS = ("_writing", "_rooms", "_landing", "_tracker")` composes four shared texts into all five roles as labelled `core:<name>` layers, so a rule addressed to several roles has one text rather than five copies that drift the moment one is edited, and each is language-selectable like every other layer. `_writing` is the writing standard (BDL-061 S4), carried by every role because the roles that produce intent documents had none; `_rooms` is the statement that a measurement is true of the room it was taken in (BDL-068 S3.2); `_landing` is what the merge slot grants and what it does not, for every role that lands a commit in a shared tree; `_tracker` is which population each of `bd`'s answers covers, for every role that reads one (both BDL-068 S5).
 - **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s). `beadloom setup-agentic-flow --tool/--architecture/--stack` is the CLI entrypoint.
 - **`flow_manifest.py`** — the sha256 of every composed write, which is what lets a later run tell `stale` (recomposable) from `hand_edited` (reported, never rewritten) from `missing` from `unverified`. `.beadloom/flow-manifest.json` is generated state and belongs in git.
 - **`flow_suppression.py`** — a declared stand-down of a core rule (`rule` + `reason` + `until`, all mandatory), rendered as a visible notice into every composed artifact. Expiry is a `config-check` finding rather than a byte, so the composition stays a function of its inputs.
 - **`config_sync.py`** — compares each artifact against its composition, maps the manifest state onto a severity, names the project layer in effect and reports suppression liveness.
 
-The core `CLAUDE.md` measures **371 lines** (down from 440), with each removed line
+The core `CLAUDE.md` measures **377 lines** (down from 440), with each removed line
 mapped to a replacement in a stack overlay or in `§0 CRITICAL RULES`. The project
 layer is what makes that shrinkage possible: a project's own rules have a home that
 survives an upgrade instead of being appended to a drift-guarded shipped file.

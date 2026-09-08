@@ -1732,7 +1732,9 @@ three scope checks `config-check` has raised since BDL-061 S4b —
 `src/beadloom/graph/rules/` wrote — 3 989 mutants, 54 min 55 s, in the room the output's
 first line names. The runner's own release is whatever `--tool` was handed and is printed
 back verbatim: this document does not restate it, because a third-party version quoted here
-goes stale in a way that says nothing about the command.
+goes stale in a way that says nothing about the command. The `Declared scope` line is the one
+that run read; the scope has since grown to fourteen targets, and the paragraphs after the
+sample state it.
 
 ```
 $ beadloom mutation --stats mutants/mutmut-cicd-stats.json \
@@ -1761,12 +1763,53 @@ which is the room and not a regression — so the `graph/rules/` floor is recali
 `0.95` to `0.94` in the room the job actually enters. It took 1 h 29 min 18 s against
 54 min 55 s locally, a factor of 1.63, so `timeout-minutes` moves 180 → 240. The workflow now
 **runs the runner twice and scores twice**: `graph/rules/` keeps its own floor, and the whole
-declared scope — seven targets since S4 added four new domain cores — is judged separately at
-`--min-score 0.88` in a step marked `if: always()`. One aggregate floor would have let the
-rules slice fall from 96.19% to 94.1% before tripping. What the aggregate floor does not guard
-is stated in the workflow rather than implied: the six file targets are 1 711 of 5 700 mutants,
-so at 0.88 they could fall from 77.0% to 70.4% before anything trips, and a per-target floor
-needs counters this runner's export does not write.
+declared scope is judged separately at `--min-score 0.88` in a step marked `if: always()`. One
+aggregate floor would have let the rules slice fall from 96.19% to 94.1% before tripping. What
+the aggregate floor does not guard is stated in the workflow rather than implied, because one
+set of counters cannot attribute a loss to a file, and a per-target floor needs per-target
+counters this runner's export does not write.
+
+**The declared scope is fourteen targets** (BDL-068 S5, `beadloom-0mdo.62`). S5 added seven
+pure cores — `bd_seam/assumptions.py`, `bd_seam/invocations.py`, `bd_seam/answers.py`,
+`bd_seam/creation.py`, `active_table/row_ids.py`, `active_table/staging.py` and
+`waves/landing.py` — and every one of them was RUN rather than counted: 764 mutants, 639
+killed, 125 survived, 0 unrun, 83.64%, in 36 min 35 s.
+
+```
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores · mutmut 3.7.0 · six workers
+```
+
+Per file, because an aggregate cannot say which target lost:
+`waves/landing.py` 96.55%, `active_table/row_ids.py` 94.26%, `bd_seam/answers.py` 88.79%,
+`bd_seam/creation.py` 88.71%, `bd_seam/invocations.py` 82.32%, `bd_seam/assumptions.py`
+79.23%, `active_table/staging.py` 65.00%. The scope goes from 5 700 to 6 464 mutants, which
+the runner's own denominator confirms.
+
+**A target's cost is its mutant count multiplied by the cost of reaching a killing test.** The
+seven are 13.4% more mutants than the six file targets already declared and eight times the
+cost per mutant — 36 min 35 s against 9 min 34 s for 1 711 mutants on the same machine. The
+reason is the covering tests and not the cores: `invocations.py` and `assumptions.py` carry ten
+covering test files each, and those ten walk this repository's harness and template files. No
+target is excluded on that cost. Scaled by the 1.63 the runner measured against this machine
+the seven cost about 60 minutes, taking the nightly from a projected 110 to 171, so
+`timeout-minutes` moves 240 → 340 by the method already in the workflow. Not 360, because that
+is GitHub's own ceiling for a hosted job, where a `timeout-minutes` equal to it can never be
+the thing that trips.
+
+**The aggregate floor was re-derived and does not move.** The workflow states the rule itself —
+the number is a property of the scope and is re-derived whenever the scope changes — and the
+previous pass widened the scope and left the floor where a scope of 5 700 had put it.
+Re-derived over 6 464 the aggregate falls from 89.98% to 89.23%, so `0.88` keeps 1.23 points of
+headroom where it had 2.00, which is 79 mutants against the 62-mutant margin at which the floor
+in the step above was called adequate. Two of its three components are macOS figures applied to a floor enforced on
+`ubuntu-latest`. Drop both by the 0.63 points the rules slice actually fell between those two
+rooms and the aggregate is 88.99%, still above the floor. It survives its own worst case, so it
+stays at 0.88, re-derived and stated rather than left standing.
+
+The 83.64% is a macOS figure feeding a floor enforced on `ubuntu-latest`. The next nightly run
+is the first measurement of these seven in the room that judges them, and it should replace the
+scaled component of the floor's composition with a measured one.
+<!-- TODO: verify against the first nightly run that covers the seven S5 cores. -->
 
 `beadloom ci` asks whether a mutant COULD run at a declared path and never whether one DID, and
 `beadloom mutation --only` prints "this run did not cover it" and "no run has ever covered it"
@@ -2288,7 +2331,7 @@ Commands (re-exported from the package via the registration shell):
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove the pre-commit hook (lint -> mypy over the declared typed surface -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
-- `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
+- `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table/reconcile.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
 - `why` -- impact analysis (upstream + downstream) with `--reverse` and `--format {panel,tree}`

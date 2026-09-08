@@ -185,7 +185,7 @@ quality:      [clean-code, tdd]
 language:     en                 # the language the flow documents are written in
 ```
 
-`beadloom setup-agentic-flow` composes from this the protocols of four roles, the slash commands and `CLAUDE.md`, and `config-check` watches that what was composed does not drift from the graph. Your project's rules live in a separate layer in `.beadloom/flow/` and survive an upgrade: the upgrade moves the core underneath them. A core rule can be overridden only by a declaration carrying a reason and an expiry, and once it expires `config-check` reports it. Details are in the [guide to project overlays](docs/guides/project-overlays.md).
+`beadloom setup-agentic-flow` composes from this the protocols of five roles, the slash commands and `CLAUDE.md`, and `config-check` watches that what was composed does not drift from the graph. Your project's rules live in a separate layer in `.beadloom/flow/` and survive an upgrade: the upgrade moves the core underneath them. A core rule can be overridden only by a declaration carrying a reason and an expiry, and once it expires `config-check` reports it. Details are in the [guide to project overlays](docs/guides/project-overlays.md).
 
 The flow is local first and goes through the same Gate. On a pull request an AI tech-writer runs: it repairs stale documentation right in the branch, at the level of symbols — a document is rewritten only when the symbol it refers to has changed. The real control stays with CI, and the agent's edit is a proposal that a person reviews and merges.
 
@@ -232,7 +232,7 @@ Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Jav
 | `export` / `federate` | Export the graph and assemble a landscape from several services |
 | `docs site` | Build the VitePress portal |
 
-The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `guard`, `waves`, `review-brief`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
+The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `guard`, `waves`, `review-brief`, `bd-calls`, `rooms`, `mutation`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
 
 ## MCP, configuration, Beads
 
