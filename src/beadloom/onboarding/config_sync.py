@@ -58,6 +58,10 @@ from beadloom.onboarding.flow_suppression import (
     expired_suppressions,
     suppresses_nothing,
 )
+from beadloom.onboarding.ignore_block import (
+    IGNORE_RELPATH,
+    ignore_block_findings,
+)
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
     cursor_rules_relpath,
@@ -845,6 +849,44 @@ def _duty_drifts(project_root: Path) -> list[ConfigDrift]:
     ]
 
 
+def _ignore_block_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report generated paths the project's ignore file no longer declares.
+
+    The third artifact ``init`` writes into a repository Beadloom does not own,
+    and until now the only one with no check. Generated-then-hand-maintained can
+    only stay correct by coincidence, and it stopped: this repository's
+    ``.gitignore`` carried ``.beadloom/guard-firings.jsonl`` while the generator
+    had emitted ``.beadloom/guard-firings*.jsonl`` since rotation shipped. Nobody
+    found it. An unrelated change tripled the firings, the record rotated for the
+    first time, and the second file turned up as untracked churn. An adopter is
+    worse off, because the upgrade path writes no ignore block at all.
+
+    Derived from :data:`~beadloom.onboarding.ignore_block.GENERATED_WORKING_SET`
+    through the same predicate the writer uses, so a pattern a later release adds
+    is checked without anyone editing a second list.
+
+    ``warn``, for the reason :func:`_suppression_drifts` warns: the file is the
+    adopter's and the pattern set is Beadloom's, so a release that adds a pattern
+    would otherwise turn every adopter's green project red on upgrade.
+
+    Never ``fixable``, and this settles nothing for the composed adapters, whose
+    ownership question ``beadloom-0mdo.67`` is deciding separately. The reason
+    here is narrower and is the module's own published contract: the block is
+    written once and never rewritten, there is no manifest that could prove a
+    line is Beadloom's, and the repair is a human's line in a human's file.
+    """
+    return [
+        ConfigDrift(
+            file=str(IGNORE_RELPATH),
+            reason=finding.why,
+            severity="warn",
+            remediation=finding.remediation,
+            fixable=False,
+        )
+        for finding in ignore_block_findings(project_root)
+    ]
+
+
 def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     """Every artifact this project composes — the text a suppression is matched against."""
     texts = [composed_command(name, config, project_root) for name in COMMAND_FILES]
@@ -1123,6 +1165,7 @@ def check_config_drift(
         drifts.append(layer)
     drifts.extend(_suppression_drifts(project_root))
     drifts.extend(_duty_drifts(project_root))
+    drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

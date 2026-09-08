@@ -30,6 +30,9 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
   against fixed bytes (BDL-061 S3).
 - `.beadloom/flow.yml` itself (unknown tool / architecture / stack / language,
   a suppression missing its reason or exit condition).
+- the project's `.gitignore`, against the patterns `ignore_block` emits — see
+  *The ignore block* below. This is the one owned artifact whose bytes are not
+  Beadloom's, so what is compared is the patterns rather than the block.
 
 A repo that never adopted the flow is never reported for it. A repo that DID
 adopt it and is missing a canonical file is reported, because the gate is not
@@ -254,6 +257,39 @@ speaks only when it finds something hands the reader a clean list. The channel t
 matters there is the coordinator's launch prompt: a prompt is not an artifact, so no
 file-based check reaches it.
 
+### The ignore block
+
+`init` writes an ignore block into a project's `.gitignore` once and never rewrites it, so
+the block is generated into a repository Beadloom does not own and hand-maintained there.
+That shape can only stay correct by coincidence, and it stopped: this repository's
+`.gitignore` carried `.beadloom/guard-firings.jsonl` while `ignore_block` had emitted the
+glob `.beadloom/guard-firings*.jsonl` since rotation shipped, and nobody found it. It
+surfaced only when an unrelated change tripled the guard firings, the record rotated for
+the first time, and the second file appeared as untracked churn (BDL-UX #238). An adopter
+is worse off than this repository was: the upgrade path writes no ignore block at all.
+
+`_ignore_block_drifts()` maps `ignore_block.ignore_block_findings()` onto `ConfigDrift` —
+one `warn`, non-fixable finding per pattern the file does not declare, each derived from
+`GENERATED_WORKING_SET` so a pattern a later release adds is checked with no second list.
+A finding whose pattern glob-matches a line already in the file names that line as the one
+it supersedes, so the remediation reads "replace" rather than "add".
+
+It differs from *Duty delivery* on both counts, and for reasons that are its own:
+
+- **`warn`, not `error`**, for the reason a suppression finding warns. The file is the
+  adopter's and the pattern set is Beadloom's, so a release that adds a pattern would
+  otherwise turn every adopter's green project red on upgrade.
+- **Never `fixable`**, because `ignore_block`'s published contract is that the block is
+  written once and never rewritten, there is no manifest that could prove a line is
+  Beadloom's, and the repair is a human's line in a human's file. That is narrower than
+  the ownership question the composed role adapters raise, and settles nothing for them.
+
+What it does not compare is the block's **text**. The reason comments are prose in a file
+people edit, and a project that ignores the same paths under a heading it wrote itself is
+correct — this repository is that project. So an entry whose `why` predates the current
+release stays invisible, which is the code half of the S5 review's finding M-b and is not
+closed by this check.
+
 ### Ownership boundary
 
 The `CLAUDE.md` body is **judged** only when the file is Beadloom's: it has a flow
@@ -312,6 +348,9 @@ Module `src/beadloom/onboarding/config_sync.py`:
   would mean deleting the body on disk).
 - `_duty_drifts(project_root) -> list[ConfigDrift]` — every `role_duties` finding as
   a blocking, non-fixable drift; empty for a project with no `.beadloom/flow.yml`.
+- `_ignore_block_drifts(project_root) -> list[ConfigDrift]` — every
+  `ignore_block.ignore_block_findings()` finding as a warning, non-fixable drift against
+  `.gitignore`; empty outside a git working tree and where no `.beadloom/` exists.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
@@ -329,7 +368,8 @@ Module `src/beadloom/onboarding/config_sync.py`:
 
 Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 `tests/test_cli_config_check.py`, `tests/test_s3_config_check_residual.py`
-(the adversarial half), `tests/test_bead57_config_check_sight.py`.
+(the adversarial half), `tests/test_bead57_config_check_sight.py`, and
+`tests/acceptance/features/ignore_block_drift.feature` for the ignore block.
 
 ## What is still not checked, measured
 
@@ -351,3 +391,7 @@ how they were closed:
   without reading as dead.
 - **`.beadloom/flow/` is scanned for the fragments that compose**, so a file
   dropped there under a name nothing composes is inert and unreported.
+- **The ignore block's reason text is not compared** — only its patterns are. A block
+  carrying an entry's `why` from an earlier release reads as clean, and a `.gitignore`
+  written entirely by hand that happens to declare the same patterns reads as clean too,
+  which is the intended answer for the second and the unclosed half of M-b for the first.
