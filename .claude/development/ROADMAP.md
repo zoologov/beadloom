@@ -345,6 +345,112 @@ module, while the federation SPEC states teams on AsyncAPI ingest through it).
 
 ---
 
+## The class BDL-068 found, and why capability makes it worse rather than better
+
+> Written 2026-09-08, during S6, from the epic's own measurements. It is a ranking
+> argument, not a task list — but it names three gaps at the end that are rankable.
+
+**One sentence.** Across BDL-067 and BDL-068, nearly every defect has one shape:
+
+> a check reports on a population narrower than the question it appears to answer,
+> and nothing in its output says so.
+
+Not "the check is wrong". The check is **right about what it looked at** and silent
+about what it did not. `lint PASS` is architecture lint; the reader hears `ruff`.
+`0 of 0 write path(s) bound` is an empty population; the reader hears full coverage.
+`waves: 0 serialisations` is computed over code scope while four beads write one
+`ACTIVE.md`. `beadloom ci` rc 0 is nine steps; the reader hears "green".
+
+### Six subclasses
+
+| Subclass | What it is |
+|---|---|
+| **phantom population** | the check is silent about its own reach |
+| **vocabulary drift** | a name that means something narrower than its reader assumes (`lint`) |
+| **attention-held rules** | discipline that requires recall at the moment of action |
+| **undated records** | a finding has no expiry, and is inherited faster than it is verified |
+| **unallocated shared resources** | numbers, `ACTIVE.md`, rooms — collisions scale with parallelism |
+| **unobservable-here** | this repository's layout and environment cannot see the adopter's defect |
+
+### Why stronger, more autonomous agents make this worse
+
+1. **The bottleneck moves from generation to verification.** A weak agent makes
+   obvious errors that any check catches. A strong one makes plausible errors that
+   only a check with the right *population* catches. The value of knowing what was
+   actually verified rises faster than the quality of the work.
+
+2. **A strong agent saturates whatever surface is measured.** Not cunning —
+   optimisation. A phantom gate is passed without effort and without signal, so the
+   residual risk concentrates on exactly the surface nothing measures. Goodhart, with
+   the population rather than the metric as the mechanism.
+
+3. **Autonomy removes the person who used to notice.** Every finding in S6 was made
+   by someone looking at something else. BDL-UX #238 surfaced because an unrelated
+   change made a second file exist; #256 because an agent read its own import path.
+   The "somebody was around" channel scales down as autonomy scales up.
+
+4. **Rules held by attention fail exactly where throughput rises.** Measured on the
+   coordinator of this epic, in one session: five backtick-in-shell incidents, a
+   branch name with the suffix #230 is filed against, a `refs:` written mid-sentence
+   after filing #234 about that trap, and the Gate-versus-suite conflation twice —
+   by the entity that wrote all four rules down. A rule that must be recalled at the
+   moment of action competes with the task, and more autonomy means more such moments
+   per unit of supervision.
+
+5. **The log rots and nothing dates it.** Six premises drawn from this project's own
+   defect log were re-measured in S5; **three were false**, all filed against a
+   working external tool. #194 sat nine days at HIGH while three epics ran concurrent
+   waves on the primitive it declared broken. An autonomous agent inherits records
+   faster than it can verify them, and an unverified inheritance looks identical to a
+   verified one.
+
+6. **Two agents cannot coordinate through a channel neither can see.** #253 was
+   duplicated by two agents in one slice, hours apart. Grep cannot fix it: the
+   coordinator's own collision grep could not match a closed entry, and two concurrent
+   writers cannot grep each other. Every shared unallocated resource becomes a
+   collision in proportion to parallelism.
+
+### What already answers it, and should keep being built
+
+- **Derived populations, never authored ones** — `refs:`, the typed surface, the `bd`
+  call sites, role duties. An authored population rots; a derived one fails on the
+  site added later.
+- **Substitutable environments** — `PathFlavour`, `room_simulation`, the five-layout
+  matrix. They turn "unobservable here" into observable.
+- **Instruments that name their own unreachability** — `NOTHING TO CHECK`,
+  `not compared`, `not_covered`, `unresolved`, `not classified`, "0 of 21 rooms",
+  "0 of 862 instruction sites". Twelve of these shipped across S4–S6.
+- **Withholding review — and the report of what the withholding could not reach.**
+- **Recording the offer, not only the decision**, so a scope choice can be re-examined.
+
+### The three gaps that are still open, and are the ones capability sharpens most
+
+**Ranked here rather than in the P0 list because BDL-068 must finish first; these are
+what to weigh against everything else once it does.**
+
+1. **Making a rule impossible to break, rather than written down.** `graph_plan`
+   refusing a title that states a bead number is the only real instance this project
+   has. Everything else — the clean-room words, the room name, the landing-lock form,
+   the commit-message rule — is text an agent must read and recall. This is the
+   subclass with the highest measured failure rate and the least coverage.
+2. **An expiry on a recorded finding.** Nothing distinguishes an entry from 2026-08-22
+   from one written yesterday, and three of six checked were false. A finding needs to
+   carry what it was measured against and when, and a reader needs to be told when that
+   has moved. `bd 1.0.4` is already written into S5's assertions; nothing acts on it.
+3. **Allocation for shared resources that no scope owns.** `ACTIVE.md` is written by
+   every bead of every wave and belongs to no bead's code scope, so `beadloom waves`
+   cannot see it by construction (#257). UX numbers have no allocator at all (#66/#187).
+   Deriving document scope will not reach either, which is why the fix has two halves
+   and neither is sufficient.
+
+**The uncomfortable, and the reason not to read this as pessimism:** better agents
+found *more* of these, not fewer. Every S6 finding came from an agent doing its job
+well and noticing the frame — including four that corrected the bead they were given.
+Capability converts unnoticed defects into noticed ones, and the backlog grows because
+the eyes improved.
+
+---
+
 ## Vision and the rule that ranks this list
 
 Beadloom is an honest, effective tool. Market reach and outside adoption are not
