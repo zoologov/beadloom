@@ -70,6 +70,20 @@
     **And the cost is measured, so it is not the reason to decide either way.** On a warm `uv` cache, macOS/APFS: `uv venv` **0.04 s**, `uv pip install -e '.[all,dev]'` **3.6 s**, `.[dev]` alone **0.5 s**, for a room of **160 MB apparent** — APFS clones from the cache, so the marginal bytes are near zero here and are not on a filesystem without cloning. Against a 7-minute suite run and several rebuilds per bead, per-room environments are affordable. What is left to decide is which extras, and #236's answer gives that a derivation to start from: the extras this project's own legs declare, not a constant.
     **Expected:** `beadloom clean-room` owns the environment as well as the directory, since `beadloom-0mdo.37` has just made it the single place that answers this question. A room that resolves the code under test to somewhere else is not a room, and the verdict it returns cannot be told from a real one by reading it.
 
+
+    > **NARROWED 2026-09-08 by `beadloom-0mdo.38`, which measured it rather than inheriting it.**
+    > The import-path half is **already closed** by `beadloom-0mdo.37`'s invocation: `import beadloom`
+    > inside that bead's room printed a path **under the room**. So the severity above is overstated
+    > — a room built by `beadloom clean-room` does not resolve the package to the main tree, and the
+    > failure this entry describes belonged to a hand-built room using `uv run --project <main tree>`.
+    > **What survives is the environment half**, which `beadloom-0mdo.74` owns: the room needs its own
+    > venv, and the cost is now measured rather than feared — `uv venv` 0.04 s, `uv pip install -e
+    > '.[all,dev]'` 3.6 s warm, 160 MB apparent.
+    > **The coordinator filed this at HIGH from an agent's report without checking whether a fix
+    > landed hours earlier had already covered part of it.** That is the same shape as #194, #237 and
+    > #164 — an entry written from a failure's appearance and not re-derived — committed by the person
+    > who wrote those three withdrawals up. The entry is narrowed rather than withdrawn: the
+    > environment half is real.
 255. [2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly
 
     **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)
