@@ -167,6 +167,16 @@ jobs:
         # Single axis, so the check-run names are exactly
         # `tests-locale (C)` / `tests-locale (en_US.ISO-8859-1)` — the names
         # branch_protection.DEFAULT_STATUS_CHECK_CONTEXTS must match verbatim.
+        #
+        # REPRODUCING THIS LEG ON A DEVELOPER MACHINE: the second name is the one
+        # `localedef` builds on this image, and it is NOT a locale macOS has.
+        # Measured three times (BDL-UX #249): `LC_ALL=en_US.ISO-8859-1` on Darwin
+        # falls back to ASCII, so copying the name from here runs the `C` row a
+        # second time under the other row's name. The 8-bit room on that platform
+        # is `en_US.ISO8859-1`, without the hyphen. Do not "fix" the spelling
+        # here — it is correct for this image, and the difference belongs to the
+        # platform. `beadloom rooms` now refuses to report a locale that did not
+        # apply as a room the run entered, and names what it got instead.
         locale: ["C", "en_US.ISO-8859-1"]
       # The rows fail in different directions; cancelling the siblings on the
       # first red one would throw away the half of the signal we came for.

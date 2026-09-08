@@ -10,7 +10,13 @@
 
 ## Current Bead
 
-**Bead:** none claimed. S6 wave 5 is complete — `.46` landed alone and, as its own gate owner,
+**Bead:** `beadloom-0mdo.50` — BDL-UX #248 and #249, the locale dimension of a room. S6, alone,
+and its own gate owner. In progress: the census derives the locale, `beadloom rooms` refuses to
+report a locale that did not apply as a room the run entered, and the 11 failures
+`beadloom-0mdo.49` attributed to `tests/room_simulation.py` are re-measured as 13 under one
+malformed spelling of the room and 3 under a well-formed one.
+
+**Before it, S6 wave 5 completed** — `.46` landed alone and, as its own gate owner,
 reports the combined tree green: `beadloom ci` rc 0 taken in the foreground without a pipe, and
 the three the Gate names as not run separately — `ruff check src/ tests/` rc 0, `mypy src/` rc 0
 against all four declared target versions (3.10 to 3.13, varying the version the checker is
@@ -1019,6 +1025,50 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     the same one-header-per-heading shape, guarded today by vocabulary rather than by boundary,
     so the class is present and the instance is not. Outside this bead's axes; recorded on the
     bead.
+  - [x] `.50` — BDL-UX **#248** and **#249**, one instrument. S6, alone, and its own gate owner.
+    **The census carries a locale dimension, and it is the CODEC rather than the name.**
+    `current_room()` derives `codecs.lookup(locale.getpreferredencoding(False)).name` — the same
+    two calls `ci.yml`'s own anti-vacuity step makes — and a leg's declared name is resolved
+    through its codeset the way that step resolves it. Before this the two `tests-locale` legs
+    answered "this run cannot describe the dimension `locale`" while the process genuinely was
+    under an ASCII codec, so the sentence every verdict in two epics is qualified with — 0 of 21
+    declared rooms — was measured over a vocabulary narrower than the 21 it names.
+    **#249 is the same instrument read the other way.** Measured on this machine: the name
+    `ci.yml` publishes, `en_US.ISO-8859-1`, gives preferred encoding `ascii`, and
+    `en_US.ISO8859-1` — no hyphen — gives `iso8859-1`. macOS has no locale by the first
+    spelling, so a developer reproducing the 8-bit leg ran the `C` room a second time under the
+    other room's name. The room now carries `locale_asked` **only** when the locale asked for is
+    not the one in force, so its presence is the finding: the room line every verdict prints
+    reads `locale ascii (asked for en_US.ISO-8859-1, which did not apply here)`, and the leg's
+    own reason says the name did not apply rather than reading as a locale nobody set. Under the
+    spelling that DOES apply the leg's reason no longer mentions locale at all, which is the
+    reproduction three bites needed. `ci.yml`'s matrix is unchanged and now says why: the
+    hyphenated name is correct for the image `localedef` builds it on.
+    **The 11 manufactured failures were re-measured, and the attribution moved.** Same tree, same
+    command, one word different: `BEADLOOM_SIMULATED_ROOM=ubuntu-latest/3.13` gives 13 failures
+    and `Linux/3.13` gives 3. The plugin's grammar takes what `platform.system()` RETURNS and
+    `beadloom-0mdo.49` gave it a runner LABEL, which matches no leg at all and reddens every room
+    assertion in the suite as an artefact of the invocation. Ten of the thirteen are that; one is
+    #258's known clean-room red; the remaining three are one cause — `python_full` fabricated as
+    `3.13.0` against `platform.python_version()` still answering the real build. Both fixed in
+    `tests/room_simulation.py` and both verified red first by stashing it: a runner label is
+    translated through `rooms.RUNNER_PLATFORMS` and a spelling in neither vocabulary raises
+    `pytest.UsageError` instead of standing the run in a room that cannot exist. Suite-wide under
+    a well-formed room the suite is now green, so the instrument is fit for the whole suite and
+    was unfit for one spelling nothing rejected.
+    **Not built, with the measurement that decided it:** a remedy naming the spelling that works
+    here would have to read `locale -a`, which on glibc spells the codeset `en_US.iso88591` —
+    `codecs.lookup` refuses it, so matching needs a normalisation this module would own, and a
+    spelling is what it exists to stop comparing.
+    41 tests (6 scenarios, 33 unit, 2 on the plugin's own vocabulary). Green in a clean room over
+    8 carried files: 9 317 passed, 59 skipped, the 1 failure BDL-UX #258's known red — a second
+    failure would have been the signal. **As its own gate owner, separately:** the combined tree
+    is green — `beadloom ci` rc 0 taken in the foreground without a pipe, `ruff check src/ tests/`
+    rc 0, `mypy src/` rc 0 against all four declared target versions, and the full suite green.
+    Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms entered. Three stale doc pairs left
+    by `.68` and `.73` were repaired rather than re-baselined unread: `docs/domains/application/
+    README.md` said `impact` reports "ten named kinds" where the code has eleven, and did not
+    name `shipped_decision_sections`.
 
 ## What is in `main` now
 

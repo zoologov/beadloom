@@ -236,6 +236,105 @@ class TestTheRoomSuiteIsJudgedInEveryRoomTheLegsDescribe:
         assert [outcome for _, outcome in inside] == ["failed"]
 
 
+class TestTheRoomTheCallerNames:
+    """The spelling of the room, which was a trap until BDL-068 S6.
+
+    MEASURED, and this class exists because of it. A suite-wide run spelled
+    `ubuntu-latest/3.13` reported 13 failures in a clean room at `38cc22f`,
+    against 3 for `Linux/3.13` over the same tree, and `beadloom-0mdo.49`
+    attributed them to the plugin. They were the invocation's: the census
+    compares a leg's runner LABEL against what `platform.system()` returns, so a
+    label standing in the current room's `os` matches no leg at all, and every
+    room assertion in the suite fails as an artefact.
+    """
+
+    def test_a_runner_label_and_its_platform_are_the_same_room(
+        self, tmp_path: Path
+    ) -> None:
+        """The two spellings a caller can arrive with, answered identically.
+
+        The module asserts a leg IS entered, which is the direction the spelling
+        decides: a room whose `os` is a runner label matches no leg, so this is
+        red under `ubuntu-latest/3.13` until the label is translated. A module
+        counting the legs it is OUTSIDE passes under both spellings and would
+        make this row vacuous.
+        """
+        module = _a_module_that_enters_a_declared_leg(tmp_path)
+
+        by_label = _run_in_a_room([module], "ubuntu-latest/3.13", tmp_path / "label.xml")
+        by_platform = _run_in_a_room([module], "Linux/3.13", tmp_path / "platform.xml")
+
+        assert [outcome for _, outcome in by_platform] == ["passed"]
+        assert by_label == by_platform
+
+    def test_a_spelling_in_neither_vocabulary_stops_the_session(
+        self, tmp_path: Path
+    ) -> None:
+        """The refusal, on the arm that used to produce silent artefacts."""
+        module = _a_room_dependent_module(tmp_path)
+
+        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-p",
+                "tests.room_simulation",
+                str(module),
+                "-p",
+                "no:cacheprovider",
+                "-q",
+            ],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "BEADLOOM_SIMULATED_ROOM": "not-a-platform/3.13",
+            },
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+
+        assert completed.returncode != 0
+        assert "not-a-platform" in completed.stdout + completed.stderr
+
+
+def _a_module_that_enters_a_declared_leg(directory: Path) -> Path:
+    """A module asserting the run is inside the one leg its fixture declares.
+
+    The other direction from `_a_room_dependent_module`: this one is red unless
+    the fabricated room really is comparable with a leg, which is what the
+    spelling of `BEADLOOM_SIMULATED_ROOM` decides.
+    """
+    module = directory / "test_enters_a_declared_leg.py"
+    module.write_text(_A_MODULE_THAT_ENTERS_A_LEG, encoding="utf-8")
+    return module
+
+
+#: See `_a_module_that_enters_a_declared_leg`.
+_A_MODULE_THAT_ENTERS_A_LEG = '''
+import json
+
+from click.testing import CliRunner
+
+from beadloom.services.cli import main
+
+
+def test_the_leg_is_entered(tmp_path):
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text(
+        "jobs:\\n  tests:\\n    runs-on: ubuntu-latest\\n",
+        encoding="utf-8",
+    )
+    outcome = CliRunner().invoke(main, ["rooms", "--project", str(tmp_path), "--json"])
+    payload = json.loads(outcome.stdout)
+    assert [r for r in payload["declared"] if r["entered"]] == payload["declared"]
+'''
+
+
 def _a_room_dependent_module(directory: Path) -> Path:
     """The defect, written out as a module the instrument can be pointed at.
 

@@ -746,3 +746,4 @@
 {"id":"int-3a87ae58","kind":"field_change","created_at":"2026-09-08T17:17:39.762064Z","actor":"v.zoologov","issue_id":"beadloom-0mdo.73","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-f5c26f2e","kind":"field_change","created_at":"2026-09-08T17:19:20.725922Z","actor":"v.zoologov","issue_id":"beadloom-0mdo.46","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-a0ddf51b","kind":"field_change","created_at":"2026-09-08T18:25:26.814315Z","actor":"v.zoologov","issue_id":"beadloom-0mdo.46","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-934461fc","kind":"field_change","created_at":"2026-09-08T18:28:21.890675Z","actor":"v.zoologov","issue_id":"beadloom-0mdo.50","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}

@@ -55,7 +55,8 @@ Every other outcome is *not entered*, with the dimension that decided it named:
 
 - the runner label names another platform — `ubuntu-latest` is Linux and this run is Darwin;
 - the leg names another interpreter;
-- the leg carries a dimension this run cannot describe, such as the `locale` legs;
+- the leg's locale names another character encoding, or names one that did not apply here;
+- the leg carries a dimension this run cannot describe at all;
 - the leg installs optional extras this run has not, or this run has extras the leg does not;
 - the runner label names no platform at all, such as a self-hosted job's label list.
 
@@ -96,6 +97,57 @@ difference in the environment, when what happened is that nothing looked.
 The current room's extras are computed from the project the census is taken over, so a bare
 `current_room()` — the mutation score's room line, for one — carries no extras dimension.
 
+## The locale dimension
+
+BDL-UX #248 and #249. This project has been bitten by its `tests-locale` leg three times —
+BDL-061 S2, PR #61 and PR #62 — and each time the reproduction was possible on a developer
+machine and was not made, or was made in the wrong room. Until this dimension existed the census
+could not help: it derived the platform and the interpreter and no locale, so `beadloom rooms`
+answered "this run cannot describe the dimension `locale`" while the process genuinely was
+running under an ASCII codec.
+
+**The dimension is the codec, never the name.** `current_room()` derives
+`codecs.lookup(locale.getpreferredencoding(False)).name` — the same two calls `ci.yml`'s own
+anti-vacuity step makes, so the product and the pipeline answer one question the same way. A
+leg's declared name is resolved the same way `ci.yml` resolves it: the codeset after the first
+dot, with `C` and `POSIX` defined by POSIX over the portable character set and therefore ASCII.
+
+**A room that silently becomes a different room is a phantom room.** Measured on macOS, Apple
+silicon, under the interpreter this project is developed on, with `PYTHONUTF8=0` and
+`PYTHONCOERCECLOCALE=0` — the two knobs the leg itself sets. The build numbers are deliberately
+not quoted, for the reason the last section of this document states about `docs audit`:
+
+| `LC_ALL` | preferred encoding | what it is |
+|----------|--------------------|------------|
+| `en_US.ISO-8859-1` | `ascii` | the name `ci.yml` publishes; macOS has no locale by it |
+| `en_US.ISO8859-1` | `iso8859-1` | the same room, under the spelling that platform has |
+| `C` | `ascii` | the other declared leg |
+
+So a developer reproducing the 8-bit leg with the name CI publishes runs the `C` room a second
+time and reports it as the other one. `ci.yml` already guards its own legs against this with an
+anti-vacuity step; nothing guarded the reproduction, and reproduction is where this census claims
+its value. The room now carries a second dimension, `locale_asked`, **only** when the locale the
+environment asked for is not the one in force — its presence is itself the finding — and the room
+line every verdict prints reads
+`locale ascii (asked for en_US.ISO-8859-1, which did not apply here)`.
+
+**A leg whose locale names no character encoding is unresolved rather than compared.**
+`locale: [en_US]` declares a language and a territory and nothing about encoding, so the codec its
+runs are taken under is declared nowhere this report can read.
+
+**Nothing is normalised beyond what `codecs` itself does.** `locale -a` on glibc spells the same
+codeset `en_US.iso88591`, which `codecs.lookup` refuses; guessing a normalisation would make this
+component the owner of a spelling rule, and a spelling is what it is here to stop comparing. So
+the report states what the name resolved to and does not offer a candidate name.
+
+**The one CI dimension a developer machine can genuinely enter.** `tests/room_simulation.py`
+fabricates the platform and the interpreter and carries the locale through unchanged, because a
+laptop cannot be Ubuntu and can be under the leg's locale. `LC_ALL=C PYTHONUTF8=0
+PYTHONCOERCECLOCALE=0` plus the simulation enters `tests-locale (C)` for real, and
+`tests/test_room_locale.py::TestTheLegIsEnterableFromADeveloperMachine` asserts both arms of it.
+The filesystem half of the dimension stays CI-only: CPython forces a UTF-8 filesystem encoding on
+macOS, so a defect in filename decoding is still invisible there.
+
 ## The unresolved population is part of the answer
 
 A derivation that omits what it could not parse hands back a clean list, and a clean list is
@@ -118,6 +170,7 @@ beadloom rooms                            # the census, in full
 beadloom rooms --json                     # the same facts for a monitor
 beadloom rooms --dimension python         # one axis, one value per line
 beadloom rooms --dimension extras         # the environments this project's legs declare
+beadloom rooms --dimension locale         # the locales this project's legs declare
 beadloom ci                               # the verdict, with the room beside it
 ```
 

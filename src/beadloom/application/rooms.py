@@ -36,9 +36,11 @@ rooms. Two scalars out of one known file do not need one; the same reasoning
 
 from __future__ import annotations
 
+import codecs
 import functools
 import importlib.metadata as metadata
 import itertools
+import locale
 import os
 import platform
 import re
@@ -92,6 +94,23 @@ WORKFLOW_DIR = Path(".github") / "workflows"
 
 #: The dimension this module gives the optional extras an environment installed.
 EXTRAS_DIMENSION = "extras"
+
+#: The dimension this module gives the character encoding a run's locale chose.
+#: The CODEC and never the name: `en_US.ISO-8859-1` and `en_US.ISO8859-1` name
+#: one room, and only the second is a locale macOS has (BDL-UX #249).
+LOCALE_DIMENSION = "locale"
+
+#: The dimension a room carries when the locale it ASKED for is not the one it
+#: got. Present only then, so its presence is itself the finding.
+LOCALE_ASKED_DIMENSION = "locale_asked"
+
+#: The variables a locale can be named in, most specific first (POSIX 8.2).
+_LOCALE_ENV_VARS = ("LC_ALL", "LC_CTYPE", "LANG")
+
+#: `C` and `POSIX` carry no codeset and are defined over the portable character
+#: set, so the encoding they declare is ASCII.
+_C_LOCALE_NAMES = frozenset({"C", "POSIX"})
+_C_LOCALE_CODEC = "ascii"
 
 #: ``name = "beadloom"`` in the packaging metadata. Read with a regular
 #: expression for the reason the module docstring states about ``tomllib``.
@@ -238,6 +257,82 @@ class RoomCensus:
 
 
 # ---------------------------------------------------------------------------
+# The locale a run is under
+# ---------------------------------------------------------------------------
+
+
+def codec_in_force() -> str | None:
+    """The character encoding this process's locale chose, or ``None``.
+
+    The same two calls ``ci.yml``'s anti-vacuity step makes, so the product and
+    the pipeline answer the question the same way. ``None`` when the name the C
+    library reports is not a codec this interpreter carries: an inability is not
+    an answer, and a room that cannot describe a dimension must not compare
+    equal along it.
+    """
+    try:
+        return codecs.lookup(locale.getpreferredencoding(False)).name
+    except LookupError:
+        return None
+
+
+def requested_locale_name() -> str | None:
+    """The locale this environment ASKED for, in POSIX's own precedence.
+
+    Read from the environment rather than from ``locale.getlocale``, because the
+    question is what somebody spelled — the answer to what they got is
+    :func:`codec_in_force`, and the whole of BDL-UX #249 is that the two can
+    differ without anything saying so.
+    """
+    for variable in _LOCALE_ENV_VARS:
+        value = os.environ.get(variable, "").strip()
+        if value:
+            return value
+    return None
+
+
+def codec_of_locale_name(name: str) -> str | None:
+    """The character encoding a locale name declares, or ``None`` when it declares none.
+
+    A locale name is ``language[_territory][.codeset][@modifier]``, so the
+    codeset is what a name says about encoding and the rest is not. ``C`` and
+    ``POSIX`` carry no codeset and are defined by POSIX over the portable
+    character set, which is ASCII.
+
+    Nothing is normalised beyond what :mod:`codecs` itself does. ``locale -a``
+    on glibc spells the same codeset ``iso88591``, which ``codecs.lookup``
+    refuses; guessing a normalisation would make this module the owner of a
+    spelling rule, and a spelling is what it is here to stop comparing.
+    """
+    spelled = name.strip().split("@", 1)[0]
+    if spelled in _C_LOCALE_NAMES:
+        return _C_LOCALE_CODEC
+    _, dot, codeset = spelled.partition(".")
+    if not dot:
+        return None
+    try:
+        return codecs.lookup(codeset).name
+    except LookupError:
+        return None
+
+
+def locale_dimensions(codec: str | None, asked: str | None) -> dict[str, str]:
+    """The locale dimensions a room carries: the codec, and any name that missed.
+
+    ``LOCALE_ASKED_DIMENSION`` appears only when the environment named a locale
+    whose codec is not the one in force, so its presence IS the finding rather
+    than something a reader has to compare two values to notice. A name that
+    declares no codeset promised nothing and so cannot have failed to keep it.
+    """
+    if codec is None:
+        return {}
+    dimensions = {LOCALE_DIMENSION: codec}
+    if asked is not None and codec_of_locale_name(asked) not in (None, codec):
+        dimensions[LOCALE_ASKED_DIMENSION] = asked
+    return dimensions
+
+
+# ---------------------------------------------------------------------------
 # The room this process is in
 # ---------------------------------------------------------------------------
 
@@ -256,6 +351,7 @@ def current_room() -> Room:
             "python_full": platform.python_version(),
             "implementation": platform.python_implementation(),
             "cores": str(os.cpu_count() or 1),
+            **locale_dimensions(codec_in_force(), requested_locale_name()),
         },
         source="this process",
     )
@@ -271,7 +367,21 @@ def room_line(room: Room) -> str:
         parts.append(f"{d['cores']} cores")
     if EXTRAS_DIMENSION in d:
         parts.append(f"extras {d[EXTRAS_DIMENSION]}")
+    if LOCALE_DIMENSION in d:
+        parts.append(_locale_clause(d[LOCALE_DIMENSION], d.get(LOCALE_ASKED_DIMENSION)))
     return " · ".join(p for p in parts if p)
+
+
+def _locale_clause(codec: str, asked: str | None) -> str:
+    """``locale ascii``, and what was asked for when that is not what happened.
+
+    On every verdict this project prints, because reproduction is where the
+    census claims its value and a developer reproducing a locale leg with the
+    name CI publishes gets a different room on macOS without being told.
+    """
+    if asked is None:
+        return f"locale {codec}"
+    return f"locale {codec} (asked for {asked}, which did not apply here)"
 
 
 # ---------------------------------------------------------------------------
@@ -950,10 +1060,9 @@ def take_census(
             unresolved.extend(extras.unresolved)
     comparisons: list[RoomComparison] = []
     for room in rooms:
-        entered, why, label_unknown = _compare(current, room)
+        entered, why, undeclared = _compare(current, room)
         comparisons.append(RoomComparison(room=room, entered=entered, why=why))
-        if label_unknown is not None:
-            unresolved.append(UnresolvedRoom(source=room.source, why=label_unknown))
+        unresolved.extend(UnresolvedRoom(source=room.source, why=note) for note in undeclared)
     legs = {r.dimensions.get("python") for r in rooms}
     return RoomCensus(
         current=current,
@@ -981,16 +1090,18 @@ def _room_with_extras(room: Room, extras: ExtraSet) -> Room:
     )
 
 
-def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
-    """Whether this run is in ``room``, why not, and any label it could not read.
+def _compare(current: Room, room: Room) -> tuple[bool, str, list[str]]:
+    """Whether this run is in ``room``, why not, and what it could not read.
 
-    Every dimension must be comparable AND equal. The two other outcomes — a
-    dimension this run cannot describe, and a runner label naming no platform —
-    both resolve to "not entered", because the alternative is a report that
-    claims coverage from an inability to check.
+    Every dimension must be comparable AND equal. The three other outcomes — a
+    dimension this run cannot describe, a runner label naming no platform, and a
+    locale name declaring no encoding — all resolve to "not entered", because
+    the alternative is a report that claims coverage from an inability to check.
+    The last two are ALSO returned as unresolved notes: they are things the
+    DECLARATION does not say, so a reader has a file to go and change.
     """
     reasons: list[str] = []
-    label_unknown: str | None = None
+    undeclared: list[str] = []
     for key in sorted(room.dimensions):
         want = room.dimensions[key]
         if key == "os":
@@ -1000,6 +1111,7 @@ def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
                     f"the runner label `{want}` names no platform this report "
                     "knows, so no run can be said to have entered it"
                 )
+                undeclared.append(label_unknown)
                 reasons.append(f"os: {label_unknown}")
                 continue
             have = current.dimensions.get("os", "")
@@ -1016,11 +1128,62 @@ def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
             if difference is not None:
                 reasons.append(f"{EXTRAS_DIMENSION}: {difference}")
             continue
+        if key == LOCALE_DIMENSION:
+            difference = _locale_difference(current.dimensions.get(key), want)
+            if difference is not None:
+                reasons.append(f"{LOCALE_DIMENSION}: {difference}")
+            if codec_of_locale_name(want) is None:
+                undeclared.append(_no_codec_note(want))
+            continue
         reasons.append(
             f"{key}: this run cannot describe the dimension `{key}`, which the "
             f"leg declares as {want}"
         )
-    return not reasons, "; ".join(reasons), label_unknown
+    return not reasons, "; ".join(reasons), undeclared
+
+
+def _no_codec_note(want: str) -> str:
+    """What a leg declaring a locale with no codeset leaves undeclared."""
+    return (
+        f"the leg declares the locale `{want}`, which names no character "
+        "encoding, so the codec its runs are taken under is declared nowhere "
+        "this report can read"
+    )
+
+
+def _locale_difference(have: str | None, want: str) -> str | None:
+    """Why this run's locale is not the leg's, or ``None`` when it is.
+
+    Both sides resolve to a CODEC, because a locale name is a spelling the
+    platform owns: `en_US.ISO-8859-1` is the name this project's own `ci.yml`
+    publishes and macOS has no locale by it, while `en_US.ISO8859-1` is the same
+    room and does exist there (measured on Darwin 25.6.0, CPython 3.13.7).
+
+    The third clause is BDL-UX #249. When the environment asked for this leg's
+    own name and the process is in another room, the run is not "outside the
+    leg" the way a Darwin run is outside an Ubuntu one — it was pointed at the
+    leg and silently landed elsewhere, and a reason that did not say so would
+    read as a locale nobody set.
+    """
+    if have is None:
+        return (
+            "this run cannot describe the locale it is running under, which the "
+            f"leg declares as {want}"
+        )
+    wanted = codec_of_locale_name(want)
+    if wanted is None:
+        return _no_codec_note(want)
+    if wanted == have:
+        return None
+    asked = requested_locale_name()
+    if asked is not None and asked.strip() == want.strip():
+        return (
+            f"this environment asks for `{want}` and the process is in the "
+            f"{have} room, so the name did not apply here — the leg's room is "
+            f"{wanted}, and a verdict taken like this is the {have} room under "
+            "the other room's name"
+        )
+    return f"the leg is {want} ({wanted}) and this run is {have}"
 
 
 def _extras_difference(have: str | None, want: str) -> str | None:
