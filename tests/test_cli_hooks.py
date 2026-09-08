@@ -131,7 +131,8 @@ def _run_hook(hook_path: Path, cwd: Path, path_env: str) -> int:
         cwd=cwd,
         env={"PATH": path_env},
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     return proc.returncode
@@ -152,7 +153,7 @@ class TestInstallHooksPrePush:
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--project", str(project)])
-        content = (project / ".git" / "hooks" / "pre-push").read_text()
+        content = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         assert "beadloom ci" in content
         # POSIX sh + guard.
         assert content.startswith("#!/bin/sh")
@@ -250,16 +251,16 @@ class TestInstallHooksPrePush:
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(project)])
-        first = (project / ".git" / "hooks" / "pre-push").read_text()
+        first = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(project)])
-        second = (project / ".git" / "hooks" / "pre-push").read_text()
+        second = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         assert first == second
 
     def test_pre_push_actionable_message(self, tmp_path: Path) -> None:
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--project", str(project)])
-        content = (project / ".git" / "hooks" / "pre-push").read_text()
+        content = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         assert "tech-writer" in content or "coordinator" in content
         assert "--no-verify" in content
 
@@ -276,14 +277,16 @@ def _init_real_git_repo(tmp_path: Path, name: str) -> Path:
             cwd=cwd,
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
     subprocess.run(  # noqa: S603
         ["git", "init", "--quiet", "--bare", str(bare)],  # noqa: S607
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     _git(repo, "init", "--quiet")
     _git(repo, "config", "user.email", "test@example.com")
@@ -302,7 +305,8 @@ def _push(repo: Path, path_env: str) -> int:
         cwd=repo,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     return proc.returncode
@@ -354,7 +358,7 @@ class TestPrePushHookFailSafe:
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(project)])
-        return (project / ".git" / "hooks" / "pre-push").read_text()
+        return (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
 
     def test_guard_precedes_gate(self, tmp_path: Path) -> None:
         content = self._pre_push(tmp_path)
@@ -465,9 +469,9 @@ class TestIdempotentNoDuplication:
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(project)])
-        first = (project / ".git" / "hooks" / "pre-push").read_text()
+        first = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(project)])
-        second = (project / ".git" / "hooks" / "pre-push").read_text()
+        second = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         # Clean overwrite, not append: re-install leaves identical content with no
         # extra Gate invocation lines.
         assert first == second
@@ -483,4 +487,5 @@ class TestIdempotentNoDuplication:
         # block pre-commit + the (always-blocking) pre-push Gate coexist.
         pre_commit = (project / ".git" / "hooks" / "pre-commit").read_text(encoding="utf-8")
         assert "Error: ruff" in pre_commit
-        assert "beadloom ci" in (project / ".git" / "hooks" / "pre-push").read_text()
+        pre_push = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
+        assert "beadloom ci" in pre_push

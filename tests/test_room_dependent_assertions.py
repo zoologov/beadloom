@@ -123,7 +123,8 @@ def _run_in_a_room(modules: list[Path], room: str | None, report: Path) -> list[
         cwd=REPO_ROOT,
         env={**os.environ, **environment},
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if not report.exists():  # pragma: no cover - only on a collection crash

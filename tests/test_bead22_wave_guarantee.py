@@ -825,7 +825,8 @@ def _run_scope_block(project: Path) -> dict[str, str]:
         ["sh", "-c", script],  # noqa: S607
         cwd=project,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     lines = result.stdout.splitlines()

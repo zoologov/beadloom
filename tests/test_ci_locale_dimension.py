@@ -278,7 +278,8 @@ def _probe(locale_value: str) -> tuple[str, str, int]:
         [sys.executable, "-c", _PROBE],
         env=_shipped_env(locale_value),
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     ).stdout.split()
     return out[0], out[1], int(out[2])

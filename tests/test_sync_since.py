@@ -28,7 +28,8 @@ def _git(project: Path, *args: str) -> None:
         cwd=project,
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 

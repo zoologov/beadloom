@@ -46,6 +46,17 @@ The five joins, with the question each answers.
 * **Does an assumption with no site enforce anything?** ``.53`` shipped ``echoed-titles``
   with zero sites, declared as reddening the day one appears. Both halves of that claim
   are measured here, and one of them is qualified.
+
+**Every reader below decodes bd with the product's own rule, imported rather than spelled.**
+``text=True`` decodes with ``locale.getpreferredencoding(False)``, so under the ``C`` leg
+these five subprocesses read bd's help and JSON as ASCII and seven of them raised
+``UnicodeDecodeError`` inside ``subprocess.py`` (``beadloom-0mdo.64``; bd 1.0.4's ``list
+--help`` carries an em dash at byte 4930). ``_BD_ENCODING`` and ``_BD_DECODE_ERRORS`` come
+from :mod:`~beadloom.services.bd_seam.client` for the same reason ``.49`` imported the hook
+writer's constant: this file asks whether the tool still says what the table says, and a
+reader that decoded bd differently from the seam every production caller uses would be
+asking about a different answer. ``surrogateescape`` is injective, so the ASCII tokens
+these assertions search for survive any byte bd emits.
 """
 
 from __future__ import annotations
@@ -74,6 +85,7 @@ from beadloom.services.bd_seam.assumptions import (
     call_sites,
     population_flags,
 )
+from beadloom.services.bd_seam.client import _BD_DECODE_ERRORS, _BD_ENCODING
 from beadloom.services.bd_seam.invocations import (
     CHANNEL_PYTHON,
     SEAM_FUNCTION,
@@ -97,7 +109,8 @@ def _bd_help(*words: str) -> str:
     done = subprocess.run(  # noqa: S603
         [binary, *words, "--help"],
         capture_output=True,
-        text=True,
+        encoding=_BD_ENCODING,
+        errors=_BD_DECODE_ERRORS,
         check=False,
         timeout=30,
     )
@@ -110,7 +123,12 @@ def _installed_bd_version() -> str | None:
     if binary is None:  # pragma: no cover - exercised only on a machine without bd
         return None
     done = subprocess.run(  # noqa: S603
-        [binary, "version"], capture_output=True, text=True, check=False, timeout=30
+        [binary, "version"],
+        capture_output=True,
+        encoding=_BD_ENCODING,
+        errors=_BD_DECODE_ERRORS,
+        check=False,
+        timeout=30,
     )
     found = re.search(r"(\d+\.\d+\.\d+)", done.stdout + done.stderr)
     return found.group(1) if found else None
@@ -296,7 +314,13 @@ def test_both_answers_this_flow_relies_on_are_still_narrower_than_the_question(
 
     def run(*words: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
-            [binary, *words], cwd=tmp_path, capture_output=True, text=True, check=False, timeout=60
+            [binary, *words],
+            cwd=tmp_path,
+            capture_output=True,
+            encoding=_BD_ENCODING,
+            errors=_BD_DECODE_ERRORS,
+            check=False,
+            timeout=60,
         )
 
     def rows(*words: str) -> tuple[int, str]:
@@ -420,7 +444,8 @@ def test_the_slot_still_grants_what_the_shipped_instruction_says_it_grants(
             [binary, *words],
             cwd=tmp_path,
             capture_output=True,
-            text=True,
+            encoding=_BD_ENCODING,
+            errors=_BD_DECODE_ERRORS,
             check=False,
             timeout=60,
         )

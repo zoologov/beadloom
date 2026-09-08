@@ -184,7 +184,7 @@ class TestRefreshClaudeMd:
         changed = refresh_claude_md(tmp_path)
 
         assert "project-info" in changed
-        updated = claude_md.read_text()
+        updated = claude_md.read_text(encoding="utf-8")
         # The rendered section carries the version THIS project declares.
         assert "- **Current version:** 2.0.0" in updated
         assert get_actual_version() not in updated
@@ -200,7 +200,7 @@ class TestRefreshClaudeMd:
         claude_dir.mkdir()
         claude_md = claude_dir / "CLAUDE.md"
         claude_md.write_text(_SAMPLE_WITH_MARKERS)
-        original = claude_md.read_text()
+        original = claude_md.read_text(encoding="utf-8")
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "9.9.9"\n')
 
@@ -208,7 +208,7 @@ class TestRefreshClaudeMd:
 
         assert "project-info" in changed
         # File should be unchanged
-        assert claude_md.read_text() == original
+        assert claude_md.read_text(encoding="utf-8") == original
 
     def test_auto_inserts_markers_on_first_run(self, tmp_path: Path) -> None:
         """When no markers but section 0.1 exists, markers are auto-inserted."""
@@ -221,7 +221,7 @@ class TestRefreshClaudeMd:
 
         changed = refresh_claude_md(tmp_path)
 
-        updated = claude_md.read_text()
+        updated = claude_md.read_text(encoding="utf-8")
         assert "<!-- beadloom:auto-start project-info -->" in updated
         assert "<!-- beadloom:auto-end -->" in updated
         assert "project-info" in changed
@@ -274,7 +274,7 @@ class TestRefreshClaudeMd:
 
         refresh_claude_md(tmp_path)
 
-        updated = claude_md.read_text()
+        updated = claude_md.read_text(encoding="utf-8")
         assert "# Title" in updated
         assert "Paragraph before." in updated
         assert "## 2. Important Section" in updated

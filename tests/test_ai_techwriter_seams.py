@@ -33,7 +33,8 @@ def _git_out(cwd: Path, *args: str) -> str:
         cwd=str(cwd),
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     ).stdout
 
 

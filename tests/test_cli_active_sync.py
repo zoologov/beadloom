@@ -333,7 +333,12 @@ def _git_out(cwd: Path, *args: str) -> str:
     import subprocess
 
     out = subprocess.run(  # noqa: S603
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True  # noqa: S607
+        ["git", *args],  # noqa: S607
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return out.stdout
 

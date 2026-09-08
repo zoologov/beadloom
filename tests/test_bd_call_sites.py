@@ -47,6 +47,7 @@ from beadloom.services.bd_seam.assumptions import (
     report_of,
     subcommand_of,
 )
+from beadloom.services.bd_seam.client import _BD_DECODE_ERRORS, _BD_ENCODING
 from beadloom.services.bd_seam.invocations import (
     CHANNEL_HOOK,
     CHANNEL_PYTHON,
@@ -84,7 +85,8 @@ def test_the_recorded_release_is_the_one_installed() -> None:
     printed = subprocess.run(
         ["bd", "version"],  # noqa: S607
         capture_output=True,
-        text=True,
+        encoding=_BD_ENCODING,
+        errors=_BD_DECODE_ERRORS,
         check=False,
         timeout=30,
     ).stdout
@@ -330,7 +332,9 @@ def test_the_landing_lock_is_judged_once_and_not_twice(tmp_path: Path) -> None:
     application layer imports no ``re`` at all and receives parsed invocations.
     Two derivations of one kind is the defect the epic is removing.
     """
-    landing = (_PROJECT_ROOT / "src/beadloom/application/waves/landing.py").read_text()
+    landing = (_PROJECT_ROOT / "src/beadloom/application/waves/landing.py").read_text(
+        encoding="utf-8"
+    )
     assert "import re" not in landing
     assert "re.compile" not in landing
     invocations = text_invocations([("a.md", "bd merge-slot acquire --holder x")])

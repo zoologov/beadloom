@@ -367,7 +367,7 @@ class TestCacheIntegration:
         # Touch graph file
         time.sleep(0.05)
         graph_file = project / ".beadloom" / "_graph" / "graph.yml"
-        graph_file.write_text(graph_file.read_text())
+        graph_file.write_text(graph_file.read_text(encoding="utf-8"))
 
         # Should get full response (cache invalidated by mtime)
         r = _dispatch_tool(
@@ -582,7 +582,7 @@ class TestWriteTools:
         import yaml
 
         graph_file = project / ".beadloom" / "_graph" / "graph.yml"
-        data = yaml.safe_load(graph_file.read_text())
+        data = yaml.safe_load(graph_file.read_text(encoding="utf-8"))
         node = next(n for n in data["nodes"] if n["ref_id"] == "FEAT-1")
         assert node["summary"] == "Updated summary"
 
@@ -701,7 +701,7 @@ class TestAutoReindex:
         # Touch a graph file.
         time.sleep(0.05)
         graph_file = project / ".beadloom" / "_graph" / "graph.yml"
-        graph_file.write_text(graph_file.read_text())
+        graph_file.write_text(graph_file.read_text(encoding="utf-8"))
 
         assert _is_index_stale(project, db_conn) is True
 

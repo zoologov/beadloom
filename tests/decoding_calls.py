@@ -33,6 +33,22 @@ TEXT_READWRITE = frozenset({"read_text", "write_text"})
 #: needs that inference.
 SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_output", "check_call", "call"})
 
+#: Modules whose ``open()`` is a *container* rather than text I/O. Keying on the
+#: attribute name alone reads ``tarfile.open(fileobj=...)`` as an unstated text
+#: read, which it is not — it has no codec to state. Found by rooting the sweep
+#: at ``tests/`` (``beadloom-0mdo.64``): ``src/beadloom`` happens to contain no
+#: such call, so the blind spot was invisible while the only root was the
+#: package. Receivers are matched by module NAME, so an aliased import reads as
+#: unknown and stays in the population — the safe direction.
+CONTAINER_OPENERS = frozenset({"tarfile", "zipfile", "gzip", "bz2", "lzma", "shelve", "dbm"})
+
+#: Where ``encoding`` sits when it is passed positionally. Nobody has to pass it
+#: that way and five sites in this suite do (``read_text("utf-8")``), so a sweep
+#: that reads keywords only reports call sites that already state their codec.
+#: Index is into ``call.args`` and differs by receiver, hence two tables.
+_ENCODING_ARG_INDEX_METHOD = {"read_text": 0, "write_text": 1, "open": 2}
+_ENCODING_ARG_INDEX_FUNCTION = {"open": 3}
+
 
 def called_name(call: ast.Call) -> str | None:
     """``p.read_text()`` -> ``"read_text"``; ``open(p)`` -> ``"open"``."""
@@ -49,6 +65,37 @@ def keyword(call: ast.Call, name: str) -> ast.expr | None:
         if kw.arg == name:
             return kw.value
     return None
+
+
+def states_encoding(call: ast.Call) -> bool:
+    """Whether *call* names its codec — by keyword OR positionally.
+
+    ``Path.read_text("utf-8")`` states its codec exactly as firmly as
+    ``read_text(encoding="utf-8")`` does, and a guard that cannot see the
+    positional form asks five correct sites in this suite to be edited.
+    """
+    if keyword(call, "encoding") is not None:
+        return True
+    name = called_name(call)
+    if name is None:
+        return False
+    table = (
+        _ENCODING_ARG_INDEX_METHOD
+        if isinstance(call.func, ast.Attribute)
+        else _ENCODING_ARG_INDEX_FUNCTION
+    )
+    index = table.get(name)
+    return index is not None and len(call.args) > index
+
+
+def is_container_open(call: ast.Call) -> bool:
+    """``tarfile.open(...)`` and friends — an ``open`` with no codec to state."""
+    return (
+        called_name(call) == "open"
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id in CONTAINER_OPENERS
+    )
 
 
 def is_true(node: ast.expr | None) -> bool:

@@ -65,7 +65,7 @@ class TestLinkCommand:
 
         # Verify YAML was updated.
         graph_file = project / ".beadloom" / "_graph" / "graph.yml"
-        data = yaml.safe_load(graph_file.read_text())
+        data = yaml.safe_load(graph_file.read_text(encoding="utf-8"))
         node = data["nodes"][0]
         assert "links" in node
         assert node["links"][0]["url"] == "https://github.com/org/repo/issues/42"
@@ -122,7 +122,7 @@ class TestLinkCommand:
 
         # Verify YAML was updated.
         graph_file = project / ".beadloom" / "_graph" / "graph.yml"
-        data = yaml.safe_load(graph_file.read_text())
+        data = yaml.safe_load(graph_file.read_text(encoding="utf-8"))
         node = data["nodes"][0]
         assert "links" not in node
 
