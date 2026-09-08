@@ -10,11 +10,16 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.73`, BDL-UX #255 — `beadloom impact` crashed on a target that exists
-and is not Python. S6 wave 4 runs it concurrently with `.40`, `.48` and `.65`, and `.73` is the
-wave's combined-tree gate owner. Before it, S6 wave 3 completed: `beadloom-0mdo.38` closed, and
-as its own gate owner it reported `beadloom ci` rc 0 on the combined tree, taken in the
-foreground without a pipe (9 254 passed).
+**Bead:** none claimed. S6 wave 4 is complete — `.40`, `.48`, `.65` and `.73` all landed, and
+as the wave's gate owner `.73` reports the combined tree green: `beadloom ci` rc 0, and, because
+`.48` landed in the same wave and the Gate now names what it does not run, the three it names
+run separately — `ruff check src/ tests/` rc 0, `mypy src/` rc 0 over 277 files, and
+`pytest --cov=beadloom --cov-fail-under=80` rc 0 with 9 297 passed and 94.25% coverage. Taken in
+Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
+
+**Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion —
+`bd close --suggest-next` named `.14` and `.69`, and the ready list of 38 holds neither, because
+`.69` still carries open blockers and `.14` is the slice bead.
 
 **The bead that closed last, `beadloom-0mdo.38`.** BDL-UX #236: the optional extras an
 environment installed are now a DIMENSION of the room, derived on both sides — from the analysed
