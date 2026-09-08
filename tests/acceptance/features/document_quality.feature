@@ -26,3 +26,16 @@ Feature: a planning document is held to the writing standard it was written unde
     Given a Draft document with an open question answered "Pending"
     When the writing standard is checked
     Then nothing is reported
+
+  # BDL-UX #213: the coordinator's verification of a subagent's report is a
+  # two-column table, and it sat in the same section as the decision table.
+  Scenario: a table of claims and measurements below a decision table is not read as decision rows
+    Given a section holding a decision table and, below it, a table of claims and measurements
+    When the writing standard is checked
+    Then nothing is reported
+
+  Scenario: a table with a reason column the document never declares as decisions is not classified
+    Given a table with an empty reason cell in a section the document never declares as decisions
+    When the writing standard is checked
+    Then nothing is reported
+    And the table is reported as not classified

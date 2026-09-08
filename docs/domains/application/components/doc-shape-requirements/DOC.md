@@ -33,6 +33,13 @@ placeholder vocabulary, derived from the shipped `/templates` command.
 - `shipped_placeholders(project_root)` — the placeholder tokens the composed templates leave for
   an author, read from **fenced blocks only** and excluding anything wholly inside an inline code
   span.
+- `shipped_decision_sections(project_root)` — the section titles the composed templates put a
+  reason-carrying decision table under, read from the same fenced blocks and by the same reader
+  `decision-reason` uses on a real document (`sections_with_a_decision_table`). On this
+  repository: `architectural decisions`, `axes`, `non-behavioural declaration`. A table
+  `decision-reason` cannot place against this list and that names no `Decision` column is
+  answered `not classified` rather than judged (BDL-UX #213). A malformed `flow.yml` yields
+  `()`, the answer its two siblings give for the same reason.
 
 ## Where it is called
 
@@ -41,8 +48,9 @@ the CI gate, `beadloom sync-check`, the MCP `sync_check` tool and the TUI dashbo
 sites deliberately do not pass it — `sync-update` (twice), where re-baselining cannot fix a
 missing section, and `site_published`, where publishing does not judge one.
 
-`planning_documents` and `shipped_placeholders` are called by `beadloom docs quality` and by the
-`docs-quality` gate step.
+`planning_documents`, `shipped_placeholders` and `shipped_decision_sections` are called by
+`beadloom docs quality` and by the `docs-quality` gate step, all three through
+`planning_report()`.
 
 ## Configuration
 

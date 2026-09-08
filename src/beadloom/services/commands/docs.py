@@ -701,6 +701,16 @@ def docs_quality(
                     "kinds_read_by_nothing": list(
                         report.quality.kinds_that_read_nothing
                     ),
+                    "unclassified": [
+                        {
+                            "path": table.path,
+                            "line": table.line,
+                            "section": table.section,
+                            "header": table.header,
+                            "rows": table.rows,
+                        }
+                        for table in report.quality.unclassified
+                    ],
                     "unreadable": [
                         {"path": path, "reason": reason}
                         for path, reason in report.quality.unreadable
@@ -734,6 +744,17 @@ def docs_quality(
             click.echo(f"  [warn] {f.path}:{f.line} ({f.check}) {f.why}")
             click.echo(f"         {f.excerpt}")
         click.echo("")
+        for table in report.quality.unclassified:
+            # A verdict, not a finding: the table states reasons and the check
+            # cannot see whether its rows are decisions, so it names the table
+            # instead of judging it (BDL-UX #213).
+            click.echo(
+                f"  NOT CLASSIFIED: {table.path}:{table.line} "
+                f"({table.rows} row(s)) under '{table.section}' — "
+                f"{table.header}; judged by nothing"
+            )
+        if report.quality.unclassified:
+            click.echo("")
         for name in CHECK_NAMES:
             count = sum(1 for f in all_findings if f.check == name)
             read = report.applicable.get(name, 0)

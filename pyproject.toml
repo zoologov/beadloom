@@ -376,6 +376,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_cli_waves.py",
     "tests/test_config_sync.py",
     "tests/test_cycle_rule.py",
+    "tests/test_decision_table_classification.py",
     "tests/test_doc_area_coherence.py",
     "tests/test_doc_quality.py",
     "tests/test_docs_audit_coverage.py",

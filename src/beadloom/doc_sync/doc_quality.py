@@ -76,7 +76,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
 MEASURABLE_GOAL = "measurable-goal"
@@ -114,6 +114,11 @@ APPROVED_STATUSES: frozenset[str] = frozenset({"approved", "accepted"})
 
 #: Section titles whose contents are read as goal statements.
 _GOAL_SECTIONS = ("goal", "goals")
+
+#: The header cells a table states its reasons under. One tuple, because the
+#: check that reads a document and the derivation that reads the templates must
+#: agree about what a reason column is or they classify different tables.
+REASON_COLUMNS: tuple[str, ...] = ("reason", "rationale", "why")
 
 #: Mitigations that name no action. Matched as the WHOLE cell, so "monitor the
 #: queue depth and page above 80%" is a mitigation and "monitor it" is not.
@@ -179,6 +184,11 @@ _IMPROVEMENT_RE = re.compile(
 #: ``---`` closing a Goal section (review BDL-061.15 m1).
 _HRULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 
+#: A heading's leading enumeration — ``9.``, ``5.2``, ``Step 3:``. Stripped
+#: before a section title is compared with a name the templates declare, because
+#: this corpus numbers its headings and the templates do not.
+_SECTION_NUMBER_RE = re.compile(r"^[\d.\s)\-]+")
+
 _HEADING_RE = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 _STATUS_RE = re.compile(r"^>\s*\*\*Status:\*\*\s*(.+?)\s*$", re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+(?:\[[ xX]\]\s*)?(.*)$")
@@ -203,6 +213,22 @@ class QualityFinding:
     excerpt: str
     why: str
     remediation: str
+
+
+@dataclass(frozen=True)
+class UnclassifiedTable:
+    """A table carrying a reason column that the document never declares as decisions.
+
+    A verdict, not a finding. The check can see that the table states reasons
+    and cannot see whether the rows are decisions, so it says which table it did
+    not judge and where to look, and reports nothing against its rows.
+    """
+
+    path: str
+    line: int
+    section: str
+    header: str
+    rows: int
 
 
 @dataclass(frozen=True)
@@ -261,6 +287,15 @@ class QualityReport:
     the moment ONE document carries ONE row, so it cannot see a check that is
     blind on an entire document kind. This is the same shape ``missing_sections``
     already reports (``Source (5/39)``), one level down.
+    """
+
+    unclassified: tuple[UnclassifiedTable, ...] = ()
+    """Tables ``decision-reason`` could not classify, and therefore did not judge.
+
+    Their rows are absent from :attr:`applicable` as well as from
+    :attr:`findings`: a row nothing judged is not a row something read, and
+    counting it would make the check's population look larger than the part of
+    it that was verified.
     """
 
     unreadable: tuple[tuple[str, str], ...] = ()
@@ -331,18 +366,36 @@ def is_approved(text: str) -> bool:
     return bool(status) and status.split()[0].strip("*_ ") in APPROVED_STATUSES
 
 
-def _rows(lines: Iterable[tuple[int, str]]) -> list[tuple[int, list[str]]]:
-    """Table rows as ``(line number, cells)``, separator rows dropped."""
-    out: list[tuple[int, list[str]]] = []
+def _tables(lines: Iterable[tuple[int, str]]) -> list[list[tuple[int, list[str]]]]:
+    """The tables under one heading, each as its own ``(line number, cells)`` rows.
+
+    A table ends where its rows stop. The reader this replaced collected every
+    row under a heading into ONE list, took the first as the header and judged
+    the rest against its column index — so a second table below the first was
+    read as continuation rows of it, and that table's own header row was read as
+    a row with a missing cell. That is BDL-UX #213's fault, measured on
+    BDL-067's ``ACTIVE.md``: a `Claim | Coordinator's measurement` table under
+    the same ``## Notes`` heading as the decision table, reported four times.
+
+    A separator row is dropped and does NOT end a table, because it is part of
+    one. Everything else that is not a table row does.
+    """
+    tables: list[list[tuple[int, list[str]]]] = []
+    current: list[tuple[int, list[str]]] = []
     for number, line in lines:
         match = _TABLE_ROW_RE.match(line)
         if match is None:
+            if current:
+                tables.append(current)
+                current = []
             continue
         cells = [c.strip() for c in match.group(1).split("|")]
         if all(_SEPARATOR_CELL_RE.match(c) for c in cells if c):
             continue
-        out.append((number, cells))
-    return out
+        current.append((number, cells))
+    if current:
+        tables.append(current)
+    return tables
 
 
 def _column(header: Sequence[str], *names: str) -> int | None:
@@ -446,6 +499,63 @@ def _check_goals(path: str, sections: Sequence[_Section]) -> tuple[list[QualityF
     return findings, read
 
 
+def declares_decisions(
+    section_title: str,
+    header: Sequence[str],
+    *,
+    declared_sections: Sequence[str] = (),
+) -> bool:
+    """Whether the DOCUMENT declares this table as a table of decisions.
+
+    Two legs, and both read a declaration the document made about itself rather
+    than guessing at what its rows mean:
+
+    * a column naming the thing decided (``Decision``, ``Scope decision``), or
+    * a section the shipped templates put a reason-carrying decision table
+      under, which is where *declared_sections* comes from
+      (:func:`beadloom.application.doc_shape.shipped_decision_sections`).
+
+    Nothing here reads the CELLS, because nothing could. A row saying
+    ``| 7341 passing | confirmed, 0 failed |`` and a row saying
+    ``| guards are data | a shell script is not portable |`` are the same two
+    strings to a checker, and BDL-UX #213 is what happens when one is judged as
+    the other. Where neither leg holds the answer is ``not classified``, which
+    the caller reports and does not turn into a finding.
+
+    A leading number is stripped from the section title, so ``## 9. Decision
+    Log`` is the section ``Decision Log``; documents in this corpus number their
+    headings and the templates do not.
+    """
+    if _column(header, "decision", "decisions") is not None:
+        return True
+    title = _SECTION_NUMBER_RE.sub("", section_title.strip().lower())
+    return any(
+        re.search(rf"\b{re.escape(name)}\b", title)
+        for name in declared_sections
+        if name
+    )
+
+
+def sections_with_a_decision_table(text: str) -> tuple[str, ...]:
+    """Section titles under which *text* states a table carrying a reason column.
+
+    Used against the SHIPPED templates, to derive the sections this flow puts a
+    decision table under. It lives here rather than beside that derivation
+    because the answer must be given in the same vocabulary the check reads a
+    real document in: a section title, a table boundary and a reason column,
+    decided once.
+    """
+    titles: set[str] = set()
+    for section in _sections(text):
+        title = section.title.strip().lower()
+        if not title:
+            continue
+        for rows in _tables(section.lines):
+            if _column(rows[0][1], *REASON_COLUMNS) is not None:
+                titles.add(title)
+    return tuple(sorted(titles))
+
+
 def _check_table(
     path: str,
     sections: Sequence[_Section],
@@ -455,34 +565,56 @@ def _check_table(
     empty: re.Pattern[str] | None,
     why: str,
     remediation: str,
-) -> tuple[list[QualityFinding], int]:
-    """One row-with-an-empty-cell check, shared by decisions and risks."""
+    declares: Callable[[str, Sequence[str]], bool] | None = None,
+) -> tuple[list[QualityFinding], int, list[UnclassifiedTable]]:
+    """One row-with-an-empty-cell check, shared by decisions and risks.
+
+    *declares* decides which tables carrying the column are this check's
+    business. ``risk-mitigation`` passes none and judges every one of them: a
+    ``Mitigation`` column names an action taken against a risk and has no
+    homonym in another kind of table, so there is nothing to tell apart. A
+    ``Reason`` column does have one, which is why ``decision-reason`` passes
+    :func:`declares_decisions` and reports the tables it cannot place.
+    """
     findings: list[QualityFinding] = []
     read = 0
+    unclassified: list[UnclassifiedTable] = []
     for section in sections:
-        rows = _rows(section.lines)
-        if len(rows) < 2:
-            continue
-        index = _column(rows[0][1], *column_names)
-        if index is None:
-            continue
-        for number, cells in rows[1:]:
-            read += 1
-            value = cells[index].strip() if index < len(cells) else ""
-            blank = not value or value in {"-", "—"}
-            weak = empty is not None and bool(empty.match(value))
-            if blank or weak:
-                findings.append(
-                    QualityFinding(
-                        check=check,
+        for rows in _tables(section.lines):
+            if len(rows) < 2:
+                continue
+            header_line, header = rows[0]
+            index = _column(header, *column_names)
+            if index is None:
+                continue
+            if declares is not None and not declares(section.title, header):
+                unclassified.append(
+                    UnclassifiedTable(
                         path=path,
-                        line=number,
-                        excerpt=_excerpt(" | ".join(cells)),
-                        why=why,
-                        remediation=remediation,
+                        line=header_line,
+                        section=section.title,
+                        header=" | ".join(header),
+                        rows=len(rows) - 1,
                     )
                 )
-    return findings, read
+                continue
+            for number, cells in rows[1:]:
+                read += 1
+                value = cells[index].strip() if index < len(cells) else ""
+                blank = not value or value in {"-", "—"}
+                weak = empty is not None and bool(empty.match(value))
+                if blank or weak:
+                    findings.append(
+                        QualityFinding(
+                            check=check,
+                            path=path,
+                            line=number,
+                            excerpt=_excerpt(" | ".join(cells)),
+                            why=why,
+                            remediation=remediation,
+                        )
+                    )
+    return findings, read, unclassified
 
 
 def _check_pending(
@@ -495,12 +627,21 @@ def _check_pending(
     for section in sections:
         if "open question" not in section.title.lower():
             continue
-        rows = _rows(section.lines)
-        index = _column(rows[0][1], "decision", "answer", "status") if rows else None
-        for number, cells in rows[1:] if rows else []:
-            read += 1
-            value = cells[index].strip() if index is not None and index < len(cells) else ""
-            if _PENDING_RE.match(value):
+        # Each table under the heading is read against ITS OWN header. The
+        # reader this replaced took the first table's column index and applied
+        # it to every later table's rows (BDL-UX #213), which in this section
+        # would judge a second table's cells under a heading they never had.
+        for rows in _tables(section.lines):
+            index = _column(rows[0][1], "decision", "answer", "status")
+            for number, cells in rows[1:]:
+                read += 1
+                value = (
+                    cells[index].strip()
+                    if index is not None and index < len(cells)
+                    else ""
+                )
+                if not _PENDING_RE.match(value):
+                    continue
                 findings.append(
                     QualityFinding(
                         check=PENDING_IN_APPROVED,
@@ -626,8 +767,15 @@ def check_document(
     *,
     path: str,
     placeholders: Sequence[str] = (),
+    decision_sections: Sequence[str] = (),
 ) -> QualityReport:
-    """Run all five checks over one document."""
+    """Run all five checks over one document.
+
+    *decision_sections* names the sections the shipped templates put a
+    reason-carrying decision table under. Passed in rather than derived here for
+    the reason *placeholders* is: this module is a domain and the templates are
+    composed one layer up.
+    """
     sections = _sections(text)
     findings: list[QualityFinding] = []
     applicable: dict[str, int] = {}
@@ -636,22 +784,26 @@ def check_document(
     findings.extend(goals)
     applicable[MEASURABLE_GOAL] = read
 
-    decisions, read = _check_table(
+    def _declares(title: str, header: Sequence[str]) -> bool:
+        return declares_decisions(title, header, declared_sections=decision_sections)
+
+    decisions, read, unclassified = _check_table(
         path,
         sections,
         check=DECISION_REASON,
-        column_names=("reason", "rationale", "why"),
+        column_names=REASON_COLUMNS,
         empty=None,
         why="the decision carries no reason",
         remediation=(
             "state why this was decided, in terms that do not restate the "
             "decision itself"
         ),
+        declares=_declares,
     )
     findings.extend(decisions)
     applicable[DECISION_REASON] = read
 
-    risks, read = _check_table(
+    risks, read, _ = _check_table(
         path,
         sections,
         check=RISK_MITIGATION,
@@ -673,7 +825,10 @@ def check_document(
 
     findings.sort(key=lambda f: (f.path, f.line, f.check))
     return QualityReport(
-        findings=tuple(findings), documents=1, applicable=applicable
+        findings=tuple(findings),
+        documents=1,
+        applicable=applicable,
+        unclassified=tuple(unclassified),
     )
 
 
@@ -695,10 +850,12 @@ def check_documents(
     *,
     project_root: Path,
     placeholders: Sequence[str] = (),
+    decision_sections: Sequence[str] = (),
 ) -> QualityReport:
     """Run all five checks over every document in *paths*, and per document kind."""
     findings: list[QualityFinding] = []
     applicable: dict[str, int] = dict.fromkeys(CHECK_NAMES, 0)
+    unclassified: list[UnclassifiedTable] = []
     unreadable: list[tuple[str, str]] = []
     per_kind: dict[str, dict[str, int]] = {}
     kind_documents: dict[str, int] = {}
@@ -731,8 +888,14 @@ def check_documents(
         kind = document_kind(relative)
         kind_documents[kind] = kind_documents.get(kind, 0) + 1
         counts = per_kind.setdefault(kind, dict.fromkeys(CHECK_NAMES, 0))
-        report = check_document(text, path=relative, placeholders=placeholders)
+        report = check_document(
+            text,
+            path=relative,
+            placeholders=placeholders,
+            decision_sections=decision_sections,
+        )
         findings.extend(report.findings)
+        unclassified.extend(report.unclassified)
         for name, count in report.applicable.items():
             applicable[name] = applicable.get(name, 0) + count
             counts[name] = counts.get(name, 0) + count
@@ -741,6 +904,7 @@ def check_documents(
         findings=tuple(findings),
         documents=documents,
         applicable=applicable,
+        unclassified=tuple(unclassified),
         by_kind=tuple(
             KindCoverage(
                 kind=kind,

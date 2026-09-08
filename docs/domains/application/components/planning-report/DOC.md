@@ -32,7 +32,10 @@ from the composed `/task-init` command by `application.work_item_routing`, for t
 
 - `CHECK_NAMES` — every check, in report order. One list, so a summary counting findings per
   check cannot silently omit a family.
-- `planning_report(paths, project_root=...)` — run everything over *paths*.
+- `planning_report(paths, project_root=...)` — run everything over *paths*. It supplies
+  `check_documents` with both derivations from the shipped templates: the placeholder tokens and
+  the sections that declare a decision table (`shipped_decision_sections`), which is what lets
+  `decision-reason` answer `not classified` instead of judging a measurement table (BDL-UX #213).
 - `PlanningReport` — `quality`, `structure`, `routes`, `axes`, `axes_read`, and the derived
   `findings`, `applicable` and `checks_that_read_nothing`.
 
@@ -52,8 +55,9 @@ a fixture instead.
 ## What it deliberately does not merge
 
 `quality` and `structure` are kept apart rather than collapsed into one count. `quality` carries
-the applicability the writing checks report and the documents nobody could decode; `structure`
-carries the conventions and the document kinds no template describes. A single number over both
+the applicability the writing checks report, the tables `decision-reason` could not classify and
+the documents nobody could decode; `structure` carries the conventions and the document kinds no
+template describes. A single number over both
 would say "clean" about populations neither entered — the equation BDL-UX #173, #174 and #175
 all turn on.
 

@@ -143,6 +143,7 @@ def planning_report(paths: list[Path], *, project_root: Path) -> PlanningReport:
     """
     from beadloom.application.doc_shape import (
         document_section_requirements,
+        shipped_decision_sections,
         shipped_placeholders,
     )
     from beadloom.application.work_item_routing import task_init_routing
@@ -151,6 +152,7 @@ def planning_report(paths: list[Path], *, project_root: Path) -> PlanningReport:
         paths,
         project_root=project_root,
         placeholders=shipped_placeholders(project_root),
+        decision_sections=shipped_decision_sections(project_root),
     )
     documents: list[tuple[str, str]] = []
     for path in sorted(paths):

@@ -10,9 +10,16 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.37`, S6 wave 2, concurrent with `beadloom-0mdo.68`, which owns this
-wave's combined-tree gate. BDL-UX #235 and #243 are answered by ONE command rather than by two
-rules: `beadloom clean-room <bead>` derives the room's directory from the bead, creates it with
+**Bead:** `beadloom-0mdo.68`, S6 wave 2, and this wave's combined-tree gate owner. BDL-UX #213:
+`decision-reason` fired on a table of claims and measurements. The reported cause was header
+vocabulary; the measured cause was the table BOUNDARY — a section was read as one table, so the
+second table's header row was reported as a row with a missing cell. Tables are now delimited,
+and a table carrying a reason column that the document never declares as decisions is answered
+`not classified` rather than judged. On this repository: 389 rows read before, 324 judged after,
+58 rows in 12 named tables not classified.
+
+**Beside it, `beadloom-0mdo.37` closed.** BDL-UX #235 and #243 are answered by ONE command
+rather than by two rules: `beadloom clean-room <bead>` derives the room's directory from the bead, creates it with
 an exclusive `mkdir` instead of entering one, and rebuilds by replacement. A neighbour's room
 therefore cannot be entered and a room cannot be re-entered, which are the two findings. Found
 by using the command on its own bead: the invocation it handed back named `sys.executable`,
@@ -844,6 +851,27 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     `.venv`. Two adjacent findings recorded on the bead: the tracked-write guard reported a
     write nobody made (`rmtree` walks with `dir_fd`, fixed in `tests/tracked_write_guard.py`),
     and editing a shared domain README clears a neighbour's stale pairs on it.
+  - [x] `.68` — BDL-UX **#213**, `decision-reason` against a claim-and-measurement table. Wave 2,
+    concurrent with `.37`, and the **gate owner** for the wave. The reported cause was header
+    vocabulary and the measured cause was not: a SECTION was read as one table, so the second
+    table's rows were judged against the first table's column index and its header row was read
+    as a row with a missing cell. `_tables()` now delimits a section into contiguous blocks, each
+    led by its own header, which fixes `risk-mitigation` and `pending-in-approved` with it and
+    needs no vocabulary at all. For the residual class — a measurement table that carries a
+    `Reason` column of its own — `declares_decisions()` asks whether the DOCUMENT declares the
+    table as decisions (a column naming the thing decided, or a section the shipped templates put
+    a reason-carrying table under, derived by `shipped_decision_sections()`), and answers
+    `not classified` where it does not. Measured on this repository's 259 planning documents:
+    **389 rows read before, 324 judged after**, 58 rows in 12 named tables `not classified`, and
+    7 rows that were never rows of any decision table gone from the population. No finding was
+    removed from the present corpus, because the check reported none on it; the removed findings
+    are the four on BDL-067's `ACTIVE.md` re-measured from `cd28e29c` — **4 before, 0 after, all
+    four false**. 20 unit tests, 2 scenarios. Green in a clean room over 15 carried files:
+    9 126 passed, the 1 failure the room's stated no-`.git` property. **As the wave's gate owner:**
+    the combined tree is green — `beadloom ci` rc 0, taken in the foreground without a pipe, and
+    the previously failing tree tests pass once `.37` landed. Every verdict taken in Darwin arm64
+    / CPython 3.13.7, 0 of the 21 declared rooms; `mypy` clean against all four declared target
+    versions, run under one interpreter.
 
 ## What is in `main` now
 

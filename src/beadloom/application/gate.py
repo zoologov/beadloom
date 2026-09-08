@@ -568,12 +568,28 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         summary += f"; NOT CHECKED: {', '.join(blind)}"
     if unread_kinds:
         summary += f"; NO CHECK READS: {', '.join(unread_kinds)}"
+    if report.quality.unclassified:
+        # A table `decision-reason` could not place is a population it did NOT
+        # enter, and the finding count cannot show it (BDL-UX #213). It sets
+        # `not_verified` for the reason the three states above do — the rows
+        # were read and judged by nothing, and *unverifiable is not clean* —
+        # and it cannot redden anyone: this step is `passed` unconditionally.
+        rows = sum(t.rows for t in report.quality.unclassified)
+        summary += (
+            f"; NOT CLASSIFIED: {len(report.quality.unclassified)} table(s), "
+            f"{rows} row(s)"
+        )
     if report.quality.unreadable:
         summary += f"; UNREADABLE: {len(report.quality.unreadable)}"
     return GateStep(
         "docs-quality",
         passed=True,
-        not_verified=bool(blind or unread_kinds or report.quality.unreadable),
+        not_verified=bool(
+            blind
+            or unread_kinds
+            or report.quality.unclassified
+            or report.quality.unreadable
+        ),
         findings=findings,
         summary=summary,
     )

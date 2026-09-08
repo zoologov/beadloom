@@ -164,6 +164,48 @@ def _question_document(world: dict[str, Any], status: str, decision: str) -> Non
     )
 
 
+@given(
+    "a section holding a decision table and, below it, a table of claims and "
+    "measurements"
+)
+def _two_tables_in_one_section(world: dict[str, Any]) -> None:
+    """The exact shape BDL-UX #213 measured, in the section layout it had.
+
+    The second table has no reason column at all, so a check that delimits
+    tables never enters it; the one that read the section as a single table
+    judged its rows against the first table's column index.
+    """
+    world["text"] = (
+        "## Notes\n\n"
+        "| Date | Decision | Reason |\n|------|----------|--------|\n"
+        "| 2026-08-31 | the bootstrap emits the edges | option (b) ships a "
+        "weaker rule |\n\n"
+        "Then the coordinator re-measured what the subagent reported.\n\n"
+        "| Claim | Coordinator's measurement |\n|---|---|\n"
+        "| `beadloom ci` rc 0 on the tree | confirmed, rc 0 |\n"
+        "| 7341 passing | confirmed, 0 failed |\n"
+    )
+
+
+@given(
+    "a table with an empty reason cell in a section the document never "
+    "declares as decisions"
+)
+def _undeclared_reason_table(world: dict[str, Any]) -> None:
+    world["text"] = (
+        "## Deviations from RFC\n\n"
+        "| Item | RFC plan | Actual | Reason |\n|---|---|---|---|\n"
+        "| the seed | derived | derived |  |\n"
+    )
+
+
+@then("the table is reported as not classified")
+def _table_not_classified(world: dict[str, Any]) -> None:
+    assert [t.header for t in world["report"].unclassified] == [
+        "Item | RFC plan | Actual | Reason"
+    ]
+
+
 @when("the writing standard is checked")
 def _check_quality(world: dict[str, Any]) -> None:
     world["report"] = check_document(world["text"], path="D.md")

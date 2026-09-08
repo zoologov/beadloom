@@ -43,21 +43,26 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    a `warn` and the step is `passed` unconditionally, so a project whose
    documents predate the checks does not go red on upgrade. A project with no
    planning document is a NAMED skip that states the globs it looked under.
-   Three states set `not_verified`, and the step then reports **WARN** rather
+   Four states set `not_verified`, and the step then reports **WARN** rather
    than PASS — *unverifiable is not clean*: a check that found no document with
    anything to read (`NOT CHECKED: <checks>`), a document KIND no content check
-   enters (`NO CHECK READS: <kinds>`), and a document nothing could decode
-   (`UNREADABLE: N`). The second exists because the first is a global OR over
-   the corpus and goes silent as soon as one document carries one row, so it
-   cannot see a check that is blind on an entire shipped document kind.
-   Measured on this repository, 2026-08-24, the step reports:
+   enters (`NO CHECK READS: <kinds>`), a table `decision-reason` could not place
+   as a table of decisions (`NOT CLASSIFIED: N table(s), M row(s)`), and a
+   document nothing could decode (`UNREADABLE: N`). The second exists because
+   the first is a global OR over the corpus and goes silent as soon as one
+   document carries one row, so it cannot see a check that is blind on an entire
+   shipped document kind. The third is BDL-UX #213: a `Reason` column does not
+   make a table a decision table, and the check names the tables it did not
+   judge instead of reporting a measurement row as a decision with no reason.
+   None of the four can redden a project — the step is `passed` unconditionally.
+   Measured on this repository, 2026-09-08, the step reports:
 
    ```
    docs-quality WARN | 259 document(s) read; measurable-goal 4,
-                       pending-in-approved 7, missing-section 102;
-                       NOT CHECKED: axes-without-a-seed,
-                       axis-without-a-scope-decision;
-                       NO CHECK READS: BRIEF, PLAN, SUMMARY
+                       pending-in-approved 2, missing-section 102,
+                       routed-without-axes 12;
+                       NO CHECK READS: BRIEF, PLAN, SUMMARY;
+                       NOT CLASSIFIED: 12 table(s), 58 row(s)
    ```
 
    Measured again on 2026-09-02, after S1.4. The two axes checks read **0**
