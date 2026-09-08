@@ -26,7 +26,7 @@ from beadloom.application.active_table import (
 from beadloom.application.active_table import (
     split_table_row as _split_table_row,
 )
-from beadloom.application.gate import run_ci_gate
+from beadloom.application.gate import GateResult, run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.application.waves import compose_declaration, declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
@@ -844,6 +844,18 @@ def _verdict_room(project_root: Path) -> dict[str, object]:
     }
 
 
+def _not_run(gate: GateResult) -> list[str]:
+    """The verifications this project declares that this run did not perform.
+
+    The room says which rooms the verdict covers; this says which verifications
+    it is a verdict about. Names only, because the agent reading it is inside
+    the project and the commands are in its own pipeline.
+    """
+    if gate.coverage is None:
+        return []
+    return [item.duty for item in gate.coverage.not_performed]
+
+
 def handle_complete_bead(
     project_root: Path,
     *,
@@ -875,8 +887,14 @@ def handle_complete_bead(
     This is advisory-strong, not the true enforcement point: CI still runs
     ``beadloom ci`` independently (G5).
     """
+    # The suite this tool runs itself is named to the gate, so one run cannot
+    # report the suite as not run while that run ran it (BDL-UX #247).
     gate = run_ci_gate(
-        project_root, fail_on=None, hub_exports=[], no_reindex=False
+        project_root,
+        fail_on=None,
+        hub_exports=[],
+        no_reindex=False,
+        performed_elsewhere=("tests",) if run_tests else (),
     )
     findings: list[dict[str, object]] = list(gate.findings)
     gate_ok = gate.ok
@@ -897,8 +915,15 @@ def handle_complete_bead(
             )
 
     room = _verdict_room(project_root)
+    not_run = _not_run(gate)
     if not (gate_ok and tests_ok):
-        return {"status": "FAIL", "bead": bead, "findings": findings, "room": room}
+        return {
+            "status": "FAIL",
+            "bead": bead,
+            "findings": findings,
+            "room": room,
+            "not_run": not_run,
+        }
 
     try:
         # Locate the bead's epic ACTIVE.md before closing (best-effort, mocked in tests).
@@ -923,6 +948,7 @@ def handle_complete_bead(
         "bead": bead,
         "findings": [],
         "room": room,
+        "not_run": not_run,
         "next": list(suggestion.confirmed),
         "next_candidates": list(suggestion.candidates),
         "next_still_blocked": list(suggestion.still_blocked),

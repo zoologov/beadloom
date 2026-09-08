@@ -2172,6 +2172,21 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 
 **The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-03: a local macOS run reports `0 of 21 declared room(s) not entered by this run`, which is the verdict's address rather than a caveat on it. The census itself is [`beadloom rooms`](#beadloom-rooms).
 
+**The verdict also names what no step of it performed (BDL-068 S6, BDL-UX #247).** `beadloom ci`
+does not run the test suite, and until this slice it never said so. `GateResult` carries a
+`GateCoverage` beside the census: the verifications this project's pipeline declares that no step
+of the run performed, each with the command the pipeline runs for it and the workflow job it was
+read from. All three shapes print it — a `Not run by this gate:` block under the rich verdict, a
+`not_run` object in `--format json` (`performed`, `not_performed`, `unresolved`, `inspected`) and
+one `::notice::not run by this gate: ...` line in `--format github`. Measured on this repository:
+the block names three — `the test suite`, `the style linter` and `the type checker`, all read
+from the `tests` job of `.github/workflows/ci.yml`. Both sides are derived: what the run performed
+comes from its own step list, so a suite step added later removes the line by the same act, and
+what the project verifies comes from its workflows through the reader the room census uses. A
+pipeline verifying under a name the vocabulary does not read (`pytest`; `ruff`/`flake8`/`pylint`;
+`mypy`/`pyright`) is told the population is empty with the vocabulary named, never that nothing is
+left to run. Like the room, it is not a step: same verdict, same exit code, same findings.
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.

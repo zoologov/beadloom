@@ -85,7 +85,10 @@ _MATRIX_EXPRESSION_RE = re.compile(r"^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$"
 #: ``${{ anything }}`` — an expression this report cannot resolve.
 _ANY_EXPRESSION_RE = re.compile(r"\$\{\{(.+?)\}\}")
 
-_WORKFLOW_DIR = Path(".github") / "workflows"
+#: Where a project declares its pipeline. Public because two derivations read
+#: one declaration: this module's rooms, and the verifications a gate run did
+#: not perform (:mod:`beadloom.application.gate_coverage`).
+WORKFLOW_DIR = Path(".github") / "workflows"
 
 #: The dimension this module gives the optional extras an environment installed.
 EXTRAS_DIMENSION = "extras"
@@ -730,12 +733,12 @@ def _read_workflows(
     project_root: Path, distribution: str | None = None
 ) -> tuple[tuple[Room, ...], list[UnresolvedRoom]]:
     """One room per matrix combination, per job, per workflow file."""
-    directory = project_root / _WORKFLOW_DIR
+    directory = project_root / WORKFLOW_DIR
     files = sorted(p for p in directory.glob("*.y*ml") if p.is_file())
     if not files:
         return (), [
             UnresolvedRoom(
-                source=str(_WORKFLOW_DIR),
+                source=str(WORKFLOW_DIR),
                 why=(
                     "no workflow file declares a leg, so this project declares no "
                     "room a verdict could be held against"
@@ -746,7 +749,7 @@ def _read_workflows(
     unresolved: list[UnresolvedRoom] = []
     for path in files:
         rel = path.relative_to(project_root).as_posix()
-        jobs, failure = _load_jobs(path)
+        jobs, failure = load_jobs(path)
         if failure is not None:
             unresolved.append(UnresolvedRoom(source=rel, why=failure))
             continue
@@ -759,8 +762,14 @@ def _read_workflows(
     return tuple(rooms), unresolved
 
 
-def _load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
-    """The ``jobs`` mapping of a workflow, or the reason there is none."""
+def load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
+    """The ``jobs`` mapping of a workflow, or the reason there is none.
+
+    Public alongside :data:`WORKFLOW_DIR` because the gate's coverage report
+    reads the same declaration for a different question, and one reader means
+    one answer to "this workflow could not be parsed" rather than two that can
+    word it differently.
+    """
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:

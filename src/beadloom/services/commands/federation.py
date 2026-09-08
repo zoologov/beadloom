@@ -452,6 +452,7 @@ def _format_gate_rich(result: GateResult) -> str:
     lines.append("")
     lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
     lines.extend(_gate_room_lines(result))
+    lines.extend(_gate_coverage_lines(result))
     return "\n".join(lines)
 
 
@@ -486,6 +487,21 @@ def _gate_room_lines(result: GateResult) -> list[str]:
     return lines
 
 
+def _gate_coverage_lines(result: GateResult) -> list[str]:
+    """What the project verifies that no step of this run performed.
+
+    Under the verdict, beside the room, and for the same reason: it changes no
+    status and no exit code. A green gate is a verdict about the steps that ran,
+    and the pre-push hook it backs is described as "the full `beadloom ci`"
+    (BDL-UX #247).
+    """
+    from beadloom.application.gate_coverage import gate_coverage_lines
+
+    if result.coverage is None:
+        return []
+    return gate_coverage_lines(result.coverage)
+
+
 def _format_gate_json(result: GateResult) -> str:
     """Structured JSON: ``ok`` + per-step status + shared-shape findings."""
     steps = [
@@ -500,6 +516,19 @@ def _format_gate_json(result: GateResult) -> str:
         for step in result.steps
     ]
     payload: dict[str, object] = {"ok": result.ok, "steps": steps}
+    coverage = result.coverage
+    if coverage is not None:
+        payload["not_run"] = {
+            "performed": list(coverage.performed),
+            "not_performed": [
+                {"duty": v.duty, "command": v.command, "source": v.source}
+                for v in coverage.not_performed
+            ],
+            "unresolved": [
+                {"source": u.source, "why": u.why} for u in coverage.unresolved
+            ],
+            "inspected": coverage.inspected,
+        }
     census = result.room
     if census is not None:
         payload["room"] = {
@@ -536,6 +565,11 @@ def _format_gate_github(result: GateResult) -> str:
         )
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
+    if result.coverage is not None and result.coverage.not_performed:
+        named = ", ".join(
+            f"{v.duty} (`{v.command}`)" for v in result.coverage.not_performed
+        )
+        lines.append(f"::notice::not run by this gate: {named}")
     for f in result.findings:
         level = "error" if f.get("severity") == "error" else "warning"
         param = _finding_github_params(f)

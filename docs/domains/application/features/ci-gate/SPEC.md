@@ -238,6 +238,31 @@ claim that can pass or fail: the same `ok`, the same exit code, the same finding
 changes is that a green is answerable — a reader can see which of the declared rooms it covers.
 Do not read a room-naming verdict as a stronger one.
 
+### The verdict names what no step of it performed
+
+`beadloom ci` does not run the test suite, and until BDL-UX #247 it never said so — while
+`CLAUDE.md` calls the pre-push hook "the full `beadloom ci`" and the coordinator skill calls it
+"the authoritative blocking backstop". Measured twice in one slice: a document change reddened
+two tests under a gate that returned rc 0, and a docs wave spilled an inline code span past a
+line under a gate that returned rc 0 over that tree twice, after which all six test legs went red
+on one assertion that reproduces locally in 0.07 s.
+
+`GateResult` therefore carries a `GateCoverage` beside its room census: the verifications this
+project's pipeline declares that no step of this run performed, each with the command the
+pipeline runs for it and the workflow job it was read from. On this repository the block names
+three — the test suite, the style linter and the type checker. The second and third are the ones
+nobody had filed: the gate's own step is called `lint` and checks the architecture boundaries,
+not the source style.
+
+**Both sides are derived.** What the run performed comes from its own step list, so a suite step
+added to the gate later removes the line by the same act rather than by somebody deleting a
+sentence. What the project verifies comes from its workflows, through the same `load_jobs` reader
+the room census uses. A project whose pipeline verifies under a name the vocabulary does not hold
+is told the population is empty with that limit named, never that nothing is left to run.
+`gate-coverage` (DOC) states the vocabulary and the four statements a run can make.
+
+**It is not a step either.** Same `ok`, same exit code, same findings.
+
 ## Invariants
 
 - Every step runs; the gate never short-circuits on the first failure.
@@ -252,6 +277,9 @@ Do not read a room-naming verdict as a stronger one.
   verified.
 - The room census never changes the verdict. It adds no step, no finding and no
   exit code, and `tests/test_gate_verdict_room.py` fails if it starts to.
+- The coverage block never changes the verdict either, and
+  `tests/test_gate_not_run.py` fails if it starts to. It names a verification
+  only when the project's own pipeline declares one this report can read.
 - `fail_on=None` selects the safe default federate set
   (`breaking,drift,orphaned_consumer,undeclared_producer`); the
   no-false-gate verdicts are never included.
@@ -266,12 +294,24 @@ Module `src/beadloom/application/gate.py`:
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
-  `RoomCensus | None`), plus the `ok` and `findings` properties. `None` means no
-  census was taken, and a surface that was not told makes no room claim.
-- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex) -> GateResult`
-  — run every gate step and aggregate the result.
+  `RoomCensus | None`), the coverage statement (`coverage`, a
+  `GateCoverage | None`), plus the `ok` and `findings` properties. `None` means
+  nothing derived it, and a surface that was not told makes no claim.
+- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
+  performed_elsewhere=()) -> GateResult` — run every gate step and aggregate the
+  result. `performed_elsewhere` names verifications the CALLER runs beside the
+  gate, in the vocabulary a step would use: the MCP `complete_bead` tool runs the
+  suite itself and passes `("tests",)`, so one run cannot report the suite as not
+  run while that run ran it.
+
+Module `src/beadloom/application/gate_coverage.py`:
+
+- `derive_gate_coverage(project_root, *, performed) -> GateCoverage` — the
+  verifications the project declares that `performed` does not cover.
+- `gate_coverage_lines(coverage) -> list[str]` — the block all surfaces quote.
 
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
+`tests/test_gate_not_run.py`,
 `tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`

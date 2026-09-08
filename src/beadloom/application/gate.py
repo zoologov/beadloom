@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
 from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
@@ -176,6 +177,16 @@ class GateResult:
     surface that was not told makes no room claim.
     """
 
+    coverage: GateCoverage | None = None
+    """The verifications this project declares that no step of this run performed.
+
+    The room line says which rooms this verdict is true of; this one says which
+    verifications it is a verdict about. Neither is a step: naming what was not
+    run makes no claim that could pass or fail, and the gate's exit code is
+    unchanged by it. ``None`` means nothing derived it, and a surface that was
+    not told makes no claim about the suite (BDL-UX #247).
+    """
+
     @property
     def ok(self) -> bool:
         """True only if every step passed (honest single verdict)."""
@@ -198,6 +209,7 @@ def run_ci_gate(
     fail_on: set[str] | None,
     hub_exports: list[Path],
     no_reindex: bool,
+    performed_elsewhere: tuple[str, ...] = (),
 ) -> GateResult:
     """Run every gate step in order, collecting all findings; never short-circuit.
 
@@ -210,6 +222,11 @@ def run_ci_gate(
     *fail_on* is the federate fail-set; ``None`` selects the safe default set
     (``breaking,drift,orphaned_consumer,undeclared_producer``) — the no-false-gate
     verdicts are never included.
+
+    *performed_elsewhere* names verifications the CALLER runs beside the gate,
+    in the same vocabulary a step would use. ``complete_bead`` runs the test
+    suite itself, and one run must not report the suite as not run while that
+    run ran it.
     """
     # Built in execution order rather than as one literal: `sync-check` needs the
     # index `reindex` writes, and the doc-spaces step needs the excused-pair count
@@ -230,7 +247,12 @@ def run_ci_gate(
     steps.append(_step_doctor(project_root))
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
-    return GateResult(steps=steps, room=take_census(project_root))
+    performed = tuple(step.name for step in steps) + performed_elsewhere
+    return GateResult(
+        steps=steps,
+        room=take_census(project_root),
+        coverage=derive_gate_coverage(project_root, performed=performed),
+    )
 
 
 def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:

@@ -413,7 +413,11 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # declares checked against the composed core of every role each one names.
         # 111 -> 112 in BDL-068 `gsal`: `typed-surface`, the files a project
         # declares type-checked, derived from its own `[tool.mypy]`.
-        assert populations[SPACE_AS_IS] == 112
+        # 112 -> 113 in BDL-068 `0mdo.48`: `gate-coverage`, the verifications a
+        # project's pipeline declares that no step of a gate run performed. The
+        # comment above about `beadloom ci` not running pytest is that bead's
+        # subject, and this case is one of the two the gate said nothing about.
+        assert populations[SPACE_AS_IS] == 113
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

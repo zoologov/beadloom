@@ -129,6 +129,11 @@ its score through `describe_room`, which composes it here so both surfaces print
 empty answer would read as "this project has no such axis", which is the clean list an agent
 trusts and stops at.
 
+`WORKFLOW_DIR` and `load_jobs(path)` are public rather than private (BDL-068 S6): `gate-coverage`
+reads the same workflow declaration for a different question — which verifications a gate run did
+not perform — and one reader means one wording for "this workflow could not be parsed" instead of
+two that can drift apart.
+
 ## Measured on this repository
 
 Taken on 2026-09-08 on macOS, Apple silicon, under the interpreter this project is developed
