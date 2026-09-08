@@ -421,6 +421,69 @@ def eight_bit_terminal() -> dict[str, str]:
     raise AssertionError  # unreachable; pytest.skip raises
 
 
+#: The character the reported failure died on: the PLUS-MINUS sign in the
+#: tolerance label of ``beadloom docs audit``. Written as an escape so this
+#: source file stays ASCII and the assertion below cannot be satisfied by the
+#: file's own encoding.
+_TOLERANCE_GLYPH = "\u00b1"
+
+#: A rich write of that glyph, through the product's own policy rather than
+#: past it. ``rich`` writes to ``sys.stdout`` as it finds it — the frame the
+#: reported traceback names is ``self.file.write(text)`` — while ``click``
+#: replaces an ASCII stdout with a UTF-8 writer of its own, which is why the
+#: ``--help`` rows above pass in this room with or without the fix.
+#: The CLI entered as a module rather than as the installed console script, so
+#: the interpreter's own ``PYTHONPATH`` decides which source answers.
+_CLI_ENTRY = "from beadloom.services.cli import main; main()"
+
+#: The control room for the row below: UTF-8 STATED rather than inherited.
+#: ``PYTHONUTF8=1`` overrides the locale, MEASURED — under both ``LC_ALL=C`` and
+#: ``LC_ALL=en_US.ISO8859-1`` a child reports ``utf-8``. Inheriting the parent's
+#: environment instead would make the control ASCII on exactly the
+#: ``tests-locale`` legs, so the row would skip on the two legs whose subject
+#: this is.
+_UTF8_ENV = {"PYTHONUTF8": "1", "PYTHONCOERCECLOCALE": "0"}
+
+_RICH_WRITE_PROBE = (
+    "from beadloom.infrastructure.console_streams import tolerate_unencodable_output\n"
+    "tolerate_unencodable_output()\n"
+    "from rich.console import Console\n"
+    "Console().print('tolerance " + _TOLERANCE_GLYPH + " 10 percent')\n"
+)
+
+
+@pytest.fixture(scope="module")
+def ascii_terminal() -> dict[str, str]:
+    """An environment whose stdout is ASCII with the handler CPython chose for it.
+
+    The C room is not a smaller version of the 8-bit one, and the difference is
+    this fixture's whole reason to exist: here the handler is
+    ``surrogateescape`` rather than ``strict``, so a policy that reads every
+    non-strict handler as an operator's decision steps aside exactly where it is
+    needed. :func:`eight_bit_terminal` requires ``strict`` and therefore skips
+    this room by construction.
+
+    Both halves are probed rather than assumed. The C-locale stdio handler is
+    CPython's choice, not a fact about POSIX, and the measurement behind this
+    class is one platform: an image that hands out ``backslashreplace`` here has
+    nothing for these rows to prove, and says so instead of failing.
+    """
+    encoding, errors = _stdout_policy_under(_ASCII_ENV)
+    if encoding in ("", "utf-8"):
+        pytest.skip(
+            f"this image coerces {_ASCII_ENV['LC_ALL']} back to UTF-8 (stdout={encoding!r}), "
+            "so an unencodable character cannot be arranged here and these rows would "
+            "assert nothing"
+        )
+    if errors != "surrogateescape":
+        pytest.skip(
+            f"this image hands a {_ASCII_ENV['LC_ALL']}-locale stdout the {errors!r} handler "
+            "rather than 'surrogateescape', so it is not the room this defect needs; the "
+            "8-bit rows cover the 'strict' one"
+        )
+    return dict(_ASCII_ENV)
+
+
 class TestTheConsoleSurvivesATerminalItCannotSpell:
     """The third group the dimension found, and the one where UTF-8 is wrong.
 
@@ -472,11 +535,94 @@ class TestTheConsoleSurvivesATerminalItCannotSpell:
         assert done.returncode == 0, done.stderr
 
 
+class TestTheConsoleSurvivesTheHandlerTheImageChose:
+    """The C room, which no leg of this project's CI ever enters with this command.
+
+    The ``tests-locale`` legs run ``pytest``, and ``beadloom ci`` runs under the
+    default UTF-8 locale, so this reaches an adopter on a C-locale container
+    rather than us — the same shape as BDL-UX #240.
+
+    MEASURED before the fix on CPython 3.13.7 / Darwin arm64, streams separated
+    and the exit code read from ``$?`` without a pipe: ``beadloom docs audit``
+    under ``LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`` exits **1** after
+    writing 1321 bytes of a partial report, with ``UnicodeEncodeError: 'ascii'
+    codec can't encode character '\\xb1' in position 111`` raised at
+    ``rich/console.py`` in ``self.file.write(text)``.
+    """
+
+    def test_a_rich_write_of_a_glyph_the_terminal_cannot_spell_does_not_raise(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """The class, in one process that needs no project state.
+
+        Before the fix this exits 1 with ``UnicodeEncodeError`` out of
+        ``rich``'s own write, because ``surrogateescape`` re-encodes lone
+        surrogates and nothing else.
+        """
+        done = _run_under(ascii_terminal, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+
+        assert done.returncode == 0, done.stderr
+
+    def test_the_glyph_it_cannot_show_is_named_rather_than_dropped(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """Same requirement as the 8-bit room's: degrade visibly, never silently."""
+        done = _run_under(ascii_terminal, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+
+        assert r"\xb1" in done.stdout, done.stdout
+
+    def test_the_reported_command_returns_the_same_verdict_in_both_rooms(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """The instance, and the assertion is the verdict rather than a fixed code.
+
+        ``docs audit`` answers about the project it runs in, so pinning its exit
+        code would make this row a claim about that project's documents. What
+        the locale must not change is the ANSWER, which is why the control run
+        supplies it.
+
+        The control also locks the row against vacuity: a project whose report
+        carries no tolerance label offers the ASCII run no unencodable character
+        at all, and a pass would mean nothing. It runs in a STATED UTF-8 room
+        rather than the parent's, because a control that inherits an ASCII
+        parent produces an ASCII report and skips the row on the two legs that
+        exist for this dimension.
+
+        The CLI is entered through :mod:`beadloom.services.cli` rather than
+        through the installed ``beadloom`` script, and that is the difference
+        between measuring a clean room and measuring the tree: the script is an
+        editable install whose shebang and import path lead back to the working
+        tree, so in a room it would report on the tree's source and a
+        neighbour's edits. ``sys.executable -c`` follows ``PYTHONPATH``, which
+        is what ``beadloom clean-room`` sets. The installed script has its own
+        row in the 8-bit class above.
+        """
+        control = _run_under(
+            _UTF8_ENV, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+        )
+        if _TOLERANCE_GLYPH not in control.stdout:
+            pytest.skip(
+                "this project's audit report carries no tolerance label, so the ASCII run "
+                "would meet no unencodable character and this row would assert nothing"
+            )
+
+        done = _run_under(
+            ascii_terminal, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+        )
+
+        assert "UnicodeEncodeError" not in done.stderr, done.stderr
+        assert done.returncode == control.returncode, done.stderr
+        assert r"\xb1" in done.stdout, done.stdout
+
+
 class TestTheStreamPolicyDoesOnlyWhatItSays:
     """``tolerate_unencodable_output`` is applied to every run, so it needs pinning."""
 
-    def test_a_strict_stream_is_relaxed_and_reported(self, tmp_path: Path) -> None:
+    def test_a_strict_stream_is_relaxed_and_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="strict") as stream:
             relaxed = tolerate_unencodable_output([stream])
 
@@ -486,12 +632,62 @@ class TestTheStreamPolicyDoesOnlyWhatItSays:
 
         assert r"\u2192" in target.read_text(encoding="ascii")
 
-    def test_an_explicit_handler_outranks_ours(self, tmp_path: Path) -> None:
+    def test_the_c_locales_own_handler_is_a_default_and_is_relaxed_too(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``surrogateescape`` is what CPython hands stdout under C/POSIX.
+
+        Nobody chose it, and it still raises on an ordinary non-ASCII character
+        because it re-encodes lone surrogates and nothing else. Treating it as
+        an operator's decision is what let ``beadloom docs audit`` exit 1 in
+        that room.
+        """
+        target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+        with target.open("w", encoding="ascii", errors="surrogateescape") as stream:
+            relaxed = tolerate_unencodable_output([stream])
+
+            assert relaxed == (str(target),)
+            assert stream.errors == TOLERANT_ERRORS
+            stream.write(_TOLERANCE_GLYPH)  # would raise under `surrogateescape`
+
+        assert r"\xb1" in target.read_text(encoding="ascii")
+
+    def test_an_explicit_handler_outranks_ours(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """An operator's ``PYTHONIOENCODING=...:replace`` is a decision, not a default."""
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="replace") as stream:
             assert tolerate_unencodable_output([stream]) == ()
             assert stream.errors == "replace"
+
+    def test_the_operator_can_still_ask_for_the_handler_the_image_also_gives(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``surrogateescape`` is a default in one channel and a decision in the other.
+
+        The handler name alone cannot tell them apart, so the variable is read:
+        ``PYTHONIOENCODING`` is the one way an operator states a handler for the
+        standard streams, and an operator piping byte-exact names asks for
+        exactly this one.
+        """
+        target = tmp_path / "out.txt"
+        monkeypatch.setenv("PYTHONIOENCODING", "utf-8:surrogateescape")
+        with target.open("w", encoding="ascii", errors="surrogateescape") as stream:
+            assert tolerate_unencodable_output([stream]) == ()
+            assert stream.errors == "surrogateescape"
+
+    def test_a_codec_without_a_handler_is_not_a_choice_of_handler(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``PYTHONIOENCODING=utf-8`` names a codec and leaves the handler to CPython."""
+        target = tmp_path / "out.txt"
+        monkeypatch.setenv("PYTHONIOENCODING", "utf-8")
+        with target.open("w", encoding="ascii", errors="strict") as stream:
+            assert tolerate_unencodable_output([stream]) == (str(target),)
+            assert stream.errors == TOLERANT_ERRORS
 
     def test_a_stream_that_cannot_be_reconfigured_is_left_alone(self) -> None:
         """Click's runner, a captured pipe: no ``reconfigure``, and no crash."""
@@ -499,9 +695,12 @@ class TestTheStreamPolicyDoesOnlyWhatItSays:
 
         assert tolerate_unencodable_output([buffer]) == ()
 
-    def test_the_codec_is_never_changed(self, tmp_path: Path) -> None:
+    def test_the_codec_is_never_changed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The terminal's encoding belongs to the operator; only the handler moves."""
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="strict") as stream:
             tolerate_unencodable_output([stream])
 

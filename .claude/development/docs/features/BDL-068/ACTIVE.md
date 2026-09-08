@@ -939,6 +939,35 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     CONTEXT — is that `beadloom docs audit` answers it, since it already reads non-Python
     artifacts and already verifies command mentions.
 
+  - [x] `.65` — `beadloom docs audit` exited 1 under `LC_ALL=C` because
+    `console_streams.tolerate_unencodable_output` read CPython's own C-locale `surrogateescape`
+    as an operator's choice. Wave 4, concurrent with `.40`, `.48` and `.73`; **not the gate
+    owner** — `.73` is. Found on `.64` while confirming the product was NOT at fault for a red
+    locale leg, and it is a different class from that bead's: `.64` was about decoding `bd`,
+    this is encoding to the console. Reproduced before the fix, streams separated and the exit
+    code read from `$?` without a pipe: rc 1 after 1321 bytes of a partial report,
+    `UnicodeEncodeError` on the `±` of the tolerance label at `rich/console.py`. `strict` and
+    `surrogateescape` are now both relaxed as handlers nobody chose, and the operator's channel
+    is `PYTHONIOENCODING` rather than the handler's NAME — so an explicit `:surrogateescape` is
+    still honoured, which the name alone could not have granted. The direction was checked
+    against the decode sites rather than made to match them: `bd_seam/client.py` and
+    `guard_probes.py` choose `surrogateescape` because it is injective and no comparison can be
+    given a wrong answer by a byte, and nothing at an encode site to a terminal compares
+    anything. The module's docstring claim that the C locale already gets `backslashreplace` was
+    false and is corrected in the module and in both documents. **No CI leg observes this and
+    none will** — the `tests-locale` legs run `pytest` and `beadloom ci` runs under UTF-8 — so
+    it reaches an adopter on a C-locale container, the shape of #240. 5 tests (3 in the C room,
+    2 unit), each probing the room rather than assuming it. Verified in BOTH locale rooms: rc 0
+    under `LC_ALL=C` and under `LC_ALL=en_US.ISO8859-1` **without the hyphen** — the spelling
+    `ci.yml` publishes degrades to ASCII on Darwin and measures the C room twice (#249,
+    confirmed independently here). Green in a clean room over 4 files: 9 212 passed, the 1
+    failure the room's stated no-`.git` property, `beadloom ci` rc 0 with 0 errors there.
+    Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms; `mypy` clean against all four
+    declared target versions, run under one interpreter. One instance of BDL-UX **#190**
+    recorded rather than re-filed: `docs audit` read the interpreter version in this bead's own
+    documents as a claim about the project's version and reddened the Gate, so the room is
+    stated in a code block and the document says why.
+
 ## What is in `main` now
 
 Four commands, each of one shape — derive the answer, name the reason, name what was not
