@@ -20,7 +20,7 @@ from beadloom.services.bd_seam import BdResult, BdUnavailableError, run_bd
 
 def test_run_bd_success() -> None:
     completed = MagicMock(returncode=0, stdout="ok\n", stderr="")
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed) as run:
         result = run_bd(["show", "bd-1"])
     assert isinstance(result, BdResult)
     assert result.ok is True
@@ -34,7 +34,7 @@ def test_run_bd_success() -> None:
 
 def test_run_bd_nonzero_exit() -> None:
     completed = MagicMock(returncode=1, stdout="", stderr="boom\n")
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed):
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed):
         result = run_bd(["close", "bd-1"])
     assert result.ok is False
     assert result.returncode == 1
@@ -43,7 +43,7 @@ def test_run_bd_nonzero_exit() -> None:
 
 def test_run_bd_missing_binary_raises_clear_error() -> None:
     with patch(
-        "beadloom.services.bd_seam.subprocess.run",
+        "beadloom.services.bd_seam.client.subprocess.run",
         side_effect=FileNotFoundError("bd"),
     ), pytest.raises(BdUnavailableError) as exc:
         run_bd(["ready"])
@@ -52,7 +52,7 @@ def test_run_bd_missing_binary_raises_clear_error() -> None:
 
 def test_run_bd_passes_cwd() -> None:
     completed = MagicMock(returncode=0, stdout="", stderr="")
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed) as run:
         run_bd(["ready"], cwd="/work/x")
     assert run.call_args.kwargs["cwd"] == "/work/x"
 
@@ -64,7 +64,7 @@ def test_run_bd_normalizes_none_streams() -> None:
     """`subprocess` may hand back ``None`` for stdout/stderr; the seam coerces
     them to empty strings so callers can always ``.strip()`` safely."""
     completed = MagicMock(returncode=0, stdout=None, stderr=None)
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed):
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed):
         result = run_bd(["ready"])
     assert result.stdout == ""
     assert result.stderr == ""
@@ -98,7 +98,7 @@ def test_run_bd_invokes_with_capture_and_no_check() -> None:
     a future edit cannot quietly hand the decision back to the environment.
     """
     completed = MagicMock(returncode=0, stdout="", stderr="")
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed) as run:
         run_bd(["show", "bd-1"])
     kwargs = run.call_args.kwargs
     assert kwargs["capture_output"] is True
@@ -111,6 +111,6 @@ def test_run_bd_invokes_with_capture_and_no_check() -> None:
 def test_run_bd_default_cwd_is_none() -> None:
     """Without an explicit ``cwd`` the invocation inherits the process cwd."""
     completed = MagicMock(returncode=0, stdout="", stderr="")
-    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+    with patch("beadloom.services.bd_seam.client.subprocess.run", return_value=completed) as run:
         run_bd(["ready"])
     assert run.call_args.kwargs["cwd"] is None

@@ -138,7 +138,9 @@ def conn(project: Path) -> sqlite3.Connection:
     code.mkdir(parents=True)
     code_file = code / "x.py"
     code_file.write_text("def f():\n    return 1\n", encoding="utf-8")
-    doc_text = (project / "docs" / "domains" / "application" / "README.md").read_text()
+    doc_text = (project / "docs" / "domains" / "application" / "README.md").read_text(
+        encoding="utf-8"
+    )
     _seed_sync_pair(
         db,
         doc_path="domains/application/README.md",
@@ -147,7 +149,7 @@ def conn(project: Path) -> sqlite3.Connection:
         status="ok",
         synced_at="2026-06-01T00:00:00+00:00",
         doc_hash=_hash(doc_text),
-        code_hash=_hash(code_file.read_text()),
+        code_hash=_hash(code_file.read_text(encoding="utf-8")),
     )
     return db
 

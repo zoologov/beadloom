@@ -61,7 +61,7 @@ Mutation testing answers that, and it is the only cheap answer there is.
 1. Tests pass + coverage >= 80% — in a named room. A suite that skips a case in your room and runs it in another produces two different coverage numbers about one tree.
 2. Architecture/doc validation green (`beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict`).
 3. Checkpoint: `bd comments add <bead-id> "TESTS: unit X, integration Y, coverage Z%, edge cases: <list>, known limitations: <…>"`.
-4. Close: `bd close <bead-id> --suggest-next` (append `--session "$CLAUDE_SESSION_ID"` only when set).
+4. Close: `bd close <bead-id> --suggest-next`, then confirm what it named with `bd ready --limit 0` — the suggestion can include still-blocked beads. Append `--session "$CLAUDE_SESSION_ID"` only when set.
 
 ### Return contract (coordinator)
 Return ONLY 2-3 lines: `"BEAD-XX: N tests, coverage Z%."` Detail → bead comments.

@@ -25,6 +25,7 @@ from beadloom.application.waves import (
     GATE_WHOLE_TREE,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
     SHARED_MEDIA,
@@ -33,25 +34,46 @@ from beadloom.application.waves import (
     STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    LockSite,
     MediumCheck,
     WaveEnvironment,
     WorkItemAxes,
     check_media,
     finding_for,
+    lock_sites,
     plan_waves,
     title_id_mismatches,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.services.bd_seam.assumptions import lock_invocations
+from beadloom.services.bd_seam.invocations import text_invocations
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
+
+def _lock_sites(sources: list[tuple[str, str]]) -> tuple[LockSite, ...]:
+    """Judge the lock instructions in *sources*, through the one shared grammar.
+
+    `beadloom-0mdo.51` moved the grammar to the seam and left the judgement here,
+    so a test that starts from TEXT composes the two the same way the services
+    edge does. Composing them here rather than mocking keeps these tests over the
+    real path.
+    """
+    return lock_sites(lock_invocations(text_invocations(sources)))
+
+
 CLEAN = WaveEnvironment(
     tree_changed_paths=(),
     commit_gate=GATE_COMMIT_SCOPED,
     doc_baseline_stale_pairs=0,
+    landing_lock_sites=(),
 )
+
+#: One instruction of the landing lock in the form that grants nothing — the
+#: form four of this project's own five sites carried until BDL-068 S5.
+GRANTS_NOTHING = _lock_sites([("a.md", "bd merge-slot acquire --wait\n")])
 
 
 def _approving(*nodes: str) -> WorkItemAxes:
@@ -101,7 +123,7 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
 
 
 class TestEveryMediumHasACheckThatCanFail:
-    """The answer to `.22`'s headline: four media, four verdicts, none constant."""
+    """The answer to `.22`'s headline: a verdict per medium, none of them constant."""
 
     def test_every_stated_medium_is_also_checked(self) -> None:
         """A medium stated and not checked is exactly the defect `.80` closed."""
@@ -117,6 +139,7 @@ class TestEveryMediumHasACheckThatCanFail:
                     tree_changed_paths=("src/elsewhere.py",),
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=0,
+                    landing_lock_sites=(),
                 ),
             ),
             (
@@ -125,6 +148,7 @@ class TestEveryMediumHasACheckThatCanFail:
                     tree_changed_paths=(),
                     commit_gate=GATE_WHOLE_TREE,
                     doc_baseline_stale_pairs=0,
+                    landing_lock_sites=(),
                 ),
             ),
             (
@@ -133,6 +157,16 @@ class TestEveryMediumHasACheckThatCanFail:
                     tree_changed_paths=(),
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=3,
+                    landing_lock_sites=(),
+                ),
+            ),
+            (
+                MEDIUM_LANDING_ORDER,
+                WaveEnvironment(
+                    tree_changed_paths=(),
+                    commit_gate=GATE_COMMIT_SCOPED,
+                    doc_baseline_stale_pairs=0,
+                    landing_lock_sites=GRANTS_NOTHING,
                 ),
             ),
         ],
@@ -147,7 +181,13 @@ class TestEveryMediumHasACheckThatCanFail:
         assert all(c.status == STATUS_PASSED for c in others)
 
     @pytest.mark.parametrize(
-        "medium", [MEDIUM_WORKING_TREE, MEDIUM_COMMIT_GATE, MEDIUM_DOC_BASELINE]
+        "medium",
+        [
+            MEDIUM_WORKING_TREE,
+            MEDIUM_COMMIT_GATE,
+            MEDIUM_DOC_BASELINE,
+            MEDIUM_LANDING_ORDER,
+        ],
     )
     def test_a_medium_nobody_observed_is_unmeasured_rather_than_passed(
         self, medium: str
@@ -169,7 +209,12 @@ class TestEveryMediumHasACheckThatCanFail:
         same doc baseline.
         """
         checks = check_media([_bead("a")], environment=CLEAN)
-        for medium in (MEDIUM_WORKING_TREE, MEDIUM_COMMIT_GATE, MEDIUM_DOC_BASELINE):
+        for medium in (
+            MEDIUM_WORKING_TREE,
+            MEDIUM_COMMIT_GATE,
+            MEDIUM_DOC_BASELINE,
+            MEDIUM_LANDING_ORDER,
+        ):
             assert _check(checks, medium).status != STATUS_NOT_APPLICABLE
             assert not _check(checks, medium).is_finding
 
@@ -300,6 +345,7 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             tree_changed_paths=("src/reporting/core.py",),
             commit_gate=GATE_COMMIT_SCOPED,
             doc_baseline_stale_pairs=0,
+            landing_lock_sites=(),
         )
         plan = plan_waves(
             [_bead("a", "billing"), _bead("b", "shipping")],
@@ -319,6 +365,7 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             tree_changed_paths=("src/billing/core.py",),
             commit_gate=GATE_COMMIT_SCOPED,
             doc_baseline_stale_pairs=0,
+            landing_lock_sites=(),
         )
         plan = plan_waves(
             [_bead("a", "billing"), _bead("b", "shipping")],
@@ -396,3 +443,4 @@ class TestTheGuaranteeSentenceMatchesTheCode:
         text = waves_package.__doc__ or ""
         assert "CHECKS the medium's plan-time precondition" in text
         assert "cannot be, by anything holding a plan" in text
+

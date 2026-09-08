@@ -102,7 +102,7 @@ This is the signal the review + tech-writer roles rely on — `sync-check` can r
 1. Validation/Gate loop above all green.
 2. API-CHANGE comment (if any public API moved).
 3. Final checkpoint: `bd comments add <bead-id>` with — what / decisions / tests / files / API changes / TODO.
-4. Close: `bd close <bead-id> --suggest-next` (then confirm with `bd ready`). Append `--session "$CLAUDE_SESSION_ID"` only when that env var is set.
+4. Close: `bd close <bead-id> --suggest-next`, then confirm what it named with `bd ready --limit 0` — the suggestion can include still-blocked beads. Append `--session "$CLAUDE_SESSION_ID"` only when that env var is set.
 5. Clear `ACTIVE.md` for the next bead.
 
 ### Return contract (when launched by the coordinator)

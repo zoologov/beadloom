@@ -92,12 +92,15 @@ from tests.decoding_calls import (
     SUBPROCESS_CALLS,
     TEXT_READWRITE,
     called_name,
+    is_container_open,
     is_true,
     keyword,
     open_mode,
+    states_encoding,
 )
 
 _SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "beadloom"
+_TESTS_ROOT = Path(__file__).resolve().parent
 _BEADLOOM = shutil.which("beadloom") or str(Path(sys.executable).parent / "beadloom")
 
 #: The knobs that make a non-UTF-8 locale real. A bare ``LC_ALL=C`` is coerced
@@ -110,33 +113,76 @@ _ASCII_ENV = {"LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
 #: user's encoding. An entry is how a future exception is made *visible*.
 _LOCALE_BY_DESIGN: dict[tuple[str, int], str] = {}
 
+#: The same register for the ``tests/`` root, and it is NOT empty. Two rows hold
+#: the defect down on purpose: they arrange an ambient codec with
+#: ``tests.ambient_codec`` and require an unstated reader to mangle and then to
+#: raise, which is the only check that the double still intercepts anything.
+#: Stating their codec would make both vacuous. Ruff cannot express the exception
+#: either — measured on ruff 0.16.3, a ``noqa`` naming ``PLW1514`` on these lines
+#: is reported as an UNUSED noqa, because ``PLW1514`` does not look at
+#: ``subprocess`` at all.
+_TESTS_LOCALE_BY_DESIGN: dict[tuple[str, int], str] = {
+    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 907): (
+        "control: an unstated reader must take the double's codec and mangle"
+    ),
+    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 926): (
+        "control: an unstated reader must be refused by an ASCII double"
+    ),
+}
 
-def _module_sources() -> list[tuple[Path, ast.Module]]:
-    """Every module of the package, parsed once."""
+
+def _module_sources(root: Path) -> list[tuple[Path, ast.Module]]:
+    """Every module under *root*, parsed once."""
     parsed = []
-    for path in sorted(_SRC_ROOT.rglob("*.py")):
+    for path in sorted(root.rglob("*.py")):
         parsed.append((path, ast.parse(path.read_text(encoding="utf-8"))))
     return parsed
 
 
+def _classify(node: ast.Call, *, decodes_only: bool) -> str | None:
+    """What kind of ambient-codec site *node* is, or ``None`` when it is not one."""
+    if states_encoding(node) or is_container_open(node):
+        return None
+    name = called_name(node)
+    if name in TEXT_READWRITE:
+        if decodes_only and name == "write_text":
+            return None
+        return f"{name}()"
+    if name == "open" and "b" not in open_mode(node):
+        return f"open(mode={open_mode(node)!r})"
+    if name in SUBPROCESS_CALLS and (
+        is_true(keyword(node, "text")) or is_true(keyword(node, "universal_newlines"))
+    ):
+        return f"subprocess.{name}(text=True)"
+    return None
+
+
+def _ambient_sites(
+    root: Path,
+    by_design: dict[tuple[str, int], str],
+    *,
+    decodes_only: bool = False,
+) -> list[tuple[Path, int, str]]:
+    """Every call under *root* whose codec the *image* would choose."""
+    repo = Path(__file__).resolve().parent.parent
+    sites: list[tuple[Path, int, str]] = []
+    for path, tree in _module_sources(root):
+        # `relative_to` only when the path IS under the repository: the control
+        # row below sweeps a `tmp_path`, and a sweep that raised there could not
+        # be checked against a planted call at all.
+        rel = path.relative_to(repo) if path.is_relative_to(repo) else path
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            what = _classify(node, decodes_only=decodes_only)
+            if what is not None:
+                sites.append((rel, node.lineno, what))
+    return [s for s in sites if (str(s[0]), s[1]) not in by_design]
+
+
 def _ambient_text_io_sites() -> list[tuple[Path, int, str]]:
     """Every call in the package whose codec the *image* would choose."""
-    sites: list[tuple[Path, int, str]] = []
-    for path, tree in _module_sources():
-        rel = path.relative_to(_SRC_ROOT.parent.parent)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or keyword(node, "encoding") is not None:
-                continue
-            name = called_name(node)
-            if name in TEXT_READWRITE:
-                sites.append((rel, node.lineno, f"{name}()"))
-            elif name == "open" and "b" not in open_mode(node):
-                sites.append((rel, node.lineno, f"open(mode={open_mode(node)!r})"))
-            elif name in SUBPROCESS_CALLS and (
-                is_true(keyword(node, "text")) or is_true(keyword(node, "universal_newlines"))
-            ):
-                sites.append((rel, node.lineno, f"subprocess.{name}(text=True)"))
-    return [s for s in sites if (str(s[0]), s[1]) not in _LOCALE_BY_DESIGN]
+    return _ambient_sites(_SRC_ROOT, _LOCALE_BY_DESIGN)
 
 
 class TestEveryTextIoSiteStatesItsEncoding:
@@ -157,6 +203,142 @@ class TestEveryTextIoSiteStatesItsEncoding:
         offending = [c for c in calls if called_name(c) == "write_text"]
         assert offending, "the AST walk no longer recognises a write_text() call"
         assert keyword(offending[0], "encoding") is None
+
+
+class TestEverySuiteDecodeStatesItsCodec:
+    """The same sweep, rooted at ``tests/``, and narrowed to the DECODE direction.
+
+    **Why the root moved.** ``beadloom-0mdo.49`` priced this extension at 26 triage
+    decisions and deferred it, on the ground that the class had cost one red leg.
+    ``beadloom-0mdo.64`` was the second, on ``tests-locale (C)`` of PR #62, and the
+    population had grown to 32 subprocess sites in the meantime — the price rises while
+    the decision waits, which is the argument for taking it now rather than a third time.
+
+    **Why decodes and not writes**, measured on this tree rather than argued:
+
+    ============================  =====  ============================================
+    direction                     sites  what a wrong codec does
+    ============================  =====  ============================================
+    ``subprocess(text=True)``        32  decodes bytes THIS PROCESS DID NOT WRITE
+    ``read_text()``                  49  same, for a file some other program wrote
+    ``open()`` text mode              2  same
+    ``write_text()``               1145  encodes bytes this process chose
+    ============================  =====  ============================================
+
+    Both failures ``.64`` had to fix were decodes and neither was a write: seven
+    ``subprocess`` reads of ``bd --help`` and one ``read_text()`` of a shipped source
+    file carrying an em dash. The write direction is 1145 sites, 1008 of which pass an
+    ASCII string LITERAL and 0 of which pass a non-ASCII one, so nothing there can raise
+    today; and a test that writes ``tmp_path`` and reads it back in the same process
+    round-trips under any codec it picks. That is a real gap and not a closed one — a
+    write whose payload is a variable (137 sites) can still raise the day it carries a
+    non-ASCII byte — but it is a different job from this one, and pricing it as 1145
+    triage decisions is what has kept both halves unbuilt for two beads.
+
+    **What this class covers that the linter does not.** ``PLW1514`` is selected in this
+    project and it reports neither half of what was red: it does not look at
+    ``subprocess`` at all, and it reports ``read_text`` only where it can infer a
+    ``Path`` receiver.
+
+    **The handler the 70 sites were given, stated once here rather than 70 times.** A
+    ``read_text`` gets ``encoding="utf-8"`` with the default ``strict``, because the file
+    on the other side is one this project or its product wrote under a UTF-8 contract and
+    a mangled artifact *is* the defect those rows exist to find. A ``subprocess`` read
+    gets ``errors="replace"`` as well, because the child's own stdout encoder follows the
+    ambient locale — measured in this room: under ``LC_ALL=en_US.ISO8859-1`` a Python
+    child's stdout is ``iso8859-1``/``strict``, so a byte it legitimately writes there is
+    not UTF-8 and a strict parent would raise on output that is not wrong. Every
+    assertion downstream of those reads searches for ASCII, which survives either way, so
+    ``replace`` keeps the row about its subject instead of about the room.
+    """
+
+    def test_no_test_module_decodes_in_the_images_codec(self) -> None:
+        sites = _ambient_sites(_TESTS_ROOT, _TESTS_LOCALE_BY_DESIGN, decodes_only=True)
+        rendered = "\n".join(f"  {p}:{line} {what}" for p, line, what in sites)
+        assert not sites, (
+            "a test decodes bytes it did not write without stating a codec — under the "
+            "`tests-locale (C)` leg that is a `UnicodeDecodeError` and under the 8-bit "
+            f"leg it is a silently different string:\n{rendered}"
+        )
+
+    def test_the_write_direction_is_out_of_scope_and_is_the_reason_this_is_affordable(
+        self,
+    ) -> None:
+        """The exclusion is a measurement, so it fails if the measurement stops holding.
+
+        If a non-ASCII literal ever reaches an unstated ``write_text``, the ground this
+        class stands on is gone and the write direction has to be priced again. Stating
+        the exclusion without checking it is how a scope note becomes folklore.
+        """
+        offenders = [
+            (path.relative_to(_TESTS_ROOT.parent), node.lineno)
+            for path, tree in _module_sources(_TESTS_ROOT)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and called_name(node) == "write_text"
+            and not states_encoding(node)
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+            and not node.args[0].value.isascii()
+        ]
+
+        assert not offenders, (
+            "an unstated `write_text` now carries a non-ASCII literal, which RAISES "
+            f"under an ASCII locale: {offenders}"
+        )
+
+    def test_the_two_deliberate_sites_are_still_the_calls_they_claim_to_be(self) -> None:
+        """A register entry that has drifted onto another line excuses the wrong call.
+
+        Line numbers are the key, and a line number is the least stable thing in a file
+        this class re-reads on every run. Without this row an edit above line 907 would
+        silently move the exemption onto an unrelated call and take a real site out of
+        the population.
+        """
+        for (relative, line), reason in _TESTS_LOCALE_BY_DESIGN.items():
+            source = (_TESTS_ROOT.parent / relative).read_text(encoding="utf-8")
+            tree = ast.parse(source)
+            here = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and node.lineno == line
+            ]
+
+            assert here, f"{relative}:{line} is no longer a call at all ({reason})"
+            assert any(_classify(node, decodes_only=True) is not None for node in here), (
+                f"{relative}:{line} states its codec now, so the exemption is stale "
+                f"and must be deleted rather than kept ({reason})"
+            )
+
+    def test_the_sweep_sees_a_planted_subprocess_and_spares_a_stated_one(
+        self, tmp_path: Path
+    ) -> None:
+        """Control: the tests-root sweep is neither blind nor indiscriminate.
+
+        Both directions in one row, because either alone is consistent with a broken
+        sweep — one that finds nothing passes the first half of the class trivially, and
+        one that finds everything passes it never.
+        """
+        planted = tmp_path / "test_planted.py"
+        planted.write_text(
+            "import subprocess\n"
+            "subprocess.run(['x'], text=True)\n"
+            "subprocess.run(['x'], text=True, encoding='utf-8')\n"
+            "import tarfile\n"
+            "tarfile.open(fileobj=None)\n"
+            "from pathlib import Path\n"
+            "Path('a').read_text('utf-8')\n"
+            "Path('a').write_text('b')\n",
+            encoding="utf-8",
+        )
+
+        found = _ambient_sites(tmp_path, {}, decodes_only=True)
+
+        assert [(line, what) for _, line, what in found] == [(2, "subprocess.run(text=True)")], (
+            "the sweep must catch the unstated read on line 2 and spare the stated "
+            "subprocess, the tar container, the positionally-stated read and the write"
+        )
 
 
 def _run_under(

@@ -5,13 +5,22 @@
 # declared targets and told `beadloom mutation` to judge only that one, so the
 # other two were unreachable by any run AND unreported as unreachable.
 # `.beadloom/flow.yml`, `[tool.mutmut] only_mutate` and the `--target` list below
-# now name the same seven targets, and two tests fail when they stop agreeing.
+# now name the same fourteen targets, and two tests fail when they stop agreeing.
 #
 #   MEASURED 2026-09-04, mutant counts from mutmut's own generator:
 #   3 989 graph/rules/ + 657 doc_quality.py + 350 doc_shape.py + 324
 #   role_duties.py + 146 shell_targets.py + 136 guards/surface.py + 98
 #   waves/derivation.py = 5 700, which is 42.9% more than the 3 989 the S3
 #   measurement below timed.
+#
+#   MEASURED 2026-09-08, the seven pure cores S5 added, counted the same way and
+#   then RUN rather than projected:
+#   183 bd_seam/assumptions.py + 181 bd_seam/invocations.py + 122
+#   active_table/row_ids.py + 107 bd_seam/answers.py + 80 active_table/staging.py
+#   + 62 bd_seam/creation.py + 29 waves/landing.py = 764, taking the declared
+#   scope to 6 464. The runner's own denominator reads 6 464, which is the count
+#   confirmed by the tool that has to execute it rather than by the generator
+#   alone.
 #
 # WHY THIS IS NIGHTLY AND NOT A PR LEG — the number decided it, not a preference.
 # CONTEXT's Q3 stated the rule before the measurement: the job runs per PR if it
@@ -81,10 +90,26 @@ jobs:
     # Projected for the widened scope on `ubuntu-latest`: 89 min for the rules
     # slice (measured), plus 16 min for the 1 711 other mutants and 6 min for the
     # second run's clean-test phase (both the macOS figures scaled by the 1.63
-    # this runner measured) — about 110 minutes. 240 leaves the same proportion
-    # of headroom that 180 left over the old 89, and a nightly with no dependent
-    # job pays nothing for a cap it never reaches.
-    timeout-minutes: 240
+    # this runner measured) — about 110 minutes.
+    #
+    # RE-DERIVED 2026-09-08 for the seven S5 cores, and their cost is NOT
+    # proportional to their mutant count. 764 mutants is 13.4% more mutants and
+    # 36 min 35 s of wall clock — measured, six workers on a 10-core Darwin arm64
+    # machine — against 9 min 34 s for the 1 711 mutants of the six file targets
+    # on the same machine. Eight times the cost per mutant, because these targets'
+    # covering tests are the derived-population ones that walk this repository's
+    # harness and template files: `invocations.py` and `assumptions.py` have ten
+    # covering test files each where `creation.py` has two. Scaled by the same
+    # 1.63, that is 60 min on this runner and a job of about 171 minutes.
+    #
+    # 340 keeps the proportion the two settings above were chosen by — 180 over
+    # 89 is 2.02 and 240 over 110 is 2.18 — and 171 x 2 is 342. It is not 360
+    # because that is GitHub's own six-hour ceiling for a hosted job, where a
+    # `timeout-minutes` equal to it can never be the thing that trips. A nightly
+    # with no dependent job pays nothing for a cap it never reaches, and a cap
+    # that DOES trip reports nothing at all, which is the asymmetry this number
+    # is set from.
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v5
 
@@ -134,12 +159,19 @@ jobs:
       - name: Run the mutants of the remaining declared targets
         run: >-
           uv run mutmut run --max-children 4
+          'beadloom.application.active_table.row_ids.*'
+          'beadloom.application.active_table.staging.*'
           'beadloom.application.guards.shell_targets.*'
           'beadloom.application.guards.surface.*'
           'beadloom.application.waves.derivation.*'
+          'beadloom.application.waves.landing.*'
           'beadloom.doc_sync.doc_quality.*'
           'beadloom.doc_sync.doc_shape.*'
           'beadloom.onboarding.role_duties.*'
+          'beadloom.services.bd_seam.answers.*'
+          'beadloom.services.bd_seam.assumptions.*'
+          'beadloom.services.bd_seam.creation.*'
+          'beadloom.services.bd_seam.invocations.*'
           || true
 
       - name: Export the counters of the whole declared scope
@@ -155,7 +187,7 @@ jobs:
         # rule".
         #
         # `--only` is honest here and was not honest before: this run genuinely
-        # covered one target, and the next step judges the other six.
+        # covered one target, and the next step judges the other thirteen.
         run: >-
           uv run beadloom mutation
           --stats mutants/rules-cicd-stats.json
@@ -178,35 +210,56 @@ jobs:
         # `tests/test_mutation_ci_job.py` derives this list from
         # `.beadloom/flow.yml` and fails when the two differ.
         #
-        # THE FLOOR IS 0.88 AND IT IS COMPOSED FROM TWO MEASUREMENTS, which is
-        # said because it is weaker than a single one. mutmut's CI/CD stats file
-        # holds one set of counters for the whole run rather than one per file,
-        # so this number is a property of the scope and is re-derived whenever
-        # the scope changes.
+        # THE FLOOR IS 0.88 AND IT IS COMPOSED FROM THREE MEASUREMENTS, which
+        # is said because it is weaker than a single one. mutmut's CI/CD stats
+        # file holds one set of counters for the whole run rather than one per
+        # file, so this number is a property of the scope and is re-derived
+        # whenever the scope changes.
         #
         #   the six file targets   77.03%  (1 711 mutants, 1 314 killed, 4
         #                                   timeout, 393 survived, 0 with no
         #                                   covering test; 9 min 34 s, six
         #                                   workers, Darwin arm64, CPython 3.13.7)
         #   graph/rules/           95.56%  (measured on this runner, 2026-09-04)
-        #   together             ~90.00%  (5 130 of 5 700)
+        #   the seven S5 cores     83.64%  (764 mutants, 639 killed, 125
+        #                                   survived, 0 unrun; 36 min 35 s, same
+        #                                   machine, 2026-09-08)
+        #   together              ~89.23%  (5 768 of 6 464)
+        #
+        # RE-DERIVED 2026-09-08 AND IT DOES NOT MOVE, which is a decision and not
+        # an omission. The aggregate falls from 89.98% to 89.23% because the
+        # seven score below the scope's mean, so 0.88 keeps 1.23 points of
+        # headroom where it had 2.00 — 79 mutants, against the 62 the rules floor
+        # above was called adequate at. Two of the three components are macOS
+        # numbers applied to a floor enforced on `ubuntu-latest`; drop both by
+        # the 0.63 points the rules slice actually fell between those rooms and
+        # the aggregate is 88.99%, still above the floor with 63 mutants to
+        # spare. The floor survives its own worst case, so it stays.
         #
         # WHAT THIS FLOOR DOES NOT GUARD, stated so it is not read as tighter
-        # than it is: at 0.88 the six could fall from 77.0% to 70.4% before
-        # anything trips, because they are 1 711 of 5 700. Their own floor needs
-        # per-target counters, which this runner's export does not write. The
-        # rules slice has its own floor in the step above and does not depend on
-        # this one.
+        # than it is: at 0.88 the six could fall from 77.0% to 72.4% before
+        # anything trips, because they are 1 711 of 6 464, and the seven could
+        # fall from 83.6% to 73.2% — each figure assuming the other components
+        # hold, since one set of counters cannot attribute a loss to a file. Per-target floors need per-target counters,
+        # which this runner's export does not write. The rules slice has its own
+        # floor in the step above and does not depend on this one.
         run: >-
           uv run beadloom mutation
           --stats mutants/mutmut-cicd-stats.json
+          --target src/beadloom/application/active_table/row_ids.py
+          --target src/beadloom/application/active_table/staging.py
           --target src/beadloom/application/guards/shell_targets.py
           --target src/beadloom/application/guards/surface.py
           --target src/beadloom/application/waves/derivation.py
+          --target src/beadloom/application/waves/landing.py
           --target src/beadloom/doc_sync/doc_quality.py
           --target src/beadloom/doc_sync/doc_shape.py
           --target src/beadloom/graph/rules/
           --target src/beadloom/onboarding/role_duties.py
+          --target src/beadloom/services/bd_seam/answers.py
+          --target src/beadloom/services/bd_seam/assumptions.py
+          --target src/beadloom/services/bd_seam/creation.py
+          --target src/beadloom/services/bd_seam/invocations.py
           --tool "mutmut 3.7"
           --min-score 0.88
 

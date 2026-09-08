@@ -28,6 +28,8 @@ from beadloom.graph.rules import exit_condition_deadline
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from beadloom.application.waves.landing import LockSite
+
 #: The two beads' node scopes intersect — the same node, or one inside the other.
 REASON_SHARED_NODE = "shared_node"
 
@@ -430,10 +432,10 @@ GATE_ABSENT = "absent"
 
 @dataclass(frozen=True)
 class WaveEnvironment:
-    """What the machine says about the three media the graph cannot see.
+    """What the machine says about the four media the graph cannot see.
 
     Every field is ``None`` by default and ``None`` means *not observed*. A caller
-    that gathers nothing therefore gets three ``unmeasured`` checks and an exit
+    that gathers nothing therefore gets four ``unmeasured`` checks and an exit
     code of 1, which is the intended outcome: a concurrent wave whose shared media
     nobody measured is not a clean plan, it is an unmeasured one.
     """
@@ -447,6 +449,12 @@ class WaveEnvironment:
 
     #: How many doc pairs are stale before the wave starts.
     doc_baseline_stale_pairs: int | None = None
+
+    #: Every place this project's flow artifacts instruct the landing lock, as
+    #: :func:`beadloom.application.waves.landing.lock_sites` derives them. An
+    #: empty tuple is a real observation — somebody read the artifacts and the
+    #: lock is instructed nowhere — and is not the same fact as ``None``.
+    landing_lock_sites: tuple[LockSite, ...] | None = None
 
 
 @dataclass(frozen=True)

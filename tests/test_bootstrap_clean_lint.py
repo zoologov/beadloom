@@ -174,7 +174,7 @@ class TestCleanBootstrapLint:
         bootstrap_project(tmp_path, preset_name="monolith")
 
         rules = yaml.safe_load(
-            (tmp_path / ".beadloom" / "_graph" / "rules.yml").read_text()
+            (tmp_path / ".beadloom" / "_graph" / "rules.yml").read_text(encoding="utf-8")
         )
         rule_names = {r["name"] for r in rules["rules"]}
         assert "feature-needs-parent" in rule_names

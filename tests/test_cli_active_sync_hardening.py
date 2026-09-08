@@ -530,7 +530,8 @@ def test_hook_is_strict_noop_in_bdless_repo(tmp_path: Path) -> None:
         cwd=project,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert completed.returncode == 0, completed.stderr + completed.stdout
     # The ACTIVE table was NOT touched by the hook (adopter has no bd).
@@ -541,7 +542,8 @@ def test_hook_is_strict_noop_in_bdless_repo(tmp_path: Path) -> None:
         cwd=project,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert status.stdout.strip() == "", status.stdout
 
@@ -595,7 +597,8 @@ def test_hook_noop_when_beadloom_present_but_bd_absent(tmp_path: Path) -> None:
         cwd=project,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert completed.returncode == 0, completed.stderr + completed.stdout
     # The tripwire beadloom was NEVER invoked (bd guard short-circuited first).

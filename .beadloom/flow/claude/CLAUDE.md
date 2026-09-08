@@ -37,8 +37,12 @@ is the normal state, not an incident.
 
 ### Concurrent waves share one working tree
 
-Commit only your own files, by explicit path — never `git add -A`. Take
-`bd merge-slot acquire --wait` before committing and `release` after. Verify in
-a clean room (`git archive HEAD` + only your files) and say so in those words:
-"green in a clean room over N files" is a different claim from "green on the
-tree" (BDL-UX #181).
+Commit only your own files, by explicit path — never `git add -A`. Take the
+landing lock as `bd merge-slot acquire --holder <bead-id>` before committing and
+`bd merge-slot release --holder <bead-id>` after, and treat a non-zero exit as
+*you do not hold it*. The lock orders the COMMITS; what keeps two agents out of
+one file is the disjoint scopes `beadloom waves` derived, and every wave this
+project ran before 2026-09-04 relied on the second while believing it held the
+first (BDL-UX #194, #237). Verify in a clean room (`git archive HEAD` + only your
+files) and say so in those words: "green in a clean room over N files" is a
+different claim from "green on the tree" (BDL-UX #181).

@@ -153,7 +153,7 @@ There are four layers.
 - **The stack overlay** — the specifics of a language and framework. Each brings its own code examples and its own linting, typing and test commands.
 - **Your project's layer** in `.beadloom/flow/` composes last and survives an upgrade, because an upgrade changes the core underneath it. A core rule can only be stood down by a declaration carrying a reason and an expiry, and once the expiry passes `config-check` reports it. Details are in the [project overlays guide](./project-overlays.md).
 
-`beadloom setup-agentic-flow` composes the four role protocols, the slash commands and `CLAUDE.md` out of these layers. A separate drift-guard test watches that the generated adapters match the composition. From this follows a practical rule: roles are not edited by hand, because the next composition overwrites a manual edit.
+`beadloom setup-agentic-flow` composes the five role protocols, the slash commands and `CLAUDE.md` out of these layers. A separate drift-guard test watches that the generated adapters match the composition. From this follows a practical rule: roles are not edited by hand, because the next composition overwrites a manual edit.
 
 Beadloom's own configuration is modest — `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`. A team writing a Vue frontend in TypeScript with Feature-Sliced Design in Cursor gets the same core and the overlays it needs. Turning that on is one line in `flow.yml`.
 
@@ -163,7 +163,7 @@ Cursor's agent capabilities today are comparable with Claude Code's: its own sub
 
 ## What the workflow checks besides documentation freshness
 
-Five mechanisms have been added to the cycle of "write code, write documentation, pass the Gate". Each has its own guide, and what is said here is only why the mechanism exists and where it stands.
+Six mechanisms have been added to the cycle of "write code, write documentation, pass the Gate". Each has its own guide, and what is said here is only why the mechanism exists and where it stands.
 
 ### Guards: a process rule becomes a check
 
@@ -177,9 +177,19 @@ A guard answers one process question about one situation. Is this edit covered b
 
 The tracker knows which task blocks which. Only the architecture graph knows what code those tasks occupy. `beadloom waves BEAD [BEAD ...]` decides which of the named tasks may run at the same time, from the code-level independence of the nodes they occupy. Every pair it separates into different waves carries one reason from a closed list: `blocked_by_bead`, `unresolved_scope`, `shared_node`, `shared_file`, `dependency_edge`, `override_serial`.
 
-Whatever shape a wave takes, its agents share four things in every case: the working tree, the pre-commit hook, the documentation freshness baseline and the tracker's identifier space. Each of the four gets a verdict at planning time, and it may come back as `failed`. The one nobody measured comes back as `unmeasured`, and that is a finding with exit code `1` rather than a silent pass. Exit `0` means clean, `1` means there are findings, `2` means it cannot be decided.
+Whatever shape a wave takes, its agents share five things in every case: the working tree, the pre-commit hook, the landing order, the documentation freshness baseline and the tracker's identifier space. Each of the five gets a verdict at planning time, and it may come back as `failed`. The one nobody measured comes back as `unmeasured`, and that is a finding with exit code `1` rather than a silent pass. Exit `0` means clean, `1` means there are findings, `2` means it cannot be decided.
+
+The landing order was added last, once its evidence had been re-measured. Two entries in this project's own defect log said that `bd merge-slot` was not an exclusion primitive. On bd 1.0.4, in an isolated rig with every exit code read without a pipe, the primitive is sound: `acquire` on a held slot exits `1`, and across four rounds of eight simultaneous acquires exactly one caller won each round. Both entries are withdrawn. What was wrong was the call form this workflow asked with, so the medium checks the call form: the slot orders commits and orders nothing else, `acquire --holder <bead-id>` is what makes the holder a bead rather than the single tracker identity every role on one machine shares, `release --holder <bead-id>` is the only release `bd` verifies, and `--wait` returns at once from a queue nothing drains. What keeps two agents out of one file is the disjoint scopes the wave plan derived, and nothing else.
 
 What is checked here is a precondition, measured before the wave starts. Nothing watches the wave's behaviour once it is running. See the [parallel waves guide](./parallel-waves.md).
+
+### `beadloom bd-calls`: what our own tracker calls assume about the answer
+
+The tracker is an external tool, and three of the answers this workflow leans on hardest cover a population narrower than the question asked for. `bd list` omits every closed issue and caps the rest, announcing one of those two filters and only on standard error. `bd ready` caps at 100 rows on the same stream. `bd close --suggest-next` names issues the closed one blocked without checking whether other blockers remain — measured over twenty-three dependency shapes in twenty-three separate rigs, it named a still-blocked issue in sixteen of them, and `bd ready` was correct in all twenty-three.
+
+The answer is not a wrapper. A wrapper is a second thing to keep in step with upstream, and it says nothing about the call sites that already exist. `beadloom bd-calls` derives them instead: every place this project reaches `bd`, in the composed role files, in the shipped templates, in the package's own Python and in the scripts `bd init` leaves under `.git/hooks/`, with the assumption each call form makes about the answer and a verdict on whether the form secures it. A site nothing settles is reported, and a subcommand the derivation has not measured is reported as `unmeasured` rather than as clean — on this repository that is 48 sites, all of them `bd swarm` and `bd gate`, the two commands the coordinator orchestrates every wave with and that nobody has measured.
+
+Every verdict names the release it was measured against, and a test fails when a different `bd` is installed. That rule is what the mechanism is for: three premises this population was built over were re-measured and found false, and a verdict carried across a release without re-measuring is how a withdrawn defect survives as a guard over nothing.
 
 ### Three document spaces
 
@@ -524,4 +534,4 @@ There is no automatic merge. `sync-check = 0` proves freshness but not the quali
 | [`project-overlays.md`](./project-overlays.md) | the four composition layers and the project layer that survives an upgrade |
 | [`architecture-model.md`](./architecture-model.md) | domain, feature and component, the untracked-code check, the two rules about graph metadata |
 
-The history of the decisions is held by the RFCs under `.claude/development/docs/features/`: BDL-047 (the orchestrator's first architecture), BDL-049 (the move to trunk-based development), BDL-050 (CI consolidation and the verdict system), BDL-051 ("Beadloom governs itself"), BDL-052 (the configurable workflow and the pre-push Gate), BDL-053 (tracker and `ACTIVE.md` coherence), BDL-061 (guards, the project layer, the three document spaces, waves and `review-brief`), BDL-062 (graph metadata as a checked surface).
+The history of the decisions is held by the RFCs under `.claude/development/docs/features/`: BDL-047 (the orchestrator's first architecture), BDL-049 (the move to trunk-based development), BDL-050 (CI consolidation and the verdict system), BDL-051 ("Beadloom governs itself"), BDL-052 (the configurable workflow and the pre-push Gate), BDL-053 (tracker and `ACTIVE.md` coherence), BDL-061 (guards, the project layer, the three document spaces, waves and `review-brief`), BDL-062 (graph metadata as a checked surface), BDL-068 (a process rule becomes an instrument: the room a verdict was taken in, the duties a role core must carry, the landing order and the tracker's own call sites).

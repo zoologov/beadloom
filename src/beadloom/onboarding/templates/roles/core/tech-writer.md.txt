@@ -40,7 +40,7 @@ Designed for parallel deployment: the coordinator assigns each agent a disjoint 
 ### Completing the bead
 1. `beadloom sync-check` — zero stale for the assigned refs.
 2. Checkpoint: `bd comments add <bead-id> "COMPLETED: updated <ref_ids>; stale before N, after M; new sections: <…>; TODOs: <…>"`.
-3. Close: `bd close <bead-id> --suggest-next` (append `--session "$CLAUDE_SESSION_ID"` only when set).
+3. Close: `bd close <bead-id> --suggest-next`, then confirm what it named with `bd ready --limit 0` — the suggestion can include still-blocked beads. Append `--session "$CLAUDE_SESSION_ID"` only when set.
 
 ### Return contract (coordinator)
 Return ONLY: `"BEAD-XX: updated <ref_ids>, stale N→M."` Detail → bead comments.

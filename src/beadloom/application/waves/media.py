@@ -17,10 +17,14 @@ about:
   and the same mechanism at integration time, #133);
 * the **tracker id space** allocates at creation while our convention writes the
   id beforehand, so a concurrent wave produces a well-formed, accepted, wrong
-  dependency edge (BDL-UX #171).
+  dependency edge (BDL-UX #171);
+* the **landing order** is one branch, and the lock every launch prompt mandates
+  before a commit grants nothing in the form this project instructs it — one
+  tracker actor for every role, a release nobody checks, and a ``--wait`` that
+  queues and returns (BDL-UX #194, #237).
 
 So the media are STATED by every wave, at every size, each with the evidence it
-comes from. A shape that quietly claimed independence in these four would be
+comes from. A shape that quietly claimed independence in these five would be
 exactly the advisory answer this command exists to replace.
 
 **Why every size, when the first version said a wave of one shares nothing**
@@ -60,14 +64,15 @@ MEDIUM_WORKING_TREE = "working-tree"
 MEDIUM_COMMIT_GATE = "commit-gate"
 MEDIUM_DOC_BASELINE = "doc-baseline"
 MEDIUM_TRACKER_IDS = "tracker-ids"
+MEDIUM_LANDING_ORDER = "landing-order"
 
 #: The prefix a clean room's directory carries, so the room names its owner.
 #: A constant because the role cores promise this exact spelling and a test
 #: binds the two — a rename here reddens the prose that offers it.
 ROOM_PREFIX = "room-"
 
-#: Stated in the order a wave meets them: it edits, it commits, it documents, and
-#: it files follow-up work.
+#: Stated in the order a wave meets them: it edits, its commit is judged, it
+#: lands, it documents, and it files follow-up work.
 SHARED_MEDIA: tuple[SharedMedium, ...] = (
     SharedMedium(
         name=MEDIUM_WORKING_TREE,
@@ -91,6 +96,23 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
         evidence="BDL-UX #118",
     ),
     SharedMedium(
+        name=MEDIUM_LANDING_ORDER,
+        statement=(
+            "One branch, landed into one commit at a time. What keeps two "
+            "agents out of one FILE is the disjoint scopes this plan derived, "
+            "and nothing else — every concurrent wave this project has run was "
+            "serialised by that and by the file sets happening to be disjoint. "
+            "`bd merge-slot` keeps two commits from interleaving, and only in "
+            "the form that grants it: `acquire --holder <bead-id>`, where a "
+            "non-zero exit means you do NOT hold the slot, and `release "
+            "--holder <bead-id>`, which is the only release bd checks. The "
+            "default holder is the tracker actor, one identity for every role, "
+            "and `--wait` appends you to a queue nothing drains and returns "
+            "without waiting."
+        ),
+        evidence="BDL-UX #194, #237",
+    ),
+    SharedMedium(
         name=MEDIUM_DOC_BASELINE,
         statement=(
             "One doc-freshness baseline, in one git-ignored index. The freshness "
@@ -106,9 +128,14 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
         statement=(
             "One id space, allocated at creation. Do not write a bead's number "
             "into its own title, and verify every dependency edge against the "
-            "titles the tracker echoes rather than against the ids you intended."
+            "titles the tracker echoes rather than against the ids you intended. "
+            "A creation of more than one bead goes through ONE plan, whose edges "
+            "name plan-local keys — on that path no id is authored, so there is "
+            "nothing to diverge; a `dep add` wired by hand is where the echo is "
+            "the only check, and the bulk `--file` form of it prints a count and "
+            "no titles at all."
         ),
-        evidence="BDL-UX #171",
+        evidence="BDL-UX #171, #165",
     ),
 )
 

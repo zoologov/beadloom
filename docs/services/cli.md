@@ -446,9 +446,26 @@ Status cell to match the bead's current `bd` status (`closed → ✓ done`,
 bead with an open blocker). A richer coordinator note is preserved when its state
 already agrees (e.g. `✓ done (PASS-WITH-FIXES)` is left intact for a `closed`
 bead). Only Status cells change — prose, the Progress Log, and other columns are
-byte-preserved. The reconcile core (`application/active_table.py`,
+byte-preserved. The reconcile core (`application/active_table/`,
 `reconcile_active_tables` / `bd_status_to_cell`) is the same one the MCP S4
 process-tools (`checkpoint` / `complete_bead`) use.
+
+A row's first cell is read for the id it NAMES, not for the text it IS: a code
+span, bold, or a Markdown link around an id resolves to that id (BDL-UX #210).
+A row that still resolves to nothing is reported with the shape that made it
+unresolvable — `no-bead-id`, `bead-and-text`, `more-than-one-bead`,
+`unknown-to-tracker` or `ambiguous-number` — because one sentence over five
+populations is a report nobody can act on.
+
+Beads the tracker holds that an epic's table did not reconcile are named too, in
+two lists, because the two have two remedies: **a row this run could not read**
+(the cell is quoted — fix it, and the shape above says how) and **no row in their
+epic's table** (add a row). They were one list until BDL-068 S5, and the run
+contradicted itself over them: 38 of the 79 beads reported as carried by no row
+had a row whose first cell's head was exactly that bead's id, already printed as
+`bead-and-text` or `more-than-one-bead` by the same run. Neither list is ever
+written into a table: inserting a row into somebody's document is the same
+decision-for-an-agent as adding a path to their commit.
 
 This is the mechanism that keeps `ACTIVE.md` honest **by construction** — wired
 into the pre-commit hook (above), the coordinator no longer hand-edits
@@ -459,14 +476,32 @@ bead-status rows; the table is reconciled from `bd` on every commit.
 - `--check` — report drift on a throwaway copy without writing; **exit 1** if any
   row would change, **exit 0** when clean. Never writes and never exports.
 - `--json` — machine-readable output: `{ "changed_files": [...], "drifted_rows":
-  [ { "path", "bead_id", "old", "new" }, ... ] }`.
+  [ { "path", "bead_id", "old", "new" }, ... ], "rows_read", "rows_resolved",
+  "unresolved_rows": [ { "path", "cell", "shape", "reason" }, ... ],
+  "unresolved_by_shape", "unlisted_beads", "beads_named_by_an_unresolved_row":
+  [ { "path", "bead_id", "cell" }, ... ], "staging" }`.
 - `--no-export` — skip the `bd export` jsonl sync (fix mode only).
+- `--stage` — re-stage the reconciled `ACTIVE.md`(s) and the exported jsonl that
+  **this commit already stages**, and name every path it corrected and did not.
+  It never adds a path to a commit. Fix mode only; best-effort (no git → skip).
 - `--project DIR` — project root (default: current directory).
 
 In fix mode (no `--check`), after rewriting it best-effort runs
 `bd export -o .beads/issues.jsonl` — but only when that file is already
 git-tracked — so the tracked tracker artifact stays honest across
 branch/squash-merge. `--no-export` skips that step.
+
+**`--stage` does not decide what your commit is.** It used to `git add` every
+path the reconcile had written, which put another agent's tracker export back
+into a commit it had been deliberately taken out of (BDL-UX #207). The commit's
+scope is the set of paths whose index entry differs from `HEAD`; `--stage`
+re-stages the corrected content of a path inside that set and prints every
+correction outside it under a `  withheld: ` line, which is what the pre-commit
+hook shows. Under `--stage`, `bd export` runs only when the commit already
+carries `.beads/issues.jsonl`: a refresh that cannot be committed keeps no
+tracked artifact honest and dirties a shared working tree instead. Measured over
+the sixteen commits of `features/BDL-068`, the export moved that file in sixteen,
+so without the gate the hook would print one line on every commit.
 
 **No-op contract.** `active-sync` exits **0 and writes nothing** when there is no
 `ACTIVE.md` with a bead-status table, OR when `bd` is unavailable, OR when
@@ -1288,9 +1323,10 @@ second ref written without a comma that the graph confirms is a node
 a wave shape is acted on, so a parser whose errors widen a wave is worse than no
 parser.
 
-**Every wave prints the four media it shares, whatever its width**, each with
+**Every wave prints the five media it shares, whatever its width**, each with
 the evidence it comes from: the working tree (#181, #235), the commit gate
-(#118), the doc baseline (#163, #182, #133) and the tracker's id space (#171).
+(#118), the landing order (#194, #237), the doc baseline (#163, #182, #133) and
+the tracker's id space (#171).
 Until BDL-068 S4 a wave of one printed `not_applicable` against three of them;
 that verdict is gone (`beadloom-67t1`). A plan is one slice of one epic, so a
 wave's width is not a claim that its bead is alone in the tree — and the
@@ -1310,8 +1346,10 @@ is is a shared directory with a reassuring name.
 measures a precondition per medium before the wave runs: that no path differs
 from `HEAD` which no bead in the plan owns (`git status`), that the installed
 pre-commit hook judges the paths a commit stages (`.git/hooks/pre-commit`), that
-no doc pair is stale already (the doc index), and that no bead's title numbers it
-differently from the id the tracker allocated (the bead records). A medium that
+every instruction of the landing lock in the composed flow artifacts names its
+holder and asks for no queue (the flow artifacts), that no doc pair is stale
+already (the doc index), and that no bead's title numbers it differently from the
+id the tracker allocated (the bead records). A medium that
 could not be observed is reported `unmeasured`, which is a finding: a concurrent
 wave nobody measured is not a clean plan, it is an unmeasured one. What is NOT
 checked is the wave's conduct afterwards -- nothing here can know whether the
@@ -1320,6 +1358,22 @@ gate owner ran the combined tree.
 The `tracker-ids` check runs even when the plan is fully serial, because a
 concurrent `bd create` shifts an id out from under the number an author already
 wrote into the title, and that happens before any wave runs (#171).
+
+The `landing-order` check reads what an agent is TOLD about the merge slot, not
+what the tracker does. Measured on bd 1.0.4 in an isolated rig with every exit
+code read without a pipe, the primitive is sound: `acquire` refuses a held slot
+with exit 1, and one of eight simultaneous acquires won in each of four rounds.
+Three things about the DEFAULT call form are not — an `acquire` with no
+`--holder` takes the tracker actor, which is one identity for every role on one
+machine; a `release` with no `--holder` frees whoever holds the slot and reports
+success; and `--wait` appends the caller to a queue nothing drains and returns at
+once. Each is reported per site, judged from the FLAGS of the invocation rather
+than from the prose around it, and a subcommand this check has not measured is
+reported as `unknown-form` rather than passing. The population is the composed
+flow artifacts an agent is handed — the agent directories, the slash commands and
+the project layer — so a project that has never scaffolded a flow instructs the
+lock nowhere and the verdict says that instead of reading as a pass over
+something.
 
 **The declaration is also held against the derivation the work item recorded**
 (BDL-068 S4, BDL-UX #232). A bead's `refs:` was the one input to this command
@@ -1395,6 +1449,7 @@ Serialised because:
 Plan-time precondition of each shared medium:
   working-tree: passed - no path differs from HEAD that no bead in this plan owns
   commit-gate: passed - the installed pre-commit hook judges the paths a commit stages
+  landing-order: passed - all 18 instruction(s) of `bd merge-slot` name the holder
   doc-baseline: passed - no doc pair is stale
   tracker-ids: passed - every bead's title agrees with the number the tracker allocated
 ```
@@ -1677,7 +1732,9 @@ three scope checks `config-check` has raised since BDL-061 S4b —
 `src/beadloom/graph/rules/` wrote — 3 989 mutants, 54 min 55 s, in the room the output's
 first line names. The runner's own release is whatever `--tool` was handed and is printed
 back verbatim: this document does not restate it, because a third-party version quoted here
-goes stale in a way that says nothing about the command.
+goes stale in a way that says nothing about the command. The `Declared scope` line is the one
+that run read; the scope has since grown to fourteen targets, and the paragraphs after the
+sample state it.
 
 ```
 $ beadloom mutation --stats mutants/mutmut-cicd-stats.json \
@@ -1706,12 +1763,53 @@ which is the room and not a regression — so the `graph/rules/` floor is recali
 `0.95` to `0.94` in the room the job actually enters. It took 1 h 29 min 18 s against
 54 min 55 s locally, a factor of 1.63, so `timeout-minutes` moves 180 → 240. The workflow now
 **runs the runner twice and scores twice**: `graph/rules/` keeps its own floor, and the whole
-declared scope — seven targets since S4 added four new domain cores — is judged separately at
-`--min-score 0.88` in a step marked `if: always()`. One aggregate floor would have let the
-rules slice fall from 96.19% to 94.1% before tripping. What the aggregate floor does not guard
-is stated in the workflow rather than implied: the six file targets are 1 711 of 5 700 mutants,
-so at 0.88 they could fall from 77.0% to 70.4% before anything trips, and a per-target floor
-needs counters this runner's export does not write.
+declared scope is judged separately at `--min-score 0.88` in a step marked `if: always()`. One
+aggregate floor would have let the rules slice fall from 96.19% to 94.1% before tripping. What
+the aggregate floor does not guard is stated in the workflow rather than implied, because one
+set of counters cannot attribute a loss to a file, and a per-target floor needs per-target
+counters this runner's export does not write.
+
+**The declared scope is fourteen targets** (BDL-068 S5, `beadloom-0mdo.62`). S5 added seven
+pure cores — `bd_seam/assumptions.py`, `bd_seam/invocations.py`, `bd_seam/answers.py`,
+`bd_seam/creation.py`, `active_table/row_ids.py`, `active_table/staging.py` and
+`waves/landing.py` — and every one of them was RUN rather than counted: 764 mutants, 639
+killed, 125 survived, 0 unrun, 83.64%, in 36 min 35 s.
+
+```
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores · mutmut 3.7.0 · six workers
+```
+
+Per file, because an aggregate cannot say which target lost:
+`waves/landing.py` 96.55%, `active_table/row_ids.py` 94.26%, `bd_seam/answers.py` 88.79%,
+`bd_seam/creation.py` 88.71%, `bd_seam/invocations.py` 82.32%, `bd_seam/assumptions.py`
+79.23%, `active_table/staging.py` 65.00%. The scope goes from 5 700 to 6 464 mutants, which
+the runner's own denominator confirms.
+
+**A target's cost is its mutant count multiplied by the cost of reaching a killing test.** The
+seven are 13.4% more mutants than the six file targets already declared and eight times the
+cost per mutant — 36 min 35 s against 9 min 34 s for 1 711 mutants on the same machine. The
+reason is the covering tests and not the cores: `invocations.py` and `assumptions.py` carry ten
+covering test files each, and those ten walk this repository's harness and template files. No
+target is excluded on that cost. Scaled by the 1.63 the runner measured against this machine
+the seven cost about 60 minutes, taking the nightly from a projected 110 to 171, so
+`timeout-minutes` moves 240 → 340 by the method already in the workflow. Not 360, because that
+is GitHub's own ceiling for a hosted job, where a `timeout-minutes` equal to it can never be
+the thing that trips.
+
+**The aggregate floor was re-derived and does not move.** The workflow states the rule itself —
+the number is a property of the scope and is re-derived whenever the scope changes — and the
+previous pass widened the scope and left the floor where a scope of 5 700 had put it.
+Re-derived over 6 464 the aggregate falls from 89.98% to 89.23%, so `0.88` keeps 1.23 points of
+headroom where it had 2.00, which is 79 mutants against the 62-mutant margin at which the floor
+in the step above was called adequate. Two of its three components are macOS figures applied to a floor enforced on
+`ubuntu-latest`. Drop both by the 0.63 points the rules slice actually fell between those two
+rooms and the aggregate is 88.99%, still above the floor. It survives its own worst case, so it
+stays at 0.88, re-derived and stated rather than left standing.
+
+The 83.64% is a macOS figure feeding a floor enforced on `ubuntu-latest`. The next nightly run
+is the first measurement of these seven in the room that judges them, and it should replace the
+scaled component of the floor's composition with a measured one.
+<!-- TODO: verify against the first nightly run that covers the seven S5 cores. -->
 
 `beadloom ci` asks whether a mutant COULD run at a declared path and never whether one DID, and
 `beadloom mutation --only` prints "this run did not cover it" and "no run has ever covered it"
@@ -1853,6 +1951,87 @@ caller that needs it most is a hook that reads one stream.
 The reading rule, why the declaration is parsed without a TOML parser, and the 24-commit
 measurement behind the hook's scope are in the
 [Typed Surface DOC](../domains/application/components/typed-surface/DOC.md).
+
+### beadloom bd-calls
+
+Every place this project reaches `bd`, and what each call form assumes about the answer
+(BDL-068 S5, `beadloom-0mdo.51`).
+
+```bash
+beadloom bd-calls [--project DIR] [--assumption NAME] [--unsettled] [--strict] [--json]
+```
+
+**A report, not a wrapper.** BDL-068's CONTEXT Q4 decided it: an External `bd` finding is
+answered by deriving our own call sites, because a wrapper is a second thing to keep in step
+with upstream and a derived population fails on a call site added later.
+
+**Four channels, and the majority of them are not code.** The composed flow artifacts, the
+templates this project ships, the installed package's Python (via the seam's `run_bd`) and the
+scripts in `.git/hooks/` — which reaches `post-merge`, written by `bd init`, tracked nowhere
+and named nowhere under `src/`.
+
+**Nine assumptions and four verdicts, because two of each are not enough.** `secured` (the call form makes the assumption
+true), `unsecured` (it relies on a default measurement shows is narrower than the question),
+`holds` (no flag can secure it and it is measured true on the recorded release) and
+`unmeasured` (a subcommand this derivation has not measured — never a clean site).
+
+Measured on this repository, against **bd 1.0.4**:
+
+```
+$ beadloom bd-calls
+349 `bd` call site(s), measured against bd 1.0.4: 2 hook, 335 instruction, 12 python
+
+    60  untruncated-population     secured
+    49  unblocked-is-ready         secured
+    48  unmeasured-subcommand      unmeasured
+    36  exclusive-hold             secured
+    31  untruncated-population     unsecured
+    17  complete-population        secured
+    15  allocated-id               secured
+     8  intended-id                secured
+     2  legacy-alias               holds
+```
+
+The findings worth naming are the ones that remain. The 48 unmeasured sites are `bd swarm`
+(26) and `bd gate` (22), the two commands the coordinator orchestrates every wave with, and
+nobody has measured either. The 31 unsecured sites are prose mentions of `bd ready`, whose cap
+is 100 rows and is announced on standard error; the remedy now ships into every composed role
+by the `_tracker` fragment, so a reader of any role file is told. Every `bd list` call in this
+project's Python names both of the filters `bd list` applies by default, which is BDL-UX #187
+answered at the consumer, and every Python call site is settled.
+
+Two of the assumptions went to zero unsecured in `beadloom-0mdo.53`. `allocated-id` is settled
+by `--json`, which answers with the id bd allocated, and by `--graph`, whose plan names beads by
+key and allocates a flat id that takes no number from the positional sequence at all.
+`intended-id` is settled at the ARTIFACT rather than the line, like `unblocked-is-ready`: an
+artifact that instructs `bd dep add` and also names `bd dep tree` tells its reader how to check
+the edge it just built. A ninth assumption, `echoed-titles`, applies only to `bd dep add
+--file`: the one-by-one form echoes both beads' full titles and the bulk form prints a count and
+none, so the fast spelling of the wiring half discards the check that caught BDL-UX #171. No
+artifact of this project instructs the bulk form today, and that rule reddens on the day one
+does.
+
+`--assumption` narrows to one assumption and `--unsettled` to the sites nothing settles.
+`--json` emits the same facts as data. `--strict` exits 1 when any site is unsettled; the
+default exits 0, because most unsettled sites are instructions to a person and the fix for an
+instruction is a role duty rather than an exit code. `--assumption` with a name the derivation
+does not judge exits 2 rather than printing an empty list, which would read as "no site makes
+that assumption".
+
+Every verdict is pinned to `BD_MEASURED_VERSION`, and a test fails when a different `bd` is
+installed. Three premises this population was built to check were re-measured and destroyed —
+BDL-UX #194 and #237, and `beadloom-l2f2` — so a verdict carried across a release without
+re-measuring is how a withdrawn defect comes back as a guard over nothing. A fourth withdrawal,
+of #97, was made and then reversed by this same population. Its mechanism has now been
+characterised three times and no characterisation survived the next measurement: given one rig
+per shape rather than ten shapes sharing one, `--suggest-next` named a still-blocked bead in
+sixteen of twenty-three, on no shape rule any of the three sessions found. What is stable is the
+observation — it names beads that are still blocked, and `bd ready` was correct in all
+twenty-three. A verdict states the release it was measured against and the shape it was measured
+over, or it states nothing.
+
+The grammar, the assumption table and the regions the derivation cannot reach are in the
+[bd Seam DOC](components/bd-seam/DOC.md).
 
 ### beadloom ci
 
@@ -2152,7 +2331,7 @@ Commands (re-exported from the package via the registration shell):
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove the pre-commit hook (lint -> mypy over the declared typed surface -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
-- `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
+- `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table/reconcile.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
 - `why` -- impact analysis (upstream + downstream) with `--reverse` and `--format {panel,tree}`

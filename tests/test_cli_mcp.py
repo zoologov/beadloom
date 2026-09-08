@@ -22,7 +22,7 @@ class TestSetupMcpCommand:
         assert result.exit_code == 0, result.output
         mcp_json = project / ".mcp.json"
         assert mcp_json.exists()
-        data = json.loads(mcp_json.read_text())
+        data = json.loads(mcp_json.read_text(encoding="utf-8"))
         assert "mcpServers" in data
         assert "beadloom" in data["mcpServers"]
 
@@ -32,7 +32,7 @@ class TestSetupMcpCommand:
         runner = CliRunner()
         runner.invoke(main, ["setup-mcp", "--project", str(project)])
         mcp_json = project / ".mcp.json"
-        data = json.loads(mcp_json.read_text())
+        data = json.loads(mcp_json.read_text(encoding="utf-8"))
         server = data["mcpServers"]["beadloom"]
         assert "command" in server
         assert "args" in server
@@ -46,7 +46,7 @@ class TestSetupMcpCommand:
         runner = CliRunner()
         result = runner.invoke(main, ["setup-mcp", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads((project / ".mcp.json").read_text())
+        data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
         assert "other" in data["mcpServers"]
         assert "beadloom" in data["mcpServers"]
 
@@ -59,7 +59,7 @@ class TestSetupMcpCommand:
         # Remove.
         result = runner.invoke(main, ["setup-mcp", "--remove", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads((project / ".mcp.json").read_text())
+        data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
         assert "beadloom" not in data["mcpServers"]
 
     def test_global_flag(self, tmp_path: Path) -> None:

@@ -286,7 +286,8 @@ class TestProvisionRunnerScript:
         proc = subprocess.run(  # noqa: S603 - fixed argv
             [bash, "-n", str(script)],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         assert proc.returncode == 0, proc.stderr
@@ -295,7 +296,8 @@ class TestProvisionRunnerScript:
             sc = subprocess.run(  # noqa: S603 - fixed argv
                 [shellcheck, "-S", "warning", str(script)],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
             )
             assert sc.returncode == 0, sc.stdout + sc.stderr
@@ -349,7 +351,8 @@ class TestInstalledHarnessIsRunnable:
             ],
             cwd=project,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         assert proc.returncode == 0, proc.stderr

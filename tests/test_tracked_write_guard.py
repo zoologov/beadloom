@@ -270,7 +270,8 @@ class TestTheGuardFailsTheRunItGuards:
         return subprocess.run(  # noqa: S603 - fixed argv (this interpreter)
             [sys.executable, "-m", "pytest", "-q", "-p", "no:randomly", str(suite)],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
             cwd=str(suite),
         )

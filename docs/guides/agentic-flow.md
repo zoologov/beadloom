@@ -170,12 +170,21 @@ others do not, BDL-061 S4 added three of them, and BDL-068 S1.5 added the fifth 
 | `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice; the role reports the counters that tool wrote through `beadloom mutation`, which scores them against the declared target. |
 | `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. **The brief first (S6):** step 1 is `beadloom review-brief <bead>`, both doc-freshness sources are derived from the change rather than from the author's note, and the account is read only after the verdict is recorded. |
 | `tech-writer` | Edits documentation only. Two staleness sources — `sync-check` and the dev's `API CHANGE:` notes — because a `reindex` can re-baseline hashes while the prose stays wrong. |
-| **all five** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. **The room a measurement was taken in (BDL-068 S3.2),** in the second shared layer `core:_rooms`: report a verdict in the words that say which room it was measured in, and state the clean room's blindness to a bead running beside you where the result is stated. Naming the room does not make the verdict stronger — it makes it answerable. |
+| **all five** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. **The room a measurement was taken in (BDL-068 S3.2),** in the second shared layer `core:_rooms`: report a verdict in the words that say which room it was measured in, and state the clean room's blindness to a bead running beside you where the result is stated. Naming the room does not make the verdict stronger — it makes it answerable. **The landing lock (BDL-068 S5),** in `core:_landing`: the merge slot orders commits and orders nothing else, it grants that only as `acquire --holder <bead-id>` read by exit code, and what keeps two agents out of one FILE is the disjoint scopes `beadloom waves` derived. **The tracker's answers (BDL-068 S5),** in `core:_tracker`: each of `bd list`, `bd ready` and `bd close --suggest-next` answers over a population narrower or wider than the question named, so a role states the population it got. Both duties used to live in the coordinator command or nowhere — the loop that orchestrates rather than the roles that commit and close. |
 
 All three of those duties now have a mechanism behind them, and the third one got its
 second half last. The BDD duty is checked by the `scenario_coverage` rule
 ([BDD guide](bdd-scenarios.md)); the writing standard is checked by
 `beadloom docs quality` ([document kinds](document-kinds.md)).
+
+The two duties BDL-068 S5 added carry their own instruments. `landing-order` is a
+plan-time precondition of every `beadloom waves` run: it parses every `bd merge-slot`
+instruction in the composed flow artifacts and reports each call form that grants less
+than it is relied on for. `beadloom bd-calls` derives every place this project reaches
+`bd` at all and states what each call form assumes about the answer. Neither reads the
+prose around a call: both judge the flags, because a check that read English for a
+promise would repeat the keyword-proximity class already filed three times against the
+docs audit.
 
 The mutation duty has two halves and shipped them two releases apart, which is worth
 stating because the first half alone let a claimed check read like a performed one. The
@@ -249,14 +258,18 @@ one implementation instead of three:
 1. **CORE** — the universal, stack/tool-neutral fragment (the single source of
    truth).
 2. the **SHARED** core fragments (`SHARED_ROLE_FRAGMENTS`, BDL-061 S4), composed
-   as a labelled `core:<name>` layer. Today those are `_writing`, the writing
-   standard, carried by every role instead of by `tech-writer` alone (the roles
-   that produce intent documents had no standard at all); and `_rooms`
+   as a labelled `core:<name>` layer. Today there are four: `_writing`, the
+   writing standard, carried by every role instead of by `tech-writer` alone
+   (the roles that produce intent documents had no standard at all); `_rooms`
    (BDL-068 S3.2), the statement that a measurement is true of the room it was
-   taken in, which reaches all five roles from one file rather than from five
-   copies that drift the moment one is edited. Each is a layer and not a role,
-   so `compose_role("_writing", …)` raises, and each is language-selectable like
-   every other layer (`_writing.ru.md.txt` and `_rooms.ru.md.txt` ship).
+   taken in; and `_landing` and `_tracker` (BDL-068 S5), what the merge slot
+   grants for a role that lands a commit in a shared tree and which population
+   each of `bd`'s answers covers for a role that reads one. Each reaches all
+   five roles from one file rather than from five copies that drift the moment
+   one is edited. Each is a layer and not a role, so
+   `compose_role("_writing", …)` raises, and each is language-selectable like
+   every other layer (`_writing.ru.md.txt`, `_rooms.ru.md.txt`,
+   `_landing.ru.md.txt` and `_tracker.ru.md.txt` ship).
 3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary. FSD is at
    **parity** with DDD (every role has both overlays).
@@ -283,13 +296,15 @@ state. That is the entire licence for `config-check` to compare against a
 composition rather than against stored bytes.
 
 **The core shrank because of layer 4.** Measured on the shipped artifact: the
-core `CLAUDE.md` went from **440 lines to 371**, with each removed line mapped to
+core `CLAUDE.md` went from **440 lines to 377**, with each removed line mapped to
 a replacement — the Quick Reference and Agent Checklist sections restated §0
 command for command, and the Python anti-patterns and the `uv run pytest` /
 `ruff` / `mypy` block moved into the Python stack overlay, where a TypeScript
 adopter no longer meets them. Composing the shipped template today, a `ddd` +
-`python` project gets **401** lines back and a project selecting neither keeps the
-**371**, its critical rules naming no Python tooling.
+`python` project gets **407** lines back and a project selecting neither keeps the
+**377**, its critical rules naming no Python tooling. The core grew by six lines in
+BDL-068 S5, which are the two `bd` call forms an agent must read an exit code from —
+the shrinkage is a property of the layering and not a budget.
 
 ### Per-tool adapters
 
@@ -507,8 +522,9 @@ serialised pair carries one named reason. The guarantee, in one sentence: for an
 placed in the same wave, no medium they share can carry one bead's in-progress state into the
 other's result — and where a medium cannot give that guarantee, the wave says so and names the
 one bead that measures the combined outcome. Code independence is decided from the graph. The
-four media a wave shares regardless — one working tree, one pre-commit hook, one doc-freshness
-baseline, one tracker id space — are measured as a **precondition before the wave runs**, and
+five media a wave shares regardless — one working tree, one pre-commit hook, one landing order,
+one doc-freshness baseline, one tracker id space — are measured as a **precondition before the
+wave runs**, and
 the wave's conduct afterwards is checked by nothing here and cannot be.
 
 **`beadloom review-brief <bead>` decides what the reviewer reads first.** It hands over the
@@ -570,7 +586,7 @@ that reuse existing substrate code; they do **not** orchestrate or spawn
 subagents.
 
 The three bead-touching tools (`task_init`, `complete_bead`, `checkpoint`) drive
-the `bd` (beads) CLI through a thin, mockable seam (`services/bd_seam.py`,
+the `bd` (beads) CLI through a thin, mockable seam (`services/bd_seam/client.py`,
 `run_bd`). If `bd` is not installed they return a clear error (the flow already
 requires `bd`).
 
@@ -581,6 +597,13 @@ per-type doc skeletons (PRD/RFC/CONTEXT/PLAN/ACTIVE for `epic`/`feature`;
 BRIEF/ACTIVE for `bug`/`task`/`chore`) **and** a valid 4-role bead DAG
 (dev → test → review → tech-writer, wired with the standard dependencies) via
 `bd`. Returns the created bead ids + doc paths.
+
+Since BDL-068 S5 the whole DAG is created as ONE `bd create --graph` plan whose edges
+name plan-local role keys, where it used to be seven `bd` processes — four creations
+followed by three `dep add` calls. The ids come back from bd's own JSON answer rather than
+being scraped from `--silent` stdout, and a bead number written by the caller is now
+refused rather than discouraged: on the plan path no id is authored, so there is nothing
+for the tracker's allocation to diverge from (BDL-UX #171, #165).
 
 ### `bead_context(bead)`
 
@@ -628,10 +651,12 @@ construction** instead of by discipline:
   `.beads/issues.jsonl`. See the
   [CLI reference](../services/cli.md#beadloom-active-sync) for the
   `--epic`/`--check`/`--json`/`--no-export` flags.
-- **The pre-commit hook runs it as a guarded auto-fix step.** After the lint /
-  mypy / sync-check steps, the hook calls `active-sync` and restages the touched
-  `features/**/ACTIVE.md` + `.beads/issues.jsonl`, so the committed table matches
-  `bd` on every commit — the coordinator no longer maintains rows by hand. The
+- **The pre-commit hook runs it as a guarded auto-fix step, and it decides
+  nothing for you.** After the lint / mypy / sync-check steps, the hook calls
+  `active-sync --stage`, which re-stages the corrected content of the paths your
+  commit **already** stages and prints every correction it therefore withheld. It
+  adds no path to your commit: it used to, and an agent that had deliberately
+  unstaged another agent's tracker export got it back anyway (BDL-UX #207). The
   step **never blocks** the commit and runs only when both `bd` and `beadloom`
   are installed.
 - **Safe no-op for every adopter.** With no `ACTIVE.md` table, no `bd`, or an
@@ -639,7 +664,7 @@ construction** instead of by discipline:
   so a repo that has not adopted the flow is never affected; it works
   out-of-the-box.
 
-The reconcile core (`application/active_table.py`) is the **same** tolerant,
+The reconcile core (`application/active_table/`) is the **same** tolerant,
 fail-safe parser/updater the `checkpoint` / `complete_bead` MCP process-tools use
 to flip a single row — so single-row updates and full reconcile share one format
 (the `active-table` [component](../domains/application/components/active-table/DOC.md)).
@@ -709,7 +734,7 @@ This is stated deliberately, not glossed over:
 - [Guard Hooks component](../domains/onboarding/components/guard-hooks/DOC.md) — the emitted hook adapter and its registration.
 - [Role Composer SPEC](../domains/onboarding/features/role-composer/SPEC.md) — CORE + architecture + stack overlay composition.
 - [Role Adapters SPEC](../domains/onboarding/features/role-adapters/SPEC.md) — per-tool adapter generation + the drift-guard.
-- [Parallel waves guide](./parallel-waves.md) — the wave guarantee, the four shared media and their plan-time checks, and reviewer isolation.
+- [Parallel waves guide](./parallel-waves.md) — the wave guarantee, the five shared media and their plan-time checks, and reviewer isolation.
 - [Wave Plan SPEC](../domains/application/features/wave-plan/SPEC.md) — the decision, the serialisation reasons and the override shape.
 - [Review Brief SPEC](../domains/application/features/review-brief/SPEC.md) — what the brief carries and what it cannot enforce.
 - [CI setup guide](./ci-setup.md) — `beadloom ci` as the enforcement gate.

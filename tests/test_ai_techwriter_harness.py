@@ -253,7 +253,7 @@ def test_green_path_refreshes_doc_and_opens_normal_pr(
     assert publisher.published[0]["flagged"] is False
     assert "needs human" not in str(publisher.published[0]["title"])
     # doc was rewritten by the agent
-    assert "<!-- refreshed -->" in (project / "docs" / "graph.md").read_text()
+    assert "<!-- refreshed -->" in (project / "docs" / "graph.md").read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #

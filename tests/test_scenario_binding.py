@@ -228,6 +228,30 @@ class TestAgreementWithTheRunner:
         assert unreadable is not None
         assert "one `Feature:`" in unreadable
 
+    @staticmethod
+    def _reference_names(children: list[dict[str, object]]) -> list[str]:
+        """Every scenario the reference parser found, in document order.
+
+        It nests a scenario written under a ``Rule:`` inside that rule's own
+        children, so reading the feature's children alone reports a file that
+        uses ``Rule:`` as having fewer scenarios than it has. That is a property
+        of this extraction and not a disagreement between the parsers: the first
+        feature file to use ``Rule:`` (``active_reconcile.feature``) made the
+        assertion fail while both parsers agreed about the file.
+        """
+        names: list[str] = []
+        for child in children:
+            if "scenario" in child:
+                names.append(child["scenario"]["name"])  # type: ignore[index]
+            elif "rule" in child:
+                rule = child["rule"]
+                names.extend(
+                    TestAgreementWithTheRunner._reference_names(
+                        rule["children"]  # type: ignore[index]
+                    )
+                )
+        return names
+
     def test_our_own_suite_parses_the_way_the_reference_parser_reads_it(self) -> None:
         """Cross-check against `gherkin-official`, the parser `pytest-bdd` uses."""
         gherkin = pytest.importorskip(
@@ -239,18 +263,22 @@ class TestAgreementWithTheRunner:
         root = Path(__file__).resolve().parent.parent
         files = sorted((root / "tests" / "acceptance" / "features").glob("*.feature"))
         assert files, "the acceptance suite is empty — the cross-check would be vacuous"
+        rules_seen = 0
         for path in files:
             document = gherkin.Parser().parse(TokenScanner(str(path)))
-            reference = [
-                child["scenario"]["name"]
-                for child in document["feature"]["children"]
-                if "scenario" in child
-            ]
+            children = document["feature"]["children"]
+            rules_seen += sum(1 for child in children if "rule" in child)
+            reference = self._reference_names(children)
             mine, unreadable = parse_feature(
                 path.read_text(encoding="utf-8"), path=path.name
             )
             assert unreadable is None, path.name
             assert [s.name for s in mine] == reference, path.name
+        assert rules_seen, (
+            "no feature file uses `Rule:`, so the rule branch of this cross-check "
+            "compared nothing — a cross-check that cannot reach half its own "
+            "extraction is the vacuous kind this suite keeps removing"
+        )
 
 
 class TestLoadSuite:

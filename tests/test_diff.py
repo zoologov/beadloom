@@ -37,7 +37,8 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", *args],  # noqa: S607
         cwd=cwd,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         env=_GIT_ENV,
     )
 

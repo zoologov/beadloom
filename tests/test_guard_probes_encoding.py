@@ -168,7 +168,7 @@ class TestTheAmbientDecoderDoesNotDecideTheAnswer:
     ) -> None:
         (tmp_path / ".beads").mkdir()
         _stub_bd(tmp_path, monkeypatch, _bd_payload("работа".encode()))
-        under_ambient_codec(monkeypatch, bd_seam, ambient)
+        under_ambient_codec(monkeypatch, bd_seam.client, ambient)
 
         claimed = build_probes(tmp_path).tracker.claimed_beads()
 
@@ -273,7 +273,7 @@ class TestTheHandlerIsAsWideAsItsSentence:
         def explode(*_args, **_kwargs):
             raise error
 
-        monkeypatch.setattr(bd_seam.subprocess, "run", explode)
+        monkeypatch.setattr(bd_seam.client.subprocess, "run", explode)
 
         with pytest.raises(BdUnavailableError) as caught:
             run_bd(["list"], cwd=None)

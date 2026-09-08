@@ -409,7 +409,8 @@ class TestCurrentCommitSha:
             cwd=cwd,
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
     def _init_repo(self, root: Path) -> None:

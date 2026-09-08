@@ -1,16 +1,159 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-04
+> **Last updated:** 2026-09-08
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
-> docs), unmerged; S5 next
+> docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
+> pass landed. S6 is next and runs in full.
 
 ---
 
 ## Current Bead
 
-**Bead:** none — S4 is finished on the branch. `0mdo.36` (tech-writer) was the last of the
-slice and closed the docs pass; `0mdo.12`, the slice bead, closes with it. The next claimable
-work is S5 (`0mdo.13`), which depends on `0mdo.12` and on `0mdo.39` (#237).
+**Bead:** none — **S5 is finished on the branch.** `0mdo.57` (tech-writer) closed the slice's
+docs pass and `0mdo.13`, the slice bead, closes with it. The full S5 set is `.58` (axes), `.39`,
+`.51`, `.52`, `.53` and `.54` (dev, over five waves), `.55` (test), `.56` (review), `.61` and
+`.62` (the two fix beads its review's first pass produced) and `.57`. The review's second pass
+returned **0 critical and 0 major**, so the re-plan rule the owner armed was NOT triggered and
+S5 does not re-plan; its seven Minors and one Nitpick are listed under *Review findings left
+open* below, with the three the docs pass closed marked as closed there and the rest named with
+what they still need. **Next: S6, and it runs in full** — see *What S6 inherited* below. S4 is
+finished on the branch too: `0mdo.36` (tech-writer) was the last of that slice and `0mdo.12`
+closes with it.
+
+**`0mdo.62` ended a deferral by measuring the thing six beads had deferred, and the measurement
+cost 17.3 seconds.** Each of `.39`, `.51`, `.52`, `.53`, `.54` and S5's test bead recorded the
+duty and passed it on, the last of them with a reason that was correct about the wrong half of
+the job: mutmut writes a `mutants/` copy a shared tree cannot hold. True of a RUN. The COUNT is
+static generation over a file's own text and needs no copy, no room and no shared tree — all
+fourteen targets count in 17.3 s. The seven cores hold 764 mutants, taking the declared scope
+to 6 464, and the figure was derived three independent ways before it was used: a generator run
+calibrated 7 of 7 exact against the figures already on the record, a second derivation from
+scratch, and the runner's own denominator.
+
+**S5's fix wave, and the report that contradicted itself.** The S5 review returned ISSUES with
+0 critical and 3 major, which is S5's FIRST issues verdict, so the slice cycles rather than
+re-plans. `0mdo.61` answered Major 1: `active-sync --check` reported 79 beads as having no row
+in their epic's table, and 38 of the 79 had a row the same run had already printed as
+unreadable. The bead-keyed report is now two lists with two remedies — 41 carried by no row, 38
+named by a row this run could not read, and 41 + 38 = 79, so nothing was suppressed to make a
+number smaller.
+
+**S5 wave 5, and the two findings that were entirely ours.** `0mdo.54` fixed a hook that staged
+what an agent had unstaged and a reconcile that could not read an id in a code span. Neither is
+a `bd` defect; both are Beadloom code meeting the tracker and getting it wrong.
+
+**#210 was live on this branch's own epic.** BDL-067's ACTIVE.md writes every one of its 27 bead
+ids as a Markdown code span, and the reconcile resolved none of them and blamed the id in all
+27. Measured on this repository at `5846b20`: 329 rows read, 211 resolved, 118 unresolved —
+every one under the same sentence, over four different faults with four different remedies.
+After: 238 resolved, 91 unresolved, reported as 38 `bead-and-text`, 50 `no-bead-id` and 3
+`more-than-one-bead`. Nothing was rewritten in either run, which is the honest outcome — those
+rows already said what the tracker says; what changed is that the mechanism now knows it. The
+other half of the finding is answered too: at `5846b20` the run named 79 beads the tracker
+holds as having no row in their epic's table — a single number `0mdo.61` later split into 41
+carried by no row and 38 named by a row the run could not read, as the paragraph above records.
+They are named and never written, because inserting a row into somebody's document is the same
+decision-for-an-agent as adding a path to their commit.
+
+**#207's fix forced one decision, and the number decided it.** `active-sync --stage` now
+re-stages only the paths a commit already carries and names the rest. Left there, it would have
+printed one withheld line on every commit: measured over the sixteen commits of
+`features/BDL-068`, `bd export` moved `.beads/issues.jsonl` in SIXTEEN of sixteen. So under
+`--stage` the export runs only when the commit already carries it — a refresh that cannot be
+committed keeps no tracked artifact honest and dirties a shared tree instead, and this project
+already commits the export where it belongs (four of those sixteen are `chore: tracker export`
+and nothing else). The by-hand path exports as before.
+
+**And the escape hatch was measured rather than assumed.** On git 2.49.0, `git commit --
+<paths>` DOES exclude a staged path it does not name, so naming your files to git is a real
+defence against an index somebody else wrote into. It is not a defence against a hook: a
+pathspec commit builds a temporary index and a `git add` run from pre-commit writes into that
+one, so the hooked file landed in the commit and was left staged in the real index afterwards.
+The hook defeated the one instruction an agent could have followed. That corrects a sentence
+the suite carried since BDL-061.22.
+
+**S5 wave 4, and a root removed rather than guarded.** `0mdo.53` answered #171 by making an
+authored id impossible on the path this project scaffolds with. `bd_seam/creation.py` composes
+the plan `bd create --graph` accepts: beads are named by KEY, edges name two keys, and the
+tracker answers with the id it allocated for each, so no id is written down anywhere.
+`handle_task_init` went from four `bd create --silent` processes plus three `bd dep add`
+processes — each wired from an id scraped out of stdout — to ONE `bd create --graph … --json`
+call. Measured on bd 1.0.4: a 60-bead DAG with 59 edges costs 69.45 s over 119 processes and
+1.15 s over one, a factor of 60, which is #165.
+
+**Whether the plan CLOSES #171 or only narrows it was measured, and the reason is not the one
+the bead predicted.** Four `bd create --parent` launched simultaneously took `.1` through `.4`
+out of launch order; a `bd create --graph` run racing them returned four FLAT ids and consumed
+no number from that sequence at all. So the plan form closes it for the path it covers for two
+independent reasons — no positional number is allocated, and its edges name keys — and closes
+nothing for `bd create --parent`, which is how every per-slice bead of this epic is created and
+whose remedy is `--json` plus the convention.
+
+**The echo is preserved, and the form that discards it is now named.** `bd dep add` still names
+both beads' full titles on 1.0.4, which is the only reason #171's mis-wired edge was caught in
+seconds. `bd dep add --file` — the bulk form a reader of #165 reaches for next — prints
+`✓ Added 2 dependencies` and no titles, so the fast spelling of the WIRING half destroys the
+check while the fast spelling of the CREATION half removes the need for it. That is a new
+`echoed-titles` assumption rather than a sentence in a doc.
+
+**S5 wave 3, and the third reading of one defect.** `0mdo.52` answered the two findings whose
+shape this epic has now shipped eight times: an answer whose population is not the question's
+must not be readable as the whole. `bd_seam/answers.py` reads what came BACK — bd's truncation
+notice off stderr, bd's `Newly unblocked:` block off stdout, and the argv we wrote — and states
+the coverage in a vocabulary with no clean reading for the unchecked case: `as-asked`,
+`filtered`, `truncated`, `unchecked`, plus `not compared` and `NOTHING TO CHECK` for a
+suggestion. `handle_complete_bead` no longer hands an agent bd's raw suggestion: it confirms
+against `bd ready --limit 0` and returns `next`, `next_candidates`, `next_still_blocked` and
+`next_stated`.
+
+**#97 was re-measured in twenty-three separate rigs and the previous CHARACTERISATION fell
+again.** `0mdo.51`'s correction concluded `--suggest-next` is silent in every shape where
+exactly one blocker had just closed — a reading taken over ten cells that shared ONE rig. Given
+its own rig per shape, that shape names a still-blocked bead. Sixteen of twenty-three are false
+positives, on no shape rule any of the three sessions found; `bd ready` was correct in all
+twenty-three. So the code records the OBSERVATION and not the mechanism, because claiming a
+mechanism is what got the previous two readings wrong.
+
+**And the prose finding the population made visible:** three of the four role cores instructed
+`bd close --suggest-next` with the caveat nowhere in the file, while it sat in `CLAUDE.md` —
+which a subagent reading its role core alone never opens. Fixed as a fourth SHARED fragment,
+`roles/core/_tracker.md.txt` (+ `.ru`), carrying a new `tracker-answers` duty the coordinator
+declares and `role_duties` checks in both directions. A sixth role added later carries the rule
+by the act that creates it.
+
+**S5 wave 2, and the withdrawal it had to reverse.** `0mdo.51` derived every place this project
+reaches `bd` — 278 sites on this repository, measured against bd 1.0.4: 12 in Python, 264 in
+the artifacts that instruct an agent, 2 in `.git/hooks/`, which reaches the `post-merge` the
+RFC recorded as outside the repository. Node `bd-seam` became a package holding the seam and
+the population; `application/waves/landing.py` lost its own grammar and kept the merge-slot
+judgement, so the tree holds one derivation of this kind rather than two. `beadloom bd-calls`
+is the report.
+
+Three inherited premises fell — BDL-UX #194, #237 and `beadloom-l2f2`'s `bd import -i`, which
+exists as a documented legacy alias. **A fourth withdrawal, of #97, was made in this bead and
+was wrong**, and the closing step of the bead itself caught it: `bd close 0mdo.51
+--suggest-next` named `.55` and `.13`, which `bd dep tree` shows blocked by four and six open
+beads. The withdrawal rested on one dependency shape — a target with two blockers, one closed —
+where the command behaves correctly. Re-measured over ten shapes it names a still-blocked bead
+in four, and is silent in every shape where exactly one blocker had been closed. #97 stands,
+`bd ready` was correct in all ten, and the reversal exposed a real call site: `handle_complete_bead`
+returns the raw `--suggest-next` output to the MCP client as `next`, so an agent finishing a
+bead is handed a list that can name blocked beads with nothing saying so (`.52`'s to fix).
+
+The standing lesson, written here because it is this epic's own subject turned on itself:
+exercising both directions of one axis is not anti-vacuity when the defect lives on another. A
+withdrawal is a measurement and states its room exactly as a finding does.
+
+**S5 wave 1, and what it corrected about its own bead.** `0mdo.39` answered BDL-UX #194 and
+#237 — one defect filed twice, nine days apart, by two agents that had never met. Both entries
+name `bd merge-slot` as the broken thing, and the re-measurement says it is not. On bd 1.0.4 in
+an isolated `bd init` rig, every exit code read without a pipe: `acquire` refuses a held slot
+with exit 1, four rounds of eight simultaneous `acquire --holder` calls produced exactly one
+winner each round, and `release --holder <name>` is owner-checked. What granted nothing was the
+CALL FORM this project instructed — no `--holder`, so every agent was the one tracker actor; a
+bare `release`, which is the single form bd does not check; and `--wait`, which queues and
+returns, under prose of ours that called it blocking. Six of eight instruction sites were
+defective at the tree the bead started from and none of eighteen is now.
 
 **Where S4 ended.** Fifteen beads: eight dev beads over six waves, then the test bead
 (`0mdo.34`), then review (`0mdo.35`), then the four fix beads its first pass produced
@@ -453,7 +596,189 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     holds — the mapping `0mdo.44` named and deliberately left for someone with the standing to
     take it — and PLAN's slice statuses now come from the tracker rather than reading `Pending`
     for four shipped slices.
-- [ ] S5 — the tracker adapters
+- [x] **S5 — the tracker adapters, where `bd`'s behaviour meets ours**
+  - [x] `0mdo.58` — S5's axes, derived at the slice's start.
+  - [x] `0mdo.51` — **the slice's mechanism bead**: the derived `bd` call-site population,
+    homed at node `bd-seam` per CONTEXT Q4 (derive our own call sites, never wrap `bd`).
+    `invocations.py` holds one grammar over two channels — a text channel anchored on COMMAND
+    POSITION, which returns 266 invocations and no prose where an unanchored sweep also reports
+    `bd verifies` and `bd checks the`, and an AST channel that resolves module-level constants
+    so `guard_probes`' most careful call reads as resolved. `assumptions.py` holds the measured
+    table and four verdicts — `secured`, `unsecured`, `holds`, `unmeasured` — each pinned to bd
+    1.0.4, with a test that fails when a different `bd` is installed. `population.py` holds four
+    roots and the four regions the derivation cannot reach, named with their reasons. Findings:
+    `bd ready` is unsecured on truncation at 40 sites and this flow calls it authoritative (its
+    cap is 100, announced on stderr, measured 100 of 135); 48 sites are unmeasured and they are
+    `bd swarm` and `bd gate`, the two commands the coordinator orchestrates every wave with; and
+    every `bd list` call in this project's Python names both default filters, so #187 is
+    answered at the consumer while 42 prose sites are not. Three python sites are unsettled and
+    all three are owned — two by `.53` (#171), one by `.52` (#97). BDL-UX #253 needed a third
+    suppression triple for one sentence-shape, which is the evidence it is a class. `.52` has
+    since closed both of its own: the `close` site is fixed and the prose is answered by a
+    shared fragment. The `bd ready` truncation sites are NOT swept and the reason is recorded
+    under that bead.
+  - [x] `0mdo.54` — **#207 + #210**, the two findings of this slice that are entirely ours.
+    `application/active_table.py` became a PACKAGE of five modules, moved with `git mv`, one
+    responsibility each: the id a row names, the markdown table, the state a Status cell
+    states, the reconcile core, and what a reconcile may stage. **#210:** `undecorate` reduces
+    a Markdown link to its text and deletes every code-span and emphasis character wherever it
+    stands — only backtick and asterisk, because an underscore can appear in a tracker id and
+    stripping it to read `_.22_` would corrupt `proj_x.22`. `resolve_row_bead_id` returns a
+    `RowId(bead_id, shape, reason)` rather than a 2-tuple, because the shape IS part of the
+    answer and a caller that parses the reason string to count is a second reader of one fact.
+    Measured on this repository: 211 → 238 resolved, 118 → 91 unresolved reported as three
+    named shapes, 0 rewritten in both runs. The 27 gained are BDL-067's whole table.
+    `unlisted_beads` named the 79 beads no row of their epic's table carries and writes none of
+    them — a report the S5 review then found contradicting the run's own row diagnosis, and
+    which `0mdo.61` split in two below. **#207:** `--stage` re-stages only paths whose index entry differs from `HEAD` — what
+    a commit actually contains — and names the rest under a fixed `  withheld: ` line; an
+    unreadable scope stages nothing and says so, because an unknown scope is not an empty one.
+    **The noise question was measured before it shipped:** `bd export` moved
+    `.beads/issues.jsonl` in SIXTEEN of the sixteen commits on this branch, so the naive fix
+    would print one line on every commit. Under `--stage` the export therefore runs only when
+    the commit already carries it. **And the shell was executed, not just asserted** — the
+    shipped `_HOOK_COHERENCE` block was extracted and run against a fake `beadloom` on `PATH`
+    in both directions: two withheld lines printed, none was silent. One defect found in the
+    report I was extending: `--check` reconciles a throwaway copy and every path it printed
+    pointed inside a directory deleted before the report was shown. Red verified by mutation in
+    both halves — `undecorate` reduced to `strip()` fails 19 of 53; the old staging answer fails
+    7 of 77.
+  - [x] `0mdo.53` — **#171 + #165**, the bead-creation path. `bd_seam/creation.py` is the one
+    place a bead is created: `PlannedBead` names beads by key and holds `depends_on` as
+    plan-local keys, `graph_plan` writes the document `bd create --graph` accepts, and
+    `allocated_ids` / `created_id` read bd's JSON answers instead of scraping `--silent`
+    stdout. The CONVENTION is enforced where the divergence is created — `graph_plan` refuses a
+    plan whose title states a bead number, because at creation there is no id to agree with and
+    the number is a promise nothing can check. It reads `title_references`, now public in
+    `waves/media_checks.py`, so the writing half and the comparing half share ONE grammar.
+    **Measured red then green on the derived report:** `allocated-id` 17 unsecured → 0 (15
+    secured) and `intended-id` 11 unsecured → 0 (8 secured) over this repository, and all 12
+    Python sites settled — `test_the_python_sites_nothing_settles_are_the_two_that_are_owned`
+    becomes `test_no_python_call_site_of_ours_is_left_unsettled` and asserts ZERO, so no number
+    has to be revised to keep it honest. **One thing I nearly got wrong and it is this epic's
+    own subject:** the first version put the argv behind a `graph_argv()` helper, and the
+    scaffold's creation site vanished from the population entirely — not unsecured, ABSENT,
+    because `invocations` resolves a list literal handed to `run_bd` and cannot follow a call.
+    The literal is spelled at the call site with the reason beside it and a test reddens if it
+    is tidied back. `.52`'s backticked-mention limit hit for a THIRD time, in my own sentence
+    explaining #171; rewritten to take the command out of command position rather than
+    appending a flag to a mention. Green in a clean room over 22 files (8 976 passed, 57
+    skipped, 1 xfailed, 1 failed — `test_all_new_node_pairs_are_fresh`, reproduced RED at HEAD
+    in `room-head-baseline-53`, a room of the same shape, rather than inherited from `.52`).
+    **As its own wave's gate owner**, green on the tree: 9 022 passed, 11 skipped, 1 xfailed;
+    `beadloom ci` rc 0 read in the foreground without a pipe; `ruff` clean; `mypy --strict`
+    clean over 269 files against all four declared interpreter targets. Every verdict taken in
+    Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms entered.
+  - [x] `0mdo.52` — **#187 + #97**, the tracker's answers at our own call sites.
+    `bd_seam/answers.py` is the run-time half of `.51`'s derivation: `coverage_of(argv, stderr)`
+    reads bd's own truncation notice and the argv's population flags, and
+    `confirmed_suggestion(close_stdout, ready)` splits `--suggest-next`'s candidates by what
+    `bd ready` lists. Both notice forms were measured rather than quoted — `Showing 50 issues;
+    more results matched…` from `bd list` against this repository (50 of 843) and `Showing 100
+    of 120 ready issues.` from `bd ready` against a rig grown past the cap with
+    `bd create --graph`. The coverage is `as-asked` and deliberately not `complete`, because
+    `bd list --status open` names a population bd honours and every open bead is not every bead.
+    The derivation learned a securing shape no flag can express: `unblocked-is-ready` is
+    `secured` when the ARTIFACT that instructs the suggestion also names `bd ready`, judged in
+    two passes so a confirmation written above the call counts too, and the verdict states that
+    whether the two answers are actually COMPARED is not something a derivation of call forms
+    can see. **Measured red then green on the same derivation:** 25 `unblocked-is-ready` and 2
+    `complete-population` unsecured over this repository before, 0 and 0 after, across a
+    population that grew 278 → 348 sites. The concrete defect is closed —
+    `test_the_python_sites_nothing_settles_are_the_two_that_are_owned` replaces the three-site
+    version, and the two that remain are `.53`'s. **#97 re-measured in twenty-three separate
+    rigs: sixteen false positives, `bd ready` correct in all twenty-three.** Green in a clean
+    room over 40 files, and **as its own wave's gate owner**, green on the tree: 8 980 passed,
+    11 skipped, 1 xfailed, `beadloom ci` rc 0 read in the foreground without a pipe, `ruff`
+    clean, `mypy --strict` clean over 268 files against all four declared interpreter versions.
+    Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms entered.
+    BDL-UX #253 needed a FOURTH suppression triple for one sentence shape.
+  - [x] `0mdo.39` — **#194 + #237**, the landing lock. A fifth shared medium, `landing-order`,
+    stated in `waves/media.py` and checked in `media_checks.py` over a new `waves/landing.py`
+    that derives every instruction of the lock in the composed flow artifacts and judges it by
+    the FLAGS of the invocation, never by the prose around it. Three defects, each measured on
+    bd 1.0.4 before it was encoded (`anonymous-holder`, `unguarded-release`, `queue-only-wait`),
+    plus `unknown-form` for a subcommand the derivation has not measured. The fix itself is
+    prose, because none of the call sites is Python: the shipped `coordinator.md.txt` and
+    `CLAUDE.md.txt`, this repository's project layer, and a new SHARED role fragment
+    `roles/core/_landing.md.txt` carrying the `landing-lock` duty that `config-check` now blocks
+    on — the mechanism `0mdo.27` built in S4, applied to the rule that made #194 rot in prose
+    for nine days. **Measured red then green on the same derivation:** 8 sites and 6 defective
+    over the flow artifacts at HEAD, 18 sites and 0 defective after. Green in a clean room over
+    28 files, and **as its own wave's gate owner**, green on the tree: 8 876 passed, 11 skipped,
+    1 xfailed, `mypy --strict` clean over 262 files, `beadloom ci` rc 0 in the foreground
+    without a pipe. Every verdict taken in Darwin arm64 / CPython 3.13.7, 0 of the 21 declared
+    rooms. Filed BDL-UX #253.
+  - [x] `0mdo.61` — **S5 review Major 1**, one run making two statements about one row. The
+    reconcile filled `seen` only from rows that RESOLVED, so a row it could not read handed its
+    bead to "no row in their epic's table" while the same run printed that row under
+    `bead-and-text` or `more-than-one-bead`. A reader acting on the message adds a row that is
+    already there — the class `row_ids.py`'s own docstring exists to remove, in the package that
+    shipped the sentence. **Both fixes the reviewer offered were needed and only one of them is
+    a choice:** carrying the id the shape already found is the MECHANISM either answer needs,
+    and the question is what the run then says. Folding those beads into `seen` would leave 38
+    of them in no number the run prints, which is this epic's own subject one level up, so the
+    bead-keyed report is SPLIT: `beads_named_by_an_unresolved_row` (fix that cell) and
+    `unlisted_beads` (add a row). **Measured before and after on this repository's real tables,
+    `active-sync --check --json` at `27db92b`:** 79 carried by no row → 41 carried by no row and
+    38 named by a row this run could not read, 41 + 38 = 79, and the row-keyed numbers do not
+    move (329 read, 238 resolved, 91 unresolved, 0 rewritten). No bead left the report and none
+    entered it. A range is deliberately not expanded: `beadloom-eeo.3..8` names `.3`, and `.4`
+    through `.7` stay in "carried by no row" because the numbers between the endpoints are ids
+    the table does not write. Four acceptance scenarios and 21 unit tests, red first. In a clean
+    room over 11 files (`room-beadloom-0mdo.61`): 9 080 passed, 57 skipped, 1 xfailed, 1 failed
+    — `test_all_new_node_pairs_are_fresh`, reproduced RED at HEAD in `room-head-baseline-61`, a
+    room of the same shape, rather than inherited from `.53` and `.54`, which report the same
+    failure. **As its own wave's gate owner**, green on the tree: 9 127 passed, 11 skipped, 1
+    xfailed, `mypy --strict` clean over 274 files against all four declared interpreter targets,
+    `beadloom ci` rc 0 in the foreground without a pipe. Darwin arm64 / CPython 3.13.7, 0 of the
+    21 declared rooms.
+  - [x] `0mdo.62` — **S5 review Major 3**, seven pure cores declared nowhere after six correct
+    deferrals. A declared target with no run reports `mutation-target-unmeasured`; an UNDECLARED
+    core reports nothing at all, so the epic that exists to stop an empty population reading as a
+    passing one was shipping seven cores into exactly that state in its own configuration. **The
+    STRONGER outcome was taken and no target is excluded on cost**, because the cost was measured
+    rather than projected: the seven run in **36 min 35 s and score 83.64%** — 764 mutants, 639
+    killed, 125 survived, 0 unrun. **The count is the wrong cost unit and that is the finding**:
+    764 mutants is 13.4% more mutants and eight times the cost per mutant, because
+    `invocations.py` and `assumptions.py` carry ten covering test files each where `creation.py`
+    carries two. Affordable anyway — scaled by the 1.63 the runner measured, 60 min, taking the
+    nightly to a projected 171. **Two settings the widening had left behind moved with it**: the
+    aggregate floor was re-derived (89.98% → 89.23%, so 0.88 keeps 1.23 points of headroom where
+    it had 2.00, and survives its own worst case at 88.99% if both macOS components fall the 0.63
+    points the rules slice actually fell) and the timeout moved 240 → 340 by the method already
+    in the file. A hypothesis was checked and REJECTED rather than reported: `test_bd_seam.py` is
+    absent from the mutation pool but covers `client.py`, not the seven, and every real covering
+    test is already in the pool. The three settings still agree — 36 passed across
+    `test_mutation_runner_scope.py`, `test_mutation_ci_job.py` and `test_mutation_scope.py`. In a
+    clean room over the 1 197 files `git archive HEAD` extracts (`room-beadloom-0mdo.62`; the
+    8 624 the bead comment records is that room AFTER `uv sync`, counting the virtualenv, which
+    is a count of a different thing than the sentence named — S5 review Nitpick 8); every
+    verdict Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms, so no number here is a
+    claim about the nightly job.
+  - [x] `0mdo.55` — **the test bead**, which cross-checked the six instruments this slice
+    built against each other and found two of their claims wrong. Its declared scope is the
+    union of what S5's dev beads touched, stated before the wave rather than derived after it.
+  - [x] `0mdo.56` — **the S5 review**, ISSUES on the first pass (0 critical, 3 major) and
+    **PASSED on the second** (0 critical, 0 major). The re-plan rule the owner armed fires on a
+    second ISSUES verdict on one slice; this was S5's first, so it did not fire. The reviewer
+    re-checked boundaries, cohesion, typing, error handling, doc freshness and the BDD
+    scenarios at `f23f54d` and found them sound, and recorded that its own independence had
+    been defeated before it ran: the launch prompt carried the slice's most distinctive
+    conclusion in the authors' framing, and nothing in the flow counts that channel.
+  - [x] `0mdo.57` — **the S5 docs pass.** `beadloom sync-check` read rc 0 and 0 stale before it
+    started, which is the second instance of BDL-UX #163 recorded on `beadloom-9glj`: each
+    wave's `reindex` legitimately moves the freshness baseline past sentences that have gone
+    wrong. Grepping `docs/` for the symbols S5 changed found what the instrument could not —
+    both language copies of the multi-agent guide and the parallel-waves guide still said a
+    wave shares FOUR media where the code has five; the composed-core line counts (371/401)
+    were six lines behind the shipped template (377/407); `SHARED_ROLE_FRAGMENTS` was still
+    documented as `("_writing",)` in two places against the four that ship; three documents
+    still named the roles as four after `explore` became the fifth; the mutation prose still
+    said seven targets and 5 700 mutants against fourteen and 6 464; and three documents still
+    pointed at `active_table.py` and `bd_seam.py` as single modules. The user-facing guides now
+    carry the honest half as well: the merge slot orders commits and orders nothing else, and
+    what keeps two agents out of one file is the disjoint scopes `beadloom waves` derived.
 - [ ] S6 — the flow's documents and roles
 
 ## What is in `main` now
@@ -570,6 +895,45 @@ reasons live in bead descriptions and in the issue log and nowhere together.
   adopter has no equivalent of the repository test that closes it here, and nothing in the DAG
   currently holds that.
 
+## What S6 inherited, and the owner's decision that it runs in full
+
+**OWNER DECISION, 2026-09-08: S6 is done in full. No split, no deferral to a follow-up epic.**
+Recorded on `0mdo.14` and on the epic bead, and repeated here because a resumed session reads
+this file and cannot reconstruct a decision that lives only in a bead comment. The coordinator
+offered to ship S5 and then cut S6 into "the two P0/P1 that bite today" plus "the rest as a
+separate epic", which would have closed BDL-068 roughly a week earlier. The owner declined it.
+The offer is recorded as well as the answer, because a scope decision that records only its
+outcome cannot be re-examined later.
+
+**S6 holds fourteen beads**, plus test, review and tech-writer — about the size S4 was, and S4
+took eight waves, a fix cycle after an ISSUES verdict and three rounds of CI.
+
+- **Six planned from the start:** `mr2l.72`, `mr2l.91`, #191, #213, `beadloom-iur5`,
+  `beadloom-ec1a`.
+- **Eight routed in from S4 and S5 as they were found:** `.37` (#235), `.38` (#236), `.40`
+  (#238), `.46` (#244 and #245), `.48` (#247), `.50` (#248), `.59` (#252), `.60` (#254).
+
+**Two of them bite today and are not deferrable quietly.**
+
+- `.60` / **#254 (P0)** — a guard that cannot evaluate itself blocks the write that would
+  repair it. Met live on 2026-09-04: `.51` wedged mid-refactor and the session was
+  unrecoverable from inside, and the owner cleared it with a heredoc in their own shell. Until
+  it is fixed, any refactor that leaves a package momentarily unimportable kills an agent's
+  session.
+- `.48` / **#247** — the push Gate does not run the suite and never says so. It cost a red PR
+  across six legs and roughly 55 runner-minutes.
+
+**Why the slice doubled, and it is not scope creep.** S6 was planned as "cheapest and most
+visible, and it blocks nothing — which is why it is last". Every one of the eight additions is
+a MEASURED defect that S4 or S5 found while doing something else, and all eight are one family:
+a check that is silent about what it did not check, which is this epic's own subject. The
+slices did not swell — the boundary held, and these were routed OUT of S4 and S5 deliberately
+rather than absorbed.
+
+**What that commits the next session to.** S6 runs as a full slice: its own axes derived at its
+start (the rule S4 paid for), its own wave plan from `beadloom waves`, then test → review →
+tech-writer, then a PR. It is not a cleanup pass appended to S5.
+
 ## Review findings left open, unassigned
 
 `0mdo.35` closed at 0 critical and 0 major. Ten Minors and three Nitpicks stand, all author's
@@ -624,6 +988,55 @@ emits `PytestUnraisableExceptionWarning: ResourceWarning: unclosed database` on 
 run. It does not reproduce in isolation and the review checked that it is not `.47`'s. A test
 named for the condition it detects, reporting that condition as a warning, is worth someone's
 attention.
+
+### From `0mdo.56`, the S5 review
+
+The second pass closed at 0 critical and 0 major and carried seven Minors and one Nitpick, plus
+five of its own first-pass Minors that nobody was assigned. The docs pass (`0mdo.57`) closed the
+four that were documentation defects and touched no code:
+
+- **Minor 2** — this file's header contradicted itself: line 5 said S5's review had closed its
+  first fix bead while line 11 said the second had landed. **Closed by this pass.**
+- **Minor 3** — the deep `.54` entry still reported 79 unlisted beads in the present tense,
+  thirteen lines below the corrected 41 + 38. **Closed by this pass**, anchored to `5846b20`
+  with a pointer to the split.
+- **Minor 4** — CONTEXT's three new decision rows were inserted above the 2026-09-04 axes row,
+  so the table was no longer in date order at its tail. **Closed by this pass.**
+- **Nitpick 8** — `.62`'s clean room was described as "`git archive HEAD`, 8 624 files". `git
+  ls-files` is 1 197 and `git archive HEAD` extracts exactly those; 8 624 is that room after
+  `uv sync`, counting the virtualenv. **Closed by this pass**, in an epic whose subject is
+  measurements that do not say what they measured.
+
+The rest are code, configuration or tracker findings and stay open. A doc edit must not make one
+of them look addressed, so each is named with what it still needs:
+
+- **Minor 1** — bead `beadloom-0mdo.60`: the retitle to #254 landed and the body did not, so the
+  first line of its description still reads `BDL-UX #253` and points a reader at the LOW
+  dependency-release entry rather than the HIGH guard one. It is the last pointer in the
+  repository that says #253 and means the guard. Needs `bd update beadloom-0mdo.60` and a
+  re-export of `.beads/issues.jsonl`, which is a tracker write and not a documentation edit.
+- **Minor 5** — the long line the reviewer named in `.github/workflows/mutation.yml:271` is
+  still ~130 columns inside an otherwise wrapped comment block. CONTEXT's own over-long line was
+  rewrapped by this pass; the workflow's was not, because it is not a document.
+- **Minor 6** — the seven per-file mutation scores exist only in `0mdo.62`'s bead comment. This
+  pass carried them into `docs/services/cli.md`, where a reader of the mutation section now sees
+  `staging.py` at 65.00% beside the aggregate. **The reviewer's actual recommendation is
+  untouched**: the scores are still absent from the workflow's own floor-composition comment,
+  which is where the three component figures live and where a person re-deriving the floor
+  looks.
+- **Minor 7** — the aggregate floor (`--min-score 0.88`) and the `timeout-minutes` are pinned by
+  no test, on settings this epic has already left behind once. The reviewer's remedy is a bead in
+  S6: assert that the component mutant counts named in the workflow comment sum to the declared
+  scope's denominator (statically derivable in 17.3 s), and that `--min-score` keeps a stated
+  margin under the composed aggregate. No such bead exists yet.
+- **First-pass Minors 3-7**, none addressed and none assigned, all verified unchanged at
+  `f23f54d`: `_UNBLOCKED_IS_READY` has no `applies_when` (`assumptions.py:298`); `_git_paths`
+  decodes with `errors="replace"` and does not defeat `core.quotepath` (`staging.py:139`);
+  `population._read`'s docstring promises a gap no caller counts (`:193`);
+  `answers.coverage_of` and `AnswerCoverage.stated` have no production consumer. The reviewer
+  would carry the fifth into S6 rather than leave it to discretion: `_ECHOED_TITLES` still
+  carries `confirmed_by="dep tree"` (`assumptions.py:285`), a claim the test bead found false,
+  so a rule reads `secured` on the strength of a check the bulk call form removes.
 
 ## Standing conventions every launch prompt carries
 

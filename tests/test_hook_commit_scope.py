@@ -73,22 +73,24 @@ class TestTheCommitGateJudgesTheCommit:
         content = _hook(_git_project(tmp_path), mode)
         assert content.index("sync-check") < content.index("ACTIVE / tracker coherence")
 
-    def test_the_hook_states_what_it_itself_added_to_the_commit(
+    def test_the_hook_adds_no_path_to_the_commit_and_names_what_it_withheld(
         self, tmp_path: Path, mode: str
     ) -> None:
-        """BDL-061.22's OBSERVATION C, measured by `.22`'s own commit.
+        """BDL-UX #207: the addition is not announced, it is not made.
 
-        `active-sync --stage` stages the reconciled ACTIVE tables and the tracker
-        export while the commit is in flight, and a pathspec commit does not
-        exclude them: `.22` committed one file by explicit path and landed two.
-        The hook then printed a confident count of what it did NOT judge and said
-        nothing about the file it had just put IN. The count states the remainder;
-        this line states the addition.
+        This assertion replaces one that pinned the opposite promise. BDL-061.22
+        measured `active-sync --stage` adding paths to a commit in flight and the
+        hook was made to SAY so; BDL-062's `.7` then unstaged another agent's
+        tracker export on purpose and the hook put it back, saying so. Announcing
+        a decision an agent did not take is not the same as not taking it, and the
+        instruction the project gives every agent — commit only your own files, by
+        explicit path — cannot hold while a hook stages after them.
         """
         content = _hook(_git_project(tmp_path), mode)
-        assert "staged_before=$(git diff --cached --name-only)" in content
-        assert "ADDED these path(s) to this commit" in content
-        assert content.index("staged_before=") < content.index("active-sync --stage")
+        assert "git add" not in content
+        assert "ADDED these path(s) to this commit" not in content
+        assert "withheld" in content
+        assert "were NOT added to it" in content or "NOT added to it" in content
 
     def test_the_unjudged_count_reads_the_status_rather_than_the_diff(
         self, tmp_path: Path, mode: str

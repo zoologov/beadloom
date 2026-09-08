@@ -535,7 +535,8 @@ def _paths_of(root: Path, commit: str) -> list[str]:
         ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],  # noqa: S607
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if result.returncode != 0:

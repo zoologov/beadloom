@@ -59,7 +59,7 @@ class TestSetupRulesContentAware:
         result = setup_rules_auto(tmp_path)
 
         assert ".cursorrules" not in result
-        assert (tmp_path / ".cursorrules").read_text() == user_content
+        assert (tmp_path / ".cursorrules").read_text(encoding="utf-8") == user_content
 
     def test_adapter_content_contains_beadloom_marker(self) -> None:
         """The adapter template itself is recognized as a beadloom adapter."""
@@ -159,7 +159,7 @@ class TestSetupRulesWindsurfCline:
         (tmp_path / ".windsurfrules").write_text(user_content)
         result = setup_rules_auto(tmp_path)
         assert ".windsurfrules" not in result
-        assert (tmp_path / ".windsurfrules").read_text() == user_content
+        assert (tmp_path / ".windsurfrules").read_text(encoding="utf-8") == user_content
 
     def test_cline_beadloom_adapter_updated(self, tmp_path: Path) -> None:
         """Cline file with beadloom content gets updated."""

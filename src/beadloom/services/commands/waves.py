@@ -150,21 +150,27 @@ def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
 
 
 def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
-    """Measure the three media the graph cannot see, here at the services edge.
+    """Measure the four media the graph cannot see, here at the services edge.
 
     Gathered here rather than inside the planner so the application layer keeps
     taking its input as data: the decision stays runnable without git, without a
     repository and without a hook, and every one of those absences arrives as a
     ``None`` that the checks report rather than as a silent zero.
     """
-    from beadloom.application.waves import WaveEnvironment
+    from beadloom.application.waves import WaveEnvironment, lock_sites
     from beadloom.doc_sync.git_baseline import changed_paths
+    from beadloom.services.bd_seam.assumptions import lock_invocations
+    from beadloom.services.bd_seam.invocations import text_invocations
+    from beadloom.services.bd_seam.population import flow_artifacts
 
     changed = changed_paths(project_root)
     return WaveEnvironment(
         tree_changed_paths=None if changed is None else tuple(sorted(changed)),
         commit_gate=_commit_gate(project_root),
         doc_baseline_stale_pairs=_stale_pairs(db_path, project_root),
+        landing_lock_sites=lock_sites(
+            lock_invocations(text_invocations(flow_artifacts(project_root)))
+        ),
     )
 
 

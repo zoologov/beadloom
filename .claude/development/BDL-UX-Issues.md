@@ -35,6 +35,87 @@
 
 ## Open Issues
 
+253. [2026-09-04] [LOW] a scanned document cannot say which release of a DEPENDENCY a measurement was taken on, because every semver token is read as a claim about this project's version
+
+    **Severity:** low (one suppression per sentence, and the suppression route is declared, dated and checked — but the class recurs for every adopter who documents a dependency's behaviour)
+    **Command:** `beadloom docs audit`
+    **Context:** BDL-068 S5, `beadloom-0mdo.39`. `docs/domains/application/README.md` gained the sentence "Measured on bd 1.0.4 in an isolated rig with every exit code read without a pipe", which is what makes the landing-lock measurement answerable at all.
+    **Measured:** `docs audit` reported `1 stale fact(s)` — `README.md:56 version mentioned 1.0.4, actual 3.0.2` — and the Gate went red on it. `_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a pin, so it has no notion of WHOSE product a version belongs to.
+    **Why it matters:** this project requires every measurement to name the room it was taken in, and the version of the tool under measurement is part of that room. The audit currently makes the two rules contradict: a document either states which release it measured, or it passes. The two existing suppressions of the same family cover an EXAMPLE token (#190) and a PAST TENSE (#205); this is a third form — another product's number — and it is the one an adopter meets first, because documenting a dependency's behaviour is ordinary.
+    **Expected:** a version token attributed to a named product is not read as this project's version. The attribution is present in the text every time (`bd 1.0.4`, `Python 3.13.7`, `mcp>=2.0`), so this is a token-boundary question rather than a semantic one — the same shape as the clause-scoped matching that retired three triples in BDL-061.45.
+    **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
+    **Related:** #190 (the example token, open), #205 (the past tense, open).
+
+254. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
+
+    > **Renumbered from #253 to #254 on 2026-09-05, by the S5 review's Major 2.** Two entries were
+    > filed as #253 on the same day by two agents working the same slice: the LOW dependency-release
+    > entry above and this one. The LOW entry keeps the number — it already had five citations in
+    > `.beadloom/config.yml` and three in `ACTIVE.md`, all committed, while this one had none in any
+    > file. **Commit `050d63ac`'s subject still says #253 and means this entry**; that is history and
+    > is left alone rather than rewritten.
+    > **This is the third instance of one class in this project**, after the duplicate #211 and the
+    > #216-#232 run of bead titles carrying numbers the log never received. It is also exactly the
+    > defect `beadloom-0mdo.53` closed for the TRACKER hours earlier — a number authored before it is
+    > allocated, kept in two places — reappearing in the log, which has no allocator at all. The RFC
+    > already names it as S6's subject (`mr2l.91`); S5 is the slice that produced the duplicate the
+    > check was proposed for, which is the argument for building it rather than a reason to wait.
+
+    **Severity:** high (an agent session wedges with no self-heal, and the state that wedges it is an ordinary mid-refactor moment)
+    **Command:** `beadloom guard bead-claimed`, the emitted `.claude/settings.json` `PreToolUse` binding
+    **Tracker:** routed to S6
+    **Context:** hit by `beadloom-0mdo.51` during BDL-068 S5, splitting `src/beadloom/services/bd_seam.py` into a package. `git mv` succeeded; the very next call — creating `__init__.py` — was blocked. Between the two the package does not import.
+    **Issue:** `guard_probes.py:79` reaches the tracker by importing `beadloom.services.bd_seam` from the editable install rooted at the working tree. While that import fails the guard cannot answer, and a guard that cannot answer **blocks**. Its own remediation reads *"fix the reported error, then re-run"* — it asks for a file write it has just disabled.
+    **Measured, from two independent sessions:** `Bash`, `Write` and `Edit` are all on the guard's surface and all return the same `ImportError`; `Read` is not, which is the only reason the proposed repair could be checked before asking a human to type it. There is no escape from inside: no env var, no marker and no path exclusion is reachable, because the failure is raised **before** any path or command analysis runs. **A human ran one heredoc in their own shell. Nothing else cleared it.**
+    **The uncomfortable half, and it is ours:** BDL-068 S4 widened the matcher to include `Bash` (`beadloom-0mdo.31`), which was correct and is the whole of #170. Before that, a shell write slipped past the guard and could have repaired it. So closing a real coverage hole converted a recoverable failure into a dead end, and the improvement is what removed the last exit.
+    **It is #170 asked in the other direction.** That entry asked *which write paths can this guard not see*. This asks *what does a guard do when it cannot answer about itself*. S4 taught four instruments to say `NOTHING TO CHECK`, `not compared`, `not_covered` and `unresolved`; this one says `ERROR` and stops the world.
+    **Not exotic.** Any refactor leaving the package momentarily unimportable wedges a session the same way: a module split, a renamed symbol, a syntax error saved mid-edit.
+    **Expected — the shape, not the instance.** A guard that cannot evaluate itself is `unresolved`, and an unresolved guard **warns and permits** rather than blocking, saying loudly that it checked nothing. A gate that blocks on its own inability is not strict, it is unavailable. If some inability must block, it must leave a reachable repair path, and `Read`-only is not one. Consider also isolating the probe from the tree it guards, so editing Beadloom cannot disarm the guard that watches the edit.
+    **Related:** #174 and #175 (a check reporting its own inability in a form nobody can act on) are the same family; #170 is its other direction.
+
+252. [2026-09-04] [MEDIUM] a composed role is missing from the entry-point document that enumerates roles, and no check asks whether it is there
+
+    **Severity:** medium (an adopter's agent reads the entry point to learn what roles exist, and learns four of five)
+    **Command:** `beadloom setup-agentic-flow`, `beadloom config-check`
+    **Tracker:** routed to S6
+    **Context:** noticed by the owner reading `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, then measured.
+    **Measured:**
+
+    ```
+    explore.md.txt                          the role template exists
+    commands/coordinator.md.txt             explore x4
+    commands/task-init.md.txt               explore x4
+    .claude/agents/explore.md               composed
+
+    CLAUDE.md.txt      (shipped)            explore x0
+    .claude/CLAUDE.md  (composed, here)     explore x0
+    ```
+
+    **Issue:** `Explore` shipped in BDL-068 S1 as a composed role and is used by two slash skills. `CLAUDE.md` is the document that calls itself the entry point, whose §0.0 draws the role map and whose §4 is the Agent Roles table. Both list four roles. So the role exists, two skills invoke it, and the map an agent is told to read first does not know about it.
+    **What already checks, and what it checks instead:** `config-check` reports `On disk: 5 role file(s)` — it counts `explore` — and checks two things, neither of which is this. It compares composed adapters against the compositions this flow would write (drift), and it checks that a declared duty reaches the composed core of every role it names, in both directions (`beadloom-0mdo.27`, shipped in S4). Nothing asks whether every composed role is NAMED in the document that enumerates roles.
+    **Why it is the same family and still a third direction:** #228 was "a duty declared for a role does not reach that role's core". This is "a role that exists does not reach the document listing roles". `.27` built the duty↔core check; the role↔map check is one more edge of the same graph and was not built because nobody had added a role since the map was written.
+    **Expected:** `config-check` derives the role set from what `role-composer` composes and asserts that each one is named in the composed `CLAUDE.md`, reporting a role the map omits and a map entry no role backs. Both directions, like `.27`. Then fix this instance — `Explore` belongs in §0.0's map and §4's table, in the shipped template and therefore in every adopter's composed copy.
+    **Not a documentation chore.** Fixing only the text leaves the next role in the same position, which is precisely the argument `beadloom-0mdo.12` made for refusing to split a duty from its check.
+
+251. [2026-09-04] [LOW] `sync-check` reports nine surface-drift warnings on the tree that a freshly reindexed clean room reports as `[ok]`, and a tree reindex does not clear them
+
+    **Severity:** low (warn-level, pre-existing, and untouched) — recorded because the two rooms disagree, not because the warnings matter
+    **Command:** `beadloom sync-check`, `beadloom reindex`
+    **Context:** observed by `beadloom-0mdo.58` while deriving S5's axes in a room built from `git archive HEAD` at `b350f6b` and reindexed there.
+    **Issue:** the tree reports nine surface-drift warnings; a clean room built from the same commit and reindexed reports `[ok]` for all nine. Re-running `reindex` on the tree does not clear them. So the freshness answer depends on which room asked, and the room that says less is the one built from the committed state.
+    **Why it is worth an entry at `warn`:** this project's whole verdict discipline rests on a clean room and the tree being two different claims about the same code, with the tree being the stricter one. Here the tree is stricter for a reason nobody has established, and "stricter for an unknown reason" is indistinguishable from "wrong" until someone looks. Same family as #163 and the S4 docs-wave finding, where `sync-check` was green over real prose drift: the freshness fact models something adjacent to the question.
+    **Expected:** establish which of the two answers is right, then either the tree stops reporting nine things the committed state does not carry, or the room stops missing them. Do not silence either side first.
+
+250. [2026-09-04] [MEDIUM] a node is approved into a work item's axes by having been SWEPT, so a `Derived by` field silently overrides an explicit `no`
+
+    **Severity:** medium (a path into the approval list that no one chose, in the list `scope-check` compares every commit against)
+    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
+    **Context:** found by `beadloom-0mdo.58` while deriving S5's axes — the first slice whose targets are files it READS rather than files it changes.
+    **Issue:** `WorkItemAxes.approved` is `kept | targets`, and `_agreement` checks `approved` first, so a row marked `no` in the scope column is still approved when it appears as a derivation target. `doc-spaces` and `intent-reader` are in BDL-068's approved set today for that reason alone — they were swept, not kept.
+    **Why the rule was right until it wasn't:** it assumed a slice changes what it derives from, which held for S1 through S4. S5's subject is where this project *calls* `bd`, so its `impact` targets include files it only reads. The assumption is now false and nothing announced the change.
+    **Same family as #244**, filed hours earlier: both are entries reaching the approval list without anyone writing them there. #244 arrives from a table header; this one arrives from a field meant to record provenance. The approval list is what `scope-check` judges every commit against, so a name nobody chose is a name every commit may touch.
+    **Expected:** `approved` follows the scope decision and nothing else. A target that was swept and ruled out is a target that was swept and ruled out; provenance is not consent.
+
 249. [2026-09-04] [MEDIUM] `ci.yml` names a locale macOS does not have, so anyone reproducing that leg locally measures the C row twice
 
     **Severity:** medium (the reproduction silently succeeds at measuring the wrong room, which is worse than failing to run)
@@ -168,8 +249,29 @@
     **Why it matters:** this is the same root the review's independence check already reports rather than enforces — one identity for every role — arriving in a primitive that is supposed to be an exclusive lock. A mutex whose holder is indistinguishable from its claimant is not a mutex, and `--wait` returning at once means nobody finds that out. The serialisation this epic's waves depend on is currently carried by the agents not colliding.
     **Expected:** the slot is held by the BEAD, not by the user — `acquire <bead-id>`, so a holder can be compared with a live claim and a stale hold can be aged out with its bead's status. `--wait` blocks until the slot is free or a stated timeout expires, and says which it did; without a timeout it is a poll loop the caller has to write. A hold whose bead is closed is reclaimable, and `check` says how old the hold is rather than only who has it.
     **The last observation, taken after the commit:** the slot then read `OPEN` with no holder at all, `Updated: 2026-09-03` unchanged. So across one wave's commit the primitive was, in order, held by a name indistinguishable from the claimant's, non-blocking on `--wait`, and empty — and nothing was serialised at any point. The commits did not collide because they touched different files, which is the property the slot exists so that nobody has to rely on.
+    **Answered on our side, 2026-09-04 (BDL-068 S5, `beadloom-0mdo.39`), and RE-MEASURED — the headline above is wrong about where the defect is.** On bd 1.0.4 (`ce242a879`) in an isolated `bd init` rig, every exit code read without a pipe: `acquire` on a held slot exits **1** and names the holder; `acquire --wait` on a held slot also exits **1**, in 357 ms, so it returns without blocking and SAYS SO through its exit code; four rounds of eight simultaneous `acquire --holder` calls produced exactly one winner each round, so the acquire is mutually exclusive under contention; `release --holder <name>` is owner-checked and refuses a caller that is not the holder; and `--holder` accepts any string, so a bead id can hold the slot today and `check --json` reports it back. The primitive is sound. What granted nothing was OUR CALL FORM — no `--holder`, a bare `release`, and `--wait` under prose of ours that called it blocking, which is what stopped anyone reading the exit code. This entry records exit 0 for that command and I measure 1; I cannot establish why, and the pipe-masking error this project has recorded three times is a hypothesis rather than a measurement.
+    **What shipped:** every instruction of the lock in the composed flow and the shipped templates now passes `--holder <bead-id>` and reads the exit code (measured: 6 of 8 sites defective at the tree this started from, 0 of 18 after). `beadloom waves` checks it on every plan as the `landing-order` shared medium, and the statement is a `landing-lock` role duty that `config-check` blocks on, so it reaches the roles that commit rather than living in one slash command.
+    **What is still upstream and unfixed:** `--wait` blocking with a stated timeout and saying which it did; `check` reporting how OLD a hold is; a hold whose bead is closed being reclaimable; and the waiters queue draining — nothing removes a waiter on acquire or release, and this repository's slot still carries five identities from ended sessions.
+
     **Related:** the review-brief independence report (one tracker identity for every role), #235 and #236 (the other two conventions in this wave whose isolation was assumed rather than checked).
 
+
+    > **WITHDRAWN 2026-09-04 by `beadloom-0mdo.39`, and #194 with it. The primitive is sound; our call form was not.**
+    > Measured on bd 1.0.4 in an isolated rig with exit codes read WITHOUT a pipe: `acquire` on a held slot
+    > returns **rc 1**; 32 concurrent acquires over four rounds produced exactly one winner each round; and
+    > `release --holder` **is** owner-checked. Verified a second time by the coordinator, independently, on this
+    > repository.
+    > **Both errors were ours and both are this project's own recurring shapes.** `--wait` does not block —
+    > by design it enqueues and returns 0, which is what it says it does; exclusion is plain `acquire`, judged by
+    > its exit code. And the identity collapse was passing no `--holder`: the flag exists, our instruction never
+    > used it, so every caller was the machine's user instead of a bead.
+    > **We read the message text and not the status.** That is the pipe-masking family, and it produced two
+    > filed defects — one HIGH, one P0 — against a working external tool over nine days. The coordinator
+    > verifying this correction masked an exit code through `tail` on its first attempt and got the wrong answer,
+    > which is the fourth instance in this epic and is why the shape is recorded rather than the incident.
+    > The fix is in `beadloom-0mdo.39`: `acquire`/`release --holder <bead-id>` read by exit code, a new
+    > `landing-order` shared medium, and a `landing-lock` role duty. Measured on the same derivation:
+    > 8 instruction sites of which 6 were defective at HEAD, 18 of which 0 are now.
 236. [2026-09-04] [MEDIUM] a clean room's verdict is decided by which optional extras it installed, and the convention never names them
 
     **Severity:** medium (the verdict is reported as a claim about the code, and three different verdicts about the same code were measured in one hour)
@@ -729,6 +831,10 @@
     **Partial mitigation, adopted now:** the coordinator exports a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal. It does **not** address the release hazard, and saying otherwise would overstate it. A caller-checked release has to come from `bd`.
 
     Related: #187 of 2026-08-25 (`bd list --json`), also External, also a default of the tracker rather than of Beadloom.
+    **Answered on our side, 2026-09-04 (BDL-068 S5, `beadloom-0mdo.39`).** Defect two is real and was reproduced: a bare `release` frees whoever holds the slot. It has a fix that needed no upstream change — `release --holder <name>` IS owner-checked, exits 1 and prints `slot held by alice, not bob`. Defect one has the same shape: `--holder` accepts any string, so passing the BEAD id makes the holder distinguishable between agents that share one tracker actor. Both are now the only forms this project's composed flow and shipped templates instruct, and `beadloom waves` fails the `landing-order` medium on any instruction that is not.
+    **The routing fact this entry is the evidence for.** It was filed HIGH on 2026-08-26 and sat for nine days while three epics ran concurrent waves on the primitive it declares broken, until #237 found the same defect independently. Nobody ignored it — it was one entry in a log of 249, and the flow had no way to say "a primitive you depend on every wave is filed as broken". The declared mitigation here ("the coordinator exports a distinct `BEADS_ACTOR` per subagent") was never carried either: nine days later #237 measured the holder as `v.zoologov` again. Both are the same class — a rule that lives only in prose. The half that is now instrumented is that a plan's `landing-order` verdict cites #194 and #237 in the artifact every wave reads. The half that is not is the log knowing which of its entries names a primitive the flow mandates, which needs the issue log as a document KIND with computed facts (S6, `beadloom-mr2l.72`).
+
+
 
     **Third defect, measured 2026-08-27 — the queue admits the holder as its own waiter.** The coordinator held the slot as `coordinator` and ran `acquire --wait` again; instead of being recognised as the holder it was appended to its own queue:
 
@@ -752,6 +858,13 @@
 
     **The coordinator caused this**, by treating `acquire --wait` as idempotent. But a mutual-exclusion primitive that enqueues its own holder behind itself is a deadlock the caller cannot see: `bd merge-slot check` reports a live-looking holder and a growing queue, with nothing distinguishing that from a legitimately busy slot. Combined with the two defects above, an agent following the documented discipline exactly can be blocked indefinitely by a peer that has already finished.
 
+
+    > **WITHDRAWN 2026-09-04 — see #237's withdrawal note, which covers both.** This entry and #237 are the
+    > same defect filed nine days apart, and both were wrong about the same external tool. `acquire` refuses a
+    > held slot with rc 1 and `release --holder` is owner-checked; the actor chain analysed here is real and is
+    > not what governs the slot when `--holder` is passed. The reporting agent committed after a refusal because
+    > it read the printed line rather than the exit code — the failure was ours, at the call site, and the entry
+    > stands as a record of how confidently two independent observers can misdiagnose a tool nobody status-checked.
 193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
 
     **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
@@ -1059,6 +1172,19 @@
     **Expected:** correct the message to the real invocation, and warn only when the import genuinely failed. Verify the flag set against the pinned bd version rather than assuming it. Same family as #140.
     > Tracked as a bead (P3).
 
+
+    > **WITHDRAWN 2026-09-05. The command exists; the entry was wrong.** Measured twice — by
+    > `beadloom-0mdo.51` while re-measuring every S5 premise, and independently by the coordinator:
+    > `bd import --help` lists `-i, --input string   Read JSONL from a specific file` and documents
+    > `bd import -i backup.jsonl` in its own examples as *"Legacy alias for a specific file"*. It
+    > imported 137 issues at rc 0. `.git/hooks/post-merge:51` and `:53` use exactly that form, so the
+    > hook's remediation line is correct and always was.
+    > **Third premise of this project's own log to fall in two days**, after #194 and #237 — all three
+    > filed against a working external tool, all three by readers who did not run the thing they were
+    > describing. The pattern is not carelessness about `bd`; it is a log entry written from a failure's
+    > *appearance* and never re-derived. Whatever S6 does about routing should notice that an entry can
+    > sit for months being wrong in a direction nobody rechecks.
+    > `beadloom-l2f2` is closed as not-reproducing rather than fixed.
 163. [2026-08-20] [MEDIUM] `sync-update` can re-attest a doc nobody read — re-baselining silences `sync-check` without evidence
 
     **Severity:** medium (the freshness guarantee quietly weakens to "the hashes were reset", which is not what a green sync-check is read to mean)
@@ -1890,6 +2016,24 @@
 
 97. [2026-05-29] [LOW] `bd close --suggest-next` reports still-blocked beads as "Newly unblocked" — During BDL-035, closing `beadloom-ji9.4` printed `Newly unblocked: beadloom-ji9.6`, but `bd ready` / `bd dep tree` show ji9.6 is still BLOCKED by ji9.2/.3/.5. `--suggest-next` appears to list beads where the closed issue was *a* blocker without checking whether *other* blockers remain — a false "ready" signal. Workaround: treat `--suggest-next` as candidates only; `bd ready` is authoritative.
     > **External.** Bug in `steveyegge/beads` CLI (1.0.4), not in beadloom. Captured during dogfooding; report upstream if desired.
+
+    > **SHARPENED 2026-09-04 by `beadloom-0mdo.51`, after that bead first withdrew the entry and then
+    > reversed itself.** The withdrawal was measured on ONE dependency shape — a target with two
+    > blockers, one of them closed — which is the single shape where the command behaves correctly.
+    > Over ten shapes it names a still-blocked bead in four, and is silent in every shape where
+    > exactly one blocker had just been closed. So the entry survives and is now specific: the defect
+    > is shape-dependent, not intermittent.
+    > **What caught the withdrawal was the bead's own closing step:** `bd close beadloom-0mdo.51
+    > --suggest-next` named `.55` and `.13`, which `bd dep tree` shows blocked by four and six open
+    > beads. The reversal landed in code, tests and docs in `f703dc8`.
+    > **The error's family is worth more than the entry.** "Both directions exercised" was true of the
+    > OUTCOME axis and blind to the SHAPE axis — the same failure, opposite sign, as the two agents who
+    > filed #194 and #237 against a working `bd merge-slot`: a conclusion measured over a population
+    > narrower than the claim, in a project whose whole subject is that distinction.
+    > **The reversal paid for itself:** it exposed `services/mcp_server.py:850`, where
+    > `handle_complete_bead` closes with `--suggest-next` and hands the raw stdout to the MCP client
+    > under `next`, unqualified. So our own tool passes bd's false signal through to an agent finishing
+    > a bead. Tracked on `beadloom-0mdo.52`.
 
 98. [2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions — `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity` flake fixed in commit a4c88fa. While investigating, the test also looks internally inconsistent (comment references "mno345 from Jan 10" absent from the sample; `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing, unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
     > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).

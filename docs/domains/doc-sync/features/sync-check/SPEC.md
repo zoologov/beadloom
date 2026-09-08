@@ -381,11 +381,15 @@ Three things, and the third names a limit rather than a repair:
   counted — and a new module is the largest unjudged thing a neighbour can leave
   in a shared tree. The second status column is non-blank for a working-tree
   modification and `?` for an untracked path, so one call answers both.
-- **What it added to the commit itself.** `beadloom active-sync --stage` stages
-  the reconciled ACTIVE tables and the tracker export while the commit is in
-  flight, and a commit made with an explicit pathspec does not exclude them. The
-  hook now lists the paths it added, because the unjudged count states the
-  remainder and nothing stated the addition.
+- **What it corrected and did NOT add to the commit.** `beadloom active-sync
+  --stage` used to stage the reconciled ACTIVE tables and the tracker export
+  while the commit was in flight, and an agent who had deliberately unstaged
+  another agent's export got it back (BDL-UX #207). It now re-stages only the
+  paths the commit already carries and prints the rest under a `  withheld: `
+  line, which the hook shows. A commit made with an explicit pathspec does
+  exclude a staged path it does not name — measured on git 2.49.0 — but not one a
+  pre-commit hook stages, because a pathspec commit builds a temporary index and
+  a hook's `git add` writes into that one.
 - **A marker line, `# beadloom-hook-scope: commit`.** An installed hook keeps its
   old behaviour until `install-hooks` is re-run, and nothing tells a repository
   to; `beadloom waves` reads the marker to tell whether the gate a concurrent

@@ -783,7 +783,9 @@ class TestBootstrapPresets:
     def test_config_includes_preset(self, tmp_path: Path) -> None:
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path, preset_name="monolith")
-        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
+        config = yaml.safe_load(
+        (tmp_path / ".beadloom" / "config.yml").read_text(encoding="utf-8")
+    )
         assert config["preset"] == "monolith"
 
 
@@ -878,7 +880,9 @@ class TestBootstrapZeroDoc:
         src.mkdir()
         (src / "app.py").write_text("pass\n")
         bootstrap_project(tmp_path)
-        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
+        config = yaml.safe_load(
+        (tmp_path / ".beadloom" / "config.yml").read_text(encoding="utf-8")
+    )
         assert config.get("docs_dir") is None
 
     def test_with_docs_dir_no_null(self, tmp_path: Path) -> None:
@@ -890,7 +894,9 @@ class TestBootstrapZeroDoc:
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n")
         bootstrap_project(tmp_path)
-        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
+        config = yaml.safe_load(
+        (tmp_path / ".beadloom" / "config.yml").read_text(encoding="utf-8")
+    )
         assert "docs_dir" not in config
 
     def test_bootstrap_succeeds_without_docs(self, tmp_path: Path) -> None:
@@ -1477,7 +1483,7 @@ class TestGenerateRules:
         assert count == 1
         assert rules_path.exists()
 
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         assert data["version"] == 1
         assert len(data["rules"]) == 1
         domain_rule = next(r for r in data["rules"] if r["name"] == "domain-needs-parent")
@@ -1510,7 +1516,7 @@ class TestGenerateRules:
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
         assert count == 2
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-parent" in rule_names
@@ -1548,7 +1554,7 @@ class TestGenerateRules:
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
         assert count == 2
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-parent" in rule_names
@@ -1595,7 +1601,7 @@ class TestGenerateRules:
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
         assert count == 1
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         assert len(data["rules"]) == 1
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
@@ -1615,7 +1621,7 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         generate_rules(nodes, edges, "theroot", rules_path)
 
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         domain_rule = data["rules"][0]
         # Empty matcher matches any node — avoids false positives on hierarchical graphs.
         assert domain_rule["require"]["has_edge_to"] == {}
@@ -1642,7 +1648,7 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         generate_rules(nodes, edges, "proj", rules_path)
 
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         assert data["version"] == 1
         assert isinstance(data["rules"], list)
         # domain-needs-parent + feature-needs-parent (no service-needs-parent)
@@ -1702,7 +1708,7 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         generate_rules(nodes, edges, "myproj", rules_path)
 
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         domain_rule = next(r for r in data["rules"] if r["name"] == "domain-needs-parent")
         # Empty dict — matches any node, not just root.
         assert domain_rule["require"]["has_edge_to"] == {}
@@ -1771,7 +1777,7 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         generate_rules(nodes, edges, "myproj", rules_path)
 
-        data = yaml.safe_load(rules_path.read_text())
+        data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         rule_names = {r["name"] for r in data["rules"]}
         assert "service-needs-parent" not in rule_names
         assert "domain-needs-parent" in rule_names
@@ -1810,7 +1816,7 @@ class TestBootstrapRulesIntegration:
 
         result = bootstrap_project(tmp_path)
         assert result["rules_generated"] == 0
-        assert rules_path.read_text() == original_content
+        assert rules_path.read_text(encoding="utf-8") == original_content
 
 
 # ---------------------------------------------------------------------------
@@ -1916,7 +1922,7 @@ class TestSetupRulesAuto:
         (tmp_path / ".cursorrules").write_text(existing_content)
         result = setup_rules_auto(tmp_path)
         assert ".cursorrules" not in result
-        assert (tmp_path / ".cursorrules").read_text() == existing_content
+        assert (tmp_path / ".cursorrules").read_text(encoding="utf-8") == existing_content
 
     def test_multiple_ides_detected(self, tmp_path: Path) -> None:
         """Creates adapters for multiple detected IDEs.
