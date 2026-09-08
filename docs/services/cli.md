@@ -1464,6 +1464,85 @@ plan included.
 reach), `agreements[]` (`bead`, `ref`, `verdict`, `detail`), `unguarded_axes[]`,
 `findings[]` and `exit_code`.
 
+### beadloom clean-room
+
+Build the clean room a bead measures in, from `HEAD` plus the files you name.
+
+```bash
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--rebuild] [--project DIR] [--json]
+```
+
+`beadloom waves` prints the room each bead owes (`clean room: <bead> -> room-<bead>`);
+this command is what creates it. The two are one spelling — the path comes from the same
+`room_for(bead_id)` the plan prints — so a room cannot be named after the concept instead
+of after its occupant.
+
+**Why the command exists, measured.** In BDL-068 S4 wave 1 two agents each built a room at
+the same session-scratchpad path. Reconstructed from mtimes: one agent's `git archive` at
+22:53, the other's files copied in at 23:16, the first's at 23:26. The suite run there
+reported 8 failures and five of them belonged to the neighbour, none a defect in either
+bead; rebuilt under a bead-unique name it reported 1, a stated property of the room
+(BDL-UX #235). Separately, copying changed files into a room that had already been indexed
+produced `sync-check` exit 2 with `stale: 2` against a change that is clean at `HEAD`,
+because the copy postdates the room's own freshness baseline (BDL-UX #243). Both are the
+same missing guarantee, and both are answered by deriving the path from the bead and
+**creating** the directory rather than entering one.
+
+So a directory that already exists is refused, never written into, and `--rebuild`
+REPLACES a room rather than refreshing it. A rebuild deletes only a directory whose
+`.beadloom-room.json` names this bead: a directory that merely carries the right name is
+refused, because removing a path chosen by a caller's typing is a worse failure than the
+one this command was written for.
+
+`--carry` copies exactly the files you name, and there is deliberately no "copy everything
+that differs from `HEAD`" mode — on a shared working tree that set holds your neighbour's
+work, which is #235 reached by a second route. A room under the project root is refused
+too: it would become untracked work in the tree it copies.
+
+```
+$ beadloom clean-room proj-1 --at /tmp/rooms --carry src/billing.py
+room-proj-1 built at /tmp/rooms/room-proj-1
+  from commit 4f2c1ab9…, holder recorded as proj-1
+  carried from the working tree: src/billing.py
+  tracker status: in_progress
+
+Measure in the room, not in the tree:
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /usr/bin/python3 -c "import beadloom; print(beadloom.__file__)"  # must print a path under /tmp/rooms/room-proj-1
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /usr/bin/python3 -m pytest /tmp/rooms/room-proj-1/tests
+
+What this room cannot answer: it carries no .git, so a freshness check inside it has no
+baseline; and its verdict is a claim about these files only, never about the combined
+tree — that measurement belongs to the wave's gate owner. Report it in those words.
+```
+
+The `PYTHONPATH` line is a measured trap rather than a formality: with an editable
+install, running the suite from inside the room under the project's environment imports
+the **tree's** source, and the first run that did it was caught from a warning path rather
+than from a failure — a green that is a measurement of the tree wearing a room's name.
+The import line is the check, and it must print a path under the room.
+
+Exit codes: `0` the room was built and the tracker says the bead is `in_progress`; `1` the
+room was built and its ownership is unconfirmed (the bead is not in progress, or the
+tracker could not be reached — that is a fact about the tracker, not about the room); `2`
+no room was built. A run that exits `2` leaves the directory it declined to enter exactly
+as it found it.
+
+Refusals are named rather than described, so a caller can branch on them: `already_exists`,
+`not_a_room`, `inside_the_project`, `no_commit`, `file_missing`, `not_a_file`,
+`file_outside_the_project` and `unknown_bead`.
+
+`--json` carries the same facts: `bead`, `room`, `built`, `refusal`, `detail`, `commit`,
+`carried[]`, `invocation[]`, `claim`, `findings[]` and `exit_code`.
+
+The room's `.beadloom-room.json` records the bead, the room's name, the project, the
+commit, the build time, the carried files, two interpreters and the Beadloom version. The
+two are not the same one: the invocation names the environment the SUITE runs under — the
+project's own `.venv` when it keeps one — while `built_by` is the process that made the
+room, which under a `uv` tool install is a different interpreter with neither `pytest` nor
+the project's development dependencies. **What the record does not carry is which optional
+extras either has installed**, which is the separate question BDL-UX #236 is open on:
+naming the interpreters is what makes that gap statable rather than invisible.
+
 ### beadloom review-brief
 
 Hand a reviewer the change and the specification, and not the author's account of

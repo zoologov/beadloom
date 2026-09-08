@@ -232,6 +232,38 @@ the plan whose ids most need checking. Dogfooding found a live one on this repos
   verdict — so the address is derived from the project's CI declaration rather than typed by
   the agent. Naming the room does not make the verdict stronger. It makes it answerable.
 
+### The room is built by the command that derives it
+
+`beadloom waves` prints the room each bead owes; `beadloom clean-room` creates it.
+
+```bash
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--rebuild] [--project DIR] [--json]
+```
+
+Naming the room was not enough, twice. Two agents of one wave reached one directory because
+the convention named the room after the concept (BDL-UX #235), and a room entered a second
+time manufactured a failure of its own: files copied into an already-indexed room postdate its
+doc-freshness baseline, measured as `sync-check` exit 2 with `stale: 2` against a change that
+is clean at `HEAD` (BDL-UX #243). A convention that is only correct when performed exactly once,
+and does not say so, will be performed twice.
+
+So the command derives the path from the bead and CREATES the directory rather than entering
+one. An existing directory is refused and left byte-for-byte as it was; `--rebuild` replaces a
+room rather than refreshing it, and deletes only a directory whose `.beadloom-room.json` names
+that same bead. `--carry` copies the files you name and nothing else — there is no "everything
+that differs from `HEAD`" mode, because on a shared tree that set holds your neighbour's work.
+
+Exit `0` = built, and the tracker says the bead is `in_progress`. Exit `1` = built, and its
+ownership is unconfirmed. Exit `2` = no room was built, under a named refusal
+(`already_exists`, `not_a_room`, `inside_the_project`, `no_commit`, `file_missing`,
+`not_a_file`, `file_outside_the_project`, `unknown_bead`).
+
+The command hands back the invocation to run in the room, and the invocation is not a
+formality: with an editable install, running the suite from inside the room under the project's
+environment imports the **tree's** source, and the first run that did it was caught from a
+warning path rather than from a failure. `PYTHONPATH` pointing at the room's own `src` is the
+fix, and the `import beadloom` line printing a path under the room is the check.
+
 ## Overriding the shape
 
 A human outranks the computation by declaring it, with a reason and an exit condition, the way
@@ -479,4 +511,5 @@ and a per-pair attestation has no CLI today.
   carries, how a verdict is recognised, and the honest limits in full.
 - [Agentic Dev Flow](agentic-flow.md) — the packaged roles, the guards and the Gate the wave
   runs inside.
-- [CLI Reference](../services/cli.md) — `beadloom waves` and `beadloom review-brief`.
+- [CLI Reference](../services/cli.md) — `beadloom waves`, `beadloom clean-room` and
+  `beadloom review-brief`.

@@ -10,7 +10,15 @@
 
 ## Current Bead
 
-**Bead:** none — `beadloom-0mdo.60` is **closed**. BDL-UX #254: a guard that cannot evaluate itself
+**Bead:** `beadloom-0mdo.37`, S6 wave 2, concurrent with `beadloom-0mdo.68`, which owns this
+wave's combined-tree gate. BDL-UX #235 and #243 are answered by ONE command rather than by two
+rules: `beadloom clean-room <bead>` derives the room's directory from the bead, creates it with
+an exclusive `mkdir` instead of entering one, and rebuilds by replacement. A neighbour's room
+therefore cannot be entered and a room cannot be re-entered, which are the two findings. Found
+by using the command on its own bead: the invocation it handed back named `sys.executable`,
+which under a `uv` tool install has no pytest, so it now names the project's own `.venv`.
+
+**Before it, `beadloom-0mdo.60` was closed.** BDL-UX #254: a guard that cannot evaluate itself
 blocked the write that would repair it. It ran as S6 wave 1, alone and first, because S6's
 subject is the flow's own role templates and composed cores — exactly the kind of edit that
 leaves an artifact momentarily unreadable — so every wave running before this landed carried
@@ -824,6 +832,18 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     rule and the rotation summary both read; the emitted hook adapter's comment now enumerates
     the three codes an invocation through it can return. Verified by reproducing the wedge,
     applying the fix and reproducing the same state again.
+  - [x] `.37` — BDL-UX **#235** and **#243**, one command. Wave 2, concurrent with `.68`.
+    `beadloom clean-room <bead>` derives the room path from the bead through the existing
+    `room_for`, creates the directory with an exclusive `mkdir` rather than entering one, and
+    `--rebuild` replaces a room whose `.beadloom-room.json` names that same bead instead of
+    refreshing it. 36 tests (11 scenarios, 16 CLI, 9 application), 97% / 100% on the two new
+    modules. Green in a clean room over 16 carried files: 9 129 passed, the 1 failure the
+    room's stated no-`.git` property. **Not the gate owner** — `.68` owns this wave's combined
+    tree. Found by dogfooding and fixed: the invocation named `sys.executable`, which under a
+    uv tool install is an interpreter with no pytest, so it now names the project's own
+    `.venv`. Two adjacent findings recorded on the bead: the tracked-write guard reported a
+    write nobody made (`rmtree` walks with `dir_fd`, fixed in `tests/tracked_write_guard.py`),
+    and editing a shared domain README clears a neighbour's stale pairs on it.
 
 ## What is in `main` now
 
@@ -913,7 +933,7 @@ reasons live in bead descriptions and in the issue log and nowhere together.
 
 | Entry | Bead | Why it is not S4's |
 |---|---|---|
-| **#235** — the clean-room convention names a fixed directory, so two agents in one wave build one room and both call it clean | `0mdo.37`, P1, open | The free half shipped in S4: `beadloom waves` now prints `room-<bead-id>` per bead and the duty text carries it. What is left is a command that CREATES the room and refuses a directory it did not create empty, which is new surface rather than a correction. |
+| **#235** — the clean-room convention names a fixed directory, so two agents in one wave build one room and both call it clean | `0mdo.37`, P1, **done** | Closed with **#243**, which the same fix answers. `beadloom clean-room` derives the path from the bead and refuses a directory it did not create empty, so a neighbour's room cannot be entered and a room cannot be re-entered. The role cores still describe the by-hand convention and are a follow-up (`beadloom-vyjp`), because those templates are outside this bead's axes and inside `0mdo.59`'s and `0mdo.67`'s surface. |
 | **#236** — a clean room's verdict is decided by which optional extras it installed, and the convention never names them | `0mdo.38`, P1, open | Measured at 0, 1 and 82 mypy errors over one code base. The durable form is `beadloom rooms` reporting an extra-set dimension beside interpreter and platform, which is a change to S3's instrument and not to S4's guards. |
 | **#238** — nothing compares the ignore block on disk against the block this version emits | `0mdo.40`, P2, open | The INSTANCE was fixed in S4: this repository's `.gitignore` now carries the shipped glob. The CLASS is a new `config-check` leg. Splitting them is what keeps a repository repair from reading as a product fix. |
 | **#244** — a second markdown table in `## Axes` contributes its header row as an approved node named `Node` | `0mdo.46`, P1, open | Worked around in S4 by keeping one table, so no commit was judged against a phantom node. The parser fix touches `read_axes_section`, which S1 owns and which `0mdo.47`'s pinned excerpt now guards. |
@@ -927,10 +947,11 @@ reasons live in bead descriptions and in the issue log and nowhere together.
   the role protocol states that a tree fact is derived at the moment it is stated, and
   `0mdo.27`'s duty mechanism can carry that as a declared duty. It needs no separate DAG node.
 - **#243** — a room that is refreshed rather than rebuilt manufactures a stale-doc failure
-  shaped
-  exactly like a defect. No bead: #235's proposed command — create the room, refuse a directory
-  it did not create empty — closes #243 as well, so a second bead would be a second thing to keep
-  in step. The workaround in use is to rebuild the room after any edit, never to re-copy.
+  shaped exactly like a defect. **Closed by `0mdo.37`**, and the prediction held: #235's command
+  answers it, because an existing directory is refused rather than entered and `--rebuild`
+  replaces the room instead of refreshing it. The workaround it replaces — rebuild after any
+  edit, never re-copy — is now the only thing the command permits, so it is a property rather
+  than a rule. No bead of its own was needed.
 - **#246** — a declared mutation target that no run ever covers passes every green Gate.
   `0mdo.45` closed the instance (`[tool.mutmut] only_mutate` now names every declared target and
   `tests/test_mutation_runner_scope.py` asserts both directions), and the CLASS — Beadloom

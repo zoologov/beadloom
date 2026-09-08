@@ -28,6 +28,9 @@ against:
 * it sees the Python-level write surface listed in :data:`_PATCHED_OPERATIONS`;
   a write through a C extension, an editor subprocess or ``git`` itself is not
   visible to it;
+* a relative path handed to ``os.remove`` / ``os.unlink`` together with a
+  ``dir_fd`` is not classified at all, because it does not resolve against the
+  process's directory (see :func:`_resolves_against_cwd`);
 * it needs ``git ls-files`` to know what "tracked" means. In a clean room (a
   ``git archive`` extraction has no ``.git``) there is no tracked set, the guard
   is INERT, and it says so once per session rather than reporting a silent pass;
@@ -84,6 +87,30 @@ def _absolute(raw: str) -> str:
 
 def _is_write_mode(mode: object) -> bool:
     return isinstance(mode, str) and any(c in mode for c in _WRITE_MODE_CHARS)
+
+
+def _resolves_against_cwd(path: object, dir_fd: object) -> bool:
+    """Whether a relative *path* means what :func:`_absolute` would make of it.
+
+    ``os.unlink(name, dir_fd=fd)`` resolves ``name`` against the DESCRIPTOR, not
+    against the process's directory, so joining it to ``os.getcwd()`` names a
+    different file. Measured: ``shutil.rmtree`` walks with ``dir_fd`` on every
+    platform whose ``os`` supports it, so removing a temp directory holding a
+    ``pyproject.toml`` was reported as a write to THIS repository's tracked
+    ``pyproject.toml`` — a finding about a file nothing touched. The whole-tree
+    ``shutil.rmtree`` wrapper still records the tracked files under a real
+    tracked directory, so what is given up is narrower than what was wrong: a
+    test calling ``os.unlink`` with an explicit ``dir_fd`` is not covered.
+    """
+    if dir_fd is None:
+        return True
+    try:
+        raw = os.fspath(path)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", "replace")
+    return os.path.isabs(raw)  # noqa: PTH117 - string-level, like `_absolute`
 
 
 def tracked_files(root: Path) -> frozenset[str]:
@@ -267,6 +294,8 @@ class TrackedWriteGuard:
             self._originals[label] = original
 
             def _wrapper(path: Any, *args: Any, **kwargs: Any) -> Any:
+                if not _resolves_against_cwd(path, kwargs.get("dir_fd")):
+                    return original(path, *args, **kwargs)
                 guard.note(path, label)
                 return original(path, *args, **kwargs)
 

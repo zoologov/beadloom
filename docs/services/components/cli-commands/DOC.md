@@ -50,6 +50,7 @@ is what holds that line.
 | `snapshot.py` | `snapshot save`, `snapshot list`, `snapshot compare` |
 | `guard.py` | `guard` |
 | `waves.py` | `waves` |
+| `clean_room.py` | `clean-room` |
 | `review_brief.py` | `review-brief` |
 | `impact.py` | `impact`, `axes`, `scope-check` |
 | `mutation.py` | `mutation` |
@@ -110,6 +111,20 @@ many nodes it approves, how many declared refs agree, how many the derivation di
 and how many axis rows name no node. That block is printed for a clean plan too, because the
 counts are how a reader tells a plan whose declarations agreed from one whose declarations
 nothing could be compared against (BDL-UX #232).
+
+`clean_room.py` builds the room `waves.py` names. It is the same spelling — the path comes
+from `room_for`, so the room a plan prints and the room a command creates cannot diverge — and
+it adds the two properties a printed name cannot carry: the directory is created rather than
+entered, and `--rebuild` replaces a room rather than refreshing one. The bead is looked up
+through the `bd` seam at this edge, which is what makes the three exit codes distinguishable:
+`0` the room was built and the tracker says the bead is `in_progress`, `1` it was built and its
+ownership is unconfirmed (not in progress, or no answer from the tracker — a fact about the
+tracker, not about the room), `2` no room was built. A tracker that answers and has no such
+bead is a refusal rather than a finding, because a room named after a bead nobody holds cannot
+say whose it is; a tracker that cannot be reached is a finding, because refusing there would
+make the command unusable wherever `bd` is not installed. The room's own limits are printed
+beside its path — no `.git`, so a freshness check inside has no baseline, and a verdict that is
+a claim about its files and never about the combined tree (BDL-UX #235, #243, #181).
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and

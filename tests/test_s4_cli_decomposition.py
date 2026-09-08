@@ -50,6 +50,9 @@ EXPECTED_COMMANDS = {
     # `impact` renders and `axes` reads back is what this one judges a commit against.
     "scope-check",
     "ci",
+    # BDL-068 S6, `beadloom-0mdo.37` (BDL-UX #235, #243): the clean room a bead
+    # measures in, derived from that bead and created rather than entered.
+    "clean-room",
     "config-check",
     "ctx",
     "diff",

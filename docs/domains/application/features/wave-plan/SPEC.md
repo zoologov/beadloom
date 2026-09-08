@@ -244,6 +244,53 @@ finding on every plan — or permanently true. What is observable is the remedy,
 so the remedy is what ships, in `room_for`, in the `working-tree` statement and
 in the role cores that carry the `clean-room` duty.
 
+### Building the room, rather than describing it
+
+`room_for` names the room; `build_room` creates it, and refuses a directory it
+did not create empty. Naming was not enough, twice. Under the convention the
+name replaced, two agents of one wave reached one directory (BDL-UX #235), and a
+room entered a second time manufactured a failure of its own: files copied into
+an already-indexed room postdate its doc-freshness baseline, measured as
+`sync-check` exit 2 with `stale: 2` against a change that is clean at `HEAD`
+(BDL-UX #243). A convention that is only correct when performed exactly once,
+and does not say so, will be performed twice.
+
+So the build has three properties, and each answers one of those:
+
+- the path is DERIVED from the bead, so two beads cannot be handed one room;
+- the directory is CREATED, never entered — an existing one is refused, and a
+  refused build writes nothing into it;
+- `rebuild=True` REPLACES the room rather than refreshing it, and deletes only a
+  directory whose `.beadloom-room.json` names that same bead. A directory that
+  merely carries the right name is refused, because removing a path chosen by a
+  caller's typing is a worse failure than the one this exists to prevent.
+
+What the room carries is `git archive HEAD` plus the files the caller NAMES.
+There is no "everything that differs from `HEAD`" mode: on a shared working tree
+that set holds the neighbour's work, which is #235 by a second route. A room
+under the project root is refused too — it would be untracked work in the tree
+it copies.
+
+`room_invocation` hands back how to measure in the room and how to check that you
+did. With an editable install, running the suite from inside the room under the
+project's environment imports the TREE's source; the first run that did it was
+caught from a warning path rather than from a failure, which is a green that is
+a measurement of the tree wearing a room's name. `PYTHONPATH` pointing at the
+room's own `src` is the fix, and the `import beadloom` line is the check.
+
+The interpreter the invocation names is the project's own `.venv` when it keeps
+one, and `sys.executable` otherwise. That distinction was found by running the
+command on this bead: `sys.executable` is the CLI PROCESS's interpreter, and
+Beadloom installed as a `uv` tool runs under one with neither `pytest` nor the
+project's development dependencies, so the first invocation handed back could not
+be run at all.
+
+The room records its owner, the commit, the carried files and both interpreters —
+the one the invocation names and the one that built the room — in
+`.beadloom-room.json`. It does not record which optional extras either has
+installed, which is the open question BDL-UX #236 states, and naming them is what
+makes that gap statable rather than invisible.
+
 ### What each medium is checked against
 
 One verdict per medium, in `plan.media_checks` and under `media_checks` in
@@ -389,6 +436,10 @@ not tell them apart.
 - The same inputs produce the same shape, including the order within a wave.
 - Every wave names its shared media, its gate owner and one room per bead,
   whatever its width.
+- A room is created, never entered: a build that finds a directory at the derived
+  path refuses and leaves it byte-for-byte as it was.
+- A rebuild deletes only a directory whose recorded owner is the bead it was
+  asked for.
 - Every medium the plan names carries a verdict, and an unobserved one is
   `unmeasured` rather than `passed`.
 - A required override field is required by its content: a key present but blank
@@ -410,6 +461,10 @@ not tell them apart.
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
+| `room_path(parent, bead_id)` | that room's directory under a parent |
+| `build_room(*, bead_id, project_root, parent, carry, rebuild)` | build it from `HEAD` plus the named files, or refuse and say why |
+| `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
+| `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
@@ -431,6 +486,7 @@ every scenario runs without a `bd` binary on the machine.
 | `independence.py` | decide whether one pair may run together, and say why not |
 | `landing.py` | what the landing lock grants, and which call form grants it |
 | `media.py` | what a wave shares no matter how independent its code is |
+| `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
 | `config.py` | read and validate the declared `waves:` overrides |
@@ -449,10 +505,15 @@ the command's two output shapes and its three exit codes;
 and owns the five findings BDL-061.22 measured;
 `tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6
 decisions fails in; `tests/test_wave_derivation.py` covers the four agreement
-verdicts, the per-wave gap and the remedies that read the work item's document.
+verdicts, the per-wave gap and the remedies that read the work item's document;
+`tests/acceptance/features/clean_room.feature` states the room's ownership and
+its once-only build as executable scenarios, and `tests/test_cli_clean_room.py`
+covers `beadloom clean-room`'s two output shapes and its three exit codes.
 
 ## Related
 
 - `beadloom waves` — the command (`src/beadloom/services/commands/waves.py`)
+- `beadloom clean-room` — the command that builds a room the plan names
+  (`src/beadloom/services/commands/clean_room.py`)
 - `flow-guards` — the sibling primitive that answers a process question per edit
 - `sync-check` — where the `commit-gate` medium's repair lives (`--staged`)

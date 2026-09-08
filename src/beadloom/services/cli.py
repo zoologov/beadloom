@@ -25,6 +25,7 @@ from beadloom.infrastructure.surface_registry import register_cli_group
 # sub-groups at import time).
 from beadloom.services.commands import (
     bd_calls,
+    clean_room,
     docs,
     guard,
     impact,
@@ -56,6 +57,7 @@ from beadloom.services.commands.query import _format_markdown
 # Mark the side-effect-only imports as used (they register commands on import).
 _REGISTRATION_ONLY = (
     bd_calls,
+    clean_room,
     docs,
     guard,
     impact,
