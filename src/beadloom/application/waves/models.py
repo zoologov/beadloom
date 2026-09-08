@@ -69,7 +69,7 @@ UNRESOLVED_UNANCHORED = "declaration_not_at_a_line_start"
 UNRESOLVED_DROPPED_NODE = "declaration_dropped_a_node"
 
 #: How a bead's declared ref stands against the derivation its work item
-#: recorded. Four answers rather than two, because "the declaration is wrong"
+#: recorded. Five answers rather than two, because "the declaration is wrong"
 #: and "the derivation did not reach here" are not the same fact and only one of
 #: them is anybody's fault. BDL-UX #225 is the measured case: `beadloom impact`
 #: attributed a node to none of the 148 caller sites it found under ``tests/``,
@@ -78,6 +78,16 @@ AXIS_AGREES = "agrees"
 AXIS_RULED_OUT = "ruled_out_of_scope"
 AXIS_UNDECIDED = "no_scope_decision"
 AXIS_NOT_DERIVED = "not_derived"
+
+#: The derivation RAN OVER this node and no row of the table rules on it. The
+#: fifth answer, added with BDL-UX #250: before it, such a node was approved for
+#: having been swept, and calling it :data:`AXIS_NOT_DERIVED` instead would state
+#: something false — the derivation reached it, which is exactly why its absence
+#: from the table is worth saying. Measured on this repository: BDL-068's
+#: ``Derived by`` fields name files owned by ``cli``, ``flow-composer``,
+#: ``guard-hooks`` and ``typed-surface``, and no row of its table names any of
+#: the four.
+AXIS_SWEPT_UNDECIDED = "swept_no_scope_decision"
 
 #: An axis row the derivation found and attributed to NO node. No declaration
 #: can name it and no comparison can reach it, so it is stated as compared
@@ -132,9 +142,10 @@ class WorkItemAxes:
     unresolved: str = ""
     #: Nodes a row keeps in scope.
     kept: frozenset[str] = frozenset()
-    #: Nodes the ``Derived by`` field ran over. Inside the approval by
-    #: construction, exactly as :attr:`DeclaredScope.inside` has it — a work
-    #: item changes the surfaces it derived its answer from.
+    #: Nodes the ``Derived by`` field ran over. PROVENANCE, and provenance is
+    #: not consent: a node is inside the approval because a row decided it, and
+    #: this field records only that the derivation was pointed at it. See
+    #: :attr:`approved`.
     targets: frozenset[str] = frozenset()
     #: Nodes a row names and rules OUT of scope. The sharpest half: somebody
     #: wrote "not this one".
@@ -154,8 +165,24 @@ class WorkItemAxes:
 
     @property
     def approved(self) -> frozenset[str]:
-        """Every node inside the approval by name — kept rows and targets."""
-        return self.kept | self.targets
+        """Every node a row of the table keeps in scope, and nothing else.
+
+        **Approval follows the scope decision (BDL-UX #250).** This was
+        ``kept | targets``, which put every node owning a file the ``Derived
+        by`` field names inside the approval whatever its own row said. The rule
+        held while a slice CHANGED what it derived from — true of BDL-068's S1
+        through S4 — and became false at S5, whose subject is where this project
+        calls ``bd`` and whose derivation targets therefore include files it only
+        reads. Measured on this repository: ``doc-spaces`` and ``intent-reader``
+        sat in the approved set with rows that say ``no``.
+
+        A swept target no row names is now :data:`AXIS_NOT_DERIVED` — the
+        derivation reached it and nobody ruled on it — and a swept target a row
+        rules out is :data:`AXIS_RULED_OUT`. Both are answers; neither is
+        approval. The approval list is what ``scope-check`` compares every commit
+        against, so a name nobody chose is a name every commit may touch.
+        """
+        return self.kept
 
     def spell_approved(self) -> str:
         """The approved nodes as a finding spells them out."""
@@ -263,13 +290,19 @@ def remedy_for(unresolved: str | None, *, axes: WorkItemAxes | None = None) -> s
     read here rather than guessed at the call site.
     """
     if unresolved == UNRESOLVED_NO_DECLARATION and axes is not None and axes.readable:
-        # The remedy is not "write a line" but "generate it from the document",
-        # which is CONTEXT Q1's direction: the axes are derived, the document
-        # records them, and the bead's `refs:` comes from the document.
+        # The remedy is not "write a line" but "derive it", which is CONTEXT Q1's
+        # direction: the axes are derived, the document records them, and the
+        # bead's `refs:` comes from the derivation the document holds the ceiling
+        # of. The work item's own set is named as the CEILING and never as the
+        # answer — BDL-UX #245: a work item's axes are the UNION of its slices'
+        # and a bead's scope is a SUBSET chosen for that bead, and prescribing
+        # the union per bead collapses every wave to a wave of one.
         return (
-            f"generate `refs:` from the `## Axes` section of {axes.document} — "
-            f"{axes.work_item} approves {len(axes.approved)} node(s) "
-            f"({axes.spell_approved()})"
+            f"derive this bead's own `refs:` with `beadloom impact` over the "
+            f"files it changes, inside the ceiling the `## Axes` section of "
+            f"{axes.document} records — {axes.work_item} approves "
+            f"{len(axes.approved)} node(s) ({axes.spell_approved()}), which is "
+            f"that ceiling and not any one bead's scope"
         )
     return UNRESOLVED_REMEDIES.get(unresolved or "", UNKNOWN_REMEDY)
 

@@ -5,7 +5,7 @@
 # declared targets and told `beadloom mutation` to judge only that one, so the
 # other two were unreachable by any run AND unreported as unreachable.
 # `.beadloom/flow.yml`, `[tool.mutmut] only_mutate` and the `--target` list below
-# now name the same fourteen targets, and two tests fail when they stop agreeing.
+# now name the same fifteen targets, and two tests fail when they stop agreeing.
 #
 #   MEASURED 2026-09-04, mutant counts from mutmut's own generator:
 #   3 989 graph/rules/ + 657 doc_quality.py + 350 doc_shape.py + 324
@@ -21,6 +21,22 @@
 #   scope to 6 464. The runner's own denominator reads 6 464, which is the count
 #   confirmed by the tool that has to execute it rather than by the generator
 #   alone.
+#
+#   MEASURED 2026-09-08, the fifteenth target: `doc_sync/tables.py`, 26 mutants,
+#   declared because code MOVED out of two targets rather than because a new
+#   surface appeared. The table-boundary rule was lifted out of `doc_quality.py`
+#   (738 -> 717 mutants) and the row grammar out of `doc_shape.py` (350 -> 340),
+#   so 31 mutants left the declared scope and 26 arrived in a file nothing
+#   declared. Leaving it undeclared would have shrunk the measured scope by a
+#   refactor, which is the hole the note above says something walked through.
+#   The declared scope reads 6 459 — five fewer than before, and those five are
+#   the deduplication itself: two copies of the table-row regex became one.
+#   The aggregate floor of 0.88 survives the worst case without being moved, and
+#   the worst case was computed rather than assumed: if all 31 departing mutants
+#   had been killed and all 26 arriving ones survive, the aggregate falls from
+#   89.23% to (5 768 - 31) / 6 459 = 88.82%, which keeps 0.82 points of headroom.
+#   The real number will be higher — the file is four pure functions covered by
+#   every test that reads a planning document — and the next nightly measures it.
 #
 # WHY THIS IS NIGHTLY AND NOT A PR LEG — the number decided it, not a preference.
 # CONTEXT's Q3 stated the rule before the measurement: the job runs per PR if it
@@ -167,6 +183,7 @@ jobs:
           'beadloom.application.waves.landing.*'
           'beadloom.doc_sync.doc_quality.*'
           'beadloom.doc_sync.doc_shape.*'
+          'beadloom.doc_sync.tables.*'
           'beadloom.onboarding.role_duties.*'
           'beadloom.services.bd_seam.answers.*'
           'beadloom.services.bd_seam.assumptions.*'
@@ -254,6 +271,7 @@ jobs:
           --target src/beadloom/application/waves/landing.py
           --target src/beadloom/doc_sync/doc_quality.py
           --target src/beadloom/doc_sync/doc_shape.py
+          --target src/beadloom/doc_sync/tables.py
           --target src/beadloom/graph/rules/
           --target src/beadloom/onboarding/role_duties.py
           --target src/beadloom/services/bd_seam/answers.py

@@ -316,6 +316,7 @@ def _render_axes(plan: WavePlan) -> None:
         AXIS_AGREES,
         AXIS_NOT_ATTRIBUTED,
         AXIS_NOT_DERIVED,
+        AXIS_SWEPT_UNDECIDED,
     )
 
     axes = plan.axes
@@ -329,6 +330,7 @@ def _render_axes(plan: WavePlan) -> None:
         f"{len(axes.approved)} node(s) approved, "
         f"{counts[AXIS_AGREES]} declared ref(s) agree, "
         f"{counts[AXIS_NOT_DERIVED]} the derivation did not reach, "
+        f"{counts[AXIS_SWEPT_UNDECIDED]} swept and not ruled on, "
         f"{counts[AXIS_NOT_ATTRIBUTED]} axis row(s) name no node."
     )
     click.echo(f"  seed: {axes.seed or 'not stated'}")

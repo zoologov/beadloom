@@ -116,11 +116,16 @@ the suite went red on exactly this case.
 
 ### One markdown table reader
 
-`table_cells(line)` is the project's only reader of a markdown table row, and the `## Axes`
-grammar is expressed over it. The `## Axes` table and `/task-init`'s routing table are two
-tables read for two facts, and two parsers would make "what a row is" a thing that can disagree
-with itself. An alignment row is not a row of data and returns `None`, so no caller has to know
-it exists.
+`table_cells(line)` is the project's only reader of a markdown table row. The `## Axes` table and
+`/task-init`'s routing table are two tables read for two facts, and two parsers would make "what
+a row is" a thing that can disagree with itself. An alignment row is not a row of data and
+returns `None`, so no caller has to know it exists.
+
+The grammar itself now lives in the `markdown-tables` component (`doc_sync.tables`), and this
+module re-exports `table_cells` so no caller moved. It moved because the same module had to
+answer where a table STARTS as well: `doc-quality` and `axes-section` each read a section holding
+two tables as one, and reported a second table's header row as data (BDL-UX #213, #244). One
+boundary rule, in one place, spent by both.
 
 ### Emptiness is judged over the whole section, not over the heading's own lines
 

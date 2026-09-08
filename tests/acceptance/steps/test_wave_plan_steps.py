@@ -22,6 +22,7 @@ from beadloom.application.waves import (
     AXIS_NOT_ATTRIBUTED,
     AXIS_NOT_DERIVED,
     AXIS_RULED_OUT,
+    AXIS_SWEPT_UNDECIDED,
     FINDING_DECLARED_OUTSIDE,
     FINDING_NOT_COMPARED,
     FINDING_UNGUARDED_AXIS,
@@ -58,7 +59,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
     db_path = tmp_path / "beadloom.db"
     conn = open_db(db_path)
     create_schema(conn)
-    for ref in ("billing", "shipping"):
+    for ref in ("billing", "shipping", "invoicing"):
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
             (ref, "feature", ref, f"src/{ref}/"),
@@ -429,3 +430,67 @@ def then_remedy_states_both(world: dict[str, Any], bead: str) -> None:
 @then(parsers.parse('the remedy for "{bead}" names the document the axes were read from'))
 def then_remedy_names_document(world: dict[str, Any], bead: str) -> None:
     assert world["plan"].axes.document in _remedy(world, bead)
+
+
+# ---------------------------------------------------------------------------
+# BDL-UX #250 and #245 — what the approval list is, and what its remedy asks for
+# ---------------------------------------------------------------------------
+
+
+@given(parsers.parse('the work item derived over "{node}" and rules on it nowhere'))
+def given_swept_target(world: dict[str, Any], node: str) -> None:
+    """Provenance: the `Derived by` field ran over a file this node owns."""
+    _axes(world, targets=frozenset({node}))
+
+
+@given("three beads each declaring the work item's whole approved set")
+def given_three_beads_with_the_union(world: dict[str, Any]) -> None:
+    """The old remedy, performed exactly: `axes --refs` renders one line."""
+    union = "billing, shipping, invoicing"
+    _axes(world, kept=frozenset({"billing", "shipping", "invoicing"}))
+    for bead in ("alpha", "beta", "gamma"):
+        _declare(world, bead, f"Do the work.\nrefs: {union}")
+
+
+@then(parsers.parse('the plan does not approve "{node}"'))
+def then_not_approved(world: dict[str, Any], node: str) -> None:
+    assert node not in world["plan"].axes.approved
+
+
+@then(
+    parsers.parse('the plan does not report "{node}" as declared by no bead of that wave')
+)
+def then_no_gap_for(world: dict[str, Any], node: str) -> None:
+    assert not any(node in gap.nodes for gap in world["plan"].unguarded_axes)
+
+
+@then(parsers.parse('the plan states "{ref}" as swept and not ruled on'))
+def then_swept_undecided(world: dict[str, Any], ref: str) -> None:
+    """Different from `not_derived`, which would say it was never reached."""
+    assert any(
+        agreement.ref == ref and agreement.verdict == AXIS_SWEPT_UNDECIDED
+        for agreement in world["plan"].agreements
+    )
+
+
+def _gap_finding(world: dict[str, Any]) -> str:
+    return next(
+        finding
+        for finding in world["plan"].findings
+        if finding.startswith(FINDING_UNGUARDED_AXIS)
+    )
+
+
+@then("the remedy for the unguarded axis derives each bead's own scope")
+def then_gap_remedy_is_per_bead(world: dict[str, Any]) -> None:
+    finding = _gap_finding(world)
+    assert "beadloom impact" in finding
+    assert "the files that bead changes" in finding
+
+
+@then("the remedy for the unguarded axis does not prescribe the work item's whole set")
+def then_gap_remedy_is_not_the_union(world: dict[str, Any]) -> None:
+    """#245: performed exactly, that sentence collapses the plan it is printed on."""
+    finding = _gap_finding(world)
+    assert "generate each bead's `refs:` from the `## Axes` section" not in finding
+    assert "collapses every wave to a wave of one" in finding

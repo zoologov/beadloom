@@ -417,7 +417,12 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # project's pipeline declares that no step of a gate run performed. The
         # comment above about `beadloom ci` not running pytest is that bead's
         # subject, and this case is one of the two the gate said nothing about.
-        assert populations[SPACE_AS_IS] == 113
+        # 113 -> 114 in BDL-068 `0mdo.46`: `markdown-tables`, where a table row
+        # and a table BOUNDARY are decided. It is a node because two readers of
+        # that boundary each read a section holding two tables as one, hours
+        # apart in one slice (BDL-UX #213, #244), and one home is what stops a
+        # third.
+        assert populations[SPACE_AS_IS] == 114
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

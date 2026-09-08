@@ -32,7 +32,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync.doc_quality import QualityFinding
-from beadloom.doc_sync.doc_shape import read_sections, table_cells
+from beadloom.doc_sync.doc_shape import read_sections
+from beadloom.doc_sync.tables import table_blocks
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -153,11 +154,44 @@ def read_axes_section(text: str) -> AxesSection | None:
 
 
 def _read_body(lineno: int, body: Sequence[str]) -> AxesSection:
+    """The section's blockquote fields and every row of every table under it.
+
+    **Two readings of one body, because a section states two different things.**
+    The blockquote fields are prose the derivation wrote; the tables are its
+    output. Reading them in one pass is what made the table boundary depend on
+    where a field happened to stop, and BDL-UX #244 is what that cost: a second
+    table's header row became an approved node named ``Node``.
+
+    A slice appends its rows under its OWN ``Derived by`` line — the RFC's rule
+    for this section, and the reason a real section holds five tables and not
+    one — so each table leads with its own header and its rows are judged
+    against that header and no other.
+    """
+    fields = _fields(body)
+    axes = [
+        _row(cells, [cell.strip("*_ ").lower() for cell in table[0][1]], lineno + offset)
+        for table in table_blocks(enumerate(body, start=1))
+        for offset, cells in table[1:]
+    ]
+    return AxesSection(
+        line=lineno,
+        seed=" ".join(fields.get(SEED_FIELD, ())).strip(),
+        derived_by=" ".join(fields.get(DERIVED_BY_FIELD, ())).strip(),
+        unresolved=" ".join(fields.get(UNRESOLVED_FIELD, ())).strip(),
+        axes=tuple(axes),
+    )
+
+
+def _fields(body: Sequence[str]) -> dict[str, list[str]]:
+    """The blockquote fields above the tables, each with its wrapped lines.
+
+    A section carrying several derivation blocks states the same field several
+    times, and every statement of it is kept: the fields describe the union of
+    the runs, which is what the section is.
+    """
     fields: dict[str, list[str]] = {}
     current: str | None = None
-    axes: list[Axis] = []
-    header: list[str] | None = None
-    for offset, line in enumerate(body, start=1):
+    for line in body:
         field = _FIELD_RE.match(line)
         if field is not None:
             current = field.group("name").strip()
@@ -170,20 +204,7 @@ def _read_body(lineno: int, body: Sequence[str]) -> AxesSection:
             fields[current].append(quoted.group(1).strip())
             continue
         current = None
-        cells = table_cells(line)
-        if cells is None:
-            continue
-        if header is None:
-            header = [cell.strip("*_ ").lower() for cell in cells]
-            continue
-        axes.append(_row(cells, header, lineno + offset))
-    return AxesSection(
-        line=lineno,
-        seed=" ".join(fields.get(SEED_FIELD, ())).strip(),
-        derived_by=" ".join(fields.get(DERIVED_BY_FIELD, ())).strip(),
-        unresolved=" ".join(fields.get(UNRESOLVED_FIELD, ())).strip(),
-        axes=tuple(axes),
-    )
+    return fields
 
 
 def _row(cells: Sequence[str], header: Sequence[str], line: int) -> Axis:

@@ -316,6 +316,7 @@ only_mutate = [
     "src/beadloom/application/waves/landing.py",
     "src/beadloom/doc_sync/doc_quality.py",
     "src/beadloom/doc_sync/doc_shape.py",
+    "src/beadloom/doc_sync/tables.py",
     "src/beadloom/graph/rules/*",
     "src/beadloom/onboarding/role_duties.py",
     "src/beadloom/services/bd_seam/answers.py",

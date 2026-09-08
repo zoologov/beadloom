@@ -157,14 +157,36 @@ may narrow freely inside them: one bead of this epic edited a node its own `refs
 does not name and that was correct, because the node is a kept row of the work
 item's table. A check reading that as a finding would be noise on its first day.
 
-Each declared ref gets one of four verdicts, and only one of them is a finding:
+Each declared ref gets one of five verdicts, and only one of them is a finding:
 
 | Verdict | What it means | Finding |
 |---|---|---|
-| `agrees` | a kept row, or a `Derived by` target, names it | no |
+| `agrees` | a kept row names it | no |
 | `ruled_out_of_scope` | a row names it and rules it **out** — the approval does not cover it | yes |
 | `no_scope_decision` | a row names it and decides nothing; `axis-without-a-scope-decision` owns that fault | no |
-| `not_derived` | no row names it at all | no |
+| `swept_no_scope_decision` | the `Derived by` field ran over it and no row rules on it | no |
+| `not_derived` | no row names it at all, and the derivation never reached it | no |
+
+**Approval follows the scope decision and nothing else (BDL-UX #250).**
+`WorkItemAxes.approved` was `kept | targets`, so every node owning a file a
+`Derived by` field names was inside the approval whatever its own row said. The
+rule held while a slice CHANGED what it derived from — true of BDL-068's S1
+through S4 — and became false at S5, whose subject is where this project calls
+`bd` and whose derivation targets therefore include files it only reads.
+Measured on this repository: 39 approved nodes, of which six were approved by
+having been swept — `cli`, `doc-spaces`, `flow-composer`, `guard-hooks`,
+`intent-reader` and `typed-surface` — and two of the six carry rows that say
+`no`. Provenance is not consent, and the approval list is what a wave plan names
+back to an author as nodes to declare.
+
+The fifth verdict exists because the four could not say what those six are.
+Calling a swept node `not_derived` would state something false: the derivation
+reached it, which is precisely why its absence from the table is worth saying.
+The commit gate keeps the wider reading — `scope_check.DeclaredScope.inside` is
+still `kept | targets` — and that is a difference between two questions rather
+than two answers to one. The gate asks whether a staged PATH is covered, and it
+measured the narrower rule going red on three of this branch's own code commits;
+the plan asks what a human DECIDED, because it prints those names back as work.
 
 `not_derived` is not an accusation, and keeping it apart from the other three is
 the point. This project has measured its own derivation under-reporting: seeded
@@ -180,7 +202,15 @@ of a changed path no node owns — measured at 41 of 52 over one branch's commit
 and it is stated, never counted as agreement.
 
 The finding that would have caught the collision is `unguarded_axis`: a node the
-work item approves that **no bead of a wave declares**. It is reported per wave
+work item approves that **no bead of a wave declares**. Its remedy names a
+PER-BEAD derivation, and the level confusion that is guarding against is
+BDL-UX #245: a work item's axes are the UNION of its slices' and a bead's scope
+is a SUBSET chosen for that bead, while `beadloom axes --refs` renders one line
+for the whole work item — 24 nodes when the entry was filed, 52 on BDL-068
+today. The remedy used to say "generate each bead's `refs:` from the `## Axes`
+section", which performed exactly would give every bead an identical scope,
+fire `shared_node` on every pair and collapse every wave to a wave of one. The
+tests hold that consequence as an executable fact rather than as prose. It is reported per wave
 and only for a wave holding two beads or more, because that is the extent of what
 it may claim — the sentence is *the pairwise verdict for these beads did not
 compare these nodes*, and a wave of one bead makes no pair. Reported per plan

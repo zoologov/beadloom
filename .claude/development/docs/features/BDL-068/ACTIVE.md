@@ -10,16 +10,16 @@
 
 ## Current Bead
 
-**Bead:** none claimed. S6 wave 4 is complete — `.40`, `.48`, `.65` and `.73` all landed, and
-as the wave's gate owner `.73` reports the combined tree green: `beadloom ci` rc 0, and, because
-`.48` landed in the same wave and the Gate now names what it does not run, the three it names
-run separately — `ruff check src/ tests/` rc 0, `mypy src/` rc 0 over 277 files, and
-`pytest --cov=beadloom --cov-fail-under=80` rc 0 with 9 297 passed and 94.25% coverage. Taken in
-Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
+**Bead:** none claimed. S6 wave 5 is complete — `.46` landed alone and, as its own gate owner,
+reports the combined tree green: `beadloom ci` rc 0 taken in the foreground without a pipe, and
+the three the Gate names as not run separately — `ruff check src/ tests/` rc 0, `mypy src/` rc 0
+against all four declared target versions (3.10 to 3.13, varying the version the checker is
+asked about and not the interpreter it runs under), and the full suite green. Taken in Darwin
+arm64 / CPython 3.13.7, 0 of the 21 declared rooms.
 
 **Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion —
-`bd close --suggest-next` named `.14` and `.69`, and the ready list of 38 holds neither, because
-`.69` still carries open blockers and `.14` is the slice bead.
+`bd close --suggest-next` names candidates and has named a still-blocked bead in sixteen of
+twenty-three dependency shapes measured on bd 1.0.4.
 
 **The bead that closed last, `beadloom-0mdo.38`.** BDL-UX #236: the optional extras an
 environment installed are now a DIMENSION of the room, derived on both sides — from the analysed
@@ -972,6 +972,53 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     recorded rather than re-filed: `docs audit` read the interpreter version in this bead's own
     documents as a claim about the project's version and reddened the Gate, so the room is
     stated in a code block and the document says why.
+  - [x] `.46` — BDL-UX **#244**, **#245** and **#250**. Wave 5, alone, and its own gate owner.
+    **#244 is #213 one reader over, and the answer was reused rather than rewritten.** `.68`
+    measured the cause of #213 as a section read as ONE table; the same sentence is true of
+    `read_axes_section`, where a second table's header row became an approved node named `Node`
+    whose `In scope` cell reads the literal words "In scope" as a yes. `.68`'s `_tables()` could
+    not be imported from `axes_section.py` — it lives in `doc_quality.py`, which `doc_shape.py`
+    imports, and `doc_shape.py` owns `table_cells` — so both halves moved into one component,
+    `doc_sync/tables.py` (`markdown-tables`), and `_tables()` is now a one-line delegate.
+    Measured on this repository's own RFC laid out in the shape its own rule describes — 74 rows
+    in five per-slice tables: **78 rows read before, 4 of them header rows, all four approved and
+    `Node` in the generated `refs:` line; 74 after**, identical to reading the one-table layout
+    the tree carries. The phantom was absent from the tree only because the document had been
+    hand-normalised into the shape the parser demands, which no artifact recorded.
+    **#250 is larger than the entry says.** `approved` was `kept | targets`, and the entry names
+    two nodes; measured, **six** of BDL-068's 39 approved nodes were approved by having been
+    swept — `cli`, `doc-spaces`, `flow-composer`, `guard-hooks`, `intent-reader`,
+    `typed-surface` — and only two of the six carry a `no` row. The other four are named by no
+    row at all. `approved` is now `kept`, 39 drops to 33, and a fifth verdict
+    `swept_no_scope_decision` carries the four, because calling them `not_derived` would state
+    something false. The commit gate KEEPS `kept | targets`, and that is two questions rather
+    than two answers: `scope_check`'s docstring records the measurement that chose it, a
+    kept-row-only rule going red on all three of this branch's code commits.
+    **#245's remedy was rewritten rather than answered with a selection step**, and the rejected
+    alternative was rejected on a measurement: 22 of the 74 rows already name a bead in their
+    `Why` cell, but a `Why` names a bead because an author explained who writes the node, and
+    row 304 names `beadloom-mr2l.44` — a bead of another epic. Reading provenance as consent is
+    #250 one level up. The remedy now says the nodes are the work item's UNION, sends the reader
+    to `beadloom impact` over the files that bead changes, and states the consequence of the old
+    sentence; the same correction went into `remedy_for` and into `beadloom axes --refs`'s own
+    help. The collapse is now executable: three beads given the union produce 1+1+1 through the
+    real planner, and the same three declaring what they occupy produce one wave of 3.
+    `beadloom waves`'s `unguarded_axis` finding falls from 22 named nodes to 18.
+    A refactor must not shrink a measured scope: 31 mutants left `doc_quality.py` and
+    `doc_shape.py` and 26 arrived in `tables.py`, so it is the fifteenth declared mutation
+    target in all three homes and the declared scope reads 6 459 against 6 464, the five being
+    the deduplication itself. 30 tests (13 unit + 5 scenarios, plus a fixture and a node-count
+    fact re-derived). Green in a clean room over 29 carried files: 9 268 passed, 59 skipped, the
+    1 failure the room's stated no-`.git` property (46 pairs unverified, no sync baseline).
+    **As this wave's gate owner, separately:** the combined tree is green — `beadloom ci` rc 0
+    taken in the foreground without a pipe, `ruff check src/ tests/` rc 0, `mypy src/` rc 0
+    against all four declared target versions, and the full suite 9 316 passed / 1 failed before
+    the node-count fact was re-derived and green after. Darwin arm64 / CPython 3.13.7, 0 of the
+    21 declared rooms entered. A third reader of the same boundary EXISTS and was left alone
+    deliberately: `application/work_item_routing.py` reads the `/task-init` routing table with
+    the same one-header-per-heading shape, guarded today by vocabulary rather than by boundary,
+    so the class is present and the instance is not. Outside this bead's axes; recorded on the
+    bead.
 
 ## What is in `main` now
 
@@ -1064,8 +1111,8 @@ reasons live in bead descriptions and in the issue log and nowhere together.
 | **#235** — the clean-room convention names a fixed directory, so two agents in one wave build one room and both call it clean | `0mdo.37`, P1, **done** | Closed with **#243**, which the same fix answers. `beadloom clean-room` derives the path from the bead and refuses a directory it did not create empty, so a neighbour's room cannot be entered and a room cannot be re-entered. The role cores still describe the by-hand convention and are a follow-up (`beadloom-vyjp`), because those templates are outside this bead's axes and inside `0mdo.59`'s and `0mdo.67`'s surface. |
 | **#236** — a clean room's verdict is decided by which optional extras it installed, and the convention never names them | `0mdo.38`, P1, **done** | The durable form shipped: `extras` is a dimension of the room, derived from the project distribution's installed metadata for this run and from a job's install step for a leg, compared on what an environment SATISFIES rather than on what was typed. Re-measured at `6c4d0a9`: 0 mypy errors under `.[all,dev]` and 82 under `.[dev]`. **#256 is not absorbed**; its import-path half is already closed by `0mdo.37`'s invocation, verified here, and what remains for `0mdo.74` is building the environment rather than stating it. |
 | **#238** — nothing compares the ignore block on disk against the block this version emits | `0mdo.40`, P2, open | The INSTANCE was fixed in S4: this repository's `.gitignore` now carries the shipped glob. The CLASS is a new `config-check` leg. Splitting them is what keeps a repository repair from reading as a product fix. |
-| **#244** — a second markdown table in `## Axes` contributes its header row as an approved node named `Node` | `0mdo.46`, P1, open | Worked around in S4 by keeping one table, so no commit was judged against a phantom node. The parser fix touches `read_axes_section`, which S1 owns and which `0mdo.47`'s pinned excerpt now guards. |
-| **#245** — the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one | `0mdo.46`, P1, open | The VERDICT is correct and shipped; only the advice beside it is wrong. #244 must land first — #245 cannot be judged honestly while #244 injects a node nobody wrote. |
+| **#244** — a second markdown table in `## Axes` contributes its header row as an approved node named `Node` | `0mdo.46`, P1, **done** | Worked around in S4 by keeping one table, so no commit was judged against a phantom node. The parser fix touches `read_axes_section`, which S1 owns and which `0mdo.47`'s pinned excerpt now guards. |
+| **#245** — the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one | `0mdo.46`, P1, **done** | The VERDICT is correct and shipped; only the advice beside it is wrong. #244 must land first — #245 cannot be judged honestly while #244 injects a node nobody wrote. |
 
 **Inherited by S6 with no bead of its own:**
 

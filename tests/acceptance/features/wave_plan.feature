@@ -236,3 +236,58 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the work item keeps "billing" and "shipping" in scope
     When the wave shape is decided
     Then the remedy for "mute" names the document the axes were read from
+
+  # BDL-UX #250. `approved` was `kept | targets`, so a node owning a file the
+  # `Derived by` field names was inside the approval whatever its row said. The
+  # rule assumed a slice CHANGES what it derives from, which held for four
+  # slices of BDL-068 and stopped holding at the fifth, whose subject is where
+  # this project calls `bd` and whose targets are therefore files it reads.
+  # Measured on this repository: 39 approved nodes, six of them approved by
+  # having been swept, two of the six carrying rows that say `no`. Provenance is
+  # not consent, and the approval list is what the plan prints back as work.
+
+  @bead:beadloom-0mdo.46
+  Scenario: A node the derivation ran over is not approved by having been swept
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the work item derived over "invoicing" and rules on it nowhere
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then the plan does not approve "invoicing"
+    And the plan does not report "invoicing" as declared by no bead of that wave
+
+  @bead:beadloom-0mdo.46
+  Scenario: A swept node nobody ruled on is stated as swept rather than as never reached
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "invoicing"
+    And the work item keeps "billing" in scope
+    And the work item derived over "invoicing" and rules on it nowhere
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then the plan states "invoicing" as swept and not ruled on
+    And the plan reports no finding against "beta" for declaring it
+
+  # BDL-UX #245. A work item's axes are the UNION of its slices'; a bead's scope
+  # is a SUBSET chosen for that bead. The remedy said "generate each bead's
+  # `refs:` from the `## Axes` section", and `beadloom axes --refs` renders that
+  # section as ONE line for the whole work item. Performed exactly, every bead
+  # declares every node, `shared_node` fires on every pair, and every wave
+  # collapses to a wave of one — the parallelism the command exists to plan.
+
+  @bead:beadloom-0mdo.46
+  Scenario: The gap the plan could not compare sends its reader to a per-bead derivation
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing", "shipping" and "invoicing" in scope
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then the remedy for the unguarded axis derives each bead's own scope
+    And the remedy for the unguarded axis does not prescribe the work item's whole set
+
+  @bead:beadloom-0mdo.46
+  Scenario: Following the withdrawn remedy is what collapses every wave
+    Given three beads each declaring the work item's whole approved set
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then no wave holds more than one bead

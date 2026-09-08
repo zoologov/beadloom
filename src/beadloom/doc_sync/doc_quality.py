@@ -75,6 +75,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from beadloom.doc_sync.tables import Table, cells_of, table_blocks
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
@@ -192,8 +194,6 @@ _SECTION_NUMBER_RE = re.compile(r"^[\d.\s)\-]+")
 _HEADING_RE = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 _STATUS_RE = re.compile(r"^>\s*\*\*Status:\*\*\s*(.+?)\s*$", re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+(?:\[[ xX]\]\s*)?(.*)$")
-_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
-_SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
 _PENDING_RE = re.compile(r"^pending\b", re.IGNORECASE)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
 _TRAILING_PAREN_RE = re.compile(r"\s*\([^()]*\)\s*$")
@@ -366,36 +366,15 @@ def is_approved(text: str) -> bool:
     return bool(status) and status.split()[0].strip("*_ ") in APPROVED_STATUSES
 
 
-def _tables(lines: Iterable[tuple[int, str]]) -> list[list[tuple[int, list[str]]]]:
+def _tables(lines: Iterable[tuple[int, str]]) -> list[Table]:
     """The tables under one heading, each as its own ``(line number, cells)`` rows.
 
-    A table ends where its rows stop. The reader this replaced collected every
-    row under a heading into ONE list, took the first as the header and judged
-    the rest against its column index — so a second table below the first was
-    read as continuation rows of it, and that table's own header row was read as
-    a row with a missing cell. That is BDL-UX #213's fault, measured on
-    BDL-067's ``ACTIVE.md``: a `Claim | Coordinator's measurement` table under
-    the same ``## Notes`` heading as the decision table, reported four times.
-
-    A separator row is dropped and does NOT end a table, because it is part of
-    one. Everything else that is not a table row does.
+    The boundary rule itself lives in :mod:`beadloom.doc_sync.tables`, because
+    the ``## Axes`` reader needed the same answer and BDL-UX #244 is what a
+    second copy of it costs. This name stays as the vocabulary this module's
+    checks are written in.
     """
-    tables: list[list[tuple[int, list[str]]]] = []
-    current: list[tuple[int, list[str]]] = []
-    for number, line in lines:
-        match = _TABLE_ROW_RE.match(line)
-        if match is None:
-            if current:
-                tables.append(current)
-                current = []
-            continue
-        cells = [c.strip() for c in match.group(1).split("|")]
-        if all(_SEPARATOR_CELL_RE.match(c) for c in cells if c):
-            continue
-        current.append((number, cells))
-    if current:
-        tables.append(current)
-    return tables
+    return table_blocks(lines)
 
 
 def _column(header: Sequence[str], *names: str) -> int | None:
@@ -731,9 +710,9 @@ def _line_items(line: str) -> list[str]:
     heading = _HEADING_RE.match(line.strip())
     if heading is not None:
         candidates.append(heading.group(2).strip())
-    row = _TABLE_ROW_RE.match(line)
+    row = cells_of(line)
     if row is not None:
-        candidates.extend(c.strip() for c in row.group(1).split("|"))
+        candidates.extend(row)
     items = []
     for candidate in candidates:
         text = candidate.strip("*_` ").strip()

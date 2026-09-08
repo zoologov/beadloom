@@ -35,6 +35,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from beadloom.doc_sync.doc_quality import QualityFinding, document_kind
+
+# Re-exported: the row grammar moved to :mod:`beadloom.doc_sync.tables` when the
+# same module had to answer where a table STARTS as well (BDL-UX #213, #244), and
+# every caller that already reads a row through this module keeps doing so.
+from beadloom.doc_sync.tables import table_cells as table_cells
 from beadloom.infrastructure.doc_roots import resolve_docs_dir
 
 if TYPE_CHECKING:
@@ -71,28 +76,6 @@ _HEADING_RE = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 #: A markdown horizontal rule — a separator, never a section's content.
 _HRULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 
-#: A markdown table row and the alignment row under its header.
-_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
-_SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
-
-
-def table_cells(line: str) -> list[str] | None:
-    """The cells of a markdown table row, or ``None`` when *line* is not one.
-
-    The one table reader in the project (BDL-068 S1.5). The ``## Axes`` grammar
-    and the ``/task-init`` routing table are two different tables read for two
-    different facts, and reading them with two parsers would make "what a row
-    is" a thing that can disagree with itself — the class this epic removes.
-    An alignment row is not a row of data and returns ``None``, so a caller
-    never has to know it exists.
-    """
-    match = _ROW_RE.match(line)
-    if match is None:
-        return None
-    cells = [cell.strip() for cell in match.group(1).split("|")]
-    if all(_SEPARATOR_CELL_RE.match(cell) for cell in cells if cell):
-        return None
-    return cells
 
 
 @dataclass(frozen=True)

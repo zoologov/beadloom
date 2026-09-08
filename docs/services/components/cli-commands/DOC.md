@@ -107,8 +107,11 @@ built one at a shared scratchpad path and one measured over the other's files (B
 It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
 media and for the same reason — the application layer keeps taking its input as data — and
 prints what every bead's declared `refs:` was held against: the work item, the document, how
-many nodes it approves, how many declared refs agree, how many the derivation did not reach
-and how many axis rows name no node. That block is printed for a clean plan too, because the
+many nodes it approves, how many declared refs agree, how many the derivation did not reach,
+how many it swept and nobody ruled on, and how many axis rows name no node. The fourth count
+arrived with BDL-UX #250, when a node stopped being approved for having been swept: calling
+such a node `not_derived` would state something false, so it is counted under a name of its
+own. That block is printed for a clean plan too, because the
 counts are how a reader tells a plan whose declarations agreed from one whose declarations
 nothing could be compared against (BDL-UX #232).
 
@@ -173,9 +176,13 @@ row. The counts, and the run they were taken on, are in the
 
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section
-back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the
+back and generates the `refs:` line from it, and `scope-check` (BDL-068 S1.6) compares the
 paths a commit stages against the section the work item declared. One document, written by
-the first, read by the second and enforced by the third. `scope-check` exits 2 when a path
+the first, read by the second and enforced by the third. `axes --refs` renders ONE line for
+the whole work item, and its help says so since BDL-UX #245: a work item's axes are the UNION
+of its slices' and a bead's scope is a SUBSET chosen for that bead, so this line is the ceiling
+a bead's own scope sits inside and never that scope itself. Handing it to every bead would make
+every pair share a node and collapse every wave to a wave of one. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
 or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
 marked `# ` and on standard output, whether the run compared anything or not: the reason used

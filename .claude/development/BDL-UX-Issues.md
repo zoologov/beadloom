@@ -46,6 +46,17 @@
     **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
     **Related:** #190 (the example token, open), #205 (the past tense, open).
 
+259. [2026-09-08] [LOW] a THIRD reader of a markdown table takes one header for a whole heading, and is guarded only by the words its rows happen to carry
+
+    **Severity:** low (the class is present and no instance exists today, because vocabulary is doing the work a boundary should do)
+    **Command:** `beadloom task-init` routing, `beadloom config-check`
+    **Tracker:** `beadloom-0mdo.77`; found by `beadloom-0mdo.46` while fixing the other two
+    **Context:** BDL-068 S6 wave 5, from the fix for #244. #213 and #244 were the same sentence in two readers, hours apart; the search for a third found one.
+    **Issue:** `application/work_item_routing.py::_routes_in` reads the composed `/task-init` routing table by matching the FIRST row whose leading cells equal the expected header, and then treats every table row anywhere below it as a route. A second table under the same heading contributes its rows to the first table's population, exactly as #213 and #244 did.
+    **Why no instance fires today:** the reader discards a row whose second cell does not contain `simplified` or `full`, so a second table's header row and most of its data rows fall out. That is a vocabulary guard standing in for a boundary, and #213's own measured cause was that vocabulary cannot decide this — the entry blamed header words and the cause was one level below them.
+    **Why it is LOW and not MEDIUM:** the composed `/task-init` command in this repository states one table under that heading, so nothing is currently misread, and the failure direction is under-reporting a route rather than inventing one.
+    **Expected:** `_routes_in` reads its table through `doc_sync.tables.table_blocks`, the one place that now decides where a table starts, and stops depending on its rows' vocabulary to end one. Measure first: the change alters which rows a routing table contributes, so it needs its own before-and-after over the composed commands this project ships.
+
 258. [2026-09-08] [MEDIUM] one test can never pass in a clean room, so every clean-room verdict in this epic carried a permanent red that everyone learned to discount
 
     **Severity:** medium (it is the always-red check this project already has a principle about, sitting inside the discipline the project uses to verify everything else)

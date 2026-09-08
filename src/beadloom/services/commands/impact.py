@@ -93,7 +93,11 @@ def impact(
     "--refs",
     "as_refs",
     is_flag=True,
-    help="Print only the `refs:` line, generated from the rows kept in scope.",
+    help=(
+        "Print only the `refs:` line, generated from the rows kept in scope. "
+        "The unit is the WORK ITEM, so this is the ceiling for every bead of it "
+        "and not any one bead's scope."
+    ),
 )
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 def axes(*, document: Path, as_refs: bool, as_json: bool) -> None:
@@ -104,6 +108,13 @@ def axes(*, document: Path, as_refs: bool, as_json: bool) -> None:
     GENERATED from the document rather than written beside it. Two authored
     homes for one fact are two things that can disagree, which is the class this
     epic exists to remove.
+
+    THE UNIT IS THE WORK ITEM, and `--refs` renders one line for the whole of
+    it. A work item's axes are the UNION of its slices'; a bead's scope is a
+    SUBSET chosen for that bead, derived with `beadloom impact` over the files
+    that bead changes. Giving every bead this line would make every pair share a
+    node and collapse every wave to a wave of one (BDL-UX #245), so it is the
+    CEILING a bead's own scope sits inside and never that scope itself.
     """
     from beadloom.doc_sync.axes_section import read_axes_section, refs_line
 

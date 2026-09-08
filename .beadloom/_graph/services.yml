@@ -322,6 +322,17 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/doc-shape/SPEC.md
 
+  # Component: what a markdown table row is, and where one table ends and the
+  # next begins (BDL-068 S6, BDL-UX #213 + #244). Lifted out of `doc-quality`
+  # when the `## Axes` reader needed the same answer: two readers of a table
+  # boundary is how one section holding two tables was read as one, twice.
+  - ref_id: markdown-tables
+    kind: component
+    summary: "What a markdown table row is, and where one table ends and the next begins: the boundary rule `doc-quality` and `axes-section` both read a section through"
+    source: src/beadloom/doc_sync/tables.py
+    docs:
+      - docs/domains/doc-sync/components/markdown-tables/DOC.md
+
   # Feature: the `## Axes` section's grammar (BDL-068 S1.4). One home for what
   # the section says, read by the checks and written by `impact --section`, so
   # the writer and the reader cannot drift into two shapes with one name.
@@ -929,6 +940,18 @@ edges:
     kind: depends_on
   - src: axes-section
     dst: doc-shape
+    kind: depends_on
+  - src: markdown-tables
+    dst: doc-sync
+    kind: part_of
+  - src: axes-section
+    dst: markdown-tables
+    kind: depends_on
+  - src: doc-quality
+    dst: markdown-tables
+    kind: depends_on
+  - src: doc-shape
+    dst: markdown-tables
     kind: depends_on
   - src: doc-quality
     dst: doc-sync

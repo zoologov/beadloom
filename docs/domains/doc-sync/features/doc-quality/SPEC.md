@@ -90,6 +90,13 @@ contiguous blocks, each led by its own header row; a separator row belongs to it
 not end it. This needs no vocabulary: a table ends where the table rows stop. `risk-mitigation`
 and `pending-in-approved` read tables through the same helper and were fixed with it.
 
+The rule then moved one module over, to `markdown-tables` (`doc_sync.tables.table_blocks`), and
+`_tables()` is the name this module's checks are still written in. It moved because the same
+sentence was true of a second reader: `axes-section` read a `## Axes` section holding one table
+per slice as one table, and its second table's header row became an approved node named `Node`
+(BDL-UX #244). Two readers of a table boundary is how one defect was found twice; a third would
+have been a third.
+
 **A reason column does not make a table a decision table.** After the boundary is fixed the
 residual class survives — a table of measurements with a `Reason` or `Why` column of its own —
 and no checker can decide it from the cells. `| 7341 passing | confirmed, 0 failed |` and

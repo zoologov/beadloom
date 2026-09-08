@@ -89,8 +89,8 @@ green result says what it was green against.
 - **surface_ledger.py** -- The committed record (`.beadloom/sync-surface.json`) of how much there was to check last time, so a shrinking surface is reported rather than silently smaller
 - **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
-- **doc_shape.py** -- Whether a document still carries the sections its kind requires; peer-relative by majority, so a convention is reported once and an outlier per document ([SPEC](features/doc-shape/SPEC.md))
-- **axes_section.py** -- The `## Axes` section's grammar, read in both directions: the seed it names, the scope decision it records, and the bead `refs:` generated from it. Two checks -- `axes-without-a-seed` and `axis-without-a-scope-decision` ([SPEC](features/axes-section/SPEC.md))
+- **doc_shape.py** -- Whether a document still carries the sections its kind requires; peer-relative by majority, so a convention is reported once and an outlier per document. Re-exports `table_cells` from `tables.py`, where the row grammar moved ([SPEC](features/doc-shape/SPEC.md))
+- **axes_section.py** -- The `## Axes` section's grammar, read in both directions: the seed it names, the scope decision it records, and the bead `refs:` generated from it. A slice appends its rows under its own `Derived by` line, so a real section holds one table per slice and each is judged against its own header. Two checks -- `axes-without-a-seed` and `axis-without-a-scope-decision` ([SPEC](features/axes-section/SPEC.md))
 - **doc_quality.py** -- The five writing-standard checks over planning documents: a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an `Approved` document, no unfilled template placeholder ([SPEC](features/doc-quality/SPEC.md))
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts. `FactRegistry.collect_set()` returns a `FactSet` -- the facts computed for the project AND, for each fact no value was declared for, the reason -- so a collector that cannot answer no longer drops the fact and shrinks the denominator in silence
 - **work_item_type.py** -- The route a work item took, checked against the axes it was decided from (BDL-068 S1.5). Two checks over the work-item FOLDER: `routed-without-axes`, for an item on the route that passes no scope approval and carries no `## Axes` section, and `route-not-supported-by-the-axes`, for one whose kept axes name more graph nodes than that route holds. Measured at `2a5c0d1`, `## Axes` was required by the template and reported by nothing: `missing-section` is peer-relative and the corpus carried it in 0 of 12 BRIEFs, so the absence produced one kind-level statement and no document-level finding. This check is absolute, and the simplified route's `Axes` requirement is withdrawn from the peer-relative half alone, so a present-and-empty section is still `empty-section`'s finding ([SPEC](features/work-item-type/SPEC.md))
@@ -108,6 +108,7 @@ green result says what it was green against.
 ### Components
 
 - **[Doc Indexer](components/doc-indexer/DOC.md)** -- Markdown scan + chunk + `docs`/`chunks` population; the doc half of every sync-check pair.
+- **[Markdown Tables](components/markdown-tables/DOC.md)** -- What a table row is, and where one table ends and the next begins. Lifted out of `doc_quality.py` when `axes_section.py` needed the same answer: two readers of a table boundary is how one section holding two tables was read as one, twice in one slice (BDL-UX #213, #244).
 
 ### Git Hook Integration
 
@@ -176,6 +177,14 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `check_reference_drift(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- (BDL-057 Layer 2) Recompute each reference doc's aggregate hash and report drift. Returns one dict per reference doc with `doc_path`, `watches`, `status` (`ok`/`surface_drift`), `reason`, and `severity` (always `warning`). Persists the new status; never affects the `sync-check` exit code.
 - `mark_reference_synced(conn: sqlite3.Connection, doc_path: str | None, project_root: Path, *, all_docs: bool = False) -> int` -- (BDL-057 Layer 2) Re-baseline a reference doc's aggregate hash (or every reference doc when `all_docs`), clearing surface drift. Returns the number of rows re-baselined. (Backs `beadloom sync-update <doc> --yes` / `--all`.)
 - `describe_reference_doc(conn: sqlite3.Connection, doc_path: str | None, project_root: Path) -> dict | None` -- the **read-only** counterpart: a reference doc's `watches` set and its current drift status (`ok` / `surface_drift`), with the baseline and current aggregate hashes. `None` when the path is not a tracked reference doc. Executes no `UPDATE` and does not commit. (Backs `beadloom sync-update <doc> --check`, BDL-UX #189.)
+
+### Module `src/beadloom/doc_sync/tables.py`
+
+- `cells_of(line: str) -> list[str] | None` -- The cells of a table line, alignment row included, or `None` when the line is no table row. The raw reading.
+- `is_separator(cells: Iterable[str]) -> bool` -- Whether those cells are an alignment row rather than content.
+- `table_cells(line: str) -> list[str] | None` -- The cells of a table row that says something; `None` for a separator. Re-exported from `doc_shape.py`, where it used to live, so no caller moved.
+- `table_blocks(lines: Iterable[tuple[int, str]]) -> list[Table]` -- The contiguous tables in numbered *lines*, each leading with its own header row. A separator row is dropped and does NOT end a table; everything that is not a table row does. Reading a section as one table is BDL-UX #213 in `doc_quality.py` and BDL-UX #244 in `axes_section.py` -- one sentence found twice, hours apart, in one slice.
+- `Table` -- one table, as `(line number, cells)` rows.
 
 ### Module `src/beadloom/doc_sync/doc_shape.py`
 
