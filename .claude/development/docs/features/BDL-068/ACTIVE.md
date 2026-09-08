@@ -10,17 +10,30 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.38` — BDL-UX #236, a clean room's verdict is decided by which optional
-extras it installed and the convention never names them. S6 wave 3, running alone and its own
-combined-tree gate owner. Wave 2 is complete: `beadloom-0mdo.37` and `beadloom-0mdo.68` both
-closed, and that wave's gate owner reported `beadloom ci` rc 0 on the combined tree, taken in the
-foreground without a pipe.
+**Bead:** none claimed. S6 wave 3 is complete — `beadloom-0mdo.38` closed, and as its own gate
+owner it reports `beadloom ci` rc 0 on the combined tree, taken in the foreground without a pipe
+(9 254 passed).
 
-**What `.38` changed, in one sentence:** the optional extras an environment installed are a
-DIMENSION of the room, derived on both sides — from the project distribution's own installed
-metadata for this run, and from a job's install step for a leg — so `beadloom rooms`, every
-`beadloom ci` verdict and every `.beadloom-room.json` state them, and a clean-room report can be
-reproduced from what it prints.
+**The bead that closed last, `beadloom-0mdo.38`.** BDL-UX #236: the optional extras an
+environment installed are now a DIMENSION of the room, derived on both sides — from the analysed
+project distribution's own installed metadata for this run, and from a job's install step for a
+leg — and compared on what an environment SATISFIES rather than on what somebody typed. So
+`beadloom rooms`, every `beadloom ci` verdict and every `.beadloom-room.json` state them, and a
+clean-room report can be reproduced from what it prints. Reproduced before it was fixed: at
+`6c4d0a9`, over one code base at one commit, `mypy src/` gives 0 errors under `.[all,dev]` and 82
+under `.[dev]`.
+
+**#256 was decided rather than deferred, and it is smaller than when it was filed.** Its
+import-path half is already closed by `.37`'s `PYTHONPATH` invocation — verified in `.38`'s room,
+where `import beadloom` printed a path under the room. What remains for `beadloom-0mdo.74` is
+BUILDING the environment, which is a decision rather than a derivation, and its cost is now
+measured (`uv venv` 0.04 s, `uv pip install -e '.[all,dev]'` 3.6 s warm-cache, 160 MB apparent)
+so cost cannot become the reason either way.
+
+**Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion.
+`bd close --suggest-next` named `.74`, `.14` and `.69`; the ready list holds `.74` and neither of
+the other two, because `.69` still has two open blockers (`.40`, `.46`) and `.14` is the slice
+bead. That is the twenty-fifth dependency shape this project has checked that call form against.
 
 **The bead that closed last, `beadloom-0mdo.68`.** BDL-UX #213: `decision-reason` fired on a
 table of claims and measurements. The reported cause was header vocabulary; the measured cause
