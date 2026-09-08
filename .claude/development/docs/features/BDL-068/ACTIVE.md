@@ -3,24 +3,29 @@
 > **Last updated:** 2026-09-08
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
-> pass landed. S6 has started and runs in full: its axes bead `.72` closed, and `.60` — the
-> first dev wave, run alone at the front by coordinator decision — is complete.
+> pass landed. S6 has started and runs in full: its axes bead `.72` closed, `.60` ran alone at
+> the front by coordinator decision, and wave 2 — `.37` and `.68` — is complete.
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.68`, S6 wave 2, and this wave's combined-tree gate owner. BDL-UX #213:
-`decision-reason` fired on a table of claims and measurements. The reported cause was header
-vocabulary; the measured cause was the table BOUNDARY — a section was read as one table, so the
-second table's header row was reported as a row with a missing cell. Tables are now delimited,
-and a table carrying a reason column that the document never declares as decisions is answered
-`not classified` rather than judged. On this repository: 389 rows read before, 324 judged after,
-58 rows in 12 named tables not classified.
+**Bead:** none claimed. S6 wave 2 is complete — `beadloom-0mdo.37` and `beadloom-0mdo.68` both
+closed, and the wave's gate owner reports `beadloom ci` rc 0 on the combined tree, taken in the
+foreground without a pipe. `bd close --suggest-next` named `.69` and `.14`; `bd ready --limit 0`
+names neither, because `.69` still has three open blockers (`.38`, `.40`, `.46`).
+
+**The bead that closed last, `beadloom-0mdo.68`.** BDL-UX #213: `decision-reason` fired on a
+table of claims and measurements. The reported cause was header vocabulary; the measured cause
+was the table BOUNDARY — a section was read as one table, so the second table's header row was
+reported as a row with a missing cell. Tables are now delimited, and a table carrying a reason
+column that the document never declares as decisions is answered `not classified` rather than
+judged. On this repository: 389 rows read before, 324 judged after, 58 rows in 12 named tables
+not classified.
 
 **Beside it, `beadloom-0mdo.37` closed.** BDL-UX #235 and #243 are answered by ONE command
-rather than by two rules: `beadloom clean-room <bead>` derives the room's directory from the bead, creates it with
-an exclusive `mkdir` instead of entering one, and rebuilds by replacement. A neighbour's room
+rather than by two rules: `beadloom clean-room <bead>` derives the room's directory from the
+bead, creates it with an exclusive `mkdir` instead of entering one, and rebuilds by replacement. A neighbour's room
 therefore cannot be entered and a room cannot be re-entered, which are the two findings. Found
 by using the command on its own bead: the invocation it handed back named `sys.executable`,
 which under a `uv` tool install has no pytest, so it now names the project's own `.venv`.
