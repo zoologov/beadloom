@@ -1,6 +1,6 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-05
+> **Last updated:** 2026-09-08
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 under way, waves 1-5 landed and its review's first fix bead closed
 
@@ -8,10 +8,20 @@
 
 ## Current Bead
 
-**Bead:** none — S5's fix wave has landed its first bead. `0mdo.61` (S5 review Major 1) is
-closed; `0mdo.62` (review Major 3, the seven undeclared mutation targets) runs next and touches
-no `active_table` file. S4 is finished on the branch: `0mdo.36` (tech-writer) was the last of
-that slice and closed its docs pass, and `0mdo.12`, the slice bead, closes with it.
+**Bead:** none — S5's fix wave has landed its second bead. `0mdo.61` (S5 review Major 1) and
+`0mdo.62` (review Major 3, the seven undeclared mutation targets) are both closed. S4 is
+finished on the branch: `0mdo.36` (tech-writer) was the last of that slice and closed its docs
+pass, and `0mdo.12`, the slice bead, closes with it.
+
+**`0mdo.62` ended a deferral by measuring the thing six beads had deferred, and the measurement
+cost 17.3 seconds.** Each of `.39`, `.51`, `.52`, `.53`, `.54` and S5's test bead recorded the
+duty and passed it on, the last of them with a reason that was correct about the wrong half of
+the job: mutmut writes a `mutants/` copy a shared tree cannot hold. True of a RUN. The COUNT is
+static generation over a file's own text and needs no copy, no room and no shared tree — all
+fourteen targets count in 17.3 s. The seven cores hold 764 mutants, taking the declared scope
+to 6 464, and the figure was derived three independent ways before it was used: a generator run
+calibrated 7 of 7 exact against the figures already on the record, a second derivation from
+scratch, and the runner's own denominator.
 
 **S5's fix wave, and the report that contradicted itself.** The S5 review returned ISSUES with
 0 critical and 3 major, which is S5's FIRST issues verdict, so the slice cycles rather than
@@ -714,6 +724,26 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     xfailed, `mypy --strict` clean over 274 files against all four declared interpreter targets,
     `beadloom ci` rc 0 in the foreground without a pipe. Darwin arm64 / CPython 3.13.7, 0 of the
     21 declared rooms.
+  - [x] `0mdo.62` — **S5 review Major 3**, seven pure cores declared nowhere after six correct
+    deferrals. A declared target with no run reports `mutation-target-unmeasured`; an UNDECLARED
+    core reports nothing at all, so the epic that exists to stop an empty population reading as a
+    passing one was shipping seven cores into exactly that state in its own configuration. **The
+    STRONGER outcome was taken and no target is excluded on cost**, because the cost was measured
+    rather than projected: the seven run in **36 min 35 s and score 83.64%** — 764 mutants, 639
+    killed, 125 survived, 0 unrun. **The count is the wrong cost unit and that is the finding**:
+    764 mutants is 13.4% more mutants and eight times the cost per mutant, because
+    `invocations.py` and `assumptions.py` carry ten covering test files each where `creation.py`
+    carries two. Affordable anyway — scaled by the 1.63 the runner measured, 60 min, taking the
+    nightly to a projected 171. **Two settings the widening had left behind moved with it**: the
+    aggregate floor was re-derived (89.98% → 89.23%, so 0.88 keeps 1.23 points of headroom where
+    it had 2.00, and survives its own worst case at 88.99% if both macOS components fall the 0.63
+    points the rules slice actually fell) and the timeout moved 240 → 340 by the method already
+    in the file. A hypothesis was checked and REJECTED rather than reported: `test_bd_seam.py` is
+    absent from the mutation pool but covers `client.py`, not the seven, and every real covering
+    test is already in the pool. The three settings still agree — 36 passed across
+    `test_mutation_runner_scope.py`, `test_mutation_ci_job.py` and `test_mutation_scope.py`. In a
+    clean room over 8 624 files (`room-beadloom-0mdo.62`); every verdict Darwin arm64 / CPython
+    3.13.7, 0 of the 21 declared rooms, so no number here is a claim about the nightly job.
 - [ ] S6 — the flow's documents and roles
 
 ## What is in `main` now
