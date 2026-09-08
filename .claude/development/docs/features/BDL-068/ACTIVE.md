@@ -10,9 +10,11 @@
 
 ## Current Bead
 
-**Bead:** none claimed. S6 wave 3 is complete — `beadloom-0mdo.38` closed, and as its own gate
-owner it reports `beadloom ci` rc 0 on the combined tree, taken in the foreground without a pipe
-(9 254 passed).
+**Bead:** `beadloom-0mdo.73`, BDL-UX #255 — `beadloom impact` crashed on a target that exists
+and is not Python. S6 wave 4 runs it concurrently with `.40`, `.48` and `.65`, and `.73` is the
+wave's combined-tree gate owner. Before it, S6 wave 3 completed: `beadloom-0mdo.38` closed, and
+as its own gate owner it reported `beadloom ci` rc 0 on the combined tree, taken in the
+foreground without a pipe (9 254 passed).
 
 **The bead that closed last, `beadloom-0mdo.38`.** BDL-UX #236: the optional extras an
 environment installed are now a DIMENSION of the room, derived on both sides — from the analysed
@@ -918,6 +920,24 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     the combined tree is green — 9 254 passed, `beadloom ci` rc 0 taken in the foreground
     without a pipe. Darwin arm64 / CPython 3.13.7, 0 of the 21 declared rooms; `mypy` clean
     against all four declared target versions, run under one interpreter.
+  - [x] `.73` — BDL-UX **#255**, `impact` against a target it cannot read. Wave 4, concurrent
+    with `.40`, `.48` and `.65`, and the **gate owner** for the wave. Found by `.72` while
+    deriving S6's axes — by using the instrument for the job the slice exists to do. Reproduced
+    at `c92dc78`: `beadloom impact .claude/CLAUDE.md` exited 1 with an unhandled `SyntaxError`
+    out of `ast.parse` at `impact/axes.py:129`, while `beadloom impact CLAUDE.md` — a path this
+    repository does not have — printed one sentence. The worse failure belonged to the more
+    plausible request. The split is by what the command could not do: a file it could not READ
+    is `unreadable-target` in the population that states limits, both source axes `unresolved`
+    with that reason and exit 0; a path it could not FIND stays `NoSuchTargetError` at exit 1,
+    and there is a test that the second line did not move. Two shapes reach that one
+    `ast.parse` and both are verdicts — a suffix that is not `.py`, and a `.py` that does not
+    parse, which has been reachable since the package was written. One unreadable file costs
+    the answer that file and no other: a directory target holding a half-saved module still
+    reports every other module's branches. 8 tests (3 scenarios, 5 unit). **The larger
+    question is stated and left**: whether `impact` should derive anything FROM markdown or
+    YAML needs a second derivation, and the recommendation on the record — in the SPEC and in
+    CONTEXT — is that `beadloom docs audit` answers it, since it already reads non-Python
+    artifacts and already verifies command mentions.
 
 ## What is in `main` now
 

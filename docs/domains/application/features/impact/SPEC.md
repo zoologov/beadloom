@@ -104,6 +104,7 @@ sentence, and a place, so a human can go and look.
 | kind | what it means |
 |---|---|
 | `target-outside-the-sweep` | a file this answer is about that does not lie under the swept root, so nothing it defines was read |
+| `unreadable-target` | a file this answer is about that this derivation could not read as Python: a document, or a module saved half-way through an edit |
 | `sweep-narrower-than-the-project` | the swept root is not the project's source root, so every axis is an answer about a subtree |
 | `no-seed` | no declared effect rule found a sink this target reaches |
 | `no-graph-index` | there was no index to read ownership from |
@@ -118,6 +119,48 @@ Terminator names are bound from the module's **own** imports and only from the
 standard library. Asking a project-local object would mean importing the tree
 under examination, and a derivation that runs the tree it is reading is a
 derivation that can change it.
+
+### A target this derivation cannot read
+
+The target argument accepts any path that EXISTS. Until BDL-UX #255 the axes then
+handed that path to `ast.parse`, so a target that exists and is not Python ended
+the command in an unhandled `SyntaxError` and exit 1, while an ABSENT path was
+answered with one sentence and the same exit code. The worse failure belonged to
+the more plausible request: a reader pointing the command at `CLAUDE.md`, an issue
+log or a role template got a traceback, and a typo got a sentence.
+
+It was found by using the instrument for the job its slice exists to do.
+BDL-068 `.72` hit it while deriving S6's axes, and it is why that derivation
+reaches **0 of its subject's 862** `beadloom <subcommand>` instruction sites
+across 68 non-Python artifacts and 11 170 lines. S5's equivalent ratio was 14 of
+about 261.
+
+Two shapes reach that one call and both are now verdicts:
+
+- a file whose suffix is not `.py`, reported by its suffix rather than by a
+  syntax error at some line of prose, and
+- a `.py` file that does not parse — a module saved half-way through an edit —
+  reported by the failure `ast.parse` raised.
+
+Each becomes an `unreadable-target` entry naming the file and why, `co_writers`
+and `callers` read `unresolved` with that reason, and the command exits 0 with an
+answer. A path that resolves to no file and no symbol is still `NoSuchTargetError`
+at exit 1: a target nobody can resolve is a mistake in the invocation, and
+answering it with four unresolved axes would hide a typo behind a verdict.
+
+The unreadable file costs the answer that file and no other. A directory target
+holding one broken module still reports every other module's branches, under the
+caveat rather than instead of it.
+
+**The larger question is stated and left open.** Whether `impact` should derive
+anything FROM markdown or YAML is not this ceiling. Answering it means a second
+derivation — a document is not a call graph, and the axis a reader would want
+from `CLAUDE.md` is which instruction sites name a command that no longer exists,
+which is `docs audit`'s subject and not this one. The recommendation on the
+record: extend `beadloom docs audit`, which already reads non-Python artifacts and
+already verifies command mentions, rather than teaching this derivation a second
+grammar. Until something is decided, a non-Python target is `unresolved` and says
+so, which is a true answer rather than a missing one.
 
 ### How wide the sweep is, and how it says so
 

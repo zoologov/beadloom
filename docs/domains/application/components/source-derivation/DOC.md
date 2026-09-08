@@ -63,6 +63,9 @@ derivation of one fact rather than adding a shape:
   beside the trees instead of raising. A syntax error in one file is a hole in every sweep
   built on this one, and `impact` reports the hole as `unparsed-module`. Every other sweep
   here is now expressed over it, so there is one answer to "what is under this root".
+  The failures it walks past are named once, as `source_tree.UNPARSEABLE`, because a second
+  caller reaches the same `ast.parse` over a file nobody vetted: `impact`'s TARGET, which had
+  no such list and ended the command in a traceback over a `.md` suffix until BDL-UX #255.
 - `call_graph.located_calls(sweep)` is the primitive the name-keyed map, the direct callers
   and the located callers are all derived from — a finding that cannot name a file and a line
   is a finding nobody can act on. One fixed point serves both directions:

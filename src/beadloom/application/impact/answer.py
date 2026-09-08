@@ -37,6 +37,7 @@ from beadloom.application.impact.seeds import (
 from beadloom.application.impact.unresolved import (
     Unresolved,
     ambiguous_names,
+    readable_targets,
     unnameable_calls,
     unparsed_modules,
     unresolved_terminators,
@@ -238,6 +239,7 @@ def impact_of(
     invocation carry no knowledge of the tree it is asking about.
     """
     targets, swept, shown = _targets_for(argument, project_root, root)
+    readable, unread = readable_targets(targets, lambda path: _relative(path, project_root))
     sweep = sweep_modules(swept)
     located = located_calls(sweep)
     calls = calls_by_name(located)
@@ -274,7 +276,7 @@ def impact_of(
     commands = tuple(
         replace(command, path=Path(_relative(command.path, project_root)))
         for command in (
-            *_target_commands(targets, seed_names=seed_names, calls=calls, owner=owner),
+            *_target_commands(readable, seed_names=seed_names, calls=calls, owner=owner),
             *_caller_commands(
                 found_calling,
                 targets=targets,
@@ -295,6 +297,7 @@ def impact_of(
         source_root=source_root_of(project_root),
         project_root=project_root,
         outside=outside,
+        unread=unread,
         targets=targets,
         seeds_found=bool(seeds),
         boundary_readable=boundary.readable,
@@ -310,11 +313,10 @@ def impact_of(
         seeds=tuple(
             replace(seed, path=Path(_relative(seed.path, project_root))) for seed in seeds
         ),
-        co_writers=Population(bool(seeds), written, "" if seeds else _NO_SEED),
-        callers=Population(
-            not outside,
+        co_writers=_axis(written, _co_writer_caveat(bool(seeds), unread)),
+        callers=_axis(
             calling,
-            "" if not outside else _outside_the_sweep(_relative(swept, project_root), outside),
+            _caller_caveat(_relative(swept, project_root), outside, unread),
         ),
         commands=commands,
         boundary=_boundary_of(boundary, targets, project_root, (*written, *calling)),
@@ -335,6 +337,45 @@ def _outside_the_sweep(swept: str, outside: tuple[str, ...]) -> str:
         f"the swept root {swept} holds none of {', '.join(outside)}, so nothing the "
         f"target defines was read and no caller of it could be found"
     )
+
+
+def _nothing_read(unread: tuple[Unresolved, ...]) -> str:
+    """Why an axis has no population when the target itself could not be read."""
+    named = ", ".join(gap.where for gap in unread)
+    return (
+        f"this derivation reads Python source and could not read {named}, so "
+        f"nothing that file defines was read and no caller or writer of it was found"
+    )
+
+
+def _axis(sites: tuple[Site, ...], caveat: str) -> Population:
+    """One axis's findings: resolved exactly when nothing qualifies them.
+
+    An unresolved axis keeps whatever sites it did find. Where one file of a
+    directory target could not be read, the rest of the answer is a partial one
+    and not an absent one, and dropping the sites would trade a traceback for a
+    silence.
+    """
+    return Population(not caveat, sites, caveat)
+
+
+def _co_writer_caveat(seeds_found: bool, unread: tuple[Unresolved, ...]) -> str:
+    """What qualifies the co-writer axis, most specific cause first."""
+    if unread:
+        return _nothing_read(unread)
+    return "" if seeds_found else _NO_SEED
+
+
+def _caller_caveat(swept: str, outside: tuple[str, ...], unread: tuple[Unresolved, ...]) -> str:
+    """What qualifies the caller axis, most specific cause first.
+
+    A target that could not be READ is named ahead of one that fell outside the
+    sweep: a document under the swept root is not outside anything, and widening
+    the sweep — the remedy the second caveat implies — would not read it.
+    """
+    if unread:
+        return _nothing_read(unread)
+    return _outside_the_sweep(swept, outside) if outside else ""
 
 
 def _target_commands(
@@ -401,6 +442,7 @@ def _gaps(
     source_root: Path,
     project_root: Path,
     outside: tuple[str, ...],
+    unread: tuple[Unresolved, ...],
     targets: frozenset[Path],
     seeds_found: bool,
     boundary_readable: bool,
@@ -409,12 +451,16 @@ def _gaps(
 ) -> tuple[Unresolved, ...]:
     """Everything this answer could not resolve, in one population.
 
-    The two sweep-shaped entries come first because they qualify every axis
-    below them. An answer derived over less than the project cannot be read as
-    an answer about the project, and before BDL-068 `.15` nothing in this
-    population said so.
+    The target-shaped and sweep-shaped entries come first because they qualify
+    every axis below them. An answer derived over less than the project cannot
+    be read as an answer about the project, and before BDL-068 `.15` nothing in
+    this population said so; an answer over a file that was never read is not an
+    answer at all, and before BDL-UX #255 it was a traceback.
     """
-    gaps: list[Unresolved] = _sweep_gaps(swept, source_root, project_root, outside)
+    gaps: list[Unresolved] = [
+        *unread,
+        *_sweep_gaps(swept, source_root, project_root, outside),
+    ]
     if not seeds_found:
         gaps.append(Unresolved(kind="no-seed", detail=_NO_SEED))
     if not boundary_readable:
