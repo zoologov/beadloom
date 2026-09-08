@@ -200,6 +200,24 @@
     **Expected:** the Gate names the suite as not run, the way it already names the room it entered (`0 of 21 declared room(s)`). One line — `tests: NOT RUN — the suite is not a Gate step; run \`uv run pytest\`` — costs nothing and removes the reading. Whether the pre-push hook should additionally run the suite is a separate and more expensive question; do not conflate the two, and answer the cheap one first.
     **Not a defect in the steps it runs.** Every one of them reported honestly. The gap is a promise the surrounding documents make on the Gate's behalf, which the Gate is silent about.
 
+
+    > **CLOSED 2026-09-08 by `beadloom-0mdo.48`, and it was three things, not one.** The Gate now names
+    > the verifications this project declares that no step of the run performed, derived from the run's
+    > own step list — so a suite step added later removes the line by the same act — and from the CI
+    > workflows through the reader the room census already uses. On this repository it names **three**,
+    > and the second and third had never been filed: the test suite, **the style linter** and **the type
+    > checker**.
+    > **How the other two hid, and it is the part worth keeping:** the Gate's own step is called `lint`
+    > and checks **architecture boundaries**, not source style. A reader seeing `lint PASS` concludes
+    > `ruff` passed. It did not run. `mypy` did not run either. So this project has been reading a green
+    > Gate as covering three verifications it performs none of, and the one that got noticed is the one
+    > that cost a red PR.
+    > **A name that means something narrower than the reader assumes is the same defect as a check that
+    > is silent** — the population is not what it appears, and nothing in the output says so. That is
+    > this epic's subject arriving through vocabulary rather than through logic.
+    > **The expensive half is recommended and deliberately not implemented:** the suite takes 7 min 52 s
+    > on this machine against roughly 55 runner-minutes for one red PR. That trade is a decision for the
+    > owner, and the cheap line does not wait on it.
 246. [2026-09-04] [MEDIUM] a declared mutation target that no run ever covers passes every green Gate, and the one command that would say so is silenced by the flag its only caller passes
 
     **Severity:** medium (a declaration the Gate reports as satisfied while nothing measures it — a phantom gate with a name on it, in the feature built to remove phantom gates)
