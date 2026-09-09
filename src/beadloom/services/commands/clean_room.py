@@ -104,6 +104,7 @@ def _payload(
         "detail": build.detail,
         "commit": build.commit,
         "carried": list(build.carried),
+        "reused": list(build.reused),
         "invocation": list(build.invocation),
         "extras": build.extras,
         "environment": _environment_payload(build),
@@ -139,6 +140,12 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     click.echo(f"  from commit {build.commit}, holder recorded as {build.bead_id}")
     carried = ", ".join(build.carried) if build.carried else "none"
     click.echo(f"  carried from the working tree: {carried}")
+    if build.reused:
+        click.echo(
+            "  taken from the record of the room this replaced: "
+            + ", ".join(build.reused)
+            + " — the list, re-copied from the working tree, never the content"
+        )
     click.echo(
         "  extras the invocation's interpreter has: "
         + (build.extras or "not resolved — no verdict here can state them")
@@ -180,7 +187,8 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     help=(
         "A project file to copy into the room, repeatable. Only what you name: "
         "on a shared tree, everything that differs from HEAD includes your "
-        "neighbour's work."
+        "neighbour's work. Beside --rebuild this REPLACES the list the room "
+        "recorded rather than adding to it."
     ),
 )
 @click.option(
@@ -208,7 +216,12 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     "--rebuild",
     is_flag=True,
     default=False,
-    help="Replace a room this command built for this bead, rather than refusing it.",
+    help=(
+        "Replace a room this command built for this bead, rather than refusing "
+        "it. The files and the extras it was asked for are read back out of its "
+        "own record, so the list is not retyped; the files themselves are copied "
+        "from the working tree again, which is what keeps the room fresh."
+    ),
 )
 @click.option(
     "--project",
@@ -235,6 +248,11 @@ def clean_room(
     than entered, so nothing in a room postdates the room. The room builds its
     own interpreter and installs the project into it, so a verdict taken here is
     not decided by what the machine happened to hold (BDL-UX #256).
+
+    ``--rebuild`` reproduces the request the room it replaces recorded, so the
+    carried list is named once rather than once per rebuild. What is reused is
+    the LIST: the files are copied from the working tree at build time, and an
+    option given beside ``--rebuild`` replaces its remembered counterpart.
     """
     from beadloom.application.waves import RoomBuild, build_room, room_path
 

@@ -1,16 +1,58 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-08
+> **Last updated:** 2026-09-09
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
-> pass landed. S6 has started and runs in full: its axes bead `.72` closed, `.60` ran alone at
-> the front by coordinator decision, and wave 2 — `.37` and `.68` — is complete.
+> pass landed. S6 runs in full: its axes bead `.72` closed, `.60` ran alone at the front by
+> coordinator decision, and with `beadloom-uzck` its last DEV bead is done. S6's `test` bead
+> `.69` runs next, then `.14`.
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-l9ee` — BDL-UX #260, the shared write and the condition an ADR needs. S6,
+**Bead:** `beadloom-uzck` — a clean-room rebuild retyped the whole `--carry` list. S6's last
+dev bead, alone, and its own combined-tree gate owner.
+
+**THE FRICTION WAS MEASURED WITH THE COMMAND ON THE BEAD THAT BUILT IT.** `beadloom-0mdo.37`
+entered 16 `--carry` flags twice, once after each fix the room itself caught. The room is
+correct and the retyping costs seconds; what earns it a place in the slice is that the
+alternative an agent reaches for under that friction is copying files into the LIVE room,
+which is the failure BDL-UX #243 records and `.37` had just fixed. `beadloom-0mdo.74`
+shortened the countdown by giving each room its own interpreter, so a rebuild now costs more
+than it did when the bead was filed.
+
+**SO `--rebuild` READS THE REQUEST OUT OF THE RECORD IT IS ABOUT TO DELETE.** The marker gains
+a `request` block — the carry list, the extras the caller pinned or `null`, and whether an
+environment was asked for — recorded beside the outcome rather than read back out of it,
+because the two come apart: a room given no environment records no extras choice at all, so a
+request reconstructed from the outcome would lose the set the caller pinned. What is reused is
+the LIST and never the content: the files are copied from the working tree at build time,
+which is what keeps #243 answered, and an option named beside `--rebuild` REPLACES its
+remembered counterpart, so the remembered list cannot grow into the "everything that differs
+from HEAD" mode that deliberately does not exist.
+
+**ONE RULE DECIDES WHAT MAY BE REMEMBERED, and it settles the two open cases opposite ways:** a
+rebuild must never silently produce a room whose verdict is greener or less isolated than the
+one it replaces. Extras the caller PINNED are reused, because forgetting `--extras dev` widens
+the room to the legs' union and that is 0 mypy errors where the pinned leg reports 82 (BDL-UX
+#236). A set the LEGS derived is derived again, for the reason the mode above does not exist.
+And `--no-environment` is recorded and NOT reused: remembering a decline hands back a room
+whose verdict the machine decides (BDL-UX #256) with no way to ask for anything else short of
+deleting the room, while forgetting it costs a measured 3.6 s and gives the room its own
+interpreter.
+
+**MEASURED WITH THE COMMAND ON ITS OWN BEAD, which is the only test that reaches the friction.**
+The first build took 11 flags; the rebuild took one and re-carried all ten files, byte-identical
+to the working tree, in 2.33 s total. In the rebuilt room: `ruff` clean, `mypy` clean under its
+own extras, `beadloom ci` rc 0 with zero `::error`, and the suite 9622 passed / 59 skipped / 1
+xfailed / 0 failed — green in a clean room over 14 files, Darwin arm64 · CPython 3.13.7 ·
+extras `all+dev+graphql+languages+mutation+tui+watch` · locale utf-8, 0 of 21 declared rooms
+entered. A clean room structurally cannot see a bead running beside it; this bead ran alone.
+On the combined tree, as its own gate owner: 9669 passed / 12 skipped / 1 xfailed, and
+`beadloom ci` rc 0 with `sync-check PASS: 450 pair(s) fresh`.
+
+**Previous bead:** `beadloom-l9ee` — BDL-UX #260, the shared write and the condition an ADR needs. S6,
 alone, and its own combined-tree gate owner. The bead is a DECISION the coordinator asked for
 and the previous agent wrote; this run re-checked its measurements as evidence rather than
 executing them as instructions, and corrected it on two points.
@@ -53,7 +95,7 @@ Closed as `db3e8c7`. `bd close --suggest-next` named `.69` and `.14` as newly un
 is the flow's documented one: the suggestion names beads the closed one blocked without
 re-checking their other blockers.
 
-**Previous bead:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
+**Bead before that:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
 subject. S6, alone, and its own combined-tree gate owner. Every clean-room Gate run on this
 repository had been rc 1 since `.63` landed, on one line of one document, and four beads
 reported it as briefed and attributed rather than chased.
@@ -1211,6 +1253,51 @@ documents: the suggestion is a candidate list that does not re-check the other b
      **As its own gate owner, separately:** the combined tree is green — `beadloom ci` rc 0 in
      the foreground without a pipe, zero `::error`, and `pytest` 9 654 passed / 0 failed once
      the four stale doc pairs this bead created were repaired.
+
+  - [x] `beadloom-uzck` — a clean-room rebuild retyped the whole `--carry` list, measured at 16
+     flags twice on one bead by `beadloom-0mdo.37` while using the command on the bead that
+     built it. Not a defect: the room is correct and the retyping costs seconds. It is in the
+     slice because the alternative an agent reaches for under that friction is copying files
+     into the LIVE room, which is BDL-UX #243 and which `.37` had just fixed — a fix that makes
+     the correct path more tedious than the wrong one has a countdown on it, and `.74`
+     shortened it by giving each room its own interpreter.
+     **`--rebuild` now reads the request out of the record it is about to delete.** The marker
+     gains a `request` block (carry list, pinned extras or `null`, environment flag), recorded
+     BESIDE the outcome rather than read back out of it: a room given no environment records no
+     extras choice at all, so a request reconstructed from the outcome would lose the set the
+     caller pinned. **What is reused is the LIST and never the content** — the files are copied
+     from the working tree at build time, which is what keeps #243 answered — and an option
+     named beside `--rebuild` REPLACES its remembered counterpart, so the remembered list
+     cannot become a proxy for the "everything that differs from HEAD" mode that deliberately
+     does not exist.
+     **One rule decides what may be remembered, and it settles the two open cases opposite
+     ways:** a rebuild must never silently produce a room whose verdict is greener or less
+     isolated than the one it replaces. Extras the caller PINNED are reused (forgetting
+     `--extras dev` widens the room to the legs' union: 0 mypy errors where the pinned leg
+     reports 82, BDL-UX #236); a set the LEGS derived is derived again, for the reason the mode
+     above does not exist; `--no-environment` is recorded and NOT reused, because a remembered
+     decline hands back a room whose verdict the machine decides (BDL-UX #256) with no way to
+     ask for anything else short of deleting the room, while forgetting it costs 3.6 s.
+     A room recorded before the block existed falls back to its `carried` list, which IS the
+     carry request faithfully — the alternative is a rebuild that silently carries nothing.
+     7 acceptance scenarios were verified RED before the fix (all 7 failed, the 11 existing ones
+     passed), plus 4 unit tests and 3 CLI tests; two mutations — dropping the fallback, and
+     making an explicit `--carry` additive — were each caught by exactly one test.
+     **Measured with the command on its own bead:** first build 11 flags, rebuild 1 flag,
+     ten files re-carried byte-identical to the working tree in 2.33 s.
+     **Green in a clean room at `room-beadloom-uzck` over 14 carried files: 9 622 passed, 59
+     skipped, 1 xfailed, 0 failed**, `beadloom ci` rc 0 there with **zero** `::error`, `ruff`
+     rc 0 and `mypy` rc 0 in the room. On the tree, `mypy src/` rc 0 against all four declared
+     target versions — the version the checker is asked about, not the interpreter it runs
+     under. Darwin arm64 / CPython 3.13.7, extras
+     `all+dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**.
+     **As its own gate owner, separately:** the combined tree is green — `pytest` 9 669 passed /
+     0 failed, and `beadloom ci` rc 0 with zero `::error` and `sync-check PASS: 450 pair(s)
+     fresh` once the three doc pairs this bead made stale were repaired.
+     **One friction is left and is stated rather than fixed:** adding a file to a remembered
+     list still retypes the whole list, because an explicit `--carry` replaces it. An additive
+     default, or a second `--carry-also` spelling, would grow a set nobody named — the property
+     this bead exists to keep.
 
 
 ## What is in `main` now

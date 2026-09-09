@@ -20,11 +20,14 @@ from beadloom.application.waves import (
     REFUSAL_FILE_OUTSIDE,
     REFUSAL_NO_COMMIT,
     REFUSAL_NOT_A_FILE,
+    REQUEST_KEY,
     ROOM_MARKER,
+    RoomRequest,
     build_room,
     room_invocation,
     room_owner,
     room_path,
+    room_request,
 )
 
 if TYPE_CHECKING:
@@ -187,3 +190,97 @@ class TestAHalfBuiltRoomIsRemoved:
             build_room(bead_id=BEAD, project_root=root, parent=tmp_path / "rooms")
 
         assert not (tmp_path / "rooms" / f"room-{BEAD}").exists()
+
+
+class TestTheRequestARoomRecords:
+    """What a rebuild reads back, and what it does when the record cannot say.
+
+    The behaviour is stated in `clean_room_rebuild.feature`. Covered here is the
+    record itself: the shapes a marker can take that a scenario would only
+    restate, and the room built by a version that did not record a request.
+    """
+
+    def test_the_request_is_recorded_apart_from_what_the_build_did(
+        self, tmp_path: Path
+    ) -> None:
+        # A room given no environment records no extras CHOICE at all, so the
+        # pinned set survives only because the request is recorded separately.
+        root = _repo(tmp_path / "project")
+
+        build = build_room(
+            bead_id=BEAD,
+            project_root=root,
+            parent=tmp_path / "rooms",
+            carry=("src/thing.py",),
+            extras=("dev",),
+            environment=False,
+        )
+
+        record = json.loads((build.path / ROOM_MARKER).read_text(encoding="utf-8"))
+        assert record[REQUEST_KEY] == {
+            "carry": ["src/thing.py"],
+            "extras": ["dev"],
+            "environment": False,
+        }
+        assert record["environment"]["asked"] == []
+
+    def test_extras_nobody_named_are_recorded_as_named_by_nobody(
+        self, tmp_path: Path
+    ) -> None:
+        # `null` and `[]` are two requests: derive them, and install none. A
+        # rebuild reuses the second and re-derives the first, so recording one
+        # for the other would pin a set nobody named.
+        root = _repo(tmp_path / "project")
+
+        derived = build_room(
+            bead_id=BEAD, project_root=root, parent=tmp_path / "derived"
+        )
+        pinned = build_room(
+            bead_id=BEAD, project_root=root, parent=tmp_path / "pinned", extras=()
+        )
+
+        assert room_request(derived.path) is not None
+        assert room_request(derived.path).extras is None  # type: ignore[union-attr]
+        assert room_request(pinned.path).extras == ()  # type: ignore[union-attr]
+
+    def test_a_room_recorded_before_requests_were_rebuilds_from_its_carried_list(
+        self, tmp_path: Path
+    ) -> None:
+        """The alternative is a rebuild that silently carries nothing, which is
+        the failure the reuse exists to prevent arriving by another door."""
+        root = _repo(tmp_path / "project")
+        build = build_room(
+            bead_id=BEAD,
+            project_root=root,
+            parent=tmp_path / "rooms",
+            carry=("src/thing.py",),
+        )
+        record = json.loads((build.path / ROOM_MARKER).read_text(encoding="utf-8"))
+        del record[REQUEST_KEY]
+        (build.path / ROOM_MARKER).write_text(json.dumps(record), encoding="utf-8")
+        (root / "src" / "thing.py").write_text("VALUE = 9\n", encoding="utf-8")
+
+        again = build_room(
+            bead_id=BEAD, project_root=root, parent=tmp_path / "rooms", rebuild=True
+        )
+
+        assert again.built, again.detail
+        assert again.carried == ("src/thing.py",)
+        assert again.reused == ("carry",)
+        assert (again.path / "src" / "thing.py").read_text(encoding="utf-8") == "VALUE = 9\n"
+
+    def test_a_record_that_cannot_state_a_request_states_an_empty_one(
+        self, tmp_path: Path
+    ) -> None:
+        # A marker is a file on disk another tool may have written. A shape this
+        # reader cannot use must leave the room deletable and rebuildable, with
+        # a request the caller states, rather than raise out of the rebuild.
+        room = tmp_path / "room"
+        room.mkdir()
+        (room / ROOM_MARKER).write_text(
+            json.dumps({"bead": BEAD, REQUEST_KEY: {"carry": "src/thing.py"}}),
+            encoding="utf-8",
+        )
+
+        assert room_request(room) == RoomRequest(carry=(), extras=None, environment=True)
+        assert room_request(tmp_path / "absent") is None

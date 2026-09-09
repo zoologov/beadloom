@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 scenarios("../features/clean_room.feature")
+scenarios("../features/clean_room_rebuild.feature")
 
 
 @pytest.fixture()
@@ -199,3 +200,121 @@ def _the_invocation_sets_pythonpath(world: dict[str, Any]) -> None:
 @then("the invocation prints where beadloom was imported from")
 def _the_invocation_checks_the_import(world: dict[str, Any]) -> None:
     assert any("import beadloom" in line for line in world["last"].invocation)
+
+
+@given(parsers.parse('the working tree changes "{path}" again'))
+def _the_working_tree_changes_again(world: dict[str, Any], path: str) -> None:
+    """A second, distinct edit — the content a reused LIST must be re-read from."""
+    (world["root"] / path).write_text("VALUE = 3\n", encoding="utf-8")
+
+
+@given(parsers.parse('the working tree no longer holds "{path}"'))
+def _the_working_tree_no_longer_holds(world: dict[str, Any], path: str) -> None:
+    (world["root"] / path).unlink()
+
+
+@given(parsers.parse('bead "{bead}" has built its clean room carrying "{path}"'))
+def _a_room_already_built_carrying(world: dict[str, Any], bead: str, path: str) -> None:
+    build = build_room(
+        bead_id=bead,
+        project_root=world["root"],
+        parent=world["parent"],
+        carry=(path,),
+    )
+    assert build.built, build.detail
+    world["builds"][bead] = build
+
+
+@given(parsers.parse('bead "{bead}" has built its clean room with no environment'))
+def _a_room_already_built_without_an_environment(world: dict[str, Any], bead: str) -> None:
+    build = build_room(
+        bead_id=bead,
+        project_root=world["root"],
+        parent=world["parent"],
+        environment=False,
+    )
+    assert build.built, build.detail
+    world["builds"][bead] = build
+
+
+@given(
+    parsers.parse(
+        'bead "{bead}" has built its clean room with extras "{extras}" and no environment'
+    )
+)
+def _a_room_already_built_with_extras(world: dict[str, Any], bead: str, extras: str) -> None:
+    build = build_room(
+        bead_id=bead,
+        project_root=world["root"],
+        parent=world["parent"],
+        extras=tuple(extras.split(",")),
+        environment=False,
+    )
+    assert build.built, build.detail
+    world["builds"][bead] = build
+
+
+@when(parsers.parse('bead "{bead}" rebuilds its clean room naming no files'))
+def _rebuilds_naming_no_files(world: dict[str, Any], bead: str) -> None:
+    _rebuilds_its_room(world, bead)
+
+
+@when(parsers.parse('bead "{bead}" rebuilds its clean room carrying "{path}"'))
+def _rebuilds_carrying(world: dict[str, Any], bead: str, path: str) -> None:
+    world["last"] = build_room(
+        bead_id=bead,
+        project_root=world["root"],
+        parent=world["parent"],
+        carry=(path,),
+        rebuild=True,
+    )
+
+
+@when(
+    parsers.parse(
+        'bead "{bead}" rebuilds its clean room with no environment and naming no files'
+    )
+)
+def _rebuilds_without_an_environment(world: dict[str, Any], bead: str) -> None:
+    world["last"] = build_room(
+        bead_id=bead,
+        project_root=world["root"],
+        parent=world["parent"],
+        rebuild=True,
+        environment=False,
+    )
+
+
+@then(parsers.parse('the rebuild reused "{part}"'))
+def _the_rebuild_reused(world: dict[str, Any], part: str) -> None:
+    assert part in world["last"].reused, world["last"].reused
+
+
+@then("the rebuild reused nothing")
+def _the_rebuild_reused_nothing(world: dict[str, Any]) -> None:
+    assert world["last"].reused == ()
+
+
+@then(parsers.parse('the room carried only "{path}"'))
+def _the_room_carried_only(world: dict[str, Any], path: str) -> None:
+    assert world["last"].carried == (path,)
+
+
+@then(parsers.parse('the room records the extras request "{extras}"'))
+def _the_room_records_the_extras_request(world: dict[str, Any], extras: str) -> None:
+    assert _request_of(world["last"].path)["extras"] == extras.split(",")
+
+
+@then("the room records that an environment was asked for")
+def _the_room_records_an_environment_request(world: dict[str, Any]) -> None:
+    assert _request_of(world["last"].path)["environment"] is True
+
+
+def _request_of(room: Path) -> dict[str, Any]:
+    """The request half of the room's own record, read as a reader would."""
+    from beadloom.application.waves import ROOM_MARKER
+
+    record = json.loads((room / ROOM_MARKER).read_text(encoding="utf-8"))
+    asked = record["request"]
+    assert isinstance(asked, dict)
+    return asked

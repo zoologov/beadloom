@@ -414,6 +414,54 @@ that set holds the neighbour's work, which is #235 by a second route. A room
 under the project root is refused too — it would be untracked work in the tree
 it copies.
 
+#### A rebuild reproduces the request, not the room
+
+Naming every file is the correct path and it was retyped on every rebuild:
+measured by `beadloom-0mdo.37` while using the command on the bead that built it,
+16 `--carry` flags entered twice, once after each fix the room itself caught. The
+room is right and the retyping costs seconds. What earns the fix a place is that
+the alternative an agent reaches for under that friction is to copy files into
+the LIVE room, which is #243 again — a fix that makes the correct path more
+tedious than the wrong one has a countdown on it. `beadloom-0mdo.74` shortened
+it, because a room now builds its own interpreter and a rebuild pays that again.
+
+So a room's record carries a `request` block — the carry list, the extras the
+caller pinned or `null`, and whether an environment was asked for — and
+`rebuild=True` reads it out of the marker it is about to delete. Two properties
+keep that from reopening what it was built on:
+
+- **What is reused is the LIST, never the content.** The files are copied from
+  the working tree at build time, exactly as a typed list would be, so a rebuild
+  is still a room nothing inside postdates. Reusing the previous room's files
+  would BE #243.
+- **An option named beside `--rebuild` REPLACES its remembered counterpart** and
+  never adds to it, so the remembered list cannot grow into the mode that
+  deliberately does not exist. A remembered path the working tree no longer holds
+  refuses the rebuild by the same `file_missing` route a typed one would, and
+  refuses it while the room and its record are still there.
+
+The request is recorded beside the outcome rather than read back out of it,
+because the two come apart: a room given no environment records no extras choice
+at all, so a request reconstructed from the outcome would lose the set the caller
+pinned. A room recorded before the `request` block existed falls back to its
+`carried` list, which IS the carry request faithfully — the alternative is a
+rebuild that silently carries nothing, which is the failure this reuse exists to
+prevent arriving by another door.
+
+**One rule decides what may be remembered: a rebuild must never silently produce
+a room whose verdict is greener or less isolated than the one it replaces.** It
+settles both open cases and they point opposite ways. Extras the caller PINNED
+are reused, because forgetting `--extras dev` widens the room to the legs' union
+and on this code base at one commit that is 0 mypy errors where the pinned leg
+reports 82 (BDL-UX #236) — a greener room than the one asked for. A set the LEGS
+derived is re-derived instead, for the reason the "everything that differs" mode
+does not exist: pinning it carries a set nobody named. And `--no-environment` is
+recorded and NOT reused, because remembering a decline hands back a room whose
+verdict the machine decides (BDL-UX #256) with no way to ask for anything else
+short of deleting the room, while forgetting it costs a measured 3.6 s and 160 MB
+and gives the room its own interpreter. To leave a pinned set, name another one:
+`beadloom rooms --dimension extras` prints the sets the legs declare.
+
 `room_invocation` hands back how to measure in the room and how to check that you
 did. With an editable install, running the suite from inside the room under the
 project's environment imports the TREE's source; the first run that did it was
@@ -665,6 +713,11 @@ not tell them apart.
   path refuses and leaves it byte-for-byte as it was.
 - A rebuild deletes only a directory whose recorded owner is the bead it was
   asked for.
+- A rebuild reuses the request the room it replaces recorded and re-reads the
+  files from the working tree, so the reused list can never carry stale content.
+- An option named beside a rebuild replaces its remembered counterpart, and a
+  remembered path the tree no longer holds refuses the rebuild rather than
+  dropping out of it.
 - A room STATES the optional extras its invocation's interpreter has, and never
   reports "no extras" for "nothing looked".
 - A room HOLDS the interpreter its verdict is taken under, or says which one it
@@ -694,6 +747,8 @@ not tell them apart.
 | `room_path(parent, bead_id)` | that room's directory under a parent |
 | `build_room(*, bead_id, project_root, parent, carry, rebuild, extras, environment)` | build it from `HEAD` plus the named files, give it an interpreter, or refuse and say why |
 | `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
+| `room_request(path)` | what that room was asked for, or `None` when the directory is not a room |
+| `RoomBuild.reused` | the request parts this build took from the record of the room it replaced |
 | `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
 | `RoomBuild.extras` | the optional extras the room's interpreter has, or `None` when nothing could look |
 | `RoomBuild.environment` | the interpreter the room holds, or the reason it holds none |

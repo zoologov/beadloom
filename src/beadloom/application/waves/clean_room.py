@@ -31,6 +31,34 @@ deliberately no "copy everything that differs from ``HEAD``" mode: on a shared
 working tree that set contains the neighbour's work, which is #235 reached by a
 second route.
 
+**A rebuild reproduces the REQUEST, over the working tree's files.** Naming every
+file is correct and it is retyped on every rebuild: measured by
+``beadloom-0mdo.37`` while using this command on the bead that built it, 16
+``--carry`` flags entered twice, once after each fix the room itself caught. The
+room is right and the retyping costs seconds; what makes it worth removing is
+that the alternative an agent reaches for under that friction is to copy files
+into the live room, which is #243 again — a fix that makes the correct path more
+tedious than the wrong one has a countdown on it. And ``beadloom-0mdo.74`` made
+a rebuild cost more than it did when that was measured, because a room now builds
+its own interpreter. So the record carries the request that built it and
+``rebuild=True`` reuses it. **What is reused is the LIST and never the content**:
+the files are copied from the working tree at build time, which is the whole of
+#243, and a ``carry`` or ``extras`` named beside ``rebuild`` REPLACES its
+remembered counterpart rather than adding to it, so the command never grows a set
+nobody named.
+
+**One rule decides what a rebuild may remember: it must never silently produce a
+room whose verdict is greener or less isolated than the one it replaces.** That
+is why the extras a caller PINNED are reused — forgetting ``--extras dev`` would
+silently widen the room to the legs' union, and on this code base at one commit
+that is 0 mypy errors where the pinned leg reports 82 (BDL-UX #236). It is also
+why ``--no-environment`` is recorded and NOT reused: remembering a decline would
+hand back a room whose verdict is the machine's, which is BDL-UX #256, and leave
+no way to ask for an environment short of deleting the room. Forgetting it costs
+a measured 3.6 s and 160 MB and takes the safe direction. A set the LEGS derived
+is re-derived rather than remembered, for the same reason the mode above does not
+exist: pinning it would carry a set nobody named into every later room.
+
 **What a room cannot tell you.** It carries no ``.git``, so a doc-freshness check
 inside it has no baseline; and it isolates the swept SOURCE, not the environment.
 A room's verdict is a claim about the files in it and never about the combined
@@ -61,6 +89,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from beadloom.application.rooms import ExtraSet, installed_extras
 from beadloom.application.waves.media import room_for
@@ -76,6 +105,12 @@ from beadloom.application.waves.room_env import (
 #: is a directory, whatever it is called — which is the whole of #235 in a
 #: sentence, and the only thing a rebuild is allowed to delete on.
 ROOM_MARKER = ".beadloom-room.json"
+
+#: The half of a room's record that says what it was ASKED for, kept apart from
+#: what the build did. ``carried`` is an outcome and ``request.carry`` is a
+#: request; they agree today, and only the second is a thing a rebuild may
+#: reproduce without inventing an intention nobody stated.
+REQUEST_KEY = "request"
 
 #: Refusal reasons. Names rather than sentences, so the CLI, ``--json`` and the
 #: tests all report the same fact and a caller can branch on it.
@@ -121,6 +156,33 @@ class RoomBuild:
     #: ``None`` on a built room: a room that could not build one says so, and a
     #: reader who is not told falls back to the project's without knowing.
     environment: RoomEnvironment | None = None
+    #: The parts of the request this build took from the record of the room it
+    #: replaced, ``carry`` and ``extras``. Reported rather than inferred: a
+    #: caller who did not type a list has to be able to see that one was used,
+    #: or the room's contents become a fact with no stated source.
+    reused: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RoomRequest:
+    """What a room was asked for, in the caller's own terms.
+
+    ``extras`` is ``None`` when the caller named none and left the derivation to
+    the project's legs. That is not an empty tuple, which asks for an environment
+    with no extras at all — the same distinction ``--extras ""`` carries at the
+    command line, and collapsing it would make a rebuild pin a set nobody named.
+    """
+
+    carry: tuple[str, ...] = ()
+    extras: tuple[str, ...] | None = None
+    environment: bool = True
+
+
+#: The request parts a rebuild may take from the room it replaces. Named here
+#: because the report prints them and the tests assert on them, and three
+#: spellings of one vocabulary is how a report and a check stop agreeing.
+REUSABLE_CARRY = "carry"
+REUSABLE_EXTRAS = "extras"
 
 
 def room_path(parent: Path, bead_id: str) -> Path:
@@ -135,15 +197,56 @@ def room_owner(path: Path) -> str | None:
     JSON that is not an object, an object naming no bead. They are one answer
     because they license one action: leave the directory alone.
     """
+    record = _record(path)
+    if record is None:
+        return None
+    owner = record.get("bead")
+    return owner if isinstance(owner, str) and owner else None
+
+
+def room_request(path: Path) -> RoomRequest | None:
+    """The request the room at *path* recorded, or ``None`` if it recorded none.
+
+    A room built before the request was recorded still names the files it
+    carried, and that list IS the carry request: the build copies exactly what
+    the caller named and nothing else. Reading it keeps such a room rebuildable,
+    where the alternative is a rebuild that silently carries nothing — the one
+    failure this whole reuse exists to prevent, arriving by another door.
+    """
+    record = _record(path)
+    if record is None:
+        return None
+    asked = record.get(REQUEST_KEY)
+    if not isinstance(asked, dict):
+        return RoomRequest(carry=_names(record.get("carried")))
+    extras = asked.get(REUSABLE_EXTRAS)
+    return RoomRequest(
+        carry=_names(asked.get(REUSABLE_CARRY)),
+        extras=None if extras is None else _names(extras),
+        environment=asked.get("environment", True) is not False,
+    )
+
+
+def _record(path: Path) -> dict[str, Any] | None:
+    """A room's own marker as data, or ``None`` for every way of not being one."""
     marker = Path(path) / ROOM_MARKER
     try:
         record = json.loads(marker.read_text(encoding=_TEXT_CODEC))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not isinstance(record, dict):
-        return None
-    owner = record.get("bead")
-    return owner if isinstance(owner, str) and owner else None
+    return record if isinstance(record, dict) else None
+
+
+def _names(value: object) -> tuple[str, ...]:
+    """The non-empty strings in a recorded list, and nothing else.
+
+    A record is a file on disk that another tool may have written, so a value
+    that is not a list of names yields no names rather than an exception: the
+    room is still deletable and rebuildable, with a request the caller states.
+    """
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item)
 
 
 def room_invocation(path: Path, *, project_root: Path | None = None) -> tuple[str, ...]:
@@ -227,7 +330,17 @@ def build_room(
     root = Path(project_root).resolve()
     path = room_path(parent, bead_id).resolve()
 
-    refusal = _refuse_before_building(bead_id, root, path, carry, rebuild=rebuild)
+    refusal = _refuse_the_room(bead_id, root, path, rebuild=rebuild)
+    if refusal is not None:
+        return refusal
+
+    # The room's own record is read before anything deletes it, and the carried
+    # paths are checked over the request that results — a remembered file the
+    # tree no longer holds refuses the rebuild by the same route an explicit one
+    # would, and refuses it while the room, and its record, are still there.
+    asked = RoomRequest(carry=tuple(carry), extras=extras, environment=environment)
+    request, reused = _remembering(path, asked, rebuild=rebuild)
+    refusal = _refuse_the_request(bead_id, root, path, request.carry)
     if refusal is not None:
         return refusal
 
@@ -247,10 +360,10 @@ def build_room(
 
     try:
         _archive_head(root, path)
-        carried = _carry(root, path, carry)
-        built_environment = _environment(root, path, extras, environment)
+        carried = _carry(root, path, request.carry)
+        built_environment = _environment(root, path, request)
         held = installed_extras(root, search_path=site_packages(path))
-        _write_marker(bead_id, root, path, commit, carried, held, built_environment)
+        _write_marker(bead_id, root, path, commit, request, held, built_environment)
     except (OSError, subprocess.SubprocessError, tarfile.TarError):
         # A half-built room is worse than none: it is a directory the next
         # attempt would refuse, for a reason that has nothing to do with a
@@ -263,23 +376,56 @@ def build_room(
         path=path,
         built=True,
         detail=(
-            f"built from {commit[:8]} with {len(carried)} carried file(s); "
-            f"no .git, so a freshness check inside it has no baseline"
+            f"built from {commit[:8]} with {len(carried)} carried file(s)"
+            + (f", reusing the replaced room's {' and '.join(reused)}" if reused else "")
+            + "; no .git, so a freshness check inside it has no baseline"
         ),
         commit=commit,
         carried=carried,
         invocation=room_invocation(path, project_root=root),
         extras=held.label if held.resolved else None,
         environment=built_environment,
+        reused=reused,
     )
 
 
-def _environment(
-    root: Path, path: Path, extras: tuple[str, ...] | None, wanted: bool
-) -> RoomEnvironment:
+def _remembering(
+    path: Path, asked: RoomRequest, *, rebuild: bool
+) -> tuple[RoomRequest, tuple[str, ...]]:
+    """The request this build runs on, and which parts of it the room remembered.
+
+    Only a rebuild remembers, and only what the caller left unsaid: a ``carry``
+    or an ``extras`` given beside ``rebuild`` REPLACES its remembered
+    counterpart rather than adding to it. The environment decision is recorded
+    and never reused, because the two mistakes are not symmetric — forgetting a
+    decline costs a measured 3.6 s and gives the room its own interpreter, while
+    remembering one hands back a verdict the machine decides (BDL-UX #256) with
+    no way to ask for anything else short of deleting the room.
+    """
+    if not rebuild:
+        return asked, ()
+    remembered = room_request(path)
+    if remembered is None:
+        return asked, ()
+    reused: list[str] = []
+    carry = asked.carry
+    if not carry and remembered.carry:
+        carry = remembered.carry
+        reused.append(REUSABLE_CARRY)
+    extras = asked.extras
+    if extras is None and remembered.extras is not None:
+        extras = remembered.extras
+        reused.append(REUSABLE_EXTRAS)
+    return (
+        RoomRequest(carry=carry, extras=extras, environment=asked.environment),
+        tuple(reused),
+    )
+
+
+def _environment(root: Path, path: Path, request: RoomRequest) -> RoomEnvironment:
     """Give the room its own interpreter, or say which one it borrows instead."""
     otherwise = _interpreter(root)
-    if not wanted:
+    if not request.environment:
         return RoomEnvironment(
             detail=(
                 "no environment was built: the caller declined one. This room's "
@@ -290,20 +436,18 @@ def _environment(
         )
     return build_environment(
         room=path,
-        choice=extras_a_room_installs(root, extras),
+        choice=extras_a_room_installs(root, request.extras),
         otherwise=otherwise,
     )
 
 
-def _refuse_before_building(
-    bead_id: str,
-    root: Path,
-    path: Path,
-    carry: tuple[str, ...],
-    *,
-    rebuild: bool,
-) -> RoomBuild | None:
-    """The checks that must pass before anything is created or deleted."""
+def _refuse_the_room(bead_id: str, root: Path, path: Path, *, rebuild: bool) -> RoomBuild | None:
+    """The checks about the DIRECTORY, which decide whether it may be read at all.
+
+    They run before the request is assembled, because a rebuild's request may
+    come out of the record of the room at this path, and a directory this
+    command may not delete is one whose record it may not act on either.
+    """
     if path == root or path.is_relative_to(root):
         return _refused(
             bead_id,
@@ -312,12 +456,24 @@ def _refuse_before_building(
             f"{path} is inside {root}: a room built in the tree it copies becomes "
             "untracked work in that tree, which every other agent then sees",
         )
-    for named in carry:
-        carry_refusal = _refuse_carried(bead_id, root, path, named)
-        if carry_refusal is not None:
-            return carry_refusal
     if path.exists():
         return _occupied(bead_id, path, rebuild=rebuild)
+    return None
+
+
+def _refuse_the_request(
+    bead_id: str, root: Path, path: Path, carry: tuple[str, ...]
+) -> RoomBuild | None:
+    """The checks about the FILES asked for, whoever named them.
+
+    A remembered path is checked exactly like a typed one: a file the working
+    tree no longer holds refuses the rebuild rather than quietly dropping out of
+    it, so a reused list can never shrink without the caller being told.
+    """
+    for named in carry:
+        refusal = _refuse_carried(bead_id, root, path, named)
+        if refusal is not None:
+            return refusal
     return None
 
 
@@ -460,7 +616,7 @@ def _write_marker(
     root: Path,
     path: Path,
     commit: str,
-    carried: tuple[str, ...],
+    request: RoomRequest,
     extras: ExtraSet,
     environment: RoomEnvironment,
 ) -> None:
@@ -479,6 +635,12 @@ def _write_marker(
     can differ, and that is the point: what was typed is a request and what the
     interpreter holds is the answer, which is the distinction BDL-UX #236 was
     filed about.
+
+    ``request`` is the third thing and is none of those: it is what the CALLER
+    named, which a rebuild reproduces. It is recorded beside the outcome rather
+    than read back out of it because the two come apart — a room given no
+    environment records no extras choice at all, so a request reconstructed from
+    the outcome would lose the one the caller pinned.
     """
     from beadloom import __version__
 
@@ -488,7 +650,12 @@ def _write_marker(
         "project": str(root),
         "commit": commit,
         "built_at": datetime.now(timezone.utc).isoformat(),
-        "carried": list(carried),
+        "carried": list(request.carry),
+        REQUEST_KEY: {
+            REUSABLE_CARRY: list(request.carry),
+            REUSABLE_EXTRAS: None if request.extras is None else list(request.extras),
+            "environment": request.environment,
+        },
         "interpreter": {
             # The room's own when it has one, which is what `room_invocation`
             # prints. Recording the project's here while printing the room's

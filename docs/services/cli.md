@@ -1538,6 +1538,22 @@ that differs from `HEAD`" mode — on a shared working tree that set holds your 
 work, which is #235 reached by a second route. A room under the project root is refused
 too: it would become untracked work in the tree it copies.
 
+**`--rebuild` does not make you retype that list.** It reads the request out of the
+`.beadloom-room.json` it is about to delete: the carried files, and the extras you pinned.
+Measured on the bead that built this command, 16 `--carry` flags were entered twice, once
+after each fix the room itself caught — and the alternative an agent reaches for under that
+friction is to copy files into the live room, which is #243 again. What is reused is the
+LIST and never the content: the files are copied from the working tree at build time, so a
+rebuild is still a room nothing inside postdates. A `--carry` or `--extras` given beside
+`--rebuild` REPLACES its remembered counterpart rather than adding to it, so the remembered
+list cannot grow into the mode that deliberately does not exist, and a remembered path the
+tree no longer holds refuses the rebuild with `file_missing` while the room is still there.
+`--no-environment` is recorded and NOT reused: remembering a decline would hand back a room
+whose verdict the machine decides (BDL-UX #256) with no way to ask for one short of
+deleting the room, while forgetting it costs 3.6 s and gives the room its own interpreter.
+`reused[]` in `--json`, and one line in the human shape, name what was taken from the
+replaced room.
+
 ```
 $ beadloom clean-room proj-1 --at /tmp/rooms --carry src/billing.py
 room-proj-1 built at /tmp/rooms/room-proj-1
@@ -1591,7 +1607,10 @@ union installs in 1.07 s for 169 MB against 1.78 s and 160 MB for `.[all,dev]`. 
 spelling `--all-extras` is expanded from `[project.optional-dependencies]`.
 
 `--extras dev,tui` names them instead, to reproduce one particular leg; `--extras ""` asks
-for an environment with no extras, which is a different request from naming none.
+for an environment with no extras, which is a different request from naming none. A set you
+pinned survives a `--rebuild` and a set the legs derived is derived again — pinning that one
+would carry a set nobody named into every later room. To leave a pinned set, name another:
+[`beadloom rooms --dimension extras`](#beadloom-rooms) prints the sets the legs declare.
 `--no-environment` builds the files and no interpreter, and is the only way to get that
 without a finding.
 
@@ -1614,14 +1633,20 @@ Refusals are named rather than described, so a caller can branch on them: `alrea
 `file_outside_the_project` and `unknown_bead`.
 
 `--json` carries the same facts: `bead`, `room`, `built`, `refusal`, `detail`, `commit`,
-`carried[]`, `invocation[]`, `extras`, `environment`, `claim`, `findings[]` and `exit_code`.
+`carried[]`, `reused[]`, `invocation[]`, `extras`, `environment`, `claim`, `findings[]` and
+`exit_code`. `reused[]` names the request parts a rebuild took from the room it replaced,
+`carry` and `extras`, and is empty on every build that was not one.
 `environment` carries `built`, `source` (`legs`, `caller` or `underived`), `asked[]`,
 `installer`, `seconds`, `python` and `detail`.
 
 The room's `.beadloom-room.json` records the bead, the room's name, the project, the
-commit, the build time, the carried files, two interpreters, the extras, the environment and
-the Beadloom
-version. The two interpreters are not the same one: the invocation names the environment the
+commit, the build time, the carried files, the REQUEST that built it, two interpreters, the
+extras, the environment and the Beadloom
+version. `request` carries `carry[]`, `extras` (a list, or `null` when the derivation was
+left to the legs) and `environment`, and it is what a `--rebuild` reads. It is recorded
+beside the outcome rather than read back out of it because the two come apart: a room given
+no environment records no extras choice at all, so a request reconstructed from the outcome
+would lose the set you pinned. The two interpreters are not the same one: the invocation names the environment the
 SUITE runs under — the room's own when it has one — while `built_by` is the
 process that made the room, which under a `uv` tool install is a different interpreter with
 neither `pytest` nor the project's development dependencies. `interpreter.extras` carries

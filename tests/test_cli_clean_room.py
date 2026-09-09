@@ -420,3 +420,64 @@ class TestTheEnvironmentTheRoomIsGiven:
         assert payload["environment"]["built"] is False
         assert payload["environment"]["detail"] in human.output
         assert payload["exit_code"] == human.exit_code
+
+
+class TestTheListARebuildDoesNotAskFor:
+    """`--rebuild` re-copies the files the room recorded, and says it did.
+
+    Measured by `beadloom-0mdo.37` while using the command on its own bead: 16
+    `--carry` flags entered twice. The retyping costs seconds; what it buys is
+    the wrong path being the cheaper one, which is BDL-UX #243 waiting to happen
+    again. The property under test is that the LIST is reused and the CONTENT is
+    not — a room whose files came from the previous room is #243 itself.
+    """
+
+    def test_a_rebuild_re_copies_the_recorded_files_from_the_working_tree(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "src" / "thing.py").write_text("VALUE = 2\n", encoding="utf-8")
+        assert _run(root, tmp_path / "rooms", "--carry", "src/thing.py").exit_code == 0
+        (root / "src" / "thing.py").write_text("VALUE = 3\n", encoding="utf-8")
+
+        result = _run(root, tmp_path / "rooms", "--rebuild")
+
+        assert result.exit_code == 0, result.output
+        room = tmp_path / "rooms" / room_for(BEAD)
+        assert (room / "src" / "thing.py").read_text(encoding="utf-8") == "VALUE = 3\n"
+        assert "src/thing.py" in result.output
+        assert "carry" in result.output
+
+    def test_both_shapes_name_what_was_taken_from_the_replaced_room(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        # A caller who did not type a list has to be able to see that one was
+        # used, or the room's contents are a fact with no stated source.
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        assert _run(root, tmp_path / "rooms", "--carry", "src/thing.py").exit_code == 0
+
+        human = _run(root, tmp_path / "rooms", "--rebuild")
+        structured = _run(root, tmp_path / "rooms", "--rebuild", "--json")
+
+        assert human.exit_code == 0, human.output
+        assert structured.exit_code == 0, structured.output
+        data = json.loads(structured.stdout)
+        assert data["reused"] == ["carry"]
+        assert data["carried"] == ["src/thing.py"]
+        assert "taken from the record of the room this replaced" in human.output
+
+    def test_a_carry_named_beside_a_rebuild_replaces_the_recorded_one(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "other.txt").write_text("mine too\n", encoding="utf-8")
+        assert _run(root, tmp_path / "rooms", "--carry", "src/thing.py").exit_code == 0
+
+        result = _run(root, tmp_path / "rooms", "--rebuild", "--carry", "other.txt", "--json")
+
+        data = json.loads(result.stdout)
+        assert data["carried"] == ["other.txt"]
+        assert data["reused"] == []

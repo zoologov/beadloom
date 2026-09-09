@@ -282,7 +282,8 @@ the plan whose ids most need checking. Dogfooding found a live one on this repos
 `beadloom waves` prints the room each bead owes; `beadloom clean-room` creates it.
 
 ```bash
-beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--rebuild] [--project DIR] [--json]
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--extras LIST] [--no-environment]
+                    [--rebuild] [--project DIR] [--json]
 ```
 
 Naming the room was not enough, twice. Two agents of one wave reached one directory because
@@ -297,6 +298,17 @@ one. An existing directory is refused and left byte-for-byte as it was; `--rebui
 room rather than refreshing it, and deletes only a directory whose `.beadloom-room.json` names
 that same bead. `--carry` copies the files you name and nothing else — there is no "everything
 that differs from `HEAD`" mode, because on a shared tree that set holds your neighbour's work.
+
+You name that list once. `--rebuild` reads the request out of the record it is about to
+delete — the carried files, and the extras you pinned with `--extras` — because retyping it
+was measured at 16 flags twice on one bead, and what an agent reaches for under that friction
+is copying files into the live room, which is #243 again. What is reused is the LIST: the
+files are copied from the working tree at build time, so a rebuild is still a room nothing
+inside postdates, and an option given beside `--rebuild` replaces its remembered counterpart
+rather than adding to it. The room also builds its own interpreter, so a verdict here is not
+decided by what the machine happened to hold; `--no-environment` declines that and is the one
+part of the request a rebuild does NOT remember, because a remembered decline would quietly
+hand back the weaker room.
 
 Exit `0` = built, and the tracker says the bead is `in_progress`. Exit `1` = built, and its
 ownership is unconfirmed. Exit `2` = no room was built, under a named refusal

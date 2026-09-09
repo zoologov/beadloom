@@ -130,7 +130,13 @@ nothing could be compared against (BDL-UX #232).
 `clean_room.py` builds the room `waves.py` names. It is the same spelling — the path comes
 from `room_for`, so the room a plan prints and the room a command creates cannot diverge — and
 it adds the two properties a printed name cannot carry: the directory is created rather than
-entered, and `--rebuild` replaces a room rather than refreshing one. The bead is looked up
+entered, and `--rebuild` replaces a room rather than refreshing one. A rebuild reads the
+request out of the record it is about to delete — the carried files and the extras the caller
+pinned — because retyping that list was measured at 16 `--carry` flags twice on one bead, and
+what an agent reaches for under that friction is copying files into the live room, which is
+#243 again. What is reused is the LIST: the files are copied from the working tree at build
+time, and an option named beside `--rebuild` replaces its remembered counterpart. `reused[]`
+in `--json`, and one line in the human shape, name what was taken from the replaced room. The bead is looked up
 through the `bd` seam at this edge, which is what makes the three exit codes distinguishable:
 `0` the room was built, it holds its own interpreter, and the tracker says the bead is
 `in_progress`; `1` it was built and something about the measurement it supports
