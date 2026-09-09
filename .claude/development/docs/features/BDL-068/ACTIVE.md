@@ -1315,7 +1315,7 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      beadloom-0mdo.69, beadloom-0mdo.78, beadloom-ec1a, beadloom-txeq)`, with 31 unowned over
      31 nodes, 165 unattributed, and 2 of the 4 claims unreadable.
 
-  - [ ] `beadloom-ec1a` — **config-check flags ORPHANED tool adapters.** The bead carried a
+  - [x] `beadloom-ec1a` — **config-check flags ORPHANED tool adapters.** The bead carried a
      title and no description, so the premise was measured before anything was built, and it
      REPRODUCES. Rig: scaffold `--tool claude --tool cursor`, then drop `cursor` from
      `flow.yml`. `config-check` exits 0, the `On disk:` line falls from 10 role files to 5, and
@@ -1338,6 +1338,32 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      Beadloom never recorded writing belongs to somebody else, and a role a later release
      retires is still reported. Stated limit: a project whose manifest was deleted has no
      provenance and is under-reported, deliberately.
+     **25 tests, red first and confirmed by mutation.** The scenario preceded the unit test and
+     both were red on `ImportError`, which is a weak red, so three mutants were run against the
+     finished code and all three died: the derivation returning `()` killed 13, inverting the
+     declared-tool filter killed 10, and dropping the directory gate — which would claim
+     `.cursor/rules/beadloom-flow.md` — killed 10. Landed at `c35c574` over nine files staged by
+     path, under `bd merge-slot acquire --holder beadloom-ec1a`.
+     **Green in a clean room at `room-beadloom-ec1a` over 6 carried files: 9 716 passed, 59
+     skipped, 14 xfailed, 0 failed**, `beadloom ci` rc 0 there with zero `::error`. Darwin arm64
+     / CPython 3.13.7, extras `dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared
+     rooms**. The room's freshness step entered **0 of 450 pairs** — `0 pair(s) fresh, 450 NOT
+     VERIFIED (no baseline — index rebuilt)`, which is `beadloom-uzck`'s caveat and the reason
+     the room's green is not a freshness claim. The tree caught what the room could not: four
+     real stale pairs from this bead's own change, repaired here rather than left for the
+     tech-writer.
+     **AS THIS WAVE'S COMBINED-TREE GATE OWNER, separately, after all three beads of the wave
+     had landed and closed:** the tree is green. `beadloom ci` rc 0 with **zero** `::error` and
+     `sync-check PASS: 453 pair(s) fresh` — against the room's 0 of 450, the same command in two
+     rooms. The three verifications the Gate names as not run were run: `pytest
+     --cov=beadloom --cov-fail-under=80` rc 0, **9 805 passed, 12 skipped, 14 xfailed, 0
+     failed**, 94 % total with `role_adapters.py` at 100 % and `config_sync.py` at 94 %; `ruff
+     check src/ tests/` rc 0; `mypy src/` clean on all four declared target versions, 3.10
+     through 3.13, over 286 files. That loop varies the version the checker is ASKED about and
+     not the interpreter it RUNS under, so a per-interpreter difference in what is installed is
+     still measured only in CI. An earlier tree run, taken while `.78` and `.83` were still
+     mid-flight, was red on five tests — all five in their files, none in mine, and all five
+     green in this bead's clean room, which is what the room is for.
 
 
 ## What is in `main` now
