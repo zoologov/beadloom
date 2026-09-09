@@ -194,7 +194,7 @@ Reads the acceptance suite and the documents that reference it; evaluates nothin
 - `parse_feature(text: str, *, path: str) -> tuple[tuple[Scenario, ...], str | None]` -- Parse one `.feature` file. A non-`None` reason means the file's scenarios are UNKNOWN, and the empty tuple beside it is "nothing could be read" rather than "nothing is there".
 - `load_suite(project_root: Path, glob: str) -> ScenarioSuite` -- The suite behind a glob, keeping `files`, `scenarios`, `empty_files` and `unreadable` apart because each needs a different remedy.
 - `parse_scenario_references(text: str, *, path: str) -> tuple[ScenarioReference, ...]` -- The scenario names a TO-BE document claims exist: a line that BEGINS with a scenario keyword after markdown stripping, outside fenced blocks.
-- `load_references(project_root: Path, globs: Sequence[str]) -> tuple[tuple[ScenarioReference, ...], tuple[str, ...]]` -- References plus the globs that matched no document, so a reference check whose documents moved cannot read like one that found no problem.
+- `load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet` -- The four outcomes of a reference glob, each named rather than inferred: the references, the globs that matched no document, the documents that matched and could not be decoded, and the documents that matched and were read. A reference check whose documents moved cannot read like one that found no problem, and a document dropped between the glob and the parse cannot read like a document that states no scenario.
 - `DEFAULT_FEATURE_GLOB` (`tests/acceptance/features/**/*.feature`), `DEFAULT_STEPS_DIRNAME`, `BEAD_TAG_PREFIX` (`@bead:`), `NODE_TAG_PREFIX` (`@node:`).
 
 ### Module `src/beadloom/graph/import_resolver.py`

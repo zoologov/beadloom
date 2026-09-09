@@ -1294,6 +1294,63 @@ The fix is filed; this name is the free mitigation and later slices keep it.
      which is exactly the reading the room exists to separate. `.beadloom/_graph/services.yml`
      was NOT touched by this bead.
 
+   - [x] `.79` — BDL-UX **#264**, a population literal is a derivable fact with two homes. S6,
+     concurrent with `.80` and `beadloom-vyjp`; **not the gate owner** — `beadloom-0mdo.80` is,
+     per `beadloom waves`.
+     **MEASURED BEFORE AND AFTER, over the whole suite and not over what the log names.**
+     Planting one feature directory holding a BRIEF that states a scenario and an ACTIVE, plus
+     one node SPEC, reddened **2 cases holding 4 literals** at `9d0c02a` — `to_be == 203`,
+     `as_is == 116`, `working_documents == 58` and `len(found.references) == 50` — and reddens
+     **0** after. `mr2l.72` recorded three because the BRIEF it added stated no scenario; the
+     fourth only moves when the added document names one. A static scan agrees: 14 numeric
+     literals remain in repository-reading test functions and none of them is a document or
+     node population — 7 are exit codes, 1 is the graph schema version and 4 are counts of a
+     DECLARATION (`site_files == 8`, the 2 `ai_agents` boundary rules, 1 landing-lock
+     invocation, 1 top-level description) that no node-adding bead moves.
+     **THE ANSWER SPLIT BY WHAT EACH CLAIM IS ABOUT, which is `0mdo.47`'s shape re-used.** The
+     three doc-space counts became three relations, each in the class whose subject it is: the
+     populations partition what the declared roots found (sum, already there), no two spaces
+     hold the same document, and no declared space is empty. The kind-precedence class asked
+     the precedence question directly instead of counting its consequence — no kind is declared
+     by two spaces, and `space_of_kind` returns the space that declares it — which can still go
+     red, on a future configuration of this repository that declares a kind twice.
+     **THE FOURTH LITERAL NEEDED A PRODUCTION CHANGE, and a measurement is what said so.** The
+     first replacement asserted the loader's references against a per-document parse and was
+     **verified NOT red** against a loader that skips its first matched document, because that
+     document is one of the 53 shipped PRDs and BRIEFs of 56 that state no scenario. An
+     assertion that cannot fail is worse than the literal it replaced, so `ReferenceSet` gained
+     `documents` — the third outcome of a glob, which the set reported by silence. It is a
+     `scenario-binding` field and `scenario-coverage` does not read it; wiring it into the
+     rule's reporting is `rule-engine`'s surface and outside these axes.
+     **EVERY NEW ASSERTION VERIFIED RED BY BREAKING THE RELATION IT NAMES, never by moving a
+     count.** Nine mutants: two buckets sharing a path, `classify` dropping its last document,
+     the WORKING kind list withdrawn, `README` declared by TO-BE as well as AS-IS, the loader
+     skipping its first match, the loader dropping the document that carries 33 references,
+     `documents` reporting what was matched rather than what was read, the parser reading
+     nothing, and a shipped PRD written as cp1251. Each named the intended case and the
+     controls came back green.
+     **WHICH HALF IS DERIVED, argued in the module rather than left to the next reader.**
+     Deriving the check's INPUT from the corpus is legitimate; deriving its OUTPUT is the
+     tautology `0mdo.47` rejected. The reference cases derive which documents ship and make no
+     claim about parsing — the per-document expectation calls the same parser — so a parser bug
+     is invisible there by construction and belongs to that file's synthetic cases. A floor
+     case guards the failure mode that leaves: two empty sets agreeing.
+     **Green in a clean room at `room-beadloom-0mdo.79` over 3 carried files: 9 535 passed, 60
+     skipped, 1 xfailed, 0 failed.** `ruff check src/ tests/` rc 0 and `mypy src/` rc 0 against
+     all four declared target versions, varying the version the checker is asked about and not
+     the interpreter it runs under. Darwin arm64 / CPython 3.13.7, extras
+     `all+dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**.
+     **Not a claim about the combined tree** — `beadloom-0mdo.80` owns that measurement, and
+     the tree carried `.80`'s in-flight graph split and `beadloom-vyjp`'s role cores throughout.
+     **`beadloom ci` rc 1 in the room on one error that is not this bead's** —
+     `active-table/DOC.md:227 doc-fact-stale '2.49.0' vs '3.0.2'`, a file this room did not
+     carry. BDL-UX #266 / `beadloom-0mdo.81`: `version_subjects.py:140` derives the subject
+     `git` from `.git` existing and a `git archive` room has none. Attributed, not chased.
+     **A finding filed rather than fixed:**
+     `test_bead15_s3b_coverage.py::test_all_nine_site_modules_exist_on_disk` asserts
+     `len(site_files) == 8`. The name and the literal disagree, and `site-generation` is outside
+     these axes.
+
 ## What is in `main` now
 
 Four commands, each of one shape — derive the answer, name the reason, name what was not
