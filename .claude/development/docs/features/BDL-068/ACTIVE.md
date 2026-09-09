@@ -48,6 +48,11 @@ different folder. That pairing is `doc-sync` plus `graph` machinery and this bea
 neither half ships, and the three decisions are recorded in `CONTEXT.md`'s table, which
 `doc-quality` already judges for a reason that explains why.
 
+Closed as `db3e8c7`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
+`bd ready --limit 0` lists neither — the second time this slice has recorded that shape, which
+is the flow's documented one: the suggestion names beads the closed one blocked without
+re-checking their other blockers.
+
 **Previous bead:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
 subject. S6, alone, and its own combined-tree gate owner. Every clean-room Gate run on this
 repository had been rc 1 since `.63` landed, on one line of one document, and four beads
