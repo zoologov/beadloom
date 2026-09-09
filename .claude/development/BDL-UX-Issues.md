@@ -51,6 +51,25 @@
 
     **Related:** #190 (its foreign-subject face is absorbed here; its example-token face is not), #205 (the past tense, open).
 
+265. [2026-09-09] [MEDIUM] the graph is one file, so one writer per file is available here and is not taken
+
+    **Severity:** medium (it removes a shared write rather than reporting it, and it changes every adopter's `.beadloom/_graph/` layout)
+    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
+    **Issue:** `.beadloom/_graph/services.yml` holds every one of this project's 100 nodes, so every bead that adds, renames or moves one writes the same file. `beadloom-kqsv` shipped the `graph-files` medium, which STATES the sharing and checks the one half a plan can observe — whether the node population the graph files declare is the one the index resolved its scopes from. It does not remove the sharing, and it cannot: the node a bead is about to add is in no graph the plan could read.
+    **The primitive that would remove it** is the one `beadloom-0mdo.66` already took at the boundary for issue numbers — one writer per file, `O_CREAT|O_EXCL`, one claim file per number. Applied here it is one graph file per node. `onboarding/graph_files.each_graph_file` already globs `*.yml`, so the loader needs no change, and the serialisation BDL-UX #261 sketched — a bead's scope reaching the graph file its declared nodes are defined in — becomes both meaningful and non-noisy on the same act. Measured today it fires on every pair of every wave and collapses each to a wave of one, which is BDL-UX #245's failure mode.
+    **The cost, stated rather than waved off:** 100 files where there is one, a `services.yml` whose comments group nodes by layer and would have to go somewhere, and every reader of that directory re-measured for 100 opens instead of one. Weigh it against the write rate: 8 of the 55 commits on `features/BDL-068` touch `services.yml`.
+    **Related:** #261 (the medium this leaves in place), #260 (one writer per file, stated as the general property), the ledger directory `beadloom-0mdo.66` shipped.
+
+264. [2026-09-09] [MEDIUM] a population literal is a derivable fact with two homes, and every node-adding bead pays three hand edits for it
+
+    **Severity:** medium (it reddens CI for a bead that did not cause it, and the bead that did cause it correctly refuses to fix it)
+    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
+    **Issue:** `tests/test_bead77_kind_and_root_disagree.py` asserts `populations[SPACE_TO_BE] == 203`, `populations[SPACE_AS_IS] == 116` and `len(spaces.working_documents(REPO_ROOT)) == 58`, and `tests/test_reference_leg_syntax.py` asserts a reference count. Every one is a hand-maintained copy of a fact this project can derive, so any bead that adds a node or a planning document has to find and bump it.
+    **Measured:** `beadloom-mr2l.72`'s comment records the third instance — adding one bug feature's BRIEF and ACTIVE reddened CI on three literals at once, none owned by the bead that caused them, the dev subagent correctly refused to edit outside its bead and the coordinator bumped them by hand. `beadloom-0mdo.59` and `beadloom-0mdo.63` then hit it again in one S6 wave: both added a graph node, both had to raise the same count, and `beadloom waves` reported `0 serialisations` for the pair. 7 of the 55 commits on `features/BDL-068` touch that one test file.
+    **Expected:** the assertion states the RELATION the test is about — that the TO-BE and AS-IS populations partition the documents the spaces resolve, that no working document is counted twice — and derives the count rather than restating it. A test that has to be edited by every unrelated bead is not pinning a behaviour, it is pinning a snapshot.
+    **Not a serialisation and not a medium:** one writer per file does not apply, because the file already has one writer per bead. The defect is one fact with two homes, which is what BDL-068 exists to remove; the answer is to delete the copy.
+    **Related:** #261 (the population this was measured in), `beadloom-mr2l.72` (the same shape for `ROADMAP.md` and the issue log).
+
 261. [2026-09-09] [HIGH] a wave shares more than its focus document — the graph the plan is derived from, and a test's population literals
 
     **Severity:** high (one of the shared artifacts is the derivation's own input)

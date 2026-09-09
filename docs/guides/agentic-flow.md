@@ -524,7 +524,7 @@ serialised pair carries one named reason. The guarantee, in one sentence: for an
 placed in the same wave, no medium they share can carry one bead's in-progress state into the
 other's result — and where a medium cannot give that guarantee, the wave says so and names the
 one bead that measures the combined outcome. Code independence is decided from the graph. The
-five media a wave shares regardless — one working tree, one pre-commit hook, one landing order,
+seven media a wave shares regardless — one graph, one working tree, one pre-commit hook, one landing order, one focus document,
 one doc-freshness baseline, one tracker id space — are measured as a **precondition before the
 wave runs**, and
 the wave's conduct afterwards is checked by nothing here and cannot be.

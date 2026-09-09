@@ -32,9 +32,13 @@ declared `refs:` to nodes and files and serialises a pair for one named reason:
 `override_serial`. This half is a decision, not advice. An advisory shape is prose that a model
 may act on or ignore, which is the failure the enforced-flow work exists to remove.
 
-**The six shared media are measured as a precondition, before the wave runs.** One working
-tree, one pre-commit hook, one landing order, one focus document, one doc-freshness baseline
-and one tracker id space are shared no matter which shape is chosen. Each carries a verdict that can come back
+**The seven shared media are measured as a precondition, before the wave runs.** One graph,
+one working tree, one pre-commit hook, one landing order, one focus document, one doc-freshness
+baseline and one tracker id space are shared no matter which shape is chosen. The graph is the
+plan's own input, so its verdict answers one question and states another: it fails when the
+node population the graph files declare is not the one the index resolved these scopes from,
+and it says in its pass that a bead which ADDS a node writes that file and is invisible here,
+because the node it adds is in no graph the plan could read (BDL-UX #261). Each carries a verdict that can come back
 `failed`, and a medium nobody observed comes back `unmeasured`, which is a finding rather than
 a silent pass. What the run establishes is that the wave may start, not that it went well.
 

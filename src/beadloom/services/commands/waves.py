@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from beadloom.application.waves import (
         BeadRecord,
         FocusDocument,
+        GraphInput,
         WaveEnvironment,
         WavePlan,
         WorkItemAxes,
@@ -152,6 +153,50 @@ def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
         conn.close()
 
 
+def _graph_input(project_root: Path, db_path: Path) -> GraphInput | None:
+    """The graph this plan is derived from, read from both of the homes it has.
+
+    Read through :func:`~beadloom.onboarding.graph_files.each_graph_file`, which
+    is the one policy every reader of that directory holds — a second reader
+    with a skip policy of its own is how two readers of one directory come to
+    disagree about what a node is, which is what that module exists to stop.
+
+    ``None`` when there is no graph directory or the index will not answer:
+    neither is a project whose graph declares nothing, and an unknown population
+    must not print like an empty one.
+    """
+    from beadloom.application.waves import GraphFile, GraphInput
+    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.repository import get_all_nodes
+    from beadloom.onboarding.graph_files import each_graph_file
+
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if not graph_dir.is_dir():
+        return None
+    files = tuple(
+        GraphFile(
+            path=_relative(yml, project_root),
+            nodes=tuple(
+                sorted(
+                    str(node["ref_id"])
+                    for node in data.get("nodes") or []
+                    if isinstance(node, dict) and node.get("ref_id")
+                )
+            ),
+        )
+        for yml, data in each_graph_file(graph_dir)
+    )
+    conn = open_db(db_path)
+    try:
+        indexed = frozenset(node.ref_id for node in get_all_nodes(conn))
+    except sqlite3.Error:
+        # An index that will not answer is not an index holding no node.
+        return None
+    finally:
+        conn.close()
+    return GraphInput(files=files, indexed=indexed)
+
+
 def _focus_documents(
     project_root: Path, axes: WorkItemAxes
 ) -> tuple[FocusDocument, ...] | None:
@@ -249,6 +294,7 @@ def _environment(
             lock_invocations(text_invocations(flow_artifacts(project_root)))
         ),
         focus_documents=_focus_documents(project_root, axes),
+        graph_input=_graph_input(project_root, db_path),
     )
 
 

@@ -1348,9 +1348,10 @@ second ref written without a comma that the graph confirms is a node
 a wave shape is acted on, so a parser whose errors widen a wave is worse than no
 parser.
 
-**Every wave prints the five media it shares, whatever its width**, each with
-the evidence it comes from: the working tree (#181, #235), the commit gate
-(#118), the landing order (#194, #237), the doc baseline (#163, #182, #133) and
+**Every wave prints the seven media it shares, whatever its width**, each with
+the evidence it comes from: the graph the plan is derived from (#261), the
+working tree (#181, #235), the commit gate (#118), the landing order (#194,
+#237), the focus document (#257), the doc baseline (#163, #182, #133) and
 the tracker's id space (#171).
 Until BDL-068 S4 a wave of one printed `not_applicable` against three of them;
 that verdict is gone (`beadloom-67t1`). A plan is one slice of one epic, so a

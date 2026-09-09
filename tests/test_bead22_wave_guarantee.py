@@ -49,6 +49,7 @@ from beadloom.application.waves import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
     MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -59,6 +60,8 @@ from beadloom.application.waves import (
     SHARED_MEDIA,
     UNRESOLVED_UNKNOWN_REF,
     BeadRecord,
+    GraphFile,
+    GraphInput,
     WaveConfigError,
     WaveEnvironment,
     WaveOverride,
@@ -150,6 +153,15 @@ def _measured() -> WaveEnvironment:
         doc_baseline_stale_pairs=0,
         landing_lock_sites=(),
         focus_documents=(),
+        graph_input=GraphInput(
+            files=(
+                GraphFile(
+                    path=".beadloom/_graph/services.yml",
+                    nodes=("billing", "payments", "platform", "shipping"),
+                ),
+            ),
+            indexed=frozenset({"billing", "payments", "platform", "shipping"}),
+        ),
     )
 
 
@@ -361,6 +373,7 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
             MEDIUM_TRACKER_IDS,
             MEDIUM_LANDING_ORDER,
             MEDIUM_FOCUS_DOCUMENT,
+            MEDIUM_GRAPH_FILES,
         }
         assert {medium.name for medium in SHARED_MEDIA} == exported
         assert len(SHARED_MEDIA) == len(exported)

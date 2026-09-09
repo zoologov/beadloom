@@ -488,6 +488,48 @@ class FocusDocument:
 
 
 @dataclass(frozen=True)
+class GraphFile:
+    """One file of the graph directory, and the ref ids it defines.
+
+    Held per FILE rather than as one node set, because the question the
+    ``graph-files`` medium answers is *which file does a bead that adds a node
+    write*, and that is a property of the file. On a graph held in one file the
+    answer is "the same one every other node-adding bead writes", which is the
+    sentence the check prints and cannot improve on.
+    """
+
+    path: str
+    nodes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GraphInput:
+    """This plan's own input, read from both of the homes it has.
+
+    ``files`` is the graph as it is on disk, read through
+    :func:`~beadloom.onboarding.graph_files.each_graph_file` — the one policy
+    every reader of that directory holds. ``indexed`` is the node population of
+    the index the scopes above were actually resolved from. The two are held
+    apart rather than compared at the edge because a difference between them is
+    the finding, and a finding computed where it is gathered is a verdict taken
+    outside the layer that states verdicts.
+
+    The self-reference is the reason this dataclass exists at all: every
+    serialisation `beadloom waves` reports is derived from the graph, so the
+    graph is an input to the answer AND an artifact a bead of the wave may be
+    writing. A derivation cannot describe its own input by asking it.
+    """
+
+    files: tuple[GraphFile, ...] = ()
+    indexed: frozenset[str] = frozenset()
+
+    @property
+    def declared(self) -> frozenset[str]:
+        """Every ref id the graph files declare, whichever file declares it."""
+        return frozenset(ref for file in self.files for ref in file.nodes)
+
+
+@dataclass(frozen=True)
 class WaveEnvironment:
     """What the machine says about the media the graph cannot see.
 
@@ -518,6 +560,11 @@ class WaveEnvironment:
     #: they write no document in common, or this project holds no work item that
     #: has one — and is not the same fact as ``None``.
     focus_documents: tuple[FocusDocument, ...] | None = None
+
+    #: The graph these scopes were derived from, read from the files and from
+    #: the index. ``None`` means nobody read it, which is not the same fact as a
+    #: project whose graph directory holds no node.
+    graph_input: GraphInput | None = None
 
 
 @dataclass(frozen=True)

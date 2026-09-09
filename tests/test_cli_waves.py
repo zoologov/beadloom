@@ -29,7 +29,19 @@ _EXIT_UNDECIDABLE = 2
 
 def _project(tmp_path: Path) -> Path:
     project = tmp_path / "proj"
-    (project / ".beadloom").mkdir(parents=True)
+    (project / ".beadloom" / "_graph").mkdir(parents=True)
+    # The graph file as well as the index, because the plan derives its scopes
+    # from the index and the `graph-files` medium asks whether that index still
+    # agrees with the files it was built from (BDL-UX #261). A project holding
+    # only one of the two homes is a project whose graph nobody could read.
+    (project / ".beadloom" / "_graph" / "services.yml").write_text(
+        "nodes:\n"
+        + "".join(
+            f"  - ref_id: {ref}\n    kind: feature\n    source: src/{ref}/\n"
+            for ref in ("billing", "shipping")
+        ),
+        encoding="utf-8",
+    )
     conn = open_db(project / ".beadloom" / "beadloom.db")
     create_schema(conn)
     for ref in ("billing", "shipping"):
@@ -251,6 +263,7 @@ class TestOneContractForEveryCaller:
         )
         payload = json.loads(result.stdout)
         assert {m["name"] for m in payload["shared_media"]} == {
+            "graph-files",
             "working-tree",
             "commit-gate",
             "landing-order",

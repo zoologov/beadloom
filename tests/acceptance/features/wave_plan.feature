@@ -58,7 +58,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     Given a bead "alpha" declaring the node scope "billing"
     And a bead "beta" declaring the node scope "shipping"
     When the wave shape is decided
-    Then the wave names the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
+    Then the wave names the graph files, the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
     And exactly one bead of the wave owns the combined-tree result
 
   # BDL-061.80. Naming the media was the whole of the second clause until `.22`
@@ -130,7 +130,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the shared media were measured and are clean
     When the wave shape is decided
     Then no wave holds more than one bead
-    And the wave names the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
+    And the wave names the graph files, the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
     And every bead is told the clean room it owes, named after its own id
     And exactly one bead of the wave owns the combined-tree result
     And every medium the wave names carries a verdict of its own
@@ -345,4 +345,55 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the routes of this flow write no document in common
     When the wave shape is decided
     Then the wave reports "focus-document" as passed
+    And the plan is clean
+
+  # BDL-UX #261. #257 named ONE member of a population and shipped a check over
+  # it. `beadloom-0mdo.59` measured the rest in the same wave: four artifacts
+  # shared by three beads whose code scopes are disjoint, and one of them is the
+  # GRAPH -- the file this plan derives every serialisation from. A derivation
+  # cannot describe its own input by asking it, and the entry's own suggested
+  # serialisation was measured before it was built: one file holds every one of
+  # this project's 100 nodes, so it fires on every pair and collapses every wave to a
+  # wave of one, which is BDL-UX #245's failure mode.
+
+  @bead:beadloom-kqsv
+  Scenario: The graph a plan is derived from is named as shared at every wave size
+    Given a bead "alpha" declaring the node scope "billing"
+    When the wave shape is decided
+    Then the wave names the graph files among the media it did not decide
+
+  @bead:beadloom-kqsv
+  Scenario: A plan derived from an index its graph files no longer match is reported
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And a neighbour added a node to the graph file and nobody reindexed
+    When the wave shape is decided
+    Then the wave reports "graph-files" as failed
+    And the failure names the node the plan could not have compared
+
+  @bead:beadloom-kqsv
+  Scenario: A graph whose two homes agree passes and still names what it cannot see
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then the wave reports "graph-files" as passed
+    And the pass names the file a bead that adds a node writes
+    And the plan is clean
+
+  # The landing-order and focus-document precedent: an empty population is a real
+  # observation and says so, rather than failing a project that has none.
+
+  @bead:beadloom-kqsv
+  Scenario: A project whose graph directory declares no node passes and says so
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And the graph directory of this project declares no node
+    When the wave shape is decided
+    Then the wave reports "graph-files" as passed
     And the plan is clean

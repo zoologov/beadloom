@@ -29,7 +29,14 @@ about:
   by an agent that did everything right: it took the landing lock in the form
   that grants it, waited, and its 43-line entry still landed inside a
   neighbour's commit — because the lock orders the COMMITS and the edit had
-  already happened.
+  already happened;
+* the **graph files** are this plan's own input, and a bead that adds a node
+  writes them. Measured by `beadloom-0mdo.59` in the same slice: four artifacts
+  were shared by three beads whose code scopes are disjoint, and
+  ``.beadloom/_graph/services.yml`` was one of them. The self-reference is
+  stated rather than left for a reader to find — a derivation cannot describe
+  its own input by asking it, because the node a bead is about to add is not in
+  the graph the plan read (BDL-UX #261).
 
 **Why the focus document is a medium and not a serialisation** (BDL-UX #257).
 It cannot be one: ``docs.ref_id`` holds at most one node per document, and
@@ -44,18 +51,30 @@ ACTIVE.md is in the docs table nowhere, and the wave-2 collision was over
 ``docs/domains/application/README.md``, owned by ``application`` — an ancestor of
 one of the two scopes and of neither.
 
-**And the shared population is wider than the documents.** Measured in the same
-slice by `beadloom-0mdo.59`: four artifacts were shared by three beads whose code
-scopes are disjoint, and two of them are not documents — a test file carrying
-hand-maintained population literals that any bead adding a node has to bump, and
-``.beadloom/_graph/services.yml``, which is the graph this plan derives its
-scopes FROM. The self-reference is worth stating rather than leaving for a reader
-to find: a derivation of ownership out of the graph cannot reach the graph,
-because the graph is its input. Naming the focus document is one member of that
-population and not the whole of it; the rest is filed rather than absorbed here.
+**Why the graph files are a medium and not a serialisation either** (BDL-UX
+#261). The entry sketched one: a bead's scope reaching the graph FILE its
+declared nodes are defined in. Measured on this repository before it was built,
+one file holds every one of this project's 100 nodes, so that reason fires on
+EVERY pair and collapses every wave to a wave of one — BDL-UX #245's failure mode — against a real write
+rate of 8 of the 55 commits this epic's branch carries. It would also miss the
+case it was drawn from, because both beads that collided were ADDING nodes and a
+node being added is in no graph the plan can read. The condition under which it
+becomes worth building is a graph split across files, and
+``TestTheGraphFileCannotSerialiseWithoutNoise`` is that condition as a red test.
+
+**And the population is still wider than these seven.** Two of `beadloom-0mdo.59`'s
+four artifacts are answered here and two are not.
+``tests/test_bead77_kind_and_root_disagree.py`` carries hand-maintained
+population literals any node-adding bead must bump: one derivable fact with two
+homes, whose answer is to remove the copy rather than to serialise around it.
+``docs/services/components/cli-commands/DOC.md`` is owned by node
+``cli-commands``, whose source covers both colliding beads' files and which
+neither declared — so ``shared_node`` would have fired had either declared it,
+and the plan already reports the gap as ``unguarded_axis``. Neither is absorbed
+here; both are filed, with their paths.
 
 So the media are STATED by every wave, at every size, each with the evidence it
-comes from. A shape that quietly claimed independence in these six would be
+comes from. A shape that quietly claimed independence in these seven would be
 exactly the advisory answer this command exists to replace.
 
 **Why every size, when the first version said a wave of one shares nothing**
@@ -97,15 +116,32 @@ MEDIUM_DOC_BASELINE = "doc-baseline"
 MEDIUM_TRACKER_IDS = "tracker-ids"
 MEDIUM_LANDING_ORDER = "landing-order"
 MEDIUM_FOCUS_DOCUMENT = "focus-document"
+MEDIUM_GRAPH_FILES = "graph-files"
 
 #: The prefix a clean room's directory carries, so the room names its owner.
 #: A constant because the role cores promise this exact spelling and a test
 #: binds the two — a rename here reddens the prose that offers it.
 ROOM_PREFIX = "room-"
 
-#: Stated in the order a wave meets them: it edits, its commit is judged, it
-#: lands, it records where it got to, it documents, and it files follow-up work.
+#: Stated in the order a wave meets them: it is derived from the graph before it
+#: exists, then it edits, its commit is judged, it lands, it records where it got
+#: to, it documents, and it files follow-up work.
 SHARED_MEDIA: tuple[SharedMedium, ...] = (
+    SharedMedium(
+        name=MEDIUM_GRAPH_FILES,
+        statement=(
+            "One graph, in files no bead's code owns and every bead that adds, "
+            "renames or moves a node writes — and it is what this plan derived "
+            "every serialisation above FROM. A derivation cannot describe its "
+            "own input by asking it: the node a bead is about to add is not in "
+            "the graph this plan read, so two beads that each add one hold "
+            "disjoint scopes here and write the same file. Stage that file by "
+            "path with your own commit, reindex before you trust a plan you "
+            "computed while a neighbour was editing it, and take a graph "
+            "conflict as a re-plan rather than a merge."
+        ),
+        evidence="BDL-UX #261",
+    ),
     SharedMedium(
         name=MEDIUM_WORKING_TREE,
         statement=(

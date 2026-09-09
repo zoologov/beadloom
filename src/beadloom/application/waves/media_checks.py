@@ -41,6 +41,7 @@ from beadloom.application.waves.media import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
     MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -140,6 +141,101 @@ def _check_tracker_ids(records: Sequence[BeadRecord]) -> MediumCheck:
         f"{named}. Verify every dependency edge against the titles the tracker "
         "echoes, not against the ids you intended (BDL-UX #171)",
     )
+
+
+#: How many missing node ids the failure names before it stops. A verdict a
+#: reader cannot finish is one they skip, and the count is stated beside them.
+_NAMED_NODES = 5
+
+
+def _check_graph_files(environment: WaveEnvironment) -> MediumCheck:
+    """Whether the graph on disk is still the graph these scopes were resolved from.
+
+    The medium is this plan's own INPUT, which is what makes it different from
+    the six above: every serialisation this command reports was derived from the
+    graph, and a bead of the wave may be writing it. That has one observable
+    plan-time half and one that no plan can reach, and the two are reported
+    differently rather than blended.
+
+    **The observable half.** The graph has two homes — the files under
+    ``.beadloom/_graph/`` and the index the scopes were resolved from — and a
+    difference between their node populations means this plan was computed from
+    a graph that is no longer the graph on disk. Compared by node id rather than
+    by timestamp: an mtime says a file was touched, and the fact that matters is
+    whether the answer would change.
+
+    **The half no plan can reach**, stated in the pass rather than left out of
+    it. A bead that ADDS a node writes the graph file, and the node it adds is
+    in no graph this command can read, so two such beads hold disjoint scopes
+    here and write the same file. That is why the entry's own suggestion — a
+    serialisation keyed on the graph file a bead's declared nodes are defined in
+    — was measured and declined: on a graph held in one file it fires on every
+    pair and still misses this case.
+    """
+    graph = environment.graph_input
+    if graph is None:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_UNMEASURED,
+            "the graph this plan derived its scopes from was not read, so "
+            "whether it is still the graph on disk is unknown",
+        )
+    if not graph.files:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_PASSED,
+            "no graph file declares a node, so this plan resolved no scope from "
+            "one and every bead above is unresolved for that reason",
+        )
+    declared = graph.declared
+    unindexed = tuple(sorted(declared - graph.indexed))
+    unwritten = tuple(sorted(graph.indexed - declared))
+    if unindexed or unwritten:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_FAILED,
+            _graph_drift_detail(unindexed, unwritten),
+        )
+    largest = max(graph.files, key=lambda file: (len(file.nodes), file.path))
+    return MediumCheck(
+        MEDIUM_GRAPH_FILES,
+        STATUS_PASSED,
+        f"the {len(declared)} node(s) of this project are declared across "
+        f"{len(graph.files)} graph file(s) and the index resolved these scopes "
+        f"from the same set — but a bead that ADDS one writes {largest.path}, "
+        f"which holds {len(largest.nodes)} of them, and the node it adds is in "
+        "no graph this plan could read (BDL-UX #261)",
+    )
+
+
+def _graph_drift_detail(
+    unindexed: tuple[str, ...], unwritten: tuple[str, ...]
+) -> str:
+    """Which way the graph and the index disagree, and what to do about it."""
+    parts: list[str] = []
+    if unindexed:
+        parts.append(
+            f"{len(unindexed)} node(s) the graph files declare that the index "
+            f"does not hold ({_named(unindexed)})"
+        )
+    if unwritten:
+        parts.append(
+            f"{len(unwritten)} node(s) the index holds that no graph file "
+            f"declares ({_named(unwritten)})"
+        )
+    return (
+        f"this plan resolved its scopes from an index that disagrees with the "
+        f"graph on disk — {'; '.join(parts)}. Every serialisation above was "
+        "computed from the older population, so a scope naming one of those "
+        "nodes was decided wrongly or not at all. Run `beadloom reindex` and "
+        "re-run this plan; if a graph file will not parse it is skipped in "
+        "silence and reads here as a node nobody declares (BDL-UX #261)"
+    )
+
+
+def _named(refs: tuple[str, ...]) -> str:
+    """Up to :data:`_NAMED_NODES` of *refs*, and an ellipsis when there are more."""
+    return ", ".join(refs[:_NAMED_NODES]) + (" ..." if len(refs) > _NAMED_NODES else "")
 
 
 def _check_working_tree(
@@ -397,6 +493,7 @@ def check_media(
     """
     observed = environment or WaveEnvironment()
     return (
+        _check_graph_files(observed),
         _check_working_tree(observed, owned_paths),
         _check_commit_gate(observed),
         _check_landing_order(observed),

@@ -30,6 +30,7 @@ from beadloom.application.waves import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
     MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -41,6 +42,8 @@ from beadloom.application.waves import (
     STATUS_UNMEASURED,
     BeadRecord,
     FocusDocument,
+    GraphFile,
+    GraphInput,
     WaveEnvironment,
     WaveOverride,
     WorkItemAxes,
@@ -106,6 +109,18 @@ def given_bead_with_scope_and_title(
     )
 
 
+#: The graph of the fixture project, in the two homes it has: the files declare
+#: what the index the scopes were resolved from holds.
+_AGREEING_GRAPH = GraphInput(
+    files=(
+        GraphFile(
+            path=".beadloom/_graph/services.yml", nodes=("billing", "shipping")
+        ),
+    ),
+    indexed=frozenset({"billing", "shipping"}),
+)
+
+
 @given("the shared media were measured and are clean")
 def given_media_measured(world: dict[str, Any]) -> None:
     """Somebody read the tree, the hook, the doc baseline and the flow, and said so."""
@@ -115,6 +130,7 @@ def given_media_measured(world: dict[str, Any]) -> None:
         doc_baseline_stale_pairs=0,
         landing_lock_sites=(),
         focus_documents=(),
+        graph_input=_AGREEING_GRAPH,
     )
 
 
@@ -233,12 +249,13 @@ def then_override_inert(world: dict[str, Any]) -> None:
 
 
 @then(
-    "the wave names the working tree, the commit gate, the landing order, the "
-    "focus document, the doc baseline and the tracker id space"
+    "the wave names the graph files, the working tree, the commit gate, the "
+    "landing order, the focus document, the doc baseline and the tracker id space"
 )
 def then_names_media(world: dict[str, Any]) -> None:
     named = {medium.name for medium in world["plan"].shared_media}
     assert named == {
+        MEDIUM_GRAPH_FILES,
         MEDIUM_WORKING_TREE,
         MEDIUM_COMMIT_GATE,
         MEDIUM_LANDING_ORDER,
@@ -567,3 +584,54 @@ def then_failure_names_bead(world: dict[str, Any], bead: str) -> None:
     )
     assert bead in check.detail
     assert "ACTIVE.md" in check.detail
+
+
+@given("a neighbour added a node to the graph file and nobody reindexed")
+def given_graph_ahead_of_index(world: dict[str, Any]) -> None:
+    """The self-reference, as a wave meets it: the plan's own input has moved."""
+    world["environment"] = replace(
+        world["environment"],
+        graph_input=GraphInput(
+            files=(
+                GraphFile(
+                    path=".beadloom/_graph/services.yml",
+                    nodes=("billing", "reporting", "shipping"),
+                ),
+            ),
+            indexed=frozenset({"billing", "shipping"}),
+        ),
+    )
+
+
+@given("the graph directory of this project declares no node")
+def given_graph_declares_nothing(world: dict[str, Any]) -> None:
+    """A real observation of an empty population, the way an empty lock site is."""
+    world["environment"] = replace(world["environment"], graph_input=GraphInput())
+
+
+@then("the wave names the graph files among the media it did not decide")
+def then_names_graph_files(world: dict[str, Any]) -> None:
+    medium = next(
+        m for m in world["plan"].shared_media if m.name == MEDIUM_GRAPH_FILES
+    )
+    assert medium.statement
+    assert medium.evidence
+
+
+@then("the failure names the node the plan could not have compared")
+def then_failure_names_the_node(world: dict[str, Any]) -> None:
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "reporting" in check.detail
+    assert "reindex" in check.detail
+
+
+@then("the pass names the file a bead that adds a node writes")
+def then_pass_names_the_file(world: dict[str, Any]) -> None:
+    """The half no plan can observe is stated rather than left out of the pass."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert ".beadloom/_graph/services.yml" in check.detail
+    assert "adds" in check.detail

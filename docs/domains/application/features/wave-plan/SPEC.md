@@ -26,8 +26,8 @@ The guarantee the shape makes, in one sentence:
 
 The sentence has two halves because measurement says one half is not enough. The
 first half is code independence, which the graph decides. The second is the set
-of media a wave shares whatever shape it takes — one working tree, one
-pre-commit hook, one landing order, one focus document, one doc-freshness
+of media a wave shares whatever shape it takes — one graph, one working tree,
+one pre-commit hook, one landing order, one focus document, one doc-freshness
 baseline, one tracker id space — and no choice of shape makes any of them
 independent.
 
@@ -248,6 +248,7 @@ evidence it comes from:
 
 | Medium | Evidence |
 |---|---|
+| `graph-files` | one graph, in files no bead's code owns and every node-adding bead writes — and it is what this plan derives every serialisation from. A derivation cannot describe its own input by asking it (BDL-UX #261) |
 | `working-tree` | an agent's clean-room green is a claim about N files, not about the tree, and the room is built at `room-<bead-id>` so it can say whose it is |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
 | `landing-order` | one branch. What keeps two agents out of one FILE is the disjoint scopes the plan derived; what orders their COMMITS is the merge slot, and only in the form that grants it (BDL-UX #194, #237) |
@@ -279,9 +280,50 @@ whose code scopes are disjoint shared four artifacts —
 `tests/test_bead77_kind_and_root_disagree.py` and `.beadloom/_graph/services.yml`.
 Two of those are not documents: one is a test carrying hand-maintained population
 literals that any bead adding a node has to bump, and the other is the graph this
-plan derives its scopes FROM. A derivation of ownership out of the graph cannot
-reach the graph, because the graph is its input. The `focus-document` medium
-names one member of that population; the rest is filed rather than absorbed.
+plan derives its scopes FROM.
+
+**Why `graph-files` is a medium and not a serialisation either (BDL-UX #261).**
+BDL-UX #261 sketched one — a bead's scope reaching the graph FILE its declared
+nodes are defined in — and it was measured before it was built rather than
+after. One file holds every one of this project's 100 nodes, so the reason fires on
+every pair of every wave and collapses each of them to a wave of one, which is
+BDL-UX #245's failure mode, against a real write rate of 8 of the 55 commits
+this epic's branch carries. It would also miss the case it was drawn from: both
+colliding beads were ADDING nodes, and a node being added is in no graph the
+plan can read. `TestTheGraphFileCannotSerialiseWithoutNoise` in
+`tests/test_the_graph_a_plan_is_derived_from.py` pins the condition under which
+the serialisation becomes worth building — a graph split across files — as a
+test that goes red when it holds.
+
+**And the primitive that would remove the medium is one writer per file.**
+`beadloom-0mdo.66` already took it at the boundary for issue numbers:
+`O_CREAT|O_EXCL`, one claim file per number, so a shared write cannot be
+attempted rather than being detected afterwards. Applied here it means one graph
+file per node — `each_graph_file` already globs `*.yml`, so the loader needs no
+change — and it would make the declined serialisation both meaningful and
+non-noisy at the same stroke. It is not taken here because it changes the
+`.beadloom/_graph/` layout of every adopter, which is the `graph` and
+`onboarding` nodes rather than `wave-plan`.
+
+**The two artifacts neither medium covers, and why each needs a different
+answer.** `tests/test_bead77_kind_and_root_disagree.py` carries hand-maintained
+population counts (`populations[SPACE_TO_BE] == 203`,
+`populations[SPACE_AS_IS] == 116`, `len(working_documents(REPO_ROOT)) == 58`)
+that any bead adding a node or a document has to bump — one derivable fact with
+two homes, whose answer is to remove the copy, not to serialise around it. One
+writer per file does not apply: the file has one writer per bead already.
+`docs/services/components/cli-commands/DOC.md` is not the ancestor-document case
+#261 guessed at, and the measurement says so: node `cli-commands` owns
+`src/beadloom/services/commands/` — both `setup.py`, which `beadloom-0mdo.59`
+changed, and `waves.py`, which `beadloom-0mdo.75` changed — and neither bead
+declared it, so `conflict_between` had no ref to intersect and `shared_node`
+would have fired if either had. The plan already reports that gap, as
+`unguarded_axis` naming `cli-commands`. An ancestor-reaching rule would be noise
+in any case: every one of this project's 100 nodes reaches the root service
+`beadloom` through `part_of`, so it is shared by every pair of every wave.
+`TestTheCliCommandsDocumentIsAnUndeclaredNode` and
+`TestAnAncestorReachingRuleIsSharedByEveryPair` hold both measurements as
+executables.
 
 **Taking the landing lock does not prevent the collision, and that was measured
 rather than reasoned about.** The fourth instance in the slice was an agent that
@@ -315,7 +357,7 @@ per bead by `beadloom waves` and under `rooms` in `--json`. Two agents once each
 built a room at one shared session-scratchpad path, and one took a measurement
 over its neighbour's untracked files that looked exactly like a correct clean
 room (BDL-UX #235). The session scratchpad is a genuinely shared medium and is
-deliberately **not** one of the five: a medium here is one with a plan-time
+deliberately **not** one of the seven: a medium here is one with a plan-time
 precondition a command can observe, and a scratchpad path exists only inside a
 running agent session. An entry for it would be permanently `unmeasured` — a
 finding on every plan — or permanently true. What is observable is the remedy,
@@ -462,6 +504,7 @@ check — see below.
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
 | `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts |
 | `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder |
+| `graph-files` | the node population the graph files declare is the one the index resolved these scopes from | `.beadloom/_graph/*.yml` through `each_graph_file`, and `get_all_nodes` on the index |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records |
 
@@ -472,7 +515,7 @@ come to disagree about what one work item approved, and a work item nothing can
 be read from arrives as a `WorkItemAxes` carrying its reason rather than as an
 absence dropped at the edge.
 
-The five file-observed media are gathered by the command and handed to
+The six file-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
 without a repository, without a hook and without a scaffolded flow — each absence
 arrives as a `None` the check reports, never as a silent zero. Every medium is checked at every wave
@@ -668,6 +711,9 @@ every scenario runs without a `bd` binary on the machine.
 scenarios; `tests/test_wave_plan.py` covers the reasons, the ordering and the
 override arithmetic; `tests/test_wave_media_checks.py` covers the medium
 verdicts and the title-against-id comparison;
+`tests/test_the_graph_a_plan_is_derived_from.py` covers the `graph-files`
+medium and holds the two mechanisms BDL-UX #261 sketched and this feature
+declined, each with the condition that reopens it;
 `tests/acceptance/features/landing_lock.feature` and
 `tests/test_landing_lock_sites.py` cover the landing-lock derivation and hold
 this repository's own instructions to it; `tests/test_cli_waves.py` covers
