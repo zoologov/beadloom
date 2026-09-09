@@ -55,8 +55,9 @@ one of the two scopes and of neither.
 #261). The entry sketched one: a bead's scope reaching the graph FILE its
 declared nodes are defined in. Measured on this repository before it was built,
 one file holds every one of this project's 100 nodes, so that reason fires on
-EVERY pair and collapses every wave to a wave of one — BDL-UX #245's failure mode — against a real write
-rate of 8 of the 55 commits this epic's branch carries. It would also miss the
+EVERY pair and collapses every wave to a wave of one — BDL-UX #245's failure
+mode — against a real write rate of 8 of the 55 commits this epic's branch
+carries. It would also miss the
 case it was drawn from, because both beads that collided were ADDING nodes and a
 node being added is in no graph the plan can read. The condition under which it
 becomes worth building is a graph split across files, and
