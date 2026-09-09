@@ -51,6 +51,21 @@
 
     **Related:** #190 (its foreign-subject face is absorbed here; its example-token face is not), #205 (the past tense, open).
 
+261. [2026-09-09] [HIGH] a wave shares more than its focus document — the graph the plan is derived from, and a test's population literals
+
+    **Severity:** high (one of the shared artifacts is the derivation's own input)
+    **Tracker:** `beadloom-kqsv` — `bd show` it; the tracker is the source of truth for this entry's text
+    **Issue:** measured across three S6 waves, `beadloom waves` reported `0 serialisations` while four artifacts were shared in fact: `ACTIVE.md`, `docs/services/components/cli-commands/DOC.md`, `tests/test_bead77_kind_and_root_disagree.py` (hand-maintained population literals any node-adding bead must bump), and `.beadloom/_graph/services.yml` — **the graph `waves` derives scope from**. A bead that adds a node writes the file the plan is computed from, so the plan cannot see that collision by construction.
+    **Related:** #257 (the focus document), and `beadloom-mr2l.72`, whose comment already recorded the population-literal shape as three hand edits per feature.
+
+260. [2026-09-09] [MEDIUM] `ACTIVE.md` is a shared write, and the property that makes it impossible is one writer per file — not generation
+
+    **Severity:** medium (a design answer, filed at the coordinator's request rather than as a defect)
+    **Tracker:** `beadloom-l9ee` — `bd show` it; the recommendation and its measurements are there in full
+    **Measured:** BDL-068's `ACTIVE.md` is 1382 lines of which **35** are table rows (2.5%); across all 58 `ACTIVE.md` files, 5601 lines and 4868 of prose (87%). **Every measured collision is in the prose**, so generating the bead-status table removes 2.5% of the file and 0% of the collisions.
+    **The finding that matters:** routing incidents to *this file* is a lateral move. `BDL-UX-Issues.md` is a single 3016-line file every bead appends to — 20 commits on one branch across four epics — and it has already produced the same collision: commit `27db92b`, "the duplicate number is mine, renumbered to #254". That is #257 with a different filename.
+    **Recommendation:** every genre gets **one writer per file** and the composed view is a consequence — one file per decision (ADR), one file per incident **numbered by allocation rather than by an author reading the last number**, rules in the already-composed role cores, status generated from the tracker. An ADR's expiry needs no new machinery: make the record a doc-code pair, which is the ROADMAP's standing decision-provenance idea.
+
 259. [2026-09-08] [LOW] a THIRD reader of a markdown table takes one header for a whole heading, and is guarded only by the words its rows happen to carry
 
     **Severity:** low (the class is present and no instance exists today, because vocabulary is doing the work a boundary should do)
