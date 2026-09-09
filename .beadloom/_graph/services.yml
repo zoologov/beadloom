@@ -343,6 +343,18 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/axes-section/SPEC.md
 
+  # Feature: the issue log's numbers (BDL-068 S6, BDL-UX #187, #211, #253 and
+  # the two of 2026-09-09). A number read off the end of a shared markdown file
+  # collided five times; here it is ALLOCATED by an exclusive create of one
+  # claim file per number, which is `beadloom-l9ee`'s one-file-per-incident
+  # primitive taken at the boundary.
+  - ref_id: issue-numbers
+    kind: feature
+    summary: "The issue log's numbers: the two populations the log states, the next number allocated by an exclusive create, and the three legs over what one filesystem cannot span"
+    source: src/beadloom/doc_sync/issue_numbers.py
+    docs:
+      - docs/domains/doc-sync/features/issue-numbers/SPEC.md
+
   # Feature: the route a work item took, checked against the axes it was decided
   # from (BDL-068 S1.5). The unit is the work-item FOLDER, not the document.
   - ref_id: work-item-type
@@ -939,6 +951,15 @@ edges:
   - src: work-item-type
     dst: doc-sync
     kind: part_of
+  - src: issue-numbers
+    dst: doc-sync
+    kind: part_of
+  - src: ci-gate
+    dst: issue-numbers
+    kind: depends_on
+  - src: cli-commands
+    dst: issue-numbers
+    kind: depends_on
   - src: work-item-type
     dst: axes-section
     kind: depends_on

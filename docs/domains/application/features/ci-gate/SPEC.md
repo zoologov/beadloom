@@ -76,7 +76,30 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    this line — filed by review `beadloom-mr2l.19` as a MINOR, and left as a
    stated limit rather than a silent one.
    
-6. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
+6. **issue-log** — the issue log's numbers (BDL-068 S6). Three legs over a
+   numbered log and the ledger that allocates its numbers: `duplicate-number`
+   (one number defined by two entries), `unwritten-claim` (a number claimed and
+   never written into the log) and `unclaimed-number` (an entry past the
+   ledger's floor holding a number no claim holds). Unlike its two neighbours
+   this step **BLOCKS**, and the difference is the kind of claim each makes: a
+   writing-standard finding is an opinion about prose a project may reasonably
+   carry for a release, while a duplicate number is a reference that resolves to
+   two entries and to neither — this repository shipped one for fifteen days
+   across a CHANGELOG, a ROADMAP, eight test files and thirty-six tracker
+   records (BDL-UX #187). Every leg's repair fits in the commit that trips it,
+   which is what makes blocking fair. It cannot redden a project that has not
+   opted in: the log is DECLARED under `issue_log:` in `.beadloom/config.yml`,
+   and a project declaring none is a NAMED skip that states the key to add.
+   `not_verified` carries the honest half — before a project's first allocation
+   the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
+   number at all and the summary says `NOT CHECKED:` rather than reporting them
+   clean. Measured on this repository, 2026-09-09:
+
+   ```
+   issue-log PASS | 236 entr(ies) uniquely numbered; 1 claim(s), floor 262
+   ```
+
+7. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
    with at least one closed bead that declared a graph node with no AS-IS
    document, plus a WORKING exemption that excuses nothing and a WORKING
    declaration the graph contradicts. Every finding is a `warn` and the step is
@@ -139,7 +162,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-7. **scope-check** — did this branch leave the axes its work item declared?
+8. **scope-check** — did this branch leave the axes its work item declared?
    (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
    push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
@@ -155,7 +178,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
-8. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+9. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -165,8 +188,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-9. **doctor** — graph integrity.
-10. **federate** — `federate --fail-on` when hub exports are supplied.
+10. **doctor** — graph integrity.
+11. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

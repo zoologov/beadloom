@@ -439,7 +439,10 @@ what to weigh against everything else once it does.**
    has moved. `bd 1.0.4` is already written into S5's assertions; nothing acts on it.
 3. **Allocation for shared resources that no scope owns.** `ACTIVE.md` is written by
    every bead of every wave and belongs to no bead's code scope, so `beadloom waves`
-   cannot see it by construction (#257). UX numbers have no allocator at all (#66/#187).
+   cannot see it by construction (#257). UX numbers HAVE one since 2026-09-09 (`beadloom-0mdo.66`): `beadloom issue-number
+   allocate` claims a number with an exclusive create of one file per number, which is the
+   one-file-per-writer shape gap 1 above is about, applied to the second shared resource. The
+   first remains open.
    Deriving document scope will not reach either, which is why the fix has two halves
    and neither is sufficient.
 

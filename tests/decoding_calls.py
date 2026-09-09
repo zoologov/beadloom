@@ -42,6 +42,18 @@ SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_output", "check_call", "cal
 #: unknown and stays in the population — the safe direction.
 CONTAINER_OPENERS = frozenset({"tarfile", "zipfile", "gzip", "bz2", "lzma", "shelve", "dbm"})
 
+#: Modules whose ``open()`` returns a FILE DESCRIPTOR rather than a stream.
+#: ``os.open`` decodes nothing — it hands back an int, and whatever wraps that
+#: int states its own codec — so it has no codec to state and no
+#: ``UnicodeDecodeError`` to catch. Read as a text open it produces a false
+#: positive in both instruments at once: the codec sweep asks for an
+#: ``encoding=`` the call has no parameter for, and the handler ledger asks a
+#: handler around it to catch a decode failure that cannot happen. Found by
+#: ``beadloom-0mdo.66``, whose exclusive create (``O_CREAT | O_EXCL``) is the
+#: first ``os.open`` in ``src/beadloom`` — the same way ``CONTAINER_OPENERS``
+#: above was found, by a call this package had never made.
+DESCRIPTOR_OPENERS = frozenset({"os"})
+
 #: Where ``encoding`` sits when it is passed positionally. Nobody has to pass it
 #: that way and five sites in this suite do (``read_text("utf-8")``), so a sweep
 #: that reads keywords only reports call sites that already state their codec.
@@ -88,14 +100,33 @@ def states_encoding(call: ast.Call) -> bool:
     return index is not None and len(call.args) > index
 
 
-def is_container_open(call: ast.Call) -> bool:
-    """``tarfile.open(...)`` and friends — an ``open`` with no codec to state."""
+def _module_open(call: ast.Call, modules: frozenset[str]) -> bool:
+    """``<module>.open(...)`` where ``<module>`` is one of *modules*.
+
+    Receivers are matched by module NAME, so an aliased import reads as unknown
+    and stays in the population — the safe direction.
+    """
     return (
         called_name(call) == "open"
         and isinstance(call.func, ast.Attribute)
         and isinstance(call.func.value, ast.Name)
-        and call.func.value.id in CONTAINER_OPENERS
+        and call.func.value.id in modules
     )
+
+
+def is_container_open(call: ast.Call) -> bool:
+    """``tarfile.open(...)`` and friends — an ``open`` with no codec to state."""
+    return _module_open(call, CONTAINER_OPENERS)
+
+
+def is_descriptor_open(call: ast.Call) -> bool:
+    """``os.open(...)`` — an ``open`` that returns a descriptor and decodes nothing."""
+    return _module_open(call, DESCRIPTOR_OPENERS)
+
+
+def opens_without_a_codec(call: ast.Call) -> bool:
+    """An ``open()`` neither instrument should ask about: a container's or a descriptor's."""
+    return is_container_open(call) or is_descriptor_open(call)
 
 
 def is_true(node: ast.expr | None) -> bool:
@@ -117,6 +148,8 @@ def open_mode(call: ast.Call) -> str:
 
 def is_text_open(call: ast.Call) -> bool:
     """An ``open()`` in text mode — the one that decodes."""
+    if opens_without_a_codec(call):
+        return False
     return called_name(call) == "open" and "b" not in open_mode(call)
 
 

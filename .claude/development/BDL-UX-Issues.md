@@ -1531,6 +1531,17 @@
 
 ---
 
+263. [2026-09-09] [MEDIUM] the codec sweep's vocabulary is a list of call names, so a decoding call it has never seen reads as no call at all
+
+    **Severity:** medium (the instrument reports clean about a population it did not enter, which is the class it exists to prevent)
+    **Command:** `uv run pytest tests/test_locale_independent_io.py tests/test_decode_handlers.py`
+    **Context:** BDL-068 S6, `beadloom-0mdo.66`. The allocator writes its claim file through `os.open(O_CREAT | O_EXCL)` and then `os.fdopen(handle, "w", encoding="utf-8")`, which is the first `os.fdopen` in `src/beadloom`.
+    **Measured:** the shared definition in `tests/decoding_calls.py` recognises a text-I/O call by NAME — `read_text`, `write_text`, `open`, `decode` and five `subprocess` entry points. `os.fdopen` is in none of them, so both instruments walked past a call that decodes: the codec sweep did not ask it to state an `encoding=`, and the handler ledger did not ask what a decode failure there would do. It happens to state its codec, so nothing is wrong today — which is exactly why it is worth recording, because the next one need not.
+    **The same run found the opposite error and it is already fixed:** `os.open` was read AS a text open, because `called_name` returns `open` for `os.open(...)` and the module-name guard only knew `tarfile`, `zipfile` and friends. That produced a false positive in both instruments at once and is closed here by `DESCRIPTOR_OPENERS` — the same shape as the `CONTAINER_OPENERS` note above it, which its own comment says was found the same way, by a call this package had never made.
+    **Why it is not closed with it:** the false positive is a fixed misreading of a known name; this is an unknown name, and the repair is a different one. A vocabulary of call names cannot be completed by adding to it — `io.TextIOWrapper`, `codecs.open` and `csv.reader` over a text handle are all outside it too. The honest fix is the one this project applies everywhere else: report the population the sweep could not classify, so a call it does not recognise arrives as *unresolved* rather than as absent.
+    **Expected:** `tests/decoding_calls.py` states what it did NOT classify, and the two instruments report that count beside their verdicts.
+    **Related:** #173 (unverifiable is not clean), and `beadloom-0mdo.64`, which found `CONTAINER_OPENERS` by rooting the sweep at `tests/`.
+
 ## Improvements
 
 > Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
@@ -2468,7 +2479,25 @@ section. Moved verbatim, nothing rewritten — a third of the "open" list was no
     > **CLOSED — `_echo_scaffold_findings()` is the caller.** `migration_notes` prints under *"Left alone (N) — your edits are the only copy of an intent"* with the `.beadloom/flow/<kind>/<name>.md` path, and `orphans` under *"Left by an older flow layout (N) — reported, never deleted"* with each `rm -f`. **`(hand-edited; use --force)` is gone** — the line advised the destructive flag and named nowhere safe, which was the actual harm; the migration note replaces it. Both assertions bite: removing the call takes both tests from passed to FAILED (measured).
     > `ScaffoldResult.flow_config_written` was added in the same pass and printed the same way, so the file every composed artifact is built from is named on the run that creates it (#187).
 
-187. ~~[2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched~~ **CLOSED (BDL-061 S3b, `.58`)**
+> **#187 of 2026-08-23 was renumbered to #262 on 2026-09-09** (`beadloom-0mdo.66`, BDL-068 S6).
+> This log carried two entries numbered 187 for fifteen days: this one, closed by BDL-061 `.58`,
+> and the open External `bd list --json` entry of 2026-08-25. A reference to "#187" therefore
+> named both and resolved to neither.
+>
+> **The number stays with the OPEN entry, and the rule is that a live reference must resolve.**
+> "#187" is quoted in the standing rules composed into every role core, in
+> `tests/test_bd_call_sites.py`'s own failure message, in `tests/test_bd_answers.py`,
+> `tests/test_s5_the_instruments_agree.py`, ROADMAP.md and BDL-068's RFC and PRD — and every one
+> of those means `bd list --json`. Every reference that means THIS entry — CHANGELOG.md,
+> BDL-061's CONTEXT, ACTIVE and PLAN, and three test-file comments — lands on this line instead.
+> That is what renumbering the closed half buys, and it is what the 2026-08-26 decision not to
+> renumber had no way to provide: it weighed "renumbering breaks every reference already
+> written" against nothing, because a forwarding line was not on the table.
+>
+> The number was allocated with `beadloom issue-number allocate`, so it is the first entry in
+> this log whose number came from the ledger rather than from reading the end of this file.
+
+262. ~~[2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched~~ **CLOSED (BDL-061 S3b, `.58`)** — **renumbered from #187 on 2026-09-09**
 
     **Severity:** medium (it is a first-contact experience, and it is the exact "green project goes red" shape the slice is built to avoid)
     **Command:** `beadloom setup-agentic-flow` then `beadloom config-check`
@@ -2966,7 +2995,7 @@ part of a long document that is read least usefully (BDL-UX #156).
 
 <summary><strong>Chronology</strong> — what was opened, closed or verified, newest first</summary>
 
-- **2026-08-26** — (v3.0.0 release, `beadloom-mr2l.90`): **opened #192** — verifying the BUILT wheel against a project that is not us found that a virgin `beadloom init --yes` exits 0 over a graph of 2 nodes and 0 edges and then fails its own `beadloom ci` on `domain-needs-parent`, a rule the same command wrote one step earlier. It is not new; it had never been measured, because everything measured here runs on a repository whose graph has been hand-authored since BDL-008. The rest of what the release did was make the OPEN set adopter-visible. The CHANGELOG's Known limitations name eight items an adopter will meet, and three of them live only here rather than in the tracker: **#191** (`setup-agentic-flow` recomposes a hand-edited role adapter — the #139/#151/#186 shape in the sibling command, and the command an upgrader runs), **#187 of 2026-08-25** (`bd list --json` returns a filtered view as a bare list — External, and it stays open because it is `bd`'s default, not ours) and the `measurable-goal` recall cost. **Found while writing the release notes and not fixed here: this log has two issues numbered 187** — the closed `setup-agentic-flow`/`config-check` one of 2026-08-23 and the open External one of 2026-08-25 — so a reference to "#187" is ambiguous in both directions. Filed as a bead rather than renumbered, because renumbering breaks every reference already written in the CHANGELOG, the tracker and this file. Measured at release: **seventeen** beads of this epic open in the tracker (`bd list --status open --json`, excluding the epic row and the swarm placeholder).
+- **2026-08-26** — (v3.0.0 release, `beadloom-mr2l.90`): **opened #192** — verifying the BUILT wheel against a project that is not us found that a virgin `beadloom init --yes` exits 0 over a graph of 2 nodes and 0 edges and then fails its own `beadloom ci` on `domain-needs-parent`, a rule the same command wrote one step earlier. It is not new; it had never been measured, because everything measured here runs on a repository whose graph has been hand-authored since BDL-008. The rest of what the release did was make the OPEN set adopter-visible. The CHANGELOG's Known limitations name eight items an adopter will meet, and three of them live only here rather than in the tracker: **#191** (`setup-agentic-flow` recomposes a hand-edited role adapter — the #139/#151/#186 shape in the sibling command, and the command an upgrader runs), **#187 of 2026-08-25** (`bd list --json` returns a filtered view as a bare list — External, and it stays open because it is `bd`'s default, not ours) and the `measurable-goal` recall cost. **Found while writing the release notes and not fixed here: this log has two issues numbered 187** — the closed `setup-agentic-flow`/`config-check` one of 2026-08-23 and the open External one of 2026-08-25 — so a reference to "#187" is ambiguous in both directions. Filed as a bead rather than renumbered, because renumbering breaks every reference already written in the CHANGELOG, the tracker and this file. **Repaired 2026-09-09 by `beadloom-0mdo.66`:** the closed half was renumbered to #262 with a forwarding line where it stood, so a reference written before that date still lands somewhere, and the log gained an allocator so the class cannot recur. Measured at release: **seventeen** beads of this epic open in the tracker (`bd list --status open --json`, excluding the epic row and the swarm placeholder).
 
 - **2026-08-24** — (BDL-061 S6, `beadloom-mr2l.78`): CLOSED #182, #133 and #105 — three filings of one
   root over eleven weeks. `symbols_hash` was stored per pair and computed per node, so one changed file

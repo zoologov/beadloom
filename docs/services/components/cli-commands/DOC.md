@@ -57,6 +57,7 @@ is what holds that line.
 | `rooms.py` | `rooms` |
 | `typed_surface.py` | `typed-surface` |
 | `bd_calls.py` | `bd-calls` |
+| `issue_number.py` | `issue-number allocate`, `issue-number check` |
 
 `config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
@@ -367,6 +368,8 @@ constant, so a second string added later is judged by the same claim.
 - `cli` — the registration shell this component is wired into
   ([docs/services/cli.md](../../cli.md))
 - `guard-probes`, `bd-seam` — the other two `services`-layer components
+
+`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187).
 
 `bd_calls.py` renders the derived `bd` call-site population that `bd_seam` computes. BDL-068's
 CONTEXT Q4 decided the shape: an External `bd` finding is answered by deriving our own call

@@ -10,7 +10,20 @@
 
 ## Current Bead
 
-**Bead:** none claimed. `beadloom-0mdo.50` closed as `d32c718` — BDL-UX #248 and #249, alone and
+**Bead:** `beadloom-0mdo.66` — the issue log's number allocator (BDL-UX #187, #211, #253 and the
+two of 2026-09-09), in S6 wave 7 beside `.67` and `.76`, where `.76` is the gate owner.
+Complete on the branch. The number is now ALLOCATED, by an exclusive create of one claim file per
+number in `.claude/development/BDL-UX-Issues/`, which is `beadloom-l9ee`'s one-file-per-incident
+primitive taken at the boundary rather than a shape the incident-file work would replace. A
+BLOCKING `issue-log` Gate step covers what one filesystem cannot span. **#187 was repaired and
+the decision is recorded on the bead:** the number stays with the OPEN entry because a live
+reference must resolve, and the closed half is renumbered to #262 with a forwarding line where it
+stood — the first number in this log that came from the ledger. Verified green in a clean room at
+`room-beadloom-0mdo.66` over 24 files (9 437 passed, ruff clean, mypy clean against all four
+declared target versions); `beadloom ci` rc 0 on the tree with only this bead's changes
+uncommitted, which is not a claim about the combined tree.
+
+**Bead (previous):** none claimed. `beadloom-0mdo.50` closed as `d32c718` — BDL-UX #248 and #249, alone and
 its own gate owner. The census derives the locale as the CODEC in force, `beadloom rooms` refuses
 to report a locale that did not apply as a room the run entered, and the 11 failures
 `beadloom-0mdo.49` attributed to `tests/room_simulation.py` re-measure as 13 under one malformed

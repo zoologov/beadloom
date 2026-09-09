@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from beadloom.application.doctor import Check
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.doc_quality import QualityFinding
+    from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -239,6 +240,7 @@ def run_ci_gate(
     steps.append(sync)
     steps.append(_step_docs_audit(project_root))
     steps.append(_step_docs_quality(project_root))
+    steps.append(_step_issue_numbers(project_root))
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
@@ -640,6 +642,97 @@ def _convention_finding(convention: SectionConvention) -> Finding:
             "add the section to the documents of this kind as they are revised, "
             "or drop it from the document template if it does not belong there"
         ),
+    }
+
+
+def _step_issue_numbers(project_root: Path) -> GateStep:
+    """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
+
+    Unlike its ``docs-quality`` neighbour this step blocks, and the difference is
+    the kind of claim each makes. A writing-standard finding is an opinion about
+    prose that a project may reasonably carry for a release. A duplicate number
+    is a reference that resolves to two entries and to neither, and this
+    repository shipped one for fifteen days across a CHANGELOG, a ROADMAP, eight
+    test files and thirty-six tracker records before anyone noticed (BDL-UX
+    #187). Its three legs each have a repair the author can perform in the same
+    commit, which is what makes blocking fair.
+
+    **It cannot redden a project that has not opted in.** The log is DECLARED in
+    ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
+    the upgrade that ships this step turns nobody's green tree red.
+
+    ``not_verified`` carries the honest half: before a project's first
+    allocation the ledger has no floor, so ``unwritten-claim`` and
+    ``unclaimed-number`` enter no number at all and a clean result would
+    describe their ignorance rather than the log (BDL-UX #173).
+    """
+    from beadloom.doc_sync.issue_numbers import check_issue_numbers
+
+    report = check_issue_numbers(project_root)
+    if not report.declared:
+        return GateStep(
+            "issue-log",
+            skipped=True,
+            summary=(
+                "skipped — no issue log is declared; add an `issue_log:` block with "
+                "`path:` and `ledger:` to .beadloom/config.yml"
+            ),
+        )
+    if report.log_missing:
+        return GateStep(
+            "issue-log",
+            passed=False,
+            findings=[
+                _simple_finding(
+                    "issue-log",
+                    "error",
+                    "the declared issue log is missing or could not be decoded",
+                    "point `issue_log.path` at the log, or remove the declaration",
+                )
+            ],
+            summary="declared issue log missing",
+        )
+    findings = [_issue_number_finding(f) for f in report.findings]
+    return GateStep(
+        "issue-log",
+        passed=not report.findings,
+        not_verified=report.not_verified,
+        findings=findings,
+        summary=_issue_number_summary(report),
+    )
+
+
+def _issue_number_summary(report: IssueNumberReport) -> str:
+    """The issue-log line, which states what it COVERED and not only what it found."""
+    floor = report.floor if report.floor is not None else "none"
+    head = (
+        f"{len(report.findings)} finding(s)"
+        if report.findings
+        else f"{report.entries} entr(ies) uniquely numbered"
+    )
+    line = f"{head}; {report.claims} claim(s), floor {floor}"
+    if report.floor is None:
+        line += (
+            "; NOT CHECKED: unwritten-claim, unclaimed-number "
+            "(the ledger holds no claim, so neither entered a number)"
+        )
+    if report.unaccounted:
+        line += (
+            f"; {len(report.unaccounted)} number(s) below the highest are stated "
+            "nowhere and are unaccounted for, not free"
+        )
+    return line
+
+
+def _issue_number_finding(finding: NumberFinding) -> Finding:
+    """Project one issue-number finding onto the shared finding shape."""
+    return {
+        "kind": "issue-log",
+        "rule": finding.check,
+        "severity": "error",
+        "locations": [{"file": finding.where}],
+        "why": finding.why,
+        "remediation": finding.remediation,
     }
 
 

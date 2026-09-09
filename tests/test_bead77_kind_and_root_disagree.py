@@ -429,7 +429,19 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # against a role's core, and a role against the map -- and `Explore` was
         # composed, invoked by two slash skills and named zero times in the map
         # while `role-duties` was green (BDL-UX #252).
-        assert populations[SPACE_AS_IS] == 115
+        # 115 -> 116 in BDL-068 `0mdo.66`: `issue-numbers`, where the issue
+        # log's numbers are allocated by an exclusive create rather than read
+        # off the end of a shared file. It is a node because the allocation and
+        # the three legs over what one filesystem cannot span are one
+        # responsibility, and `doc-quality`'s five writing-standard checks are
+        # another (BDL-UX #187, #211, #253 and the two of 2026-09-09).
+        #
+        # THIS LINE IS THE FOURTH MEASURED INSTANCE of `beadloom-mr2l.72`: a
+        # count about the documents, maintained by hand, in a file the bead that
+        # moves it does not own. `0mdo.66` decided against folding that bead in
+        # here -- see its completion comment for the reason -- and paying the
+        # edit is what makes the decision honest rather than convenient.
+        assert populations[SPACE_AS_IS] == 116
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 

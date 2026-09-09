@@ -92,10 +92,10 @@ from tests.decoding_calls import (
     SUBPROCESS_CALLS,
     TEXT_READWRITE,
     called_name,
-    is_container_open,
     is_true,
     keyword,
     open_mode,
+    opens_without_a_codec,
     states_encoding,
 )
 
@@ -141,7 +141,7 @@ def _module_sources(root: Path) -> list[tuple[Path, ast.Module]]:
 
 def _classify(node: ast.Call, *, decodes_only: bool) -> str | None:
     """What kind of ambient-codec site *node* is, or ``None`` when it is not one."""
-    if states_encoding(node) or is_container_open(node):
+    if states_encoding(node) or opens_without_a_codec(node):
         return None
     name = called_name(node)
     if name in TEXT_READWRITE:

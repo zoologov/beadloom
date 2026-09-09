@@ -1,0 +1,51 @@
+# BDL-068 S6, beadloom-0mdo.66. The UX issue log is a numbered append-only
+# markdown file that every bead writes into, and the number an author takes is
+# the one they read off the end of it. That has collided five times: #187,
+# #211, #253, and twice in one hour on 2026-09-09 when one agent took #259 --
+# already taken hours earlier by another bead in the same slice -- and #260,
+# which never reached the file at all.
+#
+# The number is therefore ALLOCATED rather than read. The allocation is one
+# file per number in a ledger directory, created with O_CREAT|O_EXCL, which is
+# `beadloom-l9ee`'s one-file-per-incident primitive taken at the boundary: the
+# claim file is where the incident's body grows when the log becomes a composed
+# view of that directory.
+#
+# The check ships beside the allocator and not instead of it. O_EXCL spans one
+# filesystem, so two agents in two clones can still take one number and only
+# the merge shows it.
+
+@bead:beadloom-0mdo.66 @node:issue-numbers
+Feature: an issue number is allocated from the log, never read off the end of it
+
+  Scenario: Two writers allocating at the same moment receive different numbers
+    Given an issue log whose highest number is 261
+    When two writers allocate a number without either seeing the other
+    Then the two writers hold different numbers
+    And each number has a claim file of its own
+
+  Scenario: A number the log states only in a closed entry's heading is never handed out again
+    Given an issue log that states 159 in a consolidated heading and in no entry
+    When a number is allocated
+    Then the allocated number is not 159
+
+  Scenario: A number two entries both define is reported
+    Given an issue log in which two entries are both numbered 187
+    When the issue numbers are checked
+    Then 187 is reported as defined twice
+
+  Scenario: A number claimed and never written into the log is reported
+    Given a ledger holding a claim for 262 and a log with no entry numbered 262
+    When the issue numbers are checked
+    Then 262 is reported as claimed and unwritten
+
+  Scenario: An entry written past the ledger's floor without claiming its number is reported
+    Given a ledger whose floor is 262 and a log entry numbered 263 that no claim holds
+    When the issue numbers are checked
+    Then 263 is reported as unclaimed
+
+  Scenario: A project that declares no issue log is not judged
+    Given a project that declares no issue log
+    When the issue numbers are checked
+    Then the check reports that no issue log is declared
+    And the check reports no finding

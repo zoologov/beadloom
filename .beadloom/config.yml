@@ -151,3 +151,15 @@ docs_audit:
   # distribution from the dependency arrays.
   subjects:
     - bd
+
+# BDL-068 S6 (`beadloom-0mdo.66`, BDL-UX #187/#211/#253 and the two of
+# 2026-09-09). The UX log's numbers are ALLOCATED, not read off the end of the
+# file: `beadloom issue-number allocate --holder <bead-id>` creates one claim
+# file per number in the ledger below with an exclusive create, so two writers
+# racing cannot receive one number. The ledger is named after the log because
+# the claim file is where an entry's body grows if the log becomes a composed
+# view of that directory (`beadloom-l9ee`). A project that declares no
+# `issue_log:` block is not judged by any of the three legs.
+issue_log:
+  path: .claude/development/BDL-UX-Issues.md
+  ledger: .claude/development/BDL-UX-Issues
