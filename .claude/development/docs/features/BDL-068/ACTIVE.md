@@ -52,6 +52,11 @@ entered. A clean room structurally cannot see a bead running beside it; this bea
 On the combined tree, as its own gate owner: 9669 passed / 12 skipped / 1 xfailed, and
 `beadloom ci` rc 0 with `sync-check PASS: 450 pair(s) fresh`.
 
+Closed as `23dc768`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
+`bd ready --limit 0` lists neither — the third time this slice has recorded the shape the flow
+documents: the suggestion names beads the closed one blocked without re-checking their other
+blockers. The authoritative list holds 29 ready issues and neither of those is among them.
+
 **Previous bead:** `beadloom-l9ee` — BDL-UX #260, the shared write and the condition an ADR needs. S6,
 alone, and its own combined-tree gate owner. The bead is a DECISION the coordinator asked for
 and the previous agent wrote; this run re-checked its measurements as evidence rather than
