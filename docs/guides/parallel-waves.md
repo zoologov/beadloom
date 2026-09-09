@@ -32,9 +32,9 @@ declared `refs:` to nodes and files and serialises a pair for one named reason:
 `override_serial`. This half is a decision, not advice. An advisory shape is prose that a model
 may act on or ignore, which is the failure the enforced-flow work exists to remove.
 
-**The five shared media are measured as a precondition, before the wave runs.** One working
-tree, one pre-commit hook, one landing order, one doc-freshness baseline and one tracker id
-space are shared no matter which shape is chosen. Each carries a verdict that can come back
+**The six shared media are measured as a precondition, before the wave runs.** One working
+tree, one pre-commit hook, one landing order, one focus document, one doc-freshness baseline
+and one tracker id space are shared no matter which shape is chosen. Each carries a verdict that can come back
 `failed`, and a medium nobody observed comes back `unmeasured`, which is a finding rather than
 a silent pass. What the run establishes is that the wave may start, not that it went well.
 
@@ -168,6 +168,7 @@ each with a plan-time precondition that is actually checked:
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181 |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` | BDL-UX #118 |
 | `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts | BDL-UX #194, #237 |
+| `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder | BDL-UX #257 |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index | BDL-UX #182, #133 |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records | BDL-UX #171 |
 
@@ -181,6 +182,34 @@ hold: a plan is one slice of one epic, so a wave's width is not a claim that its
 in the tree, and the `working-tree` check exists precisely to report paths that no bead in the
 plan owns — a question a wave of one can and does fail. `not_applicable` is gone as a verdict a
 plan's shape can produce.
+
+### The document every bead writes is shared, and the code graph cannot see it
+
+`focus-document` (BDL-068 S6) answers BDL-UX #257. A wave plan resolves a bead to the nodes and
+the SOURCE FILES its code occupies, so two beads can hold disjoint code scopes and one shared
+document, and the plan reports `0 serialisations` truthfully about the wrong population.
+Measured twice on this project. In S6 wave 2, two beads with disjoint declared scopes both
+edited `docs/domains/application/README.md`; one committed the file whole and the other's hunk
+landed inside that commit — correct in the tree, wrong in the history. In S6 wave 4, `waves`
+derived `0 serialisations` for four beads that all write into the same `ACTIVE.md`.
+
+The second is structural rather than unlucky, which is what makes it a medium rather than a
+collision to be planned away. `/task-init` routes every work-item type through a document both
+of its flows write, so every concurrent wave this project has run shared one.
+
+**The population is derived, not written down.** `Routing.shared_kinds` is the intersection of
+the document kinds every route of the composed `/task-init` writes — `ACTIVE` on this project —
+and the folder is the work item's own, taken from the same branch read the commit gate makes. A
+project that adds a work-item type, or moves a document between the two flows, changes what
+this medium looks at by the same act. Widening a bead's `refs:` to reach the document is the
+defect BDL-UX #232 was filed against and is not how this is answered.
+
+**What the check asks is not whether the beads share it — they do — but whether the document
+gives each of them a place of its own.** A bead the table carries no row for has only the prose
+around it, and that is where one bead's hunk lands inside another bead's commit. The damage is
+attribution rather than lost content, which is what makes it easy to leave: a defect whose only
+symptom is a wrong author is one nobody notices until they read the log to find out why
+something changed.
 
 ### The landing lock orders commits, and orders nothing else
 

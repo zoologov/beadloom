@@ -13,9 +13,10 @@ Codes (the contract a caller may rely on):
   could not be read (it declared none, named a ref the graph does not have, wrote
   the declaration inside a sentence, or wrote a second ref the parser had to drop),
   an override past its exit condition, an override that changed nothing, a shared
-  medium whose precondition failed, a shared medium nobody measured, a bead
-  declaring a node its work item rules out of scope, and a concurrent wave whose
-  beads leave part of that work item's approved scope undeclared. Visible,
+  medium whose precondition failed (including a bead the document every route
+  writes carries no row for), a shared medium nobody measured, a bead declaring a
+  node its work item rules out of scope, and a concurrent wave whose beads leave
+  part of that work item's approved scope undeclared. Visible,
   never blocking — the shape is still usable.
 * ``2`` — no shape could be decided: no index, no answer from the tracker, a
   bead the tracker does not have, or a ``waves:`` block that would not parse.
@@ -45,8 +46,10 @@ from beadloom.services.commands._root import main
 if TYPE_CHECKING:
     from beadloom.application.waves import (
         BeadRecord,
+        FocusDocument,
         WaveEnvironment,
         WavePlan,
+        WorkItemAxes,
     )
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
@@ -149,8 +152,82 @@ def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
         conn.close()
 
 
-def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
-    """Measure the four media the graph cannot see, here at the services edge.
+def _focus_documents(
+    project_root: Path, axes: WorkItemAxes
+) -> tuple[FocusDocument, ...] | None:
+    """The documents every work-item type writes, and the rows each carries.
+
+    Two derivations already in the codebase, joined and read once. WHICH kind
+    every route writes is
+    :attr:`~beadloom.application.work_item_routing.Routing.shared_kinds`, off the
+    composed ``/task-init`` command. WHICH work item this plan belongs to is
+    *axes*, the same read the commit gate makes, and its document names the
+    folder the work item's own files live in — so no path is spelled here and a
+    project with another convention is not measured against this one.
+
+    **Scoped to ONE work item, and the reason is a measurement.** The first
+    version read every focus document in the project and asked whether any row
+    named the bead. Run on this repository it reported ``passed`` for all three
+    beads of BDL-068's S6 wave over 58 documents, none of which carries a row for
+    any of them: an ACTIVE table abbreviates ``beadloom-0mdo.75`` to ``.75``, and
+    BDL-061's table has a ``.75`` row of its own. That is the ambiguity
+    :func:`~beadloom.application.active_table.row_ids.resolve_row_bead_id`
+    already refuses to guess at, met from the other side — this project holds
+    eight beads numbered ``.17`` in eight epics.
+
+    ``None`` when the routing could not be read, or when the branch names no work
+    item: neither is a flow whose routes write nothing, and an unknown population
+    must not print like an empty one.
+    """
+    from beadloom.application.doc_shape import planning_document_globs
+    from beadloom.application.waves import FocusDocument
+    from beadloom.application.work_item_routing import task_init_routing
+    from beadloom.doc_sync.tables import cells_of
+
+    routing = task_init_routing(project_root=project_root)
+    if not routing.routes or not axes.readable or not axes.document:
+        return None
+    kinds = routing.shared_kinds
+    if not kinds:
+        return ()
+    folder = (project_root / axes.document).parent
+    found: list[FocusDocument] = []
+    for pattern in planning_document_globs(project_root):
+        for path in sorted(project_root.glob(pattern)):
+            kind = path.stem.upper()
+            if kind not in kinds or path.parent != folder:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                # A focus document nobody could read is not one with no rows.
+                return None
+            found.append(
+                FocusDocument(
+                    path=_relative(path, project_root),
+                    kind=kind,
+                    row_cells=tuple(
+                        cells[0]
+                        for line in text.splitlines()
+                        if (cells := cells_of(line))
+                    ),
+                )
+            )
+    return tuple(found)
+
+
+def _relative(path: Path, project_root: Path) -> str:
+    """*path* as the project writes it, whether the root was absolute or not."""
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _environment(
+    project_root: Path, db_path: Path, axes: WorkItemAxes
+) -> WaveEnvironment:
+    """Measure the media the graph cannot see, here at the services edge.
 
     Gathered here rather than inside the planner so the application layer keeps
     taking its input as data: the decision stays runnable without git, without a
@@ -171,6 +248,7 @@ def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
         landing_lock_sites=lock_sites(
             lock_invocations(text_invocations(flow_artifacts(project_root)))
         ),
+        focus_documents=_focus_documents(project_root, axes),
     )
 
 
@@ -379,8 +457,8 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
         click.echo(f"Error: no wave shape could be decided — {exc}", err=True)
         sys.exit(_EXIT_UNDECIDABLE)
 
-    environment = _environment(project_root, db_path)
     axes = work_item_axes(project_root)
+    environment = _environment(project_root, db_path, axes)
     conn = open_db(db_path)
     try:
         plan = plan_waves(

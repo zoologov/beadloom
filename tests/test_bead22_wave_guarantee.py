@@ -48,6 +48,7 @@ from beadloom.application.waves import (
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -148,6 +149,7 @@ def _measured() -> WaveEnvironment:
         commit_gate=GATE_COMMIT_SCOPED,
         doc_baseline_stale_pairs=0,
         landing_lock_sites=(),
+        focus_documents=(),
     )
 
 
@@ -358,6 +360,7 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
             MEDIUM_DOC_BASELINE,
             MEDIUM_TRACKER_IDS,
             MEDIUM_LANDING_ORDER,
+            MEDIUM_FOCUS_DOCUMENT,
         }
         assert {medium.name for medium in SHARED_MEDIA} == exported
         assert len(SHARED_MEDIA) == len(exported)

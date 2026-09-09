@@ -22,9 +22,26 @@ about:
   before a commit grants nothing in the form this project instructs it — one
   tracker actor for every role, a release nobody checks, and a ``--wait`` that
   queues and returns (BDL-UX #194, #237).
+* the **focus document** is one file per work item that every one of its beads
+  writes and no bead's code owns, so a plan that resolves a bead to the nodes and
+  files its CODE occupies reports ``0 serialisations`` truthfully about the wrong
+  population (BDL-UX #257).
+
+**Why the focus document is a medium and not a serialisation** (BDL-UX #257).
+It cannot be one: ``docs.ref_id`` holds at most one node per document, and
+:func:`~beadloom.application.waves.independence.conflict_between` already
+serialises on ``shared_node`` whenever two scopes' refs intersect — so two beads
+that reach a document comparison have disjoint refs, and disjoint refs give
+disjoint owned documents by construction. Measured on this repository: a
+``shared_document`` reason derived from document OWNERSHIP produces no
+serialisation ``shared_node`` does not already produce, which is a check that
+cannot fail. And it could not reach the measured case regardless: BDL-068's
+ACTIVE.md is in the docs table nowhere, and the wave-2 collision was over
+``docs/domains/application/README.md``, owned by ``application`` — an ancestor of
+one of the two scopes and of neither.
 
 So the media are STATED by every wave, at every size, each with the evidence it
-comes from. A shape that quietly claimed independence in these five would be
+comes from. A shape that quietly claimed independence in these six would be
 exactly the advisory answer this command exists to replace.
 
 **Why every size, when the first version said a wave of one shares nothing**
@@ -46,7 +63,7 @@ because a medium in this module is one with a plan-time precondition a command
 can OBSERVE — git, the installed hook, the doc index, the bead records — and a
 session scratchpad has none: its path exists only inside a running agent
 session, the same reason a launch prompt is ``not_inspected`` rather than a
-finding in :mod:`beadloom.onboarding.role_duties`. Adding it would buy a fifth
+finding in :mod:`beadloom.onboarding.role_duties`. Adding it would buy a further
 verdict that is permanently ``unmeasured`` (a finding on every plan) or
 permanently true (a check that cannot fail), and this epic forbids both. What is
 observable is the REMEDY, so the remedy is what ships: :func:`room_for` names
@@ -65,6 +82,7 @@ MEDIUM_COMMIT_GATE = "commit-gate"
 MEDIUM_DOC_BASELINE = "doc-baseline"
 MEDIUM_TRACKER_IDS = "tracker-ids"
 MEDIUM_LANDING_ORDER = "landing-order"
+MEDIUM_FOCUS_DOCUMENT = "focus-document"
 
 #: The prefix a clean room's directory carries, so the room names its owner.
 #: A constant because the role cores promise this exact spelling and a test
@@ -72,7 +90,7 @@ MEDIUM_LANDING_ORDER = "landing-order"
 ROOM_PREFIX = "room-"
 
 #: Stated in the order a wave meets them: it edits, its commit is judged, it
-#: lands, it documents, and it files follow-up work.
+#: lands, it records where it got to, it documents, and it files follow-up work.
 SHARED_MEDIA: tuple[SharedMedium, ...] = (
     SharedMedium(
         name=MEDIUM_WORKING_TREE,
@@ -111,6 +129,22 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
             "without waiting."
         ),
         evidence="BDL-UX #194, #237",
+    ),
+    SharedMedium(
+        name=MEDIUM_FOCUS_DOCUMENT,
+        statement=(
+            "One focus document per work item, written by every bead of it and "
+            "owned by no bead's code. `/task-init` routes every work-item type "
+            "through a document both of its flows write, so a wave shares one "
+            "whatever this plan says — and this plan says nothing, because it "
+            "resolves a bead to the nodes and files its CODE occupies and no "
+            "node owns that document. Write only the row that names your bead, "
+            "stage that file by path with your own commit, and never commit it "
+            "whole: a hunk written by one bead and committed by another is "
+            "correct in the tree and wrong in the history, which is a defect "
+            "whose only symptom is a wrong author."
+        ),
+        evidence="BDL-UX #257",
     ),
     SharedMedium(
         name=MEDIUM_DOC_BASELINE,

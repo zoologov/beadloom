@@ -29,6 +29,7 @@ from beadloom.application.waves import (
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -36,8 +37,10 @@ from beadloom.application.waves import (
     REASON_UNRESOLVED_SCOPE,
     STATUS_FAILED,
     STATUS_NOT_APPLICABLE,
+    STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    FocusDocument,
     WaveEnvironment,
     WaveOverride,
     WorkItemAxes,
@@ -111,6 +114,7 @@ def given_media_measured(world: dict[str, Any]) -> None:
         commit_gate=GATE_COMMIT_SCOPED,
         doc_baseline_stale_pairs=0,
         landing_lock_sites=(),
+        focus_documents=(),
     )
 
 
@@ -230,7 +234,7 @@ def then_override_inert(world: dict[str, Any]) -> None:
 
 @then(
     "the wave names the working tree, the commit gate, the landing order, the "
-    "doc baseline and the tracker id space"
+    "focus document, the doc baseline and the tracker id space"
 )
 def then_names_media(world: dict[str, Any]) -> None:
     named = {medium.name for medium in world["plan"].shared_media}
@@ -238,6 +242,7 @@ def then_names_media(world: dict[str, Any]) -> None:
         MEDIUM_WORKING_TREE,
         MEDIUM_COMMIT_GATE,
         MEDIUM_LANDING_ORDER,
+        MEDIUM_FOCUS_DOCUMENT,
         MEDIUM_DOC_BASELINE,
         MEDIUM_TRACKER_IDS,
     }
@@ -494,3 +499,71 @@ def then_gap_remedy_is_not_the_union(world: dict[str, Any]) -> None:
     finding = _gap_finding(world)
     assert "generate each bead's `refs:` from the `## Axes` section" not in finding
     assert "collapses every wave to a wave of one" in finding
+
+
+@given(parsers.parse('the focus document carries a row for "{first}" only'))
+def given_focus_document_names_one(world: dict[str, Any], first: str) -> None:
+    """One row, and the other bead of the wave writes into the prose beside it."""
+    world["environment"] = replace(
+        world["environment"],
+        focus_documents=(
+            FocusDocument(
+                path=".claude/development/docs/features/KEY/ACTIVE.md",
+                kind="ACTIVE",
+                row_cells=("Bead", first),
+            ),
+        ),
+    )
+
+
+@given(parsers.parse('the focus document carries a row for "{first}" and "{second}"'))
+def given_focus_document_names_both(
+    world: dict[str, Any], first: str, second: str
+) -> None:
+    world["environment"] = replace(
+        world["environment"],
+        focus_documents=(
+            FocusDocument(
+                path=".claude/development/docs/features/KEY/ACTIVE.md",
+                kind="ACTIVE",
+                row_cells=("Bead", first, second),
+            ),
+        ),
+    )
+
+
+@given("the routes of this flow write no document in common")
+def given_no_shared_document(world: dict[str, Any]) -> None:
+    """An empty population is a real observation, the way an empty lock site is."""
+    world["environment"] = replace(world["environment"], focus_documents=())
+
+
+@then("the wave names the focus document among the media it did not decide")
+def then_names_focus_document(world: dict[str, Any]) -> None:
+    named = {medium.name for medium in world["plan"].shared_media}
+    assert MEDIUM_FOCUS_DOCUMENT in named
+    medium = next(
+        m for m in world["plan"].shared_media if m.name == MEDIUM_FOCUS_DOCUMENT
+    )
+    assert medium.statement
+    assert medium.evidence
+
+
+@then(parsers.parse('the wave reports "{medium}" as passed'))
+def then_medium_passed(world: dict[str, Any], medium: str) -> None:
+    check = next(c for c in world["plan"].media_checks if c.medium == medium)
+    assert check.status == STATUS_PASSED
+    assert check.detail
+
+
+@then(
+    parsers.parse(
+        'the failure names "{bead}" as writing into a document it has no row in'
+    )
+)
+def then_failure_names_bead(world: dict[str, Any], bead: str) -> None:
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_FOCUS_DOCUMENT
+    )
+    assert bead in check.detail
+    assert "ACTIVE.md" in check.detail

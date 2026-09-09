@@ -254,6 +254,7 @@ class TestOneContractForEveryCaller:
             "working-tree",
             "commit-gate",
             "landing-order",
+            "focus-document",
             "doc-baseline",
             "tracker-ids",
         }

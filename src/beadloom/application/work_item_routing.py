@@ -4,6 +4,9 @@
 
 A work item's TYPE is a claim about how far the change ranges, and the route it
 takes decides which documents get written and which approval gates it passes.
+The documents EVERY route writes are derived here too, because a document no
+route can avoid is one every bead of a work item writes and no bead's code owns
+(:attr:`Routing.shared_kinds`, BDL-UX #257).
 Until BDL-068 S1.5 the routing table was prose an agent read and nothing more:
 BDL-067 was routed ``bug``, wrote one BRIEF, passed one approval gate and became
 28 beads, and re-deriving its axes afterwards showed the change ranging over
@@ -114,6 +117,32 @@ class Routing:
     def full_kinds(self) -> frozenset[str]:
         """Document kinds written ONLY by types on the full route."""
         return self._kinds_unique_to(FULL)
+
+    @property
+    def shared_kinds(self) -> frozenset[str]:
+        """Document kinds EVERY route writes — the third face of one computation.
+
+        The two properties above take a difference to answer *which route is this
+        work item on*. This one takes the intersection to answer a question
+        `beadloom waves` asks: which document does every bead of every work item
+        write into, whatever its type. On this project's own routing table the
+        answer is ``ACTIVE``, which the docstring above already names as the kind
+        identifying neither route.
+
+        It is the derived half of BDL-UX #257. A wave plan resolves a bead to the
+        nodes and files its CODE occupies, so a document every route writes and
+        no node owns is shared by every wave and compared by none of them. The
+        population has to be derived or it rots (`beadloom-0mdo.51`), and this is
+        where it is derived from: a project that adds a type, or moves a document
+        between the two flows, changes this answer by the same act.
+
+        Empty when no route was read, which is the honest answer rather than the
+        vacuous intersection over nothing.
+        """
+        if not self.routes:
+            return frozenset()
+        kinds = [frozenset(route.documents) for route in self.routes]
+        return frozenset.intersection(*kinds)
 
     @property
     def explore_precedes_the_decision(self) -> bool:

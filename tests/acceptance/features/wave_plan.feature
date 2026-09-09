@@ -58,7 +58,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     Given a bead "alpha" declaring the node scope "billing"
     And a bead "beta" declaring the node scope "shipping"
     When the wave shape is decided
-    Then the wave names the working tree, the commit gate, the landing order, the doc baseline and the tracker id space
+    Then the wave names the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
     And exactly one bead of the wave owns the combined-tree result
 
   # BDL-061.80. Naming the media was the whole of the second clause until `.22`
@@ -130,7 +130,7 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the shared media were measured and are clean
     When the wave shape is decided
     Then no wave holds more than one bead
-    And the wave names the working tree, the commit gate, the landing order, the doc baseline and the tracker id space
+    And the wave names the working tree, the commit gate, the landing order, the focus document, the doc baseline and the tracker id space
     And every bead is told the clean room it owes, named after its own id
     And exactly one bead of the wave owns the combined-tree result
     And every medium the wave names carries a verdict of its own
@@ -291,3 +291,58 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the shared media were measured and are clean
     When the wave shape is decided
     Then no wave holds more than one bead
+
+  # BDL-UX #257. `waves` resolves a bead to the nodes and files its CODE
+  # occupies, so two beads holding disjoint code scopes and one shared DOCUMENT
+  # read as independent and the plan reports 0 serialisations truthfully about
+  # the wrong population. Measured twice: wave 2 of this slice, where `.37`
+  # committed `docs/domains/application/README.md` whole and `.68`'s hunk landed
+  # inside `.37`'s commit; and wave 4, where `waves` derived 0 serialisations for
+  # four beads that all write into one ACTIVE.md.
+  #
+  # The second is structural rather than unlucky, and that is what makes it a
+  # MEDIUM: the composed `/task-init` command routes every work-item type
+  # through a document both of its flows write, so every wave this project has
+  # ever run shared one and no bead's code owns it.
+
+  @bead:beadloom-0mdo.75
+  Scenario: The document every route writes is named as shared at every wave size
+    Given a bead "alpha" declaring the node scope "billing"
+    When the wave shape is decided
+    Then the wave names the focus document among the media it did not decide
+
+  @bead:beadloom-0mdo.75
+  Scenario: A bead the focus document carries no row for is reported
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And the focus document carries a row for "alpha" only
+    When the wave shape is decided
+    Then the wave reports "focus-document" as failed
+    And the failure names "beta" as writing into a document it has no row in
+
+  @bead:beadloom-0mdo.75
+  Scenario: A focus document carrying a row for every bead of the plan passes
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And the focus document carries a row for "alpha" and "beta"
+    When the wave shape is decided
+    Then the wave reports "focus-document" as passed
+    And the plan is clean
+
+  # The landing-order precedent: an empty population is a real observation and
+  # says so, rather than failing a project whose flow writes no such document.
+
+  @bead:beadloom-0mdo.75
+  Scenario: A flow whose routes write no document in common shares no focus document
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And the routes of this flow write no document in common
+    When the wave shape is decided
+    Then the wave reports "focus-document" as passed
+    And the plan is clean

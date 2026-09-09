@@ -464,13 +464,37 @@ GATE_ABSENT = "absent"
 
 
 @dataclass(frozen=True)
+class FocusDocument:
+    """A document every route of this flow writes, and the rows it carries.
+
+    The population is DERIVED, never authored: which document kind every
+    work-item type writes is
+    :attr:`~beadloom.application.work_item_routing.Routing.shared_kinds`, read
+    off the composed ``/task-init`` command, and where such documents live is
+    :func:`~beadloom.application.doc_shape.planning_document_globs`. Widening a
+    bead's ``refs:`` to reach this file is the defect BDL-UX #232 was filed
+    against, so the file is not attributed to any bead at all — it is stated as
+    shared by all of them.
+
+    ``row_cells`` is the FIRST cell of every markdown table row in the file, read
+    with :func:`beadloom.doc_sync.tables.cells_of`. Only the first cell, because
+    that is the column an ACTIVE table names its bead in, and only the cells
+    rather than the file, so the check stays a decision over data.
+    """
+
+    path: str
+    kind: str
+    row_cells: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class WaveEnvironment:
-    """What the machine says about the four media the graph cannot see.
+    """What the machine says about the media the graph cannot see.
 
     Every field is ``None`` by default and ``None`` means *not observed*. A caller
-    that gathers nothing therefore gets four ``unmeasured`` checks and an exit
-    code of 1, which is the intended outcome: a concurrent wave whose shared media
-    nobody measured is not a clean plan, it is an unmeasured one.
+    that gathers nothing therefore gets an ``unmeasured`` check per field and an
+    exit code of 1, which is the intended outcome: a concurrent wave whose shared
+    media nobody measured is not a clean plan, it is an unmeasured one.
     """
 
     #: Paths that differ from ``HEAD``, as
@@ -488,6 +512,12 @@ class WaveEnvironment:
     #: empty tuple is a real observation — somebody read the artifacts and the
     #: lock is instructed nowhere — and is not the same fact as ``None``.
     landing_lock_sites: tuple[LockSite, ...] | None = None
+
+    #: The documents every work-item type of this flow writes, and the rows each
+    #: carries. An empty tuple is a real observation — the routes were read and
+    #: they write no document in common, or this project holds no work item that
+    #: has one — and is not the same fact as ``None``.
+    focus_documents: tuple[FocusDocument, ...] | None = None
 
 
 @dataclass(frozen=True)

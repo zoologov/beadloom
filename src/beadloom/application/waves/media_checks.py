@@ -10,19 +10,22 @@ answer that reads as a clean one is the defect this whole command exists for.
 
 **What these checks are, precisely.** They are PRECONDITIONS, measured before the
 wave runs: the tree it starts from, the hook that will judge its commits, what its
-artifacts tell an agent about the landing lock, the doc baseline it inherits, and
-the ids its beads already carry. They are not
+artifacts tell an agent about the landing lock, whether the document every one of
+its beads writes gives each of them a row, the doc baseline it inherits, and the
+ids its beads already carry. They are not
 verification of the wave's conduct. Nothing here can check that the gate owner
 actually ran the tree afterwards, because that happens after the plan exists and
 no plan can reach it. The sentence in :mod:`beadloom.application.waves` names
 that split rather than leaving a reader to discover it.
 
-**Where the observations come from.** Four of the five are facts about files —
-git, the installed hook, the doc index, the composed flow artifacts — and they
-arrive as a :class:`WaveEnvironment` gathered by the caller rather than read
-here, so this layer keeps taking its input as data and the checks stay runnable
-without a git binary, a repository, a hook or a scaffolded flow. The fifth needs
-nothing but the bead records the planner already holds.
+**Where the observations come from.** Five of the six are facts about files —
+git, the installed hook, the doc index, the composed flow artifacts, the flow's
+own planning documents — and they arrive as a :class:`WaveEnvironment` gathered
+by the caller rather than read here, so this layer keeps taking its input as data
+and the checks stay runnable without a git binary, a repository, a hook or a
+scaffolded flow. The sixth needs nothing but the bead records the planner already
+holds, and the focus-document check needs both: the file's rows as data, and the
+records to say whose row each is.
 """
 
 # beadloom:feature=wave-plan
@@ -32,10 +35,12 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from beadloom.application.active_table import names_bead
 from beadloom.application.waves.landing import LOCK_COMMAND, defect_detail
 from beadloom.application.waves.media import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -300,6 +305,78 @@ def _check_landing_order(environment: WaveEnvironment) -> MediumCheck:
     )
 
 
+def _check_focus_document(
+    environment: WaveEnvironment, records: Sequence[BeadRecord]
+) -> MediumCheck:
+    """Whether the document every bead of this plan writes gives each of them a row.
+
+    The medium is shared by construction and cannot be planned away, so the
+    precondition is not *do these beads share it* — they do — but whether the
+    document gives each of them a place of its own to write in. A bead the
+    document carries no row for has only the shared prose, and that is where a
+    hunk written by one bead lands inside another bead's commit (BDL-UX #257).
+
+    Read with the reader that already exists.
+    :func:`~beadloom.application.active_table.names_bead` is how ``active-sync``
+    decides which bead a row names, in both the full form the tracker allocates
+    and the short form a table abbreviates it to, under whatever Markdown the
+    author wrapped it in. A second reader of that one fact is the defect
+    ``beadloom-0mdo.46`` lifted ``doc_sync/tables.py`` to stop happening a third
+    time.
+
+    **A bead named in ANY focus document counts as named.** The population is
+    every work item's focus document rather than this plan's own, because the
+    plan does not carry a work item id and deriving one would be a second source
+    for a fact ``declared-scope`` already owns. The looseness can only turn a
+    failure into a pass, and only for a wave whose beads span two work items —
+    which would not collide in one document anyway.
+    """
+    documents = environment.focus_documents
+    if documents is None:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_UNMEASURED,
+            "the flow's routing and its planning documents were not read, so "
+            "which document every bead of this plan writes into is unknown",
+        )
+    if not documents:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_PASSED,
+            "no work item of this project holds a document every route writes, "
+            "so this plan's beads share no focus document — their landings are "
+            "serialised by the derived scopes above and by nothing else",
+        )
+    cells = tuple(cell for document in documents for cell in document.row_cells)
+    missing = tuple(
+        sorted(
+            record.bead_id
+            for record in records
+            if not any(names_bead(cell, record.bead_id) for cell in cells)
+        )
+    )
+    where = ", ".join(sorted({document.path for document in documents})[:3])
+    if not missing:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_PASSED,
+            f"all {len(records)} bead(s) of this plan are named by a row of the "
+            f"{len(documents)} focus document(s) read, so each writes a line of "
+            "its own rather than the prose around it",
+        )
+    named = ", ".join(missing)
+    return MediumCheck(
+        MEDIUM_FOCUS_DOCUMENT,
+        STATUS_FAILED,
+        f"{len(missing)} of {len(records)} bead(s) of this plan write into a "
+        f"focus document no row of it names — {named}. The document is owned by "
+        f"no bead's code, so the serialisation count above did not compare it; "
+        f"give each bead a row in {where} before the wave starts, or its edit "
+        "lands in the shared prose and is committed by whoever gets there first "
+        "(BDL-UX #257)",
+    )
+
+
 def check_media(
     records: Sequence[BeadRecord],
     *,
@@ -323,6 +400,7 @@ def check_media(
         _check_working_tree(observed, owned_paths),
         _check_commit_gate(observed),
         _check_landing_order(observed),
+        _check_focus_document(observed, records),
         _check_doc_baseline(observed),
         _check_tracker_ids(records),
     )

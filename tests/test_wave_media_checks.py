@@ -25,6 +25,7 @@ from beadloom.application.waves import (
     GATE_WHOLE_TREE,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -34,6 +35,7 @@ from beadloom.application.waves import (
     STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    FocusDocument,
     LockSite,
     MediumCheck,
     WaveEnvironment,
@@ -69,6 +71,17 @@ CLEAN = WaveEnvironment(
     commit_gate=GATE_COMMIT_SCOPED,
     doc_baseline_stale_pairs=0,
     landing_lock_sites=(),
+    focus_documents=(),
+)
+
+#: A focus document that names no bead of the plan — the shape BDL-UX #257
+#: measured, where the wave's beads have only the prose around the table.
+NAMES_NOBODY = (
+    FocusDocument(
+        path=".claude/development/docs/features/KEY/ACTIVE.md",
+        kind="ACTIVE",
+        row_cells=("Bead", ".99"),
+    ),
 )
 
 #: One instruction of the landing lock in the form that grants nothing — the
@@ -140,6 +153,7 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=(),
+                    focus_documents=(),
                 ),
             ),
             (
@@ -149,6 +163,7 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_WHOLE_TREE,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=(),
+                    focus_documents=(),
                 ),
             ),
             (
@@ -158,6 +173,7 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=3,
                     landing_lock_sites=(),
+                    focus_documents=(),
                 ),
             ),
             (
@@ -167,6 +183,17 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=GRANTS_NOTHING,
+                    focus_documents=(),
+                ),
+            ),
+            (
+                MEDIUM_FOCUS_DOCUMENT,
+                WaveEnvironment(
+                    tree_changed_paths=(),
+                    commit_gate=GATE_COMMIT_SCOPED,
+                    doc_baseline_stale_pairs=0,
+                    landing_lock_sites=(),
+                    focus_documents=NAMES_NOBODY,
                 ),
             ),
         ],
@@ -187,6 +214,7 @@ class TestEveryMediumHasACheckThatCanFail:
             MEDIUM_COMMIT_GATE,
             MEDIUM_DOC_BASELINE,
             MEDIUM_LANDING_ORDER,
+            MEDIUM_FOCUS_DOCUMENT,
         ],
     )
     def test_a_medium_nobody_observed_is_unmeasured_rather_than_passed(
@@ -214,6 +242,7 @@ class TestEveryMediumHasACheckThatCanFail:
             MEDIUM_COMMIT_GATE,
             MEDIUM_DOC_BASELINE,
             MEDIUM_LANDING_ORDER,
+            MEDIUM_FOCUS_DOCUMENT,
         ):
             assert _check(checks, medium).status != STATUS_NOT_APPLICABLE
             assert not _check(checks, medium).is_finding
@@ -366,6 +395,7 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             commit_gate=GATE_COMMIT_SCOPED,
             doc_baseline_stale_pairs=0,
             landing_lock_sites=(),
+            focus_documents=(),
         )
         plan = plan_waves(
             [_bead("a", "billing"), _bead("b", "shipping")],

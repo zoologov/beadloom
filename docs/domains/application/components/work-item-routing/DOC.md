@@ -28,6 +28,12 @@ are peer domains and neither may import the other.
 | the step that derives the axes | the first `##`/`###` heading whose body launches `subagent_type: explore` |
 | the line the type decision is taken on | the routing table's header line |
 
+`Routing.shared_kinds` is the third face of the same computation: the document kinds **every**
+route writes, taken as an intersection. On this project it answers `ACTIVE`, and `beadloom
+waves` spends it — a document no route can avoid is one every bead of a work item writes and no
+bead's code owns, which is the shared medium BDL-UX #257 named. An empty routing answers the
+empty set rather than the vacuous intersection over nothing.
+
 `Routing.simplified_kinds` and `Routing.full_kinds` are the document kinds written by **only**
 one route. A kind both routes write — `ACTIVE` — identifies neither and is in neither set,
 which leaves exactly the evidence a check over a folder of documents has.
@@ -49,6 +55,7 @@ produce a note instead of an empty routing that would read as "no types are decl
 | `task_init_routing(*, config, project_root)` | The routing this project's composed `/task-init` declares |
 | `read_routing(text)` | The same derivation over an already-composed text |
 | `Routing` | The routes, the two line numbers and the notes |
+| `Routing.shared_kinds` | The document kinds every route writes — what `beadloom waves` reads as its focus document |
 | `Route` | One row: a type, its flow and the documents it writes |
 | `SIMPLIFIED` / `FULL` | The two flow labels a cell is reduced to |
 | `AXES_ROLE` | The role whose deliverable the type decision is made from |

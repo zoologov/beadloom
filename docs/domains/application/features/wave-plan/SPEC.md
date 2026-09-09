@@ -27,8 +27,9 @@ The guarantee the shape makes, in one sentence:
 The sentence has two halves because measurement says one half is not enough. The
 first half is code independence, which the graph decides. The second is the set
 of media a wave shares whatever shape it takes — one working tree, one
-pre-commit hook, one landing order, one doc-freshness baseline, one tracker id
-space — and no choice of shape makes any of them independent.
+pre-commit hook, one landing order, one focus document, one doc-freshness
+baseline, one tracker id space — and no choice of shape makes any of them
+independent.
 
 **The split the sentence names.** The second half was a constant tuple until
 BDL-061.80: the media were printed with the evidence they came from, and
@@ -250,8 +251,36 @@ evidence it comes from:
 | `working-tree` | an agent's clean-room green is a claim about N files, not about the tree, and the room is built at `room-<bead-id>` so it can say whose it is |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
 | `landing-order` | one branch. What keeps two agents out of one FILE is the disjoint scopes the plan derived; what orders their COMMITS is the merge slot, and only in the form that grants it (BDL-UX #194, #237) |
+| `focus-document` | one document per work item that every one of its beads writes and no bead's code owns. `/task-init` routes every type through it, so a wave shares it whatever the plan says — and the plan says nothing, because it resolves a bead to the nodes and files its CODE occupies (BDL-UX #257) |
 | `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
 | `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted; a creation of more than one bead goes through one plan whose edges name plan-local keys, and a hand-wired `dep add` is where the echoed titles are the only check (BDL-UX #171, #165) |
+
+**Why `focus-document` is a medium and not a serialisation (BDL-UX #257).** The
+bead that filed it asked for a bead's document scope to be derived, and derived
+from OWNERSHIP that is worth exactly zero: `docs.ref_id` is a single column and
+`docs.path` is `UNIQUE`, so a document belongs to at most one node, and
+`conflict_between` fires `shared_node` on any ref intersection before a document
+could be compared. Two beads that reach a document comparison therefore hold
+disjoint refs and disjoint owned documents, so a `shared_document` reason adds no
+serialisation `shared_node` does not already produce — a check that cannot fail.
+It could not reach the measured case in any event: BDL-068's `ACTIVE.md` is in
+the docs table nowhere, and the first observed collision was over
+`docs/domains/application/README.md`, owned by `application` — an ancestor of one
+of the two scopes and of neither. `TestDocumentOwnershipCannotSerialiseAnything`
+in `tests/test_the_document_every_bead_writes.py` holds that claim as an
+executable, so a schema that later gives a document two owners is found by a red
+test.
+
+**Which document, and whose.** The kind is derived, never spelled:
+`Routing.shared_kinds` is the intersection of the document kinds every route of
+the composed `/task-init` writes, beside the two difference properties that
+decide a work item's route. On this project it answers `ACTIVE`. The FOLDER is
+the work item's own, taken from `work_item_axes(project_root).document`. Scoping
+it to one work item is a measurement rather than a preference: reading every
+focus document in this repository reported `passed` for all three beads of
+BDL-068's S6 wave over 58 documents, none of which carries a row for any of them,
+because a table abbreviates `beadloom-0mdo.75` to `.75` and BDL-061's table has a
+`.75` row of its own.
 
 The first version printed the list only for a wave of more than one bead, on the
 reasoning that a wave of one shares nothing concurrently. BDL-UX #228 measured
@@ -350,6 +379,7 @@ check — see below.
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
 | `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts |
+| `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records |
 
@@ -360,7 +390,7 @@ come to disagree about what one work item approved, and a work item nothing can
 be read from arrives as a `WorkItemAxes` carrying its reason rather than as an
 absence dropped at the edge.
 
-The four file-observed media are gathered by the command and handed to
+The five file-observed media are gathered by the command and handed to
 `plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
 without a repository, without a hook and without a scaffolded flow — each absence
 arrives as a `None` the check reports, never as a silent zero. Every medium is checked at every wave
@@ -545,7 +575,7 @@ every scenario runs without a `bd` binary on the machine.
 
 `tests/acceptance/features/wave_plan.feature` states the behaviour as executable
 scenarios; `tests/test_wave_plan.py` covers the reasons, the ordering and the
-override arithmetic; `tests/test_wave_media_checks.py` covers the five medium
+override arithmetic; `tests/test_wave_media_checks.py` covers the medium
 verdicts and the title-against-id comparison;
 `tests/acceptance/features/landing_lock.feature` and
 `tests/test_landing_lock_sites.py` cover the landing-lock derivation and hold
