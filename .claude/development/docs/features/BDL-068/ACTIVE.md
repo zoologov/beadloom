@@ -8,18 +8,28 @@
 > `iur5`) landed after the test bead had measured the slice — and `.69` re-measured over the
 > widened surface and closed with nine findings, BDL-UX #268-#273 and #275-#277. S6's
 > `review` bead `.70` returned ISSUES: 0 critical, 3 major. Major 1 became the fix bead
-> `.84`, which is done; Majors 2 and 3 are routed to the docs wave `.71`. The docs wave runs
-> next, then `.14`, then the epic's PR.
+> `.84`, which is done; Majors 2 and 3 went to the docs wave `.71`, which has now run and
+> closed both. `.14` runs next, then the epic's PR.
 
 ---
 
 ## Current Bead
 
-**Bead:** none. `beadloom-0mdo.84` closed at `f5f8b78` and S6's dev work is finished. The
-DOCS WAVE (`.71`) runs next, carrying the review's Majors 2 and 3 — the `issue-number` section
-missing from `docs/services/cli.md`, and the `[Unreleased]` CHANGELOG carrying no `### Added`
-while this branch ships eight new commands — plus the stale planning facts the review's Minor
-7 names. Then `.14`, then the epic's PR.
+**Bead:** none. The DOCS WAVE (`beadloom-0mdo.71`) has run and closed the review's Majors 2
+and 3. `.14` runs next, then the epic's PR.
+
+**Major 2 is closed.** `docs/services/cli.md` now carries a `### beadloom issue-number`
+section. The gap was re-derived rather than taken on report: `beadloom --help` registers 43
+commands and exactly one had no `^### beadloom <cmd>` heading. That re-derivation was
+necessary, not ceremonial — `beadloom-0mdo.84` re-baselined this very file's surface warning
+with `sync-update --yes --all` an hour earlier (BDL-UX #279), so its clean surface was
+re-attested rather than re-read and was not evidence of anything.
+
+**Major 3 is closed, and its premise was corrected.** `CHANGELOG.md` `[Unreleased]` now carries
+an `### Added` block. It names NINE new top-level commands, not eight: the count was derived by
+comparing the registered names at `a4738b7` against `HEAD`, and `beadloom mutation` was missing
+from every list that said eight. The block states that the omission is epic-wide and starts at
+S1, which is already on `main` via PR #59 — it is not an S6 regression.
 
 **LAST BEAD, and what it left the docs wave:** `beadloom-0mdo.84`, S6's ONE fix bead, from the
 review's Major 1, and the last dev bead of BDL-068. The role-map check `.59` shipped to close BDL-UX #252 asked its question
@@ -69,6 +79,90 @@ the caveat is printed. And the CLAIM must name it, because the claim is what abo
 verdicts were written in. Reproduced independently in `room-beadloom-0mdo.69` at the same
 numbers, and a second step enters zero in the same room and says so as plainly:
 `scope-check SKIP: skipped — no branch is checked out`.
+
+## S6 is two slices wearing one name — read this before the bead list
+
+The S6 review (`beadloom-0mdo.70`) was asked whether S6 is one slice and answered no. The
+answer is derived rather than impressionistic, and it is recorded here because it is the name
+a reader of this epic will need.
+
+About fourteen beads fit the slice as planned — **the flow's own documents and roles**. About
+fifteen more form a second coherent slice that nobody named: **the verification apparatus this
+epic measures itself with**. The clean room (`.37`, `.38`, `.74`, `.81`, `uzck`, `.50`), the
+Gate (`.48`, `.78`), the wave planner (`.83`), `impact` (`.73`), `config-check` (`.40`), the
+locale (`.65`), the graph layout (`.80`) and the guards' verdict on inability (`.60`). The
+clean-room work alone is larger than the whole of the slice that was planned.
+
+**The recommendation is explicitly NOT to re-plan.** The slice shipped, it is green, and the
+individual beads are unusually well executed. Splitting a completed slice retrospectively buys
+a tidier record and costs a re-run of every gate. What was worth doing is naming the second
+half, so that a resumed session reading thirty dev beads under one heading knows why they do
+not look like one subject.
+
+**The cost was measured, and it landed on the review.** The slice bead declares two nodes,
+while the brief's `changed-outside-scope` finding lists 64 source files outside them. There was
+no declared scope to review against, so the reviewer had to derive its own before it could
+begin. That is the concrete price of a slice whose name covers half of it, and it is the
+argument for splitting the NEXT one at planning time rather than this one now.
+
+## What BDL-068 leaves behind
+
+S6 is the epic's last slice, so this section is the epic's handover. It states what shipped,
+what is open, and which findings were routed to no slice at all.
+
+**Shipped.** Nine new top-level commands, derived by comparing the registered command names at
+`a4738b7` (the commit before S1) against `HEAD`: `impact`, `scope-check`, `axes` (S1); `rooms`,
+`mutation` (S2/S3); `typed-surface` (S4); `bd-calls` (S5); `clean-room`, `issue-number` (S6).
+Note that nine is the derived count — the S6 review and several launch prompts said eight,
+omitting `beadloom mutation`, whose SCOPE findings existed pre-epic as a `config-check` leg
+while the command that reports a SCORE did not. Beside the commands: `## Axes` as a required
+section of BRIEF and RFC, the `Explore` role, the Gate's room census, its coverage block naming
+what no step performed, and its ownership block naming which bead owns each finding.
+
+**Open, and owned by nobody in this epic.** The code and test findings from the S4 and S5
+reviews listed under *Review findings left open, unassigned* below — M-a, M-b, M-d, Minors 4-8
+and the nitpicks — remain open by author's discretion. None blocks the PR. The
+`PytestUnraisableExceptionWarning` observation on `tests/test_db.py::test_no_resource_warning`
+is still unexplained and still not reproducible in isolation.
+
+**Routed to no slice at all — the instrument findings.** These were filed against the tooling
+the epic runs on rather than against its subject, and no bead of any slice was assigned them:
+
+- **BDL-UX #279** — `sync-update --yes --all` re-baselined NINE reference documents' surface
+  warnings an hour before the wave whose job was to audit one of them. This project's own
+  doc-baseline rule says attest by ref and never with `--all` while a neighbour is editing.
+  Nothing enforces that rule; the command offers `--all` and says nothing about neighbours.
+- **BDL-UX #258's shape, on the instrument rather than in the suite** — the branch carried a
+  known red Gate across two waves. Two stale docs (`domains/application/README.md`,
+  `domains/doc-sync/README.md`) were owned by no bead in the running plan, and every gate owner
+  in those waves had to be told by hand that the red was not theirs. `.78`'s ownership block
+  was built for exactly this and landed inside the same slice; the instance is recorded because
+  a red that everyone knows to discount is how a real red gets discounted too. Both documents
+  were genuinely repaired and verified module-by-module by this docs wave, not re-attested.
+- **BDL-UX #242, now on its fourth instance** — the launch context's git snapshot is taken at
+  session start and named `6228550` as HEAD, with four S5-era commits above it that are on no
+  branch, while the actual HEAD was `e1a082e`; this wave launched against the same stale
+  snapshot with the actual HEAD at `9d4122e`. Any tree fact stated in this file is derived at
+  the moment it is stated, for that reason.
+- **A wrong sentence found behind a clean surface, in the re-baselined document itself — the
+  third confirmation of the pattern S4 and S5 both hit.** `docs/services/cli.md` stated, as a
+  measurement dated 2026-09-03, that a local macOS run reports `0 of 21 declared room(s) NOT
+  entered by this run`. The Gate prints two shapes that count opposite populations: `--format
+  github` says `0 of 21 ... entered`, and the rich block says `21 of 21 ... not entered`
+  (`services/commands/federation.py:487-493`). The number had been carried from one shape to
+  the other's wording, which inverts the claim — it read as "a local run misses no room", the
+  reassuring direction, in the passage whose whole subject is that a verdict must name its
+  room. `sync-check` read `[ok]` on this file throughout, and `beadloom-0mdo.84` had
+  re-attested its surface an hour before. Corrected by this wave, and re-measured on
+  2026-09-10 rather than re-dated.
+
+- **Nothing checks that `docs/services/cli.md` is complete.** `doctor` reports the registered
+  command count at `OK` unconditionally and compares it to nothing; `docs audit` declares
+  `cli_command_count` and marks it NOT VERIFIED because no document states it. The two count
+  different populations — top-level names versus a recursive walk including groups — so they
+  disagree under one name. That is how `issue-number` was documented nowhere for four days
+  while its peer `clean-room` was documented in the commit that shipped it. Recorded in
+  `docs/services/cli.md` itself; no instrument was built for it in this epic.
 
 ## Progress
 

@@ -4,6 +4,22 @@
 
 Beadloom CLI is built on Click and provides a set of commands for managing the knowledge index.
 
+**What checks that this page is complete: nothing.** Two instruments count the CLI surface and
+neither compares its count against this document. `doctor`'s `agent_instructions_cli_commands`
+leg reports the registered names at `OK` severity unconditionally
+(`application/doctor.py:_get_actual_cli_commands`), and `docs audit` lists `cli_command_count`
+among the facts it declares and marks NOT VERIFIED, because no document states it. The two also
+count different populations -- `doctor` takes the top-level names off the Click group, while the
+audit walks nested groups and counts leaves and groups together -- so they answer with different
+numbers under one name, and no check reads either against this file.
+
+The consequence is measured, not hypothetical: an S6 review derived the registered names and
+compared each against a `### beadloom <cmd>` heading here, and found `beadloom issue-number`
+documented nowhere on this page four days after it shipped. The peer command of the same slice,
+`beadloom clean-room`, was documented in the commit that shipped it. A page kept current by
+convention drifts wherever the convention is missed, and the drift is invisible until somebody
+derives the comparison by hand.
+
 ## Specification
 
 ### Global Options
@@ -2258,6 +2274,51 @@ over, or it states nothing.
 The grammar, the assumption table and the regions the derivation cannot reach are in the
 [bd Seam DOC](components/bd-seam/DOC.md).
 
+### beadloom issue-number
+
+Allocate an issue-log number, or check the ones already taken (BDL-068 S6, `beadloom-0mdo.66`).
+
+```bash
+beadloom issue-number allocate --holder BEAD-ID [--project DIR] [--json]
+beadloom issue-number check [--project DIR] [--json]
+```
+
+**Allocated, not read off the end of a shared file.** The convention this replaces was "read the
+last number in the log and add one", and following it exactly produced five collisions on this
+repository -- BDL-UX #187, #211, #253 and, within one hour on 2026-09-09, a number another bead
+already held and a number that never reached the file. `allocate` is an exclusive create of one
+claim file per number, which is a thing a command can make indivisible and a paragraph cannot.
+`--holder` is required and names a bead, so a held number says who is holding it.
+
+**Three legs, over a population one filesystem cannot span.** `check` reports `duplicate-number`
+(one number, two entries), `unwritten-claim` (a number claimed and never written into the log)
+and `unclaimed-number` (an entry above the ledger's floor that no claim holds). It states the
+population each leg REACHED and not only what it found: the entries below the floor are the ones
+`unclaimed-number` never entered because they predate the ledger, and the numbers below the
+highest that are stated nowhere are NAMED rather than counted, because a count is not something a
+reader can go and look for (BDL-UX #267). The naming is bounded at twelve, so an adopter with a
+hundred unaccounted numbers gets a line that is still readable.
+
+Measured on this repository, 2026-09-10:
+
+```
+$ beadloom issue-number check
+253 entr(ies), 18 claim(s), floor 262
+  235 of 253 entr(ies) are below floor 262: `unclaimed-number` did not enter them, and no claim holds their numbers
+  1 number(s) below the highest are stated nowhere; they are unaccounted for, not free: #196
+No duplicate, unwritten or unclaimed number.
+```
+
+Exit codes are the contract a caller may rely on: `0` the number was allocated or the check found
+nothing, `1` the check found at least one finding, `2` nothing was allocated because the project
+declares no `issue_log:` block. Two states report that a leg ran over nothing rather than passing:
+a project that declares no log is told so and no leg runs, and a ledger holding no claim leaves
+`unwritten-claim` and `unclaimed-number` with no number to enter. An absent log is not an empty
+one.
+
+The grammar, the two populations a numbered log states and the regions the legs cannot reach are
+in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -2283,7 +2344,7 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 
 **Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
 
-**The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-03: a local macOS run reports `0 of 21 declared room(s) not entered by this run`, which is the verdict's address rather than a caveat on it. The census itself is [`beadloom rooms`](#beadloom-rooms).
+**The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-10: a local macOS run enters NONE of the declared rooms -- `--format github` prints `0 of 21 declared room(s) entered by this run` and the rich block prints the complement, `21 of 21 declared room(s) not entered by this run`, naming the first three. The two shapes count opposite populations and a number carried between them inverts the claim: this passage previously read `0 of 21 declared room(s) not entered`, which says a local run misses nothing. It is the verdict's address rather than a caveat on it, and the address of a local run is a room this project's CI declares no leg for. The census itself is [`beadloom rooms`](#beadloom-rooms).
 
 **The verdict also names what no step of it performed (BDL-068 S6, BDL-UX #247).** `beadloom ci`
 does not run the test suite, and until this slice it never said so. `GateResult` carries a

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nine new top-level commands, from BDL-068.** The epic added them one slice at a time and
+  this section recorded none of them until its last slice, so they are listed here together
+  rather than under the release each landed in. The first three are already on `main` via
+  PR #59; this is an omission being repaired epic-wide, not a regression of the final slice.
+
+  - `beadloom impact <ref-id>` -- who else writes a node, who else calls it, and how many
+    branches it has (S1).
+  - `beadloom scope-check` -- whether a commit stays inside the axes its work item declared (S1).
+  - `beadloom axes <work-item>` -- a work item's `## Axes` section read back: what it declares
+    and the refs it names (S1).
+  - `beadloom rooms` -- the room a run is in and the rooms the project declares, derived from
+    packaging metadata and CI workflows rather than a checklist (S2/S3).
+  - `beadloom mutation` -- the mutation score a run produced over the declared scope; the scope
+    findings alone were already a `config-check` leg, and the SCORE needs counters a runner
+    wrote (S2/S3).
+  - `beadloom typed-surface` -- the surface the project declares typed, derived from its own
+    type-checker configuration (S4).
+  - `beadloom bd-calls` -- every place the project reaches `bd`, and what each call form assumes
+    about the answer it gets back (S5).
+  - `beadloom clean-room <bead-id>` -- a room built from `HEAD` plus the files named, taking its
+    directory from the bead so two agents of one wave cannot be handed the same one (S6).
+  - `beadloom issue-number` -- an issue-log number allocated by exclusive create rather than read
+    off the end of a shared file, plus three legs over the numbers already taken (S6).
+
 ### Removed
 
 - **The vendored role snapshot, and the function that refreshed it** (BDL-UX #177's last leg).
