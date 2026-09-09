@@ -21,7 +21,11 @@ round-trips, exempt-glob nuances. This file adds the gaps the bead calls out:
 * **annotation <-> node consistency** — bidirectional: every annotation value
   names a declared node, and every new file-source node's file carries the
   matching annotation (or is the node's source).
-* **sync-check** — the new SPEC/DOC pairs are tracked + currently fresh.
+* **sync-check** — the new SPEC/DOC pairs are tracked, and fresh in any checkout
+  that holds a baseline to compare them against. A clean room holds neither
+  baseline, and the freshness case declares that rather than failing there
+  (BDL-UX #258); the decision is exercised in
+  ``TestTheFreshnessSkipIsDecidedByTheBaseline``.
 * **exempt still minimal** — exactly the 4 seeded globs, nothing newly hidden.
 
 All deterministic, no network. Real-repo assertions use the live graph as-is.
@@ -37,6 +41,7 @@ from typing import TYPE_CHECKING
 import pytest
 from click.testing import CliRunner
 
+from beadloom.doc_sync.engine import BASELINE_NONE
 from beadloom.graph.rule_engine import (
     ModuleCoverageRule,
     evaluate_module_coverage_rules,
@@ -62,6 +67,8 @@ def _built_repo_graph() -> None:
     we build it here. ``reindex`` is deterministic + idempotent.
     """
     CliRunner().invoke(main, ["reindex", "--project", str(REPO_ROOT)])
+
+
 SERVICES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "services.yml"
 
 
@@ -213,9 +220,7 @@ class TestErrorLevelRegressionGuard:
         # code ignores error-severity violations without --strict (BDL-UX #147),
         # and CliRunner's `output` merges the two streams.
         payload = json.loads(result.stdout)
-        coverage = [
-            v for v in payload["violations"] if v["rule_name"] == "module-coverage"
-        ]
+        coverage = [v for v in payload["violations"] if v["rule_name"] == "module-coverage"]
         assert coverage, payload
         assert all(v["severity"] == "error" for v in coverage)
         assert any("shadow.py" in str(v["file_path"]) for v in coverage)
@@ -435,9 +440,7 @@ class TestNewNodesResolve:
     def test_new_feature_node_ctx_resolves(self, ref_id: str) -> None:
         """Each new S3b feature node resolves through `ctx` to a feature bundle."""
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"]
-        )
+        result = runner.invoke(main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"])
         assert result.exit_code == 0, result.output
         bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
@@ -447,9 +450,7 @@ class TestNewNodesResolve:
     def test_new_component_node_ctx_resolves(self, ref_id: str) -> None:
         """Each new S3b component node resolves through `ctx` to a component bundle."""
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"]
-        )
+        result = runner.invoke(main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"])
         assert result.exit_code == 0, result.output
         bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
@@ -460,9 +461,7 @@ class TestNewNodesResolve:
         import yaml
 
         data = yaml.safe_load(SERVICES_PATH.read_text(encoding="utf-8"))
-        part_of_srcs = {
-            str(e["src"]) for e in data.get("edges", []) if e.get("kind") == "part_of"
-        }
+        part_of_srcs = {str(e["src"]) for e in data.get("edges", []) if e.get("kind") == "part_of"}
         for ref_id in self.NEW_COMPONENTS:
             assert ref_id in part_of_srcs, f"{ref_id} has no part_of parent"
 
@@ -537,9 +536,7 @@ class TestAnnotationNodeConsistency:
         import re
 
         nodes = _load_real_nodes()
-        new_ids = set(TestNewNodesResolve.NEW_FEATURES) | set(
-            TestNewNodesResolve.NEW_COMPONENTS
-        )
+        new_ids = set(TestNewNodesResolve.NEW_FEATURES) | set(TestNewNodesResolve.NEW_COMPONENTS)
         unannotated: list[str] = []
         for ref_id in new_ids:
             node = nodes[ref_id]
@@ -563,22 +560,105 @@ class TestAnnotationNodeConsistency:
 # ---------------------------------------------------------------------------
 
 
+#: The nodes whose SPEC/DOC pair this file holds to freshness. A tuple rather
+#: than a set literal inside the test, because the guard tests below assert that
+#: the population is non-empty and the sample is the thing they name.
+_FRESHNESS_SAMPLE = frozenset(
+    {
+        "code-indexer",
+        "route-extraction",
+        "test-mapping",
+        "sync-check",
+        "snapshot",
+        "ci-gate",
+        "config-check",
+        "branch-protection",
+        "site-generation",
+        "graph-loader",
+        "contracts",
+        "sdl",
+        "context-builder",
+        "doc-indexer",
+        "db",
+        "git-activity",
+        "health",
+        "mcp-tools",
+        "bd-seam",
+    }
+)
+
+
+@pytest.fixture(scope="module")
+def live_sync_pairs() -> list[dict[str, object]]:
+    """Every pair ``sync-check`` reports for this checkout, read once per module.
+
+    Module-scoped because the command walks 449 pairs over the real tree and
+    three tests ask it the same question; a per-test invocation was ~5 s of the
+    file's runtime for an answer that cannot change between them.
+
+    TWO EXIT CODES ARE ANSWERS AND ONE IS NOT. ``sync-check`` exits 2 when a
+    blocking pair exists and emits the same JSON it emits at 0, so demanding 0
+    here pre-empted the freshness assertion with the raw CLI dump instead of
+    naming the stale pair -- measured on this tree, where a neighbour's
+    untracked module made both cases in this class fail on the exit code rather
+    than on what they check. Exit 1 IS refused: it means no database or an
+    invalid ref, and there is no payload behind it.
+    """
+    result = CliRunner().invoke(main, ["sync-check", "--json", "--project", str(REPO_ROOT)])
+    assert result.exit_code in {0, 2}, (
+        f"sync-check exited {result.exit_code}, which is neither clean (0) nor "
+        f"blocking (2), so it reported no pairs to read:\n{result.output}"
+    )
+    pairs: list[dict[str, object]] = json.loads(result.stdout)["pairs"]
+    return pairs
+
+
+def _pairs_have_no_freshness_baseline(pairs: list[dict[str, object]]) -> bool:
+    """Whether NOTHING in *pairs* was compared against a baseline at all.
+
+    Doc freshness is decided against two baselines and a checkout may hold
+    neither: the index database, which is gitignored, and ``git`` history, which
+    ``sync-check`` consults through ``changed_paths``. With both absent every
+    pair comes back ``unverified`` with ``baseline: none`` — not ``stale``,
+    because nothing was compared. ``changed_paths`` is asked once per run, so
+    the answer is a property of the CHECKOUT and the whole population carries it
+    or none of it does.
+
+    The decision reads ``baseline`` and never ``status``: ``unverified`` also
+    names the ``sibling_symbols_changed`` verdict, which comes WITH an index
+    baseline and is a finding about this tree. Reading the status would let a
+    real finding buy itself a skip, which is the failure mode a skip has.
+
+    An EMPTY population answers ``False`` deliberately. No pairs at all is a
+    broken sample rather than a missing baseline, and ``True`` there would turn
+    a check that found nothing into a skip blaming the room.
+    """
+    return bool(pairs) and all(str(pair.get("baseline")) == BASELINE_NONE for pair in pairs)
+
+
+def _no_baseline_skip_reason(pairs: list[dict[str, object]]) -> str:
+    """Why the freshness assertion did not run, and what would make it run."""
+    return (
+        f"no freshness baseline in this checkout: all {len(pairs)} sampled "
+        f"sync-check pair(s) report baseline '{BASELINE_NONE}', which is the "
+        "verdict for a document compared against nothing. Both baselines are "
+        "absent from a room built by `beadloom clean-room`: the index database "
+        "is gitignored and `git archive` carries no `.git`. WHAT MAKES IT RUN: "
+        "either baseline. It runs in this repository's working tree, and on "
+        "every CI leg, where actions/checkout provides `.git`; it would run in "
+        "a room on the day `beadloom clean-room` carries a baseline into one."
+    )
+
+
 class TestSyncCheckNewPairs:
     """The new SPEC/DOC skeletons are tracked by sync-check and currently fresh."""
 
-    def _sync_pairs(self) -> list[dict[str, object]]:
-        runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-check", "--json", "--project", str(REPO_ROOT)]
-        )
-        assert result.exit_code == 0, result.output
-        pairs: list[dict[str, object]] = json.loads(result.stdout)["pairs"]
-        return pairs
-
-    def test_new_node_docs_are_tracked_pairs(self) -> None:
+    def test_new_node_docs_are_tracked_pairs(
+        self, live_sync_pairs: list[dict[str, object]]
+    ) -> None:
         """Each new node's SPEC/DOC appears as a tracked sync-check pair."""
         nodes = _load_real_nodes()
-        tracked_refs = {str(p["ref_id"]) for p in self._sync_pairs()}
+        tracked_refs = {str(p["ref_id"]) for p in live_sync_pairs}
         sample = (
             "code-indexer",
             "sync-check",
@@ -592,35 +672,141 @@ class TestSyncCheckNewPairs:
             assert ref_id in nodes
             assert ref_id in tracked_refs, f"{ref_id} not tracked by sync-check"
 
-    def test_all_new_node_pairs_are_fresh(self) -> None:
-        """None of the new node SPEC/DOC pairs are stale (status == ok)."""
-        sample = {
-            "code-indexer",
-            "route-extraction",
-            "test-mapping",
-            "sync-check",
-            "snapshot",
-            "ci-gate",
-            "config-check",
-            "branch-protection",
-            "site-generation",
-            "graph-loader",
-            "contracts",
-            "sdl",
-            "context-builder",
-            "doc-indexer",
-            "db",
-            "git-activity",
-            "health",
-            "mcp-tools",
-            "bd-seam",
-        }
-        stale = [
-            p
-            for p in self._sync_pairs()
-            if str(p["ref_id"]) in sample and p["status"] != "ok"
-        ]
+    def test_all_new_node_pairs_are_fresh(self, live_sync_pairs: list[dict[str, object]]) -> None:
+        """None of the new node SPEC/DOC pairs are stale, where freshness is knowable.
+
+        BDL-UX #258, and the reason this test states its environment instead of
+        failing in one. It CANNOT pass in a clean room — measured at ``6a55d5cc``
+        with zero carried files, 444 of 448 pairs came back
+        ``unverified/no_baseline`` — and it was the only failure in a 9 445-test
+        run there. So "one failure, the expected one" became the shape of a
+        CORRECT clean-room verdict across roughly thirty reports, and a SECOND
+        failure had to be noticed against a background that already held one.
+        ``beadloom-0mdo.41`` and ``.61`` each re-ran their extra failure at HEAD
+        in a control room to prove it was not theirs; that is the tax.
+
+        The population was counted before this was chosen rather than inferred
+        from the reports: ONE test fails in a room, and ~40 of the 59 that skip
+        there already declare a checkout property in their reason. This joins
+        them instead of staying the exception nobody reads.
+
+        The check keeps its bite: the skip is decided by the ``baseline`` field
+        alone, so any checkout that CAN compare still fails on a stale pair.
+        """
+        sampled = [p for p in live_sync_pairs if str(p["ref_id"]) in _FRESHNESS_SAMPLE]
+        assert sampled, (
+            "sync-check reported no pair for any of the sampled ref ids, so this "
+            "check is green about nothing. Either the sample names nodes the "
+            f"graph no longer has ({sorted(_FRESHNESS_SAMPLE)}) or sync-check "
+            "tracked no pair at all."
+        )
+        if _pairs_have_no_freshness_baseline(sampled):
+            pytest.skip(_no_baseline_skip_reason(sampled))
+        stale = [p for p in sampled if p["status"] != "ok"]
         assert stale == [], stale
+
+
+class TestTheFreshnessSkipIsDecidedByTheBaseline:
+    """The skip above must fire in a room and in no other checkout.
+
+    A skip is the cheapest way to make a check quiet, so the decision behind
+    this one is a function with its own cases rather than a condition nobody
+    exercises. Every case here is synthetic: the point is which shapes of
+    ``sync-check`` output license a skip, and that question needs no tree.
+    """
+
+    @staticmethod
+    def _pair(
+        baseline: str, *, status: str = "unverified", ref_id: str = "sync-check"
+    ) -> dict[str, object]:
+        """One pair in the shape ``sync-check --json`` emits."""
+        return {
+            "ref_id": ref_id,
+            "status": status,
+            "baseline": baseline,
+            "doc_path": "domains/doc-sync/features/sync-check/SPEC.md",
+            "code_path": "src/beadloom/doc_sync/engine.py",
+            "reason": "no_baseline" if baseline == BASELINE_NONE else "ok",
+        }
+
+    def test_a_population_compared_against_nothing_has_no_baseline(self) -> None:
+        """The room's own shape: every pair unverified against nothing."""
+        pairs = [self._pair(BASELINE_NONE) for _ in range(3)]
+
+        assert _pairs_have_no_freshness_baseline(pairs) is True
+
+    def test_an_unverified_pair_with_an_index_baseline_is_not_a_missing_baseline(
+        self,
+    ) -> None:
+        """``sibling_symbols_changed`` is a finding about the tree, not a room.
+
+        The tree carried 34 pairs in exactly this shape when this was written. A
+        decision that read ``status`` instead of ``baseline`` would skip on them
+        and take the whole check down with a verdict about the environment.
+        """
+        pairs = [self._pair("index", status="unverified")]
+
+        assert _pairs_have_no_freshness_baseline(pairs) is False
+
+    def test_a_stale_pair_with_a_git_baseline_is_not_a_missing_baseline(self) -> None:
+        """The verdict this test exists to report still reaches the assertion."""
+        pairs = [self._pair("git:HEAD", status="stale")]
+
+        assert _pairs_have_no_freshness_baseline(pairs) is False
+
+    def test_one_baselined_pair_among_unbaselined_ones_still_answers(self) -> None:
+        """A checkout that compared anything is a checkout that can be judged."""
+        pairs = [
+            self._pair(BASELINE_NONE),
+            self._pair(BASELINE_NONE),
+            self._pair("index", status="ok"),
+        ]
+
+        assert _pairs_have_no_freshness_baseline(pairs) is False
+
+    def test_an_empty_population_is_not_a_missing_baseline(self) -> None:
+        """No pairs is a broken sample, and the caller must fail rather than skip."""
+        assert _pairs_have_no_freshness_baseline([]) is False
+
+    def test_a_pair_that_reports_no_baseline_field_does_not_buy_a_skip(self) -> None:
+        """A renamed or dropped field fails the check; it never quiets it.
+
+        The decision reads one key. If that key ever stops being emitted, the
+        wrong direction to fail in is silence.
+        """
+        pairs: list[dict[str, object]] = [{"ref_id": "sync-check", "status": "unverified"}]
+
+        assert _pairs_have_no_freshness_baseline(pairs) is False
+
+    def test_the_skip_reason_names_what_would_make_the_test_run(self) -> None:
+        """The constraint the suite already enforces, applied to this skip.
+
+        ``test_no_platform_xfail_waits_for_a_runner_that_will_not_come`` forbids
+        a prediction nothing can adjudicate. The same rule in this shape: a skip
+        that says only "it does not run here" is the ignored red with a quieter
+        colour, so the reason names the count it saw, the baselines it wants and
+        the two places that supply them.
+        """
+        reason = _no_baseline_skip_reason([self._pair(BASELINE_NONE) for _ in range(4)])
+
+        assert "4 sampled" in reason
+        assert BASELINE_NONE in reason
+        assert ".git" in reason
+        assert "beadloom clean-room" in reason
+
+    def test_every_live_pair_reports_the_baseline_the_decision_reads(
+        self, live_sync_pairs: list[dict[str, object]]
+    ) -> None:
+        """The real output carries the field, so the decision is never guessing.
+
+        Asserted against the tree rather than a fixture because the risk is that
+        ``sync-check`` stops emitting ``baseline`` — which no synthetic pair of
+        ours would ever notice.
+        """
+        without = [p for p in live_sync_pairs if not isinstance(p.get("baseline"), str)]
+
+        assert without == [], without
+        assert live_sync_pairs, "sync-check reported no pairs for this checkout"
 
 
 # ---------------------------------------------------------------------------
@@ -658,9 +844,7 @@ class TestExemptMinimal:
             "**/graph/rule_engine.py",
         }, exempt
 
-    def test_the_shim_exemption_stays_true_to_its_reason(
-        self, live_repo_reindexed: Path
-    ) -> None:
+    def test_the_shim_exemption_stays_true_to_its_reason(self, live_repo_reindexed: Path) -> None:
         """`rule_engine.py` is exempt BECAUSE it is a pure re-export shim.
 
         The other named exemptions were argued on the seeded criterion (few
