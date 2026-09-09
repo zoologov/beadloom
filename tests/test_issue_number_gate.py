@@ -71,3 +71,40 @@ def test_the_step_runs_directly_after_docs_quality(tmp_path: Path) -> None:
     result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
     names = [step.name for step in result.steps]
     assert names.index("issue-log") == names.index("docs-quality") + 1
+
+
+def test_the_gate_line_states_how_much_of_the_log_unclaimed_number_reached(
+    tmp_path: Path,
+) -> None:
+    """BDL-068 S6, `beadloom-l9ee`.
+
+    On this repository the line read `240 entr(ies) uniquely numbered; 5
+    claim(s), floor 262` over a log whose 235 entries below the floor
+    `unclaimed-number` never entered. The step still passes -- an unreached
+    population is coverage, not a finding -- but the summary now says which
+    population the pass is over.
+    """
+    _project(tmp_path, log="5. old\n\n6. older\n\n7. also old\n\n8. the first allocated\n")
+    (tmp_path / "ledger").mkdir()
+    (tmp_path / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    step, result = _step(tmp_path)
+    assert step.passed is True
+    assert result.ok is True
+    assert "3 of 4" in step.summary
+    assert "unclaimed-number" in step.summary
+
+
+def test_the_gate_line_does_not_qualify_a_log_its_ledger_covers_whole(
+    tmp_path: Path,
+) -> None:
+    """NOT VERIFIED RED, for the reason its command-side twin states.
+
+    The clause it forbids did not exist before the commit that added it. It
+    guards the noise case: a summary that qualifies every log, including the
+    ones with nothing to qualify, is a summary a reader stops reading.
+    """
+    _project(tmp_path, log="8. the only entry\n")
+    (tmp_path / "ledger").mkdir()
+    (tmp_path / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    step, _ = _step(tmp_path)
+    assert "below floor" not in step.summary

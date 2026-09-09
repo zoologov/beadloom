@@ -214,3 +214,67 @@ def test_this_repositorys_log_is_read_by_the_grammar_it_is_written_in() -> None:
 
 
 CHECKS = (DUPLICATE_NUMBER, UNWRITTEN_CLAIM, UNCLAIMED_NUMBER)
+
+
+# ---------------------------------------------------------------------------
+# beadloom-l9ee — the population `unclaimed-number` could not reach
+# ---------------------------------------------------------------------------
+
+
+def test_entries_below_the_floor_are_counted_as_the_population_no_leg_judged(
+    tmp_path: Path,
+) -> None:
+    """The skip above is deliberate; the silence about it was not.
+
+    ``_ledger_findings`` passes over every entry below the floor, so a report
+    stating ``240 entr(ies)`` beside ``No duplicate, unwritten or unclaimed
+    number`` describes a leg that entered five of them. CONTEXT's constraint is
+    that the unresolved population is part of every answer.
+    """
+    root = _declared(tmp_path, "5. old\n\n6. older\n\n7. also old\n\n8. the first allocated\n")
+    (root / "ledger").mkdir()
+    (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    report = check_issue_numbers(root)
+    assert report.floor == 8
+    assert report.entries == 4
+    assert report.entries_below_floor == 3
+    assert report.findings == (), "an unreached population is coverage, not a finding"
+
+
+def test_a_ledger_covering_the_whole_log_leaves_nothing_to_qualify(tmp_path: Path) -> None:
+    """The sentence must be absent when it would be noise, or it trains a skip."""
+    root = _declared(tmp_path, "8. the only entry\n")
+    (root / "ledger").mkdir()
+    (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    report = check_issue_numbers(root)
+    assert report.entries_below_floor == 0
+
+
+def test_with_no_floor_at_all_the_count_is_zero_because_not_verified_carries_it(
+    tmp_path: Path,
+) -> None:
+    """Two statements of one fact are two things that can disagree.
+
+    Before a project's first allocation there is no floor for an entry to be
+    below, and :attr:`IssueNumberReport.not_verified` already says both ledger
+    legs entered no number. This count stays 0 so the empty case has one home.
+    """
+    root = _declared(tmp_path, "7. an entry\n\n8. another\n")
+    report = check_issue_numbers(root)
+    assert report.floor is None
+    assert report.not_verified is True
+    assert report.entries_below_floor == 0
+
+
+def test_this_repositorys_log_is_mostly_older_than_its_own_ledger() -> None:
+    """The property, not the literal — the same rule the corpus tests above follow.
+
+    This repository adopted the allocator on 2026-09-09 with 240 entries already
+    written, so `unclaimed-number` reaches the handful at or above the floor and
+    no more. A report that did not say so would read as a clean bill over the
+    whole log.
+    """
+    report = check_issue_numbers(REPO_ROOT)
+    assert report.floor is not None, "this repository has allocated at least one number"
+    assert report.entries_below_floor > 0, "the log predates its ledger"
+    assert report.entries_below_floor < report.entries

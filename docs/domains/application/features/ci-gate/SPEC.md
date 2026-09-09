@@ -93,10 +93,23 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
-   clean. Measured on this repository, 2026-09-09:
+   clean.
+
+   Since `beadloom-l9ee` the line also carries the PARTIAL case, which is the one
+   every adopter is in from their first allocation onwards: `unclaimed-number`
+   skips every entry below the floor by design, and the summary said nothing
+   about how many that was. The line read `240 entr(ies) uniquely numbered; 5
+   claim(s), floor 262` over a log whose leg had entered five of those entries
+   (BDL-UX #267). `PARTLY CHECKED` states the population, and it is not a
+   finding — an unreached population is coverage, and making it one would redden
+   every project that adopts the allocator with a log already written. Measured
+   on this repository, 2026-09-09:
 
    ```
-   issue-log PASS | 236 entr(ies) uniquely numbered; 1 claim(s), floor 262
+   issue-log PASS | 241 entr(ies) uniquely numbered; 6 claim(s), floor 262;
+                    PARTLY CHECKED: 235 of 241 entr(ies) are below floor 262,
+                    where unclaimed-number did not enter; 1 number(s) below the
+                    highest are stated nowhere and are unaccounted for, not free
    ```
 
 7. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic

@@ -70,6 +70,31 @@ log kept somewhere other than the log.
 Before the first allocation the ledger has no floor, so two of the three legs enter no number at
 all. The report says so through `not_verified` rather than reading as clean.
 
+### And the floor's cost is stated, not only its rule
+
+Skipping history is right; being silent about how much history was skipped is not. Measured on
+this repository on 2026-09-09, the verdict read `240 entr(ies), 5 claim(s), floor 262` and then
+`No duplicate, unwritten or unclaimed number` — a clean list over the five entries
+`unclaimed-number` entered, under a header naming 240 (BDL-UX #267). The all-or-nothing case had
+words and the partial one had none, and the partial case is the one every adopter is in from
+their first allocation onwards.
+
+`IssueNumberReport.entries_below_floor` is that population. The command prints
+`235 of 241 entr(ies) are below floor 262: unclaimed-number did not enter them, and no claim
+holds their numbers`; the Gate line carries the same fact as `PARTLY CHECKED`. Neither is a
+finding — an unreached population is coverage, and reporting it as a finding would redden every
+project that adopts the allocator with a log already written. The clause is emitted only when
+there is something to qualify, because a summary that qualifies every log is one a reader stops
+reading.
+
+The count stays `0` when there is no floor at all. `not_verified` is that case's one home, and
+two statements of one fact are two things that can disagree.
+
+This is also what decides how much of the log the ledger PROTECTS, which is the question
+`beadloom-l9ee` weighed when it declined to move the log's entry bodies into one file each. A
+claim is a separate file that a lost write cannot take with it, so an entry whose body vanishes
+is reported by `unwritten-claim` — for the entries at or above the floor, and for no others.
+
 ### The two populations, and why they are separate
 
 | Population | What it is | What it decides |
@@ -80,7 +105,14 @@ all. The report says so through `not_verified` rather than reading as clean.
 This log states several numbers only in a consolidated closed-entry heading
 (`### Import extraction depth — #159`). Such a number is not an entry and does not enter the
 duplicate leg, and it does enter `mentioned`, so the allocator never reissues it. A number below
-the highest that neither population holds is reported as **unaccounted for, not free**.
+the highest that neither population holds is reported as **unaccounted for, not free**, and it
+is NAMED rather than counted: a count is not something a reader can go and look for. The naming
+is bounded, so an adopter with a hundred gaps gets a line they can read.
+
+Quoting such a number in the log's own prose moves it into `mentioned` and silences its own
+report, because the check's corpus is the log that contains the entry describing the check. That
+self-reference errs safely for the allocator — a number quoted anywhere is never handed out
+again — and unsafely for this leg, which is one reason the leg reports rather than blocks.
 
 ### What it cannot decide
 

@@ -49,3 +49,26 @@ Feature: an issue number is allocated from the log, never read off the end of it
     When the issue numbers are checked
     Then the check reports that no issue log is declared
     And the check reports no finding
+
+  # BDL-068 S6, beadloom-l9ee. `unclaimed-number` skips every entry below the
+  # ledger's floor, which is deliberate -- the floor is derived so that a
+  # project adopting the allocator is judged from its first allocation onwards.
+  # The verdict did not say so. On this repository it reads "240 entr(ies), 5
+  # claim(s), floor 262" and then "No duplicate, unwritten or unclaimed
+  # number", over a log whose 235 entries below the floor that leg never
+  # entered. A clean list is trusted and stopped at, which is this epic's own
+  # constraint met by the module that states it.
+  @bead:beadloom-l9ee
+  Scenario: A verdict over a log older than its ledger names the entries no leg judged
+    Given a ledger whose floor is 262 and a log holding 3 entries below it
+    When the issue numbers are checked
+    Then the verdict names 3 entries as below the floor and judged by no leg
+
+  # The same sentence must not appear when there is nothing to qualify: a
+  # project whose whole log was allocated has no unreached population, and a
+  # check that says so anyway is noise that trains a reader to skip the line.
+  @bead:beadloom-l9ee
+  Scenario: A log whose every entry was allocated qualifies nothing
+    Given a ledger whose floor is the log's own first entry
+    When the issue numbers are checked
+    Then the verdict names no entry as below the floor

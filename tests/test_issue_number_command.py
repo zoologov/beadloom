@@ -89,3 +89,58 @@ def test_check_on_an_undeclared_project_says_so_rather_than_passing_silently(
     )
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["declared"] is False
+
+
+# ---------------------------------------------------------------------------
+# beadloom-l9ee — the verdict states the population one leg could not reach
+# ---------------------------------------------------------------------------
+
+
+def test_check_names_the_entries_below_the_floor_that_no_leg_judged(tmp_path: Path) -> None:
+    """A clean list is trusted and stopped at, so the clean list says what it covers."""
+    root = _declared(tmp_path, "5. old\n\n6. older\n\n7. also old\n\n8. the first allocated\n")
+    (root / "ledger").mkdir()
+    (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "3 of 4" in result.output
+    assert "floor 8" in result.output
+    assert "unclaimed-number" in result.output
+
+
+def test_check_says_nothing_about_the_floor_when_the_ledger_covers_the_whole_log(
+    tmp_path: Path,
+) -> None:
+    """NOT VERIFIED RED, and the reason is that it cannot be.
+
+    The sentence it forbids did not exist before the commit that added it, so
+    this assertion passed vacuously beforehand. It is kept because it is the
+    only thing that bites if the qualification is later emitted
+    unconditionally, which would train a reader to skip the line it is there to
+    make them read.
+    """
+    root = _declared(tmp_path, "8. the only entry\n")
+    (root / "ledger").mkdir()
+    (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "below floor" not in result.output
+
+
+def test_check_names_the_unaccounted_numbers_rather_than_only_counting_them(
+    tmp_path: Path,
+) -> None:
+    """A count is not actionable; the number is the thing a reader goes and looks for."""
+    root = _declared(tmp_path, "5. an entry\n\n8. a later entry\n")
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "#6" in result.output
+    assert "#7" in result.output
+
+
+def test_check_json_carries_the_unreached_population(tmp_path: Path) -> None:
+    root = _declared(tmp_path, "5. old\n\n6. older\n\n7. also old\n\n8. the first allocated\n")
+    (root / "ledger").mkdir()
+    (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root), "--json"])
+    assert json.loads(result.stdout)["entries_below_floor"] == 3

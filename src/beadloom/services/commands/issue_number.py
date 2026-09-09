@@ -115,6 +115,7 @@ def _payload(report: IssueNumberReport) -> dict[str, object]:
         "log_missing": report.log_missing,
         "not_verified": report.not_verified,
         "unaccounted": list(report.unaccounted),
+        "entries_below_floor": report.entries_below_floor,
         "findings": [
             {
                 "check": finding.check,
@@ -126,6 +127,20 @@ def _payload(report: IssueNumberReport) -> dict[str, object]:
             for finding in report.findings
         ],
     }
+
+
+#: How many unaccounted numbers are named before the rest become a count. A
+#: reader acts on a number and skips a list, and this log's gap is measured in
+#: single digits — the bound exists so an adopter with a hundred does not get a
+#: line they cannot read.
+_NAMED_LIMIT = 12
+
+
+def _named(numbers: tuple[int, ...]) -> str:
+    """The numbers themselves, bounded — a count alone is not something to go and look for."""
+    shown = ", ".join(f"#{number}" for number in numbers[:_NAMED_LIMIT])
+    rest = len(numbers) - _NAMED_LIMIT
+    return f"{shown} and {rest} more" if rest > 0 else shown
 
 
 def _lines(report: IssueNumberReport) -> list[str]:
@@ -146,10 +161,16 @@ def _lines(report: IssueNumberReport) -> list[str]:
             "  the ledger holds no claim, so `unwritten-claim` and `unclaimed-number` "
             "entered no number: they report nothing here rather than passing"
         )
+    if report.floor is not None and report.entries_below_floor:
+        lines.append(
+            f"  {report.entries_below_floor} of {report.entries} entr(ies) are below "
+            f"floor {report.floor}: `unclaimed-number` did not enter them, and no claim "
+            "holds their numbers"
+        )
     if report.unaccounted:
         lines.append(
             f"  {len(report.unaccounted)} number(s) below the highest are stated nowhere; "
-            "they are unaccounted for, not free"
+            f"they are unaccounted for, not free: {_named(report.unaccounted)}"
         )
     for name in CHECK_NAMES:
         for finding in report.findings:

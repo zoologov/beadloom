@@ -10,7 +10,45 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
+**Bead:** `beadloom-l9ee` — BDL-UX #260, the shared write and the condition an ADR needs. S6,
+alone, and its own combined-tree gate owner. The bead is a DECISION the coordinator asked for
+and the previous agent wrote; this run re-checked its measurements as evidence rather than
+executing them as instructions, and corrected it on two points.
+
+**THE 2.5% WAS THE RIGHT NUMBER ABOUT THE WRONG REGION.** The bead measured `ACTIVE.md`'s
+bead-status table — 35 of 1427 lines, re-measured today and unchanged — and concluded that
+composition removes 0% of the collisions. True of the table. It never asked where in the file
+the collisions were. The `Progress` section is lines 64-1122: **1059 of 1427 lines, 74.2%**,
+and it is a per-BEAD append, one sub-bullet per bead. Both `ACTIVE.md` collisions of this epic
+are in it. So the writer unit is the bead, and one-writer-per-file has a shape here that the
+table measurement hid. Not taken: it is `active-table`'s surface and this bead's derived axis
+is `issue-numbers` alone.
+
+**AND `beadloom-0mdo.66` HAS ANSWERED THE `LATERAL MOVE` OBJECTION, so the log migration is
+declined on the bead's own standard.** The objection rested on one piece of evidence — commit
+`27db92b`, two agents allocating one number — and `.66` closed that class. Re-measured: the log
+took 17 commits at +248 / -4 with no repair commit, against `ACTIVE.md`'s 22 at +735 / -395.
+Realised collisions across this epic are 3 in per-bead prose and 1 the log's number, now fixed,
+so moving 241 entry bodies would have prevented **0 of 4** — the same test the bead used to
+reject options 3 and 4, turned on its own recommendation. What protects a body meanwhile is the
+ledger, not the layout: a claim is a separate file a lost write cannot take with it.
+
+**WHICH IS WHERE THE DEFECT WAS, AND IT IS FIXED.** That protection reaches only entries at or
+above the ledger's floor, and the verdict never said so. Measured: `240 entr(ies), 5 claim(s),
+floor 262` then `No duplicate, unwritten or unclaimed number` — a clean list over 5 of 240,
+because `_ledger_findings` skips every entry below the floor. Filed as **BDL-UX #267**, allocated
+through the allocator it is about, and closed in the same commit:
+`IssueNumberReport.entries_below_floor`, a `PARTLY CHECKED` clause on the Gate line, and the
+unaccounted numbers named rather than counted. Coverage, not a finding — no tree reddens.
+
+**NEITHER THE ADR DIRECTORY NOR THE `decision` DOC KIND SHIPS, on the bead's own condition.** A
+decision record must be a doc-code pair so it can go stale, or it is the issue log in a
+different folder. That pairing is `doc-sync` plus `graph` machinery and this bead's axis is
+`issue-numbers`; shipping the directory without it is the regression the condition names. So
+neither half ships, and the three decisions are recorded in `CONTEXT.md`'s table, which
+`doc-quality` already judges for a reason that explains why.
+
+**Previous bead:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
 subject. S6, alone, and its own combined-tree gate owner. Every clean-room Gate run on this
 repository had been rc 1 since `.63` landed, on one line of one document, and four beads
 reported it as briefed and attributed rather than chased.
@@ -1119,6 +1157,56 @@ documents: the suggestion is a candidate list that does not re-check the other b
      **As its own gate owner, separately:** the combined tree is green — `beadloom ci` rc 0 in
      the foreground without a pipe, zero errors, `docs-audit PASS: 19 mention(s) fresh` both
      before and after, so the tree lost no coverage for the room's green.
+
+  - [x] `beadloom-l9ee` — **BDL-UX #260**, the shared write and the condition an ADR needs.
+     A DECISION bead, re-checked as evidence rather than executed as instructions, and its own
+     recommendation is corrected on two points. **Its numbers hold on today's tree:** 1427 lines
+     and 35 table rows (2.5%); 58 `ACTIVE.md` files, 5646 lines, 4913 of prose (87.0%), counted
+     with `doc_sync/tables.py`'s `cells_of`.
+     **First correction — it measured the wrong region.** The table is 2.5% and composing it
+     buys nothing, which is true and was read as a statement about the file. The `Progress`
+     section is lines 64-1122 — **1059 of 1427 lines, 74.2%** — and it is a per-BEAD append,
+     one sub-bullet per bead. Both `ACTIVE.md` collisions of this epic are in it: `.63` lost 43
+     lines of its `Progress` entry into a neighbour's commit while correctly holding the merge
+     slot (`4753c17`), and `.73` and `.65` each wrote a `Progress` bullet in wave 4. So the
+     writer unit is the bead. **Not taken** — `active-table`'s surface, and this bead's derived
+     axis is `issue-numbers` alone.
+     **Second correction — `beadloom-0mdo.66` answered the `lateral move` objection, so the log
+     migration is declined on the bead's own standard.** The objection rested on commit
+     `27db92b` alone and `.66` closed that class. Re-measured on this branch: the log took 17
+     commits at +248 / -4 with no repair commit, against `ACTIVE.md`'s 22 at +735 / -395.
+     Realised collisions across this epic are 3 in per-bead prose and 1 the log's number, now
+     fixed, so moving 241 entry bodies would have prevented **0 of 4** — the test the bead used
+     against options 3 and 4, turned on its own recommendation. It avoids one commit rewriting
+     every body and every cross-reference in a 3155-line file. What protects a body meanwhile is
+     the ledger and not the layout: a claim is a separate file a lost write cannot take with it.
+     **Which is where the defect was.** That protection reaches only entries at or above the
+     floor and the verdict never said so: `240 entr(ies), 5 claim(s), floor 262` then `No
+     duplicate, unwritten or unclaimed number` — a clean list over 5 of 240, because
+     `_ledger_findings` skips every entry below the floor. Filed as **BDL-UX #267**, allocated
+     through the allocator it is about, and closed in the same commit:
+     `IssueNumberReport.entries_below_floor`, `PARTLY CHECKED` on the Gate line, and the
+     unaccounted numbers named rather than counted. Coverage, not a finding — no tree reddens.
+     Self-reference recorded and deliberately not exploited: quoting an unaccounted number in
+     the log's prose silences its own report, so the entry leaves it unquoted.
+     **Neither the ADR directory nor the `decision` doc kind ships**, on the bead's own
+     condition — the pairing is `doc-sync` plus `graph` machinery, outside this axis, and the
+     directory without it is the regression the condition names. The three decisions are in
+     `CONTEXT.md`'s table, which `doc-quality` judges for a reason that explains why.
+     2 acceptance scenarios and 12 assertions verified RED before the fix; two negative
+     assertions are declared NOT VERIFIED RED in their docstrings, because the clause they
+     forbid did not exist beforehand.
+     **Green in a clean room at `room-beadloom-l9ee` over 18 carried files: 9 607 passed, 60
+     skipped, 1 xfailed, 0 failed**, `beadloom ci` rc 0 there with **zero** errors, `ruff check`
+     rc 0 and `mypy` rc 0 in the room. On the tree, `mypy src/` rc 0 against all four declared
+     target versions — varying the version the checker is asked about, not the interpreter it
+     runs under, so a difference in what is installed per interpreter is still measured only in
+     CI. Darwin arm64 / CPython 3.13.7, extras `all+dev+graphql+languages+mutation+tui+watch`,
+     **0 of the 21 declared rooms**.
+     **As its own gate owner, separately:** the combined tree is green — `beadloom ci` rc 0 in
+     the foreground without a pipe, zero `::error`, and `pytest` 9 654 passed / 0 failed once
+     the four stale doc pairs this bead created were repaired.
+
 
 ## What is in `main` now
 

@@ -207,3 +207,45 @@ def _undeclared(world: dict[str, Any]) -> None:
 @then("the check reports no finding")
 def _no_findings(world: dict[str, Any]) -> None:
     assert world["report"].findings == ()
+
+
+# ---------------------------------------------------------------------------
+# beadloom-l9ee — the population one leg could not reach
+# ---------------------------------------------------------------------------
+
+
+@given("a ledger whose floor is 262 and a log holding 3 entries below it")
+def _log_older_than_its_ledger(world: dict[str, Any], tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        "## Open Issues\n\n"
+        "259. [2026-09-01] written before the allocator existed\n\n"
+        "260. [2026-09-02] and this one\n\n"
+        "261. [2026-09-03] and this one\n\n"
+        "262. [2026-09-09] the first allocated entry\n",
+    )
+    ledger = root / ".claude" / "development" / "issues"
+    ledger.mkdir(parents=True)
+    (ledger / "0262.md").write_text("# 262\n\n**Holder:** some-bead\n", encoding="utf-8")
+    world["root"] = root
+
+
+@given("a ledger whose floor is the log's own first entry")
+def _ledger_covering_the_whole_log(world: dict[str, Any], tmp_path: Path) -> None:
+    root = _project(tmp_path, "## Open Issues\n\n262. [2026-09-09] the only entry\n")
+    ledger = root / ".claude" / "development" / "issues"
+    ledger.mkdir(parents=True)
+    (ledger / "0262.md").write_text("# 262\n\n**Holder:** some-bead\n", encoding="utf-8")
+    world["root"] = root
+
+
+@then("the verdict names 3 entries as below the floor and judged by no leg")
+def _three_below_the_floor(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert report.entries_below_floor == 3, report
+    assert report.findings == (), "the qualification is coverage, not a finding"
+
+
+@then("the verdict names no entry as below the floor")
+def _none_below_the_floor(world: dict[str, Any]) -> None:
+    assert world["report"].entries_below_floor == 0, world["report"]

@@ -53,6 +53,22 @@ holds, so a project that adopts the allocator is judged from its first
 allocation onwards and its history is not retro-required to have been allocated.
 A hand-written floor would be the literal ``beadloom-mr2l.72`` was filed about.
 
+**And the floor's cost is stated, which ``beadloom-l9ee`` found it was not.**
+``unclaimed-number`` passes over every entry below the floor by design, and the
+verdict said nothing about how many that was. Measured on this repository on
+2026-09-09: 240 entries, floor 262, so the leg entered five of them and the
+report read ``No duplicate, unwritten or unclaimed number`` — a clean list over
+a population 2% the size of the one its header named. CONTEXT's constraint for
+this epic is that the unresolved population is part of every answer, and a
+clean list is trusted and stopped at. :attr:`IssueNumberReport.entries_below_floor`
+is that population, and both verdicts state it.
+
+The same reading decides what protects an entry's BODY, which is what
+``beadloom-l9ee`` was weighing. A body lost from an entry is detectable only
+where a claim holds its number, because the claim is a separate file that the
+loss cannot take with it — so ``unwritten-claim`` covers exactly the entries at
+or above the floor, and nothing covers the 235 below it.
+
 **What the entry grammar can and cannot decide.** An entry is a line-start
 ordered-list number outside a fenced code block, which is how this log's 236
 entries are written. A number stated only in a consolidated closed-entry heading
@@ -209,6 +225,13 @@ class IssueNumberReport:
     floor: int | None = None
     log_missing: bool = False
     unaccounted: tuple[int, ...] = ()
+
+    #: Entries strictly below the ledger's floor — the population
+    #: ``unclaimed-number`` passes over, stated because the verdict otherwise
+    #: reads as a clean bill over every entry the log holds. Kept 0 when there
+    #: is no floor at all: :attr:`not_verified` is that case's one home, and two
+    #: statements of one fact are two things that can disagree.
+    entries_below_floor: int = 0
 
     @property
     def passed(self) -> bool:
@@ -409,6 +432,7 @@ def check_issue_numbers(project_root: Path) -> IssueNumberReport:
     floor = min((claim.number for claim in claims), default=None)
     if floor is not None:
         findings.extend(_ledger_findings(numbers, claims, floor, log_where))
+    below = 0 if floor is None else sum(1 for e in numbers.entries if e.number < floor)
     return IssueNumberReport(
         declared=True,
         findings=tuple(findings),
@@ -416,6 +440,7 @@ def check_issue_numbers(project_root: Path) -> IssueNumberReport:
         claims=len(claims),
         floor=floor,
         unaccounted=numbers.unaccounted,
+        entries_below_floor=below,
     )
 
 

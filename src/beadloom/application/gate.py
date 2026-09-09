@@ -86,9 +86,7 @@ def _run_doctor_checks(
     return run_checks(conn, project_root=project_root)
 
 
-def _run_audit(
-    project_root: Path, conn: sqlite3.Connection
-) -> AuditResult:
+def _run_audit(project_root: Path, conn: sqlite3.Connection) -> AuditResult:
     """Indirection over :func:`beadloom.doc_sync.audit.run_audit`.
 
     Defined as a module-level seam so the gate's docs-audit step reuses the
@@ -405,10 +403,7 @@ def _sync_shape_finding(row: dict[str, object]) -> Finding:
         "rule": REASON_MISSING_SECTIONS,
         "severity": "warning",
         "locations": locations,
-        "why": (
-            f"{ref_id}: the document is missing section(s) its peers carry — "
-            f"{details}"
-        ),
+        "why": (f"{ref_id}: the document is missing section(s) its peers carry — {details}"),
         "remediation": f"add the section(s) to {doc_path or 'the document'}",
     }
 
@@ -521,11 +516,7 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
     """
     declared = len(result.facts)
     unverified = result.unverified_facts
-    head = (
-        f"{len(stale)} stale fact(s)"
-        if stale
-        else f"{len(result.findings)} mention(s) fresh"
-    )
+    head = f"{len(stale)} stale fact(s)" if stale else f"{len(result.findings)} mention(s) fresh"
     coverage = f"{declared - len(unverified)}/{declared} declared fact(s) verified"
     if unverified:
         coverage += f", NOT VERIFIED: {', '.join(unverified)}"
@@ -536,8 +527,7 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
         # turned 3/9 into 3/8 with nothing naming the fact that left.
         names = ", ".join(sorted(result.not_applicable))
         coverage += (
-            f", NOT APPLICABLE to this project: {names}"
-            " (`beadloom docs audit` states the reason)"
+            f", NOT APPLICABLE to this project: {names} (`beadloom docs audit` states the reason)"
         )
     if result.unjudged:
         # A token whose subject the environment could not confirm here is
@@ -545,9 +535,7 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
         # in a clean room `git 2.49.0` was judged against this project and
         # reddened every Gate run taken there (BDL-UX #266). Naming it on this
         # line is what stops the repair from being a silencer.
-        subjects = ", ".join(
-            sorted({str(mention.subject) for mention in result.unjudged})
-        )
+        subjects = ", ".join(sorted({str(mention.subject) for mention in result.unjudged}))
         coverage += (
             f", COULD NOT JUDGE {len(result.unjudged)} version token(s)"
             f" naming {subjects} — unconfirmed here"
@@ -613,20 +601,14 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         # were read and judged by nothing, and *unverifiable is not clean* —
         # and it cannot redden anyone: this step is `passed` unconditionally.
         rows = sum(t.rows for t in report.quality.unclassified)
-        summary += (
-            f"; NOT CLASSIFIED: {len(report.quality.unclassified)} table(s), "
-            f"{rows} row(s)"
-        )
+        summary += f"; NOT CLASSIFIED: {len(report.quality.unclassified)} table(s), {rows} row(s)"
     if report.quality.unreadable:
         summary += f"; UNREADABLE: {len(report.quality.unreadable)}"
     return GateStep(
         "docs-quality",
         passed=True,
         not_verified=bool(
-            blind
-            or unread_kinds
-            or report.quality.unclassified
-            or report.quality.unreadable
+            blind or unread_kinds or report.quality.unclassified or report.quality.unreadable
         ),
         findings=findings,
         summary=summary,
@@ -730,6 +712,12 @@ def _issue_number_summary(report: IssueNumberReport) -> str:
             "; NOT CHECKED: unwritten-claim, unclaimed-number "
             "(the ledger holds no claim, so neither entered a number)"
         )
+    elif report.entries_below_floor:
+        line += (
+            f"; PARTLY CHECKED: {report.entries_below_floor} of {report.entries} "
+            f"entr(ies) are below floor {report.floor}, where unclaimed-number "
+            "did not enter"
+        )
     if report.unaccounted:
         line += (
             f"; {len(report.unaccounted)} number(s) below the highest are stated "
@@ -807,8 +795,7 @@ def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) ->
         )
     findings = [_doc_space_finding(f) for f in report.findings]
     populations = ", ".join(
-        f"{space} {report.populations.get(space, 0)}"
-        for space in ("to_be", "as_is", "working")
+        f"{space} {report.populations.get(space, 0)}" for space in ("to_be", "as_is", "working")
     )
     summary = (
         f"{populations}; {report.refs_checked} node declaration(s) from "
@@ -843,15 +830,12 @@ def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) ->
         # Two populations, two names. "N WORKING document(s) exempt" beside a
         # sync-check line whose own excused count was 0 was one word standing
         # for both, and a reader took the number that was not the pairs.
-        summary += (
-            f"; {report.working_documents} WORKING document(s) in the exempt space"
-        )
+        summary += f"; {report.working_documents} WORKING document(s) in the exempt space"
         if report.pairs_excused is not None:
             summary += f", {report.pairs_excused} sync pair(s) excused"
         if report.working_reach:
-            summary += (
-                "; the declaration reaches "
-                + ", ".join(f"{label} ({n})" for label, n in report.working_reach.items())
+            summary += "; the declaration reaches " + ", ".join(
+                f"{label} ({n})" for label, n in report.working_reach.items()
             )
     if report.documents_outside_declared_root:
         summary += (
@@ -1016,9 +1000,7 @@ def _step_config_check(project_root: Path) -> GateStep:
     with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
 
-    findings = [
-        _config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts
-    ]
+    findings = [_config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts]
     findings.extend(scope)
     blocking = [d for d in drifts if d.severity == "error"]
     warned = len(drifts) - len(blocking) + len(scope)
@@ -1138,13 +1120,9 @@ def _step_federate(
     (out_dir / "federated.json").write_text(serialize_federation(fed) + "\n", encoding="utf-8")
 
     failures = gate_failures(fed, fail_set)
-    findings = [
-        _gate_failure_finding(f, gate_failure_remediation(f)) for f in failures
-    ]
+    findings = [_gate_failure_finding(f, gate_failure_remediation(f)) for f in failures]
     passed = not failures
-    summary = (
-        f"{len(failures)} verdict(s) in fail-set" if failures else "landscape clean"
-    )
+    summary = f"{len(failures)} verdict(s) in fail-set" if failures else "landscape clean"
     return GateStep("federate", passed=passed, findings=findings, summary=summary)
 
 
@@ -1153,9 +1131,7 @@ def _step_federate(
 # ---------------------------------------------------------------------------
 
 
-def _simple_finding(
-    kind: str, severity: str, why: str, remediation: str | None
-) -> Finding:
+def _simple_finding(kind: str, severity: str, why: str, remediation: str | None) -> Finding:
     """A finding with no file location (step-level error)."""
     return {
         "kind": kind,
@@ -1184,10 +1160,7 @@ def _sync_finding(row: dict[str, object]) -> Finding:
             "rule": "doc-missing",
             "severity": "error",
             "locations": locations,
-            "why": (
-                f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — "
-                f"'{doc_path}' does not exist"
-            ),
+            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{doc_path}' does not exist"),
             "remediation": (
                 "restore the file, or remove the declaration from the graph "
                 "if the doc is genuinely gone — the gate is not satisfied by "
@@ -1273,9 +1246,7 @@ def _audit_finding(finding: object) -> Finding:
         "rule": "doc-fact-stale",
         "severity": "error",
         "locations": locations,
-        "why": (
-            f"{fact_name}: doc says {found!r} but project state is {expected!r}"
-        ),
+        "why": (f"{fact_name}: doc says {found!r} but project state is {expected!r}"),
         "remediation": (
             "update the doc to the current value, or add a tolerance / extra "
             "fact under `docs_audit` in `.beadloom/config.yml`"
