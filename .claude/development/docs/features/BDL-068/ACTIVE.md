@@ -32,6 +32,22 @@ FINDING and never a refusal, and names the interpreter its verdict will be taken
 **Stated and not acted on:** `beadloom-uzck`'s argument is stronger now — a rebuild pays the
 install again, so retyping 16 `--carry` flags costs more than when that bead was filed.
 
+Closed as `1303aad`. Green in a clean room at `room-beadloom-0mdo.74` over 15 carried files
+(9 473 passed, 60 skipped, 1 xfailed, **0 failed** — the first zero-failure room this bead
+recorded), which covers that room and cannot see a bead running beside it. As its own gate
+owner, separately: the combined tree is green, `uv run beadloom ci` rc 0 in the foreground
+without a pipe, 9 521 passed, ruff clean, mypy clean against all four declared target versions.
+
+**One attribution correction, measured:** the sync surface was re-recorded 444 → 448 pairs and
+100 → 101 declared docs, and only ONE of those pairs is this bead's. A pure-HEAD tree measures
+447/101 against the recorded 444/100, so three pairs and the extra declared doc were already
+inherited when `6a55d5c` recorded the baseline, and this commit absorbs them.
+
+**Next:** S6's remaining beads, from `bd ready --limit 0` and not from the close suggestion.
+`bd close --suggest-next` named `.69` and `.14`; the ready list of 34 holds neither, because
+`.69` still has open blockers and `.14` is the slice bead. That is the twenty-eighth dependency
+shape this project has checked that call form against.
+
 **Bead (previous):** none claimed. `beadloom-0mdo.66` closed as `f6dc92a` — the issue log's number
 allocator (BDL-UX #187, #211, #253 and the two of 2026-09-09), run in S6 wave 7 beside `.67` and
 `.76`, where `.76` is the gate owner. The number is now ALLOCATED, by an exclusive create of one claim file per
