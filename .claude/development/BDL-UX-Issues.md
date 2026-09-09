@@ -88,6 +88,20 @@
     **The cost is not the test.** It is that "one failure, the expected one" is now the shape of a correct clean-room verdict, so a *second* failure has to be noticed against a background that already contains one. Several agents in this epic did notice — `beadloom-0mdo.41` and `.61` both reproduced their extra failure at HEAD in a control room to prove it was not theirs — which is exactly the work the discount makes necessary every time.
     **Expected:** either the room can carry what the test needs (a baseline built inside it, which `beadloom clean-room` is now the single place to arrange), or the test declares that a room is not its environment and skips there **with a reason** — the distinction this epic has shipped twelve times. What it must stop being is a failure that everyone knows to ignore.
 
+
+    > **CLOSED 2026-09-09 by `beadloom-0mdo.76`, and the population was counted by RUNNING rather than
+    > by reading the reports.** Exactly **one** test fails in a clean room at HEAD — 1 failed, 9 384
+    > passed, 59 skipped — and roughly 40 of those skips already declare a checkout property. A
+    > population of one argued for the skip, which was this entry's own stated first outcome.
+    > The skip is decided by `sync-check`'s **`baseline: none`** field and never by `status`, so the
+    > tree's 34 `unverified/sibling_symbols_changed` findings still fail as they should. A skip that
+    > swallowed those would have been the discount in a new place.
+    > **Measured consequence:** `beadloom-0mdo.76`'s own room came back **9 392 passed, 60 skipped,
+    > 1 xfailed, 0 failed** — the first all-green clean room this epic recorded, after roughly thirty
+    > reports whose phrasing had the failure built into it.
+    > **The entry's cost claim held.** What it bought is not one test: it is that "one failure, the
+    > expected one" is no longer the shape of a correct verdict, so a second failure no longer has to
+    > be proved real against a background that already contained one.
 257. [2026-09-08] [HIGH] `waves` derived two beads' scopes as disjoint while one document belonged to both, and the landing lock ordered the commits it could not order the edits of
 
     **Severity:** high (it is the guarantee the wave plan exists to give, and the one it was believed to give while the lock was believed broken)
