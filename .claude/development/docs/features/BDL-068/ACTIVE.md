@@ -1075,6 +1075,104 @@ The fix is filed; this name is the free mitigation and later slices keep it.
     README.md` said `impact` reports "ten named kinds" where the code has eleven, and did not
     name `shipped_decision_sections`.
 
+  - [x] `.59` — BDL-UX **#252**, the check first and the text second. S6, concurrent with `.63`
+    and `.75`; **not the gate owner** — `.75` is.
+    **The third direction of `role-duties`' graph.** #228 was a duty declared for a role that
+    does not reach that role's core; this is a role that exists and does not reach the document
+    that lists roles. `onboarding/role_map.py` (new node `role-map`) derives the population from
+    `role_composer.ROLE_NAMES` — what the composer composes, not a directory listing, so
+    `_landing`, `_rooms`, `_tracker`, `_writing` and their `.ru` siblings are fragments and not
+    roles — and checks it against the composed `CLAUDE.md` in both directions: `unmapped` (a
+    composed role no construct names), `partial` (a composed role omitted from a roster that
+    names two others) and `unbacked` (a name a designation claims is a role and no core fragment
+    ships).
+    **A name is read as a role only inside a construct that designates one**, because a bare
+    word search reads `test` in "Committing with failing tests" as the role — the
+    keyword-proximity class filed three times. A DESIGNATION (`subagent_type: <names>`,
+    `agents/<name>.md`, `agents/{<names>}.md`) claims each name is a role and its findings are
+    `error`; an INFERRED roster (a `·` run, or a backticked run joined by `,` or `|`) is
+    recognised only once it already names two composed roles, produces `warn` only, and never
+    yields an `unbacked` name — otherwise an adopter's ``we deploy to `dev`, `test``` becomes a
+    release-introduced red in their own prose.
+    **Measured red on this tree before the text moved**, which is CONTEXT's no-check-that-cannot-
+    fail rule discharged on the tree the check was built against: 6 rosters in the shipped
+    `CLAUDE.md`, 1 finding — `explore` unmapped at `error`, naming all six sites. `Explore` was
+    composed, named four times each by the `/coordinator` and `/task-init` templates, and named
+    **zero** times in the map. After the fix: 16 designations, 6 of them rosters, 0 findings.
+    The text moved in the SHIPPED template, so every adopter's composed copy carries it — the
+    header pointer, section 0.0's map and both of its "two ways a role runs" bullets, the flow
+    line, section 1's list, section 4's Agent Roles table, its step 4, its closing pointer and
+    the footer. The two wave orders `dev → test → review → tech-writer` were deliberately NOT
+    changed: `Explore` runs before a work item has a type, so it is not a wave, and both lines
+    are reported in `not_judged` rather than as findings.
+    **What the check does not judge, and says on every run:** 5 lines of the shipped map mention
+    two or more roles in a shape no construct reads. Some should enumerate every role and some
+    must not, and the derivation cannot tell them apart, so `config-check` names them.
+    One instance of the same defect was found in this repository's own documents by the same
+    derivation and fixed: `docs/domains/onboarding/README.md` spelled `ROLE_NAMES` as four names.
+    The sweep that found it is a spelling-level pass over documents the check does not read, so
+    it is a lower bound and not a derivation.
+    Each guard was demonstrated red by mutating the decision it guards: allowing `,` to join a
+    `subagent_type` run reddens 3, and lowering the roster threshold from two composed roles to
+    one reddens 1. 18 tests (8 scenarios + 10 boundary guards). AS-IS document population 114 →
+    115.
+    Green in a clean room over 15 carried files: 9 336 passed, 58 skipped, the 1 failure BDL-UX
+    #258's known red, confirmed red at HEAD in a control room built the same way. Darwin arm64 /
+    CPython 3.13.7, 0 of the 21 declared rooms; `mypy src/` rc 0 against all four declared target
+    versions, varying the version the checker is asked about and not the interpreter it runs
+    under. **Not a claim about the combined tree** — `.75` owns that measurement.
+    **BDL-UX #257 confirmed from this bead's side.** `beadloom waves` reported 0 serialisations
+    for these three, and three documents no bead's code owns were shared in fact: this `ACTIVE.md`
+    (all three), `docs/services/components/cli-commands/DOC.md` (node `cli-commands` owns both
+    `setup.py` and `.75`'s `waves.py`) and `tests/test_bead77_kind_and_root_disagree.py`, whose
+    hardcoded AS-IS document count both this bead and `.63` must raise because both add a node.
+    `.beadloom/_graph/services.yml` is a fourth. None was compared by the plan.
+
+   - [x] `.63` — BDL-UX **#253**, and the foreign-subject face of **#190**. S6, concurrent with
+     `.59` and `.75`. A version is now attributed to the nearest subject NAME to its left inside
+     its own clause, and only a version whose nearest name is this project's — or that has no
+     name at all — is compared against this project's version. The vocabulary of names is DERIVED
+     from what a project already declares (every distribution in `pyproject.toml` /
+     `package.json` / `Cargo.toml`, the interpreter families implied by `requires-python` /
+     `engines.node` / `rust-version`, `git` when the project is a git repository) and configured
+     per NAME in `docs_audit.subjects` for what no manifest carries.
+     **Measured over the right population, not over what tripped.** The seven suppressions were a
+     set chosen by the defect, so the sweep counted every version token instead: 16 across the
+     audit's 68-document surface, of which ONE is a claim about this project, and 700 across all
+     400 markdown files in the repository. That second sweep is what decided the design. Reading
+     any word beside a version as a subject unless it is a function word was measured and
+     REJECTED — `Phase 3.0.0`, `Implemented 3.0.0`, `Release 2.1.0`, `dated 3.0.0` and
+     `published 2.2.0` all put an ordinary English word beside this project's own version, so
+     that rule turns a stale claim into silence. A derived-and-declared vocabulary fails LOUD
+     instead: a name nobody declared still produces a finding.
+     **Eight of the ten version triples retired**, counted and measured with a real `DocScanner`:
+     `application/README.md`, `services/cli.md` (two sentences), `services/mcp.md`,
+     `bd-seam/DOC.md` (five), `multi-agent-development.md`, its `.ru` counterpart,
+     `parallel-waves.md` and `active-table/DOC.md`. One `docs_audit.subjects` entry — `bd` —
+     replaced nine of them; `git` needed none. The 13 tokens are now reported as `bd x12, git x1`
+     under `attributed_versions` rather than silenced. One sentence was rewritten and GAINED
+     information: `bd-seam/DOC.md`'s `BD_MEASURED_VERSION` line now names `bd` beside the release
+     the reader previously had to infer from the prefix.
+     **The merge with #190 is PARTIAL, and the split is at the level of the fix.** Absorbed: every
+     face where a name stands beside the number, including #190's fifth instance (`CPython
+     3.13.7`, the room `.65` recorded). Not absorbed, and each keeps its triple with the reason:
+     a version behind a preposition (`a JavaScript project at 0.4.1`), where the subject is
+     present but not adjacent and walking past prepositions means calling `Release 2.1.0` a
+     product; and a version MENTIONED rather than used (`v2.2.0`, the example token inside the
+     sentence stating the rule). #190's fourth instance is neither — it is this project's own
+     past version, which is #205.
+     26 tests (6 scenarios + 20 unit), each verified red: four mutations of the implementation
+     were applied and two of them initially killed NOTHING, so both assertions were repaired
+     before the tests were called checks.
+     Green in a clean room over 13 carried files (1 895 files total): 9 343 passed, 59 skipped,
+     the 1 failure `test_bead15_s3b_coverage.py`'s declared no-`.git` exclusion, whose 45 pairs
+     come back `unverified` for want of a baseline. Darwin arm64 / CPython 3.13.7, 0 of the 21
+     declared rooms. **Not a claim about the combined tree** — `.75` owns that measurement.
+     **BDL-UX #257 confirmed from this bead's side too**: this `ACTIVE.md` and
+     `.claude/development/BDL-UX-Issues.md` were shared with `.59` in fact, and
+     `.beadloom/sync-surface.json` records a pair count that grew by three across two beads, so
+     it is left for the gate owner to re-record rather than staged here.
+
 ## What is in `main` now
 
 Four commands, each of one shape — derive the answer, name the reason, name what was not

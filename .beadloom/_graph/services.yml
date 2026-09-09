@@ -484,6 +484,13 @@ nodes:
     docs:
       - docs/domains/onboarding/features/role-duties/SPEC.md
 
+  - ref_id: role-map
+    kind: feature
+    summary: "role_map_report — every role this flow composes, checked in both directions against the document that enumerates roles"
+    source: src/beadloom/onboarding/role_map.py
+    docs:
+      - docs/domains/onboarding/features/role-map/SPEC.md
+
   - ref_id: flow-composer
     kind: feature
     summary: "compose(core, architecture, stack, project) — the one layered assembly behind role files, slash commands and CLAUDE.md; the project layer lives in .beadloom/flow/"
@@ -1141,6 +1148,21 @@ edges:
   - src: role-duties
     dst: onboarding
     kind: part_of
+  - src: role-map
+    dst: onboarding
+    kind: part_of
+  - src: role-map
+    dst: role-composer
+    kind: depends_on
+  - src: role-map
+    dst: flow-composer
+    kind: depends_on
+  - src: role-map
+    dst: flow-config
+    kind: depends_on
+  - src: config-check
+    dst: role-map
+    kind: depends_on
   - src: role-duties
     dst: role-composer
     kind: depends_on

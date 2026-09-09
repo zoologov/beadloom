@@ -69,6 +69,7 @@ from beadloom.onboarding.role_adapters import (
 )
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.role_duties import duty_report
+from beadloom.onboarding.role_map import role_map_report
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
@@ -849,6 +850,49 @@ def _duty_drifts(project_root: Path) -> list[ConfigDrift]:
     ]
 
 
+def _role_map_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report roles this flow composes that its own map does not enumerate.
+
+    The third direction of the graph :func:`_duty_drifts` checks two directions
+    of. That one asks whether a duty declared for a role reaches that role's
+    core; this one asks whether a role that EXISTS reaches the document that
+    lists roles. The edge was missing because nobody had added a role since the
+    map was written, and `Explore` — composed, invoked by two slash skills and
+    named zero times in `CLAUDE.md` — is the first one that could expose it.
+
+    Severity comes from the finding rather than from here, and the two values
+    mean two different things. A DESIGNATION (`subagent_type: …`,
+    `agents/<name>.md`) was written on purpose, so a role it omits or a name it
+    invents is an `error` — Beadloom ships both sides of its own map, so a
+    mismatch introduced by a release is caught by this repository's own Gate
+    before it reaches anyone. An INFERRED roster is this derivation's guess
+    about punctuation in prose that may be an adopter's, so it can only warn:
+    turning a green project red on upgrade over ``we deploy to `dev`, `test``` is
+    how a check gets switched off wholesale.
+
+    Never ``fixable``: the repair is a sentence in the map, and ``--fix`` writes
+    compositions rather than prose. Offering it would be the BDL-UX #186 shape —
+    recommending the command that will decline.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        report = role_map_report(project_root)
+    except FlowConfigError:
+        # Reported by :func:`_flow_config_drift`; don't double-report.
+        return []
+    return [
+        ConfigDrift(
+            file=finding.sites[0] if finding.sites else CLAUDE_ARTIFACT_NAME,
+            reason=finding.why,
+            severity=finding.severity,
+            remediation=finding.remediation,
+            fixable=False,
+        )
+        for finding in report.findings
+    ]
+
+
 def _ignore_block_drifts(project_root: Path) -> list[ConfigDrift]:
     """Report generated paths the project's ignore file no longer declares.
 
@@ -1165,6 +1209,7 @@ def check_config_drift(
         drifts.append(layer)
     drifts.extend(_suppression_drifts(project_root))
     drifts.extend(_duty_drifts(project_root))
+    drifts.extend(_role_map_drifts(project_root))
     drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
 

@@ -552,6 +552,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"    -> {scope.remediation}", err=True)
 
     _echo_duty_limits(project_root)
+    _echo_role_map_limits(project_root)
 
     if not blocking:
         # A warning is a real finding and is printed above; it does not block,
@@ -616,6 +617,41 @@ def _echo_duty_limits(project_root: Path) -> None:
     click.echo(f"    On disk: {_role_file_state(report.role_files)}", err=True)
     click.echo(f"    Not inspected ({len(report.not_inspected)}):", err=True)
     for entry in report.not_inspected:
+        click.echo(f"      {entry.source} — {entry.why}", err=True)
+
+
+def _echo_role_map_limits(project_root: Path) -> None:
+    """Name the lines the role-map check could NOT judge, on every run.
+
+    The findings themselves ride with the other drift and block through
+    ``check_config_drift``. This prints the other half, for the reason
+    :func:`_echo_duty_limits` prints its own: a check that speaks only when it
+    finds something hands the reader a clean list, and a clean list is trusted
+    and stopped at.
+
+    The population here is the lines that name two or more roles in a shape no
+    construct reads. Some of them SHOULD enumerate every role and some should
+    not — a wave order names four roles and `Explore` is not a wave — and this
+    derivation cannot tell them apart, so it names them instead of deciding.
+    """
+    from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH, FlowConfigError
+    from beadloom.onboarding.role_map import role_map_report
+
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return
+    try:
+        report = role_map_report(project_root)
+    except FlowConfigError:
+        # Reported as its own drift by `check_config_drift`; not doubled here.
+        return
+    click.echo(
+        f"  Role map: {len(report.roles)} composed role(s), checked against "
+        f"{len(report.references)} role designation(s) in the composed "
+        f"CLAUDE.md, {len(report.rosters)} of which enumerate two or more.",
+        err=True,
+    )
+    click.echo(f"    Not judged ({len(report.not_judged)}):", err=True)
+    for entry in report.not_judged:
         click.echo(f"      {entry.source} — {entry.why}", err=True)
 
 

@@ -58,13 +58,16 @@ is what holds that line.
 | `typed_surface.py` | `typed-surface` |
 | `bd_calls.py` | `bd-calls` |
 
-`config-check` prints two derivations beside the drift list, because neither has a Gate
+`config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
-owns no runner to hang a step on) and, whenever a project declares at least one duty, the
-population `role_duties.duty_report()` could not inspect. The second prints on the clean path
-as well as the blocking one: a check that speaks only when it finds something hands the reader
-a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
-declares no duty, where there is no verdict to qualify.
+owns no runner to hang a step on); whenever a project declares at least one duty, the
+population `role_duties.duty_report()` could not inspect; and, for any project with a
+`flow.yml`, the corpus and the not-judged population of `role_map.role_map_report()`.
+
+The last two print on the clean path as well as the blocking one: a check that speaks only
+when it finds something hands the reader a clean list, and a clean list is trusted and
+stopped at. The duty block stays silent for a project that declares no duty, where there is
+no verdict to qualify.
 
 The duty block also names the corpus it read — the COMPOSITION this flow would write, not the
 role files on disk — and counts the adapters that exist there, printing `NOTHING TO CHECK`
@@ -72,6 +75,14 @@ when none do. Until BDL-068 S4's fix bead a project that had never run `setup-ag
 was told a duty was checked over ten composed artifacts with no blocking drift, which is true
 of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
 exit code is unchanged: an unscaffolded project is not in drift.
+
+The role-map block (BDL-068 S6, BDL-UX #252) names how many roles this flow composes, how
+many role designations the composed `CLAUDE.md` carries and how many of those enumerate two
+or more, then lists every line that mentions two or more roles in a shape the derivation
+does not read. It names them rather than judging them, because some of those lines should
+enumerate every role and some should not: a wave order `dev → test → review → tech-writer`
+names four roles and `Explore` is not a wave. Measured on the shipped template: 16
+designations, 6 of them rosters, 5 not-judged lines.
 
 `guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
 not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the

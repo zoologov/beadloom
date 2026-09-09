@@ -257,6 +257,42 @@ speaks only when it finds something hands the reader a clean list. The channel t
 matters there is the coordinator's launch prompt: a prompt is not an artifact, so no
 file-based check reaches it.
 
+### The role map
+
+A role this flow composes and the composed `CLAUDE.md` names nowhere is reported at
+`error`, and so is a name the map designates as a role that no CORE fragment ships. The
+derivation is `role_map.role_map_report()`; `_role_map_drifts()` maps its findings onto
+`ConfigDrift`.
+
+This is `_duty_drifts()`'s neighbour one level up. That one asks whether a duty declared
+for a role reaches that role's core (BDL-UX #228); this one asks whether a role that
+EXISTS reaches the document that lists roles (BDL-UX #252). The edge was missing because
+nobody had added a role since the map was written. Measured on 2026-09-09: `Explore`
+shipped in BDL-068 S1 as a composed role, the `/coordinator` and `/task-init` templates
+named it four times each, `.claude/agents/explore.md` was composed, and the shipped
+`CLAUDE.md` named it zero times. This check already counted it — `On disk: 5 role file(s)`
+— while answering two other questions: composed adapters against the compositions this
+flow would write, and whether a declared duty reaches the composed core of every role it
+names.
+
+Severity comes from the finding rather than from `_role_map_drifts()`, and the two values
+mean two different things. A DESIGNATION (`subagent_type: <names>`, `agents/<name>.md`,
+`agents/{<names>}.md`) was written on purpose, so a role it omits or a name it invents is
+an `error` — Beadloom ships both sides of its own map, so a mismatch introduced by a
+release is caught by this repository's own Gate before it reaches anyone. An INFERRED
+roster is a guess about punctuation in prose that may be an adopter's, so it can only
+warn: turning a green project red on upgrade over ``we deploy to `dev`, `test``` is how a
+check gets switched off wholesale.
+
+Never `fixable`, for `_duty_drifts()`'s reason: the repair is a sentence in the map, and
+`--fix` writes compositions rather than prose.
+
+The command prints the corpus it read and `RoleMapReport.not_judged` on every run of a
+project that has a `flow.yml` — the lines that mention two or more roles in a shape no
+construct reads. Some of those should enumerate every role and some should not, since a
+wave order `dev → test → review → tech-writer` names four roles and `Explore` is not a
+wave, and this derivation cannot tell them apart.
+
 ### The ignore block
 
 `init` writes an ignore block into a project's `.gitignore` once and never rewrites it, so
@@ -348,6 +384,9 @@ Module `src/beadloom/onboarding/config_sync.py`:
   would mean deleting the body on disk).
 - `_duty_drifts(project_root) -> list[ConfigDrift]` — every `role_duties` finding as
   a blocking, non-fixable drift; empty for a project with no `.beadloom/flow.yml`.
+- `_role_map_drifts(project_root) -> list[ConfigDrift]` — every `role_map` finding as a
+  non-fixable drift carrying the finding's own severity; empty for a project with no
+  `.beadloom/flow.yml`.
 - `_ignore_block_drifts(project_root) -> list[ConfigDrift]` — every
   `ignore_block.ignore_block_findings()` finding as a warning, non-fixable drift against
   `.gitignore`; empty outside a git working tree and where no `.beadloom/` exists.

@@ -422,7 +422,14 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # that boundary each read a section holding two tables as one, hours
         # apart in one slice (BDL-UX #213, #244), and one home is what stops a
         # third.
-        assert populations[SPACE_AS_IS] == 114
+        # 114 -> 115 in BDL-068 `0mdo.59`: `role-map`, where a role this flow
+        # composes is checked against the document that enumerates roles. It is
+        # a node rather than a paragraph in `role-duties` because the two answer
+        # neighbouring directions of one graph about different things -- a duty
+        # against a role's core, and a role against the map -- and `Explore` was
+        # composed, invoked by two slash skills and named zero times in the map
+        # while `role-duties` was green (BDL-UX #252).
+        assert populations[SPACE_AS_IS] == 115
         # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
         assert len(spaces.working_documents(REPO_ROOT)) == 58
 
