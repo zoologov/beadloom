@@ -337,6 +337,44 @@ correct — this repository is that project. So an entry whose `why` predates th
 release stays invisible, which is the code half of the S5 review's finding M-b and is not
 closed by this check.
 
+### Orphaned tool adapters
+
+The gap the other adapter checks could not have. `_adapter_states`,
+`declined_adapter_rewrites` and `role_duties._role_files_on_disk` all open with
+`for tool in config.tools`, so narrowing the tool subset does not add a finding about the
+dropped tool's files — it removes them from the population. The files stay on disk, the tool
+that reads them goes on reading them, and nothing compares them again.
+
+Measured on 2026-09-09, with a control. A project scaffolded `--tool claude --tool cursor`
+reports `On disk: 10 role file(s)` and exits 0. Remove `cursor` from `flow.yml` and nothing
+else: the count falls to 5, the five files under `.cursor/agents/` are reported by nothing,
+and `config-check` still exits 0. Append the same two lines to `.claude/agents/dev.md` and to
+`.cursor/agents/dev.md` and the first is an `error` while the second is exit 0. The only
+difference between the two files is a line in `flow.yml`.
+
+`_orphaned_adapter_drifts()` maps `role_adapters.orphaned_adapters()` onto `ConfigDrift` —
+one `warn`, non-fixable finding per recorded adapter under an undeclared tool. A finding
+whose body no longer matches the digest recorded for it says it **already** differs, which
+separates a file that has changed unseen from one that has merely stopped being watched.
+
+Its policy is the ignore block's, applied to a different file rather than invented again:
+
+- **`warn`, not `error`**, under the test *Duty delivery* states — who can introduce the
+  finding. An orphan comes from exactly one act, an adopter editing `tools:` in their own
+  `flow.yml`, and blocking would turn every project that has ever narrowed its tool set red
+  on upgrade to the release that adds this check.
+- **Never `fixable`**, for a reason stronger than the ignore block's. The two repairs are
+  re-declaring the tool and deleting the file, and both are the adopter's decision: `--fix`
+  writes compositions and deletes nothing. Deleting would also be the far side of the
+  question BDL-068 `.67` settled toward preservation one bead earlier, so a `--fix` that
+  deleted here would make one command answer one hand edit two ways again (BDL-UX #191).
+
+What it does not claim is a file the manifest does not record. An adopter who drives Cursor
+by hand owns `.cursor/agents/dev.md` outright, and claiming it would be the false positive
+`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/beadloom-flow.md`
+is excluded for the reason `role_adapters` publishes: no check compares that pointer in
+either state, so calling it orphaned would imply it was guarded before.
+
 ### Ownership boundary
 
 The `CLAUDE.md` body is **judged** only when the file is Beadloom's: it has a flow
@@ -401,6 +439,9 @@ Module `src/beadloom/onboarding/config_sync.py`:
 - `_ignore_block_drifts(project_root) -> list[ConfigDrift]` — every
   `ignore_block.ignore_block_findings()` finding as a warning, non-fixable drift against
   `.gitignore`; empty outside a git working tree and where no `.beadloom/` exists.
+- `_orphaned_adapter_drifts(project_root) -> list[ConfigDrift]` — every
+  `role_adapters.orphaned_adapters()` result as a warning, non-fixable drift against the
+  adapter's own path; empty for a project with no valid `.beadloom/flow.yml`.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
@@ -423,8 +464,10 @@ Module `src/beadloom/onboarding/config_sync.py`:
 
 Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 `tests/test_cli_config_check.py`, `tests/test_s3_config_check_residual.py`
-(the adversarial half), `tests/test_bead57_config_check_sight.py`, and
-`tests/acceptance/features/ignore_block_drift.feature` for the ignore block.
+(the adversarial half), `tests/test_bead57_config_check_sight.py`,
+`tests/acceptance/features/ignore_block_drift.feature` for the ignore block, and
+`tests/acceptance/features/orphaned_adapters.feature` +
+`tests/test_orphaned_adapters.py` for the adapters of a dropped tool.
 
 ## What is still not checked, measured
 
@@ -446,6 +489,12 @@ how they were closed:
   without reading as dead.
 - **`.beadloom/flow/` is scanned for the fragments that compose**, so a file
   dropped there under a name nothing composes is inert and unreported.
+- **An orphaned adapter needs a manifest entry to be seen.** Provenance comes from
+  `.beadloom/flow-manifest.json`, so a project whose manifest was deleted has none and its
+  orphans go unreported. Deliberate rather than pending: absent information must not
+  manufacture a claim about somebody's file. The cost is small in practice, because the
+  manifest is source rather than derived state and the generated ignore block does not list
+  it.
 - **The ignore block's reason text is not compared** — only its patterns are. A block
   carrying an entry's `why` from an earlier release reads as clean, and a `.gitignore`
   written entirely by hand that happens to declare the same patterns reads as clean too,

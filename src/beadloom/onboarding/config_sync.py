@@ -66,6 +66,7 @@ from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
     cursor_rules_relpath,
     generate_adapters,
+    orphaned_adapters,
 )
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.role_duties import duty_report
@@ -931,6 +932,50 @@ def _ignore_block_drifts(project_root: Path) -> list[ConfigDrift]:
     ]
 
 
+def _orphaned_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report role adapters left behind by a tool that left ``flow.yml``.
+
+    The gap the other adapter checks cannot have. Every one of them opens with
+    ``for tool in config.tools``, so narrowing the subset does not add a finding
+    about the dropped tool's files — it removes them from the population. The
+    files stay on disk, the tool that reads them goes on reading them, and the
+    same edit that is an ``error`` under ``.claude/agents/`` is exit 0 under
+    ``.cursor/agents/`` (measured 2026-09-09, with that control).
+
+    ``warn``, for the reason :func:`_suppression_drifts` and
+    :func:`_ignore_block_drifts` warn, under the test :func:`_duty_drifts`
+    states: who can introduce the finding. An orphan comes from exactly one act
+    — an adopter editing ``tools:`` in their own ``flow.yml`` — and adding this
+    check would otherwise turn every project that has ever narrowed its tool set
+    red on upgrade, which is CONTEXT's standing constraint and is how a check
+    gets switched off wholesale.
+
+    Never ``fixable``, for a reason stronger than the ignore block's. The two
+    repairs are re-declaring the tool and deleting the file, and both are the
+    adopter's decision: ``--fix`` writes compositions and deletes nothing.
+    Deleting would also be the far side of what ``beadloom-0mdo.67`` settled
+    toward preservation, one bead after it settled it. Offering ``--fix`` here
+    would be the BDL-UX #186 shape — recommending the command that will decline.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        # The invalid-config drift is reported separately; don't double-report.
+        return []
+    return [
+        ConfigDrift(
+            file=orphan.file,
+            reason=orphan.why,
+            severity="warn",
+            remediation=orphan.remediation,
+            fixable=False,
+        )
+        for orphan in orphaned_adapters(project_root, config)
+    ]
+
+
 def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     """Every artifact this project composes — the text a suppression is matched against."""
     texts = [composed_command(name, config, project_root) for name in COMMAND_FILES]
@@ -1240,5 +1285,6 @@ def check_config_drift(
     drifts.extend(_role_map_drifts(project_root))
     drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
+    drifts.extend(_orphaned_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from beadloom.onboarding.flow_manifest import digest, record
+from beadloom.onboarding.flow_manifest import digest, load_manifest, record
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 
 if TYPE_CHECKING:
@@ -168,3 +168,126 @@ def generate_adapters(
         recorded[str(_CURSOR_RULES_RELPATH)] = digest(_CURSOR_RULES_BODY)
     record(project_root, recorded)
     return result
+
+
+#: The phrase every orphan finding carries, so a caller can recognise one
+#: without matching a sentence a later reword would break.
+ORPHAN_MARKER = "no tool this flow declares claims it"
+
+
+@dataclass(frozen=True)
+class OrphanedAdapter:
+    """One role adapter Beadloom wrote for a tool the flow no longer declares.
+
+    Every reader of role adapters takes its population from ``config.tools`` —
+    :func:`~beadloom.onboarding.config_sync._adapter_states`,
+    :func:`~beadloom.onboarding.config_sync.declined_adapter_rewrites` and
+    ``role_duties._role_files_on_disk`` all open with that loop. So narrowing
+    ``tools:`` does not add a finding about the files the dropped tool wrote; it
+    removes them from the check. Measured on 2026-09-09 with a control: the same
+    two lines appended to ``.claude/agents/dev.md`` and to
+    ``.cursor/agents/dev.md``, in a project whose flow declares ``claude`` only,
+    are an ``error`` on the first and exit 0 on the second.
+
+    ``diverged`` says the body no longer matches the digest the flow manifest
+    recorded — the silent change the finding exists for, told apart from the
+    file that has merely stopped being watched.
+    """
+
+    file: str
+    tool: str
+    diverged: bool
+
+    @property
+    def why(self) -> str:
+        """What is wrong, in the words a reader of the file needs."""
+        subject = (
+            f"orphaned adapter: Beadloom wrote it for the `{self.tool}` tool "
+            f"and {ORPHAN_MARKER}"
+        )
+        if not self.diverged:
+            return (
+                f"{subject}, so nothing compares it any more while the tool "
+                "that reads it still reads it"
+            )
+        return (
+            f"{subject} — and it ALREADY differs from what Beadloom wrote, "
+            "which no check reported because dropping the tool removed the "
+            "file from the check instead of reporting it"
+        )
+
+    @property
+    def remediation(self) -> str:
+        """The two moves that exist, neither of which Beadloom takes for you."""
+        return (
+            f"put `{self.tool}` back in `tools:` in .beadloom/flow.yml to bring "
+            f"this file back under the drift check, or delete {self.file} — "
+            "Beadloom leaves it alone either way, because deleting somebody's "
+            "file is not a repair"
+        )
+
+
+def orphaned_adapters(
+    project_root: Path, config: FlowConfig
+) -> tuple[OrphanedAdapter, ...]:
+    """Role adapters this flow's manifest records under an undeclared tool.
+
+    THE POPULATION IS THE MANIFEST, not :data:`TOOL_AGENT_DIRS` crossed with
+    :data:`~beadloom.onboarding.role_composer.ROLE_NAMES`. Two consequences,
+    both wanted. A file Beadloom never recorded writing is somebody else's — an
+    adopter who drives Cursor by hand owns ``.cursor/agents/dev.md`` outright,
+    and claiming it would be the false positive ``_adapter_drifts`` avoids by
+    checking only adapters it recognises. And a role a later release renames or
+    retires is still reported, because the record of the write does not depend
+    on the roles this release happens to compose.
+
+    THE STATED LIMIT: provenance comes from the manifest, so a project whose
+    ``.beadloom/flow-manifest.json`` was deleted has none and is under-reported
+    here. That is deliberate — absent information must not manufacture a claim
+    about somebody's file — and it costs little in practice, because the
+    manifest is source rather than derived state and the generated ignore block
+    does not list it.
+
+    THE NAMED EXCLUSION: ``.cursor/rules/beadloom-flow.md``. It is in the
+    manifest and it is equally unclaimed, and it is not an orphaned ADAPTER.
+    This module's own contract already says no check compares that pointer in
+    either state, so calling it orphaned would imply it was guarded before the
+    tool was dropped.
+    """
+    declared = set(config.tools)
+    manifest = load_manifest(project_root)
+    found: list[OrphanedAdapter] = []
+    for tool, agent_dir in TOOL_AGENT_DIRS.items():
+        if tool in declared:
+            continue
+        for relpath, recorded in manifest.items():
+            candidate = Path(relpath)
+            if candidate.parent != agent_dir or candidate.suffix != ".md":
+                continue
+            path = project_root / candidate
+            if not path.is_file():
+                # Already deleted. The adopter took one of the two moves the
+                # remediation names, and reporting a repair is noise.
+                continue
+            found.append(
+                OrphanedAdapter(
+                    file=relpath,
+                    tool=tool,
+                    diverged=_diverged(path, recorded),
+                )
+            )
+    return tuple(sorted(found, key=lambda orphan: orphan.file))
+
+
+def _diverged(path: Path, recorded: str) -> bool:
+    """Whether the body at ``path`` still matches the digest Beadloom recorded.
+
+    An undecodable body counts as diverged rather than as unknown, and the
+    inference is sound rather than defensive: :func:`_write` writes UTF-8, so a
+    file that will not decode as UTF-8 is not the body Beadloom wrote. Skipping
+    it would answer clean about a file nothing has looked at.
+    """
+    try:
+        return digest(path.read_text(encoding="utf-8")) != recorded
+    except (OSError, UnicodeDecodeError):
+        return True

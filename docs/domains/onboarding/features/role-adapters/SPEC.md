@@ -31,11 +31,38 @@ S1.5). It used to spell the four names as prose, so a fifth role reached the com
 adapters and the drift-guard and was absent from the one file that tells a Cursor user which
 roles exist.
 
+### Orphaned adapters — a tool that leaves `flow.yml`
+
+`generate_adapters` writes for the tools `config.tools` names, and so does every reader of
+what it wrote. So narrowing the tool subset does not report the files the dropped tool left
+behind; it removes them from the check. Measured on 2026-09-09 with a control: in a project
+scaffolded for `claude` and `cursor` and then narrowed to `claude`, the same two lines
+appended to `.claude/agents/dev.md` are an `error` and the same two appended to
+`.cursor/agents/dev.md` are exit 0.
+
+`orphaned_adapters(project_root, config)` names them. Its population is the **flow
+manifest**, not `TOOL_AGENT_DIRS` crossed with `ROLE_NAMES`, and both consequences are
+wanted: a file Beadloom never recorded writing belongs to somebody else — an adopter who
+drives Cursor by hand owns `.cursor/agents/dev.md` outright — and a role a later release
+renames or retires is still reported, because the record of the write does not depend on the
+roles this release composes. `diverged` says the body no longer matches the digest recorded
+for it, which tells a file that has already changed apart from one that has merely stopped
+being watched. An undecodable body counts as diverged: `_write` writes UTF-8, so a body that
+will not decode as UTF-8 is not the one Beadloom wrote.
+
+`.cursor/rules/beadloom-flow.md` is **not** in this population, for the reason it is the
+stated exception below: no check compares that pointer in either state, so calling it
+orphaned would imply it was guarded before the tool was dropped.
+
+Stated limit: provenance comes from the manifest, so a project whose
+`.beadloom/flow-manifest.json` was deleted has none and is under-reported here.
+
 ### Modules
 
 - **role_adapters.py** — `generate_adapters(config, project_root, preserve=…)`,
   `AdapterResult`, `TOOL_AGENT_DIRS`, `cursor_rules_relpath()`,
-  `cursor_rules_body()`.
+  `cursor_rules_body()`, `orphaned_adapters()`, `OrphanedAdapter`,
+  `ORPHAN_MARKER`.
 
 ### Invariants
 
@@ -74,9 +101,18 @@ Module `src/beadloom/onboarding/role_adapters.py`:
 - `TOOL_AGENT_DIRS` — `{claude: .claude/agents, cursor: .cursor/agents}`
 - `cursor_rules_relpath()` → `Path`
 - `cursor_rules_body()` → `str`
+- `orphaned_adapters(project_root, config)` → `tuple[OrphanedAdapter, ...]` — the
+  manifest-recorded role adapters that sit under a tool `config.tools` does not
+  name, sorted by path; empty when every recorded tool is declared
+- `OrphanedAdapter` — `file`, `tool`, `diverged`, plus the `why` and
+  `remediation` `config-check` prints for it
+- `ORPHAN_MARKER` — the phrase every orphan finding carries, so a caller
+  recognises one without matching a sentence a reword would break
 
 Writes are fingerprinted through `flow_manifest.record()`.
 
 ## Testing
 
-Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`
+Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`,
+`tests/test_orphaned_adapters.py`, and
+`tests/acceptance/features/orphaned_adapters.feature` for what an adopter is shown.

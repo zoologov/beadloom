@@ -1235,6 +1235,30 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      **As its own gate owner, separately:** the combined tree is green — `pytest` 9 738 passed
      / 0 failed, `beadloom sync-check` rc 0 and `beadloom lint --strict` rc 0.
 
+  - [ ] `beadloom-ec1a` — **config-check flags ORPHANED tool adapters.** The bead carried a
+     title and no description, so the premise was measured before anything was built, and it
+     REPRODUCES. Rig: scaffold `--tool claude --tool cursor`, then drop `cursor` from
+     `flow.yml`. `config-check` exits 0, the `On disk:` line falls from 10 role files to 5, and
+     the five under `.cursor/agents/` are reported by nothing. With a control: the same two
+     lines appended to `.claude/agents/dev.md` and `.cursor/agents/dev.md` are an `error` on
+     the first and exit 0 on the second, and the only difference is a line in `flow.yml`. The
+     cause is one loop — `_adapter_states`, `declined_adapter_rewrites` and
+     `_role_files_on_disk` all open with `for tool in config.tools`, so narrowing the subset
+     removes files from the check instead of reporting them. None of the three checks added
+     this month covers it: `.27`'s duties read the composition, `.40`'s reads `.gitignore`,
+     `.59`'s reads the composed CLAUDE.md.
+     **THE DECISION THE TITLE DOES NOT MAKE: report, at `warn`, never `fixable`** — `.40`'s
+     policy applied to a different file, so a third policy reused and not a fourth invented.
+     Not delete, because deleting is the far side of what `.67` settled toward preservation one
+     bead earlier. `warn` because an orphan comes from one act, an adopter editing their own
+     `flow.yml`, and blocking would turn every project that ever narrowed its tool set red on
+     upgrade. Never fixable because both repairs — re-declare the tool, or delete the file —
+     are the adopter's, and `--fix` writes compositions and deletes nothing.
+     **The population is the flow manifest**, not `TOOL_AGENT_DIRS` × `ROLE_NAMES`: a file
+     Beadloom never recorded writing belongs to somebody else, and a role a later release
+     retires is still reported. Stated limit: a project whose manifest was deleted has no
+     provenance and is under-reported, deliberately.
+
 
 ## What is in `main` now
 
