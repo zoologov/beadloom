@@ -627,6 +627,40 @@ def then_failure_names_the_node(world: dict[str, Any]) -> None:
     assert "reindex" in check.detail
 
 
+@given("this project declares each of its nodes in a file of its own")
+def given_one_file_per_node(world: dict[str, Any]) -> None:
+    """The layout BDL-UX #265 moved this repository to."""
+    world["environment"] = replace(
+        world["environment"],
+        graph_input=GraphInput(
+            files=(
+                GraphFile(path=".beadloom/_graph/billing.yml", nodes=("billing",)),
+                GraphFile(path=".beadloom/_graph/shipping.yml", nodes=("shipping",)),
+            ),
+            indexed=frozenset({"billing", "shipping"}),
+        ),
+    )
+
+
+@then("the pass says two node-adding beads write two files")
+def then_pass_says_the_collision_cannot_be_attempted(world: dict[str, Any]) -> None:
+    """The sharing is gone, so the pass says so rather than naming a shared file."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "a file of its own" in check.detail
+    assert "cannot be attempted" in check.detail
+
+
+@then("the pass still names the file it could not read")
+def then_pass_still_names_what_it_cannot_reach(world: dict[str, Any]) -> None:
+    """The half no plan can reach moved rather than disappearing."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "no graph this plan could read" in check.detail
+
+
 @then("the pass names the file a bead that adds a node writes")
 def then_pass_names_the_file(world: dict[str, Any]) -> None:
     """The half no plan can observe is stated rather than left out of the pass."""

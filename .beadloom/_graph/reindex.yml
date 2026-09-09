@@ -1,0 +1,24 @@
+  # Feature: Reindex (reindex/ package — decomposed by cohesion in BDL-059 S4:
+  # models / rules_loader / indexing / enrichment / sync_state / change_detection
+  # / full / incremental. The package __init__ is this node's source and re-exports
+  # the stable public + back-compat surface.)
+nodes:
+  - ref_id: reindex
+    kind: feature
+    summary: "Full + incremental reindex pipeline (reindex/ package: models, indexing, enrichment, sync-state, change-detection, full, incremental)"
+    source: src/beadloom/application/reindex/
+    docs:
+      - docs/domains/application/features/reindex/SPEC.md
+edges:
+  - src: reindex
+    dst: application
+    kind: part_of
+  - src: reindex
+    dst: context-oracle
+    kind: uses
+  - src: reindex
+    dst: doc-sync
+    kind: uses
+  - src: reindex
+    dst: graph
+    kind: uses

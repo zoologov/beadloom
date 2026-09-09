@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: snapshot
+    kind: feature
+    summary: "Architecture snapshot store — save, list, and compare graph states over time"
+    source: src/beadloom/graph/snapshot.py
+    docs:
+      - docs/domains/graph/features/snapshot/SPEC.md
+edges:
+  - src: snapshot
+    dst: graph
+    kind: part_of

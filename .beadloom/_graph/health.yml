@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: health
+    kind: component
+    summary: "Health metrics — snapshots, trend computation, and the Rich health dashboard"
+    source: src/beadloom/infrastructure/health.py
+    docs:
+      - docs/domains/infrastructure/components/health/DOC.md
+edges:
+  - src: health
+    dst: infrastructure
+    kind: part_of

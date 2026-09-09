@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: sync-check
+    kind: feature
+    summary: "Doc-code sync engine — symbols_hash freshness state, stale detection, mark-synced baselining"
+    source: src/beadloom/doc_sync/engine.py
+    docs:
+      - docs/domains/doc-sync/features/sync-check/SPEC.md
+edges:
+  - src: sync-check
+    dst: doc-sync
+    kind: part_of

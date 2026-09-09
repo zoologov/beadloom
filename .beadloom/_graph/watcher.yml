@@ -1,0 +1,12 @@
+  # Feature: Watcher
+nodes:
+  - ref_id: watcher
+    kind: feature
+    summary: "File watcher for auto-reindex on changes"
+    source: src/beadloom/application/watcher.py
+    docs:
+      - docs/domains/application/features/watcher/SPEC.md
+edges:
+  - src: watcher
+    dst: application
+    kind: part_of

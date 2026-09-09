@@ -1,0 +1,17 @@
+nodes:
+  - ref_id: config-check
+    kind: feature
+    summary: "AgentConfigAsCode — drift detection (and --fix) for generated agent-config artifacts (AGENTS.md, CLAUDE.md auto-blocks, IDE adapters)"
+    source: src/beadloom/onboarding/config_sync.py
+    docs:
+      - docs/domains/onboarding/features/config-check/SPEC.md
+edges:
+  - src: config-check
+    dst: onboarding
+    kind: part_of
+  - src: config-check
+    dst: role-map
+    kind: depends_on
+  - src: config-check
+    dst: role-duties
+    kind: depends_on

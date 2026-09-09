@@ -1,0 +1,23 @@
+  # Component: CLI command groups (BDL-059 S4 cohesion split of the cli monolith).
+  # Dir-source covers every module under services/commands/ for module-coverage.
+nodes:
+  - ref_id: cli-commands
+    kind: component
+    summary: "Cohesive Click command groups: query, index_ops, status, docsync, federation, docs, setup, dashboard, snapshot"
+    source: src/beadloom/services/commands/
+    tags: [layer-service]
+    docs:
+      - docs/services/components/cli-commands/DOC.md
+edges:
+  - src: cli-commands
+    dst: cli
+    kind: part_of
+  - src: cli-commands
+    dst: issue-numbers
+    kind: depends_on
+  - src: cli-commands
+    dst: declared-scope
+    kind: depends_on
+  - src: cli-commands
+    dst: typed-surface
+    kind: depends_on

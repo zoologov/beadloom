@@ -1,0 +1,14 @@
+  # Feature: the wave decision (BDL-061 S6). The graph is the only place that
+  # holds code-level interdependence, so it is the only place a wave shape can be
+  # DECIDED rather than guessed.
+nodes:
+  - ref_id: wave-plan
+    kind: feature
+    summary: "Decide which beads may run at once from the code-level independence of their node scopes, and state the media a wave shares regardless"
+    source: src/beadloom/application/waves/
+    docs:
+      - docs/domains/application/features/wave-plan/SPEC.md
+edges:
+  - src: wave-plan
+    dst: application
+    kind: part_of

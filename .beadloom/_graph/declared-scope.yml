@@ -1,0 +1,33 @@
+  # Component: which work item a commit belongs to, and the scope its `## Axes`
+  # declare (BDL-068 S1.6). The join `scope-check` cannot make for itself: the
+  # index that owns a path, git for the paths and the branch, and the planning
+  # corpus that says which folders are work items.
+nodes:
+  - ref_id: declared-scope
+    kind: component
+    summary: "The work item a branch names, and the scope its `## Axes` section declares — resolved through the graph index, git and the planning corpus"
+    source: src/beadloom/application/declared_scope.py
+    docs:
+      - docs/domains/application/components/declared-scope/DOC.md
+edges:
+  - src: declared-scope
+    dst: application
+    kind: part_of
+  - src: declared-scope
+    dst: scope-check
+    kind: depends_on
+  - src: declared-scope
+    dst: axes-section
+    kind: depends_on
+  - src: declared-scope
+    dst: impact
+    kind: depends_on
+  - src: declared-scope
+    dst: sync-check
+    kind: depends_on
+  - src: declared-scope
+    dst: doc-shape-requirements
+    kind: depends_on
+  - src: declared-scope
+    dst: flow-guards
+    kind: depends_on

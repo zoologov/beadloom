@@ -1,0 +1,12 @@
+  # Feature: Doc Generator
+nodes:
+  - ref_id: doc-generator
+    kind: feature
+    summary: "Doc skeleton generation + AI polish data from architecture graph"
+    source: src/beadloom/onboarding/doc_generator.py
+    docs:
+      - docs/domains/onboarding/features/doc-generator/SPEC.md
+edges:
+  - src: doc-generator
+    dst: onboarding
+    kind: part_of

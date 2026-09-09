@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: guard-hooks
+    kind: component
+    summary: "Emits the logic-free Claude Code hook adapter for the guard CLI and merges it into .claude/settings.json"
+    source: src/beadloom/onboarding/guard_hooks.py
+    docs:
+      - docs/domains/onboarding/components/guard-hooks/DOC.md
+edges:
+  - src: guard-hooks
+    dst: onboarding
+    kind: part_of

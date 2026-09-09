@@ -214,7 +214,10 @@ neighbour's commit. The discipline was followed exactly: the lock orders the COM
 edit had already happened. A third instance measured that the shared population is wider than
 the documents — three beads with disjoint code scopes shared four artifacts, two of which are
 not documents at all, and one of which is `.beadloom/_graph/services.yml`, the graph this plan
-derives its scopes FROM. A derivation of ownership out of the graph cannot reach the graph.
+derives its scopes FROM. A derivation of ownership out of the graph cannot reach the graph. On
+this repository that one is now gone rather than reported: BDL-UX #265 split the file into one
+per node, so two beads that add nodes write two files. A single-file graph stays valid, which
+is why the medium stays and reports the number instead of taking a verdict.
 `focus-document` names one member of that population and does not claim to name the rest.
 
 **What the check asks is not whether the beads share it — they do — but whether the document

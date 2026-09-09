@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: graph-loader
+    kind: component
+    summary: "YAML graph parser + SQLite loader — reads .beadloom/_graph/*.yml into the nodes/edges tables"
+    source: src/beadloom/graph/loader.py
+    docs:
+      - docs/domains/graph/components/graph-loader/DOC.md
+edges:
+  - src: graph-loader
+    dst: graph
+    kind: part_of

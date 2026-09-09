@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: doc-indexer
+    kind: component
+    summary: "Document indexer — Markdown scanning, chunking, and SQLite population for docs"
+    source: src/beadloom/doc_sync/doc_indexer.py
+    docs:
+      - docs/domains/doc-sync/components/doc-indexer/DOC.md
+edges:
+  - src: doc-indexer
+    dst: doc-sync
+    kind: part_of

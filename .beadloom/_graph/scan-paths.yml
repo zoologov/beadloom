@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: scan-paths
+    kind: component
+    summary: "Scan-path resolution — reads source scan directories from config.yml so domains resolve them without importing application"
+    source: src/beadloom/infrastructure/scan_paths.py
+    docs:
+      - docs/domains/infrastructure/components/scan-paths/DOC.md
+edges:
+  - src: scan-paths
+    dst: infrastructure
+    kind: part_of

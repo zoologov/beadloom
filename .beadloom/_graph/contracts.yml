@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: contracts
+    kind: component
+    summary: "First-class cross-service contract model + protocol-agnostic reconciliation (contract_key, ContractVerdict)"
+    source: src/beadloom/graph/contracts.py
+    docs:
+      - docs/domains/graph/components/contracts/DOC.md
+edges:
+  - src: contracts
+    dst: graph
+    kind: part_of

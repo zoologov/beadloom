@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: amqp_body
+    kind: component
+    summary: "Strict AMQP message-body JSON-Schema model + native body-diff — names consumer-read fields the producer body breaks (absent / type-incompatible / required-narrowed / nested+array); additive changes benign"
+    source: src/beadloom/graph/amqp_body.py
+    docs:
+      - docs/domains/graph/components/amqp_body/DOC.md
+edges:
+  - src: amqp_body
+    dst: graph
+    kind: part_of

@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: flow-suppression
+    kind: feature
+    summary: "a declared stand-down of a shipped core rule — reason + exit condition mandatory, appended as a visible notice rather than applied as a deletion"
+    source: src/beadloom/onboarding/flow_suppression.py
+    docs:
+      - docs/domains/onboarding/features/flow-suppression/SPEC.md
+edges:
+  - src: flow-suppression
+    dst: onboarding
+    kind: part_of

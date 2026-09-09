@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: flow-manifest
+    kind: feature
+    summary: "records the sha256 of every composed artifact Beadloom writes, so a later run tells its own output (recomposable) from a hand edit (reported, never rewritten)"
+    source: src/beadloom/onboarding/flow_manifest.py
+    docs:
+      - docs/domains/onboarding/features/flow-manifest/SPEC.md
+edges:
+  - src: flow-manifest
+    dst: onboarding
+    kind: part_of

@@ -1,0 +1,14 @@
+  # Feature: `beadloom impact` — what a change touches, answered from the source
+  # over a seed the command DERIVES from the target. BDL-068 S1.2; the measurement
+  # that made seed derivation the first criterion is BDL-068 S1.3's, at af26750d.
+nodes:
+  - ref_id: impact
+    kind: feature
+    summary: "Who else commits through this sink, who else calls this, how many branches and exit forms the command has, over a seed derived from the target and named in the answer"
+    source: src/beadloom/application/impact/
+    docs:
+      - docs/domains/application/features/impact/SPEC.md
+edges:
+  - src: impact
+    dst: application
+    kind: part_of

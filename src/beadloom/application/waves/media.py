@@ -36,7 +36,12 @@ about:
   ``.beadloom/_graph/services.yml`` was one of them. The self-reference is
   stated rather than left for a reader to find — a derivation cannot describe
   its own input by asking it, because the node a bead is about to add is not in
-  the graph the plan read (BDL-UX #261).
+  the graph the plan read (BDL-UX #261). On THIS repository the sharing is gone
+  rather than reported: `beadloom-0mdo.80` split that file into one per node, so
+  two node-adding beads write two files (BDL-UX #265). The medium stays, because
+  the layout is a property of a project and not of the command, and because the
+  half no plan can reach only moved — under one file per node it cannot see the
+  FILE a bead is about to create either.
 
 **Why the focus document is a medium and not a serialisation** (BDL-UX #257).
 It cannot be one: ``docs.ref_id`` holds at most one node per document, and
@@ -52,16 +57,22 @@ ACTIVE.md is in the docs table nowhere, and the wave-2 collision was over
 one of the two scopes and of neither.
 
 **Why the graph files are a medium and not a serialisation either** (BDL-UX
-#261). The entry sketched one: a bead's scope reaching the graph FILE its
-declared nodes are defined in. Measured on this repository before it was built,
-one file holds every one of this project's 100 nodes, so that reason fires on
-EVERY pair and collapses every wave to a wave of one — BDL-UX #245's failure
+#261, then #265). The entry sketched one: a bead's scope reaching the graph FILE
+its declared nodes are defined in. Measured on this repository before it was
+built, one file held every one of this project's 100 nodes, so that reason fired
+on EVERY pair and collapsed every wave to a wave of one — BDL-UX #245's failure
 mode — against a real write rate of 8 of the 55 commits this epic's branch
-carries. It would also miss the
-case it was drawn from, because both beads that collided were ADDING nodes and a
-node being added is in no graph the plan can read. The condition under which it
-becomes worth building is a graph split across files, and
-``TestTheGraphFileCannotSerialiseWithoutNoise`` is that condition as a red test.
+carries. It would also miss the case it was drawn from, because both beads that
+collided were ADDING nodes and a node being added is in no graph the plan can
+read. The condition named for reopening it was a graph split across files, and
+`beadloom-0mdo.80` met that condition. The answer did not change, and the reason
+it did not is the OPPOSITE one: one node per file makes the node-to-file map
+injective, so the reason fires exactly when two beads declare the same node —
+which ``conflict_between`` already reports as ``shared_node``. It was noise on a
+single-file graph and it is redundant on a split one, and there is no layout
+between the two where it is neither. Measured in
+``tests/test_the_graph_is_one_file_per_node.py``,
+``TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful``.
 
 **And the population is still wider than these seven.** Two of `beadloom-0mdo.59`'s
 four artifacts are answered here and two are not.

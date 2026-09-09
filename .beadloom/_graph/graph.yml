@@ -1,0 +1,16 @@
+  # Domain: Graph
+nodes:
+  - ref_id: graph
+    kind: domain
+    summary: "YAML graph format, loader, diff, rule engine, import resolver, linter"
+    source: src/beadloom/graph/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/graph/README.md
+edges:
+  - src: graph
+    dst: beadloom
+    kind: part_of
+  - src: graph
+    dst: infrastructure
+    kind: depends_on

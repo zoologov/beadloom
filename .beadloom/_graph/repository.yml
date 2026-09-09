@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: repository
+    kind: component
+    summary: "Centralized typed read queries over the graph-index tables (nodes/edges/docs/sync_state/code_symbols)"
+    source: src/beadloom/infrastructure/repository.py
+    docs:
+      - docs/domains/infrastructure/components/repository/DOC.md
+edges:
+  - src: repository
+    dst: infrastructure
+    kind: part_of

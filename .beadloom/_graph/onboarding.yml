@@ -1,0 +1,13 @@
+  # Domain: Onboarding
+nodes:
+  - ref_id: onboarding
+    kind: domain
+    summary: "Project bootstrap, doc import, architecture-aware presets, doc generation"
+    source: src/beadloom/onboarding/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/onboarding/README.md
+edges:
+  - src: onboarding
+    dst: beadloom
+    kind: part_of

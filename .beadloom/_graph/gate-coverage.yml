@@ -1,0 +1,19 @@
+  # Component: what a gate run did NOT do, derived from its own step list and
+  # from the pipeline the project declares (BDL-068 S6, BDL-UX #247). A
+  # component rather than a feature: the capability an adopter runs is the gate;
+  # this is the qualification the gate's verdict carries, like the room census
+  # beside it.
+nodes:
+  - ref_id: gate-coverage
+    kind: component
+    summary: "The verifications a project's pipeline declares that no step of a gate run performed"
+    source: src/beadloom/application/gate_coverage.py
+    docs:
+      - docs/domains/application/components/gate-coverage/DOC.md
+edges:
+  - src: gate-coverage
+    dst: application
+    kind: part_of
+  - src: gate-coverage
+    dst: verdict-room
+    kind: depends_on

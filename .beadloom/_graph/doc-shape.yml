@@ -1,0 +1,17 @@
+  # Feature: Doc Shape (BDL-061 S4b) — the structural half of freshness. Every
+  # other sync reason compares CONTENT; this one compares the document's shape
+  # against the sections its kind requires.
+nodes:
+  - ref_id: doc-shape
+    kind: feature
+    summary: "Document structure check — sections a document's peers carry and this one lost"
+    source: src/beadloom/doc_sync/doc_shape.py
+    docs:
+      - docs/domains/doc-sync/features/doc-shape/SPEC.md
+edges:
+  - src: doc-shape
+    dst: doc-sync
+    kind: part_of
+  - src: doc-shape
+    dst: markdown-tables
+    kind: depends_on

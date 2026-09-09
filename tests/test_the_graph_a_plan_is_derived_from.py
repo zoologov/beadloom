@@ -19,23 +19,32 @@ module is the other three, and they are three shapes rather than one:
    `TestTheCliCommandsDocumentIsAnUndeclaredNode` is that measurement as an
    executable.
 
-Two mechanisms are DECLINED here with the measurement that declines them, on the
+Two mechanisms were DECLINED here with the measurement that declines them, on the
 `TestDocumentOwnershipCannotSerialiseAnything` precedent `beadloom-0mdo.75` set:
-a serialisation keyed on the graph FILE a bead's declared nodes are defined in
-(`TestTheGraphFileCannotSerialiseWithoutNoise`), and an ancestor-reaching
-document statement (`TestAnAncestorReachingRuleIsSharedByEveryPair`). Each pin
-carries the condition under which it goes red and the mechanism becomes worth
-building.
+a serialisation keyed on the graph FILE a bead's declared nodes are defined in,
+and an ancestor-reaching document statement
+(`TestAnAncestorReachingRuleIsSharedByEveryPair`). Each pin carries the condition
+under which it goes red and the mechanism becomes worth reconsidering.
+
+THE FIRST PIN FIRED, AND THE ANSWER IT UNLOCKED WAS STILL NO.
+`TestTheGraphFileCannotSerialiseWithoutNoise` asserted that one file held every
+one of this project's 100 nodes and would go red on a graph split across files.
+`beadloom-0mdo.80` (BDL-UX #265) split it, so it went red as designed. It is not
+restated here, because the answer that replaced it belongs with the layout that
+produced it: `tests/test_the_graph_is_one_file_per_node.py`
+`TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` measures that one
+node per file makes the node-to-file map INJECTIVE, so the serialisation fires
+exactly when two beads declare the same node — which `conflict_between` already
+reports as `shared_node`. Keeping a second copy of that measurement here would be
+one derivable fact with two homes, which is the defect entry 2 below is about.
 """
 
 from __future__ import annotations
 
-import itertools
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-import yaml
 
 from beadloom.application.waves import (
     MEDIUM_GRAPH_FILES,
@@ -174,38 +183,6 @@ class TestTheCheckOverThePlansOwnInput:
         assert ".beadloom/_graph/b.yml" in check.detail
 
 
-class TestTheGraphFileCannotSerialiseWithoutNoise:
-    """The entry's own suggestion, measured before it was built rather than after.
-
-    BDL-UX #261 sketched a serialisation over "the graph FILE a bead's declared
-    nodes are defined in". Measured on this repository it fires on EVERY pair,
-    because one file holds every node — which collapses every wave to a wave of
-    one, the failure mode BDL-UX #245 is already open about, against a real write
-    rate of 8 of the 55 commits this epic's branch carries.
-
-    **When this goes red the mechanism becomes worth building.** A project whose
-    graph is split across files gives two node-adding beads two different files,
-    and then the serialisation says something a wave can act on.
-    """
-
-    def test_every_node_of_this_project_is_defined_in_one_file(self) -> None:
-        files = _repo_graph_files()
-        holding_nodes = {name: nodes for name, nodes in files.items() if nodes}
-        assert len(holding_nodes) == 1
-
-    def test_the_serialisation_would_fire_on_every_pair_of_this_project(self) -> None:
-        file_of: dict[str, str] = {
-            str(node["ref_id"]): name
-            for name, nodes in _repo_graph_files().items()
-            for node in nodes
-            if isinstance(node, dict) and node.get("ref_id")
-        }
-        refs = sorted(file_of)
-        pairs = list(itertools.combinations(refs, 2))
-        shared = [pair for pair in pairs if file_of[pair[0]] == file_of[pair[1]]]
-        assert len(shared) == len(pairs)
-
-
 class TestAnAncestorReachingRuleIsSharedByEveryPair:
     """The calibration BDL-UX #261 said had to be made before building anything.
 
@@ -221,9 +198,13 @@ class TestAnAncestorReachingRuleIsSharedByEveryPair:
 
     @staticmethod
     def _part_of() -> dict[str, str]:
-        data = yaml.safe_load((_GRAPH_DIR / "services.yml").read_text(encoding="utf-8"))
+        # The DIRECTORY, not one file: `beadloom-0mdo.80` split this graph into
+        # one file per node, and every edge went with the node its `src` names.
+        from beadloom.onboarding.graph_files import each_graph_file
+
         return {
             str(edge["src"]): str(edge["dst"])
+            for _yml, data in each_graph_file(_GRAPH_DIR)
             for edge in data.get("edges") or []
             if edge.get("kind") == "part_of" and edge.get("src") != edge.get("dst")
         }

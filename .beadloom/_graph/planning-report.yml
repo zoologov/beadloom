@@ -1,0 +1,34 @@
+  # Component: the shape a project's documents are held to (BDL-061 S4b). Joins
+  # onboarding's composed templates to doc-sync's checks, which are peer domains.
+  # Component: one composition of every planning-document check (BDL-068 S1.4).
+  # The Gate step and the `docs quality` command each assembled the run before
+  # this; two assemblies of one report can disagree about what was checked.
+nodes:
+  - ref_id: planning-report
+    kind: component
+    summary: "One composition of every check that reads a planning document, so the Gate and the CLI report the same run"
+    source: src/beadloom/application/planning_report.py
+    docs:
+      - docs/domains/application/components/planning-report/DOC.md
+edges:
+  - src: planning-report
+    dst: application
+    kind: part_of
+  - src: planning-report
+    dst: doc-quality
+    kind: depends_on
+  - src: planning-report
+    dst: doc-shape
+    kind: depends_on
+  - src: planning-report
+    dst: axes-section
+    kind: depends_on
+  - src: planning-report
+    dst: doc-shape-requirements
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-type
+    kind: depends_on
+  - src: planning-report
+    dst: work-item-routing
+    kind: depends_on

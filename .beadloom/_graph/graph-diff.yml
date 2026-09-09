@@ -1,0 +1,12 @@
+  # Feature: Graph Diff
+nodes:
+  - ref_id: graph-diff
+    kind: feature
+    summary: "Git ref comparison — added/removed/changed nodes and edges"
+    source: src/beadloom/graph/diff.py
+    docs:
+      - docs/domains/graph/features/graph-diff/SPEC.md
+edges:
+  - src: graph-diff
+    dst: graph
+    kind: part_of

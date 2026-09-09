@@ -1,0 +1,12 @@
+  # Feature: Docs Audit
+nodes:
+  - ref_id: docs-audit
+    kind: feature
+    summary: "Zero-config meta-doc staleness detection via keyword-proximity matching"
+    source: src/beadloom/doc_sync/audit.py
+    docs:
+      - docs/domains/doc-sync/features/docs-audit/SPEC.md
+edges:
+  - src: docs-audit
+    dst: doc-sync
+    kind: part_of

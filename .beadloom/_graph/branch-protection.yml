@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: branch-protection
+    kind: feature
+    summary: "`setup-branch-protection` — idempotent main branch-protection (PR-required + ci.yml required status checks)"
+    source: src/beadloom/onboarding/branch_protection.py
+    docs:
+      - docs/domains/onboarding/features/branch-protection/SPEC.md
+edges:
+  - src: branch-protection
+    dst: onboarding
+    kind: part_of

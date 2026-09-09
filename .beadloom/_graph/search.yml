@@ -1,0 +1,13 @@
+  # Feature: Search
+nodes:
+  - ref_id: search
+    kind: feature
+    summary: "FTS5 full-text search across nodes and documentation"
+    source: src/beadloom/context_oracle/search.py
+    docs:
+      - docs/domains/context-oracle/features/search/SPEC.md
+edges:
+  # Features are part_of their parent domains
+  - src: search
+    dst: context-oracle
+    kind: part_of

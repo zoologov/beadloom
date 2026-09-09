@@ -55,11 +55,12 @@ from beadloom.application.waves.models import (
     MediumCheck,
     WaveEnvironment,
 )
+from beadloom.onboarding.graph_layout import shared_files
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from beadloom.application.waves.models import BeadRecord
+    from beadloom.application.waves.models import BeadRecord, GraphInput
 
 #: A bead reference as this project's title convention writes one: an identifier
 #: that starts with a letter, a dot, and a number (``BDL-061.39``,
@@ -196,15 +197,43 @@ def _check_graph_files(environment: WaveEnvironment) -> MediumCheck:
             STATUS_FAILED,
             _graph_drift_detail(unindexed, unwritten),
         )
-    largest = max(graph.files, key=lambda file: (len(file.nodes), file.path))
     return MediumCheck(
         MEDIUM_GRAPH_FILES,
         STATUS_PASSED,
         f"the {len(declared)} node(s) of this project are declared across "
         f"{len(graph.files)} graph file(s) and the index resolved these scopes "
-        f"from the same set — but a bead that ADDS one writes {largest.path}, "
-        f"which holds {len(largest.nodes)} of them, and the node it adds is in "
-        "no graph this plan could read (BDL-UX #261)",
+        f"from the same set — {_graph_write_surface(graph)}",
+    )
+
+
+def _graph_write_surface(graph: GraphInput) -> str:
+    """What a bead that ADDS a node writes, which is a fact about the LAYOUT.
+
+    Two sentences rather than one, because the answer stopped being the same for
+    every project when `beadloom-0mdo.80` split this repository's graph into one
+    file per node (BDL-UX #265). While some file holds several nodes, every bead
+    that adds one writes it and the medium names it with the count it holds.
+    Once every node has a file of its own, two node-adding beads write two files
+    and there is no collision left to report.
+
+    The half no plan can reach is stated either way. It moved rather than
+    disappearing: under a shared file the plan cannot see the NODE a bead is
+    about to add, and under one file per node it cannot see the FILE that node
+    will be created in.
+    """
+    shared = shared_files({file.path: file.nodes for file in graph.files})
+    if shared:
+        largest = max(shared, key=lambda file: (len(file.nodes), file.name))
+        return (
+            f"but a bead that ADDS one writes {largest.name}, which holds "
+            f"{len(largest.nodes)} of them, and the node it adds is in no graph "
+            "this plan could read (BDL-UX #261)"
+        )
+    return (
+        "and every one of them is declared in a file of its own, so two beads "
+        "that add nodes write two files and the collision cannot be attempted "
+        "rather than being detected afterwards (BDL-UX #265). The file each of "
+        "them creates is still in no graph this plan could read"
     )
 
 

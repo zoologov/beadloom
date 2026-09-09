@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: asyncapi
+    kind: component
+    summary: "Source-only AsyncAPI ingestion adapter — extracts a message payload JSON-Schema (2.x/3.x) into the internal AMQP body model; honest degradation to None when absent"
+    source: src/beadloom/graph/asyncapi.py
+    docs:
+      - docs/domains/graph/components/asyncapi/DOC.md
+edges:
+  - src: asyncapi
+    dst: graph
+    kind: part_of

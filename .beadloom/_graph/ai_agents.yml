@@ -1,0 +1,13 @@
+  # Domain: AI Agents (governed AI-agent harnesses, shipped in the wheel)
+nodes:
+  - ref_id: ai_agents
+    kind: domain
+    summary: "Governed AI-agent harnesses (Goose + model) over Beadloom read APIs + bd/beadloom shells; ships in the package"
+    source: src/beadloom/ai_agents/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/ai_agents/README.md
+edges:
+  - src: ai_agents
+    dst: beadloom
+    kind: part_of

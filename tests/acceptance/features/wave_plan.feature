@@ -397,3 +397,19 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     When the wave shape is decided
     Then the wave reports "graph-files" as passed
     And the plan is clean
+
+  # BDL-UX #265. The layout that removes the sharing rather than reporting it:
+  # one graph file per node, so two beads that add nodes write two files.
+
+  @bead:beadloom-0mdo.80
+  Scenario: A graph declaring each node in a file of its own has nothing left to share
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And this project declares each of its nodes in a file of its own
+    When the wave shape is decided
+    Then the wave reports "graph-files" as passed
+    And the pass says two node-adding beads write two files
+    And the pass still names the file it could not read
+    And the plan is clean

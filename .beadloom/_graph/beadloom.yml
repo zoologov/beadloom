@@ -1,0 +1,22 @@
+  # Root service
+nodes:
+  - ref_id: beadloom
+    kind: service
+    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc Sync Engine, architecture rules and the Gate (v3.0.2)"
+    source: src/beadloom/
+    docs:
+      - docs/architecture.md
+      - docs/getting-started.md
+      - docs/guides/ci-setup.md
+edges:
+  # Root service: self-referencing to satisfy service-needs-parent rule
+  - src: beadloom
+    dst: beadloom
+    kind: part_of
+  - src: beadloom
+    dst: vitepress-site
+    kind: produces
+    contract:
+      protocol: site-data
+      message_type: site-bundle
+      direction: produces

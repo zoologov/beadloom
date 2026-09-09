@@ -1,0 +1,35 @@
+  # Application: use-case orchestration layer
+nodes:
+  - ref_id: application
+    kind: domain
+    summary: "Use-case orchestration: reindex, doctor, debt report, file watcher"
+    source: src/beadloom/application/
+    tags: [layer-application]
+    docs:
+      - docs/domains/application/README.md
+edges:
+  - src: application
+    dst: beadloom
+    kind: part_of
+  # The harness writes the append-only run record `.beadloom/ai_techwriter_runs.json`;
+  # `application/site_dashboard/ai_activity.py` reads it. A file-format contract
+  # between them, with no import in either direction.
+  - src: application
+    dst: ai-techwriter
+    kind: uses
+  # Application → domain / infrastructure usage edges
+  - src: application
+    dst: context-oracle
+    kind: uses
+  - src: application
+    dst: doc-sync
+    kind: uses
+  - src: application
+    dst: graph
+    kind: uses
+  - src: application
+    dst: onboarding
+    kind: uses
+  - src: application
+    dst: infrastructure
+    kind: uses

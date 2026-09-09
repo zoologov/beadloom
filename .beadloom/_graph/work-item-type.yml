@@ -1,0 +1,19 @@
+  # Feature: the route a work item took, checked against the axes it was decided
+  # from (BDL-068 S1.5). The unit is the work-item FOLDER, not the document.
+nodes:
+  - ref_id: work-item-type
+    kind: feature
+    summary: "The route a work item took, checked against the axes it was decided from: no axes on the route that skips scope approval, and kept axes naming more nodes than that route holds"
+    source: src/beadloom/doc_sync/work_item_type.py
+    docs:
+      - docs/domains/doc-sync/features/work-item-type/SPEC.md
+edges:
+  - src: work-item-type
+    dst: doc-sync
+    kind: part_of
+  - src: work-item-type
+    dst: axes-section
+    kind: depends_on
+  - src: work-item-type
+    dst: doc-quality
+    kind: depends_on

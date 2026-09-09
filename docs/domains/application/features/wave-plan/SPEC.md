@@ -277,33 +277,56 @@ reach all of it.** Measured in the same slice by `beadloom-0mdo.59`: three beads
 whose code scopes are disjoint shared four artifacts —
 `.claude/development/docs/features/BDL-068/ACTIVE.md`,
 `docs/services/components/cli-commands/DOC.md`,
-`tests/test_bead77_kind_and_root_disagree.py` and `.beadloom/_graph/services.yml`.
+`tests/test_bead77_kind_and_root_disagree.py` and `.beadloom/_graph/services.yml`
+(one file per node since `beadloom-0mdo.80`).
 Two of those are not documents: one is a test carrying hand-maintained population
 literals that any bead adding a node has to bump, and the other is the graph this
 plan derives its scopes FROM.
 
-**Why `graph-files` is a medium and not a serialisation either (BDL-UX #261).**
-BDL-UX #261 sketched one — a bead's scope reaching the graph FILE its declared
-nodes are defined in — and it was measured before it was built rather than
-after. One file holds every one of this project's 100 nodes, so the reason fires on
-every pair of every wave and collapses each of them to a wave of one, which is
-BDL-UX #245's failure mode, against a real write rate of 8 of the 55 commits
-this epic's branch carries. It would also miss the case it was drawn from: both
-colliding beads were ADDING nodes, and a node being added is in no graph the
-plan can read. `TestTheGraphFileCannotSerialiseWithoutNoise` in
-`tests/test_the_graph_a_plan_is_derived_from.py` pins the condition under which
-the serialisation becomes worth building — a graph split across files — as a
-test that goes red when it holds.
+**Why `graph-files` is a medium and not a serialisation either (BDL-UX #261,
+then #265).** BDL-UX #261 sketched one — a bead's scope reaching the graph FILE
+its declared nodes are defined in — and it was measured before it was built
+rather than after. One file held every one of this project's 100 nodes, so the
+reason fired on every pair of every wave and collapsed each of them to a wave of
+one, which is BDL-UX #245's failure mode, against a real write rate of 8 of the
+55 commits this epic's branch carries. It would also miss the case it was drawn
+from: both colliding beads were ADDING nodes, and a node being added is in no
+graph the plan can read. The condition named for reopening it was a graph split
+across files, pinned as a test that goes red when it holds.
 
-**And the primitive that would remove the medium is one writer per file.**
-`beadloom-0mdo.66` already took it at the boundary for issue numbers:
-`O_CREAT|O_EXCL`, one claim file per number, so a shared write cannot be
-attempted rather than being detected afterwards. Applied here it means one graph
-file per node — `each_graph_file` already globs `*.yml`, so the loader needs no
-change — and it would make the declined serialisation both meaningful and
-non-noisy at the same stroke. It is not taken here because it changes the
-`.beadloom/_graph/` layout of every adopter, which is the `graph` and
-`onboarding` nodes rather than `wave-plan`.
+**The condition was met, and the answer did not change — for the opposite
+reason.** `beadloom-0mdo.80` split this repository's graph into one file per node
+(BDL-UX #265). Under that layout the node-to-file map is INJECTIVE, so "two beads
+whose declared nodes are defined in one graph file" holds exactly when the two
+beads declare the same node — which `conflict_between` already reports as
+`shared_node`. The reason was noise on a single-file graph and is redundant on a
+split one, and there is no layout between the two where it is neither.
+`TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` in
+`tests/test_the_graph_is_one_file_per_node.py` is that measurement, and it goes
+red the day some file of this graph declares two nodes again.
+
+**What the medium says now depends on the layout, because the answer does.**
+While some file declares several nodes, the pass names it with the count it holds
+— that is the file every node-adding bead writes. Once every node has a file of
+its own, the pass says two node-adding beads write two files and the collision
+cannot be attempted. The half no plan can reach is stated either way, because it
+moved rather than disappearing: under a shared file the plan cannot see the NODE
+a bead is about to add, and under one file per node it cannot see the FILE that
+node will be created in. The medium remains, since the layout is a property of a
+project and not of the command: `beadloom init` still writes one `services.yml`,
+which is the easier thing for an adopter to review once, and what an adopter gets
+here is the number rather than a verdict.
+
+**The primitive is one writer per file, and `beadloom-0mdo.66` took it first.**
+`O_CREAT|O_EXCL`, one claim file per issue number, so a shared write cannot be
+attempted rather than being detected afterwards. Applied to the graph it is one
+file per node — `each_graph_file` already globs `*.yml`, so no reader changed —
+and the cost was measured rather than assumed before it was taken: `load_graph`
+61.34 ms to 66.40 ms and `beadloom reindex --full` 1895 ms to 1950 ms over 100
+nodes and 169 edges, with `lint`, `doctor` and `status` unmoved because they read
+the index. Nothing that was one pass became N. `graph-layout`
+(`onboarding/graph_layout.py`) states the layout and reports the surface where a
+shared write is still possible.
 
 **The two artifacts neither medium covers, and why each needs a different
 answer.** `tests/test_bead77_kind_and_root_disagree.py` carries hand-maintained

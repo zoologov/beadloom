@@ -1,0 +1,13 @@
+  # Feature: Doc Templates (BDL-061 S4b) — the shape of a generated document,
+  # out of the generator's string literals and into composable package data.
+nodes:
+  - ref_id: doc-templates
+    kind: feature
+    summary: "Composed document templates: render a skeleton and derive the sections it requires"
+    source: src/beadloom/onboarding/doc_templates.py
+    docs:
+      - docs/domains/onboarding/features/doc-templates/SPEC.md
+edges:
+  - src: doc-templates
+    dst: onboarding
+    kind: part_of

@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: role-adapters
+    kind: feature
+    summary: "generate_adapters — writes per-tool role adapter sets (.claude/agents/*, .cursor/agents/* + Cursor orchestrator) from composed roles; the drift-guard's single writer"
+    source: src/beadloom/onboarding/role_adapters.py
+    docs:
+      - docs/domains/onboarding/features/role-adapters/SPEC.md
+edges:
+  - src: role-adapters
+    dst: onboarding
+    kind: part_of

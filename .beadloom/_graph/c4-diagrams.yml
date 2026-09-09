@@ -1,0 +1,12 @@
+  # Feature: C4 Architecture Diagrams
+nodes:
+  - ref_id: c4-diagrams
+    kind: feature
+    summary: "C4 architecture model mapping with Mermaid and PlantUML renderers"
+    source: src/beadloom/graph/c4.py
+    docs:
+      - docs/domains/graph/features/c4-diagrams/SPEC.md
+edges:
+  - src: c4-diagrams
+    dst: graph
+    kind: part_of

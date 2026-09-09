@@ -1,0 +1,13 @@
+  # Component: the TO-BE -> AS-IS relation (BDL-061 S5). Joins the graph, the
+  # tracker and the space vocabulary — three readers no single domain owns.
+nodes:
+  - ref_id: doc-spaces
+    kind: component
+    summary: "Hold an epic's declared intent against the AS-IS space, and report what the WORKING exemption excused"
+    source: src/beadloom/application/doc_spaces.py
+    docs:
+      - docs/domains/application/components/doc-spaces/DOC.md
+edges:
+  - src: doc-spaces
+    dst: application
+    kind: part_of

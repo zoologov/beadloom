@@ -1,0 +1,12 @@
+  # Feature: Cache
+nodes:
+  - ref_id: cache
+    kind: feature
+    summary: "ETag-based context bundle cache (in-memory + SQLite)"
+    source: src/beadloom/context_oracle/cache.py
+    docs:
+      - docs/domains/context-oracle/features/cache/SPEC.md
+edges:
+  - src: cache
+    dst: context-oracle
+    kind: part_of

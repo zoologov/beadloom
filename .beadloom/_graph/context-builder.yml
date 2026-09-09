@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: context-builder
+    kind: component
+    summary: "Context bundle builder — BFS subgraph traversal + bundle assembly for ctx/prime"
+    source: src/beadloom/context_oracle/builder.py
+    docs:
+      - docs/domains/context-oracle/components/context-builder/DOC.md
+edges:
+  - src: context-builder
+    dst: context-oracle
+    kind: part_of

@@ -1,0 +1,25 @@
+  # Component: the routes `/task-init` declares, derived from the composed
+  # command rather than restated in Python (BDL-068 S1.5).
+nodes:
+  - ref_id: work-item-routing
+    kind: component
+    summary: "The work-item types, their flows and the documents each writes, derived from the composed /task-init command"
+    source: src/beadloom/application/work_item_routing.py
+    docs:
+      - docs/domains/application/components/work-item-routing/DOC.md
+edges:
+  - src: work-item-routing
+    dst: application
+    kind: part_of
+  - src: work-item-routing
+    dst: doc-shape
+    kind: depends_on
+  - src: work-item-routing
+    dst: flow-composer
+    kind: depends_on
+  - src: work-item-routing
+    dst: doc-templates
+    kind: depends_on
+  - src: work-item-routing
+    dst: role-composer
+    kind: depends_on

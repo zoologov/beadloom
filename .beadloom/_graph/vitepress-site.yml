@@ -1,0 +1,50 @@
+  # Site consumer: the VitePress documentation site. It does not live in
+  # src/beadloom/ — it is the published artifact that CONSUMES the data the
+  # beadloom service produces (the generated graph pages, dashboard.data.json,
+  # landscape Mermaid). Modelled so the own-site landscape map shows a real,
+  # honest producer->consumer contract (BDL-041 F4.4) instead of a foreign fixture.
+nodes:
+  - ref_id: vitepress-site
+    kind: site
+    summary: "VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)"
+    source: site/
+    # No node document, by decision (BDL-062 `.4`). Reported by `doctor` at INFO
+    # with this reason rather than as an unexplained gap, and reported again as
+    # inert the day a `docs:` entry is added here.
+    docs_absent: >-
+      `site/` is outside `scan_paths` (`src`), so nothing under it is indexed as
+      a symbol and a document attached to this node could be held to the code by
+      no sync pair — it would be prose no check can reach (BDL-UX #163). What is
+      committed here is the VitePress theme (22 files: the Vue components, the
+      composables, the theme CSS/JS and `.vitepress/config.mjs`); everything else
+      under `site/` is generated output. That committed surface is described by
+      `docs/guides/vitepress-site.md`, which is linked to no node because it
+      describes the GENERATOR (`beadloom docs site`, the `site-generation`
+      node's `application/site.py`) far more than the committed theme, so
+      attaching it here would trade an absence for a mis-description.
+      Revisit when `scan_paths` covers `site/`, or when this node's own theme
+      files are worth a document that something can check.
+      An earlier version of this reason also cited BDL-UX #195 — that a document
+      here collapsed `doc-area-coherence` for the whole graph. **That clause is
+      withdrawn: #195 is fixed** (BDL-062 `.9`). A source outside the derived
+      root is now excluded from the comparison and counted, and attaching a
+      document here changes nothing but `outside_root` 0 -> 1. Nothing about
+      this rule constrains the decision any more.
+    # No node document, by decision (BDL-062 `.4`). Reported by `doctor` at INFO
+    # with this reason rather than as an unexplained gap, and reported again as
+    # inert the day a `docs:` entry is added here.
+edges:
+  # Real producer->consumer contract (BDL-041 F4.4): the beadloom service
+  # PRODUCES the site data (graph pages, dashboard.data.json, landscape Mermaid);
+  # the VitePress site CONSUMES it. Both sides share one contract_key so the
+  # local landscape map reconciles them to a CONFIRMED verdict (honest, real).
+  - src: vitepress-site
+    dst: beadloom
+    kind: part_of
+  - src: vitepress-site
+    dst: beadloom
+    kind: consumes
+    contract:
+      protocol: site-data
+      message_type: site-bundle
+      direction: consumes

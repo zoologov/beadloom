@@ -1,0 +1,25 @@
+  # Component: one node per graph file (BDL-068 S6, BDL-UX #265). `graph-files`
+  # states the policy every READER of `.beadloom/_graph/` holds; this states the
+  # property its WRITERS depend on, which is why it is a second node and not a
+  # second responsibility inside the first.
+nodes:
+  - ref_id: graph-layout
+    kind: component
+    summary: "One node per graph file: where each node and edge is declared, and the surface where a shared write is still possible"
+    source: src/beadloom/onboarding/graph_layout.py
+    docs:
+      - docs/domains/onboarding/components/graph-layout/DOC.md
+edges:
+  - src: graph-layout
+    dst: onboarding
+    kind: part_of
+  - src: graph-layout
+    dst: graph-files
+    kind: depends_on
+  # Declared HERE rather than in `wave-plan.yml`, which is the layout's own rule
+  # for an edge a node-adding bead introduces: the new node's file carries the
+  # edges pointing at it, so no existing node's file is written and the bead that
+  # owns `wave-plan` is not a co-writer of this one.
+  - src: wave-plan
+    dst: graph-layout
+    kind: depends_on

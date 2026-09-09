@@ -1,0 +1,15 @@
+  # Component: what a markdown table row is, and where one table ends and the
+  # next begins (BDL-068 S6, BDL-UX #213 + #244). Lifted out of `doc-quality`
+  # when the `## Axes` reader needed the same answer: two readers of a table
+  # boundary is how one section holding two tables was read as one, twice.
+nodes:
+  - ref_id: markdown-tables
+    kind: component
+    summary: "What a markdown table row is, and where one table ends and the next begins: the boundary rule `doc-quality` and `axes-section` both read a section through"
+    source: src/beadloom/doc_sync/tables.py
+    docs:
+      - docs/domains/doc-sync/components/markdown-tables/DOC.md
+edges:
+  - src: markdown-tables
+    dst: doc-sync
+    kind: part_of

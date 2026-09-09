@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: flow-config
+    kind: feature
+    summary: "`.beadloom/flow.yml` schema + loader (FlowConfig) — declares tools/architecture/stack/quality for the role configurator; strict validation + auto-detect/resolve defaults"
+    source: src/beadloom/onboarding/flow_config.py
+    docs:
+      - docs/domains/onboarding/features/flow-config/SPEC.md
+edges:
+  - src: flow-config
+    dst: onboarding
+    kind: part_of
