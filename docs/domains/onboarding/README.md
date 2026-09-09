@@ -150,10 +150,19 @@ opened, and both of those used to read as a clean bill of health (BDL-UX #173).
   'beadloom'); declare docs_audit.extra_facts.mcp_tool_count in .beadloom/config.yml to audit
   this project's own`. The lines appear only when something was declined, so this repository's
   output is unchanged.
-- `--json` gains `coverage`, `verified_facts`, `unverified_facts`, `not_applicable` and
-  `scan_surface` beside the existing arrays, and five counts under `summary`
-  (`declared_fact_count`, `verified_fact_count`, `unverified_count`, `unreadable_count`,
-  `not_applicable_count`). `--fail-if` accepts `unverified>N` / `unverified>=N`
+- A line naming the version tokens the run declined to judge, with the reason it declined:
+  `1 version token(s) the audit could not judge here: git x1 (no .git here, and its absence
+  cannot tell a project that never used git from an export of one)`. A version belongs to the
+  subject named beside it, and `git` is confirmed by the environment rather than by a file the
+  project ships, so a directory built by `git archive HEAD` cannot confirm it -- and reading
+  the absent marker as a denial compared `git 2.49.0` against this project's own version in
+  every clean room (BDL-UX #266). The line appears only when something was declined, so a run
+  in a git working tree is unchanged.
+- `--json` gains `coverage`, `verified_facts`, `unverified_facts`, `not_applicable`,
+  `unjudged_versions`, `unresolved_version_subjects` and `scan_surface` beside the existing
+  arrays, and six counts under `summary` (`declared_fact_count`, `verified_fact_count`,
+  `unverified_count`, `unreadable_count`, `not_applicable_count`,
+  `unjudged_version_count`). `--fail-if` accepts `unverified>N` / `unverified>=N`
   alongside `stale>N` / `stale>=N`; coverage is reported on every run and enforced only when
   asked for.
 

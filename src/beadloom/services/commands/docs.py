@@ -328,6 +328,23 @@ def _docs_audit_json(
     subjects_out: list[dict[str, str]] = [
         {"name": name, "origin": origin} for name, origin in result.subjects.origins
     ]
+    # Version tokens naming a subject the environment could not confirm HERE --
+    # ``git 2.49.0`` in a directory with no ``.git``. Neither this project's
+    # claim nor a confirmed foreign release, so the audit declines to judge
+    # them and reports both the tokens and the reason (BDL-UX #266).
+    unjudged_out: list[dict[str, str | int]] = [
+        {
+            "file": str(mention.file.name),
+            "line": mention.line,
+            "value": str(mention.value),
+            "subject": str(mention.subject),
+        }
+        for mention in result.unjudged
+    ]
+    unresolved_out: list[dict[str, str]] = [
+        {"name": name, "reason": reason}
+        for name, reason in result.subjects.unresolved_origins
+    ]
 
     coverage_out: dict[str, dict[str, object]] = {
         name: {
@@ -357,7 +374,9 @@ def _docs_audit_json(
         "unverified_facts": unverified,
         "not_applicable": not_applicable_out,
         "attributed_versions": attributed_out,
+        "unjudged_versions": unjudged_out,
         "version_subjects": subjects_out,
+        "unresolved_version_subjects": unresolved_out,
         "scan_surface": _scan_surface_json(result.surface, project_root),
         "summary": {
             "stale_count": len(stale_out),
@@ -371,6 +390,7 @@ def _docs_audit_json(
             ),
             "not_applicable_count": len(not_applicable_out),
             "attributed_version_count": len(attributed_out),
+            "unjudged_version_count": len(unjudged_out),
         },
     }
 
@@ -465,6 +485,7 @@ def _print_coverage_summary(console: object, result: object) -> None:
         console.print(line + " -- `--verbose` names them[/dim]")
 
     _print_attributed_versions(console, result)
+    _print_unjudged_versions(console, result)
     console.print()
 
 
@@ -496,6 +517,39 @@ def _print_attributed_versions(console: object, result: object) -> None:
     console.print(
         f"[dim]{len(result.attributed)} version token(s) attributed to another"
         f" subject and not compared: {named}[/dim]"
+    )
+
+
+def _print_unjudged_versions(console: object, result: object) -> None:
+    """Name the version tokens this run declined to judge, and why.
+
+    A subject confirmed by the environment rather than by a file the project
+    ships -- ``git`` -- cannot be confirmed in a directory built by
+    ``git archive``, and the absent marker is not a denial. The token is
+    exempt for a reason that belongs to the DIRECTORY, so it is reported apart
+    from the attributed ones, with the reason the vocabulary recorded
+    (BDL-UX #266).
+    """
+    from rich.console import Console
+
+    from beadloom.doc_sync.audit import AuditResult
+
+    assert isinstance(console, Console)
+    assert isinstance(result, AuditResult)
+
+    if not result.unjudged:
+        return
+
+    reasons = dict(result.subjects.unresolved_origins)
+    per_subject = Counter(str(mention.subject) for mention in result.unjudged)
+    named = ", ".join(
+        f"{subject} x{count}"
+        f" ({reasons.get(subject.casefold().replace('_', '-'), 'unconfirmed')})"
+        for subject, count in sorted(per_subject.items())
+    )
+    console.print(
+        f"[dim]{len(result.unjudged)} version token(s) the audit could not"
+        f" judge here: {named}[/dim]"
     )
 
 

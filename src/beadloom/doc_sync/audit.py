@@ -174,8 +174,17 @@ class AuditResult:
         project's version.  They are reported rather than dropped: a rule about
         which sentences the audit checks is only honest while a reader can see
         it applied (BDL-UX #253).
+    unjudged:
+        Version mentions naming a subject the environment could not confirm
+        HERE -- ``git 2.49.0`` in a directory with no ``.git``.  They are
+        neither this project's claim nor a confirmed foreign release, so the
+        audit declines to judge them and says so.  Keeping them out of
+        ``attributed`` is the point: the two populations are exempt for
+        different reasons, and merging them would hide a directory that cannot
+        see its own environment behind a rule that works (BDL-UX #266).
     subjects:
-        The vocabulary that decided ``attributed``, with each name's origin.
+        The vocabulary that decided ``attributed`` and ``unjudged``, with each
+        name's origin.
     """
 
     facts: dict[str, Fact]
@@ -185,6 +194,7 @@ class AuditResult:
     surface: ScanSurface | None = None
     not_applicable: dict[str, str] = field(default_factory=dict)
     attributed: list[Mention] = field(default_factory=list)
+    unjudged: list[Mention] = field(default_factory=list)
     subjects: VersionSubjects = field(default_factory=VersionSubjects)
 
     @property
@@ -377,8 +387,9 @@ def compare_facts(
     subjects:
         The subject vocabulary the mentions were scanned with, recorded on the
         result so the report can name it.  A mention carrying a ``subject`` is
-        another product's release and is routed to ``attributed`` rather than
-        compared, whatever this argument says.
+        never compared against this project: it is routed to ``unjudged`` when
+        that subject is one this vocabulary could not confirm here, and to
+        ``attributed`` otherwise.
 
     Returns
     -------
@@ -394,14 +405,22 @@ def compare_facts(
     findings: list[AuditFinding] = []
     unmatched: list[Mention] = []
     attributed: list[Mention] = []
+    unjudged: list[Mention] = []
+    vocabulary = subjects or VersionSubjects()
 
     for mention in mentions:
         if any(rule.matches(mention) for rule in rules):
             continue  # suppressed false positive — not a finding, not unmatched
 
         if mention.subject is not None:
-            attributed.append(mention)
-            continue  # another product's release, never this project's claim
+            # Never this project's claim either way; the two populations differ
+            # in whether the subject was confirmed here (BDL-UX #266).
+            folded = mention.subject.casefold().replace("_", "-")
+            if folded in vocabulary.unresolved:
+                unjudged.append(mention)
+            else:
+                attributed.append(mention)
+            continue
 
         fact = facts.get(mention.fact_name)
         if fact is None:
@@ -433,7 +452,8 @@ def compare_facts(
         coverage=assess_coverage(facts, findings),
         not_applicable=dict(not_applicable or {}),
         attributed=attributed,
-        subjects=subjects or VersionSubjects(),
+        unjudged=unjudged,
+        subjects=vocabulary,
     )
 
 

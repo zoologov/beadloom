@@ -417,6 +417,12 @@ class DocScanner:
 
         The clause bound is the same phrase separator the count facts use: a
         subject on the far side of a comma or a dash is naming something else.
+
+        An UNRESOLVED name stops the walk exactly like a confirmed one. It is
+        still the subject the sentence names; what the vocabulary could not
+        establish is whether that subject exists here, and that question is
+        answered where the mention is judged rather than where it is attributed
+        (BDL-UX #266).
         """
         if not self._subjects:
             return None
@@ -433,7 +439,7 @@ class DocScanner:
             folded = core.casefold().replace("_", "-")
             if folded in self._subjects.project:
                 return None
-            if folded in self._subjects.names:
+            if folded in self._subjects.names or folded in self._subjects.unresolved:
                 return core
         return None
 

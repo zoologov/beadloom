@@ -113,6 +113,33 @@ interpreter families implied by `requires-python`, `engines.node` or `rust-versi
 when the project is a git repository; and `docs_audit.subjects` for a name no manifest
 carries. Each entry records where it came from, and the audit prints them.
 
+**A source that cannot be consulted answers neither yes nor no.** `git` is confirmed by the
+environment rather than by a file the project ships, and the absent `.git` was read as the
+assertion that this project has nothing to do with git. A directory built by
+`git archive HEAD` -- every clean room `beadloom clean-room` builds -- carries no `.git` by
+construction, so `git 2.49.0` lost its subject and was compared against this project's own
+version. Every clean-room Gate run on this repository was rc 1 for that one line, in
+`docs/domains/application/components/active-table/DOC.md:227`, from `beadloom-0mdo.63`
+landing until this repair (BDL-UX #266).
+
+Such a name is UNRESOLVED. It stays in the vocabulary and still wins the attribution walk, so
+the version beside it is not judged against this project; and the audit reports the token it
+declined rather than dropping it. The two exempt populations stay separate because they are
+exempt for different reasons: `attributed_versions` is a subject this project confirmed,
+`unjudged_versions` is a subject this DIRECTORY could not confirm. Merging them would hide a
+directory that cannot see its own environment behind a rule that works.
+
+| Surface | What it carries |
+|---------|-----------------|
+| `docs audit --json` | `unjudged_versions`, `summary.unjudged_version_count`, `unresolved_version_subjects` (name + reason) |
+| `docs audit` | `N version token(s) the audit could not judge here: git x1 (no .git here ...)` |
+| `beadloom ci` docs-audit line | `COULD NOT JUDGE N version token(s) naming git — unconfirmed here` |
+
+A project that names `git` under `docs_audit.subjects` has answered the question the marker
+could not, and the name resolves. The repair was NOT to add `git` to a declared list: the
+derivation exists so that no second vocabulary can drift from the first, and the shipped
+change is to what an absent source MEANS, not to what the vocabulary contains.
+
 **It is a vocabulary and not a silencer**, and the difference is the failure mode. A name
 nobody declared still produces a finding, so an unknown subject fails LOUD. The alternative
 shape -- read any word beside a version as a subject unless it is a function word -- was

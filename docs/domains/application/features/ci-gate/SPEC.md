@@ -217,6 +217,17 @@ turned `3/9 declared fact(s) verified` into `3/8` with nothing naming the fact
 that had left. The clause appears only when something was declined, so a project
 where every declared fact applies reads exactly as it did before.
 
+Since BDL-068 `.81` it also names the version tokens the audit declined to judge:
+`..., COULD NOT JUDGE 1 version token(s) naming git — unconfirmed here`. A version
+belongs to the subject named beside it, and `git` is confirmed by the environment
+rather than by a file the project ships. A directory built by `git archive HEAD` —
+every clean room `beadloom clean-room` builds — carries no `.git`, so `git 2.49.0`
+was compared against this project's version and every clean-room Gate run on this
+repository was rc 1 for one line of one document (BDL-UX #266). An unconfirmed
+subject is now unresolved rather than absent, and the token is reported instead of
+judged. This clause also appears only when something was declined, so a run in a
+git working tree reads exactly as it did before.
+
 Each step reports a `GateStep` with `PASS` / `WARN` / `FAIL` / `SKIP` — never an
 ambiguous green — and its findings in the shared finding shape. `GateResult.ok`
 is True only when every step passed.

@@ -149,6 +149,13 @@ docs_audit:
   # `pyproject.toml` nor `.git` declares. Everything else is derived: `git` from
   # the repository, `python`/`cpython`/`pypy` from `requires-python`, and every
   # distribution from the dependency arrays.
+  #
+  # `git` deliberately does NOT belong here, and adding it is the workaround this
+  # repository declined (BDL-UX #266, `beadloom-0mdo.81`). A `git archive HEAD`
+  # room carries no `.git`, so the derivation cannot confirm `git` there -- but an
+  # absent marker is not a denial, and the audit now reports such a subject as
+  # UNRESOLVED and declines to judge the version beside it. A second, hand-written
+  # vocabulary entry would be exactly the drift the derivation exists to prevent.
   subjects:
     - bd
 

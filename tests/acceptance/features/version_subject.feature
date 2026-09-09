@@ -59,3 +59,42 @@ Feature: a version token belongs to the subject named beside it
     When the audit reads that project
     Then a finding reports a stale version
     And the audit attributes 1 version token to bd
+
+  # BDL-068 S6, bead `beadloom-0mdo.81`, closing BDL-UX #266.
+  #
+  # `git` entered the vocabulary from `(project_root / ".git").exists()`, and an
+  # absent `.git` was read as the answer "this project has nothing to do with
+  # git". A directory built by `git archive HEAD` — every clean room this
+  # repository measures in — carries no `.git` by construction, so `git 2.49.0`
+  # lost its subject and was compared against this project's own version. Every
+  # clean-room Gate run on this repository was rc 1 for that one line.
+  #
+  # A source that cannot be consulted answers neither yes nor no. The name is
+  # UNRESOLVED: the audit reports the token it declined to judge and names the
+  # subject and the reason, rather than judging it against this project.
+
+  @bead:beadloom-0mdo.81 @node:docs-audit
+  Scenario: a subject the environment cannot confirm here leaves its version unjudged
+    Given a project at version "3.0.2" whose documentation declares bd a subject
+    And a document reading "Measured on git 2.49.0 in two isolated rigs."
+    When the audit reads that project
+    Then no finding reports a stale version
+    And the audit reports 1 version token it could not judge, naming git
+
+  @bead:beadloom-0mdo.81 @node:docs-audit
+  Scenario: a subject the environment confirms is attributed, not left unjudged
+    Given a project at version "3.0.2" whose documentation declares bd a subject
+    And the project is a git working tree
+    And a document reading "Measured on git 2.49.0 in two isolated rigs."
+    When the audit reads that project
+    Then no finding reports a stale version
+    And the audit attributes 1 version token to git
+    And the audit reports no version token it could not judge
+
+  @bead:beadloom-0mdo.81 @node:docs-audit
+  Scenario: an unresolved subject silences nothing else in the same document
+    Given a project at version "3.0.2" whose documentation declares bd a subject
+    And a document reading "Measured on git 2.49.0; the current release is 3.1.0."
+    When the audit reads that project
+    Then a finding reports a stale version
+    And the audit reports 1 version token it could not judge, naming git

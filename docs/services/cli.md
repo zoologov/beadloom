@@ -772,6 +772,18 @@ repository. A name no manifest declares -- a CLI, a database, a service -- is na
 `docs_audit.subjects`. A name nobody declared still produces a finding, so an unknown subject
 fails loud rather than quietly going unchecked.
 
+**A subject the environment cannot confirm here is unresolved, not absent.** `git` is
+confirmed by a `.git` rather than by a file the project ships, and a directory built by
+`git archive HEAD` -- every clean room `beadloom clean-room` builds -- carries none. Reading
+that absence as a denial compared `git 2.49.0` against this project's own version, which made
+every clean-room Gate run on this repository rc 1 for one line of one document (BDL-UX #266).
+The name now stays in the vocabulary as unresolved: it still wins the attribution walk, and
+the audit reports the token it declined to judge instead of judging it. `--json` carries them
+under `unjudged_versions` with the reason under `unresolved_version_subjects`, and the
+`beadloom ci` docs-audit line names the count and the subject. Do not declare `git` under
+`docs_audit.subjects` to work around this -- a second, hand-written vocabulary entry is the
+drift the derivation exists to prevent.
+
 **Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Three `.beadloom/config.yml` keys handle the rest:
 
 ```yaml

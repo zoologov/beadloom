@@ -21,6 +21,19 @@ interpreter family implied by ``requires-python`` / ``engines.node`` /
 manifest declares -- a CLI such as ``bd``, a database, a service -- is named
 once in ``docs_audit.subjects``, per NAME rather than per document.
 
+A SOURCE THAT CANNOT BE CONSULTED ANSWERS NEITHER YES NOR NO.  ``git`` is
+confirmed by the environment rather than by a file the project ships, and the
+absent case was read as the assertion that this project has nothing to do with
+git.  A directory built by ``git archive HEAD`` -- every clean room this
+repository measures in -- carries no ``.git`` by construction, so
+``git 2.49.0`` lost its subject and was compared against this project's own
+version, and every clean-room Gate run on this repository was rc 1 for that one
+line (BDL-UX #266).  Such a name is UNRESOLVED: it stays in the vocabulary, a
+version beside it is still attributed to it, and the audit reports the token it
+declined to judge with the reason it declined.  Unresolved is not silence --
+:mod:`beadloom.doc_sync.audit` counts it in its own population and the Gate line
+names it.
+
 IT IS A VOCABULARY AND NOT A SILENCER, and the difference is the failure mode.
 A name nobody declared still produces a finding, so an unknown subject fails
 LOUD.  The alternative shape -- read every word beside a version as a subject
@@ -54,6 +67,16 @@ _INTERPRETER_FAMILIES: dict[str, tuple[str, ...]] = {
     "engines.node": ("node", "nodejs"),
     "rust-version": ("rust", "rustc"),
 }
+
+#: Subjects whose NAME is known without any declaration and whose presence is
+#: confirmed by the environment rather than by a file the project ships:
+#: ``(name, the marker that confirms it, the origin to record)``.  The marker's
+#: absence is not a denial -- ``git archive`` produces a tree of a git project
+#: with no ``.git`` in it -- so an unconfirmed name here becomes unresolved
+#: rather than leaving the vocabulary (BDL-UX #266).
+_ENVIRONMENT_SUBJECTS: tuple[tuple[str, str, str], ...] = (
+    ("git", ".git", "the project is a git repository"),
+)
 
 #: A PEP 508 / npm requirement's distribution name is its leading run of name
 #: characters, before any extras marker, comparator or environment marker.
@@ -96,15 +119,32 @@ class VersionSubjects:
         ``(name, where it came from)`` for every entry of ``names``, sorted.
         The audit reports this so the vocabulary is visible rather than an
         invisible rule about which sentences are checked.
+    unresolved:
+        Case-folded names the environment could not confirm HERE.  A version
+        attributed to one of these is judged neither against this project nor
+        as another product's release: the audit reports it as a token it
+        declined to judge, with the reason (BDL-UX #266).
+    unresolved_origins:
+        ``(name, why it could not be confirmed)`` for every entry of
+        ``unresolved``, sorted.  A population the audit declines is only honest
+        while a reader can see why it was declined.
     """
 
     names: frozenset[str] = frozenset()
     project: frozenset[str] = frozenset()
     origins: tuple[tuple[str, str], ...] = ()
+    unresolved: frozenset[str] = frozenset()
+    unresolved_origins: tuple[tuple[str, str], ...] = ()
 
     def __bool__(self) -> bool:
-        """Whether any subject is known: an empty vocabulary changes nothing."""
-        return bool(self.names)
+        """Whether any subject is known: an empty vocabulary changes nothing.
+
+        An unresolved name counts.  It decides the attribution walk as firmly
+        as a confirmed one -- a vocabulary holding only unresolved names that
+        read as empty would send every token straight back to the comparison
+        this design exists to keep it out of.
+        """
+        return bool(self.names or self.unresolved)
 
 
 def derive_version_subjects(
@@ -118,13 +158,19 @@ def derive_version_subjects(
        (``pyproject.toml``, ``package.json``, ``Cargo.toml``);
     2. the interpreter families implied by ``requires-python``,
        ``engines.node`` or ``rust-version``;
-    3. ``git``, when *project_root* holds a ``.git``;
+    3. the environment-confirmed names of :data:`_ENVIRONMENT_SUBJECTS` --
+       ``git``, when *project_root* holds a ``.git``;
     4. ``docs_audit.subjects`` in ``.beadloom/config.yml``.
 
-    A project that declares nothing gets an empty vocabulary, which leaves the
-    scanner's behaviour exactly as it was.
+    An environment-confirmed name whose marker is absent is UNRESOLVED rather
+    than dropped: the filesystem cannot tell a project that never used git from
+    an export of one, and answering "no" to that question is what reddened
+    every clean-room Gate run on this repository (BDL-UX #266).  A later source
+    still resolves it -- a project that names ``git`` under
+    ``docs_audit.subjects`` has answered the question the marker could not.
     """
     found: dict[str, str] = {}
+    unresolved: dict[str, str] = {}
     project_names: set[str] = set()
 
     for name, origin in _from_pyproject(project_root):
@@ -136,20 +182,32 @@ def derive_version_subjects(
 
     project_names.update(_project_names(project_root))
 
-    if (project_root / ".git").exists():
-        found.setdefault("git", "the project is a git repository")
+    for name, marker, origin in _ENVIRONMENT_SUBJECTS:
+        if (project_root / marker).exists():
+            found.setdefault(name, origin)
+        else:
+            unresolved.setdefault(
+                name,
+                f"no {marker} here, and its absence cannot tell a project that"
+                f" never used {name} from an export of one",
+            )
 
     for name in _configured_subjects(project_root, config_path):
         found[name] = "docs_audit.subjects"
 
-    # A project never cites itself as somebody else's product.
+    # A project never cites itself as somebody else's product, and a name it
+    # declared for itself is not a question the environment still owes.
     for own in project_names:
         found.pop(own, None)
+    for name in (*project_names, *found):
+        unresolved.pop(name, None)
 
     return VersionSubjects(
         names=frozenset(found),
         project=frozenset(project_names),
         origins=tuple(sorted(found.items())),
+        unresolved=frozenset(unresolved),
+        unresolved_origins=tuple(sorted(unresolved.items())),
     )
 
 

@@ -101,3 +101,31 @@ def _attributed(world: dict[str, Any], count: int, subject: str) -> None:
         f"expected {count} token(s) attributed to {subject}, "
         f"got {[(m.value, m.subject) for m in world['result'].attributed]}"
     )
+
+
+@given("the project is a git working tree")
+def _git_tree(world: dict[str, Any]) -> None:
+    (world["root"] / ".git").mkdir()
+
+
+@then(
+    parsers.parse(
+        "the audit reports {count:d} version token it could not judge, "
+        "naming {subject}"
+    )
+)
+def _unjudged(world: dict[str, Any], count: int, subject: str) -> None:
+    unjudged = [
+        mention
+        for mention in world["result"].unjudged
+        if mention.subject == subject
+    ]
+    assert len(unjudged) == count, (
+        f"expected {count} token(s) unjudged for {subject}, "
+        f"got {[(m.value, m.subject) for m in world['result'].unjudged]}"
+    )
+
+
+@then("the audit reports no version token it could not judge")
+def _nothing_unjudged(world: dict[str, Any]) -> None:
+    assert world["result"].unjudged == []

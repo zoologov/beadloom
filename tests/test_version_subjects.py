@@ -169,14 +169,21 @@ class TestWhatMustNeverEnterTheVocabulary:
         assert "click" not in subjects.names
         assert "click" in subjects.project
 
-    def test_a_project_with_no_manifest_has_an_empty_vocabulary(
+    def test_a_project_with_no_manifest_declares_no_subject(
         self, tmp_path: Path
     ) -> None:
+        """Nothing declared means nothing CONFIRMED, not nothing at all.
+
+        ``git`` is still unresolved here: an empty directory cannot confirm a
+        git tree and cannot deny one either (BDL-UX #266). The vocabulary a
+        caller passes explicitly is the only genuinely empty one, and
+        ``test_an_empty_vocabulary_attributes_nothing`` holds that case.
+        """
         root = tmp_path / "p"
         root.mkdir()
         subjects = derive_version_subjects(root)
-        assert not subjects
         assert subjects.names == frozenset()
+        assert subjects.unresolved == frozenset({"git"})
 
     def test_an_unparsable_config_leaves_the_derivation_standing(
         self, tmp_path: Path
@@ -247,3 +254,87 @@ class TestWhichTokenAVersionIsGivenTo:
             "Measured on bd 1.0.4.", origin=Path("doc.md")
         )
         assert [(str(m.value), m.subject) for m in found] == [("1.0.4", None)]
+
+
+class TestASourceTheEnvironmentCannotConfirm:
+    """A probe of the environment answers "yes" or "cannot tell", never "no".
+
+    BDL-068 S6, `beadloom-0mdo.81`, closing BDL-UX #266. ``git`` entered the
+    vocabulary from ``(project_root / ".git").exists()``, and the absent case
+    was read as the assertion that this project has nothing to do with git. A
+    directory built by ``git archive HEAD`` carries no ``.git`` by
+    construction, so the derivation answered "no" to a question it could not
+    see -- and every clean-room Gate run on this repository was rc 1 for one
+    line reading "Measured on git 2.49.0".
+    """
+
+    def test_a_git_repository_resolves_git(self, tmp_path: Path) -> None:
+        root = _project(tmp_path / "p", '[project]\nname = "svc"\n')
+        (root / ".git").mkdir()
+        subjects = derive_version_subjects(root)
+        assert "git" in subjects.names
+        assert "git" not in subjects.unresolved
+
+    def test_no_git_leaves_git_unresolved_rather_than_absent(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path / "p", '[project]\nname = "svc"\n')
+        subjects = derive_version_subjects(root)
+        assert "git" in subjects.unresolved
+        assert "git" not in subjects.names
+
+    def test_an_unresolved_name_carries_the_reason_it_is_unresolved(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path / "p", '[project]\nname = "svc"\n')
+        reasons = dict(derive_version_subjects(root).unresolved_origins)
+        assert ".git" in reasons["git"]
+
+    def test_a_declared_subject_resolves_what_the_environment_cannot(
+        self, tmp_path: Path
+    ) -> None:
+        """A project that names ``git`` itself has answered the question."""
+        root = _project(tmp_path / "p", '[project]\nname = "svc"\n')
+        (root / ".beadloom").mkdir()
+        (root / ".beadloom" / "config.yml").write_text(
+            "docs_audit:\n  subjects:\n    - git\n", encoding="utf-8"
+        )
+        subjects = derive_version_subjects(root)
+        assert "git" in subjects.names
+        assert "git" not in subjects.unresolved
+
+    def test_a_project_named_git_never_becomes_its_own_foreign_subject(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path / "p", '[project]\nname = "git"\n')
+        subjects = derive_version_subjects(root)
+        assert "git" not in subjects.names
+        assert "git" not in subjects.unresolved
+
+    def test_an_unresolved_name_alone_is_still_a_vocabulary(self) -> None:
+        """``__bool__`` gates the whole attribution walk in the scanner.
+
+        A vocabulary holding only unresolved names must not read as empty, or
+        the walk returns ``None`` and the token is judged against this project
+        -- which is the defect verbatim.
+        """
+        assert bool(VersionSubjects(unresolved=frozenset({"git"})))
+
+    def test_an_unresolved_name_is_still_the_subject_beside_the_number(
+        self,
+    ) -> None:
+        scanner = DocScanner(
+            VersionSubjects(
+                names=frozenset({"bd"}),
+                project=frozenset({"beadloom"}),
+                unresolved=frozenset({"git"}),
+            )
+        )
+        found = [
+            (str(m.value), m.subject)
+            for m in scanner.scan_line(
+                "Measured on git 2.49.0.", origin=Path("doc.md")
+            )
+            if m.fact_name == "version"
+        ]
+        assert found == [("2.49.0", "git")]

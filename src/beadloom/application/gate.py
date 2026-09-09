@@ -539,6 +539,20 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
             f", NOT APPLICABLE to this project: {names}"
             " (`beadloom docs audit` states the reason)"
         )
+    if result.unjudged:
+        # A token whose subject the environment could not confirm here is
+        # exempt for a reason that belongs to the DIRECTORY, not to the rule:
+        # in a clean room `git 2.49.0` was judged against this project and
+        # reddened every Gate run taken there (BDL-UX #266). Naming it on this
+        # line is what stops the repair from being a silencer.
+        subjects = ", ".join(
+            sorted({str(mention.subject) for mention in result.unjudged})
+        )
+        coverage += (
+            f", COULD NOT JUDGE {len(result.unjudged)} version token(s)"
+            f" naming {subjects} — unconfirmed here"
+            " (`beadloom docs audit` states the reason)"
+        )
     return f"{head}; {coverage}"
 
 
