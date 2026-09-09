@@ -10,9 +10,9 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.66` — the issue log's number allocator (BDL-UX #187, #211, #253 and the
-two of 2026-09-09), in S6 wave 7 beside `.67` and `.76`, where `.76` is the gate owner.
-Complete on the branch. The number is now ALLOCATED, by an exclusive create of one claim file per
+**Bead:** none claimed. `beadloom-0mdo.66` closed as `f6dc92a` — the issue log's number
+allocator (BDL-UX #187, #211, #253 and the two of 2026-09-09), run in S6 wave 7 beside `.67` and
+`.76`, where `.76` is the gate owner. The number is now ALLOCATED, by an exclusive create of one claim file per
 number in `.claude/development/BDL-UX-Issues/`, which is `beadloom-l9ee`'s one-file-per-incident
 primitive taken at the boundary rather than a shape the incident-file work would replace. A
 BLOCKING `issue-log` Gate step covers what one filesystem cannot span. **#187 was repaired and
@@ -22,6 +22,11 @@ stood — the first number in this log that came from the ledger. Verified green
 `room-beadloom-0mdo.66` over 24 files (9 437 passed, ruff clean, mypy clean against all four
 declared target versions); `beadloom ci` rc 0 on the tree with only this bead's changes
 uncommitted, which is not a claim about the combined tree.
+
+**Next:** from `bd ready --limit 0` and not from the close suggestion. `bd close --suggest-next`
+named `.14` and `.69`; the ready list holds neither, because `.69` still has open blockers and
+`.14` is the slice bead. That is the twenty-seventh dependency shape this project has checked
+that call form against.
 
 **Bead (previous):** none claimed. `beadloom-0mdo.50` closed as `d32c718` — BDL-UX #248 and #249, alone and
 its own gate owner. The census derives the locale as the CODEC in force, `beadloom rooms` refuses
