@@ -1,6 +1,6 @@
 # beadloom:domain=onboarding
 # beadloom:feature=role-map
-"""A role this flow composes, checked against the document that enumerates roles.
+"""A role this flow composes, checked against the map its tool's reader opens.
 
 **The class this closes** (BDL-UX #252): *a role that exists does not reach the
 document that lists roles*. ``Explore`` shipped in BDL-068 S1 as a composed
@@ -44,6 +44,23 @@ with different intent:
   ``we deploy to `dev`, `test``` about environments must not have a release turn
   their green project red.
 
+**One map per declared tool, and the tool axis is stated** (BDL-068 `.84`).
+The corpus comes from ``config.tools`` through :data:`_MAP_ARTIFACTS` -- the
+composed ``CLAUDE.md`` for ``claude``, the Cursor orchestrator pointer
+``role_adapters`` writes for ``cursor``. Until `.84` this module composed
+Claude's map unconditionally and never read ``tools:``, so a project declaring
+``cursor`` alone was judged against a document its flow does not declare, while
+the one its agent does read -- ``.cursor/rules/beadloom-flow.md``, whose brace
+expansion enumerates every composed role -- was asked nothing. That is BDL-UX
+#252's own class, one axis over, inside the check written to close it.
+
+A declared tool :data:`_MAP_ARTIFACTS` has no row for is reported in
+:attr:`RoleMapReport.unreached` and judged against nothing. It is a stated
+population rather than a finding, for the reason ``not_judged`` is one: the gap
+belongs to Beadloom, which composes adapters for that tool and ships no map
+artifact for it, and turning it into an adopter's drift would fail a project for
+a hole in the release it installed.
+
 **What this does not judge, and says so on every run.**
 :attr:`RoleMapReport.not_judged` names every line that mentions two or more
 roles in a shape no construct reads -- the wave order ``dev -> test -> review ->
@@ -62,23 +79,26 @@ from typing import TYPE_CHECKING
 
 from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
+    LayerFragment,
     compose,
     templates_dir,
 )
 from beadloom.onboarding.flow_config import resolve_flow_config
+from beadloom.onboarding.role_adapters import cursor_rules_body, cursor_rules_relpath
 from beadloom.onboarding.role_composer import ROLE_NAMES
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from beadloom.onboarding.composer import LayerFragment
     from beadloom.onboarding.flow_config import FlowConfig
 
 __all__ = [
+    "MapArtifact",
     "RoleMapFinding",
     "RoleMapReport",
     "RoleReference",
     "UnjudgedLine",
+    "UnreachedTool",
     "role_map_report",
 ]
 
@@ -112,8 +132,108 @@ _TICK_ROSTER_RE = re.compile(rf"`{_NAME}`(?:\s*[,|]\s*`{_NAME}`)+")
 
 _NAME_RE = re.compile(_NAME)
 
-#: The artifact this check reads. Named once because three findings quote it.
-_MAP_ARTIFACT = f"{CLAUDE_ARTIFACT_NAME}.md"
+
+@dataclass(frozen=True)
+class MapArtifact:
+    """One tool's role map: the document its adopter opens to learn what exists.
+
+    ``name`` is the project-relative path that tool's reader holds, so a finding
+    can name a file rather than an artifact kind. ``authored_in`` is the phrase a
+    remediation puts after "name `<role>` in", because the two artifacts are
+    repaired in two different places -- one is prose in a shipped core, the other
+    is a template rendered over the derived role population.
+
+    ``fragments`` is the body, in the pieces a finding takes its provenance from.
+    It is the COMPOSITION this flow would write rather than whatever is on disk,
+    which is the same corpus ``role_duties`` reads and for the same reason: a
+    verdict about the file an adopter happens to hold is a verdict about their
+    edit, and a verdict about the composition is a verdict about the release.
+    """
+
+    tool: str
+    name: str
+    authored_in: str
+    fragments: tuple[LayerFragment, ...]
+
+
+@dataclass(frozen=True)
+class UnreachedTool:
+    """A declared tool whose role map this release cannot name, hence did not read.
+
+    Not a finding, and the distinction is the one this epic ships everywhere
+    else: a population the check could not enter is stated beside the verdict,
+    never converted into one. The gap is Beadloom's -- a tool it composes
+    adapters for and ships no map artifact for -- so reporting it as the
+    adopter's drift would fail a project for a hole in the release it installed.
+    """
+
+    tool: str
+    why: str
+
+
+def _claude_map(config: FlowConfig, project_root: Path) -> MapArtifact:
+    """Claude's map: the composed ``CLAUDE.md``, core plus overlays plus project."""
+    composition = compose(
+        "claude", CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root
+    )
+    return MapArtifact(
+        tool="claude",
+        name=str(Path(".claude") / f"{CLAUDE_ARTIFACT_NAME}.md"),
+        authored_in=(
+            f"the role map and the Agent Roles table of the shipped "
+            f"`{CLAUDE_ARTIFACT_NAME}.md` core, so every adopter's composed copy "
+            "carries it"
+        ),
+        fragments=composition.fragments,
+    )
+
+
+def _cursor_map(_config: FlowConfig, _project_root: Path) -> MapArtifact:
+    """Cursor's map: the orchestrator pointer ``role_adapters`` writes.
+
+    Four lines, one of which is a brace expansion over every composed role --
+    which is exactly the construct this check reads as a designation, so the map
+    a Cursor adopter holds is judged by the same derivation Claude's is. The
+    pointer takes no overlay and no project layer, so its body does not depend on
+    ``config``; the parameters are the registry's shape rather than this reader's
+    need.
+    """
+    relpath = cursor_rules_relpath()
+    return MapArtifact(
+        tool="cursor",
+        name=str(relpath),
+        authored_in=(
+            "the Cursor orchestrator pointer in `onboarding/role_adapters.py`, "
+            "whose roster is rendered over the derived role population rather "
+            "than typed into it -- a role missing from it means that rendering "
+            "has stopped covering the population"
+        ),
+        fragments=(LayerFragment("generated", str(relpath), cursor_rules_body()),),
+    )
+
+
+#: Which artifact enumerates roles, per tool. THE POPULATION IS ``config.tools``
+#: and this is the lookup, not the other way round: a tool an adopter declares
+#: and this table has no row for is reported as unreached, so the missing row
+#: reaches the output instead of being answered with another tool's map. That is
+#: the defect this replaced -- ``compose("claude", ...)`` ran unconditionally, so
+#: a cursor-only project's verdict was about a document its agent never opens.
+_MAP_ARTIFACTS: dict[str, Callable[[FlowConfig, Path], MapArtifact]] = {
+    "claude": _claude_map,
+    "cursor": _cursor_map,
+}
+
+
+def _unreached_tool(tool: str) -> UnreachedTool:
+    return UnreachedTool(
+        tool=tool,
+        why=(
+            f"`{tool}` is declared in this project's flow and this release names "
+            "no artifact of it that enumerates roles, so the role map was NOT "
+            f"checked for `{tool}`: a role missing from whatever document a "
+            f"`{tool}` agent reads would not be reported here"
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -121,11 +241,15 @@ class RoleReference:
     """One construct in the map that names roles, and where to open it.
 
     ``designated`` separates the two kinds: a designation claims each name is a
-    role, an inferred roster only guesses that a punctuated run is one.
+    role, an inferred roster only guesses that a punctuated run is one. ``tool``
+    names whose map it was read from, because one run reads one map per declared
+    tool and a count that does not say which map it covers is the shape this
+    check was fixed for.
     """
 
     names: tuple[str, ...]
     source: str
+    tool: str
     text: str
     designated: bool
 
@@ -140,10 +264,17 @@ class RoleMapFinding:
     role that no CORE fragment ships). ``sites`` are the places a reader opens;
     ``severity`` is ``error`` for a designation and ``warn`` for an inferred
     roster, because the second is this derivation's guess about punctuation.
+
+    ``tool`` and ``artifact`` say WHICH map the finding is about. A project
+    declaring two tools holds two maps, and a role can be named in one of them
+    and missing from the other -- so a finding that does not carry its artifact
+    is a finding a reader cannot act on.
     """
 
     kind: str
     role: str
+    tool: str
+    artifact: str
     sites: tuple[str, ...]
     severity: str
     why: str
@@ -158,9 +289,15 @@ class UnjudgedLine:
     role and some should not -- a wave order names four roles and `Explore` is
     not a wave -- and this derivation cannot tell them apart. Naming them is
     what keeps a clean verdict from reading as a claim about the whole document.
+
+    ``tool`` and ``artifact`` name the map the line is in, for the reason
+    :class:`RoleMapFinding` carries them: with two maps read in one run, a bare
+    ``source`` line number does not say which document a reader opens.
     """
 
     source: str
+    tool: str
+    artifact: str
     roles: tuple[str, ...]
     text: str
     why: str
@@ -168,9 +305,19 @@ class UnjudgedLine:
 
 @dataclass(frozen=True)
 class RoleMapReport:
-    """What this flow composes, what its map enumerates, and what was not read."""
+    """What this flow composes, what each tool's map enumerates, and what was not read.
+
+    ``tools`` is the declared population and ``artifacts`` + ``unreached``
+    partition it: every declared tool is either one map that was read or one
+    reason it was not. ``references``, ``rosters``, ``findings`` and
+    ``not_judged`` are flat across the artifacts and each element names its own,
+    so a caller can render per tool without a second lookup.
+    """
 
     roles: tuple[str, ...]
+    tools: tuple[str, ...]
+    artifacts: tuple[MapArtifact, ...]
+    unreached: tuple[UnreachedTool, ...]
     references: tuple[RoleReference, ...]
     rosters: tuple[RoleReference, ...]
     findings: tuple[RoleMapFinding, ...]
@@ -225,7 +372,7 @@ def _inferred_rosters(line: str, roles: frozenset[str]) -> Iterator[tuple[tuple[
 
 
 def _references(
-    fragments: tuple[LayerFragment, ...], project_root: Path, roles: frozenset[str]
+    artifact: MapArtifact, project_root: Path, roles: frozenset[str]
 ) -> tuple[list[RoleReference], list[UnjudgedLine]]:
     """Read both construct kinds out of every fragment, and what neither read.
 
@@ -237,12 +384,18 @@ def _references(
     """
     references: list[RoleReference] = []
     unjudged: list[UnjudgedLine] = []
-    for fragment in fragments:
+    for fragment in artifact.fragments:
         label = _fragment_label(fragment.source, project_root)
         for number, line in enumerate(fragment.text.splitlines(), start=1):
             source = f"{label}:{number}"
             found = [
-                RoleReference(names=names, source=source, text=text, designated=designated)
+                RoleReference(
+                    names=names,
+                    source=source,
+                    tool=artifact.tool,
+                    text=text,
+                    designated=designated,
+                )
                 for designated, group in (
                     (True, _designations(line)),
                     (False, _inferred_rosters(line, roles)),
@@ -250,7 +403,7 @@ def _references(
                 for names, text in group
             ]
             references.extend(found)
-            entry = _unjudged(line, source, roles, found)
+            entry = _unjudged(line, source, artifact, roles, found)
             if entry is not None:
                 unjudged.append(entry)
     return references, unjudged
@@ -264,7 +417,11 @@ def _mentioned(line: str, roles: frozenset[str]) -> tuple[str, ...]:
 
 
 def _unjudged(
-    line: str, source: str, roles: frozenset[str], found: list[RoleReference]
+    line: str,
+    source: str,
+    artifact: MapArtifact,
+    roles: frozenset[str],
+    found: list[RoleReference],
 ) -> UnjudgedLine | None:
     """A line naming two or more roles that no construct on it accounts for."""
     mentioned = _mentioned(line, roles)
@@ -275,6 +432,8 @@ def _unjudged(
         return None
     return UnjudgedLine(
         source=source,
+        tool=artifact.tool,
+        artifact=artifact.name,
         roles=mentioned,
         text=line.strip(),
         why=(
@@ -286,40 +445,43 @@ def _unjudged(
     )
 
 
-def _unmapped(role: str, omitting: list[RoleReference]) -> RoleMapFinding:
+def _unmapped(
+    role: str, artifact: MapArtifact, omitting: list[RoleReference]
+) -> RoleMapFinding:
     sites = tuple(reference.source for reference in omitting)
     where = f" — including the {len(sites)} roster(s) above" if sites else ""
     return RoleMapFinding(
         kind="unmapped",
         role=role,
+        tool=artifact.tool,
+        artifact=artifact.name,
         sites=sites,
         severity="error",
         why=(
-            f"`{role}` is a role this flow composes and the composed "
-            f"`{_MAP_ARTIFACT}` names it nowhere{where} — an agent reading the "
-            "entry point, as that document instructs, learns that the role does "
-            "not exist"
+            f"`{role}` is a role this flow composes and `{artifact.name}` — the "
+            f"map a `{artifact.tool}` reader opens — names it nowhere{where}: an "
+            "agent reading it, as that document instructs, learns that the role "
+            "does not exist"
         ),
-        remediation=(
-            f"name `{role}` in the role map and the Agent Roles table of the "
-            f"shipped `{_MAP_ARTIFACT}` core, so every adopter's composed copy "
-            "carries it"
-        ),
+        remediation=f"name `{role}` in {artifact.authored_in}",
     )
 
 
-def _partial(role: str, omitting: list[RoleReference]) -> RoleMapFinding:
+def _partial(
+    role: str, artifact: MapArtifact, omitting: list[RoleReference]
+) -> RoleMapFinding:
     designated = [reference for reference in omitting if reference.designated]
     return RoleMapFinding(
         kind="partial",
         role=role,
+        tool=artifact.tool,
+        artifact=artifact.name,
         sites=tuple(reference.source for reference in omitting),
         severity="error" if designated else "warn",
         why=(
             f"`{role}` is a role this flow composes and {len(omitting)} roster(s) "
-            f"in the composed `{_MAP_ARTIFACT}` enumerate other roles without it "
-            "— a reader who stops at one of them has a list that is wrong rather "
-            "than short"
+            f"in `{artifact.name}` enumerate other roles without it — a reader who "
+            "stops at one of them has a list that is wrong rather than short"
         ),
         remediation=(
             f"add `{role}` to each roster named above, or, when the run is an "
@@ -329,16 +491,18 @@ def _partial(role: str, omitting: list[RoleReference]) -> RoleMapFinding:
     )
 
 
-def _unbacked(name: str, sites: list[str]) -> RoleMapFinding:
+def _unbacked(name: str, artifact: MapArtifact, sites: list[str]) -> RoleMapFinding:
     return RoleMapFinding(
         kind="unbacked",
         role=name,
+        tool=artifact.tool,
+        artifact=artifact.name,
         sites=tuple(sites),
         severity="error",
         why=(
-            f"the composed `{_MAP_ARTIFACT}` designates `{name}` as a role and no "
-            "CORE fragment ships one by that name, so an agent told to launch it "
-            "has nothing to read"
+            f"`{artifact.name}` — the map a `{artifact.tool}` reader opens — "
+            f"designates `{name}` as a role and no CORE fragment ships one by "
+            "that name, so an agent told to launch it has nothing to read"
         ),
         remediation=(
             f"correct the name, or ship `roles/core/{name}.md.txt` whose front "
@@ -347,18 +511,25 @@ def _unbacked(name: str, sites: list[str]) -> RoleMapFinding:
     )
 
 
-def _judge(roles: tuple[str, ...], references: list[RoleReference]) -> list[RoleMapFinding]:
-    """Both directions, one finding per role, each naming every site to open."""
+def _judge(
+    roles: tuple[str, ...], artifact: MapArtifact, references: list[RoleReference]
+) -> list[RoleMapFinding]:
+    """Both directions, one finding per role, each naming every site to open.
+
+    Judged per ARTIFACT rather than over every reference in the run: two tools
+    hold two maps, each owes the whole role population on its own, and a role
+    named in one of them is not thereby named in the other.
+    """
     population = frozenset(roles)
     rosters = _rosters(references, population)
     findings: list[RoleMapFinding] = []
     for role in roles:
         omitting = [roster for roster in rosters if role not in roster.names]
         if not any(role in reference.names for reference in references):
-            findings.append(_unmapped(role, omitting))
+            findings.append(_unmapped(role, artifact, omitting))
         elif omitting:
-            findings.append(_partial(role, omitting))
-    findings.extend(_unbacked_findings(references, population))
+            findings.append(_partial(role, artifact, omitting))
+    findings.extend(_unbacked_findings(artifact, references, population))
     return findings
 
 
@@ -370,7 +541,7 @@ def _rosters(references: list[RoleReference], population: frozenset[str]) -> lis
 
 
 def _unbacked_findings(
-    references: list[RoleReference], population: frozenset[str]
+    artifact: MapArtifact, references: list[RoleReference], population: frozenset[str]
 ) -> list[RoleMapFinding]:
     """Names a DESIGNATION claims are roles and no core fragment ships.
 
@@ -385,7 +556,7 @@ def _unbacked_findings(
         for name in reference.names:
             if name not in population:
                 sites.setdefault(name, []).append(reference.source)
-    return [_unbacked(name, where) for name, where in sorted(sites.items())]
+    return [_unbacked(name, artifact, where) for name, where in sorted(sites.items())]
 
 
 def role_map_report(
@@ -408,23 +579,42 @@ def role_map_report(
     — which is how this check is demonstrated red on a sixth role without
     writing a sixth fragment into a templates directory every concurrent run in
     the same working tree also reads.
+
+    ONE MAP PER DECLARED TOOL. The corpus is derived from ``config.tools``
+    through :data:`_MAP_ARTIFACTS`, and a declared tool with no row there is
+    reported in ``unreached`` rather than answered with another tool's map
+    (BDL-068 `.84`).
     """
     resolved = config if config is not None else resolve_flow_config(project_root)
     population = roles if roles is not None else ROLE_NAMES
-    composition = compose(
-        "claude", CLAUDE_ARTIFACT_NAME, config=resolved, project_root=project_root
-    )
-    references, not_judged = _references(
-        composition.fragments, project_root, frozenset(population)
-    )
-    findings = _judge(population, references)
+    artifacts: list[MapArtifact] = []
+    unreached: list[UnreachedTool] = []
+    references: list[RoleReference] = []
+    not_judged: list[UnjudgedLine] = []
+    findings: list[RoleMapFinding] = []
+    inspected: list[str] = []
+    for tool in resolved.tools:
+        reader = _MAP_ARTIFACTS.get(tool)
+        if reader is None:
+            unreached.append(_unreached_tool(tool))
+            continue
+        artifact = reader(resolved, project_root)
+        artifacts.append(artifact)
+        found, unread = _references(artifact, project_root, frozenset(population))
+        references.extend(found)
+        not_judged.extend(unread)
+        findings.extend(_judge(population, artifact, found))
+        inspected.extend(
+            _fragment_label(fragment.source, project_root) for fragment in artifact.fragments
+        )
     return RoleMapReport(
         roles=population,
+        tools=resolved.tools,
+        artifacts=tuple(artifacts),
+        unreached=tuple(unreached),
         references=tuple(references),
         rosters=tuple(_rosters(references, frozenset(population))),
-        findings=tuple(sorted(findings, key=lambda f: (f.kind, f.role, f.sites))),
+        findings=tuple(sorted(findings, key=lambda f: (f.tool, f.kind, f.role, f.sites))),
         not_judged=tuple(not_judged),
-        inspected=tuple(
-            _fragment_label(fragment.source, project_root) for fragment in composition.fragments
-        ),
+        inspected=tuple(inspected),
     )

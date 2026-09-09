@@ -291,10 +291,19 @@ file-based check reaches it.
 
 ### The role map
 
-A role this flow composes and the composed `CLAUDE.md` names nowhere is reported at
+A role this flow composes and the map its tool's reader opens names nowhere is reported at
 `error`, and so is a name the map designates as a role that no CORE fragment ships. The
 derivation is `role_map.role_map_report()`; `_role_map_drifts()` maps its findings onto
 `ConfigDrift`.
+
+**One map per declared tool** (BDL-068 `.84`). The corpus is `config.tools`: the composed
+`.claude/CLAUDE.md` for `claude`, the `.cursor/rules/beadloom-flow.md` orchestrator pointer
+for `cursor`. Until `.84` the check composed Claude's map unconditionally, so a project
+declaring `cursor` alone was judged against a composition its flow does not declare while
+the map its agent reads was asked nothing. A declared tool this release names no map
+artifact for produces **no drift**: it is printed as an unreached population, because the
+gap is Beadloom's and failing a project for it would report the release's hole as the
+adopter's.
 
 This is `_duty_drifts()`'s neighbour one level up. That one asks whether a duty declared
 for a role reaches that role's core (BDL-UX #228); this one asks whether a role that
@@ -319,11 +328,14 @@ check gets switched off wholesale.
 Never `fixable`, for `_duty_drifts()`'s reason: the repair is a sentence in the map, and
 `--fix` writes compositions rather than prose.
 
-The command prints the corpus it read and `RoleMapReport.not_judged` on every run of a
-project that has a `flow.yml` — the lines that mention two or more roles in a shape no
-construct reads. Some of those should enumerate every role and some should not, since a
-wave order `dev → test → review → tech-writer` names four roles and `Explore` is not a
-wave, and this derivation cannot tell them apart.
+The command prints two populations on every run of a project that has a `flow.yml`. The
+TOOLS: how many of the declared tools a map was read for, each beside its artifact and its
+designation count, and the unreached count with its reasons — printed at zero too, as a
+sentence, because an empty list under a heading reads as "nothing to say here" and that is
+the wrong half of what zero means. And `RoleMapReport.not_judged`: the lines that mention
+two or more roles in a shape no construct reads. Some of those should enumerate every role
+and some should not, since a wave order `dev → test → review → tech-writer` names four
+roles and `Explore` is not a wave, and this derivation cannot tell them apart.
 
 ### The ignore block
 

@@ -1,19 +1,42 @@
 # ACTIVE: BDL-068 — The flow's rules are advice; make them instruments
 
-> **Last updated:** 2026-09-09
+> **Last updated:** 2026-09-10
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
 > pass landed. S6 runs in full: its axes bead `.72` closed, `.60` ran alone at the front by
 > coordinator decision, its THIRTY DEV beads are done — four of them (`.78`, `.83`, `ec1a`,
 > `iur5`) landed after the test bead had measured the slice — and `.69` re-measured over the
 > widened surface and closed with nine findings, BDL-UX #268-#273 and #275-#277. S6's
-> `review` bead `.70` runs next, then `.14`.
+> `review` bead `.70` returned ISSUES: 0 critical, 3 major. Major 1 became the fix bead
+> `.84`, which is done; Majors 2 and 3 are routed to the docs wave `.71`. The docs wave runs
+> next, then `.14`, then the epic's PR.
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.69` — S6's `test` bead. Twenty-six dev beads landed before it and each
+**Bead:** `beadloom-0mdo.84` — S6's ONE fix bead, from the review's Major 1, and the last dev
+bead of BDL-068. The role-map check `.59` shipped to close BDL-UX #252 asked its question
+about the wrong map: `role_map_report` composed `("claude", "CLAUDE")` unconditionally and
+never read `config.tools`, so a project declaring `cursor` alone was judged against a
+composition its flow does not declare, while the map its agent does read —
+`.cursor/rules/beadloom-flow.md`, whose brace expansion enumerates every composed role — was
+asked nothing. The defect is in the answer to the defect, and it contradicts CONTEXT's rule
+that no check is added that cannot fail.
+
+**FIXED BY DERIVING THE CORPUS FROM `config.tools`,** one map artifact per declared tool,
+judged per artifact because each map owes the whole role population on its own. A declared
+tool this release names no map artifact for is an UNREACHED POPULATION — stated on every run,
+at zero too, and never converted into the adopter's drift, because that gap is Beadloom's.
+
+**HALF THE REVIEW'S PREMISE IS FALSE AND IS NOW FILED.** `setup-agentic-flow` DOES write
+`.claude/CLAUDE.md` and the four slash commands into a cursor-only project: `scaffold()`
+composes them unconditionally and only the role adapters read `tools:`. Measured on
+2026-09-10 on `tests/adopter_flow.py`'s `CURSOR_ONLY` arrangement and entered as BDL-UX #278.
+The finding stands on its second half; what does not exist is any reason for the check to
+read that file, not the file.
+
+**PREVIOUS BEAD, for the record:** `beadloom-0mdo.69`, S6's `test` bead. Twenty-six dev beads landed before it and each
 wrote its own tests red-first, so this bead's subject is the question none of them could ask:
 would S6's checks fail on a repository arranged differently from this one, and do the
 instruments eleven waves built agree with each other.
@@ -1460,6 +1483,58 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      files. That loop varies the version the checker is ASKED about and not the interpreter it
      RUNS under, so a per-interpreter difference in what is installed is still measured only in
      CI.
+
+  - [x] `.84` — **the role-map check's TOOL population was a literal, and the map a Cursor
+     adopter holds was asked nothing.** S6's review Major 1, the slice's only fix bead and the
+     last dev bead of the epic. S6, alone, and **its own combined-tree gate owner**.
+     **THE PREMISE WAS MEASURED BEFORE ANYTHING WAS BUILT, and half of it is false.** The
+     review states the check "builds a `CLAUDE.md` that `setup-agentic-flow` never wrote
+     there". Reproduced on the `CURSOR_ONLY` arrangement through the two calls the CLI makes:
+     the project holds `.claude/CLAUDE.md` AND four `.claude/commands/*.md`, because
+     `scaffold()` composes both kinds unconditionally and only the role adapters read
+     `tools:`. Filed as **BDL-UX #278** and deliberately not fixed here — a bead about a
+     CHECK's population should not also decide a WRITER's, and `.67` settled that writer's
+     policy eight days ago for a different question. The finding's severity is unchanged: the
+     check still never asks about the map a `cursor` agent reads.
+     **ONE MAP PER DECLARED TOOL.** `_MAP_ARTIFACTS` maps `claude` to the composed
+     `.claude/CLAUDE.md` and `cursor` to the `.cursor/rules/beadloom-flow.md` pointer
+     `role_adapters` renders over `ROLE_NAMES`. Both corpora are the COMPOSITION and not the
+     file on disk, which is `role_duties`' choice and its reason. Judgement runs per artifact;
+     every finding, reference and unjudged line carries its tool and its artifact.
+     **NO FOURTH POLICY.** `.40` set report-at-`warn`-never-`fixable` for a file the USER owns
+     and `beadloom-ec1a` reused it. This gap is BEADLOOM's — adapters composed for a tool it
+     ships no map for — so it is reported the way `not_judged` is: a stated population, named
+     on every run including at zero, never the adopter's drift. `.59`'s severities are
+     untouched.
+     **The neighbour was checked and produced no finding**, so the silence is not an absence:
+     `role_duties._compose_all` also composes `commands/*` and `claude/CLAUDE`
+     unconditionally, and that is consistent rather than defective — its corpus is the
+     artifacts a duty can be DECLARED in, and #278 records that the scaffold writes exactly
+     those artifacts into a cursor-only project anyway.
+     **BDD first, red first.** Five scenarios appended to `role_map.feature`, all five red
+     before any code (`AttributeError: 'RoleMapReport' object has no attribute 'artifacts'`),
+     13 of 13 green after. Four derivation guards in `tests/test_role_map.py` hold
+     `_MAP_ARTIFACTS` against `SUPPORTED_TOOLS` rather than against a literal. The
+     characterisation class in `test_the_flow_checks_an_arrangement_that_is_not_ours.py` went
+     from 3 tests that PINNED the defect to 8 that hold the fix, including the control that
+     moved: it used to assert that the verdict does not change with the tool set, which was
+     the defect stated as a property.
+     **Three mutations, each caught by exactly its own tests and by nothing else in the
+     suite:** iterating `("claude",)` instead of `resolved.tools` (11 failures across all three
+     modules), `_MAP_ARTIFACTS.get(tool, _claude_map)` (exactly the four unreached tests), and
+     dropping the tool name from the `config-check` line (exactly the config-check scenario).
+     **MEASURED on the two corpora, 2026-09-10:** `.claude/CLAUDE.md` — 16 designations, 6
+     rosters, 5 not judged, 0 findings, unchanged from `.59`'s numbers, so the claude verdict
+     did not move. `.cursor/rules/beadloom-flow.md` — 1 designation (the brace expansion,
+     naming all five roles), 1 roster, 2 not judged, 0 findings.
+     **A SIGNAL WAS LOST IN THE DOC FIXPOINT AND IS RECORDED RATHER THAN QUIETLY REPLACED.**
+     `sync-update --yes --all`, run for four stale refs, also re-baselined NINE reference
+     documents' surface — `README.md`, `README.ru.md`, `docs/architecture.md`,
+     `docs/getting-started.md` and five guides including `docs/services/cli.md`, all of which
+     carried a standing `surface drift` warning at HEAD. The run discloses it in its last line
+     and its `--all` help does not. Entered as **BDL-UX #279** with the nine names, so the list
+     outlives the record that held it. `docs/services/cli.md` is one of them and is the
+     document the review's Major 2 is about.
 
 
 ## What is in `main` now

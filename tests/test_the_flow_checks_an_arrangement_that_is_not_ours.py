@@ -39,6 +39,7 @@ from beadloom.doc_sync.issue_numbers import (
     check_issue_numbers,
     read_claims,
 )
+from beadloom.onboarding.flow_config import FlowConfig
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.onboarding.graph_layout import layout_of
 from beadloom.onboarding.role_composer import ROLE_NAMES
@@ -373,47 +374,133 @@ class TestTheGraphFilesMediumUnderBothLayouts:
         assert all("in no graph this plan could read" in detail for detail in details)
 
 
-class TestTheRoleMapOnAToolSetThatIsNotOurs:
+class TestTheRoleMapReadsTheMapEachDeclaredToolHolds:
     """Which artifact the role map reads, and whose document it names.
 
-    ``role_map_report`` composes ``("claude", "CLAUDE")`` unconditionally, and its
-    findings name ``CLAUDE.md``. A project whose ``flow.yml`` declares only
-    ``cursor`` never has that file: ``role_adapters`` writes ``.cursor/agents/``
-    and a four-line ``.cursor/rules/beadloom-flow.md`` pointer, and no check reads
-    either for the role population. So on that arrangement the check reports about
-    a document the project does not hold.
+    Until BDL-068 `.84` this class characterised the defect the S6 review made
+    Major 1: ``role_map_report`` composed ``("claude", "CLAUDE")`` unconditionally
+    and never read ``config.tools``, so a project declaring ``cursor`` alone was
+    judged against a composition its flow does not declare while the map its
+    agent actually reads -- ``.cursor/rules/beadloom-flow.md``, whose body
+    enumerates the roles -- was asked nothing.
 
-    Written after the behaviour. It holds the population rather than judging it —
-    the shipped core is one document and an adopter's composed copy carries it, so
-    a finding about the core is a finding about the release the adopter installed.
-    What the guard forbids is that boundary moving without anybody noticing.
+    The control below is the one that moved. It used to assert that the verdict
+    does NOT change with the tool set, which was the defect stated as a property;
+    it now asserts that it does, because the corpus is the tool's own map.
     """
 
-    def test_a_cursor_only_project_is_judged_against_the_claude_artifact(
+    def test_a_cursor_only_project_is_checked_against_the_cursor_map(
         self, tmp_path: Path
     ) -> None:
         flow = build_flow(tmp_path / "proj", CURSOR_ONLY)
         report = role_map_report(flow.root)
-        assert report.roles == ROLE_NAMES
-        assert "templates/agentic_flow/CLAUDE.md.txt" in report.inspected
-        assert not (flow.root / ".claude" / "CLAUDE.md").exists()
+        assert [artifact.tool for artifact in report.artifacts] == ["cursor"]
+        assert [artifact.name for artifact in report.artifacts] == [
+            ".cursor/rules/beadloom-flow.md"
+        ]
+        assert report.inspected == (".cursor/rules/beadloom-flow.md",)
 
-    def test_the_check_reads_no_artifact_that_project_writes(self, tmp_path: Path) -> None:
-        """Every fragment inspected is shipped, so nothing of the adopter's is read."""
-        flow = build_flow(tmp_path / "proj", CURSOR_ONLY)
-        report = role_map_report(flow.root)
-        assert all(source.startswith("templates/") for source in report.inspected), (
-            report.inspected
-        )
-
-    def test_our_own_tool_set_reads_the_same_shipped_core(self, tmp_path: Path) -> None:
-        """The control: the verdict does not move with the tool set."""
+    def test_the_tool_set_moves_the_corpus(self, tmp_path: Path) -> None:
+        """The control the defect used to pass: two tool sets, two maps."""
         ours = role_map_report(build_flow(tmp_path / "ours", OURS).root)
         cursor = role_map_report(build_flow(tmp_path / "cursor", CURSOR_ONLY).root)
-        assert ours.inspected == cursor.inspected
-        assert [finding.kind for finding in ours.findings] == [
-            finding.kind for finding in cursor.findings
-        ]
+        assert [artifact.tool for artifact in ours.artifacts] == ["claude"]
+        assert ours.inspected == ("templates/agentic_flow/CLAUDE.md.txt",
+                                  "templates/claude/stack/python/CLAUDE.md.txt")
+        assert set(ours.inspected).isdisjoint(cursor.inspected)
+
+    def test_neither_arrangement_reads_an_artifact_that_project_wrote(
+        self, tmp_path: Path
+    ) -> None:
+        """Both corpora are the COMPOSITION, so no adopter's edit is judged.
+
+        The cursor map's one fragment is labelled with the path the pointer is
+        written TO, because that is what a reader opens; its BODY comes from
+        ``role_adapters``. Asserted by building the project without ever running
+        the adapter generator, so the file the label names does not exist.
+        """
+        for arrangement in (OURS, CURSOR_ONLY):
+            flow = build_flow(tmp_path / arrangement.label, arrangement)
+            report = role_map_report(flow.root)
+            assert report.references, report
+            for artifact in report.artifacts:
+                assert not (flow.root / artifact.name).exists(), artifact.name
+
+    def test_the_cursor_map_is_judged_by_the_same_derivation(
+        self, tmp_path: Path
+    ) -> None:
+        """A role the Cursor pointer does not name is a finding against it.
+
+        This is BDL-UX #252's own class on the axis the check could not reach: a
+        composed role missing from the map that enumerates roles. The population
+        is varied through the ``roles`` seam rather than by writing a sixth
+        fragment into the shared templates directory.
+        """
+        flow = build_flow(tmp_path / "proj", CURSOR_ONLY)
+        report = role_map_report(flow.root, roles=(*ROLE_NAMES, "scout"))
+        unmapped = [f for f in report.findings if f.kind == "unmapped"]
+        assert [f.role for f in unmapped] == ["scout"]
+        assert unmapped[0].tool == "cursor"
+        assert unmapped[0].artifact == ".cursor/rules/beadloom-flow.md"
+        assert ".cursor/rules/beadloom-flow.md" in unmapped[0].why
+
+    def test_the_shipped_cursor_map_names_every_composed_role(
+        self, tmp_path: Path
+    ) -> None:
+        """The control for the test above: red on a sixth role, green on ours."""
+        flow = build_flow(tmp_path / "proj", CURSOR_ONLY)
+        assert role_map_report(flow.root).findings == ()
+
+    def test_a_declared_tool_with_no_map_artifact_is_unreached_not_substituted(
+        self, tmp_path: Path
+    ) -> None:
+        """The population is ``config.tools``; the artifact table is the lookup.
+
+        Reached through the ``config`` seam because ``flow.yml`` validates
+        ``tools:`` against ``SUPPORTED_TOOLS``, so this is the arrangement a
+        release that adds a tool reaches first. It is the same control
+        ``beadloom-ec1a`` used on the other tool-population constant in this
+        domain (BDL-UX #277).
+        """
+        flow = build_flow(tmp_path / "proj", OURS)
+        config = FlowConfig(tools=("windsurf",), architecture="ddd", stack=("python",))
+        report = role_map_report(flow.root, config)
+        assert report.artifacts == ()
+        assert report.findings == ()
+        assert [entry.tool for entry in report.unreached] == ["windsurf"]
+        assert "was NOT checked" in report.unreached[0].why
+
+    def test_every_declared_tool_is_either_a_map_read_or_a_reason_it_was_not(
+        self, tmp_path: Path
+    ) -> None:
+        """The partition, over every tool set an adopter can declare."""
+        flow = build_flow(tmp_path / "proj", OURS)
+        for tools in (("claude",), ("cursor",), ("claude", "cursor"), ("windsurf",)):
+            config = FlowConfig(tools=tools, architecture="ddd", stack=("python",))
+            report = role_map_report(flow.root, config)
+            assert report.tools == tools
+            covered = [a.tool for a in report.artifacts] + [
+                u.tool for u in report.unreached
+            ]
+            assert covered == list(tools), (tools, covered)
+
+    def test_a_project_declaring_both_tools_is_checked_against_both_maps(
+        self, tmp_path: Path
+    ) -> None:
+        """Each map owes the whole role population on its own."""
+        flow = build_flow(tmp_path / "proj", OURS)
+        config = FlowConfig(
+            tools=("claude", "cursor"), architecture="ddd", stack=("python",)
+        )
+        report = role_map_report(flow.root, config, roles=(*ROLE_NAMES, "scout"))
+        assert {f.tool for f in report.findings if f.kind == "unmapped"} == {
+            "claude",
+            "cursor",
+        }
+        assert {reference.tool for reference in report.references} == {
+            "claude",
+            "cursor",
+        }
 
 
 class TestEveryFindingHereIsStrictAndNamesItself:

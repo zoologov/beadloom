@@ -26,6 +26,7 @@ import pytest
 from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from beadloom.onboarding.flow_config import FlowConfig
 from beadloom.onboarding.role_composer import ROLE_NAMES, roles_in
 from beadloom.onboarding.role_map import role_map_report
 from beadloom.services.cli import main
@@ -114,9 +115,33 @@ def _project_roster(world: dict[str, Any], first: str, second: str) -> None:
     )
 
 
+@given(parsers.parse('a project whose flow declares "{tool}" alone'))
+def _one_tool(world: dict[str, Any], tool: str) -> None:
+    """The declaration an adopter writes, through the file production reads."""
+    flow = world["root"] / ".beadloom" / "flow.yml"
+    flow.write_text(_FLOW_YML.replace("- claude", f"- {tool}"), encoding="utf-8")
+
+
+@given("the flow declares a tool this release ships no map artifact for")
+def _tool_without_a_map(world: dict[str, Any]) -> None:
+    """Built through the config seam, because `flow.yml` cannot express it.
+
+    `build_flow_config` validates `tools:` against `SUPPORTED_TOOLS`, so the
+    arrangement this scenario is about is one a future release reaches and a
+    current `flow.yml` cannot declare. The seam is the one `role_map_report`
+    already offers its callers, and it is the same control `beadloom-ec1a` used
+    to measure the other tool-population constant in this domain.
+    """
+    world["config"] = FlowConfig(
+        tools=("windsurf",), architecture="ddd", stack=("python",)
+    )
+
+
 @when("the role map is checked")
 def _check(world: dict[str, Any]) -> None:
-    world["report"] = role_map_report(world["root"], roles=world["roles"])
+    world["report"] = role_map_report(
+        world["root"], world.get("config"), roles=world["roles"]
+    )
 
 
 @when("the agent-config check runs")
@@ -226,3 +251,50 @@ def _every_roster_complete(world: dict[str, Any]) -> None:
 @then("no role map finding is reported")
 def _no_findings(world: dict[str, Any]) -> None:
     assert world["report"].findings == (), world["report"].findings
+
+
+# --- BDL-068 `.84`: the map artifact is derived per declared tool ------------
+
+
+def _artifact_names(world: dict[str, Any]) -> dict[str, str]:
+    return {artifact.tool: artifact.name for artifact in world["report"].artifacts}
+
+
+@then(parsers.parse('the map artifact read for "{tool}" is "{name}"'))
+def _artifact_for(world: dict[str, Any], tool: str, name: str) -> None:
+    read = _artifact_names(world)
+    assert read.get(tool) == name, read
+
+
+@then(parsers.parse('no map artifact is read for "{tool}"'))
+def _no_artifact_for(world: dict[str, Any], tool: str) -> None:
+    assert tool not in _artifact_names(world), _artifact_names(world)
+
+
+@then(parsers.parse('that finding names the tool "{tool}" and the artifact "{name}"'))
+def _finding_names_the_tool(world: dict[str, Any], tool: str, name: str) -> None:
+    for finding in world["report"].findings:
+        assert finding.tool == tool, finding
+        assert finding.artifact == name, finding
+        assert name in finding.why, finding.why
+
+
+@then("that tool is reported as unreached and its reason names it")
+def _unreached(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert [entry.tool for entry in report.unreached] == ["windsurf"], report.unreached
+    assert "windsurf" in report.unreached[0].why, report.unreached[0].why
+
+
+@then("it states how many declared tools a map artifact was read for and how many were not")
+def _states_the_tool_population(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert report.tools, report
+    assert len(report.artifacts) + len(report.unreached) == len(report.tools), report
+
+
+@then("its role-map block names each declared tool beside the artifact read for it")
+def _config_check_names_the_tools(world: dict[str, Any]) -> None:
+    combined = world["outcome"].stdout + world["outcome"].stderr
+    assert "claude -> .claude/CLAUDE.md" in combined, combined
+    assert "1 of 1 declared tool(s)" in combined, combined

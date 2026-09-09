@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         DeclinedRewrite,
         FixReport,
     )
+    from beadloom.onboarding.role_map import RoleMapReport
 
 # beadloom:service=mcp-server
 _MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
@@ -658,10 +659,15 @@ def _echo_role_map_limits(project_root: Path) -> None:
     finds something hands the reader a clean list, and a clean list is trusted
     and stopped at.
 
-    The population here is the lines that name two or more roles in a shape no
-    construct reads. Some of them SHOULD enumerate every role and some should
+    TWO populations are named here, and until BDL-068 `.84` only the first
+    reached the output. The lines that name two or more roles in a shape no
+    construct reads: some of them SHOULD enumerate every role and some should
     not — a wave order names four roles and `Explore` is not a wave — and this
-    derivation cannot tell them apart, so it names them instead of deciding.
+    derivation cannot tell them apart, so it names them instead of deciding. And
+    the TOOLS: one map is read per declared tool, and a declared tool this
+    release names no map artifact for is stated rather than answered with
+    another tool's map. The count prints at zero too, because "every declared
+    tool's map was read" is the fact a reader needs and an empty list is not it.
     """
     from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH, FlowConfigError
     from beadloom.onboarding.role_map import role_map_report
@@ -674,14 +680,43 @@ def _echo_role_map_limits(project_root: Path) -> None:
         # Reported as its own drift by `check_config_drift`; not doubled here.
         return
     click.echo(
-        f"  Role map: {len(report.roles)} composed role(s), checked against "
-        f"{len(report.references)} role designation(s) in the composed "
-        f"CLAUDE.md, {len(report.rosters)} of which enumerate two or more.",
+        f"  Role map: {len(report.roles)} composed role(s), checked against the "
+        f"map of {len(report.artifacts)} of {len(report.tools)} declared "
+        f"tool(s) — {len(report.references)} role designation(s), "
+        f"{len(report.rosters)} of which enumerate two or more.",
         err=True,
     )
+    click.echo(f"    Maps read ({len(report.artifacts)}):", err=True)
+    for artifact in report.artifacts:
+        read = [ref for ref in report.references if ref.tool == artifact.tool]
+        click.echo(
+            f"      {artifact.tool} -> {artifact.name}: {len(read)} designation(s)",
+            err=True,
+        )
+    _echo_unreached_tools(report)
     click.echo(f"    Not judged ({len(report.not_judged)}):", err=True)
     for entry in report.not_judged:
-        click.echo(f"      {entry.source} — {entry.why}", err=True)
+        click.echo(f"      {entry.source} (in {entry.artifact}) — {entry.why}", err=True)
+
+
+def _echo_unreached_tools(report: RoleMapReport) -> None:
+    """The tool axis at zero as well as above it, because zero is the answer.
+
+    An empty list under a heading is read as "nothing to say here"; the sentence
+    says which of the two things that means. The count carries its denominator
+    for the same reason every other population in this flow does.
+    """
+    total = len(report.tools)
+    if not report.unreached:
+        click.echo(
+            f"    Unreached: 0 of {total} declared tool(s) — a map artifact was "
+            "read for every tool this project declares.",
+            err=True,
+        )
+        return
+    click.echo(f"    Unreached ({len(report.unreached)} of {total} declared tool(s)):", err=True)
+    for unreached in report.unreached:
+        click.echo(f"      {unreached.tool} — {unreached.why}", err=True)
 
 
 def _role_file_state(role_files: tuple[str, ...]) -> str:

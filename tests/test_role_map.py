@@ -17,9 +17,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.onboarding.flow_config import FlowConfigError
+from beadloom.onboarding.flow_config import (
+    SUPPORTED_TOOLS,
+    FlowConfig,
+    FlowConfigError,
+)
 from beadloom.onboarding.role_composer import ROLE_NAMES
-from beadloom.onboarding.role_map import RoleMapReport, role_map_report
+from beadloom.onboarding.role_map import (
+    _MAP_ARTIFACTS,
+    RoleMapReport,
+    role_map_report,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -181,3 +189,58 @@ def test_the_shipped_map_names_every_role_the_shipped_flow_composes(tmp_path: Pa
     assert report.rosters
     for roster in report.rosters:
         assert set(ROLE_NAMES) <= set(roster.names), (roster.source, roster.names)
+
+
+# --- BDL-068 `.84`: the corpus is the declared tool set ----------------------
+#
+# Derivation guards, not examples. Each holds `_MAP_ARTIFACTS` against the tool
+# population `flow.yml` validates against, so a release that adds a third tool
+# is reported by one of them rather than by an adopter.
+
+
+def test_every_declarable_tool_is_read_or_named_unreached(tmp_path: Path) -> None:
+    """The partition, over the tools `flow.yml` accepts rather than a literal.
+
+    A tool added to `SUPPORTED_TOOLS` with no row in `_MAP_ARTIFACTS` lands in
+    `unreached` and is stated; the failure this forbids is the third outcome —
+    a declared tool that is neither judged nor named.
+    """
+    root = _project(tmp_path, "\n")
+    for tool in SUPPORTED_TOOLS:
+        config = FlowConfig(tools=(tool,), architecture="ddd", stack=("python",))
+        report = role_map_report(root, config)
+        covered = [a.tool for a in report.artifacts] + [u.tool for u in report.unreached]
+        assert covered == [tool], (tool, covered)
+
+
+def test_the_artifact_table_names_no_tool_a_project_cannot_declare() -> None:
+    """A row for a tool `flow.yml` rejects would be a corpus nothing can select."""
+    assert set(_MAP_ARTIFACTS) <= set(SUPPORTED_TOOLS)
+
+
+def test_a_tool_with_no_map_artifact_raises_nothing_and_judges_nothing(
+    tmp_path: Path,
+) -> None:
+    """The unreached branch, reached through the seam `flow.yml` cannot express.
+
+    The failure mode this forbids is a `KeyError` out of the lookup: a release
+    that adds a tool to `SUPPORTED_TOOLS` and forgets the map row must degrade
+    to a stated population, not to a traceback on the Gate surface.
+    """
+    root = _project(tmp_path, "\n")
+    config = FlowConfig(tools=("windsurf",), architecture="ddd", stack=("python",))
+    report = role_map_report(root, config)
+    assert report.artifacts == ()
+    assert report.findings == ()
+    assert report.references == ()
+    assert [entry.tool for entry in report.unreached] == ["windsurf"]
+
+
+def test_a_finding_names_the_artifact_and_the_tool_it_is_about(tmp_path: Path) -> None:
+    """Two maps in one run means a finding without its artifact is unactionable."""
+    body = '\nLaunch it with `Agent(subagent_type="scout")`.\n'
+    report = role_map_report(_project(tmp_path, body))
+    for finding in report.findings:
+        assert finding.tool == "claude"
+        assert finding.artifact == ".claude/CLAUDE.md"
+        assert finding.artifact in finding.why

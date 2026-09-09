@@ -29,7 +29,9 @@ expected result rather than drift (BDL-UX #139, #152).
 The pointer's list of roles is **rendered over `ROLE_NAMES`**, not typed into it (BDL-068
 S1.5). It used to spell the four names as prose, so a fifth role reached the composer, the
 adapters and the drift-guard and was absent from the one file that tells a Cursor user which
-roles exist.
+roles exist. Since BDL-068 `.84` that rendering is also checked: `role-map` reads the
+pointer's composed body as the map a `cursor` project's reader opens, so a role the
+rendering stops covering is a finding rather than a silence.
 
 ### Orphaned adapters — a tool that leaves `flow.yml`
 
@@ -51,8 +53,8 @@ being watched. An undecodable body counts as diverged: `_write` writes UTF-8, so
 will not decode as UTF-8 is not the one Beadloom wrote.
 
 `.cursor/rules/beadloom-flow.md` is **not** in this population, for the reason it is the
-stated exception below: no check compares that pointer in either state, so calling it
-orphaned would imply it was guarded before the tool was dropped.
+stated exception below: no check compares that pointer on disk in either state, so calling
+it orphaned would imply it was guarded before the tool was dropped.
 
 Stated limit: provenance comes from the manifest, so a project whose
 `.beadloom/flow-manifest.json` was deleted has none and is under-reported here.
@@ -86,7 +88,11 @@ Stated limit: provenance comes from the manifest, so a project whose
 - **`.cursor/rules/beadloom-flow.md` is the stated exception**: it is rewritten
   unconditionally by both callers, because it is a four-line pointer whose own
   body says it is generated, it carries no composed protocol and no check
-  compares it. A residue named here rather than a policy defended.
+  compares the file against what Beadloom wrote. A residue named here rather
+  than a policy defended. Its composed **body** is read since BDL-068 `.84` by
+  [`role-map`](../role-map/SPEC.md), as the map a Cursor adopter opens to learn
+  which roles exist — a different question, and one that leaves the file on disk
+  as unguarded as this paragraph says it is.
 - Beadloom's own `.claude/agents/*` reproduce exactly from
   `compose_role(ddd, python)`.
 

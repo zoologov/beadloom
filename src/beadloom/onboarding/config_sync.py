@@ -864,6 +864,15 @@ def _role_map_drifts(project_root: Path) -> list[ConfigDrift]:
     map was written, and `Explore` — composed, invoked by two slash skills and
     named zero times in `CLAUDE.md` — is the first one that could expose it.
 
+    ONE MAP PER DECLARED TOOL since BDL-068 `.84`. The corpus is
+    ``config.tools``, so a cursor-only project is checked against
+    ``.cursor/rules/beadloom-flow.md`` — the document a Cursor agent reads —
+    rather than against a ``CLAUDE.md`` composition its flow does not declare. A
+    declared tool this release names no map artifact for is stated as an
+    unreached population by ``config-check`` and produces no drift here: the gap
+    is Beadloom's and failing a project for it would report the release's hole as
+    the adopter's.
+
     Severity comes from the finding rather than from here, and the two values
     mean two different things. A DESIGNATION (`subagent_type: …`,
     `agents/<name>.md`) was written on purpose, so a role it omits or a name it
@@ -887,7 +896,7 @@ def _role_map_drifts(project_root: Path) -> list[ConfigDrift]:
         return []
     return [
         ConfigDrift(
-            file=finding.sites[0] if finding.sites else CLAUDE_ARTIFACT_NAME,
+            file=finding.sites[0] if finding.sites else finding.artifact,
             reason=finding.why,
             severity=finding.severity,
             remediation=finding.remediation,

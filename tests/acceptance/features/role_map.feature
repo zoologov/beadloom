@@ -81,3 +81,46 @@ Feature: a role this flow composes is named in the map that enumerates roles
     Then every composed role is named in the map
     And every roster in the map names every composed role
     And no role map finding is reported
+
+  # BDL-068 `.84`, the S6 review's Major 1. Until it, `role_map_report` composed
+  # Claude's map for every project and never read `tools:`, so a cursor-only
+  # adopter's verdict was about a document their agent does not read while the
+  # one it does read -- `.cursor/rules/beadloom-flow.md`, whose body enumerates
+  # the roles -- was asked nothing. The map artifact is now derived per declared
+  # tool, and a tool this release names no map artifact for is an unreached
+  # population rather than a substitution.
+
+  @bead:beadloom-0mdo.84
+  Scenario: a cursor-only project is checked against the map a Cursor adopter reads
+    Given a project whose flow declares "cursor" alone
+    When the role map is checked
+    Then the map artifact read for "cursor" is ".cursor/rules/beadloom-flow.md"
+    And no map artifact is read for "claude"
+
+  @bead:beadloom-0mdo.84
+  Scenario: a role missing from one tool's map is a finding against that tool's artifact
+    Given a project whose flow declares "cursor" alone
+    And the flow composes a role named "scout"
+    When the role map is checked
+    Then "scout" is reported as a role the map names nowhere
+    And that finding names the tool "cursor" and the artifact ".cursor/rules/beadloom-flow.md"
+
+  @bead:beadloom-0mdo.84
+  Scenario: a declared tool with no map artifact is an unreached population, not another tool's map
+    Given the flow declares a tool this release ships no map artifact for
+    When the role map is checked
+    Then that tool is reported as unreached and its reason names it
+    And no map artifact is read for "claude"
+    And no role map finding is reported
+
+  @bead:beadloom-0mdo.84
+  Scenario: the report states its tool population on a clean run
+    Given a project running the flow exactly as this repository ships it
+    When the role map is checked
+    Then it states how many declared tools a map artifact was read for and how many were not
+
+  @bead:beadloom-0mdo.84
+  Scenario: the agent-config check names the tool axis of the role map
+    Given a project running the flow exactly as this repository ships it
+    When the agent-config check runs
+    Then its role-map block names each declared tool beside the artifact read for it

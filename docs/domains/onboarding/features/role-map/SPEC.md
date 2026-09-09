@@ -1,7 +1,7 @@
 # Role Map
 
-Checks that every role this flow composes is named in the document that enumerates
-roles, in both directions (BDL-068 S6, `beadloom-0mdo.59`, BDL-UX #252).
+Checks that every role this flow composes is named in the map each **declared tool's**
+reader opens, in both directions (BDL-068 S6, `beadloom-0mdo.59` and `.84`, BDL-UX #252).
 
 **Source:** `src/beadloom/onboarding/role_map.py`
 
@@ -62,12 +62,52 @@ enumerating all of it. Backticks are required for the comma form, because withou
 `subagent_type` run, because a comma swallows `, run_in_background=True` and reports `run`
 as a role this flow does not ship.
 
+### One map per declared tool
+
+The corpus is derived from `config.tools`, one artifact each, and every finding carries the
+`tool` and the `artifact` it is about.
+
+| Tool | The map its reader opens | Where the body comes from |
+|---|---|---|
+| `claude` | `.claude/CLAUDE.md` | the composed core + overlays + the project layer |
+| `cursor` | `.cursor/rules/beadloom-flow.md` | the orchestrator pointer `role-adapters` renders over `ROLE_NAMES` |
+
+Both corpora are the **composition**, never the file on disk — the same choice `role-duties`
+makes, and for the same reason: a verdict about the file an adopter happens to hold is a
+verdict about their edit, while a verdict about the composition is a verdict about the
+release. The cursor artifact's one fragment is labelled with the path the pointer is written
+to, because that is what a reader opens.
+
+Each map owes the whole role population on its own, so judgement runs per artifact: a role
+named in one tool's map is not thereby named in the other's.
+
+Until `beadloom-0mdo.84` this was a literal. `role_map_report` called
+`compose("claude", "CLAUDE")` unconditionally and never read `tools:`, so a project
+declaring `cursor` alone was judged against a composition its flow does not declare, while
+the map its agent does read was asked nothing — BDL-UX #252's own class, one axis over,
+inside the check written to close it. The S6 review (`beadloom-0mdo.70`, Major 1) recorded
+it against CONTEXT's constraint that no check is added that cannot fail.
+
+### A declared tool with no map artifact is an unreached population
+
+`RoleMapReport.unreached` names every declared tool this release has no map artifact for.
+It is a **stated population, not a finding**, for the reason `not_judged` is one: the gap
+belongs to Beadloom, which would be composing adapters for a tool while shipping no map for
+it, and reporting it as the adopter's drift would fail their project for a hole in the
+release they installed. `config-check` prints the count on every run, at zero too — "every
+declared tool's map was read" is the fact a reader needs, and an empty list is not it.
+
+`SUPPORTED_TOOLS` currently holds `claude` and `cursor` and the table above has a row for
+each, so the unreached population is empty on every project that can be declared today. The
+branch is reached through the `config` argument, which is how a release that adds a third
+tool meets it before an adopter does.
+
 ### The three findings
 
-`role_map_report(project_root)` composes `CLAUDE.md` for the project's `flow.yml` plus its
-project layer, reads both construct kinds out of each **fragment** (so a finding names the
-file and line to open rather than the artifact the text ended up in), and reports one
-finding per role, naming every site.
+`role_map_report(project_root)` derives one map artifact per declared tool, reads both
+construct kinds out of each **fragment** (so a finding names the file and line to open
+rather than the artifact the text ended up in), and reports one finding per role per map,
+naming every site.
 
 | Kind | Fires when | Severity |
 |---|---|---|
@@ -85,25 +125,37 @@ severity from the kind of roster that omitted the role.
 `RoleMapReport.not_judged` names every line that mentions two or more roles in a shape no
 construct reads. Some of them should enumerate every role and some should not — a wave
 order `dev → test → review → tech-writer` names four roles and `Explore` is not a wave —
-and this derivation cannot tell them apart, so it names them instead of deciding. Measured
-on the shipped template after the fix: 16 designations, 6 of them rosters, and 5 not-judged
-lines. It prints on a clean run too, because a check that speaks only when it finds
-something hands the reader a clean list, and a clean list is trusted and stopped at.
+and this derivation cannot tell them apart, so it names them instead of deciding. It prints
+on a clean run too, because a check that speaks only when it finds something hands the
+reader a clean list, and a clean list is trusted and stopped at.
 
-The corpus is `CLAUDE.md` and nothing else. A role named in a slash command and absent from
-the map is outside this check and inside `role-duties`, which reads every composed
+Measured on 2026-09-10, on the two corpora this release can read:
+
+| Corpus | Designations | Of them rosters | Not judged | Findings |
+|---|---|---|---|---|
+| `.claude/CLAUDE.md`, this repository's declaration | 16 | 6 | 5 | 0 |
+| `.cursor/rules/beadloom-flow.md`, a `cursor`-only project | 1 | 1 | 2 | 0 |
+
+The cursor pointer's one designation is its brace expansion `.cursor/agents/{…}.md`, which
+names every composed role; its two unjudged lines are the ` / `-joined roster on line 4 and
+a sentence on line 11 that mentions `review`, `dev` and `test` as ordinary words.
+
+The corpus is the tool's map and nothing else. A role named in a slash command and absent
+from the map is outside this check and inside `role-duties`, which reads every composed
 artifact.
 
 ### Modules
 
-- **role_map.py** — `role_map_report()`, `RoleMapReport`, `RoleReference`,
-  `RoleMapFinding`, `UnjudgedLine`.
+- **role_map.py** — `role_map_report()`, `RoleMapReport`, `MapArtifact`, `UnreachedTool`,
+  `RoleReference`, `RoleMapFinding`, `UnjudgedLine`.
 
-The `roles` keyword argument is the only seam. It defaults to the derived population, which
-is the value production passes; a caller varies it to ask the question of a population
-other than the running flow's, which is how the check is demonstrated red on a sixth role
-without writing a sixth fragment into a templates directory every concurrent run in the
-same working tree also reads.
+Two seams, and neither is used by production. `roles` defaults to the derived population; a
+caller varies it to ask the question of a population other than the running flow's, which is
+how the check is demonstrated red on a sixth role without writing a sixth fragment into a
+templates directory every concurrent run in the same working tree also reads. `config`
+defaults to the project's resolved `flow.yml`; a caller varies it to ask the question of a
+tool set `flow.yml` cannot express, which is how the unreached branch is measured before a
+release makes it reachable.
 
 ### Where the findings surface
 
@@ -112,15 +164,39 @@ same channel as the rest of the agent-config drift. They are never `fixable`: th
 a sentence in the map, and `--fix` writes compositions rather than prose. Offering it would
 be the BDL-UX #186 shape — recommending the command that will decline.
 
-`beadloom config-check` prints the corpus it read and the not-judged population on every
-run of a project that has a `flow.yml`.
+`beadloom config-check` prints, on every run of a project that has a `flow.yml`: how many
+of the declared tools a map was read for, each tool beside its artifact and the designation
+count in it, the unreached count with its reasons, and the not-judged lines with the
+artifact each belongs to.
+
+```
+  Role map: 5 composed role(s), checked against the map of 1 of 1 declared tool(s) —
+  16 role designation(s), 6 of which enumerate two or more.
+    Maps read (1):
+      claude -> .claude/CLAUDE.md: 16 designation(s)
+    Unreached: 0 of 1 declared tool(s) — a map artifact was read for every tool this
+    project declares.
+    Not judged (5):
+      …/templates/agentic_flow/CLAUDE.md.txt:37 (in .claude/CLAUDE.md) — …
+```
+
+The unreached line is a sentence at zero and a list above it. An empty list under a heading
+reads as "nothing to say here", which is the wrong half of what zero means.
 
 ## Acceptance
 
 `tests/acceptance/features/role_map.feature` — both directions, the prose that is not a
 designation, the severity split between a designation and an inferred roster, the
 not-judged population, the finding reaching `config-check`, and the shipped flow's own map
-checked against the roles it composes.
+checked against the roles it composes. Since `beadloom-0mdo.84`, also the tool axis: a
+cursor-only project checked against the Cursor map, a finding naming that artifact, a
+declared tool with no map artifact reported unreached rather than substituted, the tool
+population stated on a clean run, and the tool axis reaching the `config-check` output.
+
+`tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py` holds the same questions
+against `tests/adopter_flow.py`'s cursor-only arrangement, which is where the defect was
+invisible on this repository: Beadloom declares `claude` alone, so every verdict this
+project takes is about the one corpus that was never wrong.
 
 ## Related
 
@@ -130,4 +206,7 @@ checked against the roles it composes.
   that role's composed core
 - `flow-composer` — `compose()`, whose `Composition.fragments` supply the provenance every
   finding's site comes from
+- `role-adapters` — writes the Cursor orchestrator pointer this check reads as the `cursor`
+  map, and states separately that no check compares that file on disk
+- `flow-config` — `config.tools`, the population the corpus is derived from
 - `config-check` — the channel the findings block through

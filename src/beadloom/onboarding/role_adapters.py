@@ -31,8 +31,15 @@ answered one hand edit two ways and an adopter could not predict which of their
 edits survived (BDL-UX #191). The exception, stated rather than left to be
 discovered: ``.cursor/rules/beadloom-flow.md`` is rewritten unconditionally. It
 is a four-line pointer whose own body says it is generated, it carries no
-composed protocol, and no check compares it — a residue this module names rather
-than a fourth policy it defends.
+composed protocol, and no check compares the FILE against what Beadloom wrote —
+a residue this module names rather than a fourth policy it defends.
+
+Since BDL-068 `.84` its composed BODY is read by
+:func:`~beadloom.onboarding.role_map.role_map_report`, as the map a Cursor
+adopter opens to learn which roles exist. That is a different question from the
+one above -- it asks whether the roster covers the role population, not whether
+the file on disk is still the one Beadloom wrote -- and it does not make the
+pointer guarded on disk.
 """
 
 from __future__ import annotations
@@ -250,9 +257,10 @@ def orphaned_adapters(
 
     THE NAMED EXCLUSION: ``.cursor/rules/beadloom-flow.md``. It is in the
     manifest and it is equally unclaimed, and it is not an orphaned ADAPTER.
-    This module's own contract already says no check compares that pointer in
-    either state, so calling it orphaned would imply it was guarded before the
-    tool was dropped.
+    This module's own contract already says no check compares that pointer on
+    disk in either state -- the role map reads its composed body, not the file
+    -- so calling it orphaned would imply it was guarded before the tool was
+    dropped.
     """
     declared = set(config.tools)
     manifest = load_manifest(project_root)

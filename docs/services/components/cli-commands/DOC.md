@@ -63,7 +63,8 @@ is what holds that line.
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
 owns no runner to hang a step on); whenever a project declares at least one duty, the
 population `role_duties.duty_report()` could not inspect; and, for any project with a
-`flow.yml`, the corpus and the not-judged population of `role_map.role_map_report()`.
+`flow.yml`, the per-tool corpora, the unreached tools and the not-judged population of
+`role_map.role_map_report()`.
 
 The last two print on the clean path as well as the blocking one: a check that speaks only
 when it finds something hands the reader a clean list, and a clean list is trusted and
@@ -77,13 +78,21 @@ was told a duty was checked over ten composed artifacts with no blocking drift, 
 of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
 exit code is unchanged: an unscaffolded project is not in drift.
 
-The role-map block (BDL-068 S6, BDL-UX #252) names how many roles this flow composes, how
-many role designations the composed `CLAUDE.md` carries and how many of those enumerate two
-or more, then lists every line that mentions two or more roles in a shape the derivation
-does not read. It names them rather than judging them, because some of those lines should
-enumerate every role and some should not: a wave order `dev → test → review → tech-writer`
-names four roles and `Explore` is not a wave. Measured on the shipped template: 16
-designations, 6 of them rosters, 5 not-judged lines.
+The role-map block (BDL-068 S6, BDL-UX #252) names how many roles this flow composes and how
+many of the DECLARED TOOLS a map artifact was read for, then one line per map — the tool, the
+artifact its reader opens and the designation count in it — then the unreached tools, then
+every line that mentions two or more roles in a shape the derivation does not read. It names
+those rather than judging them, because some of them should enumerate every role and some
+should not: a wave order `dev → test → review → tech-writer` names four roles and `Explore`
+is not a wave.
+
+The tool axis is printed since BDL-068 `.84`, and printed at zero: `Unreached: 0 of 1
+declared tool(s)` is a sentence rather than an empty list, because an empty list under a
+heading reads as "nothing to say here". Before `.84` the block named the composed
+`CLAUDE.md` for every project, including one whose `flow.yml` declares `cursor` alone.
+Measured on this repository, which declares `claude` alone: 1 of 1 tool, 16 designations, 6
+of them rosters, 5 not-judged lines. On a `cursor`-only project: 1 of 1 tool,
+`.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines.
 
 `guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
 not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the
