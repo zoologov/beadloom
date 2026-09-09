@@ -271,6 +271,25 @@ in `tests/test_the_document_every_bead_writes.py` holds that claim as an
 executable, so a schema that later gives a document two owners is found by a red
 test.
 
+**The shared population is wider than the documents, and the derivation cannot
+reach all of it.** Measured in the same slice by `beadloom-0mdo.59`: three beads
+whose code scopes are disjoint shared four artifacts —
+`.claude/development/docs/features/BDL-068/ACTIVE.md`,
+`docs/services/components/cli-commands/DOC.md`,
+`tests/test_bead77_kind_and_root_disagree.py` and `.beadloom/_graph/services.yml`.
+Two of those are not documents: one is a test carrying hand-maintained population
+literals that any bead adding a node has to bump, and the other is the graph this
+plan derives its scopes FROM. A derivation of ownership out of the graph cannot
+reach the graph, because the graph is its input. The `focus-document` medium
+names one member of that population; the rest is filed rather than absorbed.
+
+**Taking the landing lock does not prevent the collision, and that was measured
+rather than reasoned about.** The fourth instance in the slice was an agent that
+did everything the flow asks: it acquired the merge slot with `--holder`, waited,
+and 43 lines of its `ACTIVE.md` entry still landed inside a neighbour's commit.
+The lock orders the COMMITS; the edit had already happened. That is the same
+sentence the `landing-order` medium states, met from the other side.
+
 **Which document, and whose.** The kind is derived, never spelled:
 `Routing.shared_kinds` is the intersection of the document kinds every route of
 the composed `/task-init` writes, beside the two difference properties that

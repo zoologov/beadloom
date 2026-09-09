@@ -204,6 +204,15 @@ project that adds a work-item type, or moves a document between the two flows, c
 this medium looks at by the same act. Widening a bead's `refs:` to reach the document is the
 defect BDL-UX #232 was filed against and is not how this is answered.
 
+**Four confirmations in one slice, and the fourth is the one to read.** An agent acquired the
+merge slot with `--holder`, waited, and 43 lines of its `ACTIVE.md` entry still landed inside a
+neighbour's commit. The discipline was followed exactly: the lock orders the COMMITS, and the
+edit had already happened. A third instance measured that the shared population is wider than
+the documents — three beads with disjoint code scopes shared four artifacts, two of which are
+not documents at all, and one of which is `.beadloom/_graph/services.yml`, the graph this plan
+derives its scopes FROM. A derivation of ownership out of the graph cannot reach the graph.
+`focus-document` names one member of that population and does not claim to name the rest.
+
 **What the check asks is not whether the beads share it — they do — but whether the document
 gives each of them a place of its own.** A bead the table carries no row for has only the prose
 around it, and that is where one bead's hunk lands inside another bead's commit. The damage is

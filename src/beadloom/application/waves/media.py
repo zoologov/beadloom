@@ -25,7 +25,11 @@ about:
 * the **focus document** is one file per work item that every one of its beads
   writes and no bead's code owns, so a plan that resolves a bead to the nodes and
   files its CODE occupies reports ``0 serialisations`` truthfully about the wrong
-  population (BDL-UX #257).
+  population (BDL-UX #257). Confirmed four times in one slice, the last of them
+  by an agent that did everything right: it took the landing lock in the form
+  that grants it, waited, and its 43-line entry still landed inside a
+  neighbour's commit — because the lock orders the COMMITS and the edit had
+  already happened.
 
 **Why the focus document is a medium and not a serialisation** (BDL-UX #257).
 It cannot be one: ``docs.ref_id`` holds at most one node per document, and
@@ -39,6 +43,16 @@ cannot fail. And it could not reach the measured case regardless: BDL-068's
 ACTIVE.md is in the docs table nowhere, and the wave-2 collision was over
 ``docs/domains/application/README.md``, owned by ``application`` — an ancestor of
 one of the two scopes and of neither.
+
+**And the shared population is wider than the documents.** Measured in the same
+slice by `beadloom-0mdo.59`: four artifacts were shared by three beads whose code
+scopes are disjoint, and two of them are not documents — a test file carrying
+hand-maintained population literals that any bead adding a node has to bump, and
+``.beadloom/_graph/services.yml``, which is the graph this plan derives its
+scopes FROM. The self-reference is worth stating rather than leaving for a reader
+to find: a derivation of ownership out of the graph cannot reach the graph,
+because the graph is its input. Naming the focus document is one member of that
+population and not the whole of it; the rest is filed rather than absorbed here.
 
 So the media are STATED by every wave, at every size, each with the evidence it
 comes from. A shape that quietly claimed independence in these six would be
@@ -142,7 +156,11 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
             "stage that file by path with your own commit, and never commit it "
             "whole: a hunk written by one bead and committed by another is "
             "correct in the tree and wrong in the history, which is a defect "
-            "whose only symptom is a wrong author."
+            "whose only symptom is a wrong author. Taking the landing lock does "
+            "not prevent it, measured: a bead that acquired the slot in the form "
+            "that grants it, and waited, still had 43 lines of its entry "
+            "committed by a neighbour — the lock orders the commits and the edit "
+            "had already happened."
         ),
         evidence="BDL-UX #257",
     ),
