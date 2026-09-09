@@ -57,6 +57,10 @@ tree's blindness, and `TestTheDefectVerbatim` in `tests/test_unjudged_versions.p
 directions: a `git` release in a `.git`-less directory is not stale, and this project's own
 version in that same directory still is.
 
+Closed as `a69aa06`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
+`bd ready --limit 0` lists neither, which is the tracker-answer shape this flow already
+documents: the suggestion is a candidate list that does not re-check the other blockers.
+
 ## Progress
 
 - [x] PRD, RFC, CONTEXT, PLAN approved 2026-09-02
