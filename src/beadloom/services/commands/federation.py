@@ -408,11 +408,18 @@ def ci(
     if fmt is None:
         fmt = "rich" if sys.stdout.isatty() else "github"
 
+    # The tracker adapter is wired in HERE and not inside the gate: the `bd` seam
+    # lives in this layer, and the application layer must not import it
+    # (`architecture-layers`, severity error). Same reason `guard_probes` binds
+    # the flow guards at the CLI boundary.
+    from beadloom.services.guard_probes import BdWorkTracker
+
     result = run_ci_gate(
         project_root,
         fail_on=fail_set,
         hub_exports=list(hub),
         no_reindex=no_reindex,
+        tracker=BdWorkTracker(project_root),
     )
 
     output = _format_gate(result, fmt)
@@ -453,6 +460,7 @@ def _format_gate_rich(result: GateResult) -> str:
     lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
     lines.extend(_gate_room_lines(result))
     lines.extend(_gate_coverage_lines(result))
+    lines.extend(_gate_ownership_lines(result))
     return "\n".join(lines)
 
 
@@ -502,6 +510,21 @@ def _gate_coverage_lines(result: GateResult) -> list[str]:
     return gate_coverage_lines(result.coverage)
 
 
+def _gate_ownership_lines(result: GateResult) -> list[str]:
+    """Who owns what this run found, held against the beads claimed now.
+
+    Under the verdict with the room and the coverage, and for the same reason:
+    it changes no status and no exit code. What it removes is the message a
+    coordinator had to write by hand for every gate owner of two waves — that
+    the red on the branch was not theirs (BDL-068 S6).
+    """
+    from beadloom.application.gate_ownership import gate_ownership_lines
+
+    if result.ownership is None:
+        return []
+    return gate_ownership_lines(result.ownership)
+
+
 def _format_gate_json(result: GateResult) -> str:
     """Structured JSON: ``ok`` + per-step status + shared-shape findings."""
     steps = [
@@ -528,6 +551,26 @@ def _format_gate_json(result: GateResult) -> str:
                 {"source": u.source, "why": u.why} for u in coverage.unresolved
             ],
             "inspected": coverage.inspected,
+        }
+    ownership = result.ownership
+    if ownership is not None:
+        payload["ownership"] = {
+            "reason": ownership.reason,
+            "claimed": list(ownership.claimed),
+            "none_owned": ownership.none_owned,
+            "findings": [
+                {
+                    "rule": owner.rule,
+                    "verdict": owner.verdict,
+                    "node": owner.node,
+                    "beads": list(owner.beads),
+                    "where": owner.where,
+                }
+                for owner in ownership.owners
+            ],
+            "unread_claims": [
+                {"bead": claim.bead_id, "why": claim.why} for claim in ownership.unread
+            ],
         }
     census = result.room
     if census is not None:
@@ -570,6 +613,7 @@ def _format_gate_github(result: GateResult) -> str:
             f"{v.duty} (`{v.command}`)" for v in result.coverage.not_performed
         )
         lines.append(f"::notice::not run by this gate: {named}")
+    lines.extend(_gate_ownership_notices(result))
     for f in result.findings:
         level = "error" if f.get("severity") == "error" else "warning"
         param = _finding_github_params(f)
@@ -580,6 +624,24 @@ def _format_gate_github(result: GateResult) -> str:
         msg = msg.replace("\r\n", "%0A").replace("\n", "%0A").replace("\r", "%0A")
         lines.append(f"::{level}{param}::{msg}")
     return "\n".join(lines)
+
+
+def _gate_ownership_notices(result: GateResult) -> list[str]:
+    """The ownership block as GitHub notices — the same claim, one line each."""
+    ownership = result.ownership
+    if ownership is None:
+        return []
+    if ownership.reason is not None:
+        return [f"::notice::findings by owner: {ownership.reason}"]
+    lines = [
+        f"::notice::owned by {bead}: {count} finding(s)"
+        for bead, count in ownership.by_bead()
+    ]
+    if ownership.none_owned:
+        lines.append(
+            "::notice::no finding of this run is owned by a bead claimed now"
+        )
+    return lines
 
 
 def _finding_github_params(finding: dict[str, object]) -> str:

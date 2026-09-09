@@ -941,6 +941,16 @@ Checks read the world exclusively through the ports in `contract.py`. The
 concrete probes live in `services/guard_probes.py` because the `bd` seam is in
 the services layer, which the application layer must not import.
 
+`ClaimedBead` carries a third field beside `id` and `title`: `declaration`,
+everything the bead says about itself, joined by the wave planner's own
+`compose_declaration`. It was added for the Gate's ownership report (BDL-068 S6),
+which asks what NODES a claim covers and cannot answer that from an id and a
+title. No shipped guard reads it — `bead-claimed` deliberately still decides
+nothing about whether the claimed bead's scope covers the path, which is the
+`not_covered` clause it has carried since BDL-061 S1 — and the field is empty
+when the adapter had nothing to compose, which reads as a bead that declares no
+scope rather than one whose scope is everything.
+
 ## Related
 
 - `docs/services/components/guard-probes/DOC.md` — the real `bd` / `git` probes

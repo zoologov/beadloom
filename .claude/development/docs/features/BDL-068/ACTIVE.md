@@ -1273,6 +1273,48 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      **As its own gate owner, separately:** the combined tree is green — `pytest` 9 738 passed
      / 0 failed, `beadloom sync-check` rc 0 and `beadloom lint --strict` rc 0.
 
+  - [x] `.78` — **a Gate finding names its owner.** Offered by `.76` as its gate-owner report,
+     and it answers a defect this slice PRODUCED: the branch carried a red Gate across two
+     waves of S6 — two stale docs owned by no bead in the running plan — and every gate owner
+     in those waves had to be told by the coordinator, by hand, that the red was not theirs.
+     S6, concurrent with `.83` and `beadloom-ec1a`; **not the gate owner** — `beadloom-ec1a` is.
+     **THE CLAIM IS A BEAD, and the other two populations lose for stated reasons.** The owner
+     is a bead the tracker reports `in_progress` now, and the nodes its own `refs:` declare —
+     the population `bead-claimed` reads, through the same port, parsed by the wave planner's
+     own `resolve_scope`. The work item's `## Axes` lose because they answer `scope-check`'s
+     question, which is a step of the same run, and name the work item every agent on one
+     branch shares. A wave's plan loses because it names beads that have not started and beads
+     whose wave is over, and states what should run rather than what is running.
+     **THREE VERDICTS, because they are three facts.** `owned` names the beads; `unowned` says
+     a node was derived and no claim covers it; `unattributed` says no node could be derived at
+     all. A tracker that cannot answer, and a project with no index, are a reason on the whole
+     report rather than a page of `unowned` — and a claimed bead whose own declaration cannot
+     be read qualifies every `unowned` in the same run.
+     **It changes no verdict and no exit code**, and the tracker is asked only when the run
+     produced a finding. A finding reaches its node through the finding's own `node` field,
+     then through source ownership of a location path, then through the documented node of a
+     doc path — all read through the index, never by opening a graph file by name, which is
+     what let `.80` replace `services.yml` with 100 per-node files unnoticed. `_sync_finding`
+     now carries `node`: the two stale docs that produced this defect named their `ref_id` in
+     English prose and nowhere a reader could join on.
+     22 unit tests and 5 acceptance scenarios, RED verified twice — with the module absent the
+     file does not collect, and then five targeted mutations were each caught by exactly the
+     assertions that should catch them, against a no-op control that stayed green. The fifth
+     scenario, `naming the owner of a finding does not change the verdict`, is a guard meant to
+     stay green and was never red; declared here with its reason.
+     **Green in a clean room at `room-beadloom-0mdo.78` over 19 carried files: 9 718 passed,
+     59 skipped, 14 xfailed, 0 failed**, `ruff` and `mypy` rc 0 there, `beadloom ci` rc 0 there.
+     **That room's freshness population is 0 of 452 pairs verified** — it carries no `.git`, so
+     every pair reads `not verified` for want of a baseline. Darwin arm64 / CPython 3.13.7,
+     extras `dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**; `mypy`
+     rc 0 on the tree against all four declared target versions, which varies the version the
+     checker is ASKED about and not the interpreter it runs under.
+     **Not the gate owner, so no claim about the combined tree.** Observed on it: `beadloom ci`
+     rc 0, and the new block printing the sentence this bead exists to remove from a
+     coordinator's keyboard — `no finding of this run is owned by a bead claimed now (claimed:
+     beadloom-0mdo.69, beadloom-0mdo.78, beadloom-ec1a, beadloom-txeq)`, with 31 unowned over
+     31 nodes, 165 unattributed, and 2 of the 4 claims unreadable.
+
   - [ ] `beadloom-ec1a` — **config-check flags ORPHANED tool adapters.** The bead carried a
      title and no description, so the premise was measured before anything was built, and it
      REPRODUCES. Rig: scaffold `--tool claude --tool cursor`, then drop `cursor` from

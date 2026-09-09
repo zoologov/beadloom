@@ -310,6 +310,31 @@ is told the population is empty with that limit named, never that nothing is lef
 
 **It is not a step either.** Same `ok`, same exit code, same findings.
 
+### The verdict names who owns what it found
+
+The branch that built this feature carried a red Gate across two waves of BDL-068 S6 — two
+stale docs owned by no bead in the running plan — and every gate owner in those waves had to
+be told by the coordinator, by hand, that the red was not theirs, so their reports would
+attribute the finding rather than discount it. A known red trains its reader to discount the
+next one, and the cost is never the red itself but the work of proving a second finding is
+real against a background that already holds one.
+
+`GateResult` therefore carries a `GateOwnership` beside its room census and its coverage
+statement: one verdict per finding, held against the beads the tracker reports claimed while
+the run happened. `owned` names the beads. `unowned` says a node was derived and no claim
+covers it. `unattributed` says no node could be derived from the finding at all, which is a
+different absence and must not read as the same one. A tracker that cannot answer, and a
+project with no index, are a reason on the whole report rather than a page of `unowned`.
+
+**The claim is a bead, not the branch's approval.** The work item's `## Axes` answer whether a
+change is inside the approval, which the `scope-check` step of this same run already asks, and
+which every agent on one branch shares; a wave's plan names beads that have not started and
+beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and the three routes a
+finding takes to reach a node.
+
+**It is not a step either, and the tracker is asked only when there is a finding.** Same `ok`,
+same exit code, same findings; a green run attributes nothing and shells out to nothing.
+
 ## Invariants
 
 - Every step runs; the gate never short-circuits on the first failure.
@@ -327,6 +352,10 @@ is told the population is empty with that limit named, never that nothing is lef
 - The coverage block never changes the verdict either, and
   `tests/test_gate_not_run.py` fails if it starts to. It names a verification
   only when the project's own pipeline declares one this report can read.
+- The ownership block never changes the verdict either, and
+  `tests/test_gate_finding_owner.py` fails if it starts to. A finding nobody
+  claims is still a finding; a gate that went green because no bead owned a red
+  would be the false green this whole slice exists to remove.
 - `fail_on=None` selects the safe default federate set
   (`breaking,drift,orphaned_consumer,undeclared_producer`); the
   no-false-gate verdicts are never included.
@@ -342,14 +371,18 @@ Module `src/beadloom/application/gate.py`:
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
   `RoomCensus | None`), the coverage statement (`coverage`, a
-  `GateCoverage | None`), plus the `ok` and `findings` properties. `None` means
+  `GateCoverage | None`), the ownership report (`ownership`, a
+  `GateOwnership | None`), plus the `ok` and `findings` properties. `None` means
   nothing derived it, and a surface that was not told makes no claim.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
-  performed_elsewhere=()) -> GateResult` — run every gate step and aggregate the
-  result. `performed_elsewhere` names verifications the CALLER runs beside the
-  gate, in the vocabulary a step would use: the MCP `complete_bead` tool runs the
-  suite itself and passes `("tests",)`, so one run cannot report the suite as not
-  run while that run ran it.
+  performed_elsewhere=(), tracker=None) -> GateResult` — run every gate step and
+  aggregate the result. `performed_elsewhere` names verifications the CALLER runs
+  beside the gate, in the vocabulary a step would use: the MCP `complete_bead`
+  tool runs the suite itself and passes `("tests",)`, so one run cannot report
+  the suite as not run while that run ran it. `tracker` is the read port over the
+  work tracker, supplied by the service that runs the gate because the `bd` seam
+  lives in the services layer this one must not import; a run given none makes no
+  ownership claim rather than reporting every finding as owned by nobody.
 
 Module `src/beadloom/application/gate_coverage.py`:
 
@@ -357,8 +390,14 @@ Module `src/beadloom/application/gate_coverage.py`:
   verifications the project declares that `performed` does not cover.
 - `gate_coverage_lines(coverage) -> list[str]` — the block all surfaces quote.
 
+Module `src/beadloom/application/gate_ownership.py`:
+
+- `derive_gate_ownership(project_root, *, findings, tracker) -> GateOwnership` —
+  one verdict per finding, held against the beads the tracker reports claimed.
+- `gate_ownership_lines(ownership) -> list[str]` — the block all surfaces quote.
+
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
-`tests/test_gate_not_run.py`,
+`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
 `tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`

@@ -25,7 +25,12 @@ inward.
   `bd list --status in_progress --json --limit 0`, with the status re-checked
   client-side as belt-and-braces. Returns `None` (not an empty tuple) when the
   project has no `.beads/` directory, when `bd` is not installed, or when the
-  call fails.
+  call fails. Each `ClaimedBead` carries a `declaration` composed with the wave
+  planner's own `compose_declaration`, not by joining the tracker's fields here:
+  the Gate's ownership report and the wave plan read one declaration through one
+  parser, so they cannot come to disagree about what a bead said. `bd list
+  --json` omits a field a bead does not carry, which the joiner already treats as
+  an empty one.
 - `UNLIMITED` — the `--limit` value that lifts bd's 50-row page.
 - `GitWorkspace` — `current_branch()` via `git branch --show-current`, which
   answers correctly on an unborn branch and prints nothing on a detached HEAD.

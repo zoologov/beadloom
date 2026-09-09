@@ -49,6 +49,7 @@ from beadloom.services.bd_seam.creation import (
     allocated_ids,
     graph_plan,
 )
+from beadloom.services.guard_probes import BdWorkTracker
 
 if TYPE_CHECKING:
     import sqlite3
@@ -856,6 +857,29 @@ def _not_run(gate: GateResult) -> list[str]:
     return [item.duty for item in gate.coverage.not_performed]
 
 
+def _finding_owners(gate: GateResult) -> dict[str, object]:
+    """Which bead claimed now owns each finding this run is refusing to close on.
+
+    The agent reading this holds one of those beads, so the distinction it needs
+    is between a finding its own claim covers and one nobody's does. A report
+    that could not be produced states its reason rather than an empty list, so
+    "nobody owns these" and "nobody was asked" do not read alike (BDL-068 S6).
+    """
+    ownership = gate.ownership
+    if ownership is None:
+        return {}
+    return {
+        "reason": ownership.reason,
+        "claimed": list(ownership.claimed),
+        "none_owned": ownership.none_owned,
+        "findings": [
+            {"rule": owner.rule, "verdict": owner.verdict, "node": owner.node,
+             "beads": list(owner.beads)}
+            for owner in ownership.owners
+        ],
+    }
+
+
 def handle_complete_bead(
     project_root: Path,
     *,
@@ -895,6 +919,9 @@ def handle_complete_bead(
         hub_exports=[],
         no_reindex=False,
         performed_elsewhere=("tests",) if run_tests else (),
+        # The tracker adapter is wired in from this layer: the `bd` seam lives
+        # here and the application layer must not import it.
+        tracker=BdWorkTracker(project_root),
     )
     findings: list[dict[str, object]] = list(gate.findings)
     gate_ok = gate.ok
@@ -923,6 +950,7 @@ def handle_complete_bead(
             "findings": findings,
             "room": room,
             "not_run": not_run,
+            "owners": _finding_owners(gate),
         }
 
     try:

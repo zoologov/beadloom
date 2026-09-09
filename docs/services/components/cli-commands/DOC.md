@@ -231,6 +231,20 @@ Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph
 silently.
 
+## The one adapter these commands wire in
+
+The rule above — parse, call one entry point, render — has one deliberate
+exception, and it is a wiring decision rather than a computation. `ci` constructs
+`services.guard_probes.BdWorkTracker` and hands it to `run_ci_gate`, because the
+Gate's ownership report (BDL-068 S6) has to ask the tracker which beads are
+claimed and the `bd` seam lives in THIS layer: `architecture-layers` (severity
+`error`) forbids the application layer from importing it. The command decides
+nothing about ownership; it supplies the port and renders the block the
+application layer computed, under the verdict beside the room and coverage lines.
+`--format json` carries the same report as `ownership`, and `--format github`
+renders one `::notice::` per owning bead plus the headline when nothing is owned.
+It is the same arrangement `guard` already uses for the flow guards.
+
 ## The one command that ends in a verdict
 
 `init` renders its summary and then runs one more application call before it returns: the

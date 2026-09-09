@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
+from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
 from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.doctor import Check
+    from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.doc_quality import QualityFinding
     from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
@@ -186,6 +188,20 @@ class GateResult:
     not told makes no claim about the suite (BDL-UX #247).
     """
 
+    ownership: GateOwnership | None = None
+    """Who owns each finding of this run, held against the beads claimed now.
+
+    The third qualification the verdict carries, and not a step either: naming
+    the owner of a finding changes no status and no exit code. A finding nobody
+    claims is still a finding, and a gate that went green because no bead owned
+    a red would be the false green this epic exists to remove.
+
+    ``None`` means no work tracker was supplied to the run, so nothing was
+    asked — the same convention ``room`` and ``coverage`` follow, and distinct
+    from a report whose ``reason`` says the tracker was asked and did not
+    answer.
+    """
+
     @property
     def ok(self) -> bool:
         """True only if every step passed (honest single verdict)."""
@@ -209,6 +225,7 @@ def run_ci_gate(
     hub_exports: list[Path],
     no_reindex: bool,
     performed_elsewhere: tuple[str, ...] = (),
+    tracker: WorkTracker | None = None,
 ) -> GateResult:
     """Run every gate step in order, collecting all findings; never short-circuit.
 
@@ -226,6 +243,11 @@ def run_ci_gate(
     in the same vocabulary a step would use. ``complete_bead`` runs the test
     suite itself, and one run must not report the suite as not run while that
     run ran it.
+
+    *tracker* is the read port over the work tracker, supplied by the service
+    that runs the gate — the concrete ``bd`` adapter lives in the services layer,
+    which this layer must not import. Without it the run makes no ownership claim
+    at all, rather than reporting every finding as owned by nobody.
     """
     # Built in execution order rather than as one literal: `sync-check` needs the
     # index `reindex` writes, and the doc-spaces step needs the excused-pair count
@@ -248,11 +270,20 @@ def run_ci_gate(
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
     performed = tuple(step.name for step in steps) + performed_elsewhere
-    return GateResult(
+    result = GateResult(
         steps=steps,
         room=take_census(project_root),
         coverage=derive_gate_coverage(project_root, performed=performed),
     )
+    if tracker is None:
+        return result
+    # Built from the finished result rather than beside the steps: the report is
+    # about the findings the run produced, and reading them back off the result
+    # is what makes it impossible for it to describe a different set.
+    result.ownership = derive_gate_ownership(
+        project_root, findings=result.findings, tracker=tracker
+    )
+    return result
 
 
 def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
@@ -387,6 +418,7 @@ def _sync_shape_finding(row: dict[str, object]) -> Finding:
             "kind": "sync-check",
             "rule": REASON_SECTION_NOT_IN_USE,
             "severity": "warning",
+            "node": ref_id,
             "locations": [],
             "why": (
                 f"required section(s) {details} — not carried by a majority of "
@@ -402,6 +434,7 @@ def _sync_shape_finding(row: dict[str, object]) -> Finding:
         "kind": "sync-check",
         "rule": REASON_MISSING_SECTIONS,
         "severity": "warning",
+        "node": ref_id,
         "locations": locations,
         "why": (f"{ref_id}: the document is missing section(s) its peers carry — {details}"),
         "remediation": f"add the section(s) to {doc_path or 'the document'}",
@@ -1159,6 +1192,7 @@ def _sync_finding(row: dict[str, object]) -> Finding:
             "kind": "sync-check",
             "rule": "doc-missing",
             "severity": "error",
+            "node": ref_id,
             "locations": locations,
             "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{doc_path}' does not exist"),
             "remediation": (
@@ -1171,6 +1205,7 @@ def _sync_finding(row: dict[str, object]) -> Finding:
         "kind": "sync-check",
         "rule": "doc-stale",
         "severity": "error",
+        "node": ref_id,
         "locations": locations,
         "why": f"{ref_id}: doc out of sync with code ({reason})",
         "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",

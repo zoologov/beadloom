@@ -2300,6 +2300,24 @@ pipeline verifying under a name the vocabulary does not read (`pytest`; `ruff`/`
 `mypy`/`pyright`) is told the population is empty with the vocabulary named, never that nothing is
 left to run. Like the room, it is not a step: same verdict, same exit code, same findings.
 
+**And the verdict names who owns what it found (BDL-068 S6).** This project's own branch
+carried a red Gate across two waves — two stale docs owned by no bead in the running plan —
+and every gate owner in those waves had to be told by the coordinator, by hand, that the red
+was not theirs. `GateResult` carries a `GateOwnership`: one verdict per finding, held against
+the beads the tracker reports claimed while the run happened. `owned` names the beads;
+`unowned` says a node was derived and no claim covers it; `unattributed` says no node could be
+derived from the finding at all. A tracker that cannot answer, and a project with no index,
+are a reason on the whole report rather than a page of `unowned` — telling every gate owner
+"not yours" when nobody was asked would be the same false green in a new vocabulary. All three
+shapes print it: a `Findings by owner:` block under the rich verdict, an `ownership` object in
+`--format json` (`reason`, `claimed`, `none_owned`, `findings`, `unread_claims`) and one
+`::notice::` per owning bead in `--format github`, plus the headline `no finding of this run
+is owned by a bead claimed now`. The owner is a BEAD and never the work item: the work item's
+`## Axes` answer whether a change is inside the approval, which the `scope-check` step of the
+same run already asks and which every agent on one branch shares. Like the room and the
+coverage block, it is not a step — same verdict, same exit code, same findings — and the
+tracker is asked only when the run produced a finding, so a green run shells out to nothing.
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.

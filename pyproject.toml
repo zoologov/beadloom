@@ -389,6 +389,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_f3_gate_dogfood.py",
     "tests/test_flow_composition.py",
     "tests/test_gate.py",
+    "tests/test_gate_finding_owner.py",
     "tests/test_gate_three_states.py",
     "tests/test_gate_verdict_room.py",
     "tests/test_graph_summary_facts.py",
