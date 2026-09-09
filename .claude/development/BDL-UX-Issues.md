@@ -90,6 +90,17 @@
     **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-5`, two `xfail(strict=True)`, one per face, each with the measured verdict pinned beside it.
     **Related:** #257 (the medium's own entry), #268 (the two readers this computation spends), #210 (the ambiguity `names_bead` already refuses to guess at).
 
+274. [2026-09-09] [MEDIUM] `beadloom waves` takes the beads to plan as an authored argument list, so a wave is planned over the population its caller happened to type
+
+    **Severity:** medium (the tool whose subject is derived scope requires an authored population to start from, and the coordinator of the epic about that lost three beads to it)
+    **Command:** `beadloom waves BEADS...`
+    **Tracker:** to be filed as a bead
+    **Measured, on the coordinator of BDL-068 S6:** `beadloom-0mdo.69` could not close because three beads of the slice had never been executed — `beadloom-0mdo.78`, `beadloom-ec1a` and `beadloom-iur5`. All three were in `bd ready --limit 0` the whole time. Eleven waves were planned by passing hand-listed bead ids to `waves`, and three ids were never typed. Nothing reported their absence, because nothing knew they should have been present.
+    **The shape is this epic's own, in the instrument that carries it.** `waves` decides a wave from the **derived** independence of node scopes — that is the whole point of it, and BDL-UX #232 was filed against reading an authored `refs:` line. But the set of beads it reasons over is **authored**: whatever the caller wrote on the command line. So the tool derives the hard half and inherits the easy half from a human typing ids at midnight.
+    **Why the coordinator did not notice:** every plan it produced was internally correct. The waves were right, the serialisations were right, the media were measured. A plan over a subset is not a wrong plan — it is a right plan about a smaller world, and `waves` has no way to say *"you did not ask me about three beads that are ready under this parent."*
+    **Expected:** `waves` can derive its own population — `--parent <epic-id>`, or "everything ready under this work item" — and when given an explicit list, says how many ready beads under the same parent it was **not** asked about. The second half is the cheaper one and is the same sentence the Gate now prints about the suite it does not run (BDL-UX #247).
+    **Related:** #232 (an authored `refs:` line), #257 and #261 (the population `waves` compares is narrower than the change), and `beadloom-0mdo.78` — which is one of the three beads this defect lost.
+
 273. [2026-09-09] [MEDIUM] a clean room states the CAUSE of its missing freshness baseline and never the population, and about forty verdicts in one epic were read as green over it
 
     **Severity:** medium (the instrument is honest and the claim is not, and the claim is what was written down forty times)
