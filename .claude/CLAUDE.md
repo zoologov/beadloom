@@ -458,6 +458,8 @@ landing lock as `bd merge-slot acquire --holder <bead-id>` before committing and
 *you do not hold it*. The lock orders the COMMITS; what keeps two agents out of
 one file is the disjoint scopes `beadloom waves` derived, and every wave this
 project ran before 2026-09-04 relied on the second while believing it held the
-first (BDL-UX #194, #237). Verify in a clean room (`git archive HEAD` + only your
-files) and say so in those words: "green in a clean room over N files" is a
-different claim from "green on the tree" (BDL-UX #181).
+first (BDL-UX #194, #237). Verify in a clean room built by
+`beadloom clean-room <bead-id> --carry <path>...`, which derives the room's path
+from the bead and refuses a directory it did not create, and say so in those
+words: "green in a clean room over N files" is a different claim from "green on
+the tree" (BDL-UX #181).

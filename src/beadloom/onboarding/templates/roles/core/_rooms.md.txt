@@ -33,11 +33,27 @@ reported green on a tree that was red, and none of them was wrong. State that li
 state the result, and leave the combined tree to the wave's gate owner rather than writing a
 sentence that implies you covered it.
 
-- **Build the room at a path that carries your bead's id** — `room-<bead-id>`, which is the
-  name `beadloom waves` prints for you next to each bead. Two agents once each built a room
-  called `cleanroom` under one shared session scratchpad, and one of them measured over its
-  neighbour's untracked files and got a result that looked exactly like a correct clean room.
-  A room whose name cannot say whose it is is a shared directory with a reassuring name.
+- **Build the room with `beadloom clean-room <bead-id> --at <dir> --carry <path>...`.** The
+  command takes the room's directory from the bead, so two agents of one wave cannot be handed
+  the same one, and it CREATES that directory rather than entering it: a directory it did not
+  build is refused, so nothing inside a room postdates the room. It copies HEAD plus the files
+  you name and nothing else — on a shared tree, "everything that differs" is your neighbour's
+  work as well as yours. `--rebuild` replaces a room this command built, at the price of
+  retyping the whole `--carry` list, which is friction nobody has removed yet.
+- **The room holds the environment its verdict is taken under.** It builds its own interpreter,
+  installs the project into it and records what it installed, so a verdict is not decided by
+  what the machine happened to hold. `--extras` names a different set, for reproducing one
+  particular leg, and `--no-environment` builds no interpreter at all — which hands the
+  measurement back to the project's own environment and is a fact to report, not a default to
+  take. Read the exit code: 1 is a usable room with something about its measurement
+  unconfirmed, and that finding belongs in your report; 2 is no room at all, and the directory
+  is left exactly as it was found.
+- **The room is named `room-<bead-id>`, the name `beadloom waves` prints beside each bead, and
+  the name is only half of it.** Two agents once each built a room called `cleanroom` under one
+  shared session scratchpad, and one of them measured over its neighbour's untracked files and
+  got a result that looked exactly like a correct clean room. A room whose name cannot say
+  whose it is is a shared directory with a reassuring name — and a correct name isolates the
+  files and not the interpreter, which is why one command owns both.
 - **The wave's gate owner measures the combined tree; everyone else reports their own room
   only.** `beadloom waves` names the owner for every wave, including a wave of one. If you are
   not the owner, do not write a sentence that implies you covered the tree; if you are, say

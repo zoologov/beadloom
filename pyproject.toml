@@ -425,6 +425,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_reference_leg_syntax.py",
     "tests/test_reindex.py",
     "tests/test_role_configurator_hardening.py",
+    "tests/test_role_core_names_the_room.py",
     "tests/test_role_duties.py",
     "tests/test_rule_engine.py",
     "tests/test_rule_liveness_all_types.py",

@@ -26,9 +26,18 @@ from beadloom.onboarding.role_composer import (
     compose_role,
     roles_templates_root,
 )
+from beadloom.onboarding.role_duties import CARRIES_MARKER
+
+# The whole CLI, because the check below asks whether a command a role is
+# offered is one the root group holds: importing one command module would make
+# every other command read as unregistered.
+from beadloom.services.cli import main
+from beadloom.services.commands.clean_room import clean_room
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import click
 
 #: The statement's own words, so a rewrite that drops it is caught.
 ROOM_MARKER = "the room it was taken in"
@@ -40,6 +49,57 @@ CLEAN_ROOM_LIMITS = ("blind", "interaction")
 #: A literal interpreter version, which is what a derived checklist must not
 #: spell beside its type checker.
 _VERSION_RE = re.compile(r"\b\d+\.\d+\b")
+
+#: The duty the rooms fragment carries, and therefore the section boundary the
+#: flag check below reads. The marker is machine-readable already — the duty
+#: check finds the fragment by it — so the section is derived, not counted in
+#: lines.
+CLEAN_ROOM_DUTY = "clean-room"
+
+#: An inline code span, which is how every one of these documents writes a
+#: command. Anything outside one is prose and is not read as an invocation.
+_CODE_SPAN = re.compile(r"`([^`\n]+)`")
+
+#: Where one invocation ends and the next begins inside a single span, so
+#: `beadloom reindex && beadloom lint --strict` is two invocations and not one
+#: command holding another's flag.
+_SEGMENT = re.compile(r"&&|\|\||;|→|->|\|")
+
+
+def _option_spellings(command: click.Command) -> set[str]:
+    """Every spelling of every option *command* accepts, from click itself."""
+    return {spelling for param in command.params for spelling in param.opts}
+
+
+def _flags(segment: str) -> list[str]:
+    """The option tokens of one invocation, punctuation stripped."""
+    return [
+        word.rstrip(".,;:)")
+        for word in segment.split()[2:]
+        if word.startswith("--")
+    ]
+
+
+def _invocations(text: str) -> list[tuple[str, list[str]]]:
+    """Every `beadloom <command> …` a reader of *text* is offered, as (name, flags)."""
+    found: list[tuple[str, list[str]]] = []
+    for body in _CODE_SPAN.findall(text):
+        for segment in _SEGMENT.split(body):
+            words = segment.split()
+            if len(words) >= 2 and words[0] == "beadloom":
+                found.append((words[1], _flags(segment)))
+    return found
+
+
+def _duty_section(fragment_name: str) -> str:
+    """The clean-room duty text of a shipped fragment, from its own marker on."""
+    fragment = (roles_templates_root() / "core" / fragment_name).read_text(
+        encoding="utf-8"
+    )
+    marker = f"{CARRIES_MARKER}={CLEAN_ROOM_DUTY}"
+    _, found, tail = fragment.partition(marker)
+    assert found, f"{fragment_name} no longer carries {marker!r}"
+    return tail
 
 
 def _shipped_templates() -> list[Path]:
@@ -153,3 +213,91 @@ class TestTheCompositionStaysDeterministic:
         )
         composition = compose("roles", "dev", config=config)
         assert not any("_rooms" in note for note in composition.notes)
+
+
+class TestTheDutyOffersTheCommandThatBuildsTheRoom:
+    """The prose offers a command; the command's own name decides the words.
+
+    The room's PATH was bound to `room_for` by beadloom-67t1, and the text then
+    said nothing about the command that builds it — so the five cores still
+    described a by-hand convention while `beadloom clean-room` derived the path,
+    refused a directory it had not created and built the room's own interpreter.
+    That is the same drift one layer up, and it is bound here the same way: the
+    literals below come from click, so renaming the command or one of its
+    options reddens the text that offers it.
+
+    THE LIMIT, stated rather than discovered: this binds the SPELLINGS the prose
+    offers and never their completeness. Nothing derivable says which of a
+    command's options change what a verdict MEANS, so an option added later is
+    not reported here — a reader adding one decides whether the duty text has to
+    say so.
+    """
+
+    def test_the_cli_registers_the_command_the_duty_text_offers(self) -> None:
+        """A command the root group no longer holds is a command nobody can run."""
+        assert main.commands.get(clean_room.name) is clean_room
+
+    @pytest.mark.parametrize("role", ROLE_NAMES)
+    def test_every_composed_role_is_offered_it_by_name(self, role: str) -> None:
+        text = compose_role(role, architecture="ddd", stack=("python",))
+        assert f"beadloom {clean_room.name}" in text
+
+    @pytest.mark.parametrize("fragment", ["_rooms.md.txt", "_rooms.ru.md.txt"])
+    def test_every_flag_the_duty_offers_is_an_option_of_that_command(
+        self, fragment: str
+    ) -> None:
+        section = _duty_section(fragment)
+        offered = {
+            flag
+            for name, flags in _invocations(section)
+            if name == clean_room.name
+            for flag in flags
+        }
+        assert offered, (
+            f"{fragment} offers {clean_room.name} with no option at all, so this "
+            "check would pass over a duty text that names none"
+        )
+        assert offered <= _option_spellings(clean_room)
+
+    def test_both_shipped_spellings_offer_the_same_invocation(self) -> None:
+        """One duty, two languages. A rename must reach both or this goes red."""
+        spellings = {
+            fragment: sorted(
+                (name, tuple(flags))
+                for name, flags in _invocations(_duty_section(fragment))
+            )
+            for fragment in ("_rooms.md.txt", "_rooms.ru.md.txt")
+        }
+        assert spellings["_rooms.md.txt"], "the duty text offers no command at all"
+        assert spellings["_rooms.md.txt"] == spellings["_rooms.ru.md.txt"]
+
+
+class TestEveryCommandARoleIsOfferedIsOneItCanRun:
+    """The population is derived from the composition, not from a list here.
+
+    A regression guard rather than a red-first assertion, and it is declared as
+    one: it was GREEN over the 25 invocations the five composed roles carried
+    before this bead, and it was verified to bite by renaming an option of
+    `clean-room` in the source, which reddens it. It exists because the duty
+    text now offers flags, and a flag in prose is the one kind of instruction
+    that fails only in the agent's hands.
+    """
+
+    @pytest.mark.parametrize("role", ROLE_NAMES)
+    def test_every_invocation_names_a_registered_command_and_its_own_flags(
+        self, role: str
+    ) -> None:
+        text = compose_role(role, architecture="ddd", stack=("python",))
+        wrong: list[str] = []
+        for name, flags in _invocations(text):
+            command = main.commands.get(name)
+            if command is None:
+                wrong.append(f"`beadloom {name}` is not a command")
+                continue
+            spellings = _option_spellings(command)
+            wrong.extend(
+                f"`beadloom {name}` has no option {flag}"
+                for flag in flags
+                if flag not in spellings
+            )
+        assert wrong == [], f"{role}: " + "; ".join(wrong)
