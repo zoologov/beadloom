@@ -10,7 +10,29 @@
 
 ## Current Bead
 
-**Bead:** none claimed. `beadloom-0mdo.66` closed as `f6dc92a` — the issue log's number
+**Bead:** `beadloom-0mdo.74` — BDL-UX #256, the environment half, complete. S6, alone, and its
+own combined-tree gate owner. The import half was already closed by `beadloom-0mdo.37` and
+verified by `.38`, so what this bead built is the room's own interpreter: `beadloom clean-room`
+creates a virtual environment inside the room, installs the room's own sources into it, and
+`room_invocation` names that interpreter rather than the project's.
+
+**The extras are the UNION of every extra any leg installs, and the modal reading was measured
+and rejected.** Of the 8 installing jobs `rooms.leg_installs` reports on this repository, four
+install `dev, languages` to build a site or run a release gate and two run the suite, so the
+commonest environment is the one no suite verdict is taken under. The union is taken because
+the two errors are not symmetric: a missing extra removes tests from a run without failing it,
+a surplus one removes nothing. Measured warm on macOS/APFS: `uv venv` 0.082 s and `uv pip
+install -e` 1.07 s for the union at 169 MB, against 1.78 s and 160 MB for `.[all,dev]` — 9 MB
+and no time for the surplus, in a room of 184 MB apparent. Paid PER ROOM and never cached,
+because an environment kept outside the room and reused is a directory two rooms share, which
+is BDL-UX #235 again. Without `uv` the stdlib path measures 1.84 s plus 39.6 s over the same
+tree, so the room records which installer built it. A room that could not build one is a
+FINDING and never a refusal, and names the interpreter its verdict will be taken under instead.
+
+**Stated and not acted on:** `beadloom-uzck`'s argument is stronger now — a rebuild pays the
+install again, so retyping 16 `--carry` flags costs more than when that bead was filed.
+
+**Bead (previous):** none claimed. `beadloom-0mdo.66` closed as `f6dc92a` — the issue log's number
 allocator (BDL-UX #187, #211, #253 and the two of 2026-09-09), run in S6 wave 7 beside `.67` and
 `.76`, where `.76` is the gate owner. The number is now ALLOCATED, by an exclusive create of one claim file per
 number in `.claude/development/BDL-UX-Issues/`, which is `beadloom-l9ee`'s one-file-per-incident

@@ -52,7 +52,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
 #: Runner-label families and the platform each names. A VOCABULARY, not a room
 #: list: it translates the names GitHub gives its images into what
@@ -119,6 +119,15 @@ _PROJECT_NAME_RE = re.compile(r'^\s*name\s*=\s*["\']([^"\']+)["\']', re.MULTILIN
 #: ``extra == "dev"`` — a marker that says the requirement belongs to one extra
 #: and to nothing else. A marker carrying any further clause is NOT this, and
 #: the extra it names is reported unresolved rather than decided.
+#: The ``[project.optional-dependencies]`` table and the keys inside it. Ends at
+#: the next table header or at the end of the file, because a project may
+#: declare its extras last.
+_OPTIONAL_TABLE_RE = re.compile(
+    r"^\[project\.optional-dependencies\]\s*$(.*?)(?=^\[|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_EXTRA_KEY_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*=", re.MULTILINE)
+
 _EXTRA_MARKER_RE = re.compile(r"""^extra\s*==\s*["']([^"']+)["']$""")
 
 #: ``extra`` appearing anywhere in a marker this report cannot read whole.
@@ -141,7 +150,11 @@ _PIP_INSTALL_RE = re.compile(r"\bpip\s+install\b")
 _PIP_LOCAL_RE = re.compile(r"""(?:-e\s+)?['"]?\.(?:/[\w./-]*)?['"]?(?:\s|$)""")
 
 #: What ``--all-extras`` stands for until the declaration is known.
-_ALL_EXTRAS = "*"
+ALL_EXTRAS = "*"
+
+#: The private spelling kept so this module's own reads stay unchanged; the
+#: public name exists because a room BUILDER has to recognise the same token.
+_ALL_EXTRAS = ALL_EXTRAS
 
 #: ``pip install -e '.[all,dev]'`` — the bracket on a local path requirement.
 _PIP_EXTRAS_RE = re.compile(r"""[.'"][.\w/-]*\[([^\]]+)\]""")
@@ -189,6 +202,18 @@ class AbsentExtra:
 
     extra: str
     absent: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LegInstall:
+    """One job's install step, and the extras it names by hand.
+
+    ``extras`` carries what the workflow TYPED, canonically spelled — including
+    ``*`` for ``--all-extras``, which names no extra and asks for all of them.
+    """
+
+    source: str
+    extras: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -500,19 +525,32 @@ def canonical_distribution(name: str) -> str:
 
 
 @functools.cache
-def _installed_distributions() -> frozenset[str]:
-    """Every distribution name this interpreter can see, canonically spelled.
+def _installed_distributions(search_path: tuple[str, ...] = ()) -> frozenset[str]:
+    """Every distribution name an interpreter can see, canonically spelled.
+
+    *search_path* is empty for the running interpreter and names another
+    environment's ``site-packages`` otherwise — a clean room's own, which is a
+    different interpreter's answer to the same question and must not be read off
+    this process (BDL-UX #256). Installed metadata is files on disk, so it is
+    read without importing anything that environment holds.
 
     Cached because an interpreter does not gain a distribution part-way through
     a process, and the scan costs about 27 ms against a census that several
     verdicts take.
     """
     found: set[str] = set()
-    for distribution in metadata.distributions():
+    for distribution in _distributions(search_path):
         name = distribution.metadata["Name"]
         if name:
             found.add(canonical_distribution(name))
     return frozenset(found)
+
+
+def _distributions(search_path: tuple[str, ...]) -> Iterable[metadata.Distribution]:
+    """The distributions of the named environment, or of this process."""
+    if search_path:
+        return metadata.distributions(path=list(search_path))
+    return metadata.distributions()
 
 
 @dataclass(frozen=True)
@@ -533,12 +571,36 @@ class _ExtraDeclaration:
     failure: str | None = None
 
 
+def _find_distribution(
+    distribution: str, search_path: tuple[str, ...]
+) -> metadata.Distribution | None:
+    """One distribution's metadata, in this process or in another environment.
+
+    The name is matched canonically here rather than handed to the finder,
+    because the finder's own name matching is not the same across every
+    interpreter this project declares and a room census must not answer
+    differently on 3.10 than on 3.13.
+    """
+    if not search_path:
+        try:
+            return metadata.distribution(distribution)
+        except (metadata.PackageNotFoundError, OSError, ValueError):
+            return None
+    want = canonical_distribution(distribution)
+    for found in _distributions(search_path):
+        name = found.metadata["Name"]
+        if name and canonical_distribution(name) == want:
+            return found
+    return None
+
+
 @functools.cache
-def _declared_requirements(distribution: str) -> _ExtraDeclaration:
+def _declared_requirements(
+    distribution: str, search_path: tuple[str, ...] = ()
+) -> _ExtraDeclaration:
     """One distribution's extras: their requirements, and what could not be read."""
-    try:
-        found = metadata.distribution(distribution)
-    except (metadata.PackageNotFoundError, OSError, ValueError):
+    found = _find_distribution(distribution, search_path)
+    if found is None:
         return _ExtraDeclaration(
             requirements={},
             self_referenced={},
@@ -652,12 +714,19 @@ def extras_satisfied_by(distribution: str, available: frozenset[str]) -> tuple[s
     return tuple(satisfied)
 
 
-def installed_extras(project_root: Path) -> ExtraSet:
-    """Which of the project's declared extras this interpreter actually has.
+def installed_extras(
+    project_root: Path, *, search_path: tuple[str, ...] = ()
+) -> ExtraSet:
+    """Which of the project's declared extras an interpreter actually has.
 
-    The answer is about the ANALYSED project's distribution as this interpreter
+    The answer is about the ANALYSED project's distribution as that interpreter
     holds it, which is why it is unresolved rather than empty when the
     interpreter holds no such distribution.
+
+    *search_path* names the environment to read, and is empty for the running
+    process. A clean room builds an interpreter of its own, and reading this
+    process's extras onto that room's record would state the extras of an
+    environment no verdict was taken in (BDL-UX #256).
     """
     distribution = project_distribution(project_root)
     if distribution is None:
@@ -673,7 +742,7 @@ def installed_extras(project_root: Path) -> ExtraSet:
                 ),
             )
         )
-    declaration = _declared_requirements(distribution)
+    declaration = _declared_requirements(distribution, search_path)
     if declaration.failure is not None:
         return ExtraSet(
             distribution=distribution,
@@ -681,7 +750,7 @@ def installed_extras(project_root: Path) -> ExtraSet:
                 UnresolvedRoom(source="pyproject.toml", why=declaration.failure),
             ),
         )
-    available = _installed_distributions() | declaration.base
+    available = _installed_distributions(search_path) | declaration.base
     installed: list[str] = []
     absent: list[AbsentExtra] = []
     unresolved: list[UnresolvedRoom] = [
@@ -737,23 +806,7 @@ def _leg_extras(
     all gets neither, because a job that runs no verdict declares no
     environment for one.
     """
-    steps = job.get("steps")
-    if not isinstance(steps, list):
-        return None, []
-    typed: set[str] | None = None
-    composite = False
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        uses = step.get("uses")
-        if isinstance(uses, str) and uses.strip().startswith("./"):
-            composite = True
-        run = step.get("run")
-        if not isinstance(run, str):
-            continue
-        found = _extras_of_command(run)
-        if found is not None:
-            typed = found if typed is None else typed | found
+    typed, composite = typed_extras_of_job(job)
     if typed is None:
         if composite:
             return None, [
@@ -792,6 +845,99 @@ def _leg_extras(
     )
     satisfied = extras_satisfied_by(distribution, available)
     return ("+".join(satisfied) if satisfied else "none"), unresolved
+
+
+def typed_extras_of_job(
+    job: Mapping[str, Any],
+) -> tuple[set[str] | None, bool]:
+    """The extras one job's steps TYPE, and whether it installs through an action.
+
+    Two questions read this, and they are not the same question. A room census
+    asks which extras that environment SATISFIES, because comparing typed lists
+    would report two identical environments as two rooms. A room BUILDER asks
+    what to type, because an install command takes names and not a satisfied
+    set. Both start here, so a leg's install step is parsed once.
+
+    ``None`` for the typed set means the job installs the project nowhere; an
+    empty set means it installs it with no extras. The flag is true when a step
+    runs a local action, which is an install this reader does not follow.
+    """
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return None, False
+    typed: set[str] | None = None
+    composite = False
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        uses = step.get("uses")
+        if isinstance(uses, str) and uses.strip().startswith("./"):
+            composite = True
+        run = step.get("run")
+        if not isinstance(run, str):
+            continue
+        found = _extras_of_command(run)
+        if found is not None:
+            typed = found if typed is None else typed | found
+    return typed, composite
+
+
+def declared_extra_names(project_root: Path) -> tuple[str, ...]:
+    """The extras a project's packaging declares, read without a TOML parser.
+
+    Needed because a leg spelling ``--all-extras`` names every extra and
+    enumerates none, and the satisfied-set derivation cannot enumerate them for
+    a project whose distribution the running interpreter does not hold — which
+    is the ordinary case for a project this tool is merely pointed at.
+
+    Read by the same means as the rest of the packaging in this module, and for
+    the reason the module docstring states: ``tomllib`` is 3.11+ and this
+    project supports 3.10. A key spelled across lines or inside an inline table
+    is therefore not found, so the answer is a LOWER bound on what the project
+    declares and never a claim to be the whole of it.
+    """
+    try:
+        text = (Path(project_root) / "pyproject.toml").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ()
+    table = _OPTIONAL_TABLE_RE.search(text)
+    if table is None:
+        return ()
+    return tuple(
+        sorted(
+            {
+                canonical_distribution(name)
+                for name in _EXTRA_KEY_RE.findall(table.group(1))
+            }
+        )
+    )
+
+
+def leg_installs(project_root: Path) -> tuple[LegInstall, ...]:
+    """Every job of this project's workflows that installs it, and what it names.
+
+    Deliberately NOT the satisfied set :func:`extras_satisfied_by` produces. That
+    one needs the analysed project's distribution installed under the running
+    interpreter, so it is unresolved for a project this tool is merely pointed
+    at; the typed names are read out of the workflow file and are available
+    whether or not anything is installed. A room is built from these, and
+    compared with the other.
+    """
+    directory = Path(project_root) / WORKFLOW_DIR
+    installs: list[LegInstall] = []
+    for path in sorted(p for p in directory.glob("*.y*ml") if p.is_file()):
+        rel = path.relative_to(project_root).as_posix()
+        jobs, failure = load_jobs(path)
+        if failure is not None:
+            continue
+        for name, job in jobs.items():
+            typed, _ = typed_extras_of_job(job)
+            if typed is None:
+                continue
+            installs.append(
+                LegInstall(source=f"{rel}: {name}", extras=tuple(sorted(typed)))
+            )
+    return tuple(installs)
 
 
 def _extras_of_command(run: str) -> set[str] | None:

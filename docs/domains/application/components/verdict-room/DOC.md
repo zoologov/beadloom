@@ -97,6 +97,25 @@ difference in the environment, when what happened is that nothing looked.
 The current room's extras are computed from the project the census is taken over, so a bare
 `current_room()` — the mutation score's room line, for one — carries no extras dimension.
 
+**The same derivation answers about another environment.** `installed_extras(project_root,
+search_path=...)` reads a named `site-packages` rather than this process's. Installed metadata
+is files on disk, so it is read without importing anything that environment holds, and the
+distribution name is matched canonically here rather than handed to the finder, whose own name
+matching is not the same across every interpreter this project declares. A clean room builds an
+interpreter of its own (BDL-UX #256), and recording this process's extras onto that room's
+record would state the extras of an environment no verdict was taken in.
+
+**And the typed names are a second, different answer.** `typed_extras_of_job(job)` returns what
+a leg's install step NAMES, before the satisfied set is computed from it, and
+`leg_installs(project_root)` is that read over every job of every workflow. The census needs
+the satisfied set so two identical environments are not reported as two rooms; a room BUILDER
+needs the typed names, because an install command takes names and not a satisfied set — and it
+cannot use the satisfied set at all for a project whose distribution the running interpreter
+does not hold, which is the ordinary case. `declared_extra_names(project_root)` enumerates what
+a leg spelling `--all-extras` names and does not list, read out of
+`[project.optional-dependencies]` without a TOML parser for the reason above, and therefore a
+lower bound rather than the whole of what a project declares.
+
 ## The locale dimension
 
 BDL-UX #248 and #249. This project has been bitten by its `tests-locale` leg three times —

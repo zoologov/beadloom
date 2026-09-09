@@ -140,6 +140,36 @@
     > #164 — an entry written from a failure's appearance and not re-derived — committed by the person
     > who wrote those three withdrawals up. The entry is narrowed rather than withdrawn: the
     > environment half is real.
+
+    > **CLOSED 2026-09-09 by `beadloom-0mdo.74`, on the narrowed half.** `beadloom clean-room` now
+    > creates a virtual environment inside the room and installs the room's own sources into it, and
+    > `room_invocation` names that interpreter. So the room isolates the environment as well as the
+    > files, which is the guarantee the name never gave.
+    > **Which extras, and the reading that was measured and rejected.** The extras are the UNION of
+    > every extra any leg of this project's workflows installs, read from the TYPED install step
+    > (`rooms.leg_installs`) rather than from the satisfied set, which needs the analysed distribution
+    > installed under the running interpreter and is unresolved for a project this tool is merely
+    > pointed at. The MODAL set was tried first and is wrong here: of the 8 installing jobs
+    > `leg_installs` reports on this repository, four install `dev, languages` to build a site or run
+    > a release gate and two run the suite, so the commonest environment is the one no suite verdict
+    > is taken under. The union is taken because the two errors are not symmetric — a missing extra
+    > removes tests from a run WITHOUT failing it, a surplus one removes nothing.
+    > **The cost, re-measured at HEAD rather than inherited.** Warm `uv` cache, macOS/APFS: `uv venv`
+    > **0.082 s**, `uv pip install -e` **1.07 s** for the union (`dev, graphql, languages, mutation,
+    > tui, watch`, 169 MB) against **1.78 s** and 160 MB for `.[all,dev]`; the room is **184 MB**
+    > apparent. The surplus the union buys is 9 MB and no time. Against a seven-minute suite the whole
+    > step is under half a percent, so it is **paid per room and never cached**: an environment kept
+    > outside the room and reused is a directory two rooms share, which is #235 again. `uv`'s own
+    > package cache is the reuse that matters and is content-addressed, so it cannot carry one room's
+    > source into another.
+    > **Without `uv` it is not the same measurement:** `python -m venv` 1.84 s plus `pip install -e`
+    > 39.6 s over the same tree, about thirty times. The room records which installer built it, and a
+    > failure is reported rather than retried under the other one.
+    > **A room that could not build one is a FINDING and never a refusal** — the files are isolated
+    > either way — and it names the interpreter its verdict will be taken under instead, so
+    > `beadloom clean-room` exits 1 rather than printing a room a reader assumes has its own. The
+    > effect on `beadloom-uzck` is stated rather than acted on: a rebuild now pays the install again,
+    > so the argument for not retyping 16 `--carry` flags is stronger than when that bead was filed.
 255. [2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly
 
     **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)

@@ -356,8 +356,10 @@ caught from a warning path rather than from a failure, which is a green that is
 a measurement of the tree wearing a room's name. `PYTHONPATH` pointing at the
 room's own `src` is the fix, and the `import beadloom` line is the check.
 
-The interpreter the invocation names is the project's own `.venv` when it keeps
-one, and `sys.executable` otherwise. That distinction was found by running the
+The interpreter the invocation names is the ROOM's own when it has one, the
+project's `.venv` when it keeps one, and `sys.executable` otherwise. The room's
+comes first because isolating the files and leaving the interpreter to the
+machine is BDL-UX #256, below. The second distinction was found by running the
 command on this bead: `sys.executable` is the CLI PROCESS's interpreter, and
 Beadloom installed as a `uv` tool runs under one with neither `pytest` nor the
 project's development dependencies, so the first invocation handed back could not
@@ -379,12 +381,73 @@ rooms` reports, because two answers to one question are two things that can
 disagree — and `resolved: false` records that nothing could look, which is never
 the same answer as no extras.
 
-The room does NOT build an environment of its own. Which extras a verdict should
-be taken under is a decision rather than a derivation, and BDL-UX #256 owns it.
-Measured before deciding, on this machine with a warm `uv` cache: `uv venv` takes
-0.04 s and `uv pip install -e '.[all,dev]'` 3.6 s, for a room of 160 MB apparent
-size (APFS clones, so the marginal bytes are near zero on this filesystem and are
-not on one without cloning). Cost is therefore not what left it out.
+### The interpreter the room holds
+
+BDL-UX #256, and it is the second half of the same failure. A room isolates the
+FILES a verdict is taken over, and until this bead nothing isolated the
+interpreter they run under, so the verdict was decided by whatever the machine
+happened to hold — the same measurement as above, 0 mypy errors against 82 over
+one code base at one commit. So `build_room` creates a virtual environment inside
+the room and installs the room's own sources into it, and `room_invocation` names
+that interpreter.
+
+**Which extras: the union of every extra any leg of this project's workflows
+installs**, read from the typed install step by
+`application.rooms.leg_installs`. Two readings were measured before choosing.
+The COMMONEST set is wrong on this repository: of the 8 installing jobs
+`leg_installs` reports, four install `dev, languages` to build a site or run a
+release gate and two run the suite, so the modal set is the one no suite verdict
+is taken under. The UNION is taken because the two errors are not symmetric — a
+missing extra removes tests from a run without failing it, while a surplus one
+removes nothing. Measured over this tree on a warm `uv` cache: the union
+(`dev, graphql, languages, mutation, tui, watch`) installs in 1.07 s for 169 MB,
+against 1.78 s and 160 MB for `.[all,dev]`. The surplus is 9 MB and no time.
+
+A leg spelling `--all-extras` names every extra and enumerates none, so it is
+expanded from the packaging by `application.rooms.declared_extra_names`, read
+without a TOML parser for the reason `application/rooms.py` states — `tomllib` is
+3.11+ and this project supports 3.10. That read finds no key spelled across lines
+or inside an inline table, so it is a lower bound on what a project declares.
+
+**Three answers, never two.** `--extras` names them and wins, because
+reproducing one particular leg is the reason to override a union and a union
+cannot express it. No leg installing the project at all leaves the choice
+UNDERIVED, and an underived choice builds nothing: installing a guess is how
+`.[dev]` lost four test modules silently. `--extras ""` is a fourth request and
+not the third one — an environment with no extras is a declared environment,
+where an underived choice is no answer at all.
+
+**A room without one is a finding and never a refusal.** The files are still
+isolated, so a room whose environment could not be built is still a room; what it
+must not do is let the reader assume it has one. It reports which interpreter its
+verdict will be taken under instead, `beadloom clean-room` exits 1, and the
+record carries `environment.built: false` with the failure in the installer's own
+words. A half-built environment is removed, for the reason a half-built room is:
+an interpreter that exists, answers imports and holds an unknown subset of what a
+verdict needs is worse than none.
+
+**`interpreter.extras` is read off the ROOM's interpreter**, through
+`installed_extras(project_root, search_path=...)` — the same derivation, pointed
+at another environment's installed metadata, which is files on disk and is read
+without importing anything that environment holds. What `environment.asked`
+records is a request and what `interpreter.extras` records is the answer; they can
+differ, and that difference is what BDL-UX #236 is about.
+
+**The cost is paid per room and never cached.** Measured on this machine, warm
+`uv` cache, macOS/APFS: `uv venv` 0.082 s, `uv pip install -e` 1.07 s, room 184 MB
+apparent. Against a seven-minute suite that is under half a percent, and every
+`--rebuild` pays it again on purpose: a virtual environment kept outside the room
+and reused is a directory two rooms share, which is the property BDL-UX #235 was
+filed about. The reuse that matters is `uv`'s own package cache, which is
+content-addressed and so cannot carry one room's source into another.
+
+**Without `uv`, the stdlib path is used and it is not the same measurement**:
+`python -m venv` 1.84 s plus `pip install -e` 39.6 s over this tree, against
+`uv`'s 0.082 s plus 1.07 s. The room records which installer built it, because a
+forty-second step and a one-second step reported as one fact is how a cost that
+decides whether rooms get built at all becomes invisible. A failure is reported
+rather than retried under the other installer: falling back would hide which
+resolver produced the verdict.
 
 ### What each medium is checked against
 
@@ -538,6 +601,9 @@ not tell them apart.
   asked for.
 - A room STATES the optional extras its invocation's interpreter has, and never
   reports "no extras" for "nothing looked".
+- A room HOLDS the interpreter its verdict is taken under, or says which one it
+  borrows instead. Failing to build one is a finding and never a refusal: the
+  files are isolated either way, and what a reader must not do is assume.
 - Every medium the plan names carries a verdict, and an unobserved one is
   `unmeasured` rather than `passed`.
 - A required override field is required by its content: a key present but blank
@@ -560,10 +626,15 @@ not tell them apart.
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
 | `room_path(parent, bead_id)` | that room's directory under a parent |
-| `build_room(*, bead_id, project_root, parent, carry, rebuild)` | build it from `HEAD` plus the named files, or refuse and say why |
+| `build_room(*, bead_id, project_root, parent, carry, rebuild, extras, environment)` | build it from `HEAD` plus the named files, give it an interpreter, or refuse and say why |
 | `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
 | `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
-| `RoomBuild.extras` | the optional extras the invocation's interpreter has, or `None` when nothing could look |
+| `RoomBuild.extras` | the optional extras the room's interpreter has, or `None` when nothing could look |
+| `RoomBuild.environment` | the interpreter the room holds, or the reason it holds none |
+| `extras_a_room_installs(project_root, asked)` | what the caller named, or the union of every extra the legs install |
+| `build_environment(*, room, choice, otherwise)` | create the room's interpreter and install its sources, or say why there is none |
+| `room_python(room)` | the interpreter inside a room, or `None` |
+| `site_packages(room)` | where that interpreter keeps its installed metadata |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
@@ -586,6 +657,7 @@ every scenario runs without a `bd` binary on the machine.
 | `landing.py` | what the landing lock grants, and which call form grants it |
 | `media.py` | what a wave shares no matter how independent its code is |
 | `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
+| `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
 | `config.py` | read and validate the declared `waves:` overrides |
@@ -606,7 +678,12 @@ and owns the five findings BDL-061.22 measured;
 decisions fails in; `tests/test_wave_derivation.py` covers the four agreement
 verdicts, the per-wave gap and the remedies that read the work item's document;
 `tests/acceptance/features/clean_room.feature` states the room's ownership and
-its once-only build as executable scenarios, and `tests/test_cli_clean_room.py`
+its once-only build as executable scenarios;
+`tests/acceptance/features/room_environment.feature` states the interpreter it
+holds, over real environments, and `tests/test_room_environment.py` covers what
+those cannot reach — the second installer, a create step that fails, and the
+install spellings this repository's own workflows do not use.
+`tests/test_cli_clean_room.py`
 covers `beadloom clean-room`'s two output shapes and its three exit codes;
 `tests/acceptance/features/room_extras.feature` states that a room records the
 extras its interpreter has, and `tests/test_room_extras.py` covers the

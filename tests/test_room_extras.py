@@ -73,7 +73,9 @@ def _declare(
 
     monkeypatch.setattr(metadata, "distribution", _distribution)
     monkeypatch.setattr(
-        rooms, "_installed_distributions", lambda: frozenset(installed or set())
+        rooms,
+        "_installed_distributions",
+        lambda search_path=(): frozenset(installed or set()),
     )
     rooms._declared_requirements.cache_clear()
 

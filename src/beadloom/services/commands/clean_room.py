@@ -14,10 +14,13 @@ which is a thing a command can do and a paragraph cannot.
 
 Codes (the contract a caller may rely on):
 
-* ``0`` — the room was built and the tracker says the bead is in progress.
-* ``1`` — the room was built, and something about its OWNERSHIP is unconfirmed:
-  the bead is not in progress, or the tracker could not be reached. The room is
-  usable; who claimed the bead is a fact about the tracker, not about the room.
+* ``0`` — the room was built, it holds the interpreter its verdict will be taken
+  under, and the tracker says the bead is in progress.
+* ``1`` — the room was built, and something about the MEASUREMENT it supports is
+  unconfirmed: the bead is not in progress, the tracker could not be reached, or
+  the room holds no interpreter of its own and its verdict will therefore be
+  taken under the project's environment (BDL-UX #256). The room is usable, and
+  each of those is a fact the caller has to carry into the report.
 * ``2`` — no room was built. The directory exists, the tracker has no such bead,
   the path is inside the project, a carried file is not a file of it, or git has
   no commit to archive.
@@ -103,9 +106,26 @@ def _payload(
         "carried": list(build.carried),
         "invocation": list(build.invocation),
         "extras": build.extras,
+        "environment": _environment_payload(build),
         "claim": status or None,
         "findings": findings,
         "exit_code": code,
+    }
+
+
+def _environment_payload(build: RoomBuild) -> dict[str, Any] | None:
+    """The room's own interpreter as data, or ``None`` on a room that has none."""
+    environment = build.environment
+    if environment is None:
+        return None
+    return {
+        "built": environment.built,
+        "source": environment.source,
+        "asked": list(environment.extras),
+        "installer": environment.installer,
+        "seconds": environment.seconds,
+        "python": str(environment.python) if environment.python else None,
+        "detail": environment.detail,
     }
 
 
@@ -123,6 +143,8 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
         "  extras the invocation's interpreter has: "
         + (build.extras or "not resolved — no verdict here can state them")
     )
+    if build.environment is not None:
+        click.echo(f"  environment: {build.environment.detail}")
     click.echo(f"  tracker status: {status or 'not answered'}")
     click.echo("")
     click.echo("Measure in the room, not in the tree:")
@@ -162,6 +184,27 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     ),
 )
 @click.option(
+    "--extras",
+    "extras",
+    default=None,
+    help=(
+        "The optional extras the room's own interpreter installs, comma-separated. "
+        "The default is the union of every extra this project's legs install; name "
+        "them to reproduce one particular leg, and pass an empty string for none."
+    ),
+)
+@click.option(
+    "--no-environment",
+    "no_environment",
+    is_flag=True,
+    default=False,
+    help=(
+        "Build the files and no interpreter. The room's verdict is then taken "
+        "under the project's own environment, which is what BDL-UX #256 was "
+        "filed about — say so when reporting it."
+    ),
+)
+@click.option(
     "--rebuild",
     is_flag=True,
     default=False,
@@ -179,6 +222,8 @@ def clean_room(
     bead: str,
     at: Path | None,
     carry: tuple[str, ...],
+    extras: str | None,
+    no_environment: bool,
     rebuild: bool,
     project: Path | None,
     output_json: bool,
@@ -187,7 +232,9 @@ def clean_room(
 
     The room's directory is derived from the bead, so two agents of one wave
     cannot be handed the same one, and an existing directory is refused rather
-    than entered, so nothing in a room postdates the room.
+    than entered, so nothing in a room postdates the room. The room builds its
+    own interpreter and installs the project into it, so a verdict taken here is
+    not decided by what the machine happened to hold (BDL-UX #256).
     """
     from beadloom.application.waves import RoomBuild, build_room, room_path
 
@@ -211,10 +258,40 @@ def clean_room(
         parent=parent,
         carry=tuple(carry),
         rebuild=rebuild,
+        extras=_asked_extras(extras),
+        environment=not no_environment,
     )
     findings = [finding] if finding else []
+    findings += _environment_findings(build, declined=no_environment)
     code = _EXIT_REFUSED if not build.built else (_EXIT_FINDINGS if findings else _EXIT_CLEAN)
     _finish(build, status, findings, code, output_json=output_json)
+
+
+def _asked_extras(extras: str | None) -> tuple[str, ...] | None:
+    """The extras the caller named, or ``None`` when they named nothing.
+
+    An empty string and an absent option are different requests: the first asks
+    for an environment with no extras, the second asks this command to derive
+    them. Collapsing them would make `--extras ""` mean "decide for me".
+    """
+    if extras is None:
+        return None
+    return tuple(part.strip() for part in extras.split(",") if part.strip())
+
+
+def _environment_findings(build: RoomBuild, *, declined: bool) -> list[str]:
+    """The finding a room without its own interpreter produces, if it is one.
+
+    A caller who passed ``--no-environment`` asked for this and is told nothing:
+    a finding reports what the run did not do that it was asked to do.
+    """
+    environment = build.environment
+    if declined or environment is None or environment.built or not build.built:
+        return []
+    return [
+        f"{build.path.name} holds no interpreter of its own, so its verdict is "
+        f"the project environment's: {environment.detail}"
+    ]
 
 
 def _finish(

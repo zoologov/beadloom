@@ -1494,7 +1494,8 @@ reach), `agreements[]` (`bead`, `ref`, `verdict`, `detail`), `unguarded_axes[]`,
 Build the clean room a bead measures in, from `HEAD` plus the files you name.
 
 ```bash
-beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--rebuild] [--project DIR] [--json]
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--extras LIST] [--no-environment]
+                    [--rebuild] [--project DIR] [--json]
 ```
 
 `beadloom waves` prints the room each bead owes (`clean room: <bead> -> room-<bead>`);
@@ -1530,11 +1531,14 @@ room-proj-1 built at /tmp/rooms/room-proj-1
   from commit 4f2c1ab9…, holder recorded as proj-1
   carried from the working tree: src/billing.py
   extras the invocation's interpreter has: all+dev+graphql+languages+tui+watch
+  environment: built by uv in 1.07s with extras dev+graphql+languages+tui+watch — the
+    union of every extra the 8 installing leg(s) of this project name, because a missing
+    extra removes tests from a run without failing it and a surplus one removes nothing
   tracker status: in_progress
 
 Measure in the room, not in the tree:
-  PYTHONPATH=/tmp/rooms/room-proj-1/src /usr/bin/python3 -c "import beadloom; print(beadloom.__file__)"  # must print a path under /tmp/rooms/room-proj-1
-  PYTHONPATH=/tmp/rooms/room-proj-1/src /usr/bin/python3 -m pytest /tmp/rooms/room-proj-1/tests
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /tmp/rooms/room-proj-1/.venv/bin/python -c "import beadloom; print(beadloom.__file__)"  # must print a path under /tmp/rooms/room-proj-1
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /tmp/rooms/room-proj-1/.venv/bin/python -m pytest /tmp/rooms/room-proj-1/tests
 
 What this room cannot answer: it carries no .git, so a freshness check inside it has no
 baseline; and its verdict is a claim about these files only, never about the combined
@@ -1557,31 +1561,61 @@ reported 0 errors under `.[all,dev]` and 82 under `.[dev]`, and under the second
 collection with an error. The room therefore
 STATES the extras its invocation's interpreter has — the same derivation
 [`beadloom rooms`](#beadloom-rooms) reports, and recorded in `.beadloom-room.json` under
-`interpreter.extras` so a report can be checked against the room it was taken in. It does not
-BUILD an environment: which extras a verdict should be taken under is a decision, not a
-derivation.
+`interpreter.extras` so a report can be checked against the room it was taken in.
 
-Exit codes: `0` the room was built and the tracker says the bead is `in_progress`; `1` the
-room was built and its ownership is unconfirmed (the bead is not in progress, or the
-tracker could not be reached — that is a fact about the tracker, not about the room); `2`
-no room was built. A run that exits `2` leaves the directory it declined to enter exactly
-as it found it.
+**And the room BUILDS that interpreter (BDL-UX #256).** A room isolates the files a verdict
+is taken over; until this landed, nothing isolated the interpreter they run under, so a
+correctly-named room still returned a verdict decided by whatever the machine held. The
+command therefore creates a virtual environment inside the room and installs the room's own
+sources into it, and the invocation above names that interpreter rather than the project's.
+
+**Which extras: the union of every extra any leg of this project's workflows installs**, not
+a constant and not the set most legs declare. The modal reading is wrong on this repository —
+of the 8 installing jobs, four install `dev, languages` to build a site or run a release gate
+and two run the suite — and the two errors are not symmetric: a missing extra removes tests
+from a run without failing it, a surplus one removes nothing. Measured warm, macOS/APFS: the
+union installs in 1.07 s for 169 MB against 1.78 s and 160 MB for `.[all,dev]`. A leg
+spelling `--all-extras` is expanded from `[project.optional-dependencies]`.
+
+`--extras dev,tui` names them instead, to reproduce one particular leg; `--extras ""` asks
+for an environment with no extras, which is a different request from naming none.
+`--no-environment` builds the files and no interpreter, and is the only way to get that
+without a finding.
+
+**Cost, paid per room and never cached.** `uv venv` 0.082 s, `uv pip install -e` 1.07 s, room
+184 MB apparent — under half a percent of a seven-minute suite. Every `--rebuild` pays it
+again on purpose: an environment kept outside the room and reused is a directory two rooms
+share, which is BDL-UX #235. The reuse that matters is `uv`'s own content-addressed package
+cache. Without `uv`, `python -m venv` plus `pip install -e` is used instead and measured 1.84
+s plus 39.6 s over the same tree, so the room records which installer built it.
+
+Exit codes: `0` the room was built, it holds its own interpreter, and the tracker says the
+bead is `in_progress`; `1` the room was built and something about the measurement it supports
+is unconfirmed — the bead is not in progress, the tracker could not be reached, or the room
+holds no interpreter of its own and its verdict will be the project environment's; `2` no
+room was built. A run that exits `2` leaves the directory it declined to enter exactly as it
+found it.
 
 Refusals are named rather than described, so a caller can branch on them: `already_exists`,
 `not_a_room`, `inside_the_project`, `no_commit`, `file_missing`, `not_a_file`,
 `file_outside_the_project` and `unknown_bead`.
 
 `--json` carries the same facts: `bead`, `room`, `built`, `refusal`, `detail`, `commit`,
-`carried[]`, `invocation[]`, `extras`, `claim`, `findings[]` and `exit_code`.
+`carried[]`, `invocation[]`, `extras`, `environment`, `claim`, `findings[]` and `exit_code`.
+`environment` carries `built`, `source` (`legs`, `caller` or `underived`), `asked[]`,
+`installer`, `seconds`, `python` and `detail`.
 
 The room's `.beadloom-room.json` records the bead, the room's name, the project, the
-commit, the build time, the carried files, two interpreters, the extras and the Beadloom
+commit, the build time, the carried files, two interpreters, the extras, the environment and
+the Beadloom
 version. The two interpreters are not the same one: the invocation names the environment the
-SUITE runs under — the project's own `.venv` when it keeps one — while `built_by` is the
+SUITE runs under — the room's own when it has one — while `built_by` is the
 process that made the room, which under a `uv` tool install is a different interpreter with
 neither `pytest` nor the project's development dependencies. `interpreter.extras` carries
-`distribution`, `resolved`, `label`, `installed[]` and `absent[]`; `resolved: false` means the
-interpreter holds no distribution of that name, and it is not the same answer as no extras.
+`distribution`, `resolved`, `label`, `installed[]` and `absent[]`, read off the ROOM's
+interpreter when it has one; `resolved: false` means that interpreter holds no distribution
+of that name, and it is not the same answer as no extras. What `environment.asked` records is
+a request and what `interpreter.extras` records is the answer, and the two can differ.
 
 ### beadloom review-brief
 

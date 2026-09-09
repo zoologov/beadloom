@@ -64,6 +64,13 @@ from pathlib import Path
 
 from beadloom.application.rooms import ExtraSet, installed_extras
 from beadloom.application.waves.media import room_for
+from beadloom.application.waves.room_env import (
+    RoomEnvironment,
+    build_environment,
+    extras_a_room_installs,
+    room_python,
+    site_packages,
+)
 
 #: The file that makes a room able to say whose it is. A directory without one
 #: is a directory, whatever it is called — which is the whole of #235 in a
@@ -110,6 +117,10 @@ class RoomBuild:
     #: the derivation could not answer. ``None`` is not "no extras": a report
     #: printing the second for the first is the defect this field closes.
     extras: str | None = None
+    #: The interpreter the room holds, or the reason it holds none. Never
+    #: ``None`` on a built room: a room that could not build one says so, and a
+    #: reader who is not told falls back to the project's without knowing.
+    environment: RoomEnvironment | None = None
 
 
 def room_path(parent: Path, bead_id: str) -> Path:
@@ -145,10 +156,15 @@ def room_invocation(path: Path, *, project_root: Path | None = None) -> tuple[st
     green that is a measurement of the tree wearing a room's name. ``PYTHONPATH``
     pointing at the room's own ``src`` fixes it, and the import line is the check:
     it must print a path under the room.
+
+    The room's OWN interpreter is named when it has one (BDL-UX #256), and the
+    project's otherwise. ``PYTHONPATH`` is kept in both spellings: under the
+    room's own interpreter it is redundant, and it is the line whose output is
+    the check, so removing it would remove the evidence rather than the need.
     """
     room = Path(path)
     sources = room / "src"
-    interpreter = _interpreter(project_root)
+    interpreter = _interpreter(project_root, room=room)
     return (
         f"PYTHONPATH={sources} {interpreter} -c "
         f'"import beadloom; print(beadloom.__file__)"  # must print a path under {room}',
@@ -156,8 +172,14 @@ def room_invocation(path: Path, *, project_root: Path | None = None) -> tuple[st
     )
 
 
-def _interpreter(project_root: Path | None) -> str:
-    """The interpreter the project's suite runs under, not the one running this.
+def _interpreter(project_root: Path | None, *, room: Path | None = None) -> str:
+    """The interpreter a verdict in the room is taken under.
+
+    The room's own comes first when it has one: isolating the FILES and leaving
+    the interpreter to the machine is BDL-UX #256, where a correctly-named room
+    returned a verdict decided by whatever happened to be installed. The rest of
+    this docstring is about the fallback, which is what a room without an
+    environment of its own still names.
 
     Found by using this command on its own bead. ``sys.executable`` is the
     interpreter of the CLI PROCESS, and Beadloom installed as a ``uv`` tool runs
@@ -168,6 +190,10 @@ def _interpreter(project_root: Path | None) -> str:
     when it exists, and ``sys.executable`` is the fallback for a project that
     keeps none.
     """
+    if room is not None:
+        own = room_python(room)
+        if own is not None:
+            return str(own)
     if project_root is not None:
         root = Path(project_root)
         for relative in _PROJECT_INTERPRETERS:
@@ -184,11 +210,19 @@ def build_room(
     parent: Path,
     carry: tuple[str, ...] = (),
     rebuild: bool = False,
+    extras: tuple[str, ...] | None = None,
+    environment: bool = True,
 ) -> RoomBuild:
     """Build *bead_id*'s room under *parent* from ``HEAD`` plus the named files.
 
     Every refusal is returned rather than raised: a refusal is an answer about
     the room, and the caller needs the derived path in order to report it.
+
+    *extras* names the optional extras the room's own interpreter installs; the
+    default is derived from the project's own legs. *environment* false builds
+    the files and no interpreter, which is a room whose verdict is taken under
+    the project's environment — a caller who wants that must ask for it, because
+    getting it by omission is BDL-UX #256.
     """
     root = Path(project_root).resolve()
     path = room_path(parent, bead_id).resolve()
@@ -211,11 +245,12 @@ def build_room(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.mkdir()  # exclusive by construction: a room is created, never entered
 
-    extras = installed_extras(root)
     try:
         _archive_head(root, path)
         carried = _carry(root, path, carry)
-        _write_marker(bead_id, root, path, commit, carried, extras)
+        built_environment = _environment(root, path, extras, environment)
+        held = installed_extras(root, search_path=site_packages(path))
+        _write_marker(bead_id, root, path, commit, carried, held, built_environment)
     except (OSError, subprocess.SubprocessError, tarfile.TarError):
         # A half-built room is worse than none: it is a directory the next
         # attempt would refuse, for a reason that has nothing to do with a
@@ -234,7 +269,29 @@ def build_room(
         commit=commit,
         carried=carried,
         invocation=room_invocation(path, project_root=root),
-        extras=extras.label if extras.resolved else None,
+        extras=held.label if held.resolved else None,
+        environment=built_environment,
+    )
+
+
+def _environment(
+    root: Path, path: Path, extras: tuple[str, ...] | None, wanted: bool
+) -> RoomEnvironment:
+    """Give the room its own interpreter, or say which one it borrows instead."""
+    otherwise = _interpreter(root)
+    if not wanted:
+        return RoomEnvironment(
+            detail=(
+                "no environment was built: the caller declined one. This room's "
+                f"verdict is therefore taken under {otherwise}, which is the "
+                "project's own environment and not this room's — name it when "
+                "reporting"
+            )
+        )
+    return build_environment(
+        room=path,
+        choice=extras_a_room_installs(root, extras),
+        otherwise=otherwise,
     )
 
 
@@ -405,6 +462,7 @@ def _write_marker(
     commit: str,
     carried: tuple[str, ...],
     extras: ExtraSet,
+    environment: RoomEnvironment,
 ) -> None:
     """Record who the room belongs to and what a measurement in it is true of.
 
@@ -415,6 +473,12 @@ def _write_marker(
     not the files, decided 82 mypy errors against 0 on one code base (BDL-UX
     #236) — a report that cannot be reproduced from what it prints is a claim
     rather than a measurement.
+
+    ``interpreter.extras`` is read off the ROOM's own environment when it has
+    one, and ``environment`` states what was asked for and who asked. The two
+    can differ, and that is the point: what was typed is a request and what the
+    interpreter holds is the answer, which is the distinction BDL-UX #236 was
+    filed about.
     """
     from beadloom import __version__
 
@@ -426,7 +490,11 @@ def _write_marker(
         "built_at": datetime.now(timezone.utc).isoformat(),
         "carried": list(carried),
         "interpreter": {
-            "invocation": _interpreter(root),
+            # The room's own when it has one, which is what `room_invocation`
+            # prints. Recording the project's here while printing the room's
+            # would make the record disagree with the command that wrote it,
+            # about the one fact BDL-UX #256 is that a report gets wrong.
+            "invocation": _interpreter(root, room=path),
             "built_by": {
                 "executable": sys.executable,
                 "version": ".".join(str(part) for part in sys.version_info[:3]),
@@ -440,6 +508,15 @@ def _write_marker(
                     {"extra": a.extra, "needs": list(a.absent)} for a in extras.absent
                 ],
             },
+        },
+        "environment": {
+            "built": environment.built,
+            "source": environment.source,
+            "asked": list(environment.extras),
+            "installer": environment.installer,
+            "seconds": environment.seconds,
+            "python": str(environment.python) if environment.python else None,
+            "detail": environment.detail,
         },
         "beadloom": __version__,
     }

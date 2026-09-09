@@ -73,9 +73,28 @@ def bd(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 def _run(root: Path, at: Path, *extra: str) -> Any:
+    """Invoke the command over a project that declares no leg, and no interpreter.
+
+    ``--no-environment`` is passed because none of the cases below is about the
+    room's interpreter: they are about who the room belongs to and how many
+    times it may be built. Without it every one of them would build a real venv
+    it never looks at, and would report the finding a room without one carries.
+    The environment's own cases live in
+    ``tests/acceptance/features/room_environment.feature`` and in
+    ``tests/test_room_environment.py``.
+    """
     return CliRunner().invoke(
         main,
-        ["clean-room", BEAD, "--project", str(root), "--at", str(at), *extra],
+        [
+            "clean-room",
+            BEAD,
+            "--project",
+            str(root),
+            "--at",
+            str(at),
+            "--no-environment",
+            *extra,
+        ],
     )
 
 
@@ -316,3 +335,88 @@ class TestATrackerAnswerNobodyCanRead:
         assert result.exit_code == 1
         assert "not a bead record" in result.output
         assert (tmp_path / "rooms" / room_for(BEAD)).is_dir()
+
+
+class TestTheEnvironmentTheRoomIsGiven:
+    """The exit codes and the shapes a room's own interpreter is reported in.
+
+    No case here builds a real environment. Some decline it with
+    `--no-environment`; the rest name a project with no packaging at all, so the
+    install step fails in about 0.2 s and the room reports the failure — which
+    is the case being checked, since what a caller ASKED for has to reach the
+    record whether or not the ask succeeded. What the command DOES about a real
+    environment is stated in
+    `tests/acceptance/features/room_environment.feature`, over real ones.
+    """
+
+    def _raw(self, root: Path, at: Path, *extra: str) -> Any:
+        return CliRunner().invoke(
+            main,
+            ["clean-room", BEAD, "--project", str(root), "--at", str(at), *extra],
+        )
+
+    def test_a_room_without_an_interpreter_is_a_finding_and_not_a_refusal(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        result = self._raw(root, tmp_path / "rooms")
+
+        assert result.exit_code == 1, result.output
+        assert (tmp_path / "rooms" / room_for(BEAD)).is_dir()
+        assert "holds no interpreter of its own" in result.output
+
+    def test_a_caller_who_declines_one_is_not_told_they_are_missing_it(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        result = self._raw(root, tmp_path / "rooms", "--no-environment")
+
+        assert result.exit_code == 0, result.output
+        assert "holds no interpreter of its own" not in result.output
+        assert "the caller declined one" in result.output
+
+    def test_the_extras_the_caller_names_reach_the_record(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        result = self._raw(
+            root, tmp_path / "rooms", "--extras", "dev, tui", "--json"
+        )
+
+        payload = json.loads(result.stdout)
+        assert payload["environment"]["asked"] == ["dev", "tui"]
+        assert payload["environment"]["source"] == "caller"
+
+    def test_an_empty_extras_request_is_an_environment_and_not_an_absent_one(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        result = self._raw(root, tmp_path / "rooms", "--extras", "", "--json")
+
+        payload = json.loads(result.stdout)
+        assert payload["environment"]["asked"] == []
+        assert payload["environment"]["source"] == "caller"
+
+    def test_both_shapes_carry_the_same_environment_verdict(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        human = self._raw(root, tmp_path / "rooms", "--no-environment")
+        machine = self._raw(
+            root, tmp_path / "rooms2", "--no-environment", "--json"
+        )
+
+        payload = json.loads(machine.stdout)
+        assert payload["environment"]["built"] is False
+        assert payload["environment"]["detail"] in human.output
+        assert payload["exit_code"] == human.exit_code
