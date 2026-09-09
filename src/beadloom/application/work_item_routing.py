@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.doc_sync.doc_shape import table_cells
+from beadloom.doc_sync.tables import table_blocks
 from beadloom.onboarding.composer import compose
 from beadloom.onboarding.doc_templates import DEFAULT_DOC_CONFIG, doc_flow_config
 from beadloom.onboarding.flow_config import FlowConfigError
@@ -39,6 +39,7 @@ from beadloom.onboarding.role_composer import ROLE_NAMES
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.doc_sync.tables import Table
     from beadloom.onboarding.flow_config import FlowConfig
 
 #: The composed artifact the routing is read from.
@@ -58,7 +59,22 @@ AXES_ROLE = "explore"
 #: The routing table's header, matched by its first two columns. The third
 #: column's title has changed once already ("Docs" -> "Docs created"), so the
 #: match is on what identifies the table rather than on its full width.
+#:
+#: Matched against a TABLE'S HEADER ROW and not against any row that spells it
+#: (BDL-UX #259). A command documenting its own routing quotes this row as an
+#: example, and the reader that matched the first row anywhere took the example
+#: for the table.
 _HEADER = ("type", "flow")
+
+#: The rows the routing table states that this derivation could not read as a
+#: route, reported rather than dropped. A silent omission and a clean run read
+#: alike, and the omission is the worse of the two directions here: the type's
+#: document kinds leave :attr:`Routing.simplified_kinds`, so every work item of
+#: that type falls out of the population `check_work_item_types` judges.
+_UNREAD_ROWS = (
+    "task-init's routing table states {count} row(s) this derivation could not "
+    "read as a route ({rows}), so no flow and no document set is derived for them"
+)
 
 #: A ``##`` heading, and the launch of a subagent inside a step's body.
 _HEADING_RE = re.compile(r"^#{2,3} +(?P<title>.+?)\s*$")
@@ -168,34 +184,68 @@ def _flow_label(cell: str) -> str:
     return ""
 
 
-def _routes_in(lines: list[str]) -> tuple[tuple[Route, ...], int | None]:
-    """Every row of the routing table, and the line its heading table starts on."""
+def _label(cell: str) -> str:
+    """A cell reduced to the word it names, without its markdown emphasis."""
+    return cell.strip("*_` ").lower()
+
+
+def _routing_tables(lines: list[str]) -> list[Table]:
+    """Every table whose own HEADER ROW names the routing columns.
+
+    The boundary rule is :mod:`beadloom.doc_sync.tables`', because this is its
+    third reader and the first two disagreed about it hours apart in one slice
+    (BDL-UX #213, #244). ``table_blocks`` returns each contiguous table with its
+    own header row leading, so a routing table is a table here rather than
+    "everything below the first row that spelled the header".
+
+    **A union, not the first match, and that was measured rather than chosen.**
+    ``/task-init`` composes a project layer under the core, and a layer that adds
+    a type states its own routing table under its own heading — the capability
+    `beadloom-0mdo.5` built this derivation for. Reading only the first table
+    would have dropped that type, and a route this reader loses removes every
+    work item of it from the population `check_work_item_types` judges. It is
+    also the rule the ``## Axes`` reader already follows for the same reason: a
+    section holds one table per slice, and the answer is their union with each
+    table's rows judged against its own header.
+    """
+    tables = []
+    for table in table_blocks(enumerate(lines, start=1)):
+        header = [_label(cell) for cell in table[0][1]]
+        if tuple(header[: len(_HEADER)]) == _HEADER:
+            tables.append(table)
+    return tables
+
+
+def _routes_in(
+    lines: list[str],
+) -> tuple[tuple[Route, ...], int | None, tuple[str, ...]]:
+    """The routing tables' routes, the line the first starts on, and the rows lost.
+
+    Membership is decided by the table and not by the words in a cell. The
+    reader this replaced kept a row when its second cell contained ``simplified``
+    or ``full``, which held on this project's own documents by arithmetic rather
+    than by rule: of 5 122 table rows in 456 markdown files here, that test
+    admits 27, and 17 of them belong to other tables in other documents.
+    """
+    tables = _routing_tables(lines)
+    if not tables:
+        return (), None, ()
     routes: list[Route] = []
-    header: list[str] | None = None
-    first_line: int | None = None
-    for lineno, line in enumerate(lines, start=1):
-        cells = table_cells(line)
-        if cells is None:
-            continue
-        lowered = [cell.strip("*_` ").lower() for cell in cells]
-        if header is None:
-            if tuple(lowered[: len(_HEADER)]) == _HEADER:
-                header = lowered
-                first_line = lineno
-            continue
-        if len(cells) < 3:
-            continue
-        flow = _flow_label(cells[1])
-        if not flow:
-            continue
-        routes.append(
-            Route(
-                type=cells[0].strip("*_` ").lower(),
-                flow=flow,
-                documents=tuple(dict.fromkeys(_NAME_RE.findall(cells[2]))),
+    unread: list[str] = []
+    for table in tables:
+        for lineno, cells in table[1:]:
+            flow = _flow_label(cells[1]) if len(cells) > 1 else ""
+            if len(cells) < 3 or not flow:
+                unread.append(f"line {lineno}: {_label(cells[0]) or '(unnamed)'}")
+                continue
+            routes.append(
+                Route(
+                    type=_label(cells[0]),
+                    flow=flow,
+                    documents=tuple(dict.fromkeys(_NAME_RE.findall(cells[2]))),
+                )
             )
-        )
-    return tuple(routes), first_line
+    return tuple(routes), tables[0][0][0], tuple(unread)
 
 
 def _explore_step(lines: list[str]) -> tuple[int | None, str]:
@@ -217,14 +267,16 @@ def _explore_step(lines: list[str]) -> tuple[int | None, str]:
 def read_routing(text: str) -> Routing:
     """Derive the routing from a composed ``/task-init`` command's text."""
     lines = text.splitlines()
-    routes, table_line = _routes_in(lines)
+    routes, table_line, unread = _routes_in(lines)
     explore_line, explore_step = _explore_step(lines)
     notes: list[str] = []
-    if not routes:
+    if table_line is None:
         notes.append(
             "task-init states no routing table (a header row of "
             f"{' | '.join(_HEADER)}), so no type is judged against its axes"
         )
+    if unread:
+        notes.append(_UNREAD_ROWS.format(count=len(unread), rows="; ".join(unread)))
     if AXES_ROLE not in ROLE_NAMES:
         notes.append(
             f"no role named {AXES_ROLE!r} ships a core fragment, so the step that "
@@ -257,15 +309,9 @@ def task_init_routing(
     has its documents checked against the shipped route.
     """
     if config is None:
-        config = (
-            doc_flow_config(project_root)
-            if project_root is not None
-            else DEFAULT_DOC_CONFIG
-        )
+        config = doc_flow_config(project_root) if project_root is not None else DEFAULT_DOC_CONFIG
     try:
-        composed = compose(
-            *TASK_INIT_COMMAND, config=config, project_root=project_root
-        )
+        composed = compose(*TASK_INIT_COMMAND, config=config, project_root=project_root)
     except FlowConfigError as error:
         # Reported by name by ``config-check``; raising here would turn one
         # configuration fault into a document check that names the wrong file.

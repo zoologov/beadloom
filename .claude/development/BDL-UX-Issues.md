@@ -51,6 +51,19 @@
 
     **Related:** #190 (its foreign-subject face is absorbed here; its example-token face is not), #205 (the past tense, open).
 
+266. [2026-09-09] [MEDIUM] a clean room has no `.git`, so a version attributed to `git` loses its subject and reddens the Gate at HEAD
+
+    **Severity:** medium (every clean-room Gate run on this repository is rc 1 on a document nobody carried, and the room's own "what this room cannot answer" sentence does not name it)
+    **Command:** `beadloom clean-room <bead>` then `beadloom ci` inside the room
+    **Context:** BDL-068 S6, `beadloom-0mdo.77`. The clean room is the instrument every bead of two epics reports its verdict from, and it prints the limits of its own answer.
+    **Measured:** `beadloom ci` in `room-beadloom-0mdo.77` returned rc 1 with exactly one error — `docs/domains/application/components/active-table/DOC.md:227 doc-fact-stale: version: doc says '2.49.0' but project state is '3.0.2'`. The sentence is `Measured on git 2.49.0 in two isolated rigs`, and it is not stale. The same tree in the working directory reports `No stale mentions found`. Reproduced at HEAD with none of that bead's files carried: `git archive HEAD` into a control directory, `beadloom reindex --project`, `beadloom docs audit --project` — one stale mention, the same line.
+    **Cause, not inferred:** `doc_sync/version_subjects.py:140` derives the subject name `git` from `(project_root / ".git").exists()`. A room built by `git archive HEAD` carries no `.git` by construction, so `git` leaves the derived vocabulary, `2.49.0` loses its nearest subject and is compared against this project's version. `beadloom-0mdo.63` recorded that `git` needed no `docs_audit.subjects` entry, which was measured in the tree and is false in a room.
+    **Why it matters:** this is the second thing the room's no-`.git` property reaches, and only the first is documented. The room already says a freshness check inside it has no baseline; it does not say that a derived FACT can change its verdict. A verdict that is red for a reason belonging to the instrument is the class BDL-UX #258 already cost this epic — everyone learns to discount it, and the day a real red appears it is discounted too.
+    **Expected:** one of two, and the choice is a decision rather than a detail. Either the room carries what the derivation needs — a marker the room writes saying it came from a git tree — or the derivation stops asking the filesystem a question about vocabulary and reads the subject from what the project declares, the way it already reads every distribution name from `pyproject.toml`. The second is the shape `.63` chose everywhere else.
+    **Workaround:** a `docs_audit.subjects` entry for `git` in `.beadloom/config.yml` makes the name declared rather than derived, which is the same route `.63` took for `bd`. Not applied by `beadloom-0mdo.77`: it is a change to the audit's configuration, outside that bead's axes, and applying it would hide the finding before it was recorded.
+    **Filed as:** `beadloom-0mdo.81`.
+    **Related:** #253 (the fix this is the residual of), #258 (a permanent red in a clean room, same consequence), #256 (the room resolving something to the main tree).
+
 265. [2026-09-09] [MEDIUM] the graph is one file, so one writer per file is available here and is not taken
 
     **Severity:** medium (it removes a shared write rather than reporting it, and it changes every adopter's `.beadloom/_graph/` layout)

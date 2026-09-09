@@ -29,10 +29,19 @@ meets it, and the one acceptance assertion that reached the human text could not
 fail. A seedless target and a target nothing calls both carry an empty
 population, in the same answer, and the two sections must not read alike.
 
-:class:`TestTheLaunchIsFoundInEverySpellingOfIt` and
-:class:`TestARoutingRowWhoseFlowCellIsUnreadableIsDroppedSilently` are the two
-halves `.5` handed over: the launch form is attacked with four spellings and two
-near-misses, and the routing table's own silent omission is recorded as a GAP.
+:class:`TestTheLaunchIsFoundInEverySpellingOfIt` is one of the two halves `.5`
+handed over: the launch form is attacked with four spellings and two near-misses.
+The other half was `TestARoutingRowWhoseFlowCellIsUnreadableIsDroppedSilently`,
+which recorded the routing table's own silent omission as a GAP and instructed
+its reader to DELETE it once the gap closed. `beadloom-0mdo.77` closed it
+(BDL-UX #259) and deleted the class; what it asserted is now stated in
+`tests/test_the_routing_table_is_one_table.py`, where the row is still dropped
+from the routes, its document kinds still leave `simplified_kinds`, and
+`Routing.notes` now names it. The reason the gap recorded for not repairing it --
+that a note per unreadable cell would fire on the table's own `|---|---|`
+alignment row -- stopped applying when the reader moved onto
+`doc_sync.tables.table_blocks`, which drops a separator row before any caller
+sees one.
 """
 
 from __future__ import annotations
@@ -342,71 +351,3 @@ class TestTheLaunchIsFoundInEverySpellingOfIt:
 
         assert routing.explore_line == 1
         assert routing.explore_step == "Whatever this step is called now"
-
-
-class TestARoutingRowWhoseFlowCellIsUnreadableIsDroppedSilently:
-    """A GAP this bead measured and did not repair, recorded so it is not re-found.
-
-    The direction the bead's third clause states — a derivation that resolved
-    everything and one that silently omitted what it could not parse must not read
-    the same — holds in `impact` and does NOT hold here. `_routes_in` skips a row
-    whose `Flow` cell spells neither `simplified` nor `full`, and `Routing.notes`,
-    which exists for exactly this class of honesty, is left empty. The consequence
-    reaches a check: the dropped type's document kinds are missing from
-    `simplified_kinds`, so every work item of that type falls out of
-    `check_work_item_types`' population and the report reads as a clean run over a
-    smaller corpus.
-
-    NOT repaired here, and the reason is a measurement rather than caution: the
-    obvious repair — a note for every unreadable cell — fires on the table's own
-    `|---|---|` alignment row, which `.5` already has a mutant for. Repairing it
-    means re-measuring `.5`'s sixteen mutants, which is a dev bead's work.
-
-    When this class goes red the gap has closed: DELETE it rather than repair it.
-    """
-
-    #: A type whose flow cell names a third route nobody derives.
-    A_ROW_WHOSE_FLOW_CELL_NAMES_NEITHER = "| spike | Lightweight: NOTE | NOTE |\n"
-
-    def test_the_row_is_dropped_from_the_routes(self) -> None:
-        routing = read_routing(
-            _A_TASK_INIT.format(
-                launch=_FOUR_SPELLINGS_OF_THE_LAUNCH["an-agent-call"],
-                extra_row=self.A_ROW_WHOSE_FLOW_CELL_NAMES_NEITHER,
-            )
-        )
-
-        assert [route.type for route in routing.routes] == ["epic", "bug"]
-        assert routing.flow_of("spike") is None
-
-    def test_nothing_in_the_routing_says_a_row_was_dropped(self) -> None:
-        """The gap itself. `notes` is the field that would say it, and it is empty."""
-        routing = read_routing(
-            _A_TASK_INIT.format(
-                launch=_FOUR_SPELLINGS_OF_THE_LAUNCH["an-agent-call"],
-                extra_row=self.A_ROW_WHOSE_FLOW_CELL_NAMES_NEITHER,
-            )
-        )
-
-        assert routing.notes == (), (
-            "the routing now reports the row it could not read — the gap this "
-            "class records has closed, so delete the class rather than repair it"
-        )
-
-    def test_the_dropped_row_takes_its_document_kinds_with_it(self) -> None:
-        """Why it matters: the kinds decide which work items are judged at all."""
-        with_the_row = read_routing(
-            _A_TASK_INIT.format(
-                launch=_FOUR_SPELLINGS_OF_THE_LAUNCH["an-agent-call"],
-                extra_row=self.A_ROW_WHOSE_FLOW_CELL_NAMES_NEITHER,
-            )
-        )
-        readable = read_routing(
-            _A_TASK_INIT.format(
-                launch=_FOUR_SPELLINGS_OF_THE_LAUNCH["an-agent-call"],
-                extra_row="| spike | Simplified: NOTE | NOTE |\n",
-            )
-        )
-
-        assert "NOTE" not in with_the_row.simplified_kinds
-        assert "NOTE" in readable.simplified_kinds

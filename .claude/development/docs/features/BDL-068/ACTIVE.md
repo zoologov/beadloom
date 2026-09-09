@@ -1229,6 +1229,71 @@ The fix is filed; this name is the free mitigation and later slices keep it.
      `.beadloom/sync-surface.json` records a pair count that grew by three across two beads, so
      it is left for the gate owner to re-record rather than staged here.
 
+   - [x] `.77` — BDL-UX **#259**, the third reader of the markdown-table boundary. S6, concurrent
+     with `beadloom-kqsv`; **not the gate owner** — `beadloom-kqsv` is.
+     **The component fit, so there is no fourth parser.** `_routes_in` reads through
+     `doc_sync.tables.table_blocks`, and `_routing_tables` selects every block whose OWN HEADER
+     ROW leads with `Type` and `Flow`. Nothing was missing from `markdown-tables`: `doc-quality`
+     and `axes-section` iterate every block and classify each by its own header, and selecting
+     one by header is this reader's question rather than the component's.
+     **The design changed once, on a measurement that says the entry's failure direction was
+     backwards.** The first shape was "the FIRST matching table only" and it DROPPED A ROUTE
+     THAT EXISTS TODAY — `test_a_project_layer_that_adds_a_type_is_policed_by_the_same_act` went
+     red, because a project layer states its own routing table under its own heading, which is
+     the capability `.5` built this derivation for. The rule is therefore the union, each
+     table's rows judged against its own header: the rule `axes-section` already follows for a
+     section holding one table per slice.
+     **The phantom DELETES, so "under-reporting a route" was the wrong reading.**
+     `shared_kinds` is an INTERSECTION over every route and is where BDL-UX #257's focus
+     document comes from. Measured on the shipped command: with one real second table appended —
+     the two rows `docs/guides/document-kinds.md` already carries — **7 routes read where 5
+     exist**, two phantom types routed `simplified` with empty document sets, and `shared_kinds`
+     falls from `{ACTIVE}` to `{}`. With a table stated BEFORE it quoting a routing row as an
+     example, **6 where 5 exist**, a phantom `epic` with an empty document set, and
+     `decision_line` at 43 instead of the routing table's own header. After the fix both read 5,
+     `shared_kinds` `{ACTIVE}`, `decision_line` at the table.
+     **Reachability of the guard the reader survived on, measured over this repository:** 456
+     markdown documents, 5 122 table data rows, **27 admitted** by "second cell contains
+     `simplified` or `full`, at least three cells". Ten are the routing table itself; the other
+     **seventeen sit in fifteen other documents** and would be read as routes named `D4`,
+     `BEAD-05`, `Q1`, `12.8.3` and `Local proxy`. A filter that rejects 99.5% of a corpus is
+     sparse, not sound, and #213's measured cause was that vocabulary cannot decide this.
+     **No route disappears**, measured over the composed commands this project ships: 21
+     shapes — its own `flow.yml` plus two architectures x five stacks x two languages — 5 880
+     lines, **105 routes before and 105 after**. The routing table lives in the core fragment,
+     so no overlay moves it.
+     **A recorded GAP closed and was deleted, per its own instruction.**
+     `TestARoutingRowWhoseFlowCellIsUnreadableIsDroppedSilently` was `.5`'s: a row the table
+     states and the reader cannot use was dropped in silence, and its docstring said to DELETE
+     the class rather than repair it when it went red. It went red; deleted (412 -> 353 lines).
+     Its stated reason for not repairing — a note per unreadable cell would fire on the
+     `|---|---|` alignment row — stopped applying the moment the reader moved onto
+     `table_blocks`, which drops a separator before any caller sees one. `Routing.notes` now
+     names such a row with its line number.
+     9 assertions were verified RED against the pre-fix reader (3 scenarios + 6 unit); the other
+     25 are green in both directions and are labelled guards rather than checks in the module
+     docstring. 34 tests total.
+     **BDL-UX #266 filed rather than fixed** (`beadloom-0mdo.81`). `beadloom ci` in this bead's
+     room returned rc 1 on ONE error in a file it did not carry —
+     `active-table/DOC.md:227 doc-fact-stale: '2.49.0' vs '3.0.2'` — and it is **red at HEAD in
+     a control room built the same way**: `version_subjects.py:140` derives the subject name
+     `git` from `(project_root / ".git").exists()`, and a `git archive` room has no `.git`. The
+     tree reports `No stale mentions found`. Every clean-room Gate run on this repository is
+     rc 1 for a reason belonging to the instrument, which is BDL-UX #258's shape again.
+     Green in a clean room over 9 carried files (1 255 files total): **9 508 passed, 59 skipped,
+     1 xfailed, 0 failed** — `test_bead15_s3b_coverage.py` now SKIPS on the room's stated
+     no-`.git` property rather than failing. `ruff check src/ tests/` rc 0 and `mypy src/` rc 0
+     against all four declared target versions, varying the version the checker is asked about
+     and not the interpreter it runs under. Darwin arm64 / CPython 3.13.7, extras
+     `all+dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**.
+     **Not a claim about the combined tree** — `beadloom-kqsv` owns that measurement.
+     **BDL-UX #257 and #261 confirmed from this bead's side.** `beadloom waves` reported 1 wave
+     of 2 with 0 serialisations, and this `ACTIVE.md` was shared in fact. The tree also carried
+     `beadloom-kqsv`'s in-flight `waves/` edits throughout: a full working-tree run showed 10
+     failures and one collection error, all of them in `waves`/`media` and none of them mine,
+     which is exactly the reading the room exists to separate. `.beadloom/_graph/services.yml`
+     was NOT touched by this bead.
+
 ## What is in `main` now
 
 Four commands, each of one shape — derive the answer, name the reason, name what was not
