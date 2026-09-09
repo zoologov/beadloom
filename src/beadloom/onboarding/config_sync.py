@@ -29,7 +29,6 @@ from beadloom.graph.rules import exit_condition_deadline
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
-    _vendored_asset,
     composed_claude_md,
     composed_command,
 )
@@ -489,11 +488,11 @@ def _adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     return drifts
 
 
-#: Kinds of vendored flow file, paired with their canonical name tuple. The
-#: scaffold drops each under ``.claude/<kind>/<name>.md`` byte-identical to the
-#: vendored ``<kind>/<name>.md.txt`` template (no per-project tokens — unlike
-#: CLAUDE.md, the agents/commands are project-agnostic, so a plain byte compare
-#: is exact). Mirrors :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
+#: Kinds of canonical flow file, paired with their name tuple. The scaffold
+#: writes each under ``.claude/<kind>/<name>.md`` as the composition for that
+#: project's own flow, so the comparison is against a composition rather than
+#: against fixed bytes. Mirrors
+#: :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
 _AGENTIC_FLOW_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("agents", AGENT_FILES),
     ("commands", COMMAND_FILES),
@@ -604,10 +603,18 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
     Only checked when the flow is fully scaffolded (see
     :func:`_agentic_flow_scaffolded`). The **commands** are compared against
     their composition (CORE + the flow.yml overlays + the project layer) rather
-    than against the vendored bytes, so a project extension in
+    than against fixed bytes, so a project extension in
     ``.beadloom/flow/commands/`` is part of the expected result while a change
-    to the shipped core still differs from it. Agents are the role composer's
-    responsibility (:func:`_composed_adapter_drifts`).
+    to the shipped core still differs from it.
+
+    The **agents** belong to :func:`_composed_adapter_drifts` whenever a valid
+    ``flow.yml`` is present, which is every project scaffolded since BDL-052 S3.
+    The block here covers the one case that function returns empty for — no
+    ``flow.yml`` at all — and since ``beadloom-iur5`` it covers it the same way:
+    the composition for the config resolved from the project, through the same
+    :func:`_state_drift` projection. It used to be a byte-compare against a
+    snapshot of THIS repository's ``.claude/agents/``, under a remediation that
+    told the adopter to adopt a ``flow.yml`` and offered no fix.
     """
     manifest, manifest_usable = read_manifest(project_root)
     scaffold_state = _flow_scaffold(project_root, manifest)
@@ -644,37 +651,33 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
             drifts.append(drift)
 
     if not flow_yml:
-        # Without a flow.yml the agents are the plain BDL-048 byte-identical
-        # scaffold, so the vendored compare is exact for them too.
+        # Without a flow.yml the role files come from this same function's own
+        # scaffold path (`include_agents=True`), which since `beadloom-iur5`
+        # composes them exactly as it composes the commands above. So the role
+        # files are checked the same way the commands are, through the one
+        # `_state_drift` projection every other artifact kind reads — the
+        # composition for the config resolved from this project, with the
+        # shipped-only composition as an alternate for a repo that has not
+        # declared a project layer. It used to be a byte-compare against a
+        # snapshot of THIS repository's `.claude/agents/`, which reported drift
+        # against a body composed for another project's architecture.
+        shipped_roles = compose_all_roles(config)
+        composed_roles = compose_all_roles(config, project_root)
         for name in AGENT_FILES:
-            path = project_root / ".claude" / "agents" / f"{name}.md"
-            try:
-                on_disk = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if on_disk == _vendored_asset("agents", name):
-                continue
-            drifts.append(
-                ConfigDrift(
-                    file=f".claude/agents/{name}.md",
-                    reason=(
-                        "scaffolded agentic-flow file drifted from the shipped "
-                        "template"
-                    ),
-                    remediation=(
-                        "this repo has no .beadloom/flow.yml, so the role files "
-                        "are the plain vendored scaffold and there is no project "
-                        "layer to hold an addition. Add a flow.yml (`beadloom "
-                        "setup-agentic-flow`), then move the edit to "
-                        f"{PROJECT_FLOW_DIRNAME / 'roles' / f'{name}.md'}"
-                    ),
-                    # The scaffold's non-forcing path skips a divergent vendored
-                    # file, so `--fix` leaves this one standing. Offering it as
-                    # the remedy would be the #186 contradiction in the other
-                    # direction: advice that does nothing.
-                    fixable=False,
-                )
+            relpath = f".claude/agents/{name}.md"
+            if relpath in scaffold_state.missing:
+                continue  # already reported as missing; there is nothing to diff
+            state = state_of(
+                project_root,
+                relpath,
+                expected=composed_roles[name],
+                manifest=manifest,
+                alternates=(shipped_roles[name],),
+                accounted=manifest_usable,
             )
+            drift = _state_drift(relpath, state, kind="roles", name=name)
+            if drift is not None:
+                drifts.append(drift)
     return drifts
 
 
@@ -988,16 +991,6 @@ def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     return tuple(texts)
 
 
-def _vendored_role_body(role: str) -> str | None:
-    """The plain vendored ``agents/<role>.md`` body, if this release ships one."""
-    if role not in AGENT_FILES:
-        return None
-    try:
-        return _vendored_asset("agents", role)
-    except OSError:
-        return None
-
-
 def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
     """``(relpath, role, state)`` for every composed role adapter on disk.
 
@@ -1006,12 +999,24 @@ def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
     is exactly what BDL-UX #186 was: one command saying "It will NOT be
     rewritten" while another line of the same command rewrote it.
 
-    The plain vendored scaffold is offered as an ``alternate``. Those bytes are
-    Beadloom's own — ``_scaffold_vendored`` wrote them and simply never recorded
-    a digest — so without this a repo that adopts a ``flow.yml`` after
-    scaffolding reads ``hand_edited`` on four files nobody has touched
-    (measured), and ``--fix`` would then refuse to recompose them for ever.
-    Unowned is not the same as somebody's only copy.
+    The SHIPPED-ONLY composition is offered as an ``alternate``. Those bytes are
+    Beadloom's own, written by a scaffold run that predates the project layer,
+    so without this a repo that adds a ``.beadloom/flow/roles/`` fragment after
+    scaffolding reads ``hand_edited`` on files nobody has touched, and ``--fix``
+    would then refuse to recompose them for ever. Unowned is not the same as
+    somebody's only copy.
+
+    Until ``beadloom-iur5`` a SECOND alternate was offered beside it: the
+    vendored ``agents/*.md.txt`` snapshot, for a repo scaffolded before it
+    declared a ``flow.yml``. That alternate is gone with the snapshot, and it is
+    no longer needed for the case it was added for, because the scaffold path
+    that writes those files now writes this same composition and records its
+    digest. The narrow case it no longer covers is stated in this bead's
+    comments rather than hidden: a repo scaffolded by a Beadloom older than this
+    change, whose flow.yml then declares an architecture or stack other than
+    ``ddd``/``python``, reads ``unverified`` on its role files instead of clean.
+    That is the reporting direction, not the destroying one — the file is left
+    alone and named.
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return []
@@ -1031,16 +1036,12 @@ def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
             rel = str(agent_dir / f"{role}.md")
             if not (project_root / rel).is_file():
                 continue
-            vendored = _vendored_role_body(role)
-            alternates = [shipped_only[role]]
-            if vendored is not None:
-                alternates.append(vendored)
             state = state_of(
                 project_root,
                 rel,
                 expected=composed[role],
                 manifest=manifest,
-                alternates=tuple(alternates),
+                alternates=(shipped_only[role],),
                 accounted=manifest_usable,
             )
             states.append((rel, role, state))

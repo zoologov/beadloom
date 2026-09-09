@@ -43,7 +43,6 @@ from beadloom.doc_sync.work_item_type import (
 )
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
-    _vendored_asset,
     composed_command,
     scaffold,
 )
@@ -58,6 +57,7 @@ from beadloom.onboarding.flow_config import (
 from beadloom.onboarding.role_adapters import cursor_rules_body, generate_adapters
 from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
+    compose_all_roles,
     compose_role,
     fragment_role_name,
     roles_in,
@@ -163,10 +163,19 @@ class TestARoleExistsBecauseAFragmentShipsForIt:
         """One fact, one home — ``AGENT_FILES`` IS ``ROLE_NAMES``."""
         assert AGENT_FILES is ROLE_NAMES
 
-    def test_every_role_has_a_vendored_asset(self) -> None:
-        """``_scaffold_vendored`` reads one per role; a missing one would raise."""
+    def test_every_role_has_a_core_fragment(self) -> None:
+        """``compose_all_roles`` produces one body per role; a gap would be empty.
+
+        The predecessor read one vendored ``agents/<role>.md.txt`` asset per
+        role. ``beadloom-iur5`` deleted those assets, so the population is
+        checked where it is now derived: the composition itself.
+        """
+        composed = compose_all_roles(
+            FlowConfig(tools=("claude",), architecture="ddd", stack=("python",))
+        )
+        assert sorted(composed) == sorted(ROLE_NAMES)
         for role in ROLE_NAMES:
-            assert _vendored_asset("agents", role)
+            assert composed[role].strip(), role
 
     def test_the_cursor_pointer_names_the_derived_population(self) -> None:
         """The prose list inside the pointer was a third home for the same fact."""

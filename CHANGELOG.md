@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The vendored role snapshot, and the function that refreshed it** (BDL-UX #177's last leg).
+  `src/beadloom/onboarding/templates/agentic_flow/agents/*.md.txt` — five assets, 97 KB — were
+  a byte-snapshot of THIS repository's live `.claude/agents/`, refreshed by
+  `agentic_flow_setup.sync_agentic_flow()` and asserted byte-identical by two tests. Both are
+  gone, along with `vendored_flow_root()`, `_vendored_asset()` and `_scaffold_vendored()`.
+
+  BDL-061 S3 removed this shape for `CLAUDE.md` and the slash commands and left it standing for
+  the roles. It was harmless only while this repository declared no `.beadloom/flow/roles/`
+  fragment, because the snapshot then happened to equal the pure shipped composition; a
+  fragment added here would have been written into the package by the next refresh and shipped
+  to every adopter, silently and byte-identically to what the tests asserted. Measured on this
+  tree: `sync_agentic_flow()` had no production caller — a grep over `src/` found only its own
+  module — so the snapshot was kept current by a manual step nobody was reminded of.
+
+  **No function in `agentic_flow_setup` writes package data now.** That is what makes the
+  reversal structural for every artifact the command writes, rather than a convention: there is
+  nothing left to run that could carry a local file outward.
+
+### Changed
+
+- **The scaffold's role path composes instead of copying.** `scaffold(include_agents=True)`
+  now writes `compose_all_roles(config, project_root)` through `_scaffold_composed()`, the same
+  function, manifest recording and hand-edit policy the slash commands use, so a hand-edited
+  role file on that path is preserved and reported with the project-layer path the edit belongs
+  in instead of being skipped without a remedy. The path is reached from
+  `config_sync.refresh_agentic_flow_files()`, which passes `include_agents=not has_flow` — so
+  `config-check --fix` on a repository that adopted the flow before `.beadloom/flow.yml`
+  existed is what it serves.
+
+  This has a consequence for adopters that needed no snapshot to appear: those bodies were ONE
+  composition, this project's `ddd` and `python`, so a project whose flow declared anything else
+  received role protocols for an architecture it does not use. It now receives its own.
+
+- **`config-check` compares role files against a composition on every path.** The branch for a
+  repository with no `.beadloom/flow.yml` used to byte-compare each `.claude/agents/*.md`
+  against the snapshot and report *drifted from the shipped template* with `fixable=False`,
+  under a remediation telling the adopter to adopt a `flow.yml`. It now runs through the same
+  `_state_drift` projection every other artifact kind reads.
+
+  One narrowing, in the reporting direction and stated rather than hidden: `_adapter_states()`
+  offered the snapshot as a second `alternate` beside the shipped-only composition, for a
+  repository scaffolded before it declared a `flow.yml`. That case is covered at the write end
+  now, because the scaffold path records a digest. A repository scaffolded by a Beadloom older
+  than this change, whose `flow.yml` then declares an architecture or stack other than
+  `ddd`/`python`, reads `unverified` on its role files instead of clean — reported and left
+  exactly as it is, never rewritten.
+
 ### Fixed
 
 - **A guard that cannot evaluate itself no longer blocks the write that would repair it**

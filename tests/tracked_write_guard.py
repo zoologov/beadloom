@@ -12,11 +12,16 @@ a project-local paragraph to adopters.
 The class of defect is "the measurement mutates what it measures", the same one
 as a lint that writes its own index (BDL-UX #147). It is invisible to
 ``git status`` whenever the write happens to be byte-identical, which is exactly
-why it survived: the remaining four ``agents/*.md.txt`` writes were idempotent on
-an unchanged tree and left no trace — until somebody edited a live role file,
-after which one red run and one green run put the edit in the shipped artifact
+why it survived: the remaining ``agents/*.md.txt`` writes were idempotent on an
+unchanged tree and left no trace — until somebody edited a live role file, after
+which one red run and one green run put the edit in the shipped artifact
 (measured in a clean room at HEAD: template sha ``77dfc84…`` → ``b8bf376…``, run
 1 failed, run 2 passed with the edit inside the package).
+
+BDL-068 ``beadloom-iur5`` removed that writer and the assets it wrote, so no
+test calls a package-data writer any more. This guard stays, and its subject is
+now the whole tracked tree rather than one function: what it enforces is that a
+run cannot mutate what it measures, and that property has no expiry date.
 
 So the property is enforced structurally instead of by review: a test may write
 anywhere it likes — ``tmp_path``, a temp git repo, the index under

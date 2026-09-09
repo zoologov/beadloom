@@ -20,8 +20,12 @@ from __future__ import annotations
 
 import re
 
-from beadloom.onboarding.agentic_flow_setup import vendored_flow_root
-from beadloom.onboarding.role_composer import compose_role, roles_templates_root
+from beadloom.onboarding.flow_config import FlowConfig
+from beadloom.onboarding.role_composer import (
+    compose_all_roles,
+    compose_role,
+    roles_templates_root,
+)
 
 #: The command the duty is discharged with.
 MUTATION_COMMAND = "beadloom mutation"
@@ -89,9 +93,16 @@ class TestTheDutyAndTheInstrumentReachTheSameReader:
 
 
 class TestTheShippedAdaptersCarryItAfterRecomposition:
-    def test_the_vendored_test_adapter_carries_the_command(self) -> None:
-        """What an adopter's `setup-agentic-flow` actually drops on disk."""
-        vendored = (vendored_flow_root() / "agents" / "test.md.txt").read_text(
-            encoding="utf-8"
-        )
-        assert MUTATION_COMMAND in _mutation_section(vendored)
+    def test_the_shipped_test_role_carries_the_command(self) -> None:
+        """What an adopter's `setup-agentic-flow` actually drops on disk.
+
+        Read from the shipped-only composition — no ``project_root`` — which is
+        what an adopter with no project layer receives. It used to be read from
+        the ``agents/test.md.txt`` asset, a snapshot of THIS repository's live
+        role file, so it asserted the command reached our copy rather than
+        theirs (``beadloom-iur5``).
+        """
+        shipped = compose_all_roles(
+            FlowConfig(tools=("claude",), architecture="ddd", stack=("python",))
+        )["test"]
+        assert MUTATION_COMMAND in _mutation_section(shipped)

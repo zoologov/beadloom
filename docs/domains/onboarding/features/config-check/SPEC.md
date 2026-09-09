@@ -175,13 +175,34 @@ behaviour:
 
 One consequence had to be fixed first, and it is measured rather than argued: on
 a repo scaffolded **before** it adopted a `flow.yml`, all four `.claude/agents/*`
-read `hand_edited`, because `_scaffold_vendored` wrote those bytes and never
+read `hand_edited`, because the scaffold's role path wrote those bytes and never
 recorded a digest (probe: `fsd`+`vuejs` → four hand-edits on files nobody
-touched; `ddd`+`python` reads `clean` only by coincidence, since the vendored
-bytes *are* that composition). Declining those would mean `--fix` refusing for
-ever to recompose files Beadloom itself wrote — the mirror of the defect. The
-plain vendored body is therefore offered as an `alternate`, so it classifies
-`stale` and recomposes. **Unowned is not the same as somebody's only copy.**
+touched; `ddd`+`python` read `clean` only by coincidence, since the snapshot's
+bytes *were* that one composition). Declining those would mean `--fix` refusing
+for ever to recompose files Beadloom itself wrote — the mirror of the defect. The
+shipped-only composition — `compose_all_roles(config)` with no `project_root` —
+is therefore offered as an `alternate`, so a body Beadloom wrote before the
+project declared a layer classifies `stale` and recomposes. **Unowned is not the
+same as somebody's only copy.**
+
+BDL-068 `beadloom-iur5` removed the coincidence and the second alternate beside
+it. A `templates/agentic_flow/agents/*.md.txt` snapshot of THIS repository's live
+role files used to be offered as well, for the repo that had not yet declared a
+`flow.yml`; the assets are deleted, and the case they covered is now covered at
+the write end instead — that scaffold path composes and records a digest, so the
+manifest accounts for the file. The narrow case the alternate no longer covers is
+stated rather than hidden: a repo scaffolded by a Beadloom older than that change,
+whose `flow.yml` then declares an architecture or stack other than
+`ddd`/`python`, reads `unverified` instead of clean. That is the reporting
+direction and not the destroying one — such a file is named and left exactly as
+it is.
+
+The same change reaches the branch for a repo with **no** `flow.yml` at all. It
+used to byte-compare each `.claude/agents/*.md` against the snapshot and report
+*drifted from the shipped template*, `fixable=False`, under a remediation telling
+the adopter to adopt a `flow.yml` — a comparison against a body composed for
+another project's architecture, and advice that offered no repair. It now runs
+through the same `_state_drift` projection every other artifact kind reads.
 
 ### Deletion is not a pass
 

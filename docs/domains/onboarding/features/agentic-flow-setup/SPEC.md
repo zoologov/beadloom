@@ -17,7 +17,7 @@ regions for the target project. The flow's effectiveness lives in the exact
 wording, so the shipped CORE is preserved verbatim — never rewritten or
 condensed — and a project adapts it by *appending*, not by editing.
 
-### Composed, not snapshotted (BDL-061 S3)
+### Composed, not snapshotted (BDL-061 S3, completed by BDL-068 `beadloom-iur5`)
 
 The commands and `CLAUDE.md` used to be byte-identical snapshots of Beadloom's
 own live `.claude/`, refreshed by `sync_agentic_flow`. That direction was the
@@ -27,29 +27,54 @@ repo's branch protection that is false for an adopter — reached the shipped
 template, was corrected, and was re-propagated over the correction by the very
 next run (BDL-UX #177).
 
-The direction is now reversed:
+BDL-061 S3 reversed it for two artifact kinds and left the third. Five
+`templates/agentic_flow/agents/*.md.txt` assets remained a snapshot of this
+repository's live `.claude/agents/`, refreshed by the same `sync_agentic_flow`
+and asserted byte-identical by two tests. `beadloom-iur5` deleted the assets and
+the function.
 
-- the shipped CORE is **authored package data**;
-- `.claude/CLAUDE.md` and `.claude/commands/*` are **composed** from it —
-  `composed_claude_md()` / `composed_command()` call
-  `composer.compose(...)` for the repo's `flow.yml` plus its `.beadloom/flow/`
-  project layer;
-- a local divergence is **reported** by `config-check`, not flowed outward.
+The direction is now reversed for every artifact this command writes:
 
-`sync_agentic_flow(live_claude_root)` therefore refreshes the packaged **agent**
-assets only. Nothing writes the `CLAUDE.md` core any more, which also closes
-BDL-UX #132: a `--force` run inside Beadloom's own repo can no longer overwrite
-the `__BEADLOOM_PROJECT_NAME__` placeholder with the substituted name.
+- the shipped CORE is **authored package data** — `templates/agentic_flow/` for
+  the commands and `CLAUDE.md`, `templates/roles/` for the role protocols;
+- `.claude/CLAUDE.md`, `.claude/commands/*` and `.claude/agents/*` are all
+  **composed** from it — `composed_claude_md()` / `composed_command()` /
+  `role_composer.compose_all_roles()` call `composer.compose(...)` for the
+  repo's `flow.yml` plus its `.beadloom/flow/` project layer;
+- a local divergence is **reported** by `config-check`, not flowed outward;
+- **no function in this module writes package data.** That is what makes the
+  reversal structural rather than a convention: there is nothing left to run
+  that could carry a local file outward.
+
+Nothing writes the `CLAUDE.md` core, which also closes BDL-UX #132: a `--force`
+run inside Beadloom's own repo can no longer overwrite the
+`__BEADLOOM_PROJECT_NAME__` placeholder with the substituted name.
 
 ### Role files
 
-`AGENT_FILES` is `role_composer.ROLE_NAMES` itself since BDL-068 S1.5, not a second literal beside it: the two used to be separate tuples whose comments each claimed to mirror the other, so a role added to one was present to the composer and absent from this module's vendored scaffold and from `orphaned_flow_files`.
+`AGENT_FILES` is `role_composer.ROLE_NAMES` itself since BDL-068 S1.5, not a second literal beside it: the two used to be separate tuples whose comments each claimed to mirror the other, so a role added to one was present to the composer and absent from this module's scaffold and from `orphaned_flow_files`.
 
 Since BDL-052 the role files (`.claude/agents/*`) are composed from a CORE
 definition plus DDD/FSD and stack overlays by `role_adapters.generate_adapters`,
-which is the source of truth for those files. `scaffold(..., include_agents=False)`
-leaves them to the composer; the default still drops the vendored agents for the
-plain byte-identical scaffold path (a repo with no `flow.yml`).
+which is the source of truth for those files and writes one adapter set per
+configured tool. `scaffold(..., include_agents=False)` leaves them to it, and the
+CLI passes exactly that.
+
+The default, `include_agents=True`, is not dead and is not a byte-copy any more.
+It is reached from `config_sync.refresh_agentic_flow_files()`, which passes
+`include_agents=not has_flow` — so `config-check --fix` on a repository that
+adopted the flow before `.beadloom/flow.yml` existed writes the single
+`.claude/agents/` set here, because `refresh_composed_adapters()` returns empty
+without a `flow.yml` and there is no adapter generator to defer to. Since
+`beadloom-iur5` that path goes through `_scaffold_composed()` like the commands:
+the bodies are `compose_all_roles(config, project_root)`, each write is recorded
+in the flow manifest, and a hand-edited file is preserved and reported instead of
+being compared against fixed bytes and skipped without a remedy.
+
+That change has a second effect worth stating plainly: the snapshot was ONE
+composition — this project's `ddd` and `python` — so an adopter whose flow
+declared anything else received role protocols for an architecture they do not
+use. They now receive their own.
 
 ### One policy for every artifact the command writes
 
@@ -127,7 +152,7 @@ adopter may have edited is not ours to decide.
 **They now reach the terminal (BDL-UX #188).** Until BDL-061 S3b both this list
 and `ScaffoldResult.migration_notes` were computed on every run and read by
 nothing outside the library: `#137` was recorded as closed *by the orphan
-report* and S3's criterion "a hand-edited vendored file is reported with
+report* and S3's criterion "a hand-edited scaffolded file is reported with
 migration guidance" as met, and both claims were true of `scaffold()` and false
 of `beadloom setup-agentic-flow`. What the user actually saw was `Skipped
 .claude/commands/coordinator.md (hand-edited; use --force)` — advice to run the
@@ -166,7 +191,6 @@ Module `src/beadloom/onboarding/agentic_flow_setup.py`:
 - `composed_command(name, config, project_root) -> str`
 - `composed_claude_md(config, project_root, *, project_name) -> str`
 - `orphaned_flow_files(project_root) -> list[str]`
-- `sync_agentic_flow(live_claude_root) -> list[str]` — agents only
 - `ScaffoldResult` — files written/skipped, the CLAUDE.md path and changed
   sections, plus `orphans`, `migration_notes` and `flow_config_written`
 - `SUPERSEDED_COMMAND_FILES` — what a prior layout left in `.claude/commands/`

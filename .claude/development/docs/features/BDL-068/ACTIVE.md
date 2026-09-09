@@ -1365,6 +1365,70 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      mid-flight, was red on five tests — all five in their files, none in mine, and all five
      green in this bead's clean room, which is what the room is for.
 
+  - [x] `beadloom-iur5` — **BDL-UX #177's last leg: the vendored role snapshot is deleted.**
+     The bead was written in BDL-061 and closed unfinished in a tracker cleanup, so its two
+     premises were re-measured here rather than inherited, and **one of the two is false**.
+     TRUE: `sync_agentic_flow()` had no production caller — a grep over `src/` finds only its
+     own module, and the three calls are all in one test class. FALSE: *"`scaffold()` reads the
+     snapshot only on the legacy `include_agents=True` path, which the CLI has not used since
+     BDL-052 S3."* Wrong twice. `include_agents=True` IS reached from production — from
+     `config_sync.refresh_agentic_flow_files():1167`, which passes `include_agents=not
+     has_flow` — and the snapshot had two more production readers that never touch `scaffold()`
+     at all: the no-`flow.yml` byte-compare in `_agentic_flow_drifts()`, and `_vendored_role_body()`
+     fed as an ALTERNATE into `_adapter_states()`, which is what `.67` and `check_config_drift`
+     both read. So candidate **(a)** as literally written — *delete the snapshot and the drift
+     tests* — was not safe, and the fix is (a)'s substance with (b)'s mechanism at each read
+     site: every one of those readers asks *what is the plain shipped role body?*, and
+     `compose_all_roles(config)` with no `project_root` already answers it.
+     **What replaces it, and it is one thing rather than three.** The scaffold's role path goes
+     through `_scaffold_composed()` — the same function, the same manifest recording and the
+     same hand-edit policy the slash commands use — so `config-check --fix` on a repository with
+     no `flow.yml` writes that project's own composition, records a digest for it, and preserves
+     a hand-edited role file with somewhere to move the edit instead of skipping it without a
+     remedy. `_agentic_flow_drifts()`'s branch runs through the one `_state_drift` projection
+     every other artifact kind reads. `role_duties`'s `_is_vendored_snapshot()` exclusion is
+     gone: the derivation no longer has its own output in its input, so it no longer needs a
+     rule saying to skip it.
+     **The three settled contracts, checked as asked.** `.59`'s `role-map`: NOTHING changes —
+     it reads `CLAUDE.md` and `ROLE_NAMES` and never read the snapshot. `beadloom-ec1a`'s
+     orphaned adapters: NOTHING — its population is the manifest crossed with undeclared tools.
+     `.67`'s `declined_adapter_rewrites()`: ONE narrowing, in the reporting direction. Two
+     alternates become one. The case the removed one covered is covered at the WRITE end now,
+     because that path records a digest; the residue is a repository scaffolded by a Beadloom
+     older than this change whose `flow.yml` then declares something other than `ddd`/`python`,
+     which reads `unverified` rather than clean — reported and left exactly as it is, never
+     rewritten. No fourth policy: the same projection, the same `_UNOWNED_STATES`.
+     **A cost the snapshot had that needed no fragment**, and it is the reason (a) is right
+     beyond tidiness: those five files were ONE composition, this project's `ddd` and `python`,
+     dropped into any adopter regardless of what their flow declared. A project on `fsd` was
+     handed DDD role protocols and then told by `config-check` that its files had *drifted from
+     the shipped template*.
+     **Red first, and the coincidence is the finding.** 5 scenarios in
+     `composed_role_scaffold.feature`; 4 failed at HEAD. The fifth — *a role file is the
+     composition for that project's own flow* — PASSED at HEAD, by coincidence, because a
+     default-resolved project resolves `ddd`+`python` and the snapshot was exactly that
+     composition. That is stated in the feature's own prose rather than papered over. Two
+     drift tests were replaced rather than deleted: `TestVendoringDriftGuard` becomes
+     `TestCompositionGuard` (the live file equals its composition — the one safe direction,
+     verified to bite by appending a line), and `test_live_flow_equals_its_composition`, the
+     guard BDL-061 S3 introduced for the commands, now covers the roles too. The decode ledger
+     caught its own stale entry unprompted: `_agentic_flow_drifts#1`'s judged
+     `except OSError: continue` went out with the byte-compare it guarded.
+     **Green in a clean room at `room-beadloom-iur5` over 16 carried files: 9 753 passed, 60
+     skipped, 14 xfailed, 0 failed.** Darwin arm64 / CPython 3.13.7, extras
+     `dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**. The room's
+     `sync-check` entered **0 of 457 pairs** — 453 `unverified`, 4 `incomplete`, `ok: 0` — so
+     half of that room's green is evidence from an empty population, which is
+     `beadloom-uzck`'s finding and the fourth bead to state it. The tree caught what the room
+     could not: six real stale pairs from this bead's own change, repaired here.
+     **AS ITS OWN COMBINED-TREE GATE OWNER, on the tree:** `beadloom ci` PASS, rc 0, zero
+     `::error` over 60 `::warning`. The three verifications the Gate names as not run were run:
+     `pytest` 9 799 passed / 12 skipped / 14 xfailed / 0 failed, `ruff check src/ tests/` rc 0,
+     and `mypy src/` clean on all four declared target versions, 3.10 through 3.13, over 286
+     files. That loop varies the version the checker is ASKED about and not the interpreter it
+     RUNS under, so a per-interpreter difference in what is installed is still measured only in
+     CI.
+
 
 ## What is in `main` now
 

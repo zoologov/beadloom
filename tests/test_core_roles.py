@@ -10,9 +10,12 @@ test their STRUCTURE deterministically (no LLM, no network):
   This is the property S3 relies on to split the overlay — it is pinned here.
 - A ``## STACK`` section exists and carries the Python specifics (the
   ``<!-- overlay:python`` marker plus the Python idioms live there, not in CORE).
-- Vendoring drift-guard: each ``.claude/agents/<role>.md`` is byte-identical to
-  its ``onboarding/templates/agentic_flow/agents/<role>.md.txt`` (the scaffold
-  always ships the live flow).
+- Composition guard: each ``.claude/agents/<role>.md`` is what ``compose_role``
+  produces for this repo's own flow, so the live file is DERIVED from what the
+  package ships. It used to be the reverse — each live file was snapshotted into
+  ``templates/agentic_flow/agents/<role>.md.txt`` and asserted byte-identical to
+  it — which made the shipped artifact a copy of one project's local text
+  (BDL-UX #177, closed for the roles by BDL-068 ``beadloom-iur5``).
 - Annotation discipline lives in the **dev** CORE specifically (the dev emits
   ``# beadloom:`` annotations by construction).
 """
@@ -24,7 +27,9 @@ from pathlib import Path
 
 import pytest
 
-from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, vendored_flow_root
+from beadloom.onboarding.agentic_flow_setup import AGENT_FILES
+from beadloom.onboarding.flow_config import resolve_flow_config
+from beadloom.onboarding.role_composer import compose_all_roles
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENTS_DIR = REPO_ROOT / ".claude" / "agents"
@@ -280,18 +285,26 @@ class TestTechWriterCoreSections:
 
 
 # --------------------------------------------------------------------------- #
-# Vendoring drift-guard (byte-identical to the packaged templates)
+# Composition guard (the live file is derived from what the package ships)
 # --------------------------------------------------------------------------- #
 
 
-class TestVendoringDriftGuard:
+class TestCompositionGuard:
+    """The live role file equals its composition, and only in that direction.
+
+    The predecessor asserted the opposite — that the shipped
+    ``agents/<role>.md.txt`` asset equalled this repository's live file — and
+    kept it true by copying the live file into the package. A role fragment
+    declared here would have been shipped to every adopter by that copy, and the
+    assertion would have stayed green because it compared the copy with its own
+    source.
+    """
+
     @pytest.mark.parametrize("role", AGENT_FILES)
-    def test_live_role_byte_identical_to_vendored_template(self, role: str) -> None:
+    def test_live_role_equals_its_composition(self, role: str) -> None:
         live = (AGENTS_DIR / f"{role}.md").read_text(encoding="utf-8")
-        vendored = (vendored_flow_root() / "agents" / f"{role}.md.txt").read_text(
-            encoding="utf-8"
-        )
-        assert live == vendored, (
-            f"{role}: .claude/agents/{role}.md drifted from the vendored "
-            f"template {role}.md.txt — re-run sync-agentic-flow"
+        composed = compose_all_roles(resolve_flow_config(REPO_ROOT), REPO_ROOT)[role]
+        assert live == composed, (
+            f"{role}: .claude/agents/{role}.md is not what compose_role produces "
+            "for this repo's flow.yml — re-run `beadloom setup-agentic-flow`"
         )

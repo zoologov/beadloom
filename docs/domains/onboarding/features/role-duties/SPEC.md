@@ -98,14 +98,15 @@ not in drift, and failing one would fail a state `config-check` has always held 
 The count is never parsed: reading those files is the drift check's job, and doing it twice
 is how the two answers would drift apart again.
 
-One class is excluded from the subtraction base: `templates/agentic_flow/agents/*.md.txt`,
-the byte-identical vendored snapshot of the live `.claude/agents/*.md`. It carries every
-marker its composed role carries, so it appeared five times over the moment a role core
-first declared a duty (`beadloom-67t1`), under a reason saying the duties in it reach no
-role — false twice, because the marker is inspected in its composed form and the file is
-dropped verbatim into an adopter's roles directory by the plain scaffold path. Excluding
-output is not the authored list this derivation exists to avoid; it is the derivation
-declining to report its own input back to itself.
+The subtraction base has no exclusion, and until BDL-068 `beadloom-iur5` it had one:
+`templates/agentic_flow/agents/*.md.txt`, the byte-identical snapshot of the live
+`.claude/agents/*.md`. It carried every marker its composed role carries, so it appeared
+five times over the moment a role core first declared a duty (`beadloom-67t1`), under a
+reason saying the duties in it reach no role — false twice, because the marker is inspected
+in its composed form and the file was dropped verbatim into an adopter's roles directory by
+the plain scaffold path. The exclusion was correct and it was a rule the derivation had to
+carry about its own output. `beadloom-iur5` deleted the snapshot, so the output is no longer
+in the input and the rule is gone with it.
 
 ### Modules
 
