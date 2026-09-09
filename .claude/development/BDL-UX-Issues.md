@@ -35,6 +35,40 @@
 
 ## Open Issues
 
+275. [2026-09-09] [MEDIUM] a bead qualifies as a work item by depending on the plan, so a one-bead plan is held against the bead that blocks on it
+
+    **Severity:** medium (the report is `derived`, its reason is empty and its line is reassuring; the population it describes is the plan's own bead)
+    **Command:** `beadloom waves <bead>`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-0mdo.83`, which shipped the population notice on the same day. The notice exists because three beads of this slice were lost by hand-listing ids (#274).
+    **Measured on this repository's own tracker (870 beads):** `beadloom waves beadloom-0mdo.69` reports `every ready bead under beadloom-0mdo.70 is in this plan (0 of 1 bead(s) under beadloom-0mdo.70 are ready)`. `beadloom-0mdo.70` is the S6 REVIEW task. Its population is one bead — `beadloom-0mdo.69`, the bead the plan was asked about — because `beads_under` is a childless bead's own blockers and nothing else. The right answer is available and loses on size: for that plan there are exactly two candidates, `beadloom-0mdo.70` at 1 and `beadloom-0mdo` at 94, and `_narrowest` takes the minimum. `beadloom waves beadloom-0mdo.14` resolves to `beadloom-0mdo` correctly, because `.14` is a child and nothing blocks on it alone.
+    **Why it matters:** the line is the reassuring form of the shape this epic exists to remove — a clean statement over a population of one, with `derived` true and no reason recorded. It is worse than silence, because a coordinator reading it has been told the plan holds everything ready under its work item. And it fires exactly where #274 happened: a plan of ONE bead, which is the single-bead wave this project runs constantly.
+    **Expected:** a candidate work item has children. `beads_under` already distinguishes the two halves it sums — the parent-child closure and one dependency step — and a candidate whose closure is empty is a blocker rather than an item. Measured on the same tracker: under that rule `beadloom-0mdo.69` resolves to `beadloom-0mdo`, 94 beads, which is the answer `.14` already gets.
+    **Workaround, in force:** name the item. `derive_population(..., work_item=...)` stops the search, and a caller that passes `--parent` is answered about the item it asked for.
+    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-7`, `xfail(strict=True)`, with the measured attribution and both candidates' sizes pinned beside it. Verified by mutation: restricting candidates to beads that are somebody's parent turns it red as XPASS.
+    **Related:** #274 (the defect the notice answers), #245 (a line that fires on every run is a line its reader discounts — this one is the opposite failure, a line that reassures on every run).
+
+276. [2026-09-09] [MEDIUM] the ownership block's GitHub surface drops the caveat that says `unowned` is not a proof
+
+    **Severity:** medium (the annotation surface is the one a pull request shows, and it is the surface the bead was built to make trustworthy)
+    **Command:** `beadloom ci --format github`, which is the DEFAULT whenever stdout is not a TTY
+    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-0mdo.78`, which shipped the ownership report so a red nobody owns stops training a discount.
+    **Measured on this tree, one run, three formats.** `--format json` carries everything: `claimed`, `none_owned`, 196 per-finding verdicts (31 `unowned`, 165 `unattributed`) and `unread_claims`. The rich block carries the `unowned` count with its nodes, the `unattributed` count, the `claimed:` clause and the sentence `2 of 2 claimed bead(s) declare a scope this run could not read, so 'unowned' is not a proof that nobody owns it`. The GitHub surface emits ONE line: `::notice::no finding of this run is owned by a bead claimed now`. Both claimed beads on this tree — `beadloom-0mdo.69` and `beadloom-txeq` — report `no_declared_refs`, so on that surface `unowned` is unqualified and its qualification is exactly what was removed.
+    **Why it matters:** `_gate_ownership_notices` calls itself "the ownership block as GitHub notices — the same claim, one line each", and `gate_ownership_lines` states its own reason for existing: "three formats and one MCP tool quote it, and a second wording is how two surfaces of one run come to disagree". The emitter does not quote it. The lost sentence is the one that stops a reader concluding nobody owns 31 nodes when the truth is that nobody could be asked — which is `.78`'s own defect class, arriving inside `.78`.
+    **Expected:** the GitHub emitter renders `gate_ownership_lines`, one notice per line, the way it renders the block it says it renders. The `unread` caveat travels with the headline or the headline does not travel.
+    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-8`, `xfail(strict=True)`, with a clause-by-clause comparison of the two surfaces pinned beside it. Verified by mutation: appending the caveat to the notices turns it red as XPASS.
+    **Related:** #258 (a red that trains a discount — this is the same training through the missing caveat), #233.
+
+277. [2026-09-09] [LOW] the orphan check's role population is the manifest and its tool population is a constant, and only the first is stated
+
+    **Severity:** low (no third tool ships today, so nothing here can produce it; it reaches an adopter before it reaches this repository)
+    **Command:** `beadloom config-check`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-ec1a`, which reports the role adapters a dropped tool leaves behind.
+    **Measured:** `orphaned_adapters` opens `for tool, agent_dir in TOOL_AGENT_DIRS.items()` and keeps a manifest row only when its parent equals one of the two directories that constant holds. With `tools: [claude]`, a manifest recording `.windsurf/agents/dev.md` and that file on disk, the check returns zero orphans and states no population it could not enter. The control is in the same run: `.cursor/agents/dev.md` under the same configuration IS reported.
+    **Why it matters:** the docstring makes exactly this argument for the other axis — "a role a later release renames or retires is still reported, because the record of the write does not depend on the roles this release happens to compose" — and the code does not make it for tools. It also names its limits carefully and names only the deleted-manifest one, so a reader has been told where the check is blind and this is not in the list. The adopter who meets it is the one who scaffolded under a release that shipped a third tool and upgraded to one that does not.
+    **Expected:** either the tool is derived from the manifest row's own directory, which is where the record of the write already is, or the constant's role as the population is stated beside the limit that already is.
+    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-9`, `xfail(strict=True)`, with the silence pinned beside it — the file on disk, the manifest row present, zero orphans. Verified by mutation: deriving the tool from the row's directory turns it red as XPASS.
+    **Related:** #191 (one command answering one hand edit two ways), #268-#273 (this bead's other findings).
+
 268. [2026-09-09] [MEDIUM] two readers of one markdown table row, and the component lifted so a third could not be wrong is one of them
 
     **Severity:** medium (0 disagreements on this repository's 259 planning documents, so nothing here can produce it; the two readers meet inside one computation and one document)

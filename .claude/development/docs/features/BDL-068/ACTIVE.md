@@ -4,9 +4,10 @@
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
 > pass landed. S6 runs in full: its axes bead `.72` closed, `.60` ran alone at the front by
-> coordinator decision, its twenty-six DEV beads are done and its `test` bead `.69` has
-> closed with six findings filed as BDL-UX #268-#273. S6's `review` bead `.70` runs next,
-> then `.14`.
+> coordinator decision, its THIRTY DEV beads are done — four of them (`.78`, `.83`, `ec1a`,
+> `iur5`) landed after the test bead had measured the slice — and `.69` re-measured over the
+> widened surface and closed with nine findings, BDL-UX #268-#273 and #275-#277. S6's
+> `review` bead `.70` runs next, then `.14`.
 
 ---
 
@@ -1272,6 +1273,37 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      21 declared rooms**, and doc freshness unverified there over **0 of 450 pairs**.
      **As its own gate owner, separately:** the combined tree is green — `pytest` 9 738 passed
      / 0 failed, `beadloom sync-check` rc 0 and `beadloom lint --strict` rc 0.
+
+     **RE-MEASURED after `.78`, `.83`, `ec1a` and `iur5` landed**, because a coverage number
+     taken over 49 files is a claim about 49 files and the changed set is now 55. The four
+     beads' own modules: `waves/population.py` 99 %, `waves/planner.py` 99 %,
+     `guards/contract.py` 100 %, `guard_probes.py` 100 %, `role_adapters.py` 100 %,
+     `role_duties.py` 99 %, `gate_ownership.py` 92 %. Over the whole 55-file surface: **95 %**
+     statements and branches (8 540 statements, 2 676 branches), every file at or above 80 %.
+     **THREE MORE FINDINGS, and question 3 produced all three**, each a strict xfail citing its
+     entry and each confirmed by mutation. **#275** — `waves` searches every bead in the census
+     for the work item to hold a plan against, and a bead qualifies by DEPENDING on what the
+     plan asked about, so `beadloom waves beadloom-0mdo.69` names `beadloom-0mdo.70`, the S6
+     review task, and reports `every ready bead under beadloom-0mdo.70 is in this plan (0 of 1
+     bead(s) …)`. Both candidates exist and the right one loses on size: `.70` at 1 against
+     `beadloom-0mdo` at 94. The discriminator the module already holds is that a work item has
+     children. **#276** — `beadloom ci --format github`, the default whenever stdout is not a
+     TTY, emits the ownership headline and drops the `unowned` count, the `unattributed` count,
+     which beads were claimed and the sentence that says `unowned` is not a proof. Measured on
+     this tree: 31 unowned, 165 unattributed, 2 of 2 claimed beads reporting `no_declared_refs`,
+     one notice line. That is `.78`'s own class inside `.78`, on the surface a pull request
+     shows. **#277** — the orphan check's ROLE population is the manifest and its TOOL
+     population is `TOOL_AGENT_DIRS`, and the docstring argues the manifest case for roles and
+     not for tools.
+     **VERDICTS, re-taken.** Green in the rebuilt clean room at `room-beadloom-0mdo.69` over 1
+     carried file: **9 783 passed, 60 skipped, 17 xfailed, 0 failed**, `beadloom ci` rc 0 there
+     with **zero** `::error`. That room's doc-freshness step entered **0 of 453 pairs** and its
+     `scope-check` entered nothing at all — two populations of zero inside one green, which is
+     what BDL-UX #273 is about. Darwin arm64 / CPython 3.13.7, extras
+     `all+dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**.
+     **As its own gate owner:** the combined tree is green — `pytest` **9 831 passed / 0
+     failed**, `beadloom ci` rc 0 with zero `::error`, `sync-check PASS: 453 pair(s) fresh`,
+     `ruff` rc 0 and `mypy src/` rc 0.
 
   - [x] `.78` — **a Gate finding names its owner.** Offered by `.76` as its gate-owner report,
      and it answers a defect this slice PRODUCED: the branch carried a red Gate across two
