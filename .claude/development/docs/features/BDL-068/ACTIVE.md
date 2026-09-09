@@ -15,8 +15,14 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-0mdo.84` — S6's ONE fix bead, from the review's Major 1, and the last dev
-bead of BDL-068. The role-map check `.59` shipped to close BDL-UX #252 asked its question
+**Bead:** none. `beadloom-0mdo.84` closed at `f5f8b78` and S6's dev work is finished. The
+DOCS WAVE (`.71`) runs next, carrying the review's Majors 2 and 3 — the `issue-number` section
+missing from `docs/services/cli.md`, and the `[Unreleased]` CHANGELOG carrying no `### Added`
+while this branch ships eight new commands — plus the stale planning facts the review's Minor
+7 names. Then `.14`, then the epic's PR.
+
+**LAST BEAD, and what it left the docs wave:** `beadloom-0mdo.84`, S6's ONE fix bead, from the
+review's Major 1, and the last dev bead of BDL-068. The role-map check `.59` shipped to close BDL-UX #252 asked its question
 about the wrong map: `role_map_report` composed `("claude", "CLAUDE")` unconditionally and
 never read `config.tools`, so a project declaring `cursor` alone was judged against a
 composition its flow does not declare, while the map its agent does read —
