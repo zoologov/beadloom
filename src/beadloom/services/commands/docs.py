@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -312,6 +313,22 @@ def _docs_audit_json(
             }
         )
 
+    # Version tokens this run gave to another product -- ``bd 1.0.4``,
+    # ``CPython 3.13.7``. Reported rather than dropped, with the vocabulary that
+    # decided them, so the exemption is visible to a consumer too (BDL-UX #253).
+    attributed_out: list[dict[str, str | int]] = [
+        {
+            "file": str(mention.file.name),
+            "line": mention.line,
+            "value": str(mention.value),
+            "subject": str(mention.subject),
+        }
+        for mention in result.attributed
+    ]
+    subjects_out: list[dict[str, str]] = [
+        {"name": name, "origin": origin} for name, origin in result.subjects.origins
+    ]
+
     coverage_out: dict[str, dict[str, object]] = {
         name: {
             "status": cov.status,
@@ -339,6 +356,8 @@ def _docs_audit_json(
         "verified_facts": result.verified_facts,
         "unverified_facts": unverified,
         "not_applicable": not_applicable_out,
+        "attributed_versions": attributed_out,
+        "version_subjects": subjects_out,
         "scan_surface": _scan_surface_json(result.surface, project_root),
         "summary": {
             "stale_count": len(stale_out),
@@ -351,6 +370,7 @@ def _docs_audit_json(
                 1 for cov in result.coverage.values() if cov.status == "unreadable"
             ),
             "not_applicable_count": len(not_applicable_out),
+            "attributed_version_count": len(attributed_out),
         },
     }
 
@@ -443,7 +463,40 @@ def _print_coverage_summary(console: object, result: object) -> None:
                 " (file-type heuristic)"
             )
         console.print(line + " -- `--verbose` names them[/dim]")
+
+    _print_attributed_versions(console, result)
     console.print()
+
+
+def _print_attributed_versions(console: object, result: object) -> None:
+    """Name the version tokens this run gave to another product.
+
+    A rule about which sentences the audit checks is only honest while a reader
+    can see it applied. These tokens were read as another product's release --
+    ``bd 1.0.4``, ``CPython 3.13.7`` -- so they were never compared against this
+    project's version, and printing the count with the subjects is what keeps
+    that from being an invisible exemption (BDL-UX #253).
+    """
+    from rich.console import Console
+
+    from beadloom.doc_sync.audit import AuditResult
+
+    assert isinstance(console, Console)
+    assert isinstance(result, AuditResult)
+
+    if not result.attributed:
+        return
+
+    per_subject = Counter(
+        str(mention.subject) for mention in result.attributed
+    )
+    named = ", ".join(
+        f"{subject} x{count}" for subject, count in sorted(per_subject.items())
+    )
+    console.print(
+        f"[dim]{len(result.attributed)} version token(s) attributed to another"
+        f" subject and not compared: {named}[/dim]"
+    )
 
 
 def _docs_audit_rich(

@@ -66,7 +66,7 @@ of one per bead and one per edge.
 - `project_report(project_root)` — the whole population for a project, over four
   channels: the composed flow, the shipped templates, the installed package's
   Python, and `.git/hooks/`.
-- `BD_MEASURED_VERSION` — the release every verdict was taken against, `1.0.4`.
+- `BD_MEASURED_VERSION` — the release every verdict was taken against, `bd 1.0.4`.
 - `population_flags(subcommand)` — the flags that widen a subcommand's answer to
   its whole population, or `None` when this derivation has not measured what
   population that subcommand's answer covers.

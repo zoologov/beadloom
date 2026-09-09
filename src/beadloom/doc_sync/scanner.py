@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from beadloom.doc_sync.version_subjects import VersionSubjects
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
@@ -20,13 +22,21 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Mention:
-    """A numeric fact mention found in a markdown file."""
+    """A numeric fact mention found in a markdown file.
+
+    ``subject`` is the named product a VERSION mention was attributed to, and
+    ``None`` when the mention is this project's own claim.  A mention that
+    names another subject is carried rather than dropped, so the audit can
+    report the vocabulary it applied instead of silently checking fewer
+    sentences (BDL-UX #253).
+    """
 
     fact_name: str
     value: str | int
     file: Path
     line: int
     context: str
+    subject: str | None = None
 
 
 @dataclass(frozen=True)
@@ -265,7 +275,20 @@ _EXCLUDE_PATTERNS = (
 
 
 class DocScanner:
-    """Scans markdown files for fact mentions using keyword proximity."""
+    """Scans markdown files for fact mentions using keyword proximity.
+
+    *subjects* is the vocabulary of products a version token in this project's
+    prose may belong to (see
+    :mod:`beadloom.doc_sync.version_subjects`).  It defaults to empty, which
+    reads every version as this project's own claim — the behaviour every
+    caller had before BDL-UX #253, and the one
+    :func:`~beadloom.graph.rules.summary_facts.collect_claims` keeps, because
+    that rule declares itself pure of the filesystem and the vocabulary is
+    derived from a manifest.
+    """
+
+    def __init__(self, subjects: VersionSubjects | None = None) -> None:
+        self._subjects = subjects or VersionSubjects()
 
     FACT_KEYWORDS: ClassVar[dict[str, list[str]]] = {
         "version": [],  # special: handled by _VERSION_RE
@@ -355,7 +378,12 @@ class DocScanner:
     def _extract_versions(
         self, line: str, file_path: Path, line_num: int
     ) -> list[Mention]:
-        """Extract semantic version strings from a line."""
+        """Extract semantic version strings from a line.
+
+        Each one carries the subject it is attributed to, so a release another
+        product was measured on is reported as that product's rather than
+        compared against this project's version (BDL-UX #253).
+        """
         results: list[Mention] = []
         cleaned = self._mask_false_positives(line)
 
@@ -373,9 +401,41 @@ class DocScanner:
                     file=file_path,
                     line=line_num,
                     context=line.strip(),
+                    subject=self._version_subject(cleaned, start),
                 )
             )
         return results
+
+    def _version_subject(self, cleaned: str, start: int) -> str | None:
+        """The named product a version at *start* belongs to, or ``None``.
+
+        THE NEAREST NAME WINS, and the search stops at the first name it meets
+        walking left inside the version's own clause. Stopping at this
+        project's own name as well as at a foreign one is what gives each
+        number in ``beadloom 3.1.0 was measured on bd 1.0.4`` to the name beside
+        it rather than to whichever appears first in the sentence.
+
+        The clause bound is the same phrase separator the count facts use: a
+        subject on the far side of a comma or a dash is naming something else.
+        """
+        if not self._subjects:
+            return None
+
+        clause_start = start
+        while clause_start > 0 and cleaned[clause_start - 1] not in _CLAUSE_SEPARATORS:
+            clause_start -= 1
+
+        tokens = list(_TOKEN_RE.finditer(cleaned, clause_start, start))
+        for token in reversed(tokens):
+            core = token.group().lstrip(_TOKEN_LEAD_STRIP).rstrip(_TOKEN_TRAIL_STRIP)
+            if not core:
+                continue
+            folded = core.casefold().replace("_", "-")
+            if folded in self._subjects.project:
+                return None
+            if folded in self._subjects.names:
+                return core
+        return None
 
     def _extract_number_mentions(
         self, line: str, file_path: Path, line_num: int

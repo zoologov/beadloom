@@ -756,17 +756,40 @@ enforceable for a project that wants it.
 
 **What counts as a claim.** A line is split on whitespace and only a token whose whole core is a number is a candidate — all digits, or digits in thousands groups (`6,390`, read whole as `6390`). A number inside a larger token is an identifier rather than a claim (`BDL-061.33`, `v2.2.0`, `utf-8`) and is never extracted; markdown emphasis, brackets and trailing punctuation around the token are stripped first. A claim also reaches only to the end of its own clause: a modifier or a noun on the far side of `,` `;` `:` or a dash belongs to the rest of the sentence, so `The graph holds 316 edges, one per import.` is read (the `per` is not modifying the count) while the `14` in `exposes 18 tools: 14 over the graph` is not (it is a breakdown, not the total). See `docs/domains/doc-sync/features/docs-audit/SPEC.md` for the layer model and the declared blind spots.
 
-**Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Two `.beadloom/config.yml` keys handle the rest:
+**Whose version a version is.** A semantic version is attributed to the nearest subject NAME
+to its left inside its own clause, and only a version whose nearest name is this project's --
+or that has no name at all -- is compared against this project's version. So
+`Measured on bd 1.0.4` states the release of the tracker and `The current release is 3.0.2`
+states this project's, and each number in `bd 1.0.4 answers and beadloom 3.0.2 asks` goes to
+the name beside it. The tokens given to another product are counted with their subjects in the
+audit's own output, and carried in `--json` under `attributed_versions` with the vocabulary
+that decided them under `version_subjects`, so the exemption is visible rather than silent.
+
+The vocabulary is derived where a project already declares it: every distribution in
+`pyproject.toml`, `package.json` or `Cargo.toml`, the interpreter families implied by
+`requires-python` / `engines.node` / `rust-version`, and `git` when the project is a git
+repository. A name no manifest declares -- a CLI, a database, a service -- is named once under
+`docs_audit.subjects`. A name nobody declared still produces a finding, so an unknown subject
+fails loud rather than quietly going unchecked.
+
+**Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Three `.beadloom/config.yml` keys handle the rest:
 
 ```yaml
 docs_audit:
   tolerances:
     node_count: 0.1          # accept counts within 10% of ground truth
+  subjects:                  # products this project cites that no manifest declares
+    - bd
   ignore:                    # suppress one {path, fact, value} false match each
     - path: docs/guides/vitepress-site.md
       fact: cli_command_count
       value: 404
 ```
+
+`docs_audit.subjects` is a list of NAMES, not of documents. One entry covers every sentence in
+every document that measures that product, which is what it replaced: ten `ignore` triples
+stood on this repository for one sentence shape, and eight of them went inert when the
+attribution rule landed.
 
 `docs_audit.ignore` is a list of `{path, fact, value}` triples. Each suppresses exactly one keyword-proximity false positive — for example a subset count stated next to the correct total, or an HTTP status code matched as a command count — **without** rewording correct prose and **without** masking a genuine stale fact of the same type elsewhere. Use it only for confirmed false positives; genuine stale facts must be corrected in the doc.
 

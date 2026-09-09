@@ -96,91 +96,58 @@ docs_audit:
     - path: docs/guides/architecture-model.md
       fact: version
       value: "3.0.0"
-    # application/README: `bd 1.0.4` is the version of the BEADS CLI the
-    # landing-lock measurement was taken against, not a claim about this
-    # project's version. `_extract_versions` matches every
-    # `\bv?\d+\.\d+\.\d+\b` outside a pin and has no notion of whose product a
-    # version belongs to, so a document that states which release of a
-    # DEPENDENCY a measurement was taken on cannot say so without being read as
-    # stale. That is a third form of BDL-UX #190/#205 — not an example token
-    # and not a past tense, but another product's number — and it is filed as
-    # #253. The version is load-bearing here: the sentence states what a tool
-    # was measured to do, and a measurement without the version it was taken
-    # against is the kind of claim this project rejects from everyone else.
-    # It goes inert only if the sentence is deleted, and
-    # `TestEverySuppressionStillSuppresses` reports it the day it does.
-    - path: docs/domains/application/README.md
-      fact: version
-      value: "1.0.4"
-    # services/cli.md: the same sentence in the `waves` reference, and the same
-    # reason. Two triples for one measurement in one bead is itself the
-    # measurement that says #253 is a class rather than an instance: every
-    # document that describes what a dependency was measured to do needs one.
-    - path: docs/services/cli.md
-      fact: version
-      value: "1.0.4"
-    # services/components/bd-seam/DOC.md: the same class again, and the count is
-    # now the argument. `beadloom-0mdo.51` needed a THIRD triple for the same one
-    # sentence-shape in the same slice — "measured on bd 1.0.4" — this time in the
-    # component doc of the seam whose whole subject is what a specific release of
-    # `bd` was measured to do. Three triples, three documents, one measurement:
-    # #253 is a class, and the shape of its fix is a fact that knows whose product
-    # a version belongs to rather than a suppression per document. Load-bearing
-    # here for a stronger reason than in the other two: the module records
-    # `BD_MEASURED_VERSION` and a test fails when a different `bd` is installed,
-    # so deleting the version from the prose would leave the doc describing a
-    # measurement it cannot attribute while the code still can.
-    - path: docs/services/components/bd-seam/DOC.md
-      fact: version
-      value: "1.0.4"
-    # services/mcp.md: the FOURTH triple for the same sentence shape, and the
-    # fourth is what settles the argument the third one opened.
-    # `beadloom-0mdo.52` documented why `complete_bead` confirms `--suggest-next`
-    # against `bd ready`, which cannot be written without naming the release the
-    # defect was measured on — twenty-three dependency shapes on bd 1.0.4. Four
-    # documents, one dependency, one measurement, and each new document that
-    # describes what a dependency was measured to do will need a fifth. The fix
-    # is a fact that knows whose product a version belongs to, so `1.0.4` beside
-    # the word `bd` is never read as a claim about Beadloom's own version
-    # (BDL-UX #253). Until then the triple is load-bearing: deleting the release
-    # from the prose would leave the tool's documentation describing a
-    # confirmation whose reason it can no longer attribute.
-    - path: docs/services/mcp.md
-      fact: version
-      value: "1.0.4"
-    # The three USER-FACING guides, added by S5's documentation pass
-    # (`beadloom-0mdo.57`): the fifth, sixth and seventh triples for one sentence
-    # shape. Until this pass the four above were all reference documents, so the
-    # class could still be read as a property of reference prose. It is not — the
-    # landing-order medium cannot be explained to an adopter without saying that
-    # `bd merge-slot` was re-measured and found sound, and a re-measurement that
-    # does not name the release it was taken on is the claim this project rejects
-    # from everyone else. Seven documents, one dependency, one measurement, and
-    # every guide written about a measured dependency will need an eighth. That
-    # count is the argument for #253's actual fix — a fact that knows whose
-    # product a version belongs to — rather than for a triple per document. Each
-    # goes inert only if its sentence is deleted, and
-    # `TestEverySuppressionStillSuppresses` reports it the day it does.
-    - path: docs/guides/multi-agent-development.md
-      fact: version
-      value: "1.0.4"
-    - path: docs/guides/multi-agent-development.ru.md
-      fact: version
-      value: "1.0.4"
-    - path: docs/guides/parallel-waves.md
-      fact: version
-      value: "1.0.4"
-    # active-table/DOC.md: the FIFTH triple for this sentence shape, and the
-    # first whose dependency is not `bd`. `beadloom-0mdo.54` measured what
-    # `git commit -- <paths>` does about a staged path it does not name, and what
-    # a pre-commit hook's `git add` does inside that commit, on git 2.49.0. Both
-    # answers are the reason BDL-UX #207's fix is shaped as it is, and neither is
-    # quotable without the release it was taken on. So #253 is not a `bd`-shaped
-    # problem at all: it is any document that records what a DEPENDENCY was
-    # measured to do, and `_extract_versions` matches every
-    # `\bv?\d+\.\d+\.\d+\b` with no notion of whose product a version
-    # belongs to. It goes inert only if the measurement is deleted from the
-    # prose, and `TestEverySuppressionStillSuppresses` reports it the day it does.
-    - path: docs/domains/application/components/active-table/DOC.md
-      fact: version
-      value: "2.49.0"
+    # RETIRED 2026-09-09 by `beadloom-0mdo.63` (BDL-UX #253), which replaced
+    # ten version triples with a rule about the token beside the number: a
+    # version is attributed to the nearest subject NAME to its left inside its
+    # own clause, and only a version whose nearest name is this project's -- or
+    # that has no name at all -- is compared against this project's version.
+    #
+    # EIGHT of the ten went inert, measured with a real DocScanner over the
+    # audit's 68-document surface: `docs/domains/application/README.md`,
+    # `docs/services/cli.md` (two sentences), `docs/services/mcp.md`,
+    # `docs/services/components/bd-seam/DOC.md` (five sentences),
+    # `docs/guides/multi-agent-development.md`, its `.ru` counterpart,
+    # `docs/guides/parallel-waves.md` and
+    # `docs/domains/application/components/active-table/DOC.md`. Thirteen
+    # tokens that used to need a triple are now reported as `bd x12, git x1`,
+    # named in the audit's own output rather than silenced.
+    #
+    # `bd` is the one name below because it is the one this project cites that
+    # no manifest declares. `git` is derived from `.git`, and every dependency
+    # and interpreter family comes from `pyproject.toml`, so the vocabulary is
+    # derived where it can be and declared per NAME rather than per document.
+    #
+    # THE TWO THAT REMAIN are the two faces the attribution rule does not
+    # reach, and they are kept apart on purpose:
+    #  - `docs/services/cli.md` `v2.2.0` is a MENTION rather than a use -- the
+    #    example of a token the extractor must not read, inside the sentence
+    #    stating the rule. No subject appears beside it because the sentence is
+    #    about the token itself (BDL-UX #190's example face, still open).
+    #  - `docs/guides/architecture-model.md` `3.0.0` is THIS project's own
+    #    PAST version. There is no foreign subject to find, so no attribution
+    #    rule can help; it needs a notion of past tense (BDL-UX #205).
+    #
+    # One sentence was rewritten rather than suppressed, and it gained
+    # information rather than losing it: `bd-seam/DOC.md`'s
+    # `BD_MEASURED_VERSION` line now names `bd` beside the release, where the
+    # reader previously had to infer the product from the `BD_` prefix.
+
+  # Named products this project's documentation cites that no manifest declares
+  # (BDL-UX #253). A version token is attributed to the nearest name to its left
+  # inside its own clause; a version attributed to a name here is that product's
+  # release and is never compared against Beadloom's version.
+  #
+  # THIS IS A VOCABULARY AND NOT A SILENCER, and the difference is the failure
+  # mode: a name nobody declared still produces a finding, so an unknown subject
+  # fails LOUD. The alternative shape -- read any word beside a version as a
+  # subject unless it is a function word -- was measured against this repository's
+  # own prose and rejected: `Phase 3.0.0`, `Implemented 3.0.0`, `Release 2.1.0`,
+  # `dated 3.0.0` and `published 2.2.0` all put an ordinary English word beside
+  # Beadloom's OWN version, so that rule turns a stale claim into silence.
+  #
+  # One entry, because `bd` is the only product this project cites that neither
+  # `pyproject.toml` nor `.git` declares. Everything else is derived: `git` from
+  # the repository, `python`/`cpython`/`pypy` from `requires-python`, and every
+  # distribution from the dependency arrays.
+  subjects:
+    - bd
