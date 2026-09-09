@@ -35,6 +35,72 @@
 
 ## Open Issues
 
+268. [2026-09-09] [MEDIUM] two readers of one markdown table row, and the component lifted so a third could not be wrong is one of them
+
+    **Severity:** medium (0 disagreements on this repository's 259 planning documents, so nothing here can produce it; the two readers meet inside one computation and one document)
+    **Command:** `beadloom waves`, `beadloom active-sync`, and every check that reads a `## Axes` section
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `doc_sync/tables.py` was lifted by `beadloom-0mdo.46` after two readers of one fact disagreed twice in one slice, and its docstring states the purpose: "a third reader cannot be wrong about it a third time" (#213, #244, #259).
+    **Measured:** `application/active_table/table.py:33` splits a row with its own body — `stripped.strip("|").split("|")` — and carries its own separator predicate. It is older than the component and does not spend it. A shape derivation over the parsed source finds exactly four `split("|")` sites in `src/beadloom`: two are row readers and two belong to `guards/surface.py` and are about tool matchers. The two row readers answer three measured rows differently: `|` and `||` are not a row to `cells_of` and one empty cell to `split_table_row`, and `|| a | b ||` is four cells to the first and two to the second.
+    **Why it matters:** the `focus-document` medium spends BOTH in one computation — it collects a document's rows with `tables.cells_of` and asks `active_table`'s `names_bead` about the cells it got — while `active-sync` reads the same document with `split_table_row`. A row written `|| beadloom-x.1 | dev | done ||` gives `active-sync` a bead id in its first cell and gives the medium an empty one, so one instrument updates that bead's status and the other reports that no row names it. Measured on this repository: 0 disagreements over 259 planning documents and 32 353 lines, 12 over 610 markdown files and 106 740 lines, every one of them a lone `|` inside a diagram. The divergence is invisible on this arrangement, which is BDL-UX #240's condition.
+    **Expected:** one reader. `split_table_row` spends `tables.cells_of`, or the component absorbs it — the two bodies answer one question and the question has one answer.
+    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-1`, `xfail(strict=True)`. `TestThePackageHasTwoReadersOfOneRow` derives the population from the source, so a FOURTH pipe-split has to be classified by whoever adds it.
+    **Related:** #213, #244, #259 (the three times a table boundary was read wrongly), #272 (the medium that spends both).
+
+269. [2026-09-09] [MEDIUM] a one-hyphen alignment row is valid GitHub Flavored Markdown and reaches the approved-node list as an axis named `-`
+
+    **Severity:** medium (a finding against a document that is correct, in the list `scope-check` compares every commit against)
+    **Command:** `beadloom docs quality`, `beadloom scope-check`, and the `docs-quality` step of `beadloom ci`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. This is BDL-UX #244's own class inside the component that was lifted to end it.
+    **Measured:** `doc_sync/tables.py`'s `_SEPARATOR_CELL_RE` is `^:?-{2,}:?$` and demands two hyphens. GitHub Flavored Markdown's delimiter row holds hyphens with optional colons and one hyphen is a well-formed cell, so `|-|-|-|-|-|` is a valid alignment row that `table_blocks` returns as DATA. `read_axes_section` over a `## Axes` section written that way returns two rows where the document states one: `axis='-'`, `node=''`, `in_scope=None`, and `check_axes_section` reports it as `axis-without-a-scope-decision`. `application/active_table/table.py`'s `is_separator_cells` answers the same row correctly, so the two predicates disagree and the lifted one is the wrong one.
+    **Why it matters:** the kept rows of the `## Axes` section are the approved-node list a commit is judged against, and a phantom row enters it. The document's author has no repair except changing a spelling their Markdown renderer is indifferent to. Nothing here produces it because this repository writes `| ------ |`, which is the arrangement question BDL-UX #240 records.
+    **Expected:** `^:?-+:?$`. The predicate answers what the format defines rather than what this repository happens to write.
+    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-2`, two `xfail(strict=True)` — one on the predicate and one on the section it reaches. Verified by mutation: widening the regex turns both red as XPASS.
+    **Related:** #244 (the same class, first instance), #268 (the second reader that gets this right).
+
+270. [2026-09-09] [MEDIUM] four ways of misdeclaring `issue_log:` reach the same gate verdict as declaring none
+
+    **Severity:** medium (a project that opted in and mistyped one key is told it opted out, and the Gate is green)
+    **Command:** the `issue-log` step of `beadloom ci`, and `beadloom issue-number check`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. The step blocks on a duplicate number, and it earns that by never reddening a project that has not opted in: "The log is DECLARED in `.beadloom/config.yml`; an adopter who declares none gets a named skip."
+    **Measured:** with `path:` misspelled as `paths:`, with `ledger:` misspelled, with a block that will not parse, and with `issue_log:` given a scalar instead of a mapping, `_step_issue_numbers` returns the same `(skipped=True, "skipped — no issue log is declared; add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml")` a project with no block at all gets. `resolve_issue_log` emits `logger.warning("%s needs both %r and %r", ...)`, and the Gate renders no logging channel.
+    **Why it matters:** this is the epic's own two-reasons-one-verdict class inside a check S6 shipped, and the direction is the unsafe one — the reason a project opted in is that its numbers had collided five times, and the misdeclaration silently returns it to the state the collisions happened in. `log_missing` already proves the shape is available: a declared log that is absent is a finding rather than a skip.
+    **Expected:** a declaration this reader could not use is its own outcome, named as such, with the key it could not read. A skip stays a skip only for a project that declared nothing.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-3`, `xfail(strict=True)` over four parameterised misdeclarations, each compared against the opt-out's own verdict so that rewording one side cannot pass it.
+    **Related:** #173 (a leg that read nothing must say so), #267 (the population the same check states correctly).
+
+271. [2026-09-09] [HIGH] a ledger file the claim reader drops is a free number, so the allocator hands out a number two writers then hold
+
+    **Severity:** high (the collision the allocator exists to make impossible, produced by the allocator, silently)
+    **Command:** `beadloom issue-number allocate`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.66` allocates a number by `os.open(O_CREAT | O_EXCL)` of one claim file per number, and the file name IS the allocation.
+    **Measured:** `read_claims` keeps a `*.md` whose stem matches `^(\d{1,6})$` and drops every other file in the ledger without reporting one. With a ledger holding `0003-the-clean-room-convention.md` and a log whose highest number is 2, `read_claims` returns `()`, `allocate_number` computes candidate 3, creates `0003.md` because that name is free, and returns 3. Two writers now hold #3 in two files. `check_issue_numbers` afterwards reports `claims=1` and one `unwritten-claim` — a finding about the wrong thing — and says nothing about the file it could not read.
+    **Why it matters:** the name the reader drops is the name the module's own docstring invites. The claim file is described as "where the incident's body grows when the log becomes a composed view of the ledger", and a body grows a title. The failure is silent in both directions: nothing reports the unread file, and the number it holds is handed out as free — which is the mechanism BDL-UX #187, #211 and #253 were filed about, arriving through the door built to close them.
+    **Expected:** a claim is the number at the start of the file name, so `0003-the-clean-room-convention.md` holds #3; and a `*.md` in the ledger that states no number at all is reported as a population the reader could not enter, never dropped.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-4`, `xfail(strict=True)`, with the whole collision pinned beside it. Verified by mutation: relaxing the stem pattern to a prefix match turns it red as XPASS.
+    **Related:** #187, #211, #253 (the collisions the allocator answers), #267 (the check's stated population).
+
+272. [2026-09-09] [MEDIUM] the `focus-document` medium reads the first cell of every table row in the file, so its population is neither the bead table nor the bead column
+
+    **Severity:** medium (a false red on a bead table that numbers its waves first, and a false green on a bead named only by a table about something else)
+    **Command:** `beadloom waves`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.75` shipped the medium so a wave states the document every bead of a work item writes, and `FocusDocument.row_cells` is documented as "the FIRST cell of every markdown table row in the file", justified as "the column an ACTIVE table names its bead in".
+    **Measured, on projects built to be arranged differently:** with a bead table headed `| Wave | Bead | Status |`, the check reports `failed — 2 of 2 bead(s) of this plan write into a focus document no row of it names` about a document that gives each of them a row of its own. With a bead named only by a second table — `| Bead | Why it was not done here |`, the deferral shape this repository's own `active-table` documents — the check reports `passed — each writes a line of its own` about a bead the status table has no row for.
+    **Why it matters:** both halves are claims about an arrangement rather than about the flow. The column is a convention, and the population is every table row rather than the bead table's. Measured on this repository: 0 of 58 `ACTIVE.md` documents carry a short-form bead id outside the status table, and 28 of the 58 carry no bead-status table `active_table.find_status_column` can find at all — including BDL-068's own, where the medium still collects 35 first cells from four other tables. So neither face can be produced here, which is BDL-UX #240's condition again.
+    **Expected:** the medium reads the bead table, through the same reader `active-sync` locates it with — a header whose first cell is `Bead` followed by an alignment row — and reports a document that holds no such table as a population it could not enter rather than as rows.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-5`, two `xfail(strict=True)`, one per face, each with the measured verdict pinned beside it.
+    **Related:** #257 (the medium's own entry), #268 (the two readers this computation spends), #210 (the ambiguity `names_bead` already refuses to guess at).
+
+273. [2026-09-09] [MEDIUM] a clean room states the CAUSE of its missing freshness baseline and never the population, and about forty verdicts in one epic were read as green over it
+
+    **Severity:** medium (the instrument is honest and the claim is not, and the claim is what was written down forty times)
+    **Command:** `beadloom clean-room <bead>` then `beadloom ci` inside the room
+    **Context:** BDL-068 S6, `beadloom-uzck` measured it and `beadloom-0mdo.69` judged it. The clean room is the instrument every bead of two epics reports its verdict from.
+    **Measured, twice, in two rooms:** `beadloom ci` reports `::notice::sync-check WARN: 0 pair(s) fresh, 450 NOT VERIFIED (no baseline — index rebuilt)`, while the same gate on the tree found the three stale pairs `beadloom-uzck`'s own change had created. Reproduced independently in `room-beadloom-0mdo.69` at the same numbers. A second step enters zero in the same room and says so as plainly: `scope-check SKIP: skipped — no branch is checked out`. The room's own report states the limit as a cause — "no .git, so a freshness check inside it has no baseline" — and carries no number, in both the human line and `RoomBuild.detail`.
+    **Why it matters:** rc 0 with zero `::error` is what "green in a clean room" is written from, and it absorbs a `WARN` whose population was zero. This epic's own constraint is that the unresolved population is part of every answer, and 0 of 450 is that answer where "no baseline" is its cause.
+    **Expected — and the three options are not equivalent.** The room must NOT carry a baseline: `.git` or the tree's index would import the freshness state the room exists to exclude, which is BDL-UX #243 in the other direction, and a room with no commits cannot hold a document-to-commit relationship truthfully. The room SHOULD hand over the number, because the project root is already in hand where the caveat is printed and a number is the form of a caveat that survives being skimmed. And the CLAIM must name it, because the claim is what forty verdicts were written in: "green in a clean room over N files, with doc freshness unverified over 0 of 450 pairs" is the same verdict, attributed.
+    **Held by:** `tests/test_the_room_and_the_claim_it_supports.py`, `FINDING BDL-068.S6-6`, `xfail(strict=True)` on the room's clause, with the Gate's own honest line held beside it so a later simplification of either cannot remove the only place the population is stated.
+    **Related:** #181 (a room's verdict is not the tree's), #258 (an expected red that trained a discount), #266 (the other thing the room's absent `.git` reaches), #243 (why a baseline must not be carried in).
+
 253. [2026-09-04] [LOW] a scanned document cannot say which release of a DEPENDENCY a measurement was taken on, because every semver token is read as a claim about this project's version
 
     **Severity:** low (one suppression per sentence, and the suppression route is declared, dated and checked — but the class recurs for every adopter who documents a dependency's behaviour)

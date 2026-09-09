@@ -4,152 +4,41 @@
 > **Phase:** Development — S1-S3 merged; S4 complete on the branch (dev, test, review and
 > docs), unmerged; S5 complete on the branch, its review OK on the second pass and its docs
 > pass landed. S6 runs in full: its axes bead `.72` closed, `.60` ran alone at the front by
-> coordinator decision, and with `beadloom-uzck` its last DEV bead is done. S6's `test` bead
-> `.69` runs next, then `.14`.
+> coordinator decision, its twenty-six DEV beads are done and its `test` bead `.69` has
+> closed with six findings filed as BDL-UX #268-#273. S6's `review` bead `.70` runs next,
+> then `.14`.
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-uzck` — a clean-room rebuild retyped the whole `--carry` list. S6's last
-dev bead, alone, and its own combined-tree gate owner.
+**Bead:** `beadloom-0mdo.69` — S6's `test` bead. Twenty-six dev beads landed before it and each
+wrote its own tests red-first, so this bead's subject is the question none of them could ask:
+would S6's checks fail on a repository arranged differently from this one, and do the
+instruments eleven waves built agree with each other.
 
-**THE FRICTION WAS MEASURED WITH THE COMMAND ON THE BEAD THAT BUILT IT.** `beadloom-0mdo.37`
-entered 16 `--carry` flags twice, once after each fix the room itself caught. The room is
-correct and the retyping costs seconds; what earns it a place in the slice is that the
-alternative an agent reaches for under that friction is copying files into the LIVE room,
-which is the failure BDL-UX #243 records and `.37` had just fixed. `beadloom-0mdo.74`
-shortened the countdown by giving each room its own interpreter, so a rebuild now costs more
-than it did when the bead was filed.
+**THE ARRANGEMENT IS NOW A SUBSTITUTABLE INPUT.** `tests/adopter_flow.py` varies the FLOW the
+way `tests/adopter_project.py` varies the project: tool set, planning-document glob, which
+column of the bead table carries the id, how an alignment row is spelled, one graph file
+against one per node, and whether an issue log is declared at all. Every value is a choice the
+shipped flow permits, so a check that holds for only one of them is a check about this
+repository.
 
-**SO `--rebuild` READS THE REQUEST OUT OF THE RECORD IT IS ABOUT TO DELETE.** The marker gains
-a `request` block — the carry list, the extras the caller pinned or `null`, and whether an
-environment was asked for — recorded beside the outcome rather than read back out of it,
-because the two come apart: a room given no environment records no extras choice at all, so a
-request reconstructed from the outcome would lose the set the caller pinned. What is reused is
-the LIST and never the content: the files are copied from the working tree at build time,
-which is what keeps #243 answered, and an option named beside `--rebuild` REPLACES its
-remembered counterpart, so the remembered list cannot grow into the "everything that differs
-from HEAD" mode that deliberately does not exist.
+**SIX FINDINGS, EACH A STRICT XFAIL AND A LOG ENTRY.** #268 the two markdown-row readers, #269
+the one-hyphen alignment row that becomes an approved node named `-`, #270 a misdeclared
+`issue_log:` reported as no declaration, #271 the allocator re-issuing a number a titled claim
+file holds, #272 the `focus-document` medium's population, #273 the clean room's freshness
+caveat without its number. Five were confirmed by mutation, each caught by the tests written
+for it and by no other.
 
-**ONE RULE DECIDES WHAT MAY BE REMEMBERED, and it settles the two open cases opposite ways:** a
-rebuild must never silently produce a room whose verdict is greener or less isolated than the
-one it replaces. Extras the caller PINNED are reused, because forgetting `--extras dev` widens
-the room to the legs' union and that is 0 mypy errors where the pinned leg reports 82 (BDL-UX
-#236). A set the LEGS derived is derived again, for the reason the mode above does not exist.
-And `--no-environment` is recorded and NOT reused: remembering a decline hands back a room
-whose verdict the machine decides (BDL-UX #256) with no way to ask for anything else short of
-deleting the room, while forgetting it costs a measured 3.6 s and gives the room its own
-interpreter.
-
-**MEASURED WITH THE COMMAND ON ITS OWN BEAD, which is the only test that reaches the friction.**
-The first build took 11 flags; the rebuild took one and re-carried all ten files, byte-identical
-to the working tree, in 2.33 s total. In the rebuilt room: `ruff` clean, `mypy` clean under its
-own extras, `beadloom ci` rc 0 with zero `::error`, and the suite 9622 passed / 59 skipped / 1
-xfailed / 0 failed — green in a clean room over 14 files, Darwin arm64 · CPython 3.13.7 ·
-extras `all+dev+graphql+languages+mutation+tui+watch` · locale utf-8, 0 of 21 declared rooms
-entered. A clean room structurally cannot see a bead running beside it; this bead ran alone.
-On the combined tree, as its own gate owner: 9669 passed / 12 skipped / 1 xfailed, and
-`beadloom ci` rc 0 with `sync-check PASS: 450 pair(s) fresh`.
-
-Closed as `23dc768`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
-`bd ready --limit 0` lists neither — the third time this slice has recorded the shape the flow
-documents: the suggestion names beads the closed one blocked without re-checking their other
-blockers. The authoritative list holds 29 ready issues and neither of those is among them.
-
-**Previous bead:** `beadloom-l9ee` — BDL-UX #260, the shared write and the condition an ADR needs. S6,
-alone, and its own combined-tree gate owner. The bead is a DECISION the coordinator asked for
-and the previous agent wrote; this run re-checked its measurements as evidence rather than
-executing them as instructions, and corrected it on two points.
-
-**THE 2.5% WAS THE RIGHT NUMBER ABOUT THE WRONG REGION.** The bead measured `ACTIVE.md`'s
-bead-status table — 35 of 1427 lines, re-measured today and unchanged — and concluded that
-composition removes 0% of the collisions. True of the table. It never asked where in the file
-the collisions were. The `Progress` section is lines 64-1122: **1059 of 1427 lines, 74.2%**,
-and it is a per-BEAD append, one sub-bullet per bead. Both `ACTIVE.md` collisions of this epic
-are in it. So the writer unit is the bead, and one-writer-per-file has a shape here that the
-table measurement hid. Not taken: it is `active-table`'s surface and this bead's derived axis
-is `issue-numbers` alone.
-
-**AND `beadloom-0mdo.66` HAS ANSWERED THE `LATERAL MOVE` OBJECTION, so the log migration is
-declined on the bead's own standard.** The objection rested on one piece of evidence — commit
-`27db92b`, two agents allocating one number — and `.66` closed that class. Re-measured: the log
-took 17 commits at +248 / -4 with no repair commit, against `ACTIVE.md`'s 22 at +735 / -395.
-Realised collisions across this epic are 3 in per-bead prose and 1 the log's number, now fixed,
-so moving 241 entry bodies would have prevented **0 of 4** — the same test the bead used to
-reject options 3 and 4, turned on its own recommendation. What protects a body meanwhile is the
-ledger, not the layout: a claim is a separate file a lost write cannot take with it.
-
-**WHICH IS WHERE THE DEFECT WAS, AND IT IS FIXED.** That protection reaches only entries at or
-above the ledger's floor, and the verdict never said so. Measured: `240 entr(ies), 5 claim(s),
-floor 262` then `No duplicate, unwritten or unclaimed number` — a clean list over 5 of 240,
-because `_ledger_findings` skips every entry below the floor. Filed as **BDL-UX #267**, allocated
-through the allocator it is about, and closed in the same commit:
-`IssueNumberReport.entries_below_floor`, a `PARTLY CHECKED` clause on the Gate line, and the
-unaccounted numbers named rather than counted. Coverage, not a finding — no tree reddens.
-
-**NEITHER THE ADR DIRECTORY NOR THE `decision` DOC KIND SHIPS, on the bead's own condition.** A
-decision record must be a doc-code pair so it can go stale, or it is the issue log in a
-different folder. That pairing is `doc-sync` plus `graph` machinery and this bead's axis is
-`issue-numbers`; shipping the directory without it is the regression the condition names. So
-neither half ships, and the three decisions are recorded in `CONTEXT.md`'s table, which
-`doc-quality` already judges for a reason that explains why.
-
-Closed as `db3e8c7`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
-`bd ready --limit 0` lists neither — the second time this slice has recorded that shape, which
-is the flow's documented one: the suggestion names beads the closed one blocked without
-re-checking their other blockers.
-
-**Bead before that:** `beadloom-0mdo.81` — BDL-UX #266, the clean room's missing `.git` cost the audit a
-subject. S6, alone, and its own combined-tree gate owner. Every clean-room Gate run on this
-repository had been rc 1 since `.63` landed, on one line of one document, and four beads
-reported it as briefed and attributed rather than chased.
-
-**THE ANSWER WAS WRONG, NOT THE QUESTION.** `version_subjects.py` derived the subject `git`
-from `(project_root / ".git").exists()` and read the absent marker as a denial. An absent
-`.git` cannot tell a project that never used git from an export of one, so the derivation now
-records `git` as UNRESOLVED: it stays in the vocabulary, still wins the scanner's attribution
-walk, and `compare_facts` routes its mentions to `AuditResult.unjudged` — a population apart
-from `attributed`, because the two are exempt for different reasons. `attributed` is a subject
-this project confirmed; `unjudged` is a subject this DIRECTORY could not confirm, and merging
-them would hide a directory that cannot see its own environment behind a rule that works.
-
-**Unresolved is not silence, and that is the half that keeps the repair from being the
-workaround.** The `beadloom ci` docs-audit line names it (`COULD NOT JUDGE 5 version token(s)
-naming git — unconfirmed here`), the human report gives the reason, and `--json` carries
-`unjudged_versions`, `unresolved_version_subjects` and `summary.unjudged_version_count`.
-
-**The declared list was not taken, and `.beadloom/config.yml` now says so where a reader would
-reach for it.** A `docs_audit.subjects` entry for `git` is one line and is the thing `.63`'s
-design removed; this project has shipped a second hand-written vocabulary twice already
-(`mr2l.82`'s typed surface, and the `^(src\|tests)/` gate `.42` found in front of its
-replacement). What changed here is what an absent source MEANS, not what the vocabulary holds:
-the one name is the one that was already hard-coded, now behind `_ENVIRONMENT_SUBJECTS` whose
-probe answers "yes" or "cannot tell".
-
-**The room was weighed and declined, and the reason is that it fixes fewer directories.** A
-marker written by `beadloom clean-room` would repair the rooms this command builds and no
-other export — an sdist, a vendored copy, a `COPY` of tracked files into an image all reach the
-same derivation, and an adopter never runs this command at all. A room that carried the real
-`.git` would also stop being the room: `sync-check` would gain a baseline the room states it
-does not have. The room's caveat was left alone on purpose too — the audit's own line reports
-the declined token at the place the measurement happens, and a second sentence in the room's
-prose would be an authored copy of a derived fact, which is the drift this epic exists to
-remove.
-
-**MEASURED IN BOTH PLACES, BEFORE AND AFTER.** Clean room at HEAD with **zero** carried files:
-`beadloom ci` rc 1 with exactly one `::error`,
-`active-table/DOC.md:227 doc-fact-stale '2.49.0' vs '3.0.2'`. After, over the carried set: rc 0,
-zero errors, and the docs-audit line names the five tokens it declined. The tree before AND
-after: rc 0, zero errors, `docs-audit PASS: 19 mention(s) fresh` both times, with `unjudged`
-empty there because a working tree confirms `git`. The room's green was not bought with the
-tree's blindness, and `TestTheDefectVerbatim` in `tests/test_unjudged_versions.py` pins both
-directions: a `git` release in a `.git`-less directory is not stale, and this project's own
-version in that same directory still is.
-
-Closed as `a69aa06`. `bd close --suggest-next` named `.69` and `.14` as newly unblocked and
-`bd ready --limit 0` lists neither, which is the tracker-answer shape this flow already
-documents: the suggestion is a candidate list that does not re-check the other blockers.
+**THE JUDGEMENT `beadloom-uzck` ASKED FOR, on the room's `0 pair(s) fresh, 450 NOT VERIFIED`:
+both, and in one order.** The room must NOT carry a baseline — `.git` or the tree's index would
+import the freshness state the room exists to exclude, which is BDL-UX #243 in the other
+direction. It SHOULD hand over the number, because the project root is already in hand where
+the caveat is printed. And the CLAIM must name it, because the claim is what about forty
+verdicts were written in. Reproduced independently in `room-beadloom-0mdo.69` at the same
+numbers, and a second step enters zero in the same room and says so as plainly:
+`scope-check SKIP: skipped — no branch is checked out`.
 
 ## Progress
 
@@ -1303,6 +1192,48 @@ documents: the suggestion is a candidate list that does not re-check the other b
      list still retypes the whole list, because an explicit `--carry` replaces it. An additive
      default, or a second `--carry-also` spelling, would grow a set nobody named — the property
      this bead exists to keep.
+  - [x] `0mdo.69` — **S6's `test` bead.** Twenty-six dev beads landed before it and each wrote
+     its own tests red-first, so this bead asked the four questions none of them could.
+     **THE ARRANGEMENT IS A SUBSTITUTABLE INPUT NOW.** `tests/adopter_flow.py` varies the FLOW
+     the way `tests/adopter_project.py` varies the project — tool set, planning-document glob,
+     which column of the bead table carries the id, how an alignment row is spelled, one graph
+     file against one per node, whether an issue log is declared — and every value is a choice
+     the shipped flow permits. **SIX FINDINGS, each a strict xfail citing its log entry, and
+     none of them producible on this repository's own arrangement.** #268 two readers of one
+     markdown table row, where the component `.46` lifted so "a third reader cannot be wrong
+     about it a third time" is one of two and `active_table/table.py` is the other — measured
+     at 0 disagreements over 259 planning documents and 32 353 lines, 12 over 610 markdown
+     files. #269 a one-hyphen alignment row is valid GitHub Flavored Markdown and reaches
+     `read_axes_section` as an axis named `-`, which is #244's own class inside the component
+     lifted to end it, in the list `scope-check` compares every commit against. #270 four ways
+     of misdeclaring `issue_log:` reach the same gate verdict as declaring none. #271 a ledger
+     file whose stem is not purely numeric is dropped without report, so `allocate_number`
+     re-issues the number it holds — the collision the allocator exists to make impossible,
+     produced by the allocator. #272 the `focus-document` medium reads the first cell of every
+     table row, so a bead table headed `| Wave | Bead |` fails and a bead named only by a
+     deferral table passes. #273 the room's freshness caveat states its cause and not its
+     population. **Five confirmed by mutation**, each caught by the tests written for it and by
+     no other: fixing `_SEPARATOR_CELL_RE`, unifying the two row readers, relaxing the claim
+     stem, widening `row_cells`, and the pipe-split derivation itself.
+     **THE JUDGEMENT `beadloom-uzck` ASKED FOR is both, in one order.** The room must NOT carry
+     a baseline — `.git` or the tree's index would import the freshness state the room exists
+     to exclude, BDL-UX #243 in the other direction, and a room with no commits cannot hold a
+     document-to-commit relationship truthfully. It SHOULD hand over the number, because the
+     project root is already in hand where the caveat is printed. And the CLAIM must name it,
+     because the claim is what about forty verdicts were written in. Reproduced independently
+     in `room-beadloom-0mdo.69` at the same numbers, and a second step enters zero in the same
+     room and says so as plainly: `scope-check SKIP: skipped — no branch is checked out`.
+     **COVERAGE, measured over S6's 49 changed source files with the full suite:** 94 %
+     statements and branches, every file at or above 80 %. One was below the floor and is not
+     now — `services/commands/impact.py` at 51 %, whose `beadloom axes` command was reached by
+     no test at all; `tests/test_cli_axes.py` and `tests/test_cli_impact.py` take it to 84 %,
+     and the second holds the `--section` renderer against the reader that must read it back.
+     **Green in a clean room at `room-beadloom-0mdo.69` over 5 carried files: 9 668 passed, 60
+     skipped, 14 xfailed, 0 failed**, `beadloom ci` rc 0 there with **zero** `::error`. Darwin
+     arm64 / CPython 3.13.7, extras `all+dev+graphql+languages+mutation+tui+watch`, **0 of the
+     21 declared rooms**, and doc freshness unverified there over **0 of 450 pairs**.
+     **As its own gate owner, separately:** the combined tree is green — `pytest` 9 738 passed
+     / 0 failed, `beadloom sync-check` rc 0 and `beadloom lint --strict` rc 0.
 
 
 ## What is in `main` now
