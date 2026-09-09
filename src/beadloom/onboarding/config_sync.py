@@ -1028,6 +1028,43 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
 _UNOWNED_STATES = (ArtifactState.HAND_EDITED, ArtifactState.UNVERIFIED)
 
 
+def declined_adapter_rewrites(project_root: Path) -> tuple[DeclinedRewrite, ...]:
+    """The role adapters no writer may recompose over, each with why and what to do.
+
+    An adapter is declined when its body on disk is not demonstrably Beadloom's
+    output — ``hand_edited`` (we wrote it and somebody changed it) or
+    ``unverified`` (nothing records whether we wrote it at all). The reason and
+    remediation are the ones :func:`check_config_drift` prints for the same file,
+    read off the same :func:`_adapter_states` classification, so the sentence an
+    adopter is shown and the decision taken about their file cannot disagree.
+
+    BOTH WRITERS READ THIS. ``config-check --fix`` has since BDL-061 `.59`;
+    ``setup-agentic-flow`` does now. Measured before this bead, on a scratch
+    project scaffolded by the shipped command: the same two lines appended to
+    ``.claude/agents/dev.md``, ``.claude/commands/coordinator.md`` and
+    ``.claude/CLAUDE.md``, then one re-run with no flags, left the second and
+    third alone and recomposed over the first — while ``config-check`` printed
+    "It will NOT be rewritten" over both of the first two, under a remediation
+    that says to re-run that command (BDL-UX #191, and #139/#152/#186 before it).
+
+    Empty when the project declares no valid ``flow.yml``: with no config there
+    is no composition to compare a body against, and a writer with nothing to
+    write cannot destroy anything.
+    """
+    declined: list[DeclinedRewrite] = []
+    for relpath, role, state in _adapter_states(project_root):
+        if state not in _UNOWNED_STATES:
+            continue
+        drift = _state_drift(relpath, state, kind="roles", name=role)
+        if drift is not None:
+            declined.append(
+                DeclinedRewrite(
+                    file=relpath, reason=drift.reason, remediation=drift.remediation
+                )
+            )
+    return tuple(sorted(declined, key=lambda d: d.file))
+
+
 def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     """Recompose the per-tool role adapters for this flow.yml — except the unowned ones.
 
@@ -1043,6 +1080,10 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     deletion. The promise is now the behaviour: an adapter whose body Beadloom
     cannot prove it wrote is left alone and returned in ``declined``, the rest
     are recomposed, and the standing finding keeps the exit code honest.
+
+    Since BDL-068 `.67` the set it declines is :func:`declined_adapter_rewrites`,
+    which ``setup-agentic-flow`` reads too — so the repair and the scaffold
+    cannot disagree about whose file a body is (BDL-UX #191).
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return AdapterRefresh()
@@ -1051,17 +1092,7 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     except FlowConfigError:
         return AdapterRefresh()
 
-    declined: list[DeclinedRewrite] = []
-    for relpath, role, state in _adapter_states(project_root):
-        if state not in _UNOWNED_STATES:
-            continue
-        drift = _state_drift(relpath, state, kind="roles", name=role)
-        if drift is not None:
-            declined.append(
-                DeclinedRewrite(
-                    file=relpath, reason=drift.reason, remediation=drift.remediation
-                )
-            )
+    declined = declined_adapter_rewrites(project_root)
     result = generate_adapters(
         config, project_root, preserve=frozenset(d.file for d in declined)
     )
@@ -1069,10 +1100,7 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     for files in result.agents.values():
         written.extend(files)
     written.extend(result.extra)
-    return AdapterRefresh(
-        rewritten=tuple(sorted(written)),
-        declined=tuple(sorted(declined, key=lambda d: d.file)),
-    )
+    return AdapterRefresh(rewritten=tuple(sorted(written)), declined=declined)
 
 
 def refresh_agentic_flow_files(project_root: Path) -> list[str]:

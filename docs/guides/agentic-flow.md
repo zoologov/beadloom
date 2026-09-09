@@ -335,9 +335,11 @@ fall back to the defaults (`claude` / `ddd` / a stack auto-detected from the
 repo's source-file extensions). It echoes the resolved
 `architecture / stack / tools`, writes every configured tool's adapter set, then
 composes the slash commands and `CLAUDE.md`. A file Beadloom wrote and nobody
-touched is recomposed; a hand-edited one is **skipped** and reported
-(`Skipped .claude/commands/<name>.md (hand-edited; use --force)`); `--force`
-overwrites regardless.
+touched is recomposed; one whose body the flow manifest cannot prove Beadloom
+wrote is **skipped** and reported (`Skipped <path> (hand-edited)`, plus the
+project-layer path the edit belongs in); `--force` overwrites regardless. That
+holds for all three artifact kinds — until BDL-UX #191 the role adapters were
+recomposed over silently, so the same command answered one hand edit two ways.
 
 > **Write a `.beadloom/flow.yml` before you rely on the result.** Without one,
 > the command composes the role adapters from the auto-detected stack while

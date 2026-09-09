@@ -46,12 +46,20 @@ roles exist.
   by `config-check`. Which of the two it is, is decided by the flow manifest:
   every write records the body's sha256, so a file Beadloom wrote and nobody
   touched is recomposed while a hand-edited one is reported and left alone.
-- **Who owns a body is the caller's judgement, not this module's.**
-  `setup-agentic-flow` is an explicit instruction to compose and passes nothing;
-  `config-check --fix` passes every adapter it cannot prove Beadloom wrote in
-  `preserve`, and those paths are neither written nor recorded — recording a
-  digest we did not write would make the next run believe the edit was ours
-  (BDL-UX #186).
+- **Who owns a body is the caller's judgement, not this module's — and both
+  callers now make the same judgement.** Each passes the paths it cannot prove
+  Beadloom wrote in `preserve`, derived from
+  `config_sync.declined_adapter_rewrites()`, and those paths are neither written
+  nor recorded: recording a digest we did not write would make the next run
+  believe the edit was ours (BDL-UX #186). `config-check --fix` has done this
+  since BDL-061 `.59`; `setup-agentic-flow` did not until BDL-068 `.67`, on the
+  reading that a scaffold is an explicit instruction to compose. See
+  [the agentic-flow-setup SPEC](../agentic-flow-setup/SPEC.md#one-policy-for-every-artifact-the-command-writes)
+  for why that reading was retired (BDL-UX #191).
+- **`.cursor/rules/beadloom-flow.md` is the stated exception**: it is rewritten
+  unconditionally by both callers, because it is a four-line pointer whose own
+  body says it is generated, it carries no composed protocol and no check
+  compares it. A residue named here rather than a policy defended.
 - Beadloom's own `.claude/agents/*` reproduce exactly from
   `compose_role(ddd, python)`.
 

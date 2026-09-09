@@ -1209,6 +1209,8 @@ Two things this closed, both measured:
 
 The remedy is unchanged and now actually terminates: move the additions into `.beadloom/flow/roles/<role>.md`, then re-run `beadloom setup-agentic-flow`.
 
+**And the remedy is now safe to follow literally (BDL-068 `.67`, BDL-UX #191).** Until then `setup-agentic-flow` recomposed the adapter that this finding had just promised would not be rewritten, so an adopter who ran the remediation without doing the move first lost the edit — the same shape as #186, in the sibling command. Both commands now derive their preserve set from one function, `config_sync.declined_adapter_rewrites()`, so the sentence printed about a file and the decision taken about it cannot disagree whichever command took it.
+
 Which of the two a divergence *is*, is decided by the flow manifest (`.beadloom/flow-manifest.json`): every write records the body's sha256, so `stale` (Beadloom wrote it, the composition moved — `error`, recompose), `hand_edited` (`error`, never rewritten) `missing` (we wrote it and it is gone — `error`) and `unverified` (nothing accounts for it, so the two cannot be told apart — `warn`) are separate findings and not one word. The `CLAUDE.md` body is JUDGED only when the file is Beadloom's: a manifest entry, or the `<!-- beadloom:composed` stamp the shipped core begins with — a project's own hand-written `CLAUDE.md` is never policed. Not judged is not the same as not mentioned: in a project that adopted the flow, a `CLAUDE.md` with neither signal is named at `unverified`/`warn` rather than passed over. Those two signals are independent on purpose: deleting the generated manifest used to downgrade a hand edit to `warn` and the command to exit 0, and deleting one scaffolded file used to switch the checks off for every other one. Neither does now — the deletions are themselves reported (BDL-061 `.57`). `config-check` also names, at `warn`, a project layer in effect (its prose is composed but not judged) and an `overlays.suppress` entry that has expired or that names no rule in the composed flow.
 
 **It also checks that a duty declared for a role reaches that role's composed core, in both directions** (BDL-068 S4). A duty an agent is obliged to perform, written somewhere the performer does not read, is the class this check exists for: the clean-room rule lived in the coordinator's prose and occurred zero times in the role cores the roles receive. Duties are **declared, never inferred** — `<!-- beadloom:duty=<id> roles=<a,b> -->` in a composed flow artifact, `<!-- beadloom:carries=<id> -->` in a fragment that composes into one — because a detector over English role prose would repeat the docs-audit keyword-proximity class. Four findings, all `error` and none `fixable` (the repair is prose in a role core, and `--fix` writes compositions): `undelivered` (declared for a role whose composed core carries it nowhere), `undeclared` (carried and declared by nothing), `unknown-role` (a declaration naming a role no CORE fragment ships) and `malformed` (a `duty=` marker with no `roles=` list, which names no performer).
@@ -2349,12 +2351,40 @@ The command makes the same whole-working-set `.gitignore` call `init` makes (see
 the block: the guards' firing record is one entry in that set, not a special case owned
 by the guard scaffolder.
 
-A composed command or `CLAUDE.md` that already matches is left alone; a
-hand-edited one is **skipped** (reported as such) so user edits are not silently
-clobbered; `--force` overwrites it. Composed role adapters are owned by the
-configurator (re-running recomposes them). Delegates to
+**One policy for all three artifact kinds (BDL-068 `.67`, BDL-UX #191).** An
+artifact that already matches its composition is left alone; one Beadloom wrote
+and nobody touched is recomposed, so an upgrade lands; one whose body the flow
+manifest cannot prove Beadloom wrote — `hand_edited` or `unverified` — is
+**skipped**, named on stdout as `Skipped <path> (hand-edited)` and reported in
+the `Left alone` block with the project-layer path the edit belongs in. `--force`
+is the one door that adopts the composed body over it. Delegates to
 `onboarding/role_adapters.py:generate_adapters()` (the adapters) +
-`onboarding/agentic_flow_setup.py:scaffold()` (the commands + CLAUDE.md).
+`onboarding/agentic_flow_setup.py:scaffold()` (the commands + CLAUDE.md), and
+both are given the same declined set, `config_sync.declined_adapter_rewrites()`,
+that `config-check --fix` reads.
+
+> Until BDL-068 `.67` the role adapters were the exception: they were composed
+> with no `preserve` argument and recomposed over silently, so the same command
+> answered one hand edit two ways and nothing an adopter could read said which
+> was intended. Measured on a scratch project scaffolded by the shipped command,
+> with the same two lines appended to `.claude/agents/dev.md`,
+> `.claude/commands/coordinator.md` and `.claude/CLAUDE.md` and one re-run with
+> no flags: the first was destroyed and reported as `Wrote`, the other two were
+> preserved and reported. `config-check` printed "hand-edited: … It will **NOT**
+> be rewritten" over both of the first two, under a remediation that says to
+> re-run this command — so following that remediation literally destroyed one of
+> the two edits it was printed to protect. The `--force` help had promised the
+> new behaviour since the flag shipped. The one artifact still rewritten
+> unconditionally is `.cursor/rules/beadloom-flow.md`, a four-line pointer whose
+> own body says it is generated and which no check compares — stated here rather
+> than left to be discovered.
+
+The same run also stopped printing two false lines about `CLAUDE.md`: a
+preserved body was reported as `Wrote .claude/CLAUDE.md`, and its skip travelled
+in `ScaffoldResult.commands_skipped`, where the caller rendered it through the
+commands path template and printed `Skipped .claude/commands/CLAUDE.md.md` — a
+path that exists in no project. `ScaffoldResult.claude_md_skipped` carries it
+now.
 
 The command **prints what it found**, not only what it wrote: the files an older
 layout left behind, each with the exact `rm -f` command (BDL-UX #137), and a

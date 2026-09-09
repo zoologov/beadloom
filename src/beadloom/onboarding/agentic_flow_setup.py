@@ -31,6 +31,26 @@ live one with the project name templated) and then reuses that machinery to
 fill in the TARGET project's facts — so Beadloom's own facts never leak into a
 scaffolded repo.
 
+One policy for every artifact this command writes
+-------------------------------------------------
+The command writes three kinds of artifact into a repository it does not own:
+the composed role adapters (``.claude/agents/*``, written by
+:func:`~beadloom.onboarding.role_adapters.generate_adapters`), the slash
+commands, and ``CLAUDE.md``. All three answer a hand edit the same way — a body
+the flow manifest cannot prove Beadloom wrote is REPORTED with somewhere to move
+the edit and left exactly as it is, everything Beadloom did write is recomposed
+so an upgrade lands, and ``--force`` is the single explicit door.
+
+That was true of two of the three until BDL-068 `.67`. Measured on a scratch
+project scaffolded by the shipped command, with the same two lines appended to
+one file of each kind and one re-run with no flags: the commands and
+``CLAUDE.md`` were preserved and reported, ``.claude/agents/dev.md`` was
+recomposed over, and the run printed ``Wrote .claude/agents/dev.md`` for the
+file it had just eaten. ``config-check`` printed "It will NOT be rewritten" over
+both of the first two under a remediation that says to re-run this command, so
+following that remediation literally destroyed the edit it was printed to
+protect (BDL-UX #191, the #139/#151/#186 shape in the sibling command).
+
 Honest boundary (G4/G5)
 -----------------------
 The scaffolded ``CLAUDE.md`` and the command's next-steps state the boundary
@@ -109,6 +129,14 @@ class ScaffoldResult:
     commands_skipped: list[str] = field(default_factory=list)
     claude_md: Path | None = None
     claude_md_sections_changed: list[str] = field(default_factory=list)
+    #: True when the ``CLAUDE.md`` BODY was left alone (hand-edited or
+    #: unverified); its auto-regions are refreshed either way, so ``claude_md``
+    #: still names the file. Carried as its own field because the skip used to
+    #: travel in ``commands_skipped``, where the caller rendered it through the
+    #: commands path template and printed ``.claude/commands/CLAUDE.md.md`` —
+    #: a path that exists in no project — beside a ``Wrote .claude/CLAUDE.md``
+    #: line for the same run that had preserved it.
+    claude_md_skipped: bool = False
     #: Files from a PRIOR flow layout that this version no longer owns, with the
     #: exact cleanup command. Reported, never deleted (BDL-UX #137).
     orphans: list[str] = field(default_factory=list)
@@ -414,7 +442,7 @@ def scaffold(
         claude_skipped,
         claude_notes,
     ) = _scaffold_claude_md(project_root, config, force=force)
-    result.commands_skipped.extend(claude_skipped)
+    result.claude_md_skipped = bool(claude_skipped)
     result.migration_notes = [*command_notes, *claude_notes]
     return result
 

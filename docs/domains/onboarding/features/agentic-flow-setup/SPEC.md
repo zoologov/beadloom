@@ -51,20 +51,70 @@ which is the source of truth for those files. `scaffold(..., include_agents=Fals
 leaves them to the composer; the default still drops the vendored agents for the
 plain byte-identical scaffold path (a repo with no `flow.yml`).
 
-### What a re-run does to an existing file
+### One policy for every artifact the command writes
 
-`_scaffold_composed()` classifies each target through the flow manifest before
-touching it:
+The command writes three kinds of artifact into a repository it does not own:
+the composed role adapters (`.claude/agents/*`), the slash commands
+(`.claude/commands/*`) and `.claude/CLAUDE.md`. All three answer a hand edit the
+same way, and `--force` is the one door that adopts the composed body over one.
+
+`_scaffold_composed()` classifies the commands and `CLAUDE.md` through the flow
+manifest before touching them; the role adapters are classified by
+`config_sync.declined_adapter_rewrites()` — the same classification
+`config-check` prints and `--fix` decides on — and passed to
+`generate_adapters(..., preserve=…)`:
 
 | state | action |
 |-------|--------|
 | `clean` | nothing |
 | `stale` — matches what Beadloom last wrote | recomposed in place |
-| `hand_edited` | **skipped**, reported in `ScaffoldResult.migration_notes` with the `.beadloom/flow/<kind>/<name>.md` path the edit belongs in |
+| `hand_edited` | **skipped**, reported with the `.beadloom/flow/<kind>/<name>.md` path the edit belongs in |
 | `unverified` — nothing accounts for it | skipped, reported, `--force` adopts the composed version |
 | `missing` — recorded and gone from disk | recomposed in place |
 
 That is the difference between an idempotent generator and one that eats work.
+
+#### The role adapters were the exception until BDL-068 `.67` (BDL-UX #191)
+
+They were composed through `generate_adapters(config, project_root)` with no
+`preserve` argument, so one command answered one hand edit two ways and nothing
+an adopter could read said which was intended. Measured before the fix, on a
+scratch project scaffolded by the shipped command, with the same two lines
+appended to one file of each kind and one re-run with no flags:
+
+| file | outcome | what the run printed |
+|------|---------|----------------------|
+| `.claude/agents/dev.md` | edit destroyed | `Wrote .claude/agents/dev.md (claude)` |
+| `.claude/commands/coordinator.md` | edit preserved | `Skipped …` + the migration note |
+| `.claude/CLAUDE.md` | edit preserved | `Skipped …` + the migration note |
+
+Two readings were defensible — a repair must not destroy, a scaffold may
+reasonably reinstate the shipped flow — so the inconsistency was the defect
+either way. It was settled towards preservation on evidence already in the
+product rather than on preference:
+
+- The `--force` flag is documented as "Overwrite hand-edited scaffolded flow
+  files (default: preserve them)". A role adapter is a scaffolded flow file, so
+  the default was already specified and only the adapters broke it.
+- `config-check` prints the identical sentence over `.claude/agents/dev.md` and
+  `.claude/commands/coordinator.md` — "hand-edited: … It will **NOT** be
+  rewritten" — under a remediation that says to re-run `setup-agentic-flow`.
+  Following that remediation literally destroyed one of the two edits.
+- It removes a policy rather than adding one. Three artifact kinds now answer
+  one question one way, and the flow manifest still lets every body Beadloom
+  wrote be recomposed, so an upgrade lands unchanged.
+
+The decision was previously recorded in one place only: the docstring of
+`tests/test_cli_setup_agentic_flow.py::test_cli_recomposes_hand_edited_agent_file`,
+which asserted the opposite of what the same file's command help promised. That
+test now asserts preservation and carries the retired reading in its docstring.
+
+A neighbouring artifact was settled the other way for its own reason and does
+not contradict this: the generated `.gitignore` block is **reported and never
+rewritten at all**, because `ignore_block`'s published contract is written-once
+and no manifest could prove a line there is Beadloom's. Here a manifest can, so
+"recompose what we wrote" stays available. See the
+[config-check SPEC](../config-check/SPEC.md).
 
 ### Cross-major re-init (BDL-UX #137)
 
@@ -96,7 +146,10 @@ existing one. See the flow-config SPEC for why a virgin scaffold used to leave
 
 - The scaffold is idempotent and safe to re-run.
 - A hand-edited file is never rewritten without `--force`, and is always
-  reported with somewhere to put the edit.
+  reported with somewhere to put the edit — for **every** artifact kind the
+  command writes, the role adapters included (BDL-UX #191).
+- A file the flow manifest proves Beadloom wrote is still recomposed on every
+  run, so an upgrade lands without `--force`.
 - Orphans from a previous layout are named, never deleted — **and printed**.
 - A first scaffold leaves `beadloom config-check` at exit 0.
 - Beadloom's own `.claude/` reproduces exactly from CORE + its overlays + its

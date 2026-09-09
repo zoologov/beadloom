@@ -20,6 +20,19 @@ a CORE/overlay change without regenerating makes the on-disk file differ from
 the recomputed composition and is reported, while a project extension is part of
 the expected result and is not (BDL-UX #139, #152). Each write is fingerprinted
 in the flow manifest so a later run can tell its own output from a hand edit.
+
+One policy, for every writer
+----------------------------
+A body Beadloom cannot prove it wrote is **reported and left alone**; everything
+it can prove it wrote is recomposed, so an upgrade still lands; ``--force`` is
+the single explicit door. That is what ``setup-agentic-flow`` already did for
+its slash commands and ``CLAUDE.md`` and did not do here, so one command
+answered one hand edit two ways and an adopter could not predict which of their
+edits survived (BDL-UX #191). The exception, stated rather than left to be
+discovered: ``.cursor/rules/beadloom-flow.md`` is rewritten unconditionally. It
+is a four-line pointer whose own body says it is generated, it carries no
+composed protocol, and no check compares it — a residue this module names rather
+than a fourth policy it defends.
 """
 
 from __future__ import annotations
@@ -119,13 +132,20 @@ def generate_adapters(
     Returns an :class:`AdapterResult` of the project-relative paths written.
 
     ``preserve`` names project-relative paths to leave exactly as they are. The
-    caller establishes ownership, not this function: ``setup-agentic-flow`` is
-    an explicit instruction to compose and passes nothing, while
-    ``config-check --fix`` passes every adapter whose body Beadloom cannot prove
-    it wrote, because rewriting one deletes the only copy of somebody's intent
-    (BDL-UX #186, #139, #152). A preserved path is not recorded in the flow
-    manifest either — recording a digest we did not write would make the next
-    run believe the edit was ours.
+    caller establishes ownership, not this function, and since BDL-068 `.67`
+    both callers establish the same one: an adapter whose body Beadloom cannot
+    prove it wrote is preserved, because rewriting it deletes the only copy of
+    somebody's intent (BDL-UX #186, #139, #152). ``config-check --fix`` has done
+    that since BDL-061 `.59`; ``setup-agentic-flow`` used to pass nothing, on the
+    reading that a scaffold is an explicit instruction to compose. That reading
+    is retired: the same command already declined for its other two artifact
+    kinds, so one command answered one hand edit two ways and nothing said which
+    was intended (BDL-UX #191). ``--force`` is the one door, and both callers
+    derive their preserve set from
+    :func:`~beadloom.onboarding.config_sync.declined_adapter_rewrites`.
+
+    A preserved path is not recorded in the flow manifest either — recording a
+    digest we did not write would make the next run believe the edit was ours.
     """
     composed = compose_all_roles(config, project_root)
     result = AdapterResult()

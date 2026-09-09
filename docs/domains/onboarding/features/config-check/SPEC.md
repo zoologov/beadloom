@@ -161,6 +161,17 @@ behaviour:
 - `ConfigDrift.fixable` stops the closing advice offering `config-check --fix`
   for a finding it will decline — doing what the last line said used to undo what
   the line above it promised.
+- **And the OTHER remedy the finding names is now safe too (BDL-068 `.67`,
+  BDL-UX #191).** A `hand_edited` adapter's remediation says *move the additions
+  to `.beadloom/flow/roles/<role>.md`, then re-run `beadloom
+  setup-agentic-flow`*, and until this bead that command recomposed the adapter
+  unconditionally: an adopter who ran the remediation without doing the move
+  first lost the edit the sentence above it had promised to keep. Closing #186
+  in `--fix` alone left the promise false through the sibling command it points
+  at. The declined set is now one function, `declined_adapter_rewrites()`, which
+  both `--fix` and `setup-agentic-flow` read, so the sentence printed about a
+  file and the decision taken about it cannot disagree whichever command took
+  it.
 
 One consequence had to be fixed first, and it is measured rather than argued: on
 a repo scaffolded **before** it adopted a `flow.yml`, all four `.claude/agents/*`
@@ -395,6 +406,11 @@ Module `src/beadloom/onboarding/config_sync.py`:
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
   `.changed` is the union of the first two.
 - `DeclinedRewrite` — `file`, `reason`, `remediation` for one refusal.
+- `declined_adapter_rewrites(project_root) -> tuple[DeclinedRewrite, ...]` — the
+  role adapters no writer may recompose over (`hand_edited` or `unverified`),
+  each carrying the reason and remediation `check_config_drift` prints for the
+  same file. Read by `--fix` and by `setup-agentic-flow`; empty when the project
+  declares no valid `flow.yml`.
 - `refresh_composed_adapters(project_root) -> AdapterRefresh` — re-render the
   composed role adapters, minus the ones it declines (`rewritten` + `declined`).
 - `refresh_agentic_flow_files(project_root) -> list[str]` — recompose the

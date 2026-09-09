@@ -487,20 +487,60 @@ class TestCli:
         result = _run(project, "--force")
         assert result.exit_code == 0, result.output
 
-    def test_cli_recomposes_hand_edited_agent_file(self, tmp_path: Path) -> None:
-        """BDL-052 S3: role files (.claude/agents/*) are now COMPOSED from
-        CORE+overlays — the composer is their source of truth, so a hand-edit is
-        recomposed away on the next run (drift-guard semantics), not preserved.
-        Hand-edit preservation now applies only to the vendored commands/CLAUDE.md."""
+    def test_cli_preserves_hand_edited_agent_file(self, tmp_path: Path) -> None:
+        """BDL-068 `.67` (BDL-UX #191): a hand-edited role adapter is preserved.
+
+        THIS ASSERTION USED TO BE ITS OWN OPPOSITE, and its docstring was the
+        only place the old decision was ever written: "role files are now
+        COMPOSED from CORE+overlays — the composer is their source of truth, so
+        a hand-edit is recomposed away on the next run ... Hand-edit
+        preservation now applies only to the vendored commands/CLAUDE.md."
+
+        So the asymmetry was deliberate at BDL-052 S3 and was recorded in a test
+        docstring, which is exactly #191's complaint: the same command answered
+        one hand edit two ways, and nothing an adopter could read said which was
+        intended. The reading is retired because the command's own `--force`
+        help already promised the opposite for every scaffolded flow file, and
+        `config-check` printed "It will NOT be rewritten" over this very file
+        under a remediation that says to re-run this command.
+        """
         project = _make_project(tmp_path)
         _run(project)
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED", encoding="utf-8")
         result = _run(project)
         assert result.exit_code == 0, result.output
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED"
+        assert "Skipped .claude/agents/dev.md" in result.output
+        assert ".beadloom/flow/roles/dev.md" in result.output
+
+    def test_cli_force_adopts_the_composed_role_body(self, tmp_path: Path) -> None:
+        """`--force` is the one door: it replaces the hand edit with the composition."""
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED", encoding="utf-8")
+        result = _run(project, "--force")
+        assert result.exit_code == 0, result.output
         assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
-        # The composed body is back.
         assert "## CORE" in agent.read_text(encoding="utf-8")
+
+    def test_cli_recomposes_a_role_file_it_wrote_itself(self, tmp_path: Path) -> None:
+        """Preserving a hand edit must not stop an UPGRADE from landing.
+
+        The whole point of the manifest is that "we wrote this" and "somebody
+        changed it" are told apart by evidence rather than by policy, so a file
+        Beadloom wrote and nobody touched is still recomposed on every run.
+        """
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        composed = agent.read_text(encoding="utf-8")
+        agent.unlink()
+        result = _run(project)
+        assert result.exit_code == 0, result.output
+        assert agent.read_text(encoding="utf-8") == composed
+        assert "Wrote .claude/agents/dev.md" in result.output
 
     def test_cli_hand_edited_command_still_skipped(self, tmp_path: Path) -> None:
         """Without --force, a hand-edited vendored command file is left untouched."""
