@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING
 
+from beadloom.application.waves.population import Population
 from beadloom.graph.rules import exit_condition_deadline
 
 if TYPE_CHECKING:
@@ -624,6 +625,11 @@ class WavePlan:
     #: Per wave, the approved nodes none of its beads declares. Empty for a wave
     #: of one, which makes no pair and therefore claims nothing about one.
     unguarded_axes: tuple[UnguardedAxis, ...] = ()
+
+    #: The beads this plan could have been about, against the ones it was. Never
+    #: absent: a plan whose list was held against no population says so, and the
+    #: count it carries is a notice rather than a finding (BDL-UX #274).
+    population: Population = field(default_factory=Population)
 
     @property
     def exit_code(self) -> int:

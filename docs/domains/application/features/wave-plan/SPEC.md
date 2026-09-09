@@ -241,6 +241,68 @@ room, each honestly reported green, and the combined tree was red, because
 nothing ran the combined tree until the very end and that step was in nobody's
 bead.
 
+### The set of beads the shape is decided over
+
+Everything above decides the hard half from the graph. **The set of beads it
+reasons over was the easy half and was authored** — whatever ids a caller typed
+on the command line. The command therefore derived what a human cannot compute
+and inherited what a human can forget, and nothing could report the second,
+because nothing knew what should have been present.
+
+The measured instance is this project's own coordinator (BDL-UX #274). BDL-068's
+S6 test bead could not close because three beads of the slice had never been
+executed — `beadloom-0mdo.78`, `beadloom-ec1a` and `beadloom-iur5`. All three sat
+in `bd ready --limit 0` the whole time, and every plan produced over that slice
+was internally correct: right waves, right serialisations, all seven media
+measured. A plan over a subset is not a wrong plan. It is a right plan about a
+smaller world.
+
+Two halves answer it, and only the first removes the typing:
+
+- **`beadloom waves --parent <work-item-id>`** derives the bead list from the
+  tracker: every bead it lists as ready under that work item. The caller states
+  the work item instead of the list.
+- **Every plan reports how many ready beads under the same work item it was not
+  asked about**, whether or not `--parent` was given. That is the half that
+  works when a caller has a good reason to pass a subset.
+
+**The count is a notice and never a finding.** Measured over BDL-068's own S6 by
+clustering the `started_at` of every bead in the slice's population: 15 launches,
+and all 15 were subsets of what was ready at the moment they started — 15 unasked
+ready beads at the first launch, 1 at the last. Two of the 15 recorded why they
+were narrowed. A line that goes red on 15 of 15 real runs is a line its reader
+learns to discount, which is the rule this feature already applies to an
+unreadable derivation. Narrowing a wave deliberately stays legitimate; what
+changed is that the narrowing is visible and no longer indistinguishable from an
+oversight.
+
+**Membership is derived from the tracker's own edges, and the parent field alone
+is not enough.** Two of the three lost beads have no parent at all: they belong
+to the slice because they *block* it. So a work item's population is its
+parent-child closure plus every bead any member of that closure depends on — one
+step out of the parent tree and no further, because a blocker's own blockers
+belong to that blocker's work item. Measured on this repository, the bounded rule
+over `beadloom-0mdo.14` returns 31 beads and holds all three lost ones; an
+unbounded walk returns 110 and reaches a different epic.
+
+When the caller names no work item, the item is derived as the **narrowest** one
+whose population contains every bead asked about, ties broken by id. Narrowest
+rather than widest, because the count is only actionable at the unit a wave is
+planned in: BDL-068's S6 slice holds 31 beads and the epic above it holds 94, and
+a plan of three beads is a subset of both.
+
+**One thing here can fail, and it is this report's own population rather than the
+caller's.** A count of ready beads taken from a truncated `bd ready` is a claim
+about the truncation. bd caps that answer at 100 and announces the cap on stderr
+only, so an answer that was capped is reported as a finding — the count above is
+then a claim about part of the tracker and says so.
+
+A census the tracker could not answer leaves the population **stated as
+ungathered** rather than counted as zero, and a bead list that sits under no
+single work item is reported as such rather than attributed to the widest item
+holding some of it. Neither stops a shape being decided: the population is a
+notice beside the plan, never an input to it.
+
 ### What a wave shares regardless of the shape
 
 Printed by every plan, whatever the width of its widest wave, each with the
@@ -728,13 +790,18 @@ not tell them apart.
 - A required override field is required by its content: a key present but blank
   is a configuration error, because an override with no reason and no deadline
   outranks the graph permanently by accident.
+- A plan states the population its bead list was held against, and a census
+  nobody could gather is stated rather than counted as zero.
+- A ready bead under the same work item that the plan was not asked about is
+  reported and never blocks: the narrowing is made visible, not refused.
+- A count of unasked beads taken from a capped tracker answer says so.
 - The plan is read-only with respect to the index and the tracker.
 
 ## API
 
 | Entry point | Answers |
 |---|---|
-| `plan_waves(records, *, conn, overrides, today, environment, axes)` | the whole shape, as a `WavePlan` |
+| `plan_waves(records, *, conn, overrides, today, environment, axes, census, work_item)` | the whole shape, as a `WavePlan` |
 | `compare_declarations(scopes, axes)` | one verdict per declared ref, plus one per axis row naming no node |
 | `unguarded_axes(waves, scopes, axes)` | per concurrent wave, the approved nodes none of its beads declares |
 | `remedy_for(reason, *, axes)` | what to do about an unresolved scope, given what else is known |
@@ -757,6 +824,11 @@ not tell them apart.
 | `room_python(room)` | the interpreter inside a room, or `None` |
 | `site_packages(room)` | where that interpreter keeps its installed metadata |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
+| `derive_population(asked, census, *, work_item)` | the work item these beads sit under, and the ready ones the plan was not asked about |
+| `beads_under(work_item, beads)` | every bead a work item holds, by the tracker's own parent and blocker edges |
+| `ready_under(work_item, census)` | the ready beads under one work item, for a caller that states the item |
+| `population_lines(population)` | the notice block both output shapes quote |
+| `population_findings(population)` | what a reader must be told about the answer that count was taken from |
 | `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
 | `defect_detail(defect)` | what one defective call form costs and the flag that fixes it |
@@ -780,6 +852,7 @@ every scenario runs without a `bd` binary on the machine.
 | `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
 | `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
+| `population.py` | the beads a plan could have been about, and which of them it was not asked about |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
 | `config.py` | read and validate the declared `waves:` overrides |
 
@@ -795,7 +868,8 @@ declined, each with the condition that reopens it;
 `tests/acceptance/features/landing_lock.feature` and
 `tests/test_landing_lock_sites.py` cover the landing-lock derivation and hold
 this repository's own instructions to it; `tests/test_cli_waves.py` covers
-the command's two output shapes and its three exit codes;
+the command's two output shapes, its three exit codes, and the population it
+reports having not been asked about;
 `tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
 and owns the five findings BDL-061.22 measured;
 `tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6

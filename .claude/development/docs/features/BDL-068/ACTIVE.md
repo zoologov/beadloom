@@ -1192,6 +1192,44 @@ numbers, and a second step enters zero in the same room and says so as plainly:
      list still retypes the whole list, because an explicit `--carry` replaces it. An additive
      default, or a second `--carry-also` spelling, would grow a set nobody named — the property
      this bead exists to keep.
+  - [x] `.83` — BDL-UX **#274**, and the coordinator of this epic is the measured instance.
+     `waves` decides the hard half — which beads may run at once — from the DERIVED independence
+     of node scopes, and took the easy half from whatever ids a caller typed. Three beads of this
+     slice sat in `bd ready --limit 0` through every launch and were never named; every plan was
+     internally correct about the smaller world it was asked about, and none of them could say
+     the world was smaller. S6, concurrent with `.78` and `beadloom-ec1a`; **not the gate
+     owner** — `beadloom-ec1a` is.
+     **MEASURED FIRST, because the ratio decides the shape of the fix.** S6's population derived
+     from the tracker's own edges (31 beads); launches reconstructed by clustering `started_at`
+     with a ten-minute gap: **15 launches, and 15 of them subsets**, from 15 unasked ready beads
+     at the first down to 1 at the last. Two recorded a reason. The count is therefore a
+     **notice and never a finding** — a line red on 15 of 15 real runs is a line its reader
+     discounts, which is the rule `derivation_findings` already applies to an unreadable
+     derivation. What IS a finding is the report's own population: a `bd ready` the tracker
+     capped makes every count above it a claim about part of the tracker.
+     **The parent field alone finds one of the three lost beads.** `beadloom-ec1a` and
+     `beadloom-iur5` carry `parent: null`; they belong to S6 because they BLOCK `.14`. So
+     membership is the parent-child closure plus ONE dependency step and no further — bounded
+     over `.14` it returns 31 beads and holds all three, unbounded it returns 110 and reaches
+     BDL-061.
+     **Both halves ship.** `beadloom waves --parent <work-item>` derives the list from the
+     tracker; every plan, with or without it, prints how many ready beads under the same work
+     item it was not asked about. Run on this branch, `--parent beadloom-0mdo.14` names
+     `beadloom-iur5` — the bead this slice is still missing — and the explicit form for this
+     wave prints `1 ready bead(s) this plan was not asked about: beadloom-iur5 (1 of 31 bead(s)
+     under beadloom-0mdo.14 are ready)`.
+     7 acceptance scenarios and 9 CLI tests, every one verified RED before the code; four
+     mutations — dropping the notice, dropping `--parent`, dropping the dependency step,
+     dropping the truncation finding — were each caught.
+     **Green in a clean room at `room-beadloom-0mdo.83` over 8 carried files: 9 706 passed, 59
+     skipped, 14 xfailed, 0 failed**, `mypy` rc 0 there against all four declared target
+     versions and `lint --strict` rc 0. **That room's freshness population is 0 of 451 pairs
+     verified** — it carries no `.git`, so every pair reads `not verified` for want of a
+     baseline, and 9 watch-based document checks did run. Darwin arm64 / CPython 3.13.7, extras
+     `dev+graphql+languages+mutation+tui+watch`, **0 of the 21 declared rooms**.
+     **Not the gate owner, so no claim about the combined tree.** On the tree `beadloom ci` was
+     rc 0 with zero `::error`; `pytest` had 3 failures, all of them in the neighbours' files
+     (`tests/test_gate_finding_owner.py` twice, and a `config-check` doc pair) and none in mine.
   - [x] `0mdo.69` — **S6's `test` bead.** Twenty-six dev beads landed before it and each wrote
      its own tests red-first, so this bead asked the four questions none of them could.
      **THE ARRANGEMENT IS A SUBSTITUTABLE INPUT NOW.** `tests/adopter_flow.py` varies the FLOW

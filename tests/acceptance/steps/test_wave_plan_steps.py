@@ -25,6 +25,7 @@ from beadloom.application.waves import (
     AXIS_SWEPT_UNDECIDED,
     FINDING_DECLARED_OUTSIDE,
     FINDING_NOT_COMPARED,
+    FINDING_POPULATION_PART,
     FINDING_UNGUARDED_AXIS,
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
@@ -34,6 +35,8 @@ from beadloom.application.waves import (
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
+    POPULATION_NO_COMMON_ITEM,
+    POPULATION_NOT_GATHERED,
     REASON_SHARED_NODE,
     REASON_UNRESOLVED_SCOPE,
     STATUS_FAILED,
@@ -44,10 +47,13 @@ from beadloom.application.waves import (
     FocusDocument,
     GraphFile,
     GraphInput,
+    TrackerBead,
+    TrackerCensus,
     WaveEnvironment,
     WaveOverride,
     WorkItemAxes,
     plan_waves,
+    population_lines,
     remedy_for,
     room_for,
 )
@@ -82,6 +88,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "plan": None,
         "environment": None,
         "axes": None,
+        "census": None,
     }
 
 
@@ -192,6 +199,7 @@ def when_decided(world: dict[str, Any]) -> None:
         overrides=world["overrides"],
         environment=world["environment"],
         axes=world["axes"],
+        census=world["census"],
     )
 
 
@@ -669,3 +677,133 @@ def then_pass_names_the_file(world: dict[str, Any]) -> None:
     )
     assert ".beadloom/_graph/services.yml" in check.detail
     assert "adds" in check.detail
+
+
+# BDL-UX #274 — the population the plan was asked about, against the one the
+# tracker holds under the same work item. The census arrives as data for the
+# same reason the bead records do: the decision has to be runnable without a
+# `bd` binary, and the application layer never reaches up into `services`.
+
+
+def _census(world: dict[str, Any]) -> TrackerCensus:
+    """The census being built by the givens, created on first use."""
+    if world.get("census") is None:
+        world["census"] = TrackerCensus(beads=(), ready=())
+    census: TrackerCensus = world["census"]
+    return census
+
+
+def _add_to_census(
+    world: dict[str, Any], beads: tuple[TrackerBead, ...], ready: tuple[str, ...]
+) -> None:
+    census = _census(world)
+    world["census"] = replace(
+        census,
+        beads=(census.beads or ()) + beads,
+        ready=(census.ready or ()) + ready,
+    )
+
+
+@given(
+    parsers.re(
+        r'the tracker holds a work item "(?P<item>[^"]+)" whose ready beads are '
+        r'(?P<members>.+)'
+    )
+)
+def given_work_item_with_ready_beads(
+    world: dict[str, Any], item: str, members: str
+) -> None:
+    ids = tuple(re.findall(r'"([^"]+)"', members))
+    _add_to_census(
+        world,
+        (
+            TrackerBead(bead_id=item, depends_on=frozenset(ids)),
+            *(TrackerBead(bead_id=bead) for bead in ids),
+        ),
+        ids,
+    )
+
+
+@given(
+    parsers.parse(
+        'a ready bead "{bead}" blocking "{item}" and naming no parent'
+    )
+)
+def given_ready_bead_blocking_the_item(
+    world: dict[str, Any], bead: str, item: str
+) -> None:
+    census = _census(world)
+    beads = tuple(
+        replace(row, depends_on=row.depends_on | {bead})
+        if row.bead_id == item
+        else row
+        for row in (census.beads or ())
+    )
+    world["census"] = replace(
+        census,
+        beads=(*beads, TrackerBead(bead_id=bead)),
+        ready=(*(census.ready or ()), bead),
+    )
+
+
+@given("the tracker capped the ready answer it gave")
+def given_ready_answer_capped(world: dict[str, Any]) -> None:
+    world["census"] = replace(
+        _census(world),
+        ready_whole=False,
+        ready_note="`bd ready` returned 100 of 120 row(s) and said so on stderr",
+    )
+
+
+@then(parsers.parse('the plan names "{item}" as the work item its beads belong to'))
+def then_population_names_work_item(world: dict[str, Any], item: str) -> None:
+    assert world["plan"].population.work_item == item
+
+
+@then(
+    parsers.re(
+        r"the plan states (?P<count>\d+) ready beads? under it that it was not "
+        r"asked about"
+    )
+)
+def then_population_unasked_count(world: dict[str, Any], count: str) -> None:
+    assert len(world["plan"].population.unasked) == int(count)
+
+
+@then(parsers.parse('the plan names "{bead}" among the beads it was not asked about'))
+def then_population_names_unasked(world: dict[str, Any], bead: str) -> None:
+    population = world["plan"].population
+    assert bead in population.unasked
+    assert bead in "\n".join(population_lines(population))
+
+
+@then(parsers.parse('the plan says every ready bead under "{item}" is in this plan'))
+def then_population_complete(world: dict[str, Any], item: str) -> None:
+    block = "\n".join(population_lines(world["plan"].population))
+    assert item in block
+    assert "every ready bead" in block
+
+
+@then("the plan states that it held its bead list against no population")
+def then_population_not_gathered(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert population.reason == POPULATION_NOT_GATHERED
+    assert POPULATION_NOT_GATHERED in "\n".join(population_lines(population))
+
+
+@then("the plan states that no work item it read contains every bead it was asked about")
+def then_population_no_common_work_item(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert population.reason == POPULATION_NO_COMMON_ITEM
+    assert population.work_item == ""
+    assert POPULATION_NO_COMMON_ITEM in "\n".join(population_lines(population))
+
+
+@then("the plan reports the population it was held against as incomplete")
+def then_population_incomplete(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert not population.ready_whole
+    assert any(
+        finding.startswith(FINDING_POPULATION_PART)
+        for finding in world["plan"].findings
+    )

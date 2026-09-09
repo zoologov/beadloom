@@ -413,3 +413,79 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     And the pass says two node-adding beads write two files
     And the pass still names the file it could not read
     And the plan is clean
+
+  # BDL-UX #274. Everything above decides the HARD half — which of these beads
+  # may run at once — from the graph. The set of beads it decides over is the
+  # easy half and was authored: whatever ids the caller typed. The measured
+  # instance is this epic's own coordinator, which planned fifteen launches over
+  # BDL-068's S6 population and named a subset every time; three beads sat in
+  # `bd ready --limit 0` through all of them and no plan could say so, because
+  # every plan was internally correct about the smaller world it was asked
+  # about.
+  #
+  # A subset is legitimate, so the count below is a NOTICE and never a finding:
+  # measured over this epic's own S6, 15 of 15 launches were subsets, and a line
+  # that goes red on every real run is a line its reader discounts — the same
+  # rule `derivation_findings` already applies to an unreadable derivation.
+
+  @bead:beadloom-0mdo.83
+  Scenario: A plan asked about part of a work item's ready beads says how many it was not asked about
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the work item keeps "billing" and "shipping" in scope
+    And the shared media were measured and are clean
+    And the tracker holds a work item "epic" whose ready beads are "alpha", "beta" and "gamma"
+    When the wave shape is decided
+    Then the plan names "epic" as the work item its beads belong to
+    And the plan states 1 ready bead under it that it was not asked about
+    And the plan names "gamma" among the beads it was not asked about
+    And the plan is clean
+
+  # The shape that was actually lost: two of the three beads have no parent link
+  # at all and belong to the slice only because they block it.
+
+  @bead:beadloom-0mdo.83
+  Scenario: A bead that reaches the work item through a blocking edge alone is part of its population
+    Given a bead "alpha" declaring the node scope "billing"
+    And the tracker holds a work item "epic" whose ready beads are "alpha"
+    And a ready bead "orphan" blocking "epic" and naming no parent
+    When the wave shape is decided
+    Then the plan names "orphan" among the beads it was not asked about
+
+  @bead:beadloom-0mdo.83
+  Scenario: A plan asked about every ready bead under the work item says nothing was left out
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the tracker holds a work item "epic" whose ready beads are "alpha" and "beta"
+    When the wave shape is decided
+    Then the plan states 0 ready beads under it that it was not asked about
+    And the plan says every ready bead under "epic" is in this plan
+
+  @bead:beadloom-0mdo.83
+  Scenario: A plan that gathered no tracker census says so rather than reporting nothing left out
+    Given a bead "alpha" declaring the node scope "billing"
+    When the wave shape is decided
+    Then the plan states that it held its bead list against no population
+
+  @bead:beadloom-0mdo.83
+  Scenario: A bead list no single work item contains is reported rather than attributed to one
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the tracker holds a work item "epic" whose ready beads are "alpha"
+    And the tracker holds a work item "other" whose ready beads are "beta"
+    When the wave shape is decided
+    Then the plan states that no work item it read contains every bead it was asked about
+
+  # The one thing here that CAN fail, and it is the answer's own population
+  # rather than the caller's: a count taken from a truncated `bd ready` is a
+  # claim about the truncation. `--limit 0` is what this project passes, and bd
+  # announces a cap on stderr only (BDL-UX #187).
+
+  @bead:beadloom-0mdo.83
+  Scenario: A truncated tracker answer makes the population it was compared against a part of one
+    Given a bead "alpha" declaring the node scope "billing"
+    And the tracker holds a work item "epic" whose ready beads are "alpha", "beta" and "gamma"
+    And the tracker capped the ready answer it gave
+    When the wave shape is decided
+    Then the plan reports the population it was held against as incomplete
+    And the plan is not clean

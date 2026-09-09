@@ -51,12 +51,33 @@ instead of to a coordinator's habit. Every wave also gets one clean-room path pe
 shared scratchpad, and one of them measured over its neighbour's untracked files (BDL-UX #235).
 
 ```bash
-beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+beadloom waves BEAD [BEAD ...] [--parent WORK-ITEM] [--json] [--project DIR]
 ```
 
 Exit `0` = a shape was decided and rests on nothing unstated. Exit `1` = a shape was decided and
 carries findings, which are visible and never blocking. Exit `2` = no shape could be decided.
 Read the exit code or `--json`, never the number of lines printed (BDL-UX #148).
+
+**The bead list was the last thing here a human typed, and it is now derivable.** Everything
+above decides the hard half from the graph; the SET of beads it decides over came from the
+command line. This project's own coordinator lost three beads of a slice that way — they sat in
+`bd ready --limit 0` through fifteen launches, every plan was internally correct about the
+smaller world it was asked about, and none of them could say the world was smaller (BDL-UX
+#274). `--parent <work-item-id>` derives the list instead: every bead the tracker lists as
+ready under that work item. And every plan, with or without `--parent`, prints how many ready
+beads under the same work item it was **not** asked about:
+
+```
+Ready under this plan's work item and not in it:
+  1 ready bead(s) this plan was not asked about: beadloom-iur5 (4 of 31 bead(s) under
+  beadloom-0mdo.14 are ready)
+  a subset is legitimate; this line says the narrowing happened, not that it was wrong
+```
+
+That line is a notice and never a finding: measured over this epic's own S6, 15 of 15 launches
+were subsets, and a line that goes red on every real run is a line its reader discounts. What
+can fail is the answer the count was taken from — a `bd ready` the tracker capped makes the
+count a claim about part of the tracker, and that is reported as a finding.
 
 A real run on this epic's own S6 beads, all three of which turned out to be dependent:
 

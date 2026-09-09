@@ -125,12 +125,33 @@ class _FakeBd:
     pinned by `test_the_record_shape_this_command_reads_is_the_one_bd_emits`.
     """
 
-    def __init__(self, records: dict[str, dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        records: dict[str, dict[str, Any]],
+        census: list[dict[str, Any]] | None = None,
+        ready: list[str] | None = None,
+        ready_stderr: str = "",
+    ) -> None:
         self.records = records
+        self.census = census
+        self.ready = ready
+        self.ready_stderr = ready_stderr
 
     def __call__(self, args: list[str], *, cwd: str | None = None) -> Any:
         from beadloom.services.bd_seam import BdResult
 
+        if args[0] == "list":
+            if self.census is None:
+                return BdResult(returncode=1, stdout="", stderr="no tracker")
+            return BdResult(returncode=0, stdout=json.dumps(self.census), stderr="")
+        if args[0] == "ready":
+            if self.ready is None:
+                return BdResult(returncode=1, stdout="", stderr="no tracker")
+            return BdResult(
+                returncode=0,
+                stdout=json.dumps([{"id": bead} for bead in self.ready]),
+                stderr=self.ready_stderr,
+            )
         bead = args[1]
         if bead not in self.records:
             return BdResult(returncode=1, stdout="", stderr=f"no such issue: {bead}")
@@ -150,12 +171,38 @@ def _record(bead: str, refs: str = "", deps: list[dict[str, str]] | None = None)
 
 @pytest.fixture()
 def bd(monkeypatch: pytest.MonkeyPatch) -> Any:
-    def _install(records: dict[str, dict[str, Any]]) -> None:
+    def _install(
+        records: dict[str, dict[str, Any]],
+        census: list[dict[str, Any]] | None = None,
+        ready: list[str] | None = None,
+        ready_stderr: str = "",
+    ) -> None:
         monkeypatch.setattr(
-            "beadloom.services.bd_seam.run_bd", _FakeBd(records), raising=True
+            "beadloom.services.bd_seam.run_bd",
+            _FakeBd(records, census, ready, ready_stderr),
+            raising=True,
         )
 
     return _install
+
+
+def _census_row(
+    bead: str, parent: str = "", depends_on: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """One row in `bd list --all --json`'s own spelling of a dependency.
+
+    `bd list` writes `type` and `depends_on_id`; `bd show` writes
+    `dependency_type` and `id` for the same edge. Pinned in the double because
+    reading the wrong pair would silently make every population empty.
+    """
+    return {
+        "id": bead,
+        "parent": parent or None,
+        "dependencies": [
+            {"issue_id": bead, "depends_on_id": other, "type": "blocks"}
+            for other in depends_on
+        ],
+    }
 
 
 class TestShape:
@@ -345,3 +392,164 @@ class TestTrackerSeam:
             ]
         }
         assert _blocked_by(record) == frozenset()
+
+
+class TestThePopulationItWasNotAskedAbout:
+    """BDL-UX #274 — the plan derives which beads may run at once, and used to
+    take WHICH BEADS from whatever the caller typed.
+
+    The measured instance is this project's own coordinator: three beads of
+    BDL-068's S6 sat in `bd ready --limit 0` through fifteen launches and were
+    never named. Every plan was internally correct about the smaller world it
+    was asked about, and none of them could say the world was smaller.
+    """
+
+    def test_a_plan_over_part_of_the_ready_population_says_how_many_it_left_out(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing"), "b": _record("b", "shipping")},
+            census=[
+                _census_row("epic", depends_on=("a", "b", "c")),
+                _census_row("a", parent="epic"),
+                _census_row("b", parent="epic"),
+                _census_row("c", parent="epic"),
+            ],
+            ready=["a", "b", "c"],
+        )
+        result = CliRunner().invoke(
+            main, ["waves", "a", "b", "--project", str(project)]
+        )
+        assert "1 ready bead(s) this plan was not asked about: c" in result.output
+        assert "epic" in result.output
+
+    def test_the_narrowing_is_reported_and_is_not_a_finding(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """15 of 15 of this epic's own S6 launches were subsets, so a finding
+        here would go red on every real run and teach its reader to discount it."""
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing")},
+            census=[
+                _census_row("epic", depends_on=("a", "c")),
+                _census_row("a", parent="epic"),
+                _census_row("c", parent="epic"),
+            ],
+            ready=["a", "c"],
+        )
+        result = CliRunner().invoke(main, ["waves", "a", "--project", str(project)])
+        assert result.exit_code == _EXIT_CLEAN
+        assert "not asked about: c" in result.output
+
+    def test_a_bead_reaching_the_work_item_only_through_a_blocking_edge_is_counted(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The shape that was actually lost: two of the three beads had no
+        parent link at all and belonged to the slice by blocking it."""
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing")},
+            census=[
+                _census_row("epic", depends_on=("a", "orphan")),
+                _census_row("a", parent="epic"),
+                _census_row("orphan"),
+            ],
+            ready=["a", "orphan"],
+        )
+        result = CliRunner().invoke(main, ["waves", "a", "--project", str(project)])
+        assert "not asked about: orphan" in result.output
+
+    def test_parent_derives_the_bead_list_instead_of_taking_it_from_the_caller(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing"), "b": _record("b", "shipping")},
+            census=[
+                _census_row("epic", depends_on=("a", "b")),
+                _census_row("a", parent="epic"),
+                _census_row("b", parent="epic"),
+            ],
+            ready=["a", "b"],
+        )
+        result = CliRunner().invoke(
+            main, ["waves", "--parent", "epic", "--project", str(project)]
+        )
+        assert result.exit_code == _EXIT_CLEAN
+        assert "Wave 1: a, b" in result.output
+        assert "every ready bead under epic is in this plan" in result.output
+
+    def test_a_parent_the_tracker_cannot_answer_for_is_exit_two(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """A derived list nobody could derive is not a plan of no beads."""
+        project = _measured_project(tmp_path)
+        bd({"a": _record("a", "billing")})
+        result = CliRunner().invoke(
+            main, ["waves", "--parent", "epic", "--project", str(project)]
+        )
+        assert result.exit_code == _EXIT_UNDECIDABLE
+        assert "could not be derived" in result.output
+
+    def test_naming_neither_a_bead_nor_a_parent_is_exit_two(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        project = _measured_project(tmp_path)
+        bd({})
+        result = CliRunner().invoke(main, ["waves", "--project", str(project)])
+        assert result.exit_code == _EXIT_UNDECIDABLE
+        assert "--parent" in result.output
+
+    def test_a_tracker_that_cannot_answer_leaves_the_population_unstated(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """Not a comfortable zero: the plan says it held its list against nothing."""
+        project = _measured_project(tmp_path)
+        bd({"a": _record("a", "billing")})
+        result = CliRunner().invoke(main, ["waves", "a", "--project", str(project)])
+        assert result.exit_code == _EXIT_CLEAN
+        assert "gathered no tracker census" in result.output
+
+    def test_a_capped_ready_answer_makes_the_count_a_claim_about_part(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The one thing here that can fail is this report's own population."""
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing")},
+            census=[
+                _census_row("epic", depends_on=("a", "c")),
+                _census_row("a", parent="epic"),
+                _census_row("c", parent="epic"),
+            ],
+            ready=["a", "c"],
+            ready_stderr="Showing 100 of 120 ready issues.",
+        )
+        result = CliRunner().invoke(main, ["waves", "a", "--project", str(project)])
+        assert result.exit_code == _EXIT_FINDINGS
+        assert "FINDING: population_not_whole" in result.output
+
+    def test_json_and_the_human_shape_agree_about_the_population(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        project = _measured_project(tmp_path)
+        records = {"a": _record("a", "billing")}
+        census = [
+            _census_row("epic", depends_on=("a", "c")),
+            _census_row("a", parent="epic"),
+            _census_row("c", parent="epic"),
+        ]
+        runner = CliRunner()
+        bd(records, census=census, ready=["a", "c"])
+        human = runner.invoke(main, ["waves", "a", "--project", str(project)])
+        bd(records, census=census, ready=["a", "c"])
+        machine = runner.invoke(
+            main, ["waves", "a", "--json", "--project", str(project)]
+        )
+        payload = json.loads(machine.stdout)["population"]
+        assert payload["work_item"] == "epic"
+        assert payload["unasked"] == ["c"]
+        assert payload["work_item"] in human.output
+        assert f"{len(payload['unasked'])} ready bead(s)" in human.output

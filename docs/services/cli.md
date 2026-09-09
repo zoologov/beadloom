@@ -1325,15 +1325,31 @@ The path is model-supplied, so its **shape is narrowed rather than repaired**: a
 Decide which of these beads may run at the same time.
 
 ```bash
-beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+beadloom waves BEAD [BEAD ...] [--parent WORK-ITEM] [--json] [--project DIR]
 ```
 
 Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
 shape was decided and carries findings (a bead whose declared scope could not be
 read, an override past its exit condition, an override that changed nothing, a
-shared medium that failed its check or that nobody measured) -- visible, never
-blocking; `2` = no shape could be decided (no index, no answer from the
-tracker, a bead the tracker does not have, a `waves:` block that would not parse).
+shared medium that failed its check or that nobody measured, a ready list the
+tracker capped) -- visible, never blocking; `2` = no shape could be decided (no
+index, no answer from the tracker, a bead the tracker does not have, a `--parent`
+whose beads could not be derived, neither a bead nor a `--parent`, a `waves:`
+block that would not parse).
+
+**Every plan says how many ready beads under the same work item it was not asked
+about**, and that count is a notice rather than a finding. The bead list was the
+one input here a human typed, and this project's own coordinator lost three beads
+of a slice that way -- all three sat in `bd ready --limit 0` through fifteen
+launches and no plan could report their absence, because nothing knew they should
+have been present. `--parent WORK-ITEM` is the other half: it derives the list
+from the tracker -- every bead ready under that work item -- so the caller states
+the work item instead of the list. Passing a subset stays legitimate; what the
+notice adds is that the narrowing is visible.
+
+A work item's population is its parent-child closure plus every bead any member
+of that closure depends on. The parent link alone is not enough: two of the three
+lost beads had no parent at all and belonged to the slice because they blocked it.
 
 It **decides**, it does not advise. Parallelism follows from the code-level
 independence of the beads' node scopes, which only the architecture graph holds:
