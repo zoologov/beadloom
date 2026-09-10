@@ -18,12 +18,12 @@ has been launched.
 | `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ready |
 | `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | blocked |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ready |
-| `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | in progress |
+| `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | blocked |
 | `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ready |
 | `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | blocked |
-| `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | in progress |
-| `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | blocked |
+| `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
+| `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ready |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -71,6 +71,36 @@ wrapping moves by the same amount.
 Verdict: green in a clean room over 10 carried files — pytest 9832 passed, ruff, `mypy --strict`
 on each of 3.10-3.13 as a target, and `beadloom ci` all rc 0. The combined tree is
 `beadloom-4ad3`'s to measure.
+
+**2026-09-10 — S2 dev (`beadloom-4ad3`) landed.** The seven readers of `.beadloom/_graph/` are
+classified by experiment rather than by reading: each was asked the same question over two
+directories holding the same nodes and different bytes, and then over two holding different
+nodes. Five read for NODES and two read for BYTES — `change_detection._scan_project_files` and
+`setup._graph_files_now` — and for those two the policy is inapplicable by nature, because a
+file that will not parse still has bytes. Q2's premise was wrong in the way the RFC suspected.
+
+`read_declared_docs` and `link` were routed through `each_graph_file`. The other three node
+readers could not be, for ONE boundary rather than three judgements: all three are in `graph`,
+the policy is in `onboarding`, and `onboarding` already imports `graph`, so the reverse import is
+a cycle `no-dependency-cycles` refuses at error severity. Each names the policy in its own
+docstring and the policy names each of them, and both ends are asserted. Two of the three would
+keep a behavioural exemption regardless — `load_graph` must report a file it cannot parse rather
+than skip it, and `compute_diff` compares a tree against content at a git ref, where a directory
+walk covers one side. The remaining duplication is `beadloom-4axf`, filed rather than done
+mid-wave, because the RFC says routing that turns out large becomes a bead and not a redesign.
+
+Two of the three shapes of BDL-UX #220 are closed as a consequence, measured over all eight cells
+of `init`'s own entry-point-by-mode table. The third is not an unreadable file and no skip policy
+reaches it: `added: 2026-09-02` loads as a `datetime.date` and dies in `load_graph` on
+`json.dumps`. BDL-067 `.25`'s pin was built to fail on this day and did.
+
+Verdict: green in a clean room over 13 carried files, `room-beadloom-4ad3` built from `9c814e02`
+— which already carried S4 — with its own interpreter: 9876 passed, 61 skipped, 17 xfailed,
+`mypy --strict` 0 issues over 287 files, ruff clean. That room carries no `.git` and can take no
+freshness verdict. Green on the tree, Darwin arm64 CPython 3.13.7: 9924 passed, 13 skipped, 17
+xfailed; `mypy --strict` green against all four declared targets, which varies the version the
+checker is asked about and not the interpreter it runs under. Of 21 declared rooms this run
+entered none.
 
 ## Waves
 

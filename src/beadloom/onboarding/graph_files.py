@@ -1,4 +1,32 @@
-"""The one policy every reader of `.beadloom/_graph/` holds."""
+"""The skip policy for a reader of `.beadloom/_graph/` that reads it for NODES.
+
+THE POPULATION, narrowed by measurement rather than by preference. This module
+was declared "the one policy every reader of this directory holds", and BDL-069
+measured what each of the seven readers reads FOR. Two of them do not read the
+directory as a graph at all — `change_detection._scan_project_files` hashes each
+file's bytes to decide whether a reindex is needed, and `setup._graph_files_now`
+digests them to tell the files THIS run wrote from the ones it inherited. Their
+answers move when a comment is added to a graph file and a node reader's do not,
+which is the experiment `tests/test_what_each_reader_of_the_graph_directory_reads_for.py`
+performs. For those two the policy is inapplicable by nature: there is nothing
+to skip, because a file that will not parse still has bytes.
+
+So the claim this module makes is over the readers that PARSE NODES, and three
+of those five do not reach it either. `graph.loader.update_node_in_yaml`,
+`graph.loader.load_graph` and `graph.diff.compute_diff` each state their
+exemption where they read, and the structural half of the reason is the same for
+all three: this module is in `onboarding`, which already imports `graph`, so a
+`graph` -> `onboarding` import would be a dependency cycle. `no-dependency-cycles`
+refuses that at error severity, so those three restate the guards instead. The
+duplication is real and is filed as `beadloom-4axf`: closing it means moving this
+body into a layer every reader may import, which is a bead of its own and not a
+line in a docstring.
+
+What is left is the claim this module can hold: `read_declared_docs`, `link`, and
+`init`'s own readers under `onboarding/` and `services/commands/setup.py` — every
+node reader outside the `graph` domain — go through one body, and the derivation
+in `tests/test_graph_files_are_read_under_one_policy.py` fails on a second one.
+"""
 
 # beadloom:domain=onboarding
 # beadloom:component=graph-files
@@ -9,16 +37,13 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.graph.loader import NOT_A_GRAPH_FILE
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-#: The file in `.beadloom/_graph/` that is not a graph file. `rules.yml` holds
-#: rules and no nodes, so a reader that walked it would either find nothing or
-#: mistake a rule for a node. Every reader skipped it before this module existed
-#: and none of them had a reason of its own for doing so, which is why it is the
-#: policy rather than a parameter of it.
-NOT_A_GRAPH_FILE = frozenset({"rules.yml"})
+__all__ = ["NOT_A_GRAPH_FILE", "each_graph_file"]
 
 
 def each_graph_file(

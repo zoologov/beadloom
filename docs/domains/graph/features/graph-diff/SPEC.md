@@ -228,6 +228,14 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - Paths listed by `git ls-tree` are decoded with `errors="surrogateescape"`, the
   rule `os.fsdecode` itself uses, so a name that is not UTF-8 round-trips back
   through `git show`'s argv instead of raising.
+- **Both sides pass through one parse** (`_parse_yaml_content`), and that is where
+  the parse and mapping guards live rather than in a directory walk: a graph file
+  that will not parse, or whose top level is not a mapping, contributes no nodes
+  and no edges on either side. A guard applied to one side of a comparison and not
+  the other invents changes, which is why this reader restates the guards instead
+  of going through `onboarding.graph_files.each_graph_file` — a policy over a
+  DIRECTORY, and half of this input is content at a git ref, where there is no
+  directory to walk (BDL-069).
 
 ---
 
@@ -236,7 +244,8 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - Requires a git repository at `project_root` (all git commands run with `cwd=project_root`).
 - Default comparison is against `HEAD`.
 - Raises `ValueError` on an invalid git ref (determined by `git rev-parse --verify`).
-- Only considers `.yml` files inside `.beadloom/_graph/`.
+- Only considers `.yml` files inside `.beadloom/_graph/`, and not `rules.yml`,
+  which holds rules and no nodes. The name is skipped on both sides.
 - Files that do not exist at the given ref are treated as absent (contributing zero nodes and edges for that ref).
 - YAML files are parsed with `yaml.safe_load`; `None` content is treated as empty.
 - `compute_diff_from_snapshot` requires a database with `nodes`, `edges`, and `graph_snapshots` tables.

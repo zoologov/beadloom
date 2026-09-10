@@ -8,9 +8,14 @@ Internal building block of the onboarding domain.
 
 ## Overview
 
-One body holding the policy every reader of `.beadloom/_graph/` applies before it
-looks at a graph file. `init` held four of them with four different policies, and two
-of the four carried no guard at all.
+One body holding the skip policy a reader of `.beadloom/_graph/` applies before it
+looks at a graph file, for every reader that reads the directory FOR NODES and is
+outside the `graph` domain. `init` held four of them with four different policies, and
+two of the four carried no guard at all.
+
+The population is narrower than "every reader", and BDL-069 narrowed it by
+measurement rather than by preference. See *The population, and what is outside it*
+below.
 
 The policy, stated once because there is one of it:
 
@@ -45,6 +50,8 @@ it must read is the one it will be added to.
 | `onboarding/scanner/doc_classify.py::_existing_graph` | the graph's root, and which ref_ids already have a parent |
 | `services/commands/setup.py::_graph_file_of_each_node` | which file each node came from, for the failure report |
 | `services/commands/setup.py::_graph_nodes_now` | each node as written, for the report's attribution |
+| `application/reindex/indexing.py::read_declared_docs` | every `docs:` entry a node declares, for the doc index |
+| `services/commands/index_ops.py::link` | the file holding one ref_id, to patch its `links:` |
 
 ## Why it exists
 
@@ -68,23 +75,54 @@ The mapping guard is not the same guard as the parse guard and is needed separat
 graph file holding a top-level list parses without complaint and then raises
 `AttributeError` on `data.get`.
 
-## Scope, and what is outside it
+## The population, and what is outside it
 
-This policy covers the readers `init`'s own modules hold. It is not a claim about the
-command: `init` still ends in a Python traceback on a graph file it cannot handle, filed
-as BDL-UX #220 and open. MEASURED at `.25` over `init`'s own eight (entry point x mode)
-cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml` — 24 runs,
-of which the 15 that reach the file traceback. Those are `--bootstrap`, `--import` and all
-three wizard modes, on a file that does not parse, on a file whose top level is a list,
-and on a file carrying an unquoted date. Two frames, both outside `onboarding`:
-`application/reindex/indexing.py::read_declared_docs`, reached through `do_reindex`, and
-`graph/loader.py::load_graph`. The date shape is why a fix scoped to unreadable YAML would
-close two thirds of the class and no more — that file parses, and every reader this policy
-covers yields it happily. `--yes` reaches none of the 15, and not because a guard works:
-`non_interactive_init` returns `skipped` when `.beadloom/` already exists, and `--force`
-deletes the directory first. `graph/diff.py`, `reindex/change_detection.py` and
-`services/commands/index_ops.py` walk the directory too. Closing the class is a planning
-decision rather than a fix.
+BDL-069 `beadloom-4ad3` asked each of the seven readers of `.beadloom/_graph/` the same
+question over two directories holding THE SAME NODES and DIFFERENT BYTES — a YAML
+comment — and then over two holding different nodes. A reader whose answer moves on the
+comment reads bytes; one whose answer moves only on the nodes reads nodes.
+
+**Five read for nodes**, and belong to this policy's population:
+`graph/loader.py::update_node_in_yaml`, `graph/loader.py::load_graph`,
+`graph/diff.py::compute_diff`, `application/reindex/indexing.py::read_declared_docs`
+and `services/commands/index_ops.py::link`.
+
+**Two read for bytes**, and are outside it by nature rather than by oversight:
+`application/reindex/change_detection.py::_scan_project_files` hashes each file to
+decide whether a reindex is needed, and `services/commands/setup.py::_graph_files_now`
+digests them to tell the files a run wrote from the ones it inherited. There is nothing
+for either to skip, because a file that will not parse still has bytes.
+
+**Three of the five do not reach this body**, and the structural half of the reason is
+one boundary rather than three judgements: all three are in the `graph` domain, this
+module is in `onboarding`, and `onboarding` already imports `graph`. A `graph` ->
+`onboarding` import would be a dependency cycle, which `no-dependency-cycles` refuses at
+error severity, so those three restate the guards where they read and each names this
+module in its own docstring. Two of them would keep a behavioural exemption even if the
+cycle were broken, and those are the reasons worth reading:
+
+- `load_graph` must REPORT a file it cannot parse rather than pass over it, so a broken
+  graph does not load as a silently smaller one (BDL-UX #86). Skipping is the right
+  answer for `init` and the wrong one for the loader.
+- `compute_diff` has two sides — the working tree and content at a git ref — and a
+  directory walk covers only the first. Its guards are in `_parse_yaml_content`, which
+  both sides pass through, because a guard applied to one side of a comparison and not
+  the other invents changes.
+
+Only `update_node_in_yaml` restates the guards for the boundary alone. Removing that
+duplication means moving this body into a layer every reader may import, which is filed
+as `beadloom-4axf`. The DATA half is already shared: `NOT_A_GRAPH_FILE` is declared in
+`graph/loader.py` and re-exported here, because the direction that allows one constant
+is `onboarding` -> `graph` and not the reverse.
+
+BDL-UX #220 is closed except for one shape, and that shape is not an unreadable file.
+MEASURED over `init`'s own eight (entry point x mode) cells crossed with three shapes of
+a hand-edited `.beadloom/_graph/legacy.yml`: a file that does not parse and a file whose
+top level is a list now leave `init --bootstrap` at exit 0, because `read_declared_docs`
+was routed here. A file carrying `added: 2026-09-02` still ends in `TypeError` — the
+date loads as a `datetime.date` and `graph/loader.py::load_graph` cannot `json.dumps` it
+into the `extra` column. No skip policy reaches that one, because the file is perfectly
+readable.
 
 ## Tests
 
@@ -98,3 +136,12 @@ directory were measured passing the narrower detector `.24` shipped, which asked
 `glob` with the literal `"*.yml"` and for `yaml.safe_load` by name — the spelling
 `each_graph_file` happens to use rather than what makes a body a reader. It also pins
 the residue above, so the case fails as soon as somebody closes it.
+
+`tests/test_what_each_reader_of_the_graph_directory_reads_for.py` holds the population
+measurement: the comment-versus-node experiment for all seven readers, the skip-policy
+cases for the five that read nodes, and the two-ended record of each exemption — the
+body names this module in its docstring, and this module names the body. It also states
+the derivation's ceiling: the one-body shape sees `each_graph_file` and
+`update_node_in_yaml` and is blind to `load_graph` and `compute_diff`, which hand their
+parse to a helper, which is why the epic's grep found seven readers where the derivation
+finds two.

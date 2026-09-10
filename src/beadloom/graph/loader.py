@@ -44,6 +44,19 @@ def get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]:
     extra: dict[str, Any] = json.loads(str(raw))
     return set(extra.get("tags", []))
 
+
+#: The file in ``.beadloom/_graph/`` that is not a graph file. ``rules.yml``
+#: holds rules and no nodes, so a reader that walked it would either find
+#: nothing or mistake a rule for a node.
+#:
+#: It is declared HERE, in the domain that owns the graph file format and that
+#: also reads ``rules.yml`` (``graph/linter.py``), and re-exported by
+#: ``onboarding.graph_files`` for the readers that go through the skip policy.
+#: The direction is what makes one constant possible: ``onboarding`` may import
+#: ``graph`` and the reverse is a cycle, so a constant needed on both sides can
+#: only live on this one (BDL-069).
+NOT_A_GRAPH_FILE = frozenset({"rules.yml"})
+
 # Fields mapped directly to SQLite columns (not stored in ``extra``).
 _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source", "lifecycle"})
 # ``docs`` is tracked but handled by the doc indexer (BEAD-04).
@@ -140,8 +153,18 @@ def parse_graph_file(path: Path) -> ParsedFile:
     valid YAML and parse identically. Any YAML syntax error is raised as a
     :class:`GraphParseError` naming the file and line -- never swallowed into
     a silent empty result (see BDL-UX-Issues #86).
+
+    A file that will not DECODE is the same finding as one that will not parse,
+    and was not one until BDL-069: ``read_text`` sat outside the ``try``, so a
+    graph file that is not UTF-8 left `load_graph` as a raw ``UnicodeDecodeError``
+    rather than as an entry in ``result.errors``. That is the one shape
+    ``each_graph_file`` guards which this reader's own guards did not cover, and
+    the loader's contract is to report it, not to skip it.
     """
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise GraphParseError(f"Failed to read graph file '{path.name}': {exc}.") from exc
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -182,11 +205,27 @@ def update_node_in_yaml(
     writes the YAML back to disk, and updates the ``nodes`` table.
 
     Returns ``True`` if the node was found and updated.
+
+    NOT ROUTED THROUGH ``each_graph_file``, and the reason is structural rather
+    than a judgement about this body: BDL-069 measured that it reads the
+    directory for NODES, so it belongs in that policy's population, and the
+    policy lives in ``onboarding``, which already imports ``graph``. Importing it
+    here would be a ``graph`` -> ``onboarding`` edge and a dependency cycle,
+    which ``no-dependency-cycles`` refuses at error severity. So the policy's
+    three guards are restated here — a file that will not read, one that will not
+    parse, and one that parses to something other than a mapping are each
+    skipped rather than raised on — and the duplication is what
+    ``beadloom-4axf`` exists to remove by moving the policy into a layer every
+    reader may import.
     """
     for yml_path in sorted(graph_dir.glob("*.yml")):
-        text = yml_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-        if data is None:
+        if yml_path.name in NOT_A_GRAPH_FILE:
+            continue
+        try:
+            data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, UnicodeDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
             continue
         nodes_list: list[dict[str, Any]] = data.get("nodes") or []
         for node in nodes_list:
@@ -200,9 +239,7 @@ def update_node_in_yaml(
                 node["source"] = source
 
             # Write YAML back to disk (atomic — crash-safe; same bytes).
-            write_yaml_atomic(
-                yml_path, data, default_flow_style=False, allow_unicode=True
-            )
+            write_yaml_atomic(yml_path, data, default_flow_style=False, allow_unicode=True)
 
             # Update SQLite.
             if summary is not None:
@@ -272,6 +309,19 @@ def load_graph(
     grandparent (``<root>/.beadloom/_graph`` -> ``<root>``).
 
     Returns a :class:`GraphLoadResult` with counts and diagnostics.
+
+    NOT ROUTED THROUGH ``each_graph_file``, for two reasons that are both
+    independent of each other. The structural one is the cycle
+    :func:`update_node_in_yaml` states. The behavioural one is that this reader
+    must REPORT the file it could not parse rather than pass over it: a graph
+    file that will not parse is recorded in ``result.errors`` naming the file and
+    the line, which is what stops a broken graph from loading as a silently
+    smaller one (BDL-UX #86). ``each_graph_file`` skips such a file, which is the
+    right answer for a reader whose caller is `init` and the wrong one here. The
+    guards themselves are in :func:`parse_graph_file`, so the two shapes
+    ``each_graph_file`` also guards — a file that will not read, and one that
+    parses to something other than a mapping — reach the caller as findings
+    rather than as tracebacks.
     """
     if project_root is None:
         project_root = graph_dir.parent.parent
@@ -281,6 +331,8 @@ def load_graph(
     all_nodes: list[dict[str, Any]] = []
     all_edges: list[dict[str, Any]] = []
     for yml_path in sorted(graph_dir.glob("*.yml")):
+        if yml_path.name in NOT_A_GRAPH_FILE:
+            continue
         try:
             parsed = parse_graph_file(yml_path)
         except GraphParseError as exc:
@@ -376,9 +428,7 @@ def _process_edge(
     if src_foreign is None or dst_foreign is None:
         return  # malformed @... — already recorded as an error
 
-    lifecycle = _normalize_lifecycle(
-        edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
-    )
+    lifecycle = _normalize_lifecycle(edge.get("lifecycle"), f"Edge '{src}→{dst}'", result)
     edge_extra = _edge_extra(edge)
     _fold_graphql_surface(edge_extra, edge_kind, project_root, src, dst, result)
     contract_key = _contract_key(edge_extra)

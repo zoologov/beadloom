@@ -247,7 +247,7 @@ def store_declared_docs(
 ) -> None
 ```
 
-Read every doc a node DECLARES in its `docs:` list as `(declared_path, doc_path, ref_id)` — *declared_path* resolved project-relative (both spellings, `docs/domains/x/README.md` and `domains/x/README.md`, land on the same file) and *doc_path* docs-dir-relative, the key of the `docs` table — and cache them in `declared_docs`. The `docs` table only holds files found on disk, so without this a deleted doc simply stopped being indexed and the gate had nothing to miss (BDL-UX #174). Both reindex paths write it; a graph-YAML change already forces a full reindex.
+Read every doc a node DECLARES in its `docs:` list as `(declared_path, doc_path, ref_id)` — *declared_path* resolved project-relative (both spellings, `docs/domains/x/README.md` and `domains/x/README.md`, land on the same file) and *doc_path* docs-dir-relative, the key of the `docs` table — and cache them in `declared_docs`. The `docs` table only holds files found on disk, so without this a deleted doc simply stopped being indexed and the gate had nothing to miss (BDL-UX #174). Both reindex paths write it; a graph-YAML change already forces a full reindex. The graph directory is read through `onboarding.graph_files.each_graph_file`, which is where the skip policy is stated: BDL-069 measured that this body reads the directory for NODES, and it was the frame BDL-UX #220 measured `init` tracebacking in, twice — a hand-edited graph file that does not parse raised `yaml.parser.ParserError` here, and one holding a top-level list raised `AttributeError` on `data.get`, which no `except yaml.YAMLError` catches.
 
 ```python
 def _index_code_files(

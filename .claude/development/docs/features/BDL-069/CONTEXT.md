@@ -75,6 +75,7 @@ reporting on a population that is empty, partial, or unnamed.
 | 2026-09-10 | `init` names the modules in the skeleton rather than attesting the pair at write time | attesting asserts a freshness nobody checked — the false-green shape removed in BDL-061 |
 | 2026-09-10 | The command is `version-surface` | symmetry with the shipped `typed-surface`: the same shape of question earns the same shape of name |
 | 2026-09-10 | `sync-update` reports what it did NOT clear; its scope is untouched | scope is BDL-UX #279; the defect here is a command reporting over the population it attested and staying silent about the rest |
+| 2026-09-10 | The three graph-domain readers restate `each_graph_file`'s guards rather than routing to it | `onboarding` already imports `graph`, so the reverse import is a cycle `no-dependency-cycles` refuses at error severity; moving the policy is filed as `beadloom-4axf` rather than done mid-wave |
 
 ## Related Files
 

@@ -55,14 +55,19 @@ def read_declared_docs(
     disk: a declared doc that was deleted still appears here, which is what lets
     the gate notice it went missing instead of simply having less to check
     (BDL-UX #174).
+
+    Read through :func:`~beadloom.onboarding.graph_files.each_graph_file`, which
+    is where the skip policy is stated. BDL-069 measured what this body reads
+    for and the answer is nodes, so it belongs to that policy's population — and
+    it was the frame BDL-UX #220 measured `init` tracebacking in, twice: a
+    hand-edited file that does not parse raised `yaml.parser.ParserError` here,
+    and one holding a top-level list raised `AttributeError` on `data.get`,
+    which no `except yaml.YAMLError` catches.
     """
-    import yaml
+    from beadloom.onboarding.graph_files import each_graph_file
 
     declared: list[tuple[str, str, str]] = []
-    for yml_path in sorted(graph_dir.glob("*.yml")):
-        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
-        if data is None:
-            continue
+    for _yml_path, data in each_graph_file(graph_dir):
         for node in data.get("nodes") or []:
             ref_id = node.get("ref_id", "")
             for doc_path_str in node.get("docs") or []:
@@ -95,14 +100,11 @@ def _project_relative_doc(docs_dir: Path, project_root: Path, rel: str) -> str:
     return str(resolved)
 
 
-def store_declared_docs(
-    conn: sqlite3.Connection, declared: list[tuple[str, str, str]]
-) -> None:
+def store_declared_docs(conn: sqlite3.Connection, declared: list[tuple[str, str, str]]) -> None:
     """Cache the declared documentation surface (see :func:`read_declared_docs`)."""
     conn.execute("DELETE FROM declared_docs")
     conn.executemany(
-        "INSERT OR REPLACE INTO declared_docs (declared_path, doc_path, ref_id) "
-        "VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO declared_docs (declared_path, doc_path, ref_id) VALUES (?, ?, ?)",
         declared,
     )
     conn.commit()

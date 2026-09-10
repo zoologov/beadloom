@@ -41,6 +41,8 @@ is what holds that line.
 | `_root.py` | the shared `main` group and the missing-parser warning helper — no command of its own. The summary `beadloom --help` prints is `help=_HELP`, derived from the package docstring rather than written as the group's own docstring: it was a third hand-written copy of the product description and shipped the 1.x sentence through both 3.0 patch releases (BDL-UX #211) |
 | `query.py` | `ctx`, `graph`, `why`, `search`, `prime` |
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
+
+`link` reads `.beadloom/_graph/` through `onboarding.graph_files.each_graph_file`, which is where the skip policy is stated: BDL-069 measured that it reads the directory for NODES, so a graph file it cannot parse must leave the answer "that node is not in the graph" rather than a traceback at whoever ran the command.
 | `status.py` | `status` |
 | `docsync.py` | `sync-check`, `sync-update`, `install-hooks`, `active-sync` |
 | `federation.py` | `export`, `federate`, `lint`, `ci` |

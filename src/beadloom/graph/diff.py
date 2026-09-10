@@ -8,13 +8,15 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
+from beadloom.graph.loader import NOT_A_GRAPH_FILE
+
 if TYPE_CHECKING:
     import sqlite3
-    from pathlib import Path
 
     from rich.console import Console
 
@@ -139,9 +141,20 @@ def _parse_yaml_content(
         A tuple of (nodes_dict, edges_set) where:
         - nodes_dict maps ref_id -> {"kind": ..., "summary": ..., "source": ..., "tags": ...}
         - edges_set contains (src, dst, kind) tuples
+
+    The parse and mapping guards of
+    :func:`~beadloom.onboarding.graph_files.each_graph_file` are restated here
+    rather than imported, and this is the body they belong in: the policy is a
+    walk over a DIRECTORY, and half of this diff's input is content read at a git
+    ref, where there is no directory to walk. A guard applied to one side of a
+    comparison and not the other invents changes, so both sides go through this
+    one function. `beadloom-4axf` is where the duplication goes.
     """
-    data = yaml.safe_load(content)
-    if data is None:
+    try:
+        data = yaml.safe_load(content)
+    except yaml.YAMLError:
+        return {}, set()
+    if not isinstance(data, dict):
         return {}, set()
 
     nodes_dict: dict[str, dict[str, object]] = {}
@@ -204,6 +217,15 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
     Raises:
         ValueError: If the git ref is invalid, or if graph YAML on either side
             is not valid UTF-8 (a refusal that names the file, never a diff).
+
+    NOT ROUTED THROUGH ``each_graph_file``, for two independent reasons. The
+    structural one is the cycle :func:`~beadloom.graph.loader.update_node_in_yaml`
+    states: the policy lives in ``onboarding``, which already imports ``graph``.
+    The behavioural one is that this reader has TWO sides — the working tree and
+    the content at a git ref — and a directory walk can only cover the first, so
+    the guards are restated in :func:`_parse_yaml_content`, which both sides go
+    through. The name guard is applied to both sides here, where each side lists
+    its own files.
     """
     if not _validate_git_ref(project_root, since):
         msg = f"Invalid git ref: '{since}'"
@@ -218,6 +240,8 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
     current_files: set[str] = set()
     if graph_dir.is_dir():
         for yml_path in sorted(graph_dir.glob("*.yml")):
+            if yml_path.name in NOT_A_GRAPH_FILE:
+                continue
             rel_path = str(yml_path.relative_to(project_root))
             current_files.add(rel_path)
             content = _decode_graph_yaml(yml_path.read_bytes(), rel_path)
@@ -231,6 +255,8 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
 
     prev_files = _list_graph_files_at_ref(project_root, since)
     for rel_path in prev_files:
+        if Path(rel_path).name in NOT_A_GRAPH_FILE:
+            continue
         prev_content = _read_yaml_at_ref(project_root, rel_path, since)
         if prev_content is not None:
             nodes, edges = _parse_yaml_content(prev_content)
