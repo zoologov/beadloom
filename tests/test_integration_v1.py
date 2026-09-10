@@ -22,16 +22,23 @@ _GRAPH_DIR = _PROJECT_ROOT / ".beadloom" / "_graph"
 
 
 class TestVersion:
-    """Verify version is 3.0.2."""
+    """Verify the version is 4.0.0, and that the CLI reports the same one.
+
+    The literal is deliberate and has to be edited every release: it is what
+    turns an ACCIDENTAL version change into a red test rather than a silent
+    ship. What it does not do is find the version's other homes — this project
+    states it in nine places, and four of them fail nowhere a developer looks
+    until a release is underway (BDL-UX #281).
+    """
 
     def test_version_string(self) -> None:
-        assert __version__ == "3.0.2"
+        assert __version__ == "4.0.0"
 
     def test_cli_version(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "3.0.2" in result.output
+        assert "4.0.0" in result.output
 
 
 class TestGraphCompleteness:

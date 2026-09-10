@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [4.0.0] - 2026-09-10
+
 ### Added
 
 - **Nine new top-level commands, from BDL-068.** The epic added them one slice at a time and

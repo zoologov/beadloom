@@ -1,6 +1,8 @@
 # Beadloom Roadmap
 
-> **Current version: 3.0.2** (PyPI, verified on the downloaded wheel 2026-08-30).
+> **Current version: 4.0.0** (released 2026-09-10; the published-wheel verification is
+> recorded below the Shipped table once it has been run, and until then this line states
+> the tag and not the artifact).
 > Rewritten 2026-08-31. The previous revision was headed *post-v2.0.0* and had not
 > been touched through two major releases: it still listed BDL-061 as unstarted
 > P0 work after it shipped as 3.0.0, and named BDL-062 through BDL-066 nowhere.
@@ -21,10 +23,23 @@
 | **v3.0.0** (08-26) | **MAJOR.** Flow guards as data with a verdict on every invocation; the false-green residue removed; `CLAUDE.md` composed with a project layer that survives upgrades; executable `@bead:`/`@node:` scenarios; three document spaces; `waves` / `review-brief` / `sync-check --staged` |
 | **v3.0.1** (08-27) | `graph_summary_facts` and `doc_area_coherence`; the audit's three populations; **the audit stopped declaring two facts about Beadloom as facts about the adopter's project**; 14 graph corrections; the package description |
 | **v3.0.2** (08-27) | the description was fixed in two copies of five — the check read the two it compared and printed the word for all of them |
+| **v4.0.0** (09-10) | **MAJOR.** BDL-068, six slices, 86 beads: the flow's rules became instruments. `impact` / `axes` / `scope-check` answer a change's blast radius from the source; `mutation`, `rooms`, `typed-surface`, `bd-calls`, `clean-room`, `issue-number` each replace a convention with a measurement; `waves --parent` derives wave membership from the tracker. Breaking: a sixth guard verdict `unresolved` that warns and permits where `error` blocked, `guard --liveness --json` as an object, and the firing record no longer storing command lines — 1 927 of 1 999 firings held one. Every check now names the boundary of its own knowledge: what it did not run, whose finding it is, and the population it did not reach. |
 
 ---
 
-## What is being worked on now
+## Shipped in v4.0.0 (BDL-068) — kept as the record of why
+
+The three P0 items below were the list this file carried into September, and BDL-068
+closed all three: `impact` / `axes` / `scope-check` for the first, `mutation` for the
+second, and the virgin-`init` blocker merged rather than sitting on a branch. They are
+kept here in full rather than deleted, because what they diagnose — the measurements on
+BDL-067, the reason each was ranked where it was — is the evidence the instruments were
+built from, and a shipped instrument with no record of the defect it answers is the same
+unattached rule this epic spent six slices removing.
+
+**What is NOT closed is recorded, and not here.** The epic ended with three gaps still
+open, and they are stated with their reasons under *The class BDL-068 found* below. Read
+that section, not this one, for what is left.
 
 ### P0 — the flow cannot see a change's axes, and cannot re-plan when they turn out larger
 
@@ -231,6 +246,8 @@ layout (BDL-UX #214, `beadloom-7c6k`). Nine review passes were needed to get her
 eight of the defects they found were one sentence true of one shape while a
 neighbouring shape existed — which is the argument for the axes artifact ranked above
 this item, not a separate observation.
+
+## What is being worked on now
 
 ### P1 — BDL-066: agent behaviour observability, trace and result
 
