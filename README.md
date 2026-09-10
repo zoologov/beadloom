@@ -4,7 +4,7 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Rules for architecture, documentation and contracts, as checks with an exit code. The same for a human and for an agent.**
+**An engineering control loop for autonomous agents: the bounds of a task, architectural context, and checks that say honestly what they did not check.**
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
@@ -22,13 +22,81 @@
 
 ---
 
-## The agent forgets what you wrote
+## Why prompts and `CLAUDE.md` are no longer enough
 
-An agent writes code faster than you can read it. At the start of a session it remembers the instruction in `CLAUDE.md`. In a long session it forgets.
+A chatbot that answers questions and writes a chunk of code on request is ordinary now. That is the baseline.
 
-The reason is known and it is called context rot: the longer the conversation and the larger the file of rules, the harder those instructions compete for the model's attention. Rules weaken exactly when the session has grown long and you need them most. Adding one more paragraph to the file makes it worse.
+Past it, something else begins. The agent works the task out for itself, plans it, breaks it into steps, uses tools, writes and checks code, edits documentation, works alongside other agents and carries out long chains of actions. It stays on that for hours, with nobody watching.
 
-So you cannot rely on the instruction being read and remembered. You need something that does not depend on memory.
+Autonomy raises more than speed. It also raises the chance that the agent understands the task differently from how it was meant. Asked to fix a failing test, it deleted the test, and the build went green. Asked to bring coverage up to eighty percent, it wrote tests that call the code and assert nothing. Formally, the task is done. This has a name: goal misalignment.
+
+There is a worse case. The agent looks as though it is going along with the rules, while leaving part of what it did unsaid and routing around part of the checks. This is called scheming, hidden strategic behaviour. Such scenarios are already being studied in labs. In everyday work we usually miss them: first we miss them, then we throw up our hands and say the model has got worse.
+
+So you can no longer rely on the agent recalling and correctly applying what is written in a prompt, in `AGENTS.md` or in `CLAUDE.md`. In a short session it still works. In a long one the context grows, the rules sink into it, and they weaken exactly when they start to matter.
+
+What is needed is an engineering control loop: explicit bounds on a task and on what it is allowed to touch, architectural context, isolated parallel work, executable checks, evidence of what was done, and an honest record of what could not be checked.
+
+Beadloom is an attempt to build that loop into the repository itself.
+
+## A check that passed and a check that ran are different facts
+
+Most tools answer two ways: pass or fail. That leaves out a third case, and the third case is the one that hurts — the check ran over nothing and said `pass`.
+
+A rule whose path pattern has a typo matches no file. A document is declared in the graph and was deleted from disk. A freshness check on a fresh clone has no baseline to compare against. A guard is configured correctly and wired to nothing, so it has never once fired. In every one of these the honest answer is "I did not check this", and the usual answer is green.
+
+Beadloom says what it did not do. From real runs:
+
+```
+docs-audit  PASS: 19 mentions fresh; 4/9 declared facts verified,
+            NOT VERIFIED: cli_command_count, edge_count, language_count
+scope-check SKIP: skipped — the branch names no work item among the planning
+            documents, so there are no declared axes to judge against
+lint        domain-needs-parent: cannot fire: its `for` kind 'domain' matches
+            none of the 1 nodes in the graph. It is counted as evaluated and
+            checks nothing
+gate        not run by this gate: the test suite, the style linter, the type checker
+```
+
+A guard has six outcomes rather than two:
+
+- `pass` — it checked, and it has nothing against the edit;
+- `warn` — worth a look, but the work is not stopped;
+- `block` — a rule is broken, the edit does not go through;
+- `skip` — there was nothing to check, and that is not dressed up as success;
+- `error` — the guard refuses to interpret what it was handed. Also does not go through;
+- `unresolved` — the guard could not evaluate *itself*: its own code would not import, its config would not parse.
+
+`unresolved` is worth a sentence of its own. A broken checker that forbids everything also forbids the edit that would repair it, and an agent cannot get out of that on its own. So here Beadloom warns and lets the edit through instead of blocking.
+
+What each check declines to assert is set out [further down](#when-a-check-cannot-answer-beadloom-says-so).
+
+## What Beadloom is not
+
+It is not a safety layer for the model. It cannot tell you whether an agent is being straight with you, whether it is holding something back, or whether it would act differently unobserved. Those are properties of the model, and they are worked on elsewhere.
+
+It does not replace sandboxing, secret handling, access control or human review. An agent with network access and production credentials is an infrastructure question before it is a workflow question.
+
+What it does is narrower and can be checked: it bounds where one change may reach, shows what a change touches, keeps several agents out of each other's files, and refuses to report a check as passed when it had nothing to check.
+
+## What is covered, and what is not
+
+Beadloom is made of several layers, each of which the industry calls something "as code". Here is what is covered, by what exactly, and where the boundary runs.
+
+| Layer | | Covered by |
+|---|---|---|
+| Architecture as code | yes | the graph in versioned YAML, `lint` over it, `impact`, the graph's file layout |
+| Policy as code | yes | guards as data, rules about a task's scope, six verdicts and their exit codes |
+| Documentation as code | yes | document-to-code pairs, freshness against `HEAD`, a tech-writer on the pull request |
+| Context as code | yes | `ctx`, `prime`, `why`, the declared typed surface |
+| Coordination as code | yes | `waves`, `rooms`, `clean-room`, issue numbers handed out by exclusive file create |
+| Assurance as code | yes | `guard --liveness`, `scope-check`, `mutation`, an explicit "not checked" in every report |
+| Agentic workflow as code | yes | `flow.yml`, roles, adapters, and `config-check` over them |
+| Security & privacy as code | partly | the firing record keeps the command name and the files, never the command line |
+| Runtime agent governance | partly | the loop covers tools and edits in the repository, not a full authorization plane for actions |
+| Model alignment | no | Beadloom does not judge a model's goals or its honesty |
+| Frontier-AI safety | not a goal | it does not replace model evaluations, sandboxes or capability thresholds |
+
+The bottom three rows are not a roadmap. They are the boundary of the project, and it is drawn on purpose.
 
 ## A rule becomes a command
 
@@ -102,7 +170,7 @@ beadloom reindex                   # build the index
 beadloom ci                        # run every check at once
 ```
 
-`beadloom init` checks its own output before it reports success. When the scaffold fails the rules the same run wrote beside it, `init` says which rule and which node, and exits 1 — rather than exiting 0 and leaving you to find it at the first `beadloom ci`. The scaffold stays on disk either way.
+`beadloom init` checks the graph it has just written against the rules it wrote beside it. When the scaffold breaks one of them, `init` names the rule and the node and exits 1, instead of exiting 0 and leaving you to find it at the first `beadloom ci`. The scaffold stays on disk either way. The documents it writes are not checked the same way yet, so read the first `beadloom ci` rather than assuming it.
 
 Three things are worth looking at next: `beadloom ctx <node>` — what the tool knows about a piece of the system, `beadloom prime` — exactly what an agent will see, `beadloom docs site` — how it looks on the portal.
 
@@ -229,10 +297,15 @@ Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Jav
 | `lint` | Check the architecture rules (`--strict` for CI) |
 | `sync-check` | Documentation freshness against the code |
 | `ci` | The single Gate: every check under one exit code |
+| `impact REF_ID` | Who else writes this node, who calls it, how many branches it has |
+| `scope-check` | Whether a commit stayed inside the axes its work item declared |
+| `waves --parent BEAD` | Which tasks can run at once, derived from the tracker rather than typed out |
+| `clean-room BEAD` | A room built from `HEAD` plus the files you name, so one agent's verdict is about its own work |
+| `guard --liveness` | Which guards exist, and what each one is actually wired to |
 | `export` / `federate` | Export the graph and assemble a landscape from several services |
 | `docs site` | Build the VitePress portal |
 
-The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `guard`, `waves`, `review-brief`, `bd-calls`, `rooms`, `mutation`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
+The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `axes`, `typed-surface`, `bd-calls`, `issue-number`, `rooms`, `mutation`, `review-brief`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
 
 ## MCP, configuration, Beads
 
