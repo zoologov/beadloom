@@ -9,11 +9,21 @@ distributed. Before BDL-061 S3 there was nowhere to put it, so it went into the
 core and shipped verbatim — including a bead id and a claim about this repo's
 branch protection that is false for an adopter (BDL-UX #177).
 
-### `setup-branch-protection` — not safe to re-run right now
+### `setup-branch-protection` — the gap is closed as of 4.0.0, and will reopen
 
-`DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine** contexts; `main`'s live protection
-has **seven**. Running the command today would require checks that have not been
-observed green on this repository, which is how `main` becomes unmergeable.
+**As of 2026-09-10 the declared set and the live set are the same nine.** The two
+`tests-locale` legs were the whole difference; they reported `SUCCESS` on PR #64
+and #65, `ci.yml` carries no `if:` and no `paths:` filter on that job so it runs
+on every PR, and its matrix produces the two context names verbatim. The command
+was re-run against `zoologov/beadloom` and the payload differed from the live
+protection in those two entries and nothing else — `strict`, `enforce_admins`,
+0 required reviews, `restrictions: null`, force-push and deletion all unchanged,
+compared before and after.
+
+**This paragraph is the thing most likely to be false when you read it.** It was
+false for the four months before this line was written, and the sentence it
+replaced described a seven-vs-nine gap as the standing state. Re-measure; do not
+believe this.
 
 The count has moved three times, which is the thing to notice rather than the
 number: S2 added the two `tests-locale` legs (red until `beadloom-mr2l.42` closed
@@ -33,7 +43,12 @@ contexts against what actually reports green.**
 
 A dimension is added whenever this project learns it was only ever verified along
 one axis, so the declared set will keep growing ahead of the green set. That gap
-is the normal state, not an incident.
+is the normal state, not an incident — and closing it, as 4.0.0 did, is a moment
+rather than a property.
+
+One risk this repository carries and an adopter may not: `ai-techwriter` runs on
+a **self-hosted** runner. It is a required check, so `main` is unmergeable while
+that VPS is down. That predates the nine and is not part of it.
 
 ### Concurrent waves share one working tree
 

@@ -775,8 +775,8 @@ enforceable for a project that wants it.
 **Whose version a version is.** A semantic version is attributed to the nearest subject NAME
 to its left inside its own clause, and only a version whose nearest name is this project's --
 or that has no name at all -- is compared against this project's version. So
-`Measured on bd 1.0.4` states the release of the tracker and `The current release is 3.0.2`
-states this project's, and each number in `bd 1.0.4 answers and beadloom 3.0.2 asks` goes to
+`Measured on bd 1.0.4` states the release of the tracker and `The current release is 4.0.0`
+states this project's, and each number in `bd 1.0.4 answers and beadloom 4.0.0 asks` goes to
 the name beside it. The tokens given to another product are counted with their subjects in the
 audit's own output, and carried in `--json` under `attributed_versions` with the vocabulary
 that decided them under `version_subjects`, so the exemption is visible rather than silent.

@@ -35,6 +35,33 @@
 
 ## Open Issues
 
+281. [2026-09-10] [MEDIUM] the release version is stated in NINE places, and no command names that population — three instruments each check a disjoint part of it and none knows the others exist
+
+    **Severity:** medium (nothing ships wrong — every place was found; the cost is that three of the seven fail only once a release is already underway, and one of those is `severity: error`)
+    **Command:** the release procedure itself; `beadloom lint --strict`, `beadloom docs audit`, `beadloom doctor`
+    **Context:** cutting 4.0.0 (BDL-068's release). Bumping `src/beadloom/__init__.py` and the four documents left the tree RED, and the two failures arrived in the two least convenient places: a `lint --strict` error, and two assertions inside the test suite.
+    **Measured on 2026-09-10.** The version is written in seven places, and what checks each one is not the same instrument:
+
+    | Where | What checks it |
+    |---|---|
+    | `src/beadloom/__init__.py:6` | the source of truth — `[tool.hatch.version]` reads it |
+    | `.claude/CLAUDE.md`, `project-info` auto-region | `beadloom doctor`, `agent_instructions_version` |
+    | `docs/getting-started.md:45` | `beadloom docs audit`, as a version subject |
+    | `.beadloom/_graph/beadloom.yml:5`, the node summary | `beadloom lint --strict`, rule `graph-summary-facts`, **severity error** |
+    | `docs/services/cli.md:778-779`, twice, inside an EXAMPLE of the attribution rule | `beadloom docs audit`, `doc-fact-stale` |
+    | `docs/domains/doc-sync/features/docs-audit/SPEC.md:107-108`, the same example in the twin document | nothing — and it is the same sentence as the row above |
+    | `tests/test_integration_v1.py:28` and `:35` | the test suite, two literals |
+    | `CHANGELOG.md`, the release heading | nothing |
+    | `.claude/development/ROADMAP.md:3` | nothing |
+
+    **The shape, and why it is this epic's own class.** BDL-068 S6 shipped `doc_sync/version_subjects.py` — the instrument for exactly this question, "which subject does a version token belong to". Its population is **documents**. The graph node summary is a YAML value judged by a lint rule; the test literals are Python judged by pytest. Three instruments, three disjoint populations, no one of them able to say how much of the fact it covers — and two places covered by none. Each check is individually correct and the union is unnamed, which is the population defect this epic spent six slices removing, sitting in the release procedure of the release that removed it.
+    **What made it visible rather than costly:** `graph-summary-facts` is `severity: error`, so the graph node was a hard red instead of a wrong string shipped to PyPI. That is the check working. The complaint is not that it fired — it is that it fired at the END, after the four "obvious" places had been edited and the work was believed done.
+    **The Gate DOES catch it — measured rather than assumed.** This entry first recorded that as unmeasured; the measurement was then taken by putting `v3.0.2` back into the node summary and running the Gate. `beadloom ci` exits 1 with `lint FAIL: 1 error(s)`, and the error names its own population in the form this epic argues for: *"read from 102 node summaries: 2 state a checkable fact (1 agree, 1 disagree, 0 could not be verified) and 100 state none"*. So nothing could reach `main` with a stale graph version. The complaint is only about WHEN — the Gate is the last door, and four of the nine places had already been edited under the belief the job was done.
+    **The same probe found TWO more places, which is the entry's real point.** Deriving the list by hand produced seven. Running the instruments produced nine: `docs audit` reported `docs/services/cli.md:779` (`doc-fact-stale: doc says '3.0.2' but project state is '4.0.0'`), and grepping for its twin found the identical sentence in `docs-audit/SPEC.md`, which NO check reads. A hand-derived population of a version's homes was wrong by two on the first attempt, by the person who had just written the list — which is the argument for the command rather than the checklist, made against the checklist's own author.
+    **And a third-order effect worth recording:** changing the node summary made `docs/architecture.md` and `docs/guides/ci-setup.md` stale by `hash_changed`, needing `sync-update beadloom`. Neither document states a version. The version's blast radius is therefore larger than the places that state it.
+    **Expected:** one command that names the population — `beadloom version-subjects`-shaped, reporting every place this project states its own version, what checks each, and which are checked by nothing. The derivation is available: the manifest names the source of truth, and the other six are literal matches for that value. Failing that, the release checklist should carry the list, which is the weaker answer this epic argues against — a rule stated as a spelling rather than as a shape.
+    **Related:** #253 (the foreign-subject face of the same scanner), #266 (a version subject whose source cannot be consulted), #239 (a population of zero reading as coverage).
+
 280. [2026-09-10] [MEDIUM] a room's `locale` dimension is the TEXT codec, and a run has a second one it never reports — the codec `argv` is decoded with
 
     **Severity:** medium (nothing on disk is wrong; three of PR #63's five red rows were reproducible on this laptop and two were not, and `beadloom rooms` reports no dimension that tells the two apart)
