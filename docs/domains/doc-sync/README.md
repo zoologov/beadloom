@@ -101,11 +101,13 @@ green result says what it was green against.
 - **version_subjects.py** -- Which named products a version token in this project's prose may belong to, derived from what the project already declares (every distribution in `pyproject.toml` / `package.json` / `Cargo.toml`, the interpreter families implied by `requires-python` / `engines.node` / `rust-version`, `git` when the project is a git repository) and configured per NAME in `docs_audit.subjects` for what no manifest carries. It replaced a suppression per document: ten `docs_audit.ignore` triples stood on this repository for one sentence shape -- "measured on bd 1.0.4" -- and eight went inert when a version stopped being read as a claim about this project whatever it was actually about (BDL-UX #253). A subject the environment confirms rather than the project declares is UNRESOLVED where its marker is absent, never denied: a `git archive HEAD` room carries no `.git`, so reading that absence as "this project has nothing to do with git" compared `git 2.49.0` against this project's version and made every clean-room Gate run on this repository rc 1 for one line of one document (BDL-UX #266). An unresolved name still wins the attribution walk, and `audit.py` reports the token under `unjudged` with the reason rather than judging it
 - **audit_coverage.py** -- Per-fact coverage of an audit run: whether anything was checked for each declared fact (`verified` / `not_covered` / `unreadable`), so a count of findings can no longer read as a verdict on facts nobody stated
 - **docsync.py** (in `services/commands/`) -- CLI commands: `beadloom sync-check`, `beadloom sync-update`, `beadloom install-hooks`, and `beadloom active-sync` (the ACTIVE-table reconcile command; annotated as `component=active-table` but housed in this module after the BDL-059 split of `services/cli.py` into `services/commands/`)
+- **document_pairs.py** -- A declared pair of documents compared by SHAPE and never by text: the sequence of blocks each file is built from (heading, paragraph, code, list, table), the heading levels, and the row counts of the lists and the tables. This repository ships two READMEs and nothing held them against each other; on 2026-09-10 the English one was missing a paragraph the Russian one had, and the only number that differed between the files was a line count -- 362 against 360 -- which nothing reads and which a translator wrapping differently moves by the same amount. The files are in two languages, so a TEXT comparison would be a check somebody has to switch off, which is the defect class BDL-069 is about. The pair is declared in `.beadloom/config.yml` under `document_pairs:`, modelled on `issue_log:`, and a project that declares none is not judged. The table reading is `tables.py`'s, so this is a caller of the one table reader rather than a fifth reader of markdown ([SPEC](features/document-pairs/SPEC.md))
 
 ### Features
 
 - **[Sync Check](features/sync-check/SPEC.md)** -- The doc-code synchronization engine (`beadloom sync-check` / `sync-update`).
 - **[Docs Audit](features/docs-audit/SPEC.md)** -- Zero-config meta-doc staleness detection via keyword-proximity matching. CLI: `beadloom docs audit`.
+- **[Document Pairs](features/document-pairs/SPEC.md)** -- A declared pair of documents compared by shape: the block sequence, the heading levels and the row counts of the lists and the tables. Declared under `document_pairs:`; a project that declares none is not judged.
 
 ### Components
 
@@ -187,6 +189,14 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `table_cells(line: str) -> list[str] | None` -- The cells of a table row that says something; `None` for a separator. Re-exported from `doc_shape.py`, where it used to live, so no caller moved.
 - `table_blocks(lines: Iterable[tuple[int, str]]) -> list[Table]` -- The contiguous tables in numbered *lines*, each leading with its own header row. A separator row is dropped and does NOT end a table; everything that is not a table row does. Reading a section as one table is BDL-UX #213 in `doc_quality.py` and BDL-UX #244 in `axes_section.py` -- one sentence found twice, hours apart, in one slice.
 - `Table` -- one table, as `(line number, cells)` rows.
+
+### Module `src/beadloom/doc_sync/document_pairs.py`
+
+- `read_blocks(text: str) -> tuple[Block, ...]` -- one document as its sequence of blocks. A blank line ends a block and so does a line of another kind; a fenced block is opaque, because a `#` inside a shell transcript is a comment and not a heading.
+- `compare_documents(source: Sequence[Block], follower: Sequence[Block]) -> Comparison` -- the two sequences aligned by `difflib.SequenceMatcher` over block signatures, with the number of pairs it aligned. It names WHERE the sequences diverge and the heading that position stands under; it cannot name which of several identical-shaped paragraphs went missing, and that limit is what lets it compare across two languages.
+- `resolve_document_pairs(project_root: Path) -> tuple[DocumentPair, ...]` -- the pairs declared in `.beadloom/config.yml`, or an empty tuple. A half-written entry or a path resolving outside the project is refused rather than guessed.
+- `check_document_pairs(project_root: Path) -> PairReport` -- every declared pair compared, with the blocks each file held, the pairs aligned, and every path it could not read.
+- `UNPAIRED_BLOCK`, `BLOCK_KIND`, `ROW_COUNT` (`CHECK_NAMES`) -- the three checks; `HEADING`, `PARAGRAPH`, `CODE`, `LIST`, `TABLE` (`BLOCK_KINDS`) -- the five block kinds.
 
 ### Module `src/beadloom/doc_sync/doc_shape.py`
 
