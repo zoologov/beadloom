@@ -24,13 +24,15 @@
 
 ## Why prompts and `CLAUDE.md` are no longer enough
 
-A chatbot that answers questions and writes a chunk of code on request is ordinary now. That is the baseline.
+A chatbot that answers questions, and an agent handed something small: generate a function, put a table together, work through a log. None of that surprises anyone any more. That is the baseline.
 
-Past it, something else begins. The agent works the task out for itself, plans it, breaks it into steps, uses tools, writes and checks code, edits documentation, works alongside other agents and carries out long chains of actions. It stays on that for hours, with nobody watching.
+Past it a new era begins: autonomous multi-agent systems. Several agents work on one repository at the same time — they work the task out, break it into parts, plan the order, agree between themselves and keep the statuses. Each of them uses tools, writes and checks code, edits documentation. And they stay on it for hours, with nobody watching.
 
 Autonomy raises more than speed. It also raises the chance that the agent understands the task differently from how it was meant. Asked to fix a failing test, it deleted the test, and the build went green. Asked to bring coverage up to eighty percent, it wrote tests that call the code and assert nothing. Formally, the task is done. This has a name: goal misalignment.
 
-There is a worse case. The agent looks as though it is going along with the rules, while leaving part of what it did unsaid and routing around part of the checks. This is called scheming, hidden strategic behaviour. Such scenarios are already being studied in labs. In everyday work we usually miss them: first we miss them, then we throw up our hands and say the model has got worse.
+There is a worse case. The agent looks as though it is going along with the rules, while leaving part of what it did unsaid and routing around part of the checks. This is called scheming, hidden strategic behaviour. Such scenarios are already being studied in labs. In everyday work it goes past us. First it goes past, then we throw up our hands and say the model has got worse.
+
+With several agents something arrives that a single one never produces. Two of them edit one file in one tree. The first calls the work finished, not having seen that it was redone alongside. The check goes green while that happens, because there is nothing left for it to check.
 
 So you can no longer rely on the agent recalling and correctly applying what is written in a prompt, in `AGENTS.md` or in `CLAUDE.md`. In a short session it still works. In a long one the context grows, the rules sink into it, and they weaken exactly when they start to matter.
 
@@ -180,7 +182,7 @@ You need no documentation to start: the skeleton is raised from the structure of
 
 The graph has to be raised, reviewed and then maintained. The rules have to be written. The Gate has to go into CI. On a project of ten files, or on a one-off task, that work will not pay for itself: you remember everything anyway, and an agent will manage with what it reads on its own.
 
-The return starts where the system stops fitting in one person's head. When it has been written for years, when several team line-ups have passed through it, when there is more than one service and they live in different repositories. That is when knowledge leaves with people, documentation drifts from the code unnoticed, and a contract breaks in someone else's repository and surfaces in production. The longer the system lives and the more moving parts it has, the sooner the setup pays off.
+The return starts in two situations. The first is two agents or more working on the repository at once: almost everything here answers a question that does not come up with one. The second is the system no longer fitting in one person's head. When it has been written for years, when several team line-ups have passed through it, when there is more than one service and they live in different repositories. That is when knowledge leaves with people, documentation drifts from the code unnoticed, and a contract breaks in someone else's repository and surfaces in production. The longer the system lives and the more moving parts it has, the sooner the setup pays off.
 
 Who this is usually for:
 
