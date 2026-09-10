@@ -33,6 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `beadloom issue-number` -- an issue-log number allocated by exclusive create rather than read
     off the end of a shared file, plus three legs over the numbers already taken (S6).
 
+- **`beadloom waves --parent <bead-id>`.** Wave membership derived from the tracker rather than
+  typed out: the parent-child closure plus one dependency step. Measured on this epic's own S6,
+  where the ids were hand-listed across fifteen waves -- all fifteen were subsets of what
+  `--parent` derives, and three beads were dropped for eleven waves while sitting in
+  `bd ready` the whole time. `parent` alone is not enough and that is why the dependency step
+  is in the rule: it finds one of those three.
+
+- **One node per file under `.beadloom/_graph/`, and `graph-layout.yml` reporting how far a
+  project is from it.** A graph held in one file is written by every bead that adds, renames or
+  moves a node -- 7 of the 8 commits that touched this project's graph on one branch. One file
+  per node removes the collision instead of detecting it. **This is not breaking and needs no
+  action.** `beadloom init` still writes a single `services.yml`, a single-file graph stays
+  valid, and the module reports the number rather than refusing the layout
+  (`onboarding/graph_layout.py`). This repository moved to 104 files; an adopter who does
+  nothing is unaffected.
+
+- **Two new `beadloom ci` legs, neither of which can turn a green project red on upgrade.**
+  `scope-check` compares a branch against the axes its work item declares -- its findings carry
+  severity `warning`, and it returns *skipped* when nothing the branch changed belongs to a
+  node, rather than passing over an empty population. `issue-log` checks the numbers already
+  taken in a declared issue log, and returns *skipped* unless an `issue_log:` block is declared.
+  Both are opt-in in effect; the verdict names them as skipped so the skip is visible.
+
 ### Removed
 
 - **The vendored role snapshot, and the function that refreshed it** (BDL-UX #177's last leg).
@@ -81,6 +104,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than this change, whose `flow.yml` then declares an architecture or stack other than
   `ddd`/`python`, reads `unverified` on its role files instead of clean — reported and left
   exactly as it is, never rewritten.
+
+- **`beadloom guard --liveness --json` emits an object where it emitted a list.** The payload is
+  now `{"surface": {...}, "guards": [...]}`; it was the `guards` array alone. The new `surface`
+  key carries the binding's enforcement surface -- what the guard is actually wired to, read
+  from the harness settings -- because a liveness report that lists guards without saying what
+  invokes them cannot distinguish a guard nothing matched from a guard nothing is bound to.
+  **This is a breaking change for anything parsing that JSON**; a consumer reading the top-level
+  array now reads a mapping.
+
+- **`guard` has a sixth outcome, `unresolved`, and `--json` can emit it.** The enum went from
+  five members to six (`application/guards/models.py`). It is the same change as the exit-code
+  remap recorded under Fixed, seen from the other side: a case that previously reported
+  `error` now reports `unresolved`. **A consumer that matches exhaustively on `outcome` breaks
+  on a value that did not exist**, and one that treats `error` as "the guard could not evaluate
+  itself" now sees that case under a different name.
+
+### Security
+
+- **`.beadloom/guard-firings.jsonl` no longer stores the command line a shell edit ran.** The
+  record held the model-supplied command verbatim, capped at 2 000 characters, in plaintext
+  inside the project directory. Measured on this repository before the change: **1 927 command
+  lines across 1 999 firings**, 895 481 characters of one session's shell history -- and the
+  ignore block Beadloom ships told adopters "a team that wants the audit trail deletes this
+  line, once", so the file was written to be committed.
+
+  The line is now reduced to the facts the guard reasons about *before* it is admitted to the
+  evaluation context, by `shell_command_context()`: `command_name` (the program -- `sed`, `git`,
+  `python3`), `command_writes` (the paths the command was seen to write, a lower bound, one per
+  line) and `command_unreadable` (why a line could not be tokenized at all, when it could not).
+  `command` remains the spelling a **caller** may supply -- `--context command=...` on the
+  command line, `tool_input.command` in a harness event -- and is replaced before anything
+  downstream sees it. No verdict and no firing record carries the line itself.
+
+  **This changes the shape of an on-disk record.** Anything reading `guard-firings.jsonl` for a
+  `command` key finds none. Existing records written by an earlier version keep their command
+  lines until the cap rotates them out; a project that wants them gone sooner can delete the
+  file, which costs only the firing history.
 
 ### Fixed
 
