@@ -213,9 +213,17 @@ reproducible benchmark on a real codebase.
 bead comment, and a declared mutation target outside the configured source paths is
 reported rather than silently scoring zero.
 
-### P0 — A virgin `beadloom init` leaves the Gate red — CLOSED on the branch, not yet merged
+### P0 — A virgin `beadloom init` leaves the Gate red — SHIPPED in v4.0.0, verified on the published wheel
 
-**`beadloom-e8s4` · BDL-UX #192 · the adopter-facing blocker.**
+**`beadloom-e8s4` (closed) · BDL-UX #192 (closed) · the adopter-facing blocker.**
+
+> **Re-measured 2026-09-10 on the PUBLISHED 4.0.0 wheel, in a virgin git repository that is
+> not this one:** `beadloom init --yes --mode bootstrap` exits 0 and `beadloom ci` in that
+> project exits 0. `domain-needs-parent` now reports `cannot fire: its 'for' kind 'domain'
+> matches none of the 1 nodes in the graph … counted as evaluated but checks nothing`. The
+> rule that used to redden an adopter's first command now names its own empty population,
+> which is the whole of what this epic was for. The heading above said "not yet merged"
+> until this sweep; it had been merged for a week.
 
 `beadloom init --yes --mode bootstrap` exited 0 and then failed its own `beadloom ci`
 on `domain-needs-parent` — a rule the same command wrote one step earlier. The
@@ -347,15 +355,20 @@ exist. Recorded rather than reopened, because the work is being done here.
 
 | Bead | What |
 |---|---|
-| `beadloom-iur5` | **P1** — the vendored agents snapshot is the #177 loop, one direction short of closed |
 | `beadloom-uxqc` | **P1** — `doctor` should audit the PRODUCED graph, not just the code: islands, unexplained nodes |
 | `beadloom-9glj` | `sync-update` can re-attest a doc nobody read |
 | `beadloom-431c` | `docs audit` checks numbers but never that a documented identifier still exists |
 | `beadloom-1d70` | no signal for a bounded context too large by SUBTREE |
 | `beadloom-2qwb` | centralize remaining inline node-reads |
 | `beadloom-g0c5` | `test_tui.py` connection leak during textual GC |
-| `beadloom-ec1a` | `config-check` does not flag ORPHANED tool adapters |
-| `beadloom-l2f2` | the beads git-hook prints a remediation command that does not exist |
+
+> **Three rows left this table on 2026-09-10, and are named rather than silently dropped:**
+> `beadloom-iur5` (the vendored agents snapshot — removed in BDL-068, and the CHANGELOG's
+> `### Removed` entry is the record), `beadloom-ec1a` (orphaned tool adapters) and
+> `beadloom-l2f2` (the beads git-hook's nonexistent remediation command, whose UX entry #164
+> was withdrawn because `bd import -i` does exist). All three read CLOSED in the tracker while
+> this table still listed them as standing debt. The table is checked against `bd` rather than
+> remembered — that check is what found them, and it is worth repeating at every release.
 
 Two findings were checked on 2026-08-31 and are **still live**: BDL-UX **#147**
 (`beadloom lint` mutates the index — a read-only-sounding verb writes to the
