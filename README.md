@@ -44,7 +44,9 @@ Beadloom is an attempt to build that loop into the repository itself.
 
 Most tools answer two ways: pass or fail. That leaves out a third case, and the third case is the one that hurts — the check ran over nothing and said `pass`.
 
-A rule whose path pattern has a typo matches no file. A document is declared in the graph and was deleted from disk. A freshness check on a fresh clone has no baseline to compare against. A guard is configured correctly and wired to nothing, so it has never once fired. In every one of these the honest answer is "I did not check this", and the usual answer is green.
+This happens more often than you would think. A rule whose path pattern has a typo matches no file. A document is declared in the graph and was deleted from disk. A freshness check on a fresh clone has no baseline to compare against. A guard is configured correctly, wired to nothing, and has never once fired.
+
+There is one honest answer here: "I did not check this." The usual answer is green.
 
 Beadloom says what it did not do. From real runs:
 
@@ -68,7 +70,7 @@ A guard has six outcomes rather than two:
 - `error` — the guard refuses to interpret what it was handed. Also does not go through;
 - `unresolved` — the guard could not evaluate *itself*: its own code would not import, its config would not parse.
 
-`unresolved` is worth a sentence of its own. A broken checker that forbids everything also forbids the edit that would repair it, and an agent cannot get out of that on its own. So here Beadloom warns and lets the edit through instead of blocking.
+`unresolved` is worth a sentence of its own. A broken guard that forbids everything also forbids the edit that would repair it, and an agent cannot get out of that on its own. So here Beadloom warns instead of blocking.
 
 What each check declines to assert is set out [further down](#when-a-check-cannot-answer-beadloom-says-so).
 
