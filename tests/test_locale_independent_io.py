@@ -401,6 +401,82 @@ def _preferred_encoding_under(env_extra: dict[str, str]) -> str:
     return done.stdout.strip()
 
 
+def _filesystem_codec_under(env_extra: dict[str, str]) -> str:
+    """The codec a child decodes ``argv`` with — probed, because macOS forces it.
+
+    ``sys.getfilesystemencoding()`` and not the preferred encoding: they are two
+    codecs and a run has both. Under ``_ASCII_ENV`` a Darwin child reports
+    ``preferred=ascii`` and ``fs=utf-8``, and it is the SECOND that decides what
+    a command line delivers (BDL-UX #280).
+    """
+    probe = "import codecs, sys; print(codecs.lookup(sys.getfilesystemencoding()).name)"
+    done = _run_under(env_extra, [sys.executable, "-c", probe], Path.cwd())
+    return done.stdout.strip()
+
+
+def _a_byte_refused_by(codec: str) -> int | None:
+    """A byte *codec* cannot decode, or ``None`` when it decodes every one.
+
+    An 8-bit codec decodes all 256, which is the whole of the finding below: a
+    surrogate can only be smuggled into a child whose codec refuses some byte.
+    """
+    for byte in range(0x80, 0x100):
+        try:
+            bytes([byte]).decode(codec)
+        except (UnicodeDecodeError, LookupError):
+            return byte
+    return None
+
+
+@pytest.fixture(scope="module")
+def a_child_whose_codec_refuses_a_byte() -> tuple[dict[str, str], int]:
+    """``(environment, byte)`` for a child that cannot decode *byte* out of argv.
+
+    The environment is SUPPLIED rather than inherited, and that is the whole
+    repair: the row that used to inherit it asserted a claim about the leg it
+    happened to run on. ``beadloom-0mdo.49`` met this exactly one slice ago and
+    its answer was the same one — supply the codec, do not read the ambient one.
+
+    Probed all the same, because a supplied name is not a codec until an image
+    resolves it, and an image that decodes every byte has nothing for the row
+    below to prove.
+    """
+    codec = _filesystem_codec_under(_ASCII_ENV)
+    byte = _a_byte_refused_by(codec) if codec else None
+    if byte is None:
+        pytest.skip(
+            f"a child under {_ASCII_ENV['LC_ALL']} here decodes argv with {codec!r}, which "
+            "refuses no byte, so no byte can reach it as a surrogate and this row would "
+            "assert nothing; it runs on any image whose filesystem codec is ASCII or UTF-8"
+        )
+    return _ASCII_ENV, byte
+
+
+@pytest.fixture(scope="module")
+def a_child_whose_codec_decodes_every_byte() -> tuple[dict[str, str], str]:
+    """``(environment, codec)`` for a child whose argv codec is a real 8-bit one.
+
+    The other half of the same dimension, and the half this project's own
+    ``tests-locale (en_US.ISO-8859-1)`` leg is. It cannot be arranged on macOS
+    at ALL -- measured: every one of the four environments tried here, the
+    inherited one included, gives a child ``fs=utf-8``, because macOS forces the
+    filesystem codec whatever the locale says. So this row states what would
+    make it run rather than pretending it did.
+    """
+    for name in _EIGHT_BIT_CANDIDATES:
+        env = {"LC_ALL": name, "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+        codec = _filesystem_codec_under(env)
+        if codec and codec not in ("utf-8", "ascii") and _a_byte_refused_by(codec) is None:
+            return env, codec
+    pytest.skip(
+        "no locale on this image gives a child a filesystem codec that decodes every "
+        f"byte (tried {', '.join(_EIGHT_BIT_CANDIDATES)}); macOS forces `utf-8` there "
+        "whatever the locale says, so what would make this row run is an image whose "
+        "filesystem codec is 8-bit — the `tests-locale (en_US.ISO-8859-1)` leg is one"
+    )
+    raise AssertionError  # unreachable; pytest.skip raises
+
+
 @pytest.fixture(scope="module")
 def ascii_locale_is_real() -> str:
     """Skip with a stated reason rather than assert nothing (see .38's vacuity locks)."""
@@ -691,6 +767,18 @@ class TestTheSourceReachesTheChildWhateverDecodesTheCommandLine:
     in two bytes and ISO 8859-1 in one. Both symptoms CI reported -- a non-zero
     child AND an empty stdout -- are the same event: the command is decoded
     before a byte of it runs, so a refused command prints nothing.
+
+    AND THE FAILURE MODE ITSELF READS THE ROOM, which cost this class a second
+    round. The first version of the row below inherited its environment and
+    asserted that a surrogate in argv always kills the child. It does where the
+    child's codec REFUSES the byte; where the codec decodes every byte -- any
+    8-bit one -- ``surrogateescape`` round-trips it back and the child RUNS,
+    holding a different character. Measured: byte ``0xff`` is refused by ``ascii``
+    and by ``utf-8`` and decodes to ``U+00FF`` under ``iso8859-1``. So the row was
+    green on five legs and red on ``tests-locale (en_US.ISO-8859-1)``, and the
+    silent-corruption room is the worse of the two -- the loud death is the lucky
+    one. Both rooms are now SUPPLIED and probed rather than inherited, which is
+    the answer `beadloom-0mdo.49` reached one slice earlier for the same shape.
     """
 
     def test_a_command_line_carries_a_source_through_a_codec_neither_end_states(
@@ -710,28 +798,75 @@ class TestTheSourceReachesTheChildWhateverDecodesTheCommandLine:
         assert surrogates, "an ASCII-decoding child would have received the source intact"
         assert received != _RICH_WRITE_PROBE, "the source arrived unchanged, so this row is moot"
 
-    def test_a_command_string_that_arrived_as_surrogates_dies_with_an_empty_stdout(
-        self,
+    def test_where_the_childs_codec_refuses_a_byte_the_command_dies_with_an_empty_stdout(
+        self, a_child_whose_codec_refuses_a_byte: tuple[dict[str, str], int]
     ) -> None:
         """One event, both of CI's symptoms -- which is why the two rows fell together.
+
+        THE ROOM IS SUPPLIED, and the first version of this row did not supply it.
+        It inherited the leg's environment and asserted that a surrogate in argv
+        always kills the child, which is true where the child's codec refuses the
+        byte and false where it decodes it. Green on five legs and red on
+        ``tests-locale (en_US.ISO-8859-1)``, where the child ran and printed. The
+        byte is now derived from the codec the child actually reports.
 
         Built by hand rather than through :func:`_run_under`, because this row is
         ABOUT the channel that function now refuses.
         """
-        unspellable = "print('this never runs')\n#" + chr(0xDCFF) + "\n"
+        environment, byte = a_child_whose_codec_refuses_a_byte
+        unspellable = "print('this never runs')\n#" + chr(0xDC00 + byte) + "\n"
 
-        # Built here rather than through `_run_under`: the refused channel is the subject.
         done = subprocess.run(  # noqa: S603 — fixed argv, no shell
             [sys.executable, "-c", unspellable],
             capture_output=True,
             encoding="utf-8",
             errors="replace",
+            env={**os.environ, **environment},
             check=False,
         )
 
         assert done.returncode != 0, done.stdout
         assert done.stdout == "", done.stdout
         assert "surrogates not allowed" in done.stderr, done.stderr
+
+    def test_where_the_childs_codec_decodes_every_byte_the_command_runs_and_is_wrong(
+        self, a_child_whose_codec_decodes_every_byte: tuple[dict[str, str], str]
+    ) -> None:
+        """The same channel in the other room, and it is the WORSE of the two.
+
+        An 8-bit codec decodes all 256 bytes, so nothing can reach that child as a
+        surrogate: the byte the parent sent becomes an ordinary character of the
+        child's codec and the command runs. The loud death the row above measures
+        is therefore the LUCKY room, and this one corrupts in silence -- which is
+        the argument for removing the channel rather than for characterising it.
+
+        Found the hard way: it is why the row above was red on one leg and green
+        on five, and it is the second half of BDL-UX #280.
+        """
+        environment, codec = a_child_whose_codec_decodes_every_byte
+        byte = 0xFF
+        arrives_as = bytes([byte]).decode(codec)
+        smuggled = chr(0xDC00 + byte)
+        source = "import sys\nsys.stdout.write(str(ord('" + smuggled + "')))\n"
+
+        done = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [sys.executable, "-c", source],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, **environment},
+            check=False,
+        )
+
+        assert done.returncode == 0, done.stderr
+        assert done.stdout == str(ord(arrives_as)), (
+            f"the child decodes argv with {codec}, so byte {byte:#04x} should reach it as "
+            f"U+{ord(arrives_as):04X}: {done.stdout!r}, {done.stderr!r}"
+        )
+        assert ord(arrives_as) != ord(smuggled), (
+            "the character arrived unchanged, so this room delivers argv faithfully "
+            "and the row has nothing to report"
+        )
 
     def test_the_command_line_refuses_a_source_it_cannot_promise_to_carry(self) -> None:
         """The mechanism is removed rather than re-measured: no row may rebuild it.
