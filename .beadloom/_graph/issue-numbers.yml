@@ -1,0 +1,16 @@
+  # Feature: the issue log's numbers (BDL-068 S6, BDL-UX #187, #211, #253 and
+  # the two of 2026-09-09). A number read off the end of a shared markdown file
+  # collided five times; here it is ALLOCATED by an exclusive create of one
+  # claim file per number, which is `beadloom-l9ee`'s one-file-per-incident
+  # primitive taken at the boundary.
+nodes:
+  - ref_id: issue-numbers
+    kind: feature
+    summary: "The issue log's numbers: the two populations the log states, the next number allocated by an exclusive create, and the three legs over what one filesystem cannot span"
+    source: src/beadloom/doc_sync/issue_numbers.py
+    docs:
+      - docs/domains/doc-sync/features/issue-numbers/SPEC.md
+edges:
+  - src: issue-numbers
+    dst: doc-sync
+    kind: part_of

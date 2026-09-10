@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
+from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
 from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
@@ -54,8 +56,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.doctor import Check
+    from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.doc_quality import QualityFinding
+    from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -84,9 +88,7 @@ def _run_doctor_checks(
     return run_checks(conn, project_root=project_root)
 
 
-def _run_audit(
-    project_root: Path, conn: sqlite3.Connection
-) -> AuditResult:
+def _run_audit(project_root: Path, conn: sqlite3.Connection) -> AuditResult:
     """Indirection over :func:`beadloom.doc_sync.audit.run_audit`.
 
     Defined as a module-level seam so the gate's docs-audit step reuses the
@@ -176,6 +178,30 @@ class GateResult:
     surface that was not told makes no room claim.
     """
 
+    coverage: GateCoverage | None = None
+    """The verifications this project declares that no step of this run performed.
+
+    The room line says which rooms this verdict is true of; this one says which
+    verifications it is a verdict about. Neither is a step: naming what was not
+    run makes no claim that could pass or fail, and the gate's exit code is
+    unchanged by it. ``None`` means nothing derived it, and a surface that was
+    not told makes no claim about the suite (BDL-UX #247).
+    """
+
+    ownership: GateOwnership | None = None
+    """Who owns each finding of this run, held against the beads claimed now.
+
+    The third qualification the verdict carries, and not a step either: naming
+    the owner of a finding changes no status and no exit code. A finding nobody
+    claims is still a finding, and a gate that went green because no bead owned
+    a red would be the false green this epic exists to remove.
+
+    ``None`` means no work tracker was supplied to the run, so nothing was
+    asked — the same convention ``room`` and ``coverage`` follow, and distinct
+    from a report whose ``reason`` says the tracker was asked and did not
+    answer.
+    """
+
     @property
     def ok(self) -> bool:
         """True only if every step passed (honest single verdict)."""
@@ -198,6 +224,8 @@ def run_ci_gate(
     fail_on: set[str] | None,
     hub_exports: list[Path],
     no_reindex: bool,
+    performed_elsewhere: tuple[str, ...] = (),
+    tracker: WorkTracker | None = None,
 ) -> GateResult:
     """Run every gate step in order, collecting all findings; never short-circuit.
 
@@ -210,6 +238,16 @@ def run_ci_gate(
     *fail_on* is the federate fail-set; ``None`` selects the safe default set
     (``breaking,drift,orphaned_consumer,undeclared_producer``) — the no-false-gate
     verdicts are never included.
+
+    *performed_elsewhere* names verifications the CALLER runs beside the gate,
+    in the same vocabulary a step would use. ``complete_bead`` runs the test
+    suite itself, and one run must not report the suite as not run while that
+    run ran it.
+
+    *tracker* is the read port over the work tracker, supplied by the service
+    that runs the gate — the concrete ``bd`` adapter lives in the services layer,
+    which this layer must not import. Without it the run makes no ownership claim
+    at all, rather than reporting every finding as owned by nobody.
     """
     # Built in execution order rather than as one literal: `sync-check` needs the
     # index `reindex` writes, and the doc-spaces step needs the excused-pair count
@@ -222,6 +260,7 @@ def run_ci_gate(
     steps.append(sync)
     steps.append(_step_docs_audit(project_root))
     steps.append(_step_docs_quality(project_root))
+    steps.append(_step_issue_numbers(project_root))
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
@@ -230,7 +269,21 @@ def run_ci_gate(
     steps.append(_step_doctor(project_root))
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
-    return GateResult(steps=steps, room=take_census(project_root))
+    performed = tuple(step.name for step in steps) + performed_elsewhere
+    result = GateResult(
+        steps=steps,
+        room=take_census(project_root),
+        coverage=derive_gate_coverage(project_root, performed=performed),
+    )
+    if tracker is None:
+        return result
+    # Built from the finished result rather than beside the steps: the report is
+    # about the findings the run produced, and reading them back off the result
+    # is what makes it impossible for it to describe a different set.
+    result.ownership = derive_gate_ownership(
+        project_root, findings=result.findings, tracker=tracker
+    )
+    return result
 
 
 def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
@@ -365,6 +418,7 @@ def _sync_shape_finding(row: dict[str, object]) -> Finding:
             "kind": "sync-check",
             "rule": REASON_SECTION_NOT_IN_USE,
             "severity": "warning",
+            "node": ref_id,
             "locations": [],
             "why": (
                 f"required section(s) {details} — not carried by a majority of "
@@ -380,11 +434,9 @@ def _sync_shape_finding(row: dict[str, object]) -> Finding:
         "kind": "sync-check",
         "rule": REASON_MISSING_SECTIONS,
         "severity": "warning",
+        "node": ref_id,
         "locations": locations,
-        "why": (
-            f"{ref_id}: the document is missing section(s) its peers carry — "
-            f"{details}"
-        ),
+        "why": (f"{ref_id}: the document is missing section(s) its peers carry — {details}"),
         "remediation": f"add the section(s) to {doc_path or 'the document'}",
     }
 
@@ -497,11 +549,7 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
     """
     declared = len(result.facts)
     unverified = result.unverified_facts
-    head = (
-        f"{len(stale)} stale fact(s)"
-        if stale
-        else f"{len(result.findings)} mention(s) fresh"
-    )
+    head = f"{len(stale)} stale fact(s)" if stale else f"{len(result.findings)} mention(s) fresh"
     coverage = f"{declared - len(unverified)}/{declared} declared fact(s) verified"
     if unverified:
         coverage += f", NOT VERIFIED: {', '.join(unverified)}"
@@ -512,7 +560,18 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
         # turned 3/9 into 3/8 with nothing naming the fact that left.
         names = ", ".join(sorted(result.not_applicable))
         coverage += (
-            f", NOT APPLICABLE to this project: {names}"
+            f", NOT APPLICABLE to this project: {names} (`beadloom docs audit` states the reason)"
+        )
+    if result.unjudged:
+        # A token whose subject the environment could not confirm here is
+        # exempt for a reason that belongs to the DIRECTORY, not to the rule:
+        # in a clean room `git 2.49.0` was judged against this project and
+        # reddened every Gate run taken there (BDL-UX #266). Naming it on this
+        # line is what stops the repair from being a silencer.
+        subjects = ", ".join(sorted({str(mention.subject) for mention in result.unjudged}))
+        coverage += (
+            f", COULD NOT JUDGE {len(result.unjudged)} version token(s)"
+            f" naming {subjects} — unconfirmed here"
             " (`beadloom docs audit` states the reason)"
         )
     return f"{head}; {coverage}"
@@ -568,12 +627,22 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         summary += f"; NOT CHECKED: {', '.join(blind)}"
     if unread_kinds:
         summary += f"; NO CHECK READS: {', '.join(unread_kinds)}"
+    if report.quality.unclassified:
+        # A table `decision-reason` could not place is a population it did NOT
+        # enter, and the finding count cannot show it (BDL-UX #213). It sets
+        # `not_verified` for the reason the three states above do — the rows
+        # were read and judged by nothing, and *unverifiable is not clean* —
+        # and it cannot redden anyone: this step is `passed` unconditionally.
+        rows = sum(t.rows for t in report.quality.unclassified)
+        summary += f"; NOT CLASSIFIED: {len(report.quality.unclassified)} table(s), {rows} row(s)"
     if report.quality.unreadable:
         summary += f"; UNREADABLE: {len(report.quality.unreadable)}"
     return GateStep(
         "docs-quality",
         passed=True,
-        not_verified=bool(blind or unread_kinds or report.quality.unreadable),
+        not_verified=bool(
+            blind or unread_kinds or report.quality.unclassified or report.quality.unreadable
+        ),
         findings=findings,
         summary=summary,
     )
@@ -602,6 +671,103 @@ def _convention_finding(convention: SectionConvention) -> Finding:
             "add the section to the documents of this kind as they are revised, "
             "or drop it from the document template if it does not belong there"
         ),
+    }
+
+
+def _step_issue_numbers(project_root: Path) -> GateStep:
+    """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
+
+    Unlike its ``docs-quality`` neighbour this step blocks, and the difference is
+    the kind of claim each makes. A writing-standard finding is an opinion about
+    prose that a project may reasonably carry for a release. A duplicate number
+    is a reference that resolves to two entries and to neither, and this
+    repository shipped one for fifteen days across a CHANGELOG, a ROADMAP, eight
+    test files and thirty-six tracker records before anyone noticed (BDL-UX
+    #187). Its three legs each have a repair the author can perform in the same
+    commit, which is what makes blocking fair.
+
+    **It cannot redden a project that has not opted in.** The log is DECLARED in
+    ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
+    the upgrade that ships this step turns nobody's green tree red.
+
+    ``not_verified`` carries the honest half: before a project's first
+    allocation the ledger has no floor, so ``unwritten-claim`` and
+    ``unclaimed-number`` enter no number at all and a clean result would
+    describe their ignorance rather than the log (BDL-UX #173).
+    """
+    from beadloom.doc_sync.issue_numbers import check_issue_numbers
+
+    report = check_issue_numbers(project_root)
+    if not report.declared:
+        return GateStep(
+            "issue-log",
+            skipped=True,
+            summary=(
+                "skipped — no issue log is declared; add an `issue_log:` block with "
+                "`path:` and `ledger:` to .beadloom/config.yml"
+            ),
+        )
+    if report.log_missing:
+        return GateStep(
+            "issue-log",
+            passed=False,
+            findings=[
+                _simple_finding(
+                    "issue-log",
+                    "error",
+                    "the declared issue log is missing or could not be decoded",
+                    "point `issue_log.path` at the log, or remove the declaration",
+                )
+            ],
+            summary="declared issue log missing",
+        )
+    findings = [_issue_number_finding(f) for f in report.findings]
+    return GateStep(
+        "issue-log",
+        passed=not report.findings,
+        not_verified=report.not_verified,
+        findings=findings,
+        summary=_issue_number_summary(report),
+    )
+
+
+def _issue_number_summary(report: IssueNumberReport) -> str:
+    """The issue-log line, which states what it COVERED and not only what it found."""
+    floor = report.floor if report.floor is not None else "none"
+    head = (
+        f"{len(report.findings)} finding(s)"
+        if report.findings
+        else f"{report.entries} entr(ies) uniquely numbered"
+    )
+    line = f"{head}; {report.claims} claim(s), floor {floor}"
+    if report.floor is None:
+        line += (
+            "; NOT CHECKED: unwritten-claim, unclaimed-number "
+            "(the ledger holds no claim, so neither entered a number)"
+        )
+    elif report.entries_below_floor:
+        line += (
+            f"; PARTLY CHECKED: {report.entries_below_floor} of {report.entries} "
+            f"entr(ies) are below floor {report.floor}, where unclaimed-number "
+            "did not enter"
+        )
+    if report.unaccounted:
+        line += (
+            f"; {len(report.unaccounted)} number(s) below the highest are stated "
+            "nowhere and are unaccounted for, not free"
+        )
+    return line
+
+
+def _issue_number_finding(finding: NumberFinding) -> Finding:
+    """Project one issue-number finding onto the shared finding shape."""
+    return {
+        "kind": "issue-log",
+        "rule": finding.check,
+        "severity": "error",
+        "locations": [{"file": finding.where}],
+        "why": finding.why,
+        "remediation": finding.remediation,
     }
 
 
@@ -662,8 +828,7 @@ def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) ->
         )
     findings = [_doc_space_finding(f) for f in report.findings]
     populations = ", ".join(
-        f"{space} {report.populations.get(space, 0)}"
-        for space in ("to_be", "as_is", "working")
+        f"{space} {report.populations.get(space, 0)}" for space in ("to_be", "as_is", "working")
     )
     summary = (
         f"{populations}; {report.refs_checked} node declaration(s) from "
@@ -698,15 +863,12 @@ def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) ->
         # Two populations, two names. "N WORKING document(s) exempt" beside a
         # sync-check line whose own excused count was 0 was one word standing
         # for both, and a reader took the number that was not the pairs.
-        summary += (
-            f"; {report.working_documents} WORKING document(s) in the exempt space"
-        )
+        summary += f"; {report.working_documents} WORKING document(s) in the exempt space"
         if report.pairs_excused is not None:
             summary += f", {report.pairs_excused} sync pair(s) excused"
         if report.working_reach:
-            summary += (
-                "; the declaration reaches "
-                + ", ".join(f"{label} ({n})" for label, n in report.working_reach.items())
+            summary += "; the declaration reaches " + ", ".join(
+                f"{label} ({n})" for label, n in report.working_reach.items()
             )
     if report.documents_outside_declared_root:
         summary += (
@@ -871,9 +1033,7 @@ def _step_config_check(project_root: Path) -> GateStep:
     with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
 
-    findings = [
-        _config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts
-    ]
+    findings = [_config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts]
     findings.extend(scope)
     blocking = [d for d in drifts if d.severity == "error"]
     warned = len(drifts) - len(blocking) + len(scope)
@@ -993,13 +1153,9 @@ def _step_federate(
     (out_dir / "federated.json").write_text(serialize_federation(fed) + "\n", encoding="utf-8")
 
     failures = gate_failures(fed, fail_set)
-    findings = [
-        _gate_failure_finding(f, gate_failure_remediation(f)) for f in failures
-    ]
+    findings = [_gate_failure_finding(f, gate_failure_remediation(f)) for f in failures]
     passed = not failures
-    summary = (
-        f"{len(failures)} verdict(s) in fail-set" if failures else "landscape clean"
-    )
+    summary = f"{len(failures)} verdict(s) in fail-set" if failures else "landscape clean"
     return GateStep("federate", passed=passed, findings=findings, summary=summary)
 
 
@@ -1008,9 +1164,7 @@ def _step_federate(
 # ---------------------------------------------------------------------------
 
 
-def _simple_finding(
-    kind: str, severity: str, why: str, remediation: str | None
-) -> Finding:
+def _simple_finding(kind: str, severity: str, why: str, remediation: str | None) -> Finding:
     """A finding with no file location (step-level error)."""
     return {
         "kind": kind,
@@ -1038,11 +1192,9 @@ def _sync_finding(row: dict[str, object]) -> Finding:
             "kind": "sync-check",
             "rule": "doc-missing",
             "severity": "error",
+            "node": ref_id,
             "locations": locations,
-            "why": (
-                f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — "
-                f"'{doc_path}' does not exist"
-            ),
+            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{doc_path}' does not exist"),
             "remediation": (
                 "restore the file, or remove the declaration from the graph "
                 "if the doc is genuinely gone — the gate is not satisfied by "
@@ -1053,6 +1205,7 @@ def _sync_finding(row: dict[str, object]) -> Finding:
         "kind": "sync-check",
         "rule": "doc-stale",
         "severity": "error",
+        "node": ref_id,
         "locations": locations,
         "why": f"{ref_id}: doc out of sync with code ({reason})",
         "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",
@@ -1128,9 +1281,7 @@ def _audit_finding(finding: object) -> Finding:
         "rule": "doc-fact-stale",
         "severity": "error",
         "locations": locations,
-        "why": (
-            f"{fact_name}: doc says {found!r} but project state is {expected!r}"
-        ),
+        "why": (f"{fact_name}: doc says {found!r} but project state is {expected!r}"),
         "remediation": (
             "update the doc to the current value, or add a tolerance / extra "
             "fact under `docs_audit` in `.beadloom/config.yml`"

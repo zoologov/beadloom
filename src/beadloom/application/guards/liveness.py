@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 from beadloom.application.guards.checks import GUARD_NAMES
 from beadloom.application.guards.config import load_guards_config
 from beadloom.application.guards.firing import read_carried, read_firings
-from beadloom.application.guards.models import GuardOutcome
+from beadloom.application.guards.models import is_unanswered
 
 if TYPE_CHECKING:
     from datetime import date
@@ -193,11 +193,14 @@ def _row(
     own = [record for record in firings if record.guard == name]
     summary = carried.for_guard(name)
     last = own[-1] if own else None
-    # An `error` record is evidence the guard RAN and did NOT answer, so it is
-    # counted in fired_count and does not clear `never-fired`. Counting it as a
-    # firing would let a guard that has never once reached a verdict read as a
-    # live gate — the same silence the report exists to break.
-    answered = [record for record in own if record.outcome != GuardOutcome.ERROR.value]
+    # An `error` or `unresolved` record is evidence the guard RAN and did NOT
+    # answer, so it is counted in fired_count and does not clear `never-fired`.
+    # Counting it as a firing would let a guard that has never once reached a
+    # verdict read as a live gate — the same silence the report exists to break.
+    # `unresolved` matters here more than `error` does: it is the outcome that
+    # PERMITS the edit (BDL-UX #254), so it is the one whose absence from this
+    # line would turn a guard nothing can run into a guard reported as live.
+    answered = [record for record in own if not is_unanswered(record.outcome)]
     carried_answered = summary.answered if summary else 0
     last_at = last.at if last else (summary.last_at if summary else "")
     last_outcome = last.outcome if last else (summary.last_outcome if summary else "")

@@ -1,0 +1,15 @@
+  # === BDL-051 S3b (BEAD-14): full module-coverage classification ===
+
+  # --- Features (capabilities with a SPEC.md) ---
+nodes:
+  - ref_id: code-indexer
+    kind: feature
+    summary: "Tree-sitter code symbol indexer — parses src into symbols + extracts beadloom annotations"
+    source: src/beadloom/context_oracle/code_indexer.py
+    docs:
+      - docs/domains/context-oracle/features/code-indexer/SPEC.md
+edges:
+  # BDL-051 S3b (BEAD-14): new features part_of their domains
+  - src: code-indexer
+    dst: context-oracle
+    kind: part_of

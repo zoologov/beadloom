@@ -37,3 +37,25 @@ Feature: the Axes section records the derivation it came from and the scope deci
     Given a brief whose "Axes" section keeps two nodes in scope and one out
     When the refs line is generated from the document
     Then it names the two nodes kept in scope and not the third
+
+  # BDL-UX #244. This section's own rule is that a work item's axes are the UNION
+  # of its slices' and that each slice appends its rows under its own `Derived by`
+  # line, so a real section holds one table per slice. The reader took the first
+  # table's header as the header for everything under the heading, and the second
+  # table's header row came back as data: an approved node named `Node`, in the
+  # list `scope-check` compares every commit against. Measured on this repository's
+  # RFC laid out in the shape its own rule describes: 78 rows read where 74 exist,
+  # 4 of them header rows, all four approved.
+
+  @bead:beadloom-0mdo.46
+  Scenario: A slice appending its rows under its own derivation block is read as its own table
+    Given a work item whose "Axes" section carries two derivation blocks, each with its own table
+    When the Axes section is read back
+    Then the rows read are the rows the two tables state
+    And no node named after a column heading is kept in scope
+
+  @bead:beadloom-0mdo.46
+  Scenario: The second table's rows are judged against the second table's columns
+    Given a work item whose second derivation block orders its columns differently
+    When the Axes section is read back
+    Then the second table's row is read with its own node and its own scope decision

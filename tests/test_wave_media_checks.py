@@ -25,6 +25,8 @@ from beadloom.application.waves import (
     GATE_WHOLE_TREE,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -34,6 +36,9 @@ from beadloom.application.waves import (
     STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    FocusDocument,
+    GraphFile,
+    GraphInput,
     LockSite,
     MediumCheck,
     WaveEnvironment,
@@ -64,11 +69,40 @@ def _lock_sites(sources: list[tuple[str, str]]) -> tuple[LockSite, ...]:
     return lock_sites(lock_invocations(text_invocations(sources)))
 
 
+#: A graph whose two homes agree — the files declare exactly what the index the
+#: scopes were resolved from holds.
+AGREEING_GRAPH = GraphInput(
+    files=(GraphFile(path=".beadloom/_graph/services.yml", nodes=("billing",)),),
+    indexed=frozenset({"billing"}),
+)
+
+#: The same graph after a neighbour added a node and nobody reindexed.
+DRIFTED_GRAPH = GraphInput(
+    files=(
+        GraphFile(
+            path=".beadloom/_graph/services.yml", nodes=("billing", "shipping")
+        ),
+    ),
+    indexed=frozenset({"billing"}),
+)
+
 CLEAN = WaveEnvironment(
     tree_changed_paths=(),
     commit_gate=GATE_COMMIT_SCOPED,
     doc_baseline_stale_pairs=0,
     landing_lock_sites=(),
+    focus_documents=(),
+    graph_input=AGREEING_GRAPH,
+)
+
+#: A focus document that names no bead of the plan — the shape BDL-UX #257
+#: measured, where the wave's beads have only the prose around the table.
+NAMES_NOBODY = (
+    FocusDocument(
+        path=".claude/development/docs/features/KEY/ACTIVE.md",
+        kind="ACTIVE",
+        row_cells=("Bead", ".99"),
+    ),
 )
 
 #: One instruction of the landing lock in the form that grants nothing — the
@@ -140,6 +174,8 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=(),
+                    focus_documents=(),
+                    graph_input=AGREEING_GRAPH,
                 ),
             ),
             (
@@ -149,6 +185,8 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_WHOLE_TREE,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=(),
+                    focus_documents=(),
+                    graph_input=AGREEING_GRAPH,
                 ),
             ),
             (
@@ -158,6 +196,8 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=3,
                     landing_lock_sites=(),
+                    focus_documents=(),
+                    graph_input=AGREEING_GRAPH,
                 ),
             ),
             (
@@ -167,6 +207,30 @@ class TestEveryMediumHasACheckThatCanFail:
                     commit_gate=GATE_COMMIT_SCOPED,
                     doc_baseline_stale_pairs=0,
                     landing_lock_sites=GRANTS_NOTHING,
+                    focus_documents=(),
+                    graph_input=AGREEING_GRAPH,
+                ),
+            ),
+            (
+                MEDIUM_FOCUS_DOCUMENT,
+                WaveEnvironment(
+                    tree_changed_paths=(),
+                    commit_gate=GATE_COMMIT_SCOPED,
+                    doc_baseline_stale_pairs=0,
+                    landing_lock_sites=(),
+                    focus_documents=NAMES_NOBODY,
+                    graph_input=AGREEING_GRAPH,
+                ),
+            ),
+            (
+                MEDIUM_GRAPH_FILES,
+                WaveEnvironment(
+                    tree_changed_paths=(),
+                    commit_gate=GATE_COMMIT_SCOPED,
+                    doc_baseline_stale_pairs=0,
+                    landing_lock_sites=(),
+                    focus_documents=(),
+                    graph_input=DRIFTED_GRAPH,
                 ),
             ),
         ],
@@ -187,6 +251,8 @@ class TestEveryMediumHasACheckThatCanFail:
             MEDIUM_COMMIT_GATE,
             MEDIUM_DOC_BASELINE,
             MEDIUM_LANDING_ORDER,
+            MEDIUM_FOCUS_DOCUMENT,
+            MEDIUM_GRAPH_FILES,
         ],
     )
     def test_a_medium_nobody_observed_is_unmeasured_rather_than_passed(
@@ -214,6 +280,8 @@ class TestEveryMediumHasACheckThatCanFail:
             MEDIUM_COMMIT_GATE,
             MEDIUM_DOC_BASELINE,
             MEDIUM_LANDING_ORDER,
+            MEDIUM_FOCUS_DOCUMENT,
+            MEDIUM_GRAPH_FILES,
         ):
             assert _check(checks, medium).status != STATUS_NOT_APPLICABLE
             assert not _check(checks, medium).is_finding
@@ -366,6 +434,8 @@ class TestTheWorkingTreeCheckAsksBdlux181sQuestion:
             commit_gate=GATE_COMMIT_SCOPED,
             doc_baseline_stale_pairs=0,
             landing_lock_sites=(),
+            focus_documents=(),
+            graph_input=AGREEING_GRAPH,
         )
         plan = plan_waves(
             [_bead("a", "billing"), _bead("b", "shipping")],

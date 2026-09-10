@@ -42,6 +42,10 @@ from beadloom.application.waves.models import (
     remedy_for,
     sorted_pair,
 )
+from beadloom.application.waves.population import (
+    derive_population,
+    population_findings,
+)
 from beadloom.application.waves.scope import resolve_scopes
 
 if TYPE_CHECKING:
@@ -55,6 +59,7 @@ if TYPE_CHECKING:
         WaveEnvironment,
         WaveOverride,
     )
+    from beadloom.application.waves.population import TrackerCensus
 
 
 def _conflict_set(
@@ -263,6 +268,8 @@ def plan_waves(
     today: date | None = None,
     environment: WaveEnvironment | None = None,
     axes: WorkItemAxes | None = None,
+    census: TrackerCensus | None = None,
+    work_item: str = "",
 ) -> WavePlan:
     """Decide the wave shape for *records* against the indexed graph in *conn*.
 
@@ -275,6 +282,13 @@ def plan_waves(
     rule for the same reason: leaving it out is allowed and is reported, so a
     concurrent wave whose declarations were held against nothing does not read
     like one whose declarations agreed (BDL-UX #232).
+
+    *census* carries what the tracker says about beads NOT in *records*, so the
+    plan can report how many ready beads under the same work item it was not
+    asked about. That count is a notice and never a finding (BDL-UX #274); what
+    the census can make a finding is its own completeness. *work_item* names the
+    item a caller stated, and is empty when the caller stated a bead list and the
+    item has to be derived from it.
     """
     scopes = resolve_scopes(conn, records)
     computed = conflicts_among(conn, scopes, records)
@@ -296,6 +310,7 @@ def plan_waves(
         environment=environment,
     )
     recorded = axes if axes is not None else WorkItemAxes(reason=AXES_NOT_GATHERED)
+    population = derive_population(tuple(present), census, work_item=work_item)
     agreements = compare_declarations(scopes, recorded)
     gaps = unguarded_axes(waves, scopes, recorded)
     return WavePlan(
@@ -305,9 +320,11 @@ def plan_waves(
         overrides=outcomes,
         shared_media=SHARED_MEDIA,
         findings=_findings(scopes, outcomes, checks, recorded)
-        + derivation_findings(waves, agreements, gaps, recorded),
+        + derivation_findings(waves, agreements, gaps, recorded)
+        + population_findings(population),
         media_checks=checks,
         axes=recorded,
         agreements=agreements,
         unguarded_axes=gaps,
+        population=population,
     )

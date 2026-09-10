@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: console-streams
+    kind: component
+    summary: "Console output policy — the CLI's stdout/stderr keep the operator's codec but degrade an unencodable glyph instead of dying on it"
+    source: src/beadloom/infrastructure/console_streams.py
+    docs:
+      - docs/domains/infrastructure/components/console-streams/DOC.md
+edges:
+  - src: console-streams
+    dst: infrastructure
+    kind: part_of

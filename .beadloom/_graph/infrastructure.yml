@@ -1,0 +1,13 @@
+  # Domain: Infrastructure
+nodes:
+  - ref_id: infrastructure
+    kind: domain
+    summary: "Domain-agnostic SQLite database layer, health metrics, git activity"
+    source: src/beadloom/infrastructure/
+    tags: [layer-infra]
+    docs:
+      - docs/domains/infrastructure/README.md
+edges:
+  - src: infrastructure
+    dst: beadloom
+    kind: part_of

@@ -335,9 +335,11 @@ fall back to the defaults (`claude` / `ddd` / a stack auto-detected from the
 repo's source-file extensions). It echoes the resolved
 `architecture / stack / tools`, writes every configured tool's adapter set, then
 composes the slash commands and `CLAUDE.md`. A file Beadloom wrote and nobody
-touched is recomposed; a hand-edited one is **skipped** and reported
-(`Skipped .claude/commands/<name>.md (hand-edited; use --force)`); `--force`
-overwrites regardless.
+touched is recomposed; one whose body the flow manifest cannot prove Beadloom
+wrote is **skipped** and reported (`Skipped <path> (hand-edited)`, plus the
+project-layer path the edit belongs in); `--force` overwrites regardless. That
+holds for all three artifact kinds — until BDL-UX #191 the role adapters were
+recomposed over silently, so the same command answered one hand edit two ways.
 
 > **Write a `.beadloom/flow.yml` before you rely on the result.** Without one,
 > the command composes the role adapters from the auto-detected stack while
@@ -522,7 +524,7 @@ serialised pair carries one named reason. The guarantee, in one sentence: for an
 placed in the same wave, no medium they share can carry one bead's in-progress state into the
 other's result — and where a medium cannot give that guarantee, the wave says so and names the
 one bead that measures the combined outcome. Code independence is decided from the graph. The
-five media a wave shares regardless — one working tree, one pre-commit hook, one landing order,
+seven media a wave shares regardless — one graph, one working tree, one pre-commit hook, one landing order, one focus document,
 one doc-freshness baseline, one tracker id space — are measured as a **precondition before the
 wave runs**, and
 the wave's conduct afterwards is checked by nothing here and cannot be.

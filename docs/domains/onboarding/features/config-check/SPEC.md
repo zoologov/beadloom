@@ -30,6 +30,9 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
   against fixed bytes (BDL-061 S3).
 - `.beadloom/flow.yml` itself (unknown tool / architecture / stack / language,
   a suppression missing its reason or exit condition).
+- the project's `.gitignore`, against the patterns `ignore_block` emits — see
+  *The ignore block* below. This is the one owned artifact whose bytes are not
+  Beadloom's, so what is compared is the patterns rather than the block.
 
 A repo that never adopted the flow is never reported for it. A repo that DID
 adopt it and is missing a canonical file is reported, because the gate is not
@@ -158,16 +161,48 @@ behaviour:
 - `ConfigDrift.fixable` stops the closing advice offering `config-check --fix`
   for a finding it will decline — doing what the last line said used to undo what
   the line above it promised.
+- **And the OTHER remedy the finding names is now safe too (BDL-068 `.67`,
+  BDL-UX #191).** A `hand_edited` adapter's remediation says *move the additions
+  to `.beadloom/flow/roles/<role>.md`, then re-run `beadloom
+  setup-agentic-flow`*, and until this bead that command recomposed the adapter
+  unconditionally: an adopter who ran the remediation without doing the move
+  first lost the edit the sentence above it had promised to keep. Closing #186
+  in `--fix` alone left the promise false through the sibling command it points
+  at. The declined set is now one function, `declined_adapter_rewrites()`, which
+  both `--fix` and `setup-agentic-flow` read, so the sentence printed about a
+  file and the decision taken about it cannot disagree whichever command took
+  it.
 
 One consequence had to be fixed first, and it is measured rather than argued: on
 a repo scaffolded **before** it adopted a `flow.yml`, all four `.claude/agents/*`
-read `hand_edited`, because `_scaffold_vendored` wrote those bytes and never
+read `hand_edited`, because the scaffold's role path wrote those bytes and never
 recorded a digest (probe: `fsd`+`vuejs` → four hand-edits on files nobody
-touched; `ddd`+`python` reads `clean` only by coincidence, since the vendored
-bytes *are* that composition). Declining those would mean `--fix` refusing for
-ever to recompose files Beadloom itself wrote — the mirror of the defect. The
-plain vendored body is therefore offered as an `alternate`, so it classifies
-`stale` and recomposes. **Unowned is not the same as somebody's only copy.**
+touched; `ddd`+`python` read `clean` only by coincidence, since the snapshot's
+bytes *were* that one composition). Declining those would mean `--fix` refusing
+for ever to recompose files Beadloom itself wrote — the mirror of the defect. The
+shipped-only composition — `compose_all_roles(config)` with no `project_root` —
+is therefore offered as an `alternate`, so a body Beadloom wrote before the
+project declared a layer classifies `stale` and recomposes. **Unowned is not the
+same as somebody's only copy.**
+
+BDL-068 `beadloom-iur5` removed the coincidence and the second alternate beside
+it. A `templates/agentic_flow/agents/*.md.txt` snapshot of THIS repository's live
+role files used to be offered as well, for the repo that had not yet declared a
+`flow.yml`; the assets are deleted, and the case they covered is now covered at
+the write end instead — that scaffold path composes and records a digest, so the
+manifest accounts for the file. The narrow case the alternate no longer covers is
+stated rather than hidden: a repo scaffolded by a Beadloom older than that change,
+whose `flow.yml` then declares an architecture or stack other than
+`ddd`/`python`, reads `unverified` instead of clean. That is the reporting
+direction and not the destroying one — such a file is named and left exactly as
+it is.
+
+The same change reaches the branch for a repo with **no** `flow.yml` at all. It
+used to byte-compare each `.claude/agents/*.md` against the snapshot and report
+*drifted from the shipped template*, `fixable=False`, under a remediation telling
+the adopter to adopt a `flow.yml` — a comparison against a body composed for
+another project's architecture, and advice that offered no repair. It now runs
+through the same `_state_drift` projection every other artifact kind reads.
 
 ### Deletion is not a pass
 
@@ -254,6 +289,125 @@ speaks only when it finds something hands the reader a clean list. The channel t
 matters there is the coordinator's launch prompt: a prompt is not an artifact, so no
 file-based check reaches it.
 
+### The role map
+
+A role this flow composes and the map its tool's reader opens names nowhere is reported at
+`error`, and so is a name the map designates as a role that no CORE fragment ships. The
+derivation is `role_map.role_map_report()`; `_role_map_drifts()` maps its findings onto
+`ConfigDrift`.
+
+**One map per declared tool** (BDL-068 `.84`). The corpus is `config.tools`: the composed
+`.claude/CLAUDE.md` for `claude`, the `.cursor/rules/beadloom-flow.md` orchestrator pointer
+for `cursor`. Until `.84` the check composed Claude's map unconditionally, so a project
+declaring `cursor` alone was judged against a composition its flow does not declare while
+the map its agent reads was asked nothing. A declared tool this release names no map
+artifact for produces **no drift**: it is printed as an unreached population, because the
+gap is Beadloom's and failing a project for it would report the release's hole as the
+adopter's.
+
+This is `_duty_drifts()`'s neighbour one level up. That one asks whether a duty declared
+for a role reaches that role's core (BDL-UX #228); this one asks whether a role that
+EXISTS reaches the document that lists roles (BDL-UX #252). The edge was missing because
+nobody had added a role since the map was written. Measured on 2026-09-09: `Explore`
+shipped in BDL-068 S1 as a composed role, the `/coordinator` and `/task-init` templates
+named it four times each, `.claude/agents/explore.md` was composed, and the shipped
+`CLAUDE.md` named it zero times. This check already counted it — `On disk: 5 role file(s)`
+— while answering two other questions: composed adapters against the compositions this
+flow would write, and whether a declared duty reaches the composed core of every role it
+names.
+
+Severity comes from the finding rather than from `_role_map_drifts()`, and the two values
+mean two different things. A DESIGNATION (`subagent_type: <names>`, `agents/<name>.md`,
+`agents/{<names>}.md`) was written on purpose, so a role it omits or a name it invents is
+an `error` — Beadloom ships both sides of its own map, so a mismatch introduced by a
+release is caught by this repository's own Gate before it reaches anyone. An INFERRED
+roster is a guess about punctuation in prose that may be an adopter's, so it can only
+warn: turning a green project red on upgrade over ``we deploy to `dev`, `test``` is how a
+check gets switched off wholesale.
+
+Never `fixable`, for `_duty_drifts()`'s reason: the repair is a sentence in the map, and
+`--fix` writes compositions rather than prose.
+
+The command prints two populations on every run of a project that has a `flow.yml`. The
+TOOLS: how many of the declared tools a map was read for, each beside its artifact and its
+designation count, and the unreached count with its reasons — printed at zero too, as a
+sentence, because an empty list under a heading reads as "nothing to say here" and that is
+the wrong half of what zero means. And `RoleMapReport.not_judged`: the lines that mention
+two or more roles in a shape no construct reads. Some of those should enumerate every role
+and some should not, since a wave order `dev → test → review → tech-writer` names four
+roles and `Explore` is not a wave, and this derivation cannot tell them apart.
+
+### The ignore block
+
+`init` writes an ignore block into a project's `.gitignore` once and never rewrites it, so
+the block is generated into a repository Beadloom does not own and hand-maintained there.
+That shape can only stay correct by coincidence, and it stopped: this repository's
+`.gitignore` carried `.beadloom/guard-firings.jsonl` while `ignore_block` had emitted the
+glob `.beadloom/guard-firings*.jsonl` since rotation shipped, and nobody found it. It
+surfaced only when an unrelated change tripled the guard firings, the record rotated for
+the first time, and the second file appeared as untracked churn (BDL-UX #238). An adopter
+is worse off than this repository was: the upgrade path writes no ignore block at all.
+
+`_ignore_block_drifts()` maps `ignore_block.ignore_block_findings()` onto `ConfigDrift` —
+one `warn`, non-fixable finding per pattern the file does not declare, each derived from
+`GENERATED_WORKING_SET` so a pattern a later release adds is checked with no second list.
+A finding whose pattern glob-matches a line already in the file names that line as the one
+it supersedes, so the remediation reads "replace" rather than "add".
+
+It differs from *Duty delivery* on both counts, and for reasons that are its own:
+
+- **`warn`, not `error`**, for the reason a suppression finding warns. The file is the
+  adopter's and the pattern set is Beadloom's, so a release that adds a pattern would
+  otherwise turn every adopter's green project red on upgrade.
+- **Never `fixable`**, because `ignore_block`'s published contract is that the block is
+  written once and never rewritten, there is no manifest that could prove a line is
+  Beadloom's, and the repair is a human's line in a human's file. That is narrower than
+  the ownership question the composed role adapters raise, and settles nothing for them.
+
+What it does not compare is the block's **text**. The reason comments are prose in a file
+people edit, and a project that ignores the same paths under a heading it wrote itself is
+correct — this repository is that project. So an entry whose `why` predates the current
+release stays invisible, which is the code half of the S5 review's finding M-b and is not
+closed by this check.
+
+### Orphaned tool adapters
+
+The gap the other adapter checks could not have. `_adapter_states`,
+`declined_adapter_rewrites` and `role_duties._role_files_on_disk` all open with
+`for tool in config.tools`, so narrowing the tool subset does not add a finding about the
+dropped tool's files — it removes them from the population. The files stay on disk, the tool
+that reads them goes on reading them, and nothing compares them again.
+
+Measured on 2026-09-09, with a control. A project scaffolded `--tool claude --tool cursor`
+reports `On disk: 10 role file(s)` and exits 0. Remove `cursor` from `flow.yml` and nothing
+else: the count falls to 5, the five files under `.cursor/agents/` are reported by nothing,
+and `config-check` still exits 0. Append the same two lines to `.claude/agents/dev.md` and to
+`.cursor/agents/dev.md` and the first is an `error` while the second is exit 0. The only
+difference between the two files is a line in `flow.yml`.
+
+`_orphaned_adapter_drifts()` maps `role_adapters.orphaned_adapters()` onto `ConfigDrift` —
+one `warn`, non-fixable finding per recorded adapter under an undeclared tool. A finding
+whose body no longer matches the digest recorded for it says it **already** differs, which
+separates a file that has changed unseen from one that has merely stopped being watched.
+
+Its policy is the ignore block's, applied to a different file rather than invented again:
+
+- **`warn`, not `error`**, under the test *Duty delivery* states — who can introduce the
+  finding. An orphan comes from exactly one act, an adopter editing `tools:` in their own
+  `flow.yml`, and blocking would turn every project that has ever narrowed its tool set red
+  on upgrade to the release that adds this check.
+- **Never `fixable`**, for a reason stronger than the ignore block's. The two repairs are
+  re-declaring the tool and deleting the file, and both are the adopter's decision: `--fix`
+  writes compositions and deletes nothing. Deleting would also be the far side of the
+  question BDL-068 `.67` settled toward preservation one bead earlier, so a `--fix` that
+  deleted here would make one command answer one hand edit two ways again (BDL-UX #191).
+
+What it does not claim is a file the manifest does not record. An adopter who drives Cursor
+by hand owns `.cursor/agents/dev.md` outright, and claiming it would be the false positive
+`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/beadloom-flow.md`
+is excluded for the reason `role_adapters` publishes: no check compares that pointer in
+either state, so calling it orphaned would imply it was guarded before.
+
 ### Ownership boundary
 
 The `CLAUDE.md` body is **judged** only when the file is Beadloom's: it has a flow
@@ -312,11 +466,25 @@ Module `src/beadloom/onboarding/config_sync.py`:
   would mean deleting the body on disk).
 - `_duty_drifts(project_root) -> list[ConfigDrift]` — every `role_duties` finding as
   a blocking, non-fixable drift; empty for a project with no `.beadloom/flow.yml`.
+- `_role_map_drifts(project_root) -> list[ConfigDrift]` — every `role_map` finding as a
+  non-fixable drift carrying the finding's own severity; empty for a project with no
+  `.beadloom/flow.yml`.
+- `_ignore_block_drifts(project_root) -> list[ConfigDrift]` — every
+  `ignore_block.ignore_block_findings()` finding as a warning, non-fixable drift against
+  `.gitignore`; empty outside a git working tree and where no `.beadloom/` exists.
+- `_orphaned_adapter_drifts(project_root) -> list[ConfigDrift]` — every
+  `role_adapters.orphaned_adapters()` result as a warning, non-fixable drift against the
+  adapter's own path; empty for a project with no valid `.beadloom/flow.yml`.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
   `.changed` is the union of the first two.
 - `DeclinedRewrite` — `file`, `reason`, `remediation` for one refusal.
+- `declined_adapter_rewrites(project_root) -> tuple[DeclinedRewrite, ...]` — the
+  role adapters no writer may recompose over (`hand_edited` or `unverified`),
+  each carrying the reason and remediation `check_config_drift` prints for the
+  same file. Read by `--fix` and by `setup-agentic-flow`; empty when the project
+  declares no valid `flow.yml`.
 - `refresh_composed_adapters(project_root) -> AdapterRefresh` — re-render the
   composed role adapters, minus the ones it declines (`rewritten` + `declined`).
 - `refresh_agentic_flow_files(project_root) -> list[str]` — recompose the
@@ -329,7 +497,10 @@ Module `src/beadloom/onboarding/config_sync.py`:
 
 Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 `tests/test_cli_config_check.py`, `tests/test_s3_config_check_residual.py`
-(the adversarial half), `tests/test_bead57_config_check_sight.py`.
+(the adversarial half), `tests/test_bead57_config_check_sight.py`,
+`tests/acceptance/features/ignore_block_drift.feature` for the ignore block, and
+`tests/acceptance/features/orphaned_adapters.feature` +
+`tests/test_orphaned_adapters.py` for the adapters of a dropped tool.
 
 ## What is still not checked, measured
 
@@ -351,3 +522,13 @@ how they were closed:
   without reading as dead.
 - **`.beadloom/flow/` is scanned for the fragments that compose**, so a file
   dropped there under a name nothing composes is inert and unreported.
+- **An orphaned adapter needs a manifest entry to be seen.** Provenance comes from
+  `.beadloom/flow-manifest.json`, so a project whose manifest was deleted has none and its
+  orphans go unreported. Deliberate rather than pending: absent information must not
+  manufacture a claim about somebody's file. The cost is small in practice, because the
+  manifest is source rather than derived state and the generated ignore block does not list
+  it.
+- **The ignore block's reason text is not compared** — only its patterns are. A block
+  carrying an entry's `why` from an earlier release reads as clean, and a `.gitignore`
+  written entirely by hand that happens to declare the same patterns reads as clean too,
+  which is the intended answer for the second and the unclosed half of M-b for the first.

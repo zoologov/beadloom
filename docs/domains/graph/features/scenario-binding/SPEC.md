@@ -124,16 +124,26 @@ Four deliberate exclusions keep the check about claims rather than sentences:
   bare line starting with one is prose; bulleted, quoted or backticked, it is a reference.
   Measured (`.62`): `Example: a nested import inside a function is still an import.` yielded the
   reference `a nested import inside a function`, which the rule then demanded a scenario for.
-  This repository has 33 references before and after the change, so nothing an author wrote
-  stopped being read.
+  This repository had 33 references before and after the change, so nothing an author wrote
+  stopped being read. That number is no longer written down anywhere: the test that held it
+  derives the corpus where the assertion runs (`beadloom-0mdo.79`), because every bead adding a
+  PRD or BRIEF that names a scenario had to find and bump the literal.
 
-`load_references` returns a `ReferenceSet`: the `references`, the `dead_globs` that matched **no
-document**, and the `unreadable` documents that matched and could not be decoded. A reference
-check whose documents moved reports nothing and reads exactly like one that found no problem
-(BDL-UX #172), and an undecodable document is the sharper case of the same thing — before `.62`
-a cp1251 PRD naming one scenario yielded no reference, no dead glob and no finding, so the rule
-stated that document's intent was fully met. `scenario-coverage` reports each unreadable
-document as a finding naming the reason.
+`load_references` returns a `ReferenceSet` naming each of the four things that can become of a
+glob: the `references`, the `dead_globs` that matched **no document**, the `unreadable`
+documents that matched and could not be decoded, and the `documents` that matched and were
+read. A reference check whose documents moved reports nothing and reads exactly like one that
+found no problem (BDL-UX #172), and an undecodable document is the sharper case of the same
+thing — before `.62` a cp1251 PRD naming one scenario yielded no reference, no dead glob and no
+finding, so the rule stated that document's intent was fully met. `scenario-coverage` reports
+each unreadable document as a finding naming the reason.
+
+`documents` was added by `beadloom-0mdo.79` because the set reported three of those four
+outcomes and left the fourth to be inferred from the references a document happened to state.
+Measured on this repository: 53 of the 56 shipped PRDs and BRIEFs state no scenario at all, so
+a document dropped between the glob and the parse changed `references` by nothing and was
+reported by nothing. `scenario-coverage` does not read `documents` yet; adding it to the rule's
+reporting belongs to `rule-engine`.
 
 ### Honest limits
 

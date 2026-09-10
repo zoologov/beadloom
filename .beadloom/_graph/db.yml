@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: db
+    kind: component
+    summary: "SQLite database layer — connection management, schema creation, meta helpers"
+    source: src/beadloom/infrastructure/db.py
+    docs:
+      - docs/domains/infrastructure/components/db/DOC.md
+edges:
+  - src: db
+    dst: infrastructure
+    kind: part_of

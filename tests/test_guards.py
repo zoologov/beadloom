@@ -22,13 +22,14 @@ def _write_flow(root, body: str) -> None:
 
 
 class TestVerdictModel:
-    def test_outcomes_are_the_five_declared_names(self) -> None:
+    def test_outcomes_are_the_six_declared_names(self) -> None:
         assert [o.value for o in GuardOutcome] == [
             "pass",
             "warn",
             "block",
             "skip",
             "error",
+            "unresolved",
         ]
 
     def test_exit_codes_separate_block_from_usage_error(self) -> None:
@@ -38,15 +39,26 @@ class TestVerdictModel:
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.BLOCK] == 2
 
     def test_an_error_blocks_because_it_is_the_only_code_that_blocks(self) -> None:
-        """"I could not tell" must stop the edit, and 2 is the code that does.
+        """A target the guard will not read must stop the edit, and 2 is the code that does.
 
         Measured against the adapter this ships (Claude Code): exit 2 is fed back
         to the agent and blocks the tool call, every other non-zero code is shown
         to the human and the call proceeds. 1 is the warn code, and 3 is reserved
-        for a configuration defect, which is a statement about the project's own
-        files rather than about this edit.
+        for an inability the guard has about itself, which is a statement about
+        the project's own files rather than about this edit.
         """
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.ERROR] == 2
+
+    def test_an_unresolved_does_not_take_the_blocking_code(self) -> None:
+        """The guard could not evaluate ITSELF, so it must not stop its own repair.
+
+        BDL-UX #254, measured live: a half-moved package made every guard raise
+        ``ImportError``, the blocking code went to ``Bash``, ``Write`` and
+        ``Edit`` alike, and the only tool outside the surface was ``Read``. The
+        remediation asked for a write the same verdict had disabled.
+        """
+        assert EXIT_CODE_BY_OUTCOME[GuardOutcome.UNRESOLVED] != 2
+        assert EXIT_CODE_BY_OUTCOME[GuardOutcome.UNRESOLVED] != 0
 
     def test_an_error_must_name_what_it_did_not_check(self) -> None:
         """An error is a verdict with no finding behind it — so it owes the reader one."""
@@ -54,6 +66,15 @@ class TestVerdictModel:
             GuardVerdict(
                 guard="bead-claimed",
                 outcome=GuardOutcome.ERROR,
+                why="the guard could not be evaluated: boom",
+            )
+
+    def test_an_unresolved_must_name_what_it_did_not_check(self) -> None:
+        """It permits the edit, so the one thing it owes the reader is the scope it skipped."""
+        with pytest.raises(ValueError, match="did not check"):
+            GuardVerdict(
+                guard="bead-claimed",
+                outcome=GuardOutcome.UNRESOLVED,
                 why="the guard could not be evaluated: boom",
             )
 

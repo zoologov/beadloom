@@ -677,13 +677,18 @@ class TestEveryWayTheCommandCanTerminate:
                 True,
             ),
             (
-                # 2, not 3, since BDL-061.33: the row is only reachable through a
-                # hook, and 3 does not block there.
+                # 1, not 3, since BDL-061.33 and BDL-UX #254: the row is only
+                # reachable through a hook, which reads a code and not a
+                # vocabulary. The verdict is `unresolved` — the guard cannot
+                # translate this binding's payload, so it could not evaluate
+                # itself — and the repair is an edit to the binding, which the
+                # blocking code this row carried between those two entries
+                # forbade.
                 "a harness nobody supports",
                 ["guard", "bead-claimed", "--hook", "no-such-harness"],
                 "",
                 _BLOCKING_WITH_EXCLUSION,
-                2,
+                1,
                 True,
             ),
             (
@@ -718,16 +723,22 @@ class TestEveryWayTheCommandCanTerminate:
         assert bool(_outcomes(root)) is records, f"{label}: {_outcomes(root)}"
 
     @pytest.mark.parametrize(
-        ("label", "args", "stdin", "exit_code"),
+        ("label", "args", "stdin", "exit_code", "outcome"),
         [
-            ("a malformed --context pair", ["--context", "nonsense"], "", 3),
-            # 2, not 3, since BDL-061.33 — see the row above.
-            ("a harness nobody supports", ["--hook", "no-such-harness"], "", 2),
-            ("a hook payload that is not JSON", ["--hook", "claude-code"], "{not json", 2),
+            ("a malformed --context pair", ["--context", "nonsense"], "", 3, "unresolved"),
+            # 1, not 3, since BDL-061.33 and BDL-UX #254 — see the row above.
+            ("a harness nobody supports", ["--hook", "no-such-harness"], "", 1, "unresolved"),
+            (
+                "a hook payload that is not JSON",
+                ["--hook", "claude-code"],
+                "{not json",
+                2,
+                "error",
+            ),
         ],
     )
     def test_a_registered_guard_no_longer_ends_without_a_record(
-        self, tmp_path, monkeypatch, label, args, stdin, exit_code
+        self, tmp_path, monkeypatch, label, args, stdin, exit_code, outcome
     ) -> None:
         """CLOSED by BDL-061.29 — the gap this test was written to pin.
 
@@ -736,8 +747,10 @@ class TestEveryWayTheCommandCanTerminate:
         reporting whatever the previous run said. The hook-payload row was the
         one that mattered: that string comes from the harness, so it was the F2
         shape (model-controlled input, no verdict, no record) with a different
-        spelling. It now also blocks rather than exiting on the configuration
-        code, because the input describes the edit in flight.
+        spelling. It still blocks rather than exiting on the configuration code,
+        because the input describes the edit in flight — the payload row is one
+        of the two failures BDL-UX #254 left at the blocking code, and the two
+        rows above it are the class that moved.
         """
         from beadloom.services.commands import guard as guard_cmd
 
@@ -749,7 +762,7 @@ class TestEveryWayTheCommandCanTerminate:
         )
 
         assert result.exit_code == exit_code, f"{label}: {result.output}"
-        assert _outcomes(root) == ["error"], label
+        assert _outcomes(root) == [outcome], label
 
     def test_liveness_shows_the_invocation_that_could_not_answer(
         self, tmp_path, monkeypatch
@@ -787,6 +800,11 @@ class TestEveryWayTheCommandCanTerminate:
 
         ``.27`` pinned this by exploding ``evaluate_guard`` itself; a check is
         where a future defect actually lives, and it is behind two more layers.
+        The live instance was exactly this shape and not a hypothetical one: a
+        ``git mv`` left the package ``services/guard_probes.py:79`` imports
+        without an ``__init__.py``, so the check raised ``ImportError`` (BDL-UX
+        #254). Hence ``unresolved`` at 3 for this shell caller — the guard could
+        not run itself, and every repair for that is a file write.
         """
         from beadloom.application.guards.checks import BUILTIN_GUARDS
         from beadloom.application.guards.contract import Guard
@@ -806,8 +824,8 @@ class TestEveryWayTheCommandCanTerminate:
 
         result = _cli(["guard", "bead-claimed", "--project", str(root)])
 
-        assert result.exit_code == 2, result.output
-        assert _outcomes(root) == ["error"]
+        assert result.exit_code == 3, result.output
+        assert _outcomes(root) == ["unresolved"]
         assert "the tracker probe blew up" in read_firings(root)[-1].why
 
     def test_a_missing_tracker_is_a_recorded_skip_not_a_silent_pass(
@@ -829,14 +847,17 @@ class TestEveryWayTheCommandCanTerminate:
 
 
 class TestEveryRefusalNamesWhatItDidNotCheck:
-    """``not_covered`` on every route that produces ``error``, not just the two shown.
+    """``not_covered`` on every route that answers no question, not just the two shown.
 
     ``.27`` set the precedent that a refused evaluation reports "everything this
-    guard checks" as unchecked. There are exactly three routes to ``error``: a
-    refused path (the evaluator), a configuration error and an unexpected
-    exception (both the CLI). All three are asserted here, and the note is
-    checked for being TRUE — naming the guard's whole scope and the stage that
-    was never reached — rather than merely non-empty.
+    guard checks" as unchecked. There are exactly three such routes: a refused
+    path (the evaluator, ``error``), a configuration error and an unexpected
+    exception (both the CLI, ``unresolved`` since BDL-UX #254). All three are
+    asserted here, and the note is checked for being TRUE — naming the guard's
+    whole scope and the stage that was never reached — rather than merely
+    non-empty. The obligation is the same for both outcomes and for the same
+    reason: it is the reader's only account of what went unexamined, and for
+    ``unresolved`` it is also the only account of what was let through.
     """
 
     def test_a_refused_path_reports_everything_as_unchecked(self, tmp_path) -> None:
@@ -902,7 +923,7 @@ class TestEveryRefusalNamesWhatItDidNotCheck:
         payload = json.loads(result.stdout)
 
         assert result.exit_code == 3, label
-        assert payload["outcome"] == "error", label
+        assert payload["outcome"] == "unresolved", label
         assert payload["not_covered"] == [
             "everything guard 'bead-claimed' checks: the evaluation did not complete"
         ], label
@@ -926,17 +947,23 @@ class TestEveryRefusalNamesWhatItDidNotCheck:
         result = _cli(["guard", "bead-claimed", "--project", str(root), "--json"])
         payload = json.loads(result.stdout)
 
-        assert result.exit_code == 2
+        assert result.exit_code == 3
+        assert payload["outcome"] == "unresolved"
         assert payload["not_covered"] == [
             "everything guard 'bead-claimed' checks: the evaluation did not complete"
         ]
 
-    def test_an_error_verdict_cannot_be_built_without_the_note(self) -> None:
+    @pytest.mark.parametrize(
+        "outcome", [GuardOutcome.ERROR, GuardOutcome.UNRESOLVED], ids=lambda o: o.value
+    )
+    def test_a_verdict_that_answered_nothing_cannot_be_built_without_the_note(
+        self, outcome
+    ) -> None:
         """The invariant that makes the three cases above structural, not habitual."""
         from beadloom.application.guards.models import GuardVerdict
 
         with pytest.raises(ValueError, match="did not check"):
-            GuardVerdict(guard="bead-claimed", outcome=GuardOutcome.ERROR, why="x")
+            GuardVerdict(guard="bead-claimed", outcome=outcome, why="x")
 
 
 # ==========================================================================
@@ -1069,19 +1096,22 @@ class TestTheExitCodeContractThroughTheRealBinary:
         exist produced Click's own exit 2 — the code the SPEC reserves for a
         block — with no verdict and no firing record: a usage error wearing a
         block's clothes. Validation now happens inside the boundary, so the same
-        argv produces an ``error`` verdict that says the project could not be
-        located. It still exits 2, and that is the point: the guard genuinely
-        cannot answer, so the edit must stop. Nothing is recorded, because
-        recording would require inventing the project this invocation could not
-        find — the one exception the SPEC names for exactly this reason.
+        argv produces a verdict that says the project could not be located.
+
+        The code is 3 since BDL-UX #254 and the outcome ``unresolved``: not
+        finding a project is an inability the guard has about ITSELF — no
+        configuration says this tree is guarded — and the repair is a write. What
+        the row is here to pin did not move: Click validates nothing, the verdict
+        names the cause, and nothing is recorded, because recording would require
+        inventing the project this invocation could not find.
         """
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION, branch="main")
 
         result = _run_real(root, ["guard", "working-branch", "--project", str(root / "gone")])
 
-        assert result.returncode == 2, result.stderr
+        assert result.returncode == 3, result.stderr
         assert b"Invalid value" not in result.stderr
-        assert b"working-branch: ERROR" in result.stderr
+        assert b"working-branch: UNRESOLVED" in result.stderr
         assert not (root / "gone").exists()
         assert read_firings(root) == ()
 

@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: route-extraction
+    kind: feature
+    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
+    source: src/beadloom/context_oracle/route_extractor.py
+    docs:
+      - docs/domains/context-oracle/features/route-extraction/SPEC.md
+edges:
+  - src: route-extraction
+    dst: context-oracle
+    kind: part_of

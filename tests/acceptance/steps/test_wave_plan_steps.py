@@ -22,25 +22,38 @@ from beadloom.application.waves import (
     AXIS_NOT_ATTRIBUTED,
     AXIS_NOT_DERIVED,
     AXIS_RULED_OUT,
+    AXIS_SWEPT_UNDECIDED,
     FINDING_DECLARED_OUTSIDE,
     FINDING_NOT_COMPARED,
+    FINDING_POPULATION_PART,
     FINDING_UNGUARDED_AXIS,
     GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
+    POPULATION_NO_COMMON_ITEM,
+    POPULATION_NOT_GATHERED,
     REASON_SHARED_NODE,
     REASON_UNRESOLVED_SCOPE,
     STATUS_FAILED,
     STATUS_NOT_APPLICABLE,
+    STATUS_PASSED,
     STATUS_UNMEASURED,
     BeadRecord,
+    FocusDocument,
+    GraphFile,
+    GraphInput,
+    TrackerBead,
+    TrackerCensus,
     WaveEnvironment,
     WaveOverride,
     WorkItemAxes,
     plan_waves,
+    population_lines,
     remedy_for,
     room_for,
 )
@@ -58,7 +71,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
     db_path = tmp_path / "beadloom.db"
     conn = open_db(db_path)
     create_schema(conn)
-    for ref in ("billing", "shipping"):
+    for ref in ("billing", "shipping", "invoicing"):
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
             (ref, "feature", ref, f"src/{ref}/"),
@@ -75,6 +88,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "plan": None,
         "environment": None,
         "axes": None,
+        "census": None,
     }
 
 
@@ -102,6 +116,18 @@ def given_bead_with_scope_and_title(
     )
 
 
+#: The graph of the fixture project, in the two homes it has: the files declare
+#: what the index the scopes were resolved from holds.
+_AGREEING_GRAPH = GraphInput(
+    files=(
+        GraphFile(
+            path=".beadloom/_graph/services.yml", nodes=("billing", "shipping")
+        ),
+    ),
+    indexed=frozenset({"billing", "shipping"}),
+)
+
+
 @given("the shared media were measured and are clean")
 def given_media_measured(world: dict[str, Any]) -> None:
     """Somebody read the tree, the hook, the doc baseline and the flow, and said so."""
@@ -110,6 +136,8 @@ def given_media_measured(world: dict[str, Any]) -> None:
         commit_gate=GATE_COMMIT_SCOPED,
         doc_baseline_stale_pairs=0,
         landing_lock_sites=(),
+        focus_documents=(),
+        graph_input=_AGREEING_GRAPH,
     )
 
 
@@ -171,6 +199,7 @@ def when_decided(world: dict[str, Any]) -> None:
         overrides=world["overrides"],
         environment=world["environment"],
         axes=world["axes"],
+        census=world["census"],
     )
 
 
@@ -228,15 +257,17 @@ def then_override_inert(world: dict[str, Any]) -> None:
 
 
 @then(
-    "the wave names the working tree, the commit gate, the landing order, the "
-    "doc baseline and the tracker id space"
+    "the wave names the graph files, the working tree, the commit gate, the "
+    "landing order, the focus document, the doc baseline and the tracker id space"
 )
 def then_names_media(world: dict[str, Any]) -> None:
     named = {medium.name for medium in world["plan"].shared_media}
     assert named == {
+        MEDIUM_GRAPH_FILES,
         MEDIUM_WORKING_TREE,
         MEDIUM_COMMIT_GATE,
         MEDIUM_LANDING_ORDER,
+        MEDIUM_FOCUS_DOCUMENT,
         MEDIUM_DOC_BASELINE,
         MEDIUM_TRACKER_IDS,
     }
@@ -429,3 +460,350 @@ def then_remedy_states_both(world: dict[str, Any], bead: str) -> None:
 @then(parsers.parse('the remedy for "{bead}" names the document the axes were read from'))
 def then_remedy_names_document(world: dict[str, Any], bead: str) -> None:
     assert world["plan"].axes.document in _remedy(world, bead)
+
+
+# ---------------------------------------------------------------------------
+# BDL-UX #250 and #245 — what the approval list is, and what its remedy asks for
+# ---------------------------------------------------------------------------
+
+
+@given(parsers.parse('the work item derived over "{node}" and rules on it nowhere'))
+def given_swept_target(world: dict[str, Any], node: str) -> None:
+    """Provenance: the `Derived by` field ran over a file this node owns."""
+    _axes(world, targets=frozenset({node}))
+
+
+@given("three beads each declaring the work item's whole approved set")
+def given_three_beads_with_the_union(world: dict[str, Any]) -> None:
+    """The old remedy, performed exactly: `axes --refs` renders one line."""
+    union = "billing, shipping, invoicing"
+    _axes(world, kept=frozenset({"billing", "shipping", "invoicing"}))
+    for bead in ("alpha", "beta", "gamma"):
+        _declare(world, bead, f"Do the work.\nrefs: {union}")
+
+
+@then(parsers.parse('the plan does not approve "{node}"'))
+def then_not_approved(world: dict[str, Any], node: str) -> None:
+    assert node not in world["plan"].axes.approved
+
+
+@then(
+    parsers.parse('the plan does not report "{node}" as declared by no bead of that wave')
+)
+def then_no_gap_for(world: dict[str, Any], node: str) -> None:
+    assert not any(node in gap.nodes for gap in world["plan"].unguarded_axes)
+
+
+@then(parsers.parse('the plan states "{ref}" as swept and not ruled on'))
+def then_swept_undecided(world: dict[str, Any], ref: str) -> None:
+    """Different from `not_derived`, which would say it was never reached."""
+    assert any(
+        agreement.ref == ref and agreement.verdict == AXIS_SWEPT_UNDECIDED
+        for agreement in world["plan"].agreements
+    )
+
+
+def _gap_finding(world: dict[str, Any]) -> str:
+    return next(
+        finding
+        for finding in world["plan"].findings
+        if finding.startswith(FINDING_UNGUARDED_AXIS)
+    )
+
+
+@then("the remedy for the unguarded axis derives each bead's own scope")
+def then_gap_remedy_is_per_bead(world: dict[str, Any]) -> None:
+    finding = _gap_finding(world)
+    assert "beadloom impact" in finding
+    assert "the files that bead changes" in finding
+
+
+@then("the remedy for the unguarded axis does not prescribe the work item's whole set")
+def then_gap_remedy_is_not_the_union(world: dict[str, Any]) -> None:
+    """#245: performed exactly, that sentence collapses the plan it is printed on."""
+    finding = _gap_finding(world)
+    assert "generate each bead's `refs:` from the `## Axes` section" not in finding
+    assert "collapses every wave to a wave of one" in finding
+
+
+@given(parsers.parse('the focus document carries a row for "{first}" only'))
+def given_focus_document_names_one(world: dict[str, Any], first: str) -> None:
+    """One row, and the other bead of the wave writes into the prose beside it."""
+    world["environment"] = replace(
+        world["environment"],
+        focus_documents=(
+            FocusDocument(
+                path=".claude/development/docs/features/KEY/ACTIVE.md",
+                kind="ACTIVE",
+                row_cells=("Bead", first),
+            ),
+        ),
+    )
+
+
+@given(parsers.parse('the focus document carries a row for "{first}" and "{second}"'))
+def given_focus_document_names_both(
+    world: dict[str, Any], first: str, second: str
+) -> None:
+    world["environment"] = replace(
+        world["environment"],
+        focus_documents=(
+            FocusDocument(
+                path=".claude/development/docs/features/KEY/ACTIVE.md",
+                kind="ACTIVE",
+                row_cells=("Bead", first, second),
+            ),
+        ),
+    )
+
+
+@given("the routes of this flow write no document in common")
+def given_no_shared_document(world: dict[str, Any]) -> None:
+    """An empty population is a real observation, the way an empty lock site is."""
+    world["environment"] = replace(world["environment"], focus_documents=())
+
+
+@then("the wave names the focus document among the media it did not decide")
+def then_names_focus_document(world: dict[str, Any]) -> None:
+    named = {medium.name for medium in world["plan"].shared_media}
+    assert MEDIUM_FOCUS_DOCUMENT in named
+    medium = next(
+        m for m in world["plan"].shared_media if m.name == MEDIUM_FOCUS_DOCUMENT
+    )
+    assert medium.statement
+    assert medium.evidence
+
+
+@then(parsers.parse('the wave reports "{medium}" as passed'))
+def then_medium_passed(world: dict[str, Any], medium: str) -> None:
+    check = next(c for c in world["plan"].media_checks if c.medium == medium)
+    assert check.status == STATUS_PASSED
+    assert check.detail
+
+
+@then(
+    parsers.parse(
+        'the failure names "{bead}" as writing into a document it has no row in'
+    )
+)
+def then_failure_names_bead(world: dict[str, Any], bead: str) -> None:
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_FOCUS_DOCUMENT
+    )
+    assert bead in check.detail
+    assert "ACTIVE.md" in check.detail
+
+
+@given("a neighbour added a node to the graph file and nobody reindexed")
+def given_graph_ahead_of_index(world: dict[str, Any]) -> None:
+    """The self-reference, as a wave meets it: the plan's own input has moved."""
+    world["environment"] = replace(
+        world["environment"],
+        graph_input=GraphInput(
+            files=(
+                GraphFile(
+                    path=".beadloom/_graph/services.yml",
+                    nodes=("billing", "reporting", "shipping"),
+                ),
+            ),
+            indexed=frozenset({"billing", "shipping"}),
+        ),
+    )
+
+
+@given("the graph directory of this project declares no node")
+def given_graph_declares_nothing(world: dict[str, Any]) -> None:
+    """A real observation of an empty population, the way an empty lock site is."""
+    world["environment"] = replace(world["environment"], graph_input=GraphInput())
+
+
+@then("the wave names the graph files among the media it did not decide")
+def then_names_graph_files(world: dict[str, Any]) -> None:
+    medium = next(
+        m for m in world["plan"].shared_media if m.name == MEDIUM_GRAPH_FILES
+    )
+    assert medium.statement
+    assert medium.evidence
+
+
+@then("the failure names the node the plan could not have compared")
+def then_failure_names_the_node(world: dict[str, Any]) -> None:
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "reporting" in check.detail
+    assert "reindex" in check.detail
+
+
+@given("this project declares each of its nodes in a file of its own")
+def given_one_file_per_node(world: dict[str, Any]) -> None:
+    """The layout BDL-UX #265 moved this repository to."""
+    world["environment"] = replace(
+        world["environment"],
+        graph_input=GraphInput(
+            files=(
+                GraphFile(path=".beadloom/_graph/billing.yml", nodes=("billing",)),
+                GraphFile(path=".beadloom/_graph/shipping.yml", nodes=("shipping",)),
+            ),
+            indexed=frozenset({"billing", "shipping"}),
+        ),
+    )
+
+
+@then("the pass says two node-adding beads write two files")
+def then_pass_says_the_collision_cannot_be_attempted(world: dict[str, Any]) -> None:
+    """The sharing is gone, so the pass says so rather than naming a shared file."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "a file of its own" in check.detail
+    assert "cannot be attempted" in check.detail
+
+
+@then("the pass still names the file it could not read")
+def then_pass_still_names_what_it_cannot_reach(world: dict[str, Any]) -> None:
+    """The half no plan can reach moved rather than disappearing."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert "no graph this plan could read" in check.detail
+
+
+@then("the pass names the file a bead that adds a node writes")
+def then_pass_names_the_file(world: dict[str, Any]) -> None:
+    """The half no plan can observe is stated rather than left out of the pass."""
+    check = next(
+        c for c in world["plan"].media_checks if c.medium == MEDIUM_GRAPH_FILES
+    )
+    assert ".beadloom/_graph/services.yml" in check.detail
+    assert "adds" in check.detail
+
+
+# BDL-UX #274 — the population the plan was asked about, against the one the
+# tracker holds under the same work item. The census arrives as data for the
+# same reason the bead records do: the decision has to be runnable without a
+# `bd` binary, and the application layer never reaches up into `services`.
+
+
+def _census(world: dict[str, Any]) -> TrackerCensus:
+    """The census being built by the givens, created on first use."""
+    if world.get("census") is None:
+        world["census"] = TrackerCensus(beads=(), ready=())
+    census: TrackerCensus = world["census"]
+    return census
+
+
+def _add_to_census(
+    world: dict[str, Any], beads: tuple[TrackerBead, ...], ready: tuple[str, ...]
+) -> None:
+    census = _census(world)
+    world["census"] = replace(
+        census,
+        beads=(census.beads or ()) + beads,
+        ready=(census.ready or ()) + ready,
+    )
+
+
+@given(
+    parsers.re(
+        r'the tracker holds a work item "(?P<item>[^"]+)" whose ready beads are '
+        r'(?P<members>.+)'
+    )
+)
+def given_work_item_with_ready_beads(
+    world: dict[str, Any], item: str, members: str
+) -> None:
+    ids = tuple(re.findall(r'"([^"]+)"', members))
+    _add_to_census(
+        world,
+        (
+            TrackerBead(bead_id=item, depends_on=frozenset(ids)),
+            *(TrackerBead(bead_id=bead) for bead in ids),
+        ),
+        ids,
+    )
+
+
+@given(
+    parsers.parse(
+        'a ready bead "{bead}" blocking "{item}" and naming no parent'
+    )
+)
+def given_ready_bead_blocking_the_item(
+    world: dict[str, Any], bead: str, item: str
+) -> None:
+    census = _census(world)
+    beads = tuple(
+        replace(row, depends_on=row.depends_on | {bead})
+        if row.bead_id == item
+        else row
+        for row in (census.beads or ())
+    )
+    world["census"] = replace(
+        census,
+        beads=(*beads, TrackerBead(bead_id=bead)),
+        ready=(*(census.ready or ()), bead),
+    )
+
+
+@given("the tracker capped the ready answer it gave")
+def given_ready_answer_capped(world: dict[str, Any]) -> None:
+    world["census"] = replace(
+        _census(world),
+        ready_whole=False,
+        ready_note="`bd ready` returned 100 of 120 row(s) and said so on stderr",
+    )
+
+
+@then(parsers.parse('the plan names "{item}" as the work item its beads belong to'))
+def then_population_names_work_item(world: dict[str, Any], item: str) -> None:
+    assert world["plan"].population.work_item == item
+
+
+@then(
+    parsers.re(
+        r"the plan states (?P<count>\d+) ready beads? under it that it was not "
+        r"asked about"
+    )
+)
+def then_population_unasked_count(world: dict[str, Any], count: str) -> None:
+    assert len(world["plan"].population.unasked) == int(count)
+
+
+@then(parsers.parse('the plan names "{bead}" among the beads it was not asked about'))
+def then_population_names_unasked(world: dict[str, Any], bead: str) -> None:
+    population = world["plan"].population
+    assert bead in population.unasked
+    assert bead in "\n".join(population_lines(population))
+
+
+@then(parsers.parse('the plan says every ready bead under "{item}" is in this plan'))
+def then_population_complete(world: dict[str, Any], item: str) -> None:
+    block = "\n".join(population_lines(world["plan"].population))
+    assert item in block
+    assert "every ready bead" in block
+
+
+@then("the plan states that it held its bead list against no population")
+def then_population_not_gathered(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert population.reason == POPULATION_NOT_GATHERED
+    assert POPULATION_NOT_GATHERED in "\n".join(population_lines(population))
+
+
+@then("the plan states that no work item it read contains every bead it was asked about")
+def then_population_no_common_work_item(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert population.reason == POPULATION_NO_COMMON_ITEM
+    assert population.work_item == ""
+    assert POPULATION_NO_COMMON_ITEM in "\n".join(population_lines(population))
+
+
+@then("the plan reports the population it was held against as incomplete")
+def then_population_incomplete(world: dict[str, Any]) -> None:
+    population = world["plan"].population
+    assert not population.ready_whole
+    assert any(
+        finding.startswith(FINDING_POPULATION_PART)
+        for finding in world["plan"].findings
+    )

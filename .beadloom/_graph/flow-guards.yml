@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: flow-guards
+    kind: feature
+    summary: "Named-guard primitive: registry, verdict {pass|warn|block|skip}, strictness + exclusions from flow.yml, firing record + liveness"
+    source: src/beadloom/application/guards/
+    docs:
+      - docs/domains/application/features/flow-guards/SPEC.md
+edges:
+  - src: flow-guards
+    dst: application
+    kind: part_of

@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: graph-reads
+    kind: feature
+    summary: "Application read facade over the infrastructure repository — lets the TUI read the graph index without a presentation->infrastructure import"
+    source: src/beadloom/application/graph_reads.py
+    docs:
+      - docs/domains/application/features/graph-reads/SPEC.md
+edges:
+  - src: graph-reads
+    dst: application
+    kind: part_of

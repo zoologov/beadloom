@@ -14,6 +14,7 @@ from beadloom.application.waves import (
     AXIS_NOT_ATTRIBUTED,
     AXIS_NOT_DERIVED,
     AXIS_RULED_OUT,
+    AXIS_SWEPT_UNDECIDED,
     AXIS_UNDECIDED,
     FINDING_DECLARED_OUTSIDE,
     FINDING_NOT_COMPARED,
@@ -31,17 +32,20 @@ from beadloom.application.waves import (
     unguarded_axes,
 )
 
-#: A work item that approves two nodes by a kept row, one by having derived over
-#: it, rules one out, decides nothing about one, and could attribute no node to
-#: one axis. Every verdict has a subject here, so a test asking for one never
-#: passes because the table happened to be empty.
+#: A work item that approves three nodes by a kept row, swept a fourth without
+#: ruling on it, rules one out, decides nothing about one, and could attribute no
+#: node to one axis. Every verdict has a subject here, so a test asking for one
+#: never passes because the table happened to be empty.
+#:
+#: ``swept`` moved out of the approved set with BDL-UX #250: a node the
+#: ``Derived by`` field ran over is provenance, and provenance is not consent.
 AXES = WorkItemAxes(
     work_item="BDL-000",
     document="docs/BDL-000/RFC.md",
     seed="none",
     unresolved="co-writers, on all three targets",
-    kept=frozenset({"billing", "shipping"}),
-    targets=frozenset({"invoicing"}),
+    kept=frozenset({"billing", "shipping", "invoicing"}),
+    targets=frozenset({"swept"}),
     ruled_out=frozenset({"legacy"}),
     undecided=frozenset({"pending"}),
     unattributed=("co-writers",),
@@ -68,14 +72,19 @@ class TestOneRefAgainstTheTable:
     def test_a_kept_row_agrees(self) -> None:
         assert _verdicts([_scope("a", "billing")], AXES)["billing"] == AXIS_AGREES
 
-    def test_a_derived_by_target_agrees_as_well_as_a_kept_row(self) -> None:
-        """A work item changes the surfaces it derived its answer from.
+    def test_a_derived_by_target_is_not_approved_by_having_been_swept(self) -> None:
+        """BDL-UX #250. Provenance is not consent.
 
-        The same rule `scope_check.DeclaredScope.inside` applies, spent here
-        rather than restated: two readings of one approval are two things that
-        can disagree.
+        The rule this replaces was ``kept | targets``, and it held while a slice
+        CHANGED what it derived from. BDL-068's S5 derived over files it only
+        reads, so ``doc-spaces`` and ``intent-reader`` sat in its approved set
+        with rows that say ``no``. The commit gate keeps the wider reading for a
+        reason it measured — ``scope_check``'s module docstring records the three
+        commits a kept-row-only rule went red on — because it asks whether a
+        staged PATH is covered, while this asks what a human DECIDED.
         """
-        assert _verdicts([_scope("a", "invoicing")], AXES)["invoicing"] == AXIS_AGREES
+        assert "swept" not in AXES.approved
+        assert _verdicts([_scope("a", "swept")], AXES)["swept"] == AXIS_SWEPT_UNDECIDED
 
     def test_a_row_that_rules_the_node_out_is_the_sharpest_half(self) -> None:
         assert _verdicts([_scope("a", "legacy")], AXES)["legacy"] == AXIS_RULED_OUT

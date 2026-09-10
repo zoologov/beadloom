@@ -22,6 +22,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from beadloom.application.guards.contract import ClaimedBead, GuardProbes
+from beadloom.application.waves import compose_declaration
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -96,7 +97,15 @@ class BdWorkTracker:
         if not isinstance(payload, list):
             return None
         return tuple(
-            ClaimedBead(id=bead["id"], title=str(bead.get("title") or ""))
+            ClaimedBead(
+                id=bead["id"],
+                title=str(bead.get("title") or ""),
+                # Composed with the planner's own joiner rather than by
+                # concatenating the fields here: the gate's ownership report and
+                # the wave plan read one declaration, so they cannot come to
+                # disagree about what a bead said (BDL-061.23 M5 is that defect).
+                declaration=compose_declaration(bead),
+            )
             for bead in payload
             if isinstance(bead, dict)
             and isinstance(bead.get("id"), str)

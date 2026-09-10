@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: role-composer
+    kind: feature
+    summary: "compose_role — assembles a role file from CORE + one architecture overlay (ddd/fsd) + stack overlays (python/fastapi/js/ts/vue), deterministically ordered"
+    source: src/beadloom/onboarding/role_composer.py
+    docs:
+      - docs/domains/onboarding/features/role-composer/SPEC.md
+edges:
+  - src: role-composer
+    dst: onboarding
+    kind: part_of

@@ -1,0 +1,15 @@
+  # Component: the intent half of a context bundle (BDL-061 `.87`). Pure policy —
+  # which recorded intent belongs to a node, and which of the three answers a
+  # bundle carries. No filesystem, so the port types live here and the adapter
+  # that fills them lives one layer up.
+nodes:
+  - ref_id: node-intent
+    kind: component
+    summary: "Decide which recorded intent a node's context bundle carries, and keep 'nobody declared it' apart from 'nobody looked'"
+    source: src/beadloom/context_oracle/intent.py
+    docs:
+      - docs/domains/context-oracle/components/node-intent/DOC.md
+edges:
+  - src: node-intent
+    dst: context-oracle
+    kind: part_of

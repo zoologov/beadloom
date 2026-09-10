@@ -1,0 +1,12 @@
+  # Feature: Why (Impact Analysis)
+nodes:
+  - ref_id: why
+    kind: feature
+    summary: "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
+    source: src/beadloom/context_oracle/why.py
+    docs:
+      - docs/domains/context-oracle/features/why/SPEC.md
+edges:
+  - src: why
+    dst: context-oracle
+    kind: part_of

@@ -1,0 +1,12 @@
+  # Feature: Doctor
+nodes:
+  - ref_id: doctor
+    kind: feature
+    summary: "Validation checks for graph and data integrity"
+    source: src/beadloom/application/doctor.py
+    docs:
+      - docs/domains/application/features/doctor/SPEC.md
+edges:
+  - src: doctor
+    dst: application
+    kind: part_of

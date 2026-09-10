@@ -1,0 +1,13 @@
+  # Component: the adapter that feeds `node-intent` (BDL-061 `.87`). It reads the
+  # TO-BE space through `doc-spaces`' declaration join rather than a second one.
+nodes:
+  - ref_id: intent-reader
+    kind: component
+    summary: "Read the TO-BE space's node declarations into the shape a context bundle consumes"
+    source: src/beadloom/application/intent_reader.py
+    docs:
+      - docs/domains/application/components/intent-reader/DOC.md
+edges:
+  - src: intent-reader
+    dst: application
+    kind: part_of

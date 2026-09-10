@@ -48,6 +48,7 @@ from beadloom.application.waves.models import (
     AXIS_NOT_ATTRIBUTED,
     AXIS_NOT_DERIVED,
     AXIS_RULED_OUT,
+    AXIS_SWEPT_UNDECIDED,
     AXIS_UNDECIDED,
     FINDING_DECLARED_OUTSIDE,
     FINDING_NOT_COMPARED,
@@ -125,6 +126,17 @@ def _agreement(bead_id: str, ref: str, axes: WorkItemAxes) -> ScopeAgreement:
             ),
             bead_id=bead_id,
         )
+    if ref in axes.targets:
+        return ScopeAgreement(
+            ref=ref,
+            verdict=AXIS_SWEPT_UNDECIDED,
+            detail=(
+                f"the derivation RAN OVER `{ref}` and no row of {axes.document} "
+                "rules on it — swept is not decided, so nothing approves this "
+                "declaration and nothing condemns it"
+            ),
+            bead_id=bead_id,
+        )
     return ScopeAgreement(
         ref=ref,
         verdict=AXIS_NOT_DERIVED,
@@ -199,8 +211,11 @@ def derivation_findings(
         f"together and {axes.work_item} approves {len(gap.nodes)} node(s) none of "
         f"them declares ({', '.join(gap.nodes)}) — their pairwise verdict did not "
         f"compare those nodes, so a collision in one of them is invisible to this "
-        f"plan; generate each bead's `refs:` from the `## Axes` section of "
-        f"{axes.document}"
+        f"plan. Those nodes are the work item's UNION and no bead's scope: derive "
+        f"each bead's own `refs:` with `beadloom impact` over the files that bead "
+        f"changes, inside the ceiling {axes.document} records. Declaring that "
+        f"union on every bead makes every pair share a node and collapses every "
+        f"wave to a wave of one"
         for gap in gaps
     )
     return tuple(found)

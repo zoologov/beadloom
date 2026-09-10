@@ -8,7 +8,7 @@ the project layer composes AFTER the core, survives every upgrade, and does not 
 > **Version:** 3.1 (agents/ + commands/ split)
 > **Integration:** steveyegge/beads CLI (1.0.4, embedded Dolt)
 > **Process skills (`.claude/commands/`, slash, run in main loop):** `/task-init`, `/coordinator`, `/checkpoint`, `/templates`
-> **Role subagents (`.claude/agents/`, launched via the `Agent` tool):** `dev`, `test`, `review`, `tech-writer`
+> **Role subagents (`.claude/agents/`, launched via the `Agent` tool):** `explore`, `dev`, `test`, `review`, `tech-writer`
 > **See §0.0 Process Architecture for how these fit together.**
 
 ---
@@ -27,16 +27,16 @@ CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this 
 │    /templates    document templates used by /task-init
 │
 └─ .claude/agents/    — ROLE SUBAGENTS, launched via the `Agent` tool (isolated context)
-     dev · test · review · tech-writer   (canonical role definitions; scoped tools; model: opus)
+     explore · dev · test · review · tech-writer   (canonical role definitions; scoped tools; model: opus)
 ```
 
 **Why coordinator is a command, not an agent:** the coordinator IS the main-loop process that *spawns* subagents via the `Agent` tool. A subagent cannot spawn subagents, so orchestration must live in the main loop. `/coordinator` is a skill injected into that loop.
 
 **Two ways a role runs:**
-- **Multi-agent (default for epics/features):** `/coordinator` launches roles as subagents — `Agent(subagent_type="dev"|"test"|"review"|"tech-writer", run_in_background=True)`. The role's full protocol lives in `.claude/agents/<role>.md` (single source of truth) and is NOT re-injected by the coordinator.
-- **Single-agent (one small bead, no orchestration):** the main loop adopts the role inline by reading and following `.claude/agents/<role>.md` directly. (There are no `/dev` `/test` `/review` `/tech-writer` slash commands — roles are subagents, not skills.)
+- **Multi-agent (default for epics/features):** `/coordinator` launches roles as subagents — `Agent(subagent_type="explore"|"dev"|"test"|"review"|"tech-writer", run_in_background=True)`. The role's full protocol lives in `.claude/agents/<role>.md` (single source of truth) and is NOT re-injected by the coordinator.
+- **Single-agent (one small bead, no orchestration):** the main loop adopts the role inline by reading and following `.claude/agents/<role>.md` directly. (There are no `/explore` `/dev` `/test` `/review` `/tech-writer` slash commands — roles are subagents, not skills.)
 
-**Flow:** `/task-init` (docs + beads) → `/coordinator` (waves: dev → test → review → tech-writer, gated by bead dependencies) → commit per wave. Durable state lives in files (`CONTEXT.md`/`ACTIVE.md`) + bead comments, never chat.
+**Flow:** `/task-init` (Explore derives the axes at step 0.5, then docs + beads) → `/coordinator` (waves: dev → test → review → tech-writer, gated by bead dependencies) → commit per wave. Durable state lives in files (`CONTEXT.md`/`ACTIVE.md`) + bead comments, never chat.
 
 ---
 
@@ -49,7 +49,8 @@ CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this 
 ```bash
 git config beads.role maintainer   # or "contributor" — required by bd 1.0.4 (silences GH#2950 warning)
 beadloom install-hooks             # pre-commit (lint + sync-check + ACTIVE/tracker coherence) +
-                                   # pre-push Beadloom Gate (full `beadloom ci`; blocks on red, --no-verify to skip)
+                                   # pre-push Beadloom Gate (`beadloom ci`; blocks on red, --no-verify to skip).
+                                   # It does not run the test suite, and names that under its verdict.
 ```
 
 ### BEFORE any work
@@ -130,7 +131,7 @@ bd close <bead-id> --suggest-next
 | Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF |
 | Create checkpoint | `/checkpoint` | Format, rules |
 
-**Role subagents (via the `Agent` tool — see §0.0):** `dev` (TDD implementation), `test` (tests, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
+**Role subagents (via the `Agent` tool — see §0.0):** `explore` (the axes, before a work item has a type), `dev` (TDD implementation), `test` (tests, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
 
 **Rule:** Invoke a slash skill when you need detailed instructions; launch a role subagent (or follow its agent file inline) to do role work.
 
@@ -224,7 +225,8 @@ beadloom init                    # initialize beadloom in a project
 beadloom setup-rules             # create IDE rules files referencing AGENTS.md
 beadloom setup-mcp               # configure MCP server for IDE
 beadloom setup-agentic-flow      # compose+write role adapters from .beadloom/flow.yml (ddd|fsd × stack, claude/cursor)
-beadloom install-hooks           # pre-commit (lint + sync-check + coherence) + pre-push Beadloom Gate (full `beadloom ci`)
+beadloom install-hooks           # pre-commit (lint + sync-check + coherence) + pre-push Beadloom Gate (`beadloom ci`;
+                                 # graph and documents, not the suite — the verdict names what it did not run)
 
 # After changing code
 # 1. beadloom reindex            — re-index changed files
@@ -271,6 +273,7 @@ beadloom install-hooks           # pre-commit (lint + sync-check + coherence) + 
 
 | Role | How it runs | When to use |
 |------|-------------|-------------|
+| **Explorer** | `agents/explore.md` (`subagent_type: explore`) | Deriving how far a change ranges, before its type is chosen (`/task-init` step 0.5) |
 | **Developer** | `agents/dev.md` (`subagent_type: dev`) | Implementing beads (TDD) |
 | **Reviewer** | `agents/review.md` (`subagent_type: review`) | Quality verification (read-only) |
 | **Tester** | `agents/test.md` (`subagent_type: test`) | Writing tests |
@@ -285,9 +288,9 @@ Coordinator MUST be activated before multi-bead work:
 1. Invoke `/coordinator` skill (main-loop only — see §0.0).
 2. Complete `/task-init` flow BEFORE creating any beads or writing code.
 3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly.
-4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / the landing lock.
+4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: explore|dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / the landing lock.
 
-Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (single source of truth; no slash-command wrappers).
+Roles are defined canonically in `.claude/agents/{explore,dev,test,review,tech-writer}.md` (single source of truth; no slash-command wrappers).
 
 ---
 
@@ -379,7 +382,7 @@ owner still self-merges).
 ---
 
 > **Need detailed instructions?** Slash skills: `/task-init` | `/coordinator` | `/templates` | `/checkpoint`.
-> Role subagents (`Agent` tool / follow the agent file inline): `dev` | `test` | `review` | `tech-writer` — see §0.0.
+> Role subagents (`Agent` tool / follow the agent file inline): `explore` | `dev` | `test` | `review` | `tech-writer` — see §0.0.
 
 ---
 
@@ -455,6 +458,8 @@ landing lock as `bd merge-slot acquire --holder <bead-id>` before committing and
 *you do not hold it*. The lock orders the COMMITS; what keeps two agents out of
 one file is the disjoint scopes `beadloom waves` derived, and every wave this
 project ran before 2026-09-04 relied on the second while believing it held the
-first (BDL-UX #194, #237). Verify in a clean room (`git archive HEAD` + only your
-files) and say so in those words: "green in a clean room over N files" is a
-different claim from "green on the tree" (BDL-UX #181).
+first (BDL-UX #194, #237). Verify in a clean room built by
+`beadloom clean-room <bead-id> --carry <path>...`, which derives the room's path
+from the bead and refuses a directory it did not create, and say so in those
+words: "green in a clean room over N files" is a different claim from "green on
+the tree" (BDL-UX #181).

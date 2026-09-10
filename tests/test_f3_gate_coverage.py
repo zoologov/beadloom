@@ -572,6 +572,9 @@ class TestHonestGate:
             "sync-check",
             "docs-audit",
             "docs-quality",
+            # BDL-068 S6: the issue log's numbers, beside the other
+            # document checks and before the composed-config ones.
+            "issue-log",
             "doc-spaces",
             # BDL-068 S1.6: the branch judged against its work item's axes.
             "scope-check",

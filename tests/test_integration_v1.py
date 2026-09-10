@@ -10,6 +10,7 @@ import yaml
 from click.testing import CliRunner
 
 from beadloom import __version__
+from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
 
 # ---------------------------------------------------------------------------
@@ -17,6 +18,7 @@ from beadloom.services.cli import main
 # ---------------------------------------------------------------------------
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_GRAPH_DIR = _PROJECT_ROOT / ".beadloom" / "_graph"
 
 
 class TestVersion:
@@ -33,12 +35,34 @@ class TestVersion:
 
 
 class TestGraphCompleteness:
-    """Verify the architecture graph has the DDD domain structure."""
+    """Verify the architecture graph has the DDD domain structure.
+
+    Read from the graph DIRECTORY rather than from one file since BDL-UX #265
+    split this repository's graph into one file per node. `each_graph_file` is
+    the one policy every reader of that directory holds, so this population
+    cannot disagree with the loader's about which files count.
+    """
+
+    @staticmethod
+    def _nodes() -> set[str]:
+        return {
+            str(node["ref_id"])
+            for _path, data in each_graph_file(_GRAPH_DIR)
+            for node in (data.get("nodes") or [])
+            if isinstance(node, dict) and node.get("ref_id")
+        }
+
+    @staticmethod
+    def _edges() -> list[dict[str, object]]:
+        return [
+            edge
+            for _path, data in each_graph_file(_GRAPH_DIR)
+            for edge in (data.get("edges") or [])
+            if isinstance(edge, dict)
+        ]
 
     def test_graph_has_domain_nodes(self) -> None:
-        graph_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "services.yml"
-        data = yaml.safe_load(graph_path.read_text(encoding="utf-8"))
-        ref_ids = {n["ref_id"] for n in data["nodes"]}
+        ref_ids = self._nodes()
         # All 5 DDD domains must be present
         for domain in ("context-oracle", "doc-sync", "graph", "onboarding", "infrastructure"):
             assert domain in ref_ids, f"Missing domain: {domain}"
@@ -46,9 +70,7 @@ class TestGraphCompleteness:
         assert "rule-engine" in ref_ids
 
     def test_graph_domain_edges(self) -> None:
-        graph_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "services.yml"
-        data = yaml.safe_load(graph_path.read_text(encoding="utf-8"))
-        edges = data["edges"]
+        edges = self._edges()
         # graph domain part_of beadloom
         assert any(
             e["src"] == "graph" and e["dst"] == "beadloom" and e["kind"] == "part_of"

@@ -1,0 +1,13 @@
+  # Service: TUI
+nodes:
+  - ref_id: tui
+    kind: service
+    summary: "Interactive 3-screen architecture workstation with dashboard, explorer, doc status"
+    source: src/beadloom/tui/
+    tags: [layer-service]
+    docs:
+      - docs/services/tui.md
+edges:
+  - src: tui
+    dst: beadloom
+    kind: part_of

@@ -25,6 +25,10 @@ from beadloom.doc_sync.audit_self_surface import (
     foreign_project_reason,
 )
 from beadloom.doc_sync.scanner import DocScanner, Mention, ScanSurface
+from beadloom.doc_sync.version_subjects import (
+    VersionSubjects,
+    derive_version_subjects,
+)
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
 
@@ -164,6 +168,23 @@ class AuditResult:
         project.  These facts are outside the denominator entirely; they are
         neither verified nor unverified, and naming them is what keeps the
         denominator from shrinking in silence.
+    attributed:
+        Version mentions that name ANOTHER product — ``bd 1.0.4``,
+        ``CPython 3.13.7`` — and were therefore never compared against this
+        project's version.  They are reported rather than dropped: a rule about
+        which sentences the audit checks is only honest while a reader can see
+        it applied (BDL-UX #253).
+    unjudged:
+        Version mentions naming a subject the environment could not confirm
+        HERE -- ``git 2.49.0`` in a directory with no ``.git``.  They are
+        neither this project's claim nor a confirmed foreign release, so the
+        audit declines to judge them and says so.  Keeping them out of
+        ``attributed`` is the point: the two populations are exempt for
+        different reasons, and merging them would hide a directory that cannot
+        see its own environment behind a rule that works (BDL-UX #266).
+    subjects:
+        The vocabulary that decided ``attributed`` and ``unjudged``, with each
+        name's origin.
     """
 
     facts: dict[str, Fact]
@@ -172,6 +193,9 @@ class AuditResult:
     coverage: dict[str, FactCoverage] = field(default_factory=dict)
     surface: ScanSurface | None = None
     not_applicable: dict[str, str] = field(default_factory=dict)
+    attributed: list[Mention] = field(default_factory=list)
+    unjudged: list[Mention] = field(default_factory=list)
+    subjects: VersionSubjects = field(default_factory=VersionSubjects)
 
     @property
     def verified_facts(self) -> list[str]:
@@ -333,6 +357,7 @@ def compare_facts(
     tolerances: dict[str, float] | None = None,
     ignore: list[IgnoreRule] | None = None,
     not_applicable: dict[str, str] | None = None,
+    subjects: VersionSubjects | None = None,
 ) -> AuditResult:
     """Compare mentions against ground-truth facts.
 
@@ -359,6 +384,12 @@ def compare_facts(
         Fact name → the reason the registry declared no value for it here.
         Carried through to the result so the report can name the population it
         did not check, instead of leaving the denominator quietly smaller.
+    subjects:
+        The subject vocabulary the mentions were scanned with, recorded on the
+        result so the report can name it.  A mention carrying a ``subject`` is
+        never compared against this project: it is routed to ``unjudged`` when
+        that subject is one this vocabulary could not confirm here, and to
+        ``attributed`` otherwise.
 
     Returns
     -------
@@ -373,10 +404,23 @@ def compare_facts(
     rules = ignore or []
     findings: list[AuditFinding] = []
     unmatched: list[Mention] = []
+    attributed: list[Mention] = []
+    unjudged: list[Mention] = []
+    vocabulary = subjects or VersionSubjects()
 
     for mention in mentions:
         if any(rule.matches(mention) for rule in rules):
             continue  # suppressed false positive — not a finding, not unmatched
+
+        if mention.subject is not None:
+            # Never this project's claim either way; the two populations differ
+            # in whether the subject was confirmed here (BDL-UX #266).
+            folded = mention.subject.casefold().replace("_", "-")
+            if folded in vocabulary.unresolved:
+                unjudged.append(mention)
+            else:
+                attributed.append(mention)
+            continue
 
         fact = facts.get(mention.fact_name)
         if fact is None:
@@ -407,6 +451,9 @@ def compare_facts(
         unmatched=unmatched,
         coverage=assess_coverage(facts, findings),
         not_applicable=dict(not_applicable or {}),
+        attributed=attributed,
+        unjudged=unjudged,
+        subjects=vocabulary,
     )
 
 
@@ -567,7 +614,9 @@ def run_audit(
     Loads tolerance overrides and targeted false-positive suppressions
     (``docs_audit.tolerances`` / ``docs_audit.ignore``) from
     ``.beadloom/config.yml`` if present and passes them to
-    :func:`compare_facts`.
+    :func:`compare_facts`, and derives the version-subject vocabulary
+    (:func:`~beadloom.doc_sync.version_subjects.derive_version_subjects`) so a
+    release another product was measured on is reported as that product's.
 
     Parameters
     ----------
@@ -586,7 +635,8 @@ def run_audit(
     registry = FactRegistry()
     fact_set = registry.collect_set(project_root, db)
 
-    scanner = DocScanner()
+    subjects = derive_version_subjects(project_root)
+    scanner = DocScanner(subjects)
     surface = scanner.resolve_surface(project_root, scan_paths)
     mentions = scanner.scan(list(surface.scanned))
 
@@ -598,6 +648,7 @@ def run_audit(
         tolerances=tolerances,
         ignore=ignore,
         not_applicable=fact_set.not_applicable,
+        subjects=subjects,
     )
     return replace(result, surface=surface)
 

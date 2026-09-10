@@ -1,0 +1,23 @@
+nodes:
+  - ref_id: ci-gate
+    kind: feature
+    summary: "Unified CI gate (`beadloom ci`) — one convergence point composing reindex/lint/sync-check/config-check/doctor/federate into a single verdict"
+    source: src/beadloom/application/gate.py
+    docs:
+      - docs/domains/application/features/ci-gate/SPEC.md
+edges:
+  - src: ci-gate
+    dst: issue-numbers
+    kind: depends_on
+  - src: ci-gate
+    dst: declared-scope
+    kind: depends_on
+  - src: ci-gate
+    dst: gate-coverage
+    kind: depends_on
+  - src: ci-gate
+    dst: verdict-room
+    kind: depends_on
+  - src: ci-gate
+    dst: application
+    kind: part_of

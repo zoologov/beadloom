@@ -32,9 +32,13 @@ declared `refs:` to nodes and files and serialises a pair for one named reason:
 `override_serial`. This half is a decision, not advice. An advisory shape is prose that a model
 may act on or ignore, which is the failure the enforced-flow work exists to remove.
 
-**The five shared media are measured as a precondition, before the wave runs.** One working
-tree, one pre-commit hook, one landing order, one doc-freshness baseline and one tracker id
-space are shared no matter which shape is chosen. Each carries a verdict that can come back
+**The seven shared media are measured as a precondition, before the wave runs.** One graph,
+one working tree, one pre-commit hook, one landing order, one focus document, one doc-freshness
+baseline and one tracker id space are shared no matter which shape is chosen. The graph is the
+plan's own input, so its verdict answers one question and states another: it fails when the
+node population the graph files declare is not the one the index resolved these scopes from,
+and it says in its pass that a bead which ADDS a node writes that file and is invisible here,
+because the node it adds is in no graph the plan could read (BDL-UX #261). Each carries a verdict that can come back
 `failed`, and a medium nobody observed comes back `unmeasured`, which is a finding rather than
 a silent pass. What the run establishes is that the wave may start, not that it went well.
 
@@ -47,12 +51,33 @@ instead of to a coordinator's habit. Every wave also gets one clean-room path pe
 shared scratchpad, and one of them measured over its neighbour's untracked files (BDL-UX #235).
 
 ```bash
-beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+beadloom waves BEAD [BEAD ...] [--parent WORK-ITEM] [--json] [--project DIR]
 ```
 
 Exit `0` = a shape was decided and rests on nothing unstated. Exit `1` = a shape was decided and
 carries findings, which are visible and never blocking. Exit `2` = no shape could be decided.
 Read the exit code or `--json`, never the number of lines printed (BDL-UX #148).
+
+**The bead list was the last thing here a human typed, and it is now derivable.** Everything
+above decides the hard half from the graph; the SET of beads it decides over came from the
+command line. This project's own coordinator lost three beads of a slice that way — they sat in
+`bd ready --limit 0` through fifteen launches, every plan was internally correct about the
+smaller world it was asked about, and none of them could say the world was smaller (BDL-UX
+#274). `--parent <work-item-id>` derives the list instead: every bead the tracker lists as
+ready under that work item. And every plan, with or without `--parent`, prints how many ready
+beads under the same work item it was **not** asked about:
+
+```
+Ready under this plan's work item and not in it:
+  1 ready bead(s) this plan was not asked about: beadloom-iur5 (4 of 31 bead(s) under
+  beadloom-0mdo.14 are ready)
+  a subset is legitimate; this line says the narrowing happened, not that it was wrong
+```
+
+That line is a notice and never a finding: measured over this epic's own S6, 15 of 15 launches
+were subsets, and a line that goes red on every real run is a line its reader discounts. What
+can fail is the answer the count was taken from — a `bd ready` the tracker capped makes the
+count a claim about part of the tracker, and that is reported as a finding.
 
 A real run on this epic's own S6 beads, all three of which turned out to be dependent:
 
@@ -168,6 +193,7 @@ each with a plan-time precondition that is actually checked:
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181 |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` | BDL-UX #118 |
 | `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts | BDL-UX #194, #237 |
+| `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder | BDL-UX #257 |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index | BDL-UX #182, #133 |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records | BDL-UX #171 |
 
@@ -181,6 +207,46 @@ hold: a plan is one slice of one epic, so a wave's width is not a claim that its
 in the tree, and the `working-tree` check exists precisely to report paths that no bead in the
 plan owns — a question a wave of one can and does fail. `not_applicable` is gone as a verdict a
 plan's shape can produce.
+
+### The document every bead writes is shared, and the code graph cannot see it
+
+`focus-document` (BDL-068 S6) answers BDL-UX #257. A wave plan resolves a bead to the nodes and
+the SOURCE FILES its code occupies, so two beads can hold disjoint code scopes and one shared
+document, and the plan reports `0 serialisations` truthfully about the wrong population.
+Measured twice on this project. In S6 wave 2, two beads with disjoint declared scopes both
+edited `docs/domains/application/README.md`; one committed the file whole and the other's hunk
+landed inside that commit — correct in the tree, wrong in the history. In S6 wave 4, `waves`
+derived `0 serialisations` for four beads that all write into the same `ACTIVE.md`.
+
+The second is structural rather than unlucky, which is what makes it a medium rather than a
+collision to be planned away. `/task-init` routes every work-item type through a document both
+of its flows write, so every concurrent wave this project has run shared one.
+
+**The population is derived, not written down.** `Routing.shared_kinds` is the intersection of
+the document kinds every route of the composed `/task-init` writes — `ACTIVE` on this project —
+and the folder is the work item's own, taken from the same branch read the commit gate makes. A
+project that adds a work-item type, or moves a document between the two flows, changes what
+this medium looks at by the same act. Widening a bead's `refs:` to reach the document is the
+defect BDL-UX #232 was filed against and is not how this is answered.
+
+**Four confirmations in one slice, and the fourth is the one to read.** An agent acquired the
+merge slot with `--holder`, waited, and 43 lines of its `ACTIVE.md` entry still landed inside a
+neighbour's commit. The discipline was followed exactly: the lock orders the COMMITS, and the
+edit had already happened. A third instance measured that the shared population is wider than
+the documents — three beads with disjoint code scopes shared four artifacts, two of which are
+not documents at all, and one of which is `.beadloom/_graph/services.yml`, the graph this plan
+derives its scopes FROM. A derivation of ownership out of the graph cannot reach the graph. On
+this repository that one is now gone rather than reported: BDL-UX #265 split the file into one
+per node, so two beads that add nodes write two files. A single-file graph stays valid, which
+is why the medium stays and reports the number instead of taking a verdict.
+`focus-document` names one member of that population and does not claim to name the rest.
+
+**What the check asks is not whether the beads share it — they do — but whether the document
+gives each of them a place of its own.** A bead the table carries no row for has only the prose
+around it, and that is where one bead's hunk lands inside another bead's commit. The damage is
+attribution rather than lost content, which is what makes it easy to leave: a defect whose only
+symptom is a wrong author is one nobody notices until they read the log to find out why
+something changed.
 
 ### The landing lock orders commits, and orders nothing else
 
@@ -231,6 +297,50 @@ the plan whose ids most need checking. Dogfooding found a live one on this repos
   the declared rooms it did not enter, and `beadloom ci` prints the same census beside its own
   verdict — so the address is derived from the project's CI declaration rather than typed by
   the agent. Naming the room does not make the verdict stronger. It makes it answerable.
+
+### The room is built by the command that derives it
+
+`beadloom waves` prints the room each bead owes; `beadloom clean-room` creates it.
+
+```bash
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--extras LIST] [--no-environment]
+                    [--rebuild] [--project DIR] [--json]
+```
+
+Naming the room was not enough, twice. Two agents of one wave reached one directory because
+the convention named the room after the concept (BDL-UX #235), and a room entered a second
+time manufactured a failure of its own: files copied into an already-indexed room postdate its
+doc-freshness baseline, measured as `sync-check` exit 2 with `stale: 2` against a change that
+is clean at `HEAD` (BDL-UX #243). A convention that is only correct when performed exactly once,
+and does not say so, will be performed twice.
+
+So the command derives the path from the bead and CREATES the directory rather than entering
+one. An existing directory is refused and left byte-for-byte as it was; `--rebuild` replaces a
+room rather than refreshing it, and deletes only a directory whose `.beadloom-room.json` names
+that same bead. `--carry` copies the files you name and nothing else — there is no "everything
+that differs from `HEAD`" mode, because on a shared tree that set holds your neighbour's work.
+
+You name that list once. `--rebuild` reads the request out of the record it is about to
+delete — the carried files, and the extras you pinned with `--extras` — because retyping it
+was measured at 16 flags twice on one bead, and what an agent reaches for under that friction
+is copying files into the live room, which is #243 again. What is reused is the LIST: the
+files are copied from the working tree at build time, so a rebuild is still a room nothing
+inside postdates, and an option given beside `--rebuild` replaces its remembered counterpart
+rather than adding to it. The room also builds its own interpreter, so a verdict here is not
+decided by what the machine happened to hold; `--no-environment` declines that and is the one
+part of the request a rebuild does NOT remember, because a remembered decline would quietly
+hand back the weaker room.
+
+Exit `0` = built, and the tracker says the bead is `in_progress`. Exit `1` = built, and its
+ownership is unconfirmed. Exit `2` = no room was built, under a named refusal
+(`already_exists`, `not_a_room`, `inside_the_project`, `no_commit`, `file_missing`,
+`not_a_file`, `file_outside_the_project`, `unknown_bead`).
+
+The command hands back the invocation to run in the room, and the invocation is not a
+formality: with an editable install, running the suite from inside the room under the project's
+environment imports the **tree's** source, and the first run that did it was caught from a
+warning path rather than from a failure. `PYTHONPATH` pointing at the room's own `src` is the
+fix, and the `import beadloom` line printing a path under the room is the check.
 
 ## Overriding the shape
 
@@ -479,4 +589,5 @@ and a per-pair attestation has no CLI today.
   carries, how a verdict is recognised, and the honest limits in full.
 - [Agentic Dev Flow](agentic-flow.md) — the packaged roles, the guards and the Gate the wave
   runs inside.
-- [CLI Reference](../services/cli.md) — `beadloom waves` and `beadloom review-brief`.
+- [CLI Reference](../services/cli.md) — `beadloom waves`, `beadloom clean-room` and
+  `beadloom review-brief`.

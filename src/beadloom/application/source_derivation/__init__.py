@@ -63,6 +63,7 @@ from beadloom.application.source_derivation.calls import (
     dotted_name,
 )
 from beadloom.application.source_derivation.source_tree import (
+    UNPARSEABLE,
     FoundFunction,
     FunctionNode,
     ModuleSweep,
@@ -93,6 +94,7 @@ __all__ = [
     "SERIALISES_YAML",
     "THE_EXITS_THAT_CARRY_NO_ANNOTATION",
     "THE_NO_RETURN_ANNOTATIONS",
+    "UNPARSEABLE",
     "CallSite",
     "FoundFunction",
     "FunctionNode",

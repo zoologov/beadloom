@@ -20,11 +20,16 @@ import click
 from beadloom.services.commands._root import _warn_missing_parsers, main
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from beadloom.application.gate import GateStep
     from beadloom.onboarding.agentic_flow_setup import ScaffoldResult
-    from beadloom.onboarding.config_sync import ConfigDrift, FixReport
+    from beadloom.onboarding.config_sync import (
+        ConfigDrift,
+        DeclinedRewrite,
+        FixReport,
+    )
+    from beadloom.onboarding.role_map import RoleMapReport
 
 # beadloom:service=mcp-server
 _MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
@@ -266,7 +271,11 @@ def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
     "--force",
     is_flag=True,
     default=False,
-    help="Overwrite hand-edited scaffolded flow files (default: preserve them).",
+    help=(
+        "Overwrite hand-edited scaffolded flow files (default: preserve them). "
+        "Applies to every artifact this command writes: the role adapters, the "
+        "slash commands and CLAUDE.md."
+    ),
 )
 @click.option(
     "--tool",
@@ -310,12 +319,19 @@ def setup_agentic_flow(
     orchestrator pointer). Selection comes from ``.beadloom/flow.yml`` (or the
     ``--tool``/``--architecture``/``--stack`` flags, which override it; defaults
     are ``claude`` / ``ddd`` / auto-detected stack). A drift-guard test keeps
-    every generated adapter byte-identical to its composition. User prose
-    outside CLAUDE.md auto-regions is never touched; --force overwrites
-    hand-edited Claude flow files.
+    every generated adapter byte-identical to its composition.
+
+    ONE POLICY FOR EVERY ARTIFACT IT WRITES. A body the flow manifest cannot
+    prove Beadloom wrote — a role adapter, a slash command or ``CLAUDE.md`` —
+    is left exactly as it is and reported with the project-layer file the edit
+    belongs in. Everything Beadloom did write is recomposed, so an upgrade
+    lands. ``--force`` is the one door that adopts the composed body over a hand
+    edit. Until BDL-068 `.67` the role adapters were the exception and were
+    recomposed over silently (BDL-UX #191).
     """
     from beadloom.application.guards.checks import GUARD_NAMES
     from beadloom.onboarding.agentic_flow_setup import scaffold
+    from beadloom.onboarding.config_sync import declined_adapter_rewrites
     from beadloom.onboarding.flow_config import FlowConfigError, resolve_flow_config
     from beadloom.onboarding.guard_hooks import scaffold_guard_hooks
     from beadloom.onboarding.ignore_block import ensure_ignore_block
@@ -339,12 +355,23 @@ def setup_agentic_flow(
         f"Composing roles: architecture={config.architecture}, "
         f"stack={','.join(config.stack)}, tools={','.join(config.tools)}"
     )
-    adapters = generate_adapters(config, project_root)
+    # ONE POLICY FOR ALL THREE ARTIFACT KINDS (BDL-UX #191). A body Beadloom
+    # cannot prove it wrote is left alone and reported, exactly as the commands
+    # and CLAUDE.md already were; `--force` is the one explicit door, which is
+    # what its own help has promised since it shipped. The declined set is the
+    # one `config-check --fix` reads, so the sentence the check prints about a
+    # file and the decision this command takes about it cannot disagree.
+    declined = () if force else declined_adapter_rewrites(project_root)
+    adapters = generate_adapters(
+        config, project_root, preserve=frozenset(entry.file for entry in declined)
+    )
     for tool, files in adapters.agents.items():
         for rel in files:
             click.echo(f"Wrote {rel} ({tool})")
     for rel in adapters.extra:
         click.echo(f"Wrote {rel}")
+    for rel in adapters.preserved:
+        click.echo(f"Skipped {rel} (hand-edited)")
 
     result = scaffold(
         project_root, force=force, include_agents=False, config=config
@@ -360,8 +387,11 @@ def setup_agentic_flow(
     for name in result.commands_skipped:
         click.echo(f"Skipped .claude/commands/{name}.md (hand-edited)")
     if result.claude_md is not None:
-        click.echo(f"Wrote {result.claude_md.relative_to(project_root)}")
-    _echo_scaffold_findings(result)
+        relpath = result.claude_md.relative_to(project_root)
+        verb = "Skipped" if result.claude_md_skipped else "Wrote"
+        suffix = " (hand-edited)" if result.claude_md_skipped else ""
+        click.echo(f"{verb} {relpath}{suffix}")
+    _echo_scaffold_findings(result, declined)
 
     # The guard hook adapter: the harness binding for the tool-agnostic
     # `beadloom guard` primitive. The names come from the registry, so a guard
@@ -552,6 +582,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"    -> {scope.remediation}", err=True)
 
     _echo_duty_limits(project_root)
+    _echo_role_map_limits(project_root)
 
     if not blocking:
         # A warning is a real finding and is printed above; it does not block,
@@ -619,6 +650,75 @@ def _echo_duty_limits(project_root: Path) -> None:
         click.echo(f"      {entry.source} — {entry.why}", err=True)
 
 
+def _echo_role_map_limits(project_root: Path) -> None:
+    """Name the lines the role-map check could NOT judge, on every run.
+
+    The findings themselves ride with the other drift and block through
+    ``check_config_drift``. This prints the other half, for the reason
+    :func:`_echo_duty_limits` prints its own: a check that speaks only when it
+    finds something hands the reader a clean list, and a clean list is trusted
+    and stopped at.
+
+    TWO populations are named here, and until BDL-068 `.84` only the first
+    reached the output. The lines that name two or more roles in a shape no
+    construct reads: some of them SHOULD enumerate every role and some should
+    not — a wave order names four roles and `Explore` is not a wave — and this
+    derivation cannot tell them apart, so it names them instead of deciding. And
+    the TOOLS: one map is read per declared tool, and a declared tool this
+    release names no map artifact for is stated rather than answered with
+    another tool's map. The count prints at zero too, because "every declared
+    tool's map was read" is the fact a reader needs and an empty list is not it.
+    """
+    from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH, FlowConfigError
+    from beadloom.onboarding.role_map import role_map_report
+
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return
+    try:
+        report = role_map_report(project_root)
+    except FlowConfigError:
+        # Reported as its own drift by `check_config_drift`; not doubled here.
+        return
+    click.echo(
+        f"  Role map: {len(report.roles)} composed role(s), checked against the "
+        f"map of {len(report.artifacts)} of {len(report.tools)} declared "
+        f"tool(s) — {len(report.references)} role designation(s), "
+        f"{len(report.rosters)} of which enumerate two or more.",
+        err=True,
+    )
+    click.echo(f"    Maps read ({len(report.artifacts)}):", err=True)
+    for artifact in report.artifacts:
+        read = [ref for ref in report.references if ref.tool == artifact.tool]
+        click.echo(
+            f"      {artifact.tool} -> {artifact.name}: {len(read)} designation(s)",
+            err=True,
+        )
+    _echo_unreached_tools(report)
+    click.echo(f"    Not judged ({len(report.not_judged)}):", err=True)
+    for entry in report.not_judged:
+        click.echo(f"      {entry.source} (in {entry.artifact}) — {entry.why}", err=True)
+
+
+def _echo_unreached_tools(report: RoleMapReport) -> None:
+    """The tool axis at zero as well as above it, because zero is the answer.
+
+    An empty list under a heading is read as "nothing to say here"; the sentence
+    says which of the two things that means. The count carries its denominator
+    for the same reason every other population in this flow does.
+    """
+    total = len(report.tools)
+    if not report.unreached:
+        click.echo(
+            f"    Unreached: 0 of {total} declared tool(s) — a map artifact was "
+            "read for every tool this project declares.",
+            err=True,
+        )
+        return
+    click.echo(f"    Unreached ({len(report.unreached)} of {total} declared tool(s)):", err=True)
+    for unreached in report.unreached:
+        click.echo(f"      {unreached.tool} — {unreached.why}", err=True)
+
+
 def _role_file_state(role_files: tuple[str, ...]) -> str:
     """The other half of the duty answer: what the composition reached.
 
@@ -641,7 +741,10 @@ def _role_file_state(role_files: tuple[str, ...]) -> str:
     )
 
 
-def _echo_scaffold_findings(result: ScaffoldResult) -> None:
+def _echo_scaffold_findings(
+    result: ScaffoldResult,
+    declined: Sequence[DeclinedRewrite] = (),
+) -> None:
     """Print what the scaffold FOUND, not just what it wrote (BDL-UX #188).
 
     ``orphaned_flow_files()`` and ``ScaffoldResult.migration_notes`` were
@@ -652,14 +755,24 @@ def _echo_scaffold_findings(result: ScaffoldResult) -> None:
     user actually saw was ``(hand-edited; use --force)`` — advice to run the
     destructive flag, never naming the project layer where the edit could safely
     go. NO CALLER, NO CAPABILITY: this is the caller.
+
+    ``declined`` carries the ROLE adapters, which the scaffold does not write
+    and so cannot report on. They are printed in the same block as the other two
+    kinds, in the words ``config-check`` uses for the same file, so an adopter
+    reads one list and one sentence rather than discovering per artifact kind
+    which of their edits survived (BDL-UX #191).
     """
-    if result.migration_notes:
+    notes = [
+        f"{entry.file}: {entry.reason} — {entry.remediation}" for entry in declined
+    ]
+    notes.extend(result.migration_notes)
+    if notes:
         click.echo(
-            f"\nLeft alone ({len(result.migration_notes)}) — your edits are the "
+            f"\nLeft alone ({len(notes)}) — your edits are the "
             "only copy of an intent, so Beadloom did not recompose over them:",
             err=True,
         )
-        for note in result.migration_notes:
+        for note in notes:
             click.echo(f"  = {note}", err=True)
     if result.orphans:
         click.echo(

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING
 
+from beadloom.application.waves.population import Population
 from beadloom.graph.rules import exit_condition_deadline
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ UNRESOLVED_UNANCHORED = "declaration_not_at_a_line_start"
 UNRESOLVED_DROPPED_NODE = "declaration_dropped_a_node"
 
 #: How a bead's declared ref stands against the derivation its work item
-#: recorded. Four answers rather than two, because "the declaration is wrong"
+#: recorded. Five answers rather than two, because "the declaration is wrong"
 #: and "the derivation did not reach here" are not the same fact and only one of
 #: them is anybody's fault. BDL-UX #225 is the measured case: `beadloom impact`
 #: attributed a node to none of the 148 caller sites it found under ``tests/``,
@@ -78,6 +79,16 @@ AXIS_AGREES = "agrees"
 AXIS_RULED_OUT = "ruled_out_of_scope"
 AXIS_UNDECIDED = "no_scope_decision"
 AXIS_NOT_DERIVED = "not_derived"
+
+#: The derivation RAN OVER this node and no row of the table rules on it. The
+#: fifth answer, added with BDL-UX #250: before it, such a node was approved for
+#: having been swept, and calling it :data:`AXIS_NOT_DERIVED` instead would state
+#: something false — the derivation reached it, which is exactly why its absence
+#: from the table is worth saying. Measured on this repository: BDL-068's
+#: ``Derived by`` fields name files owned by ``cli``, ``flow-composer``,
+#: ``guard-hooks`` and ``typed-surface``, and no row of its table names any of
+#: the four.
+AXIS_SWEPT_UNDECIDED = "swept_no_scope_decision"
 
 #: An axis row the derivation found and attributed to NO node. No declaration
 #: can name it and no comparison can reach it, so it is stated as compared
@@ -132,9 +143,10 @@ class WorkItemAxes:
     unresolved: str = ""
     #: Nodes a row keeps in scope.
     kept: frozenset[str] = frozenset()
-    #: Nodes the ``Derived by`` field ran over. Inside the approval by
-    #: construction, exactly as :attr:`DeclaredScope.inside` has it — a work
-    #: item changes the surfaces it derived its answer from.
+    #: Nodes the ``Derived by`` field ran over. PROVENANCE, and provenance is
+    #: not consent: a node is inside the approval because a row decided it, and
+    #: this field records only that the derivation was pointed at it. See
+    #: :attr:`approved`.
     targets: frozenset[str] = frozenset()
     #: Nodes a row names and rules OUT of scope. The sharpest half: somebody
     #: wrote "not this one".
@@ -154,8 +166,24 @@ class WorkItemAxes:
 
     @property
     def approved(self) -> frozenset[str]:
-        """Every node inside the approval by name — kept rows and targets."""
-        return self.kept | self.targets
+        """Every node a row of the table keeps in scope, and nothing else.
+
+        **Approval follows the scope decision (BDL-UX #250).** This was
+        ``kept | targets``, which put every node owning a file the ``Derived
+        by`` field names inside the approval whatever its own row said. The rule
+        held while a slice CHANGED what it derived from — true of BDL-068's S1
+        through S4 — and became false at S5, whose subject is where this project
+        calls ``bd`` and whose derivation targets therefore include files it only
+        reads. Measured on this repository: ``doc-spaces`` and ``intent-reader``
+        sat in the approved set with rows that say ``no``.
+
+        A swept target no row names is now :data:`AXIS_NOT_DERIVED` — the
+        derivation reached it and nobody ruled on it — and a swept target a row
+        rules out is :data:`AXIS_RULED_OUT`. Both are answers; neither is
+        approval. The approval list is what ``scope-check`` compares every commit
+        against, so a name nobody chose is a name every commit may touch.
+        """
+        return self.kept
 
     def spell_approved(self) -> str:
         """The approved nodes as a finding spells them out."""
@@ -263,13 +291,19 @@ def remedy_for(unresolved: str | None, *, axes: WorkItemAxes | None = None) -> s
     read here rather than guessed at the call site.
     """
     if unresolved == UNRESOLVED_NO_DECLARATION and axes is not None and axes.readable:
-        # The remedy is not "write a line" but "generate it from the document",
-        # which is CONTEXT Q1's direction: the axes are derived, the document
-        # records them, and the bead's `refs:` comes from the document.
+        # The remedy is not "write a line" but "derive it", which is CONTEXT Q1's
+        # direction: the axes are derived, the document records them, and the
+        # bead's `refs:` comes from the derivation the document holds the ceiling
+        # of. The work item's own set is named as the CEILING and never as the
+        # answer — BDL-UX #245: a work item's axes are the UNION of its slices'
+        # and a bead's scope is a SUBSET chosen for that bead, and prescribing
+        # the union per bead collapses every wave to a wave of one.
         return (
-            f"generate `refs:` from the `## Axes` section of {axes.document} — "
-            f"{axes.work_item} approves {len(axes.approved)} node(s) "
-            f"({axes.spell_approved()})"
+            f"derive this bead's own `refs:` with `beadloom impact` over the "
+            f"files it changes, inside the ceiling the `## Axes` section of "
+            f"{axes.document} records — {axes.work_item} approves "
+            f"{len(axes.approved)} node(s) ({axes.spell_approved()}), which is "
+            f"that ceiling and not any one bead's scope"
         )
     return UNRESOLVED_REMEDIES.get(unresolved or "", UNKNOWN_REMEDY)
 
@@ -431,13 +465,79 @@ GATE_ABSENT = "absent"
 
 
 @dataclass(frozen=True)
+class FocusDocument:
+    """A document every route of this flow writes, and the rows it carries.
+
+    The population is DERIVED, never authored: which document kind every
+    work-item type writes is
+    :attr:`~beadloom.application.work_item_routing.Routing.shared_kinds`, read
+    off the composed ``/task-init`` command, and where such documents live is
+    :func:`~beadloom.application.doc_shape.planning_document_globs`. Widening a
+    bead's ``refs:`` to reach this file is the defect BDL-UX #232 was filed
+    against, so the file is not attributed to any bead at all — it is stated as
+    shared by all of them.
+
+    ``row_cells`` is the FIRST cell of every markdown table row in the file, read
+    with :func:`beadloom.doc_sync.tables.cells_of`. Only the first cell, because
+    that is the column an ACTIVE table names its bead in, and only the cells
+    rather than the file, so the check stays a decision over data.
+    """
+
+    path: str
+    kind: str
+    row_cells: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GraphFile:
+    """One file of the graph directory, and the ref ids it defines.
+
+    Held per FILE rather than as one node set, because the question the
+    ``graph-files`` medium answers is *which file does a bead that adds a node
+    write*, and that is a property of the file. On a graph held in one file the
+    answer is "the same one every other node-adding bead writes", which is the
+    sentence the check prints and cannot improve on.
+    """
+
+    path: str
+    nodes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GraphInput:
+    """This plan's own input, read from both of the homes it has.
+
+    ``files`` is the graph as it is on disk, read through
+    :func:`~beadloom.onboarding.graph_files.each_graph_file` — the one policy
+    every reader of that directory holds. ``indexed`` is the node population of
+    the index the scopes above were actually resolved from. The two are held
+    apart rather than compared at the edge because a difference between them is
+    the finding, and a finding computed where it is gathered is a verdict taken
+    outside the layer that states verdicts.
+
+    The self-reference is the reason this dataclass exists at all: every
+    serialisation `beadloom waves` reports is derived from the graph, so the
+    graph is an input to the answer AND an artifact a bead of the wave may be
+    writing. A derivation cannot describe its own input by asking it.
+    """
+
+    files: tuple[GraphFile, ...] = ()
+    indexed: frozenset[str] = frozenset()
+
+    @property
+    def declared(self) -> frozenset[str]:
+        """Every ref id the graph files declare, whichever file declares it."""
+        return frozenset(ref for file in self.files for ref in file.nodes)
+
+
+@dataclass(frozen=True)
 class WaveEnvironment:
-    """What the machine says about the four media the graph cannot see.
+    """What the machine says about the media the graph cannot see.
 
     Every field is ``None`` by default and ``None`` means *not observed*. A caller
-    that gathers nothing therefore gets four ``unmeasured`` checks and an exit
-    code of 1, which is the intended outcome: a concurrent wave whose shared media
-    nobody measured is not a clean plan, it is an unmeasured one.
+    that gathers nothing therefore gets an ``unmeasured`` check per field and an
+    exit code of 1, which is the intended outcome: a concurrent wave whose shared
+    media nobody measured is not a clean plan, it is an unmeasured one.
     """
 
     #: Paths that differ from ``HEAD``, as
@@ -455,6 +555,17 @@ class WaveEnvironment:
     #: empty tuple is a real observation — somebody read the artifacts and the
     #: lock is instructed nowhere — and is not the same fact as ``None``.
     landing_lock_sites: tuple[LockSite, ...] | None = None
+
+    #: The documents every work-item type of this flow writes, and the rows each
+    #: carries. An empty tuple is a real observation — the routes were read and
+    #: they write no document in common, or this project holds no work item that
+    #: has one — and is not the same fact as ``None``.
+    focus_documents: tuple[FocusDocument, ...] | None = None
+
+    #: The graph these scopes were derived from, read from the files and from
+    #: the index. ``None`` means nobody read it, which is not the same fact as a
+    #: project whose graph directory holds no node.
+    graph_input: GraphInput | None = None
 
 
 @dataclass(frozen=True)
@@ -514,6 +625,11 @@ class WavePlan:
     #: Per wave, the approved nodes none of its beads declares. Empty for a wave
     #: of one, which makes no pair and therefore claims nothing about one.
     unguarded_axes: tuple[UnguardedAxis, ...] = ()
+
+    #: The beads this plan could have been about, against the ones it was. Never
+    #: absent: a plan whose list was held against no population says so, and the
+    #: count it carries is a notice rather than a finding (BDL-UX #274).
+    population: Population = field(default_factory=Population)
 
     @property
     def exit_code(self) -> int:

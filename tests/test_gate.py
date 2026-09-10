@@ -140,6 +140,9 @@ class TestRunCiGate:
             "sync-check",
             "docs-audit",
             "docs-quality",
+            # BDL-068 S6: the issue log's numbers, beside the other
+            # document checks and before the composed-config ones.
+            "issue-log",
             "doc-spaces",
             # BDL-068 S1.6: the branch judged against the axes its work item
             # declares. It sits before `config-check` because it reads the
@@ -149,12 +152,15 @@ class TestRunCiGate:
             "doctor",
         ]
         assert all(s.passed for s in result.steps)
-        # ``docs-quality``, ``doc-spaces`` and ``scope-check`` are named SKIPs
-        # on a project with no planning documents — a skip that says why, never
-        # a silent pass (BDL-061 S1). The first two name the globs that matched
-        # nothing; the third names the branch that names no work item.
+        # ``docs-quality``, ``issue-log``, ``doc-spaces`` and ``scope-check``
+        # are named SKIPs on a project with no planning documents — a skip that
+        # says why, never a silent pass (BDL-061 S1). Two of them name the globs
+        # that matched nothing, ``scope-check`` names the branch that names no
+        # work item, and ``issue-log`` names the config block that declares
+        # none: an adopter who has not opted in is not judged (BDL-068 S6).
         assert [s.name for s in result.steps if s.skipped] == [
             "docs-quality",
+            "issue-log",
             "doc-spaces",
             "scope-check",
         ]

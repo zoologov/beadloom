@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: flow-composer
+    kind: feature
+    summary: "compose(core, architecture, stack, project) — the one layered assembly behind role files, slash commands and CLAUDE.md; the project layer lives in .beadloom/flow/"
+    source: src/beadloom/onboarding/composer.py
+    docs:
+      - docs/domains/onboarding/features/flow-composer/SPEC.md
+edges:
+  - src: flow-composer
+    dst: onboarding
+    kind: part_of

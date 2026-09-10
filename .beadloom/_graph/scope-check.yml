@@ -1,0 +1,20 @@
+  # Feature: the paths a commit stages, judged against the axes its work item
+  # declared (BDL-068 S1.6). Pure: paths, a declared scope and an ownership map
+  # in, a verdict out — the git and index halves are `declared-scope`'s.
+nodes:
+  - ref_id: scope-check
+    kind: feature
+    summary: "The paths a commit stages, judged against the axes its work item declared: a node an axis rules out of scope, or a bounded context no declared axis reaches"
+    source: src/beadloom/doc_sync/scope_check.py
+    docs:
+      - docs/domains/doc-sync/features/scope-check/SPEC.md
+edges:
+  - src: scope-check
+    dst: doc-sync
+    kind: part_of
+  - src: scope-check
+    dst: axes-section
+    kind: depends_on
+  - src: scope-check
+    dst: doc-quality
+    kind: depends_on

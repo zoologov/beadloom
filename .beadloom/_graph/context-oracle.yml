@@ -1,0 +1,18 @@
+  # Domain: Context Oracle
+nodes:
+  - ref_id: context-oracle
+    kind: domain
+    summary: "Context bundle building via BFS graph traversal, code indexing, caching, search"
+    source: src/beadloom/context_oracle/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/context-oracle/README.md
+edges:
+  # Domains are part_of beadloom
+  - src: context-oracle
+    dst: beadloom
+    kind: part_of
+  # Cross-domain dependencies
+  - src: context-oracle
+    dst: infrastructure
+    kind: depends_on

@@ -51,7 +51,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from beadloom.graph.rules import (
@@ -64,6 +63,7 @@ from beadloom.graph.rules import (
 )
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB, load_suite
 from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
@@ -128,15 +128,25 @@ def _shipped_scenario_coverage_rule() -> ScenarioCoverageRule:
 
 
 def _declared_nodes() -> list[tuple[str, str]]:
-    """Every node `services.yml` declares, as ``(ref_id, kind)``.
+    """Every node the graph DIRECTORY declares, as ``(ref_id, kind)``.
 
     Read from the tracked YAML rather than from `.beadloom/beadloom.db`: the index
     is gitignored, so a check that read it would ERROR in a clean room instead of
     measuring anything, and a shared tree may be reindexed mid-run by another
     agent.
+
+    Read from the DIRECTORY rather than from `services.yml`, since BDL-UX #265
+    split this repository's graph into one file per node. The reader is
+    `each_graph_file`, which is the one policy every reader of that directory
+    holds, so this population cannot disagree with the loader's about which files
+    count.
     """
-    data = yaml.safe_load((GRAPH_DIR / "services.yml").read_text(encoding="utf-8"))
-    return [(str(n["ref_id"]), str(n["kind"])) for n in data["nodes"]]
+    return [
+        (str(node["ref_id"]), str(node.get("kind", "")))
+        for _path, data in each_graph_file(GRAPH_DIR)
+        for node in (data.get("nodes") or [])
+        if isinstance(node, dict) and node.get("ref_id")
+    ]
 
 
 # --------------------------------------------------------------------------- #

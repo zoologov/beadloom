@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: sdl
+    kind: component
+    summary: "Minimal dependency-free GraphQL SDL surface extractor for the cross-service contract graph"
+    source: src/beadloom/graph/sdl.py
+    docs:
+      - docs/domains/graph/components/sdl/DOC.md
+edges:
+  - src: sdl
+    dst: graph
+    kind: part_of

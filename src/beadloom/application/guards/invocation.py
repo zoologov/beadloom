@@ -36,7 +36,7 @@ reported on the result rather than inferred from an absent line:
 * **no project** — there is nowhere to write it. Manufacturing a root was the
   measured failure (a stray ``.beadloom/`` inside the source tree that the real
   project's ``--liveness`` never reads), so the guard writes nothing and answers
-  ``error``, which blocks.
+  ``unresolved``.
 * **no name** — nothing was asked about, so there is nothing to attribute. It
   was the fourth case folded into the third's wording until BDL-061.34:
   :func:`_named` renders the missing name as ``(no guard named)`` for the
@@ -51,45 +51,61 @@ reported on the result rather than inferred from an absent line:
 * **``--liveness``** — a report evaluates nothing; recording one would inflate
   the very count it prints.
 
-**The handler of last resort is ``BaseException``, and that has a price.**
-``SystemExit`` was caught from the first version because a lower layer that
-terminates the process without a verdict is the shape of every hole this module
-closed; ``KeyboardInterrupt`` is the other ``BaseException`` a running guard
-actually meets, and catching only the first left it escaping to Click, which
-turns it into exit ``1`` — the *warn* code the shipped adapter carries on past —
-with no verdict and no record (BDL-061.30, finding A). The price of closing it,
-stated because it is not free: an interrupt is now a recorded ``error`` at exit
-``2``, so Ctrl-C during a guarded edit BLOCKS that edit rather than waving it
-through. That is the right side to fail on. SIGINT is delivered to the whole
-foreground process group, so the harness's own tool call is interrupted along
-with the guard and there is usually no edit left to block; and where there is,
-"the guard did not answer" must never be readable as "the guard passed" — which
-is the one sentence this whole slice exists to keep true. The two named clauses
-above it exist only to give a reader a cause they can act on; the wide one
-exists so that the class nobody thought of is a verdict rather than an escape.
+**The handler of last resort is ``BaseException``.** ``SystemExit`` was caught
+from the first version because a lower layer that terminates the process without
+a verdict is the shape of every hole this module closed; ``KeyboardInterrupt`` is
+the other ``BaseException`` a running guard actually meets, and catching only the
+first left it escaping to Click, which turns it into exit ``1`` with no verdict
+and no record (BDL-061.30, finding A). The two named clauses exist only to give a
+reader a cause they can act on; the wide one exists so that the class nobody
+thought of is a verdict rather than an escape.
+
+**Which failures stop an edit, and which do not** — one question decides it, and
+it is not how severe the failure looks. *What could the guard not answer about?*
+
+* **About this EDIT** — the harness sent a payload that will not decode, or a
+  target whose shape the guard refuses to resolve. The guard ran and has a real
+  answer: it does not know what file this is. That answer stops this edit at
+  exit ``2`` and stops nothing else, because a different target clears it and no
+  repair anywhere is waiting on it. :func:`_failed` is that verdict.
+* **About ITSELF** — its own code would not import, its configuration would not
+  parse, the evaluation crashed, exited or was interrupted, no project could be
+  located. The guard has no answer about anything, and every repair for the class
+  is a **file write**, which is exactly what a block forbids. :func:`_unresolved`
+  is that verdict: ``unresolved``, at a code the harness shows and carries past.
+
+The second bullet is BDL-UX #254 and it was measured live rather than reasoned
+about. In BDL-068 S5 a ``git mv`` left ``services/bd_seam`` a package with no
+``__init__.py``; ``services/guard_probes.py:79`` imports it to reach the tracker,
+so every guard raised ``ImportError`` and answered ``error`` at ``2``. Two
+independent sessions found ``Bash``, ``Write`` and ``Edit`` all blocked and only
+``Read`` outside the surface, and a read repairs nothing. The remediation printed
+on every attempt read "fix the reported error, then re-run" — a file write the
+same verdict had just disabled. The owner cleared it by typing a heredoc in a
+shell outside the session, because nothing inside one could.
+
+**The coverage was not the defect.** ``beadloom-0mdo.31`` put ``Bash`` on the
+matcher in S4, which is the whole of BDL-UX #170 and is correct; before it a
+shell write slipped past the guard and could have repaired the tree. Closing a
+real hole removed the last exit. Narrowing the matcher would restore the escape
+and re-open the hole, so what moved is the verdict on inability.
+
+**Permitting is not passing.** ``unresolved`` has its own outcome name, its own
+line on stderr, its own firing record, and it does not clear ``never-fired`` in
+``--liveness`` — so a guard that keeps failing to run keeps reading as a dead
+gate. "The guard did not answer" must never be readable as "the guard passed",
+which is the one sentence this slice exists to keep true; a gate that blocks on
+its own inability is not strict, it is unavailable.
 
 **Exit codes.** The code follows the verdict (``pass``/``skip`` 0, ``warn`` 1,
-``block``/``error`` 2). One class is overridden and no other: a defect in the
-project's own declared configuration (a ``guards:`` block that will not parse,
-an exclusion with no reason, a guard name nobody registered) and a command line
-the CLI could not use at all (no guard named, ``--liveness`` with a name, a
-malformed ``--context`` pair, an unsupported ``--hook`` harness). Both are
-stable defects a human fixes once and neither is about any particular edit, so
-BDL-061.2 reserved ``3`` for them — a broken ``flow.yml`` is then never mistaken
-for a guard that fired. Everything that goes wrong while trying to answer about
-*this* edit — a payload that cannot be decoded or parsed, a project that cannot
-be located, an exception anywhere — is an ``error`` verdict at exit ``2``,
-because that is the one code the shipped adapter blocks on, and the harness
-supplied the input that failed.
-
-**The override is conditional on the caller (BDL-061.33).** ``3`` blocks nothing
-in the harness the emitted adapter binds to, so while it was unconditional the
-largest reachable class of "I could not tell" — a ``flow.yml`` that will not
-parse — switched every bound guard off and said so on a stream nobody stops for.
-:func:`~beadloom.application.guards.models.harness_exit_code` decides: ``3`` for
-a shell or CI caller, where the distinction is the whole point and no edit is
-waiting on the answer, and the blocking code when ``--hook`` names a harness,
-where the only question the code answers is whether the edit proceeds.
+``block``/``error`` 2). ``unresolved`` is the one outcome whose code depends on
+the caller, and
+:func:`~beadloom.application.guards.models.unresolved_exit_code` decides: ``3``
+for a shell or CI caller, where no edit is waiting on the answer and a broken
+``flow.yml`` must stay distinguishable from a guard that fired and from Click's
+own usage exit; ``1`` when ``--hook`` names a harness, where the only question
+the code answers is whether the edit proceeds and blocking is what made the
+class unrepairable.
 """
 
 from __future__ import annotations
@@ -114,7 +130,7 @@ from beadloom.application.guards.models import (
     GuardOutcome,
     GuardVerdict,
     exception_detail,
-    harness_exit_code,
+    unresolved_exit_code,
 )
 from beadloom.application.guards.project_root import (
     ProjectLocation,
@@ -190,8 +206,8 @@ _INTERRUPTED_WHY = (
 )
 _CRASHED_WHY = "the guard could not be evaluated: {detail}"
 _CRASHED_REMEDIATION = (
-    "fix the reported error, then re-run `beadloom guard {name}`; the edit is "
-    "blocked until the guard can answer"
+    "fix the reported error, then re-run `beadloom guard {name}`; the edit was "
+    "allowed through unchecked, so nothing stops you making that fix"
 )
 _NO_PROJECT_REMEDIATION = (
     "run the guard from inside the project (any directory under the one holding "
@@ -288,13 +304,13 @@ def _answer(invocation: GuardInvocation) -> InvocationResult:
         )
         return _decide(invocation, location)
     except SystemExit as exc:
-        return _unanswerable(
+        return _could_not_run(
             invocation, location, _EXITED_WHY.format(code=exc.code)
         )
     except KeyboardInterrupt:
-        return _unanswerable(invocation, location, _INTERRUPTED_WHY)
+        return _could_not_run(invocation, location, _INTERRUPTED_WHY)
     except BaseException as exc:  # the last resort; see the module docstring
-        return _unanswerable(
+        return _could_not_run(
             invocation, location, _CRASHED_WHY.format(detail=exception_detail(exc))
         )
 
@@ -345,8 +361,9 @@ def _decide(invocation: GuardInvocation, location: ProjectLocation) -> Invocatio
     """The evaluation itself — free to fail, because :func:`_answer` catches it."""
     root = location.root
     if root is None:
-        return _failed(
-            invocation.name,
+        return _unresolved(
+            invocation,
+            None,
             why=location.refusal,
             because=_BECAUSE_NO_PROJECT,
             remediation=_NO_PROJECT_REMEDIATION,
@@ -354,7 +371,7 @@ def _decide(invocation: GuardInvocation, location: ProjectLocation) -> Invocatio
     if invocation.liveness:
         return _report(invocation, root)
     if invocation.name is None:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=_NO_NAME_WHY,
@@ -367,7 +384,7 @@ def _decide(invocation: GuardInvocation, location: ProjectLocation) -> Invocatio
 def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
     """The liveness report: rows, or the configuration error that stopped them."""
     if invocation.name is not None:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=_LIVENESS_WITH_NAME_WHY,
@@ -377,7 +394,7 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
     try:
         rows = build_liveness(root)
     except GuardConfigError as exc:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=str(exc),
@@ -396,7 +413,7 @@ def _evaluate(
     try:
         context = _context(invocation)
     except GuardUsageError as exc:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=str(exc),
@@ -404,7 +421,7 @@ def _evaluate(
             remediation=_CONTEXT_REMEDIATION,
         )
     except UnknownHarnessError as exc:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=str(exc),
@@ -427,7 +444,7 @@ def _evaluate(
             probes=invocation.probes_for(root),
         )
     except GuardConfigError as exc:
-        return _usage(
+        return _unresolved(
             invocation,
             root,
             why=str(exc),
@@ -490,14 +507,14 @@ def _parse_context(pairs: tuple[str, ...]) -> dict[str, str]:
     return context
 
 
-def _unanswerable(
+def _could_not_run(
     invocation: GuardInvocation, location: ProjectLocation, why: str
 ) -> InvocationResult:
     """The verdict for a failure nobody enumerated — recorded like any other."""
     name = _named(invocation.name)
-    return _failed(
-        invocation.name,
-        root=location.root,
+    return _unresolved(
+        invocation,
+        location.root,
         why=why,
         because=_BECAUSE_INCOMPLETE,
         remediation=_CRASHED_REMEDIATION.format(name=name),
@@ -512,14 +529,23 @@ def _failed(
     remediation: str,
     root: Path | None = None,
 ) -> InvocationResult:
-    """An ``error`` verdict: the guard could not answer, so the edit stops."""
+    """An ``error`` verdict: the guard cannot read THIS EDIT, so this edit stops.
+
+    Reserved for the two failures that are about the edit rather than about the
+    guard — a harness payload that will not decode, and a target whose shape the
+    guard refuses to resolve. Both leave the guard unable to say which file is
+    being written, and permitting an unidentified write is the one thing a guard
+    bound before a write must not do. Both are also cleared by a different
+    target, so nothing a repair needs is waiting on this code; every failure that
+    a repair IS waiting on goes to :func:`_unresolved` instead (BDL-UX #254).
+    """
     verdict = _error_verdict(name, why=why, because=because, remediation=remediation)
     return InvocationResult(
         exit_code=verdict.exit_code, verdict=verdict, project_root=root
     )
 
 
-def _usage(
+def _unresolved(
     invocation: GuardInvocation,
     root: Path | None,
     *,
@@ -527,23 +553,42 @@ def _usage(
     because: str,
     remediation: str,
 ) -> InvocationResult:
-    """A configuration or command-line defect: an ``error`` verdict, on whose code?
+    """The guard could not evaluate ITSELF: warn, permit, and say nothing was checked.
+
+    Every inability in this class shares one property that decides the verdict:
+    **its repair is a file write**. A ``flow.yml`` that will not parse, a guard
+    name nobody registered, a half-moved package whose ``__init__.py`` does not
+    exist yet, a syntax error saved mid-edit — each is fixed by editing a file,
+    and the guard is bound to every tool that edits one, ``Bash`` included since
+    ``beadloom-0mdo.31`` closed BDL-UX #170. So while this answered at the
+    blocking code it disabled its own remediation, and the only tool left outside
+    the surface was ``Read``, which repairs nothing. Measured live: BDL-068 S5
+    cleared it by having the owner type a heredoc in a shell outside the session,
+    because nothing inside one could (BDL-UX #254).
 
     The verdict is the same one every failure takes; only the code differs, and
-    it differs by *caller* rather than by cause (BDL-061.33). A shell caller
-    gets ``3``, which keeps a defect in the declared configuration
-    distinguishable from a guard that fired; an invocation bound to a harness
-    gets the blocking code, because ``3`` is a code that harness carries on
-    past. The whole invocation is taken rather than a name, because the name is
-    already ``invocation.name`` at every call site and the harness is the other
-    thing this function now needs to know — see
-    :func:`~beadloom.application.guards.models.harness_exit_code`.
+    it differs by *caller* rather than by cause. A shell caller gets ``3``, which
+    keeps a defect in the declared configuration distinguishable from a guard
+    that fired; an invocation bound to a harness gets the warn code, which that
+    harness shows and carries past. The whole invocation is taken rather than a
+    name, because the name is already ``invocation.name`` at every call site and
+    the harness is the other thing this function needs to know — see
+    :func:`~beadloom.application.guards.models.unresolved_exit_code`.
+
+    Permitting is NOT passing, and the distance between them is the point. The
+    outcome has its own name, its own line on stderr, its own firing record, and
+    it does not clear ``never-fired`` in ``--liveness``. A guard that keeps
+    failing to run keeps reading as a dead gate.
     """
     verdict = _error_verdict(
-        invocation.name, why=why, because=because, remediation=remediation
+        invocation.name,
+        outcome=GuardOutcome.UNRESOLVED,
+        why=why,
+        because=because,
+        remediation=remediation,
     )
     return InvocationResult(
-        exit_code=harness_exit_code(invocation.harness),
+        exit_code=unresolved_exit_code(invocation.harness),
         verdict=verdict,
         project_root=root,
     )
@@ -566,15 +611,23 @@ def _error_verdict(
     why: str,
     because: str,
     remediation: str,
+    outcome: GuardOutcome = GuardOutcome.ERROR,
     context: Mapping[str, str] | None = None,
 ) -> GuardVerdict:
-    """The one verdict shape every failure takes, so none of them is silent."""
+    """The one verdict shape every failure takes, so none of them is silent.
+
+    *outcome* selects which of the two non-answers this is —
+    :attr:`~beadloom.application.guards.models.GuardOutcome.ERROR` for a target
+    the guard refuses to interpret, ``UNRESOLVED`` for an inability the guard
+    has about itself. The shape is shared because what the reader needs is
+    identical: what was observed, what was therefore not checked, and what to do.
+    """
     scope = (
         SCOPE_EVERY_GUARD if name is None else SCOPE_ONE_GUARD.format(name=name)
     )
     return GuardVerdict(
         guard=_named(name),
-        outcome=GuardOutcome.ERROR,
+        outcome=outcome,
         why=why,
         not_covered=(UNANSWERED_NOT_COVERED.format(scope=scope, because=because),),
         remediation=remediation,

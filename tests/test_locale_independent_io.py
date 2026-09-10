@@ -92,10 +92,10 @@ from tests.decoding_calls import (
     SUBPROCESS_CALLS,
     TEXT_READWRITE,
     called_name,
-    is_container_open,
     is_true,
     keyword,
     open_mode,
+    opens_without_a_codec,
     states_encoding,
 )
 
@@ -141,7 +141,7 @@ def _module_sources(root: Path) -> list[tuple[Path, ast.Module]]:
 
 def _classify(node: ast.Call, *, decodes_only: bool) -> str | None:
     """What kind of ambient-codec site *node* is, or ``None`` when it is not one."""
-    if states_encoding(node) or is_container_open(node):
+    if states_encoding(node) or opens_without_a_codec(node):
         return None
     name = called_name(node)
     if name in TEXT_READWRITE:
@@ -341,13 +341,36 @@ class TestEverySuiteDecodeStatesItsCodec:
         )
 
 
+def _is_surrogate(character: str) -> bool:
+    """A lone surrogate is what an undecodable byte becomes, never a real character."""
+    return 0xD800 <= ord(character) <= 0xDFFF
+
+
+#: Why no row may put a non-ASCII word on a command line. `subprocess` encodes
+#: argv with the PARENT's filesystem codec and CPython decodes it with the
+#: CHILD's, and every child below is deliberately given a non-UTF-8 one, so the
+#: codec on each side is the image's rather than ours. PR #63 failed this way on
+#: all six legs in three different shapes — see
+#: :class:`TestTheSourceReachesTheChildWhateverDecodesTheCommandLine` for the
+#: measurements. Use :func:`_run_source_under` for a source: PEP 263 fixes a
+#: script's default codec at UTF-8, which is a promise argv cannot make.
+_ARGV_MUST_BE_ASCII = (
+    "this word of argv is not ASCII, and argv is encoded by the parent's "
+    "filesystem codec and decoded by the child's, neither of which this suite "
+    "chooses: {word!r}"
+)
+
+
 def _run_under(
-    env_extra: dict[str, str], argv: list[str], cwd: Path
+    env_extra: dict[str, str], argv: list[str], cwd: Path, stdin: str | None = None
 ) -> subprocess.CompletedProcess[str]:
+    for word in argv:
+        assert word.isascii(), _ARGV_MUST_BE_ASCII.format(word=word)
     env = {**os.environ, **env_extra}
     return subprocess.run(  # noqa: S603 — fixed argv, no shell
         argv,
         cwd=cwd,
+        input=stdin,
         capture_output=True,
         encoding="utf-8",  # the harness states its own codec; the child's is the subject
         errors="replace",
@@ -356,11 +379,102 @@ def _run_under(
     )
 
 
+def _run_source_under(
+    env_extra: dict[str, str], source: str, cwd: Path, *arguments: str
+) -> subprocess.CompletedProcess[str]:
+    """Run *source* in a child through a channel whose codec is not the image's.
+
+    ``python -`` reads the script from stdin, and a Python script's default
+    source encoding is UTF-8 by PEP 263 wherever it is read from — so the parent
+    states the codec on the way out (``encoding="utf-8"``) and the language
+    states it on the way in. A temporary file would decode identically and was
+    measured to; stdin is used because a file puts a PATH back on the command
+    line, and a temporary directory's name is the machine's to choose.
+    """
+    return _run_under(env_extra, [sys.executable, "-", *arguments], cwd, stdin=source)
+
+
 def _preferred_encoding_under(env_extra: dict[str, str]) -> str:
     """What a child interpreter actually gets — never assumed, always probed."""
     probe = "import codecs, locale; print(codecs.lookup(locale.getpreferredencoding(False)).name)"
     done = _run_under(env_extra, [sys.executable, "-c", probe], Path.cwd())
     return done.stdout.strip()
+
+
+def _filesystem_codec_under(env_extra: dict[str, str]) -> str:
+    """The codec a child decodes ``argv`` with — probed, because macOS forces it.
+
+    ``sys.getfilesystemencoding()`` and not the preferred encoding: they are two
+    codecs and a run has both. Under ``_ASCII_ENV`` a Darwin child reports
+    ``preferred=ascii`` and ``fs=utf-8``, and it is the SECOND that decides what
+    a command line delivers (BDL-UX #280).
+    """
+    probe = "import codecs, sys; print(codecs.lookup(sys.getfilesystemencoding()).name)"
+    done = _run_under(env_extra, [sys.executable, "-c", probe], Path.cwd())
+    return done.stdout.strip()
+
+
+def _a_byte_refused_by(codec: str) -> int | None:
+    """A byte *codec* cannot decode, or ``None`` when it decodes every one.
+
+    An 8-bit codec decodes all 256, which is the whole of the finding below: a
+    surrogate can only be smuggled into a child whose codec refuses some byte.
+    """
+    for byte in range(0x80, 0x100):
+        try:
+            bytes([byte]).decode(codec)
+        except (UnicodeDecodeError, LookupError):
+            return byte
+    return None
+
+
+@pytest.fixture(scope="module")
+def a_child_whose_codec_refuses_a_byte() -> tuple[dict[str, str], int]:
+    """``(environment, byte)`` for a child that cannot decode *byte* out of argv.
+
+    The environment is SUPPLIED rather than inherited, and that is the whole
+    repair: the row that used to inherit it asserted a claim about the leg it
+    happened to run on. ``beadloom-0mdo.49`` met this exactly one slice ago and
+    its answer was the same one — supply the codec, do not read the ambient one.
+
+    Probed all the same, because a supplied name is not a codec until an image
+    resolves it, and an image that decodes every byte has nothing for the row
+    below to prove.
+    """
+    codec = _filesystem_codec_under(_ASCII_ENV)
+    byte = _a_byte_refused_by(codec) if codec else None
+    if byte is None:
+        pytest.skip(
+            f"a child under {_ASCII_ENV['LC_ALL']} here decodes argv with {codec!r}, which "
+            "refuses no byte, so no byte can reach it as a surrogate and this row would "
+            "assert nothing; it runs on any image whose filesystem codec is ASCII or UTF-8"
+        )
+    return _ASCII_ENV, byte
+
+
+@pytest.fixture(scope="module")
+def a_child_whose_codec_decodes_every_byte() -> tuple[dict[str, str], str]:
+    """``(environment, codec)`` for a child whose argv codec is a real 8-bit one.
+
+    The other half of the same dimension, and the half this project's own
+    ``tests-locale (en_US.ISO-8859-1)`` leg is. It cannot be arranged on macOS
+    at ALL -- measured: every one of the four environments tried here, the
+    inherited one included, gives a child ``fs=utf-8``, because macOS forces the
+    filesystem codec whatever the locale says. So this row states what would
+    make it run rather than pretending it did.
+    """
+    for name in _EIGHT_BIT_CANDIDATES:
+        env = {"LC_ALL": name, "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+        codec = _filesystem_codec_under(env)
+        if codec and codec not in ("utf-8", "ascii") and _a_byte_refused_by(codec) is None:
+            return env, codec
+    pytest.skip(
+        "no locale on this image gives a child a filesystem codec that decodes every "
+        f"byte (tried {', '.join(_EIGHT_BIT_CANDIDATES)}); macOS forces `utf-8` there "
+        "whatever the locale says, so what would make this row run is an image whose "
+        "filesystem codec is 8-bit — the `tests-locale (en_US.ISO-8859-1)` leg is one"
+    )
+    raise AssertionError  # unreachable; pytest.skip raises
 
 
 @pytest.fixture(scope="module")
@@ -421,6 +535,69 @@ def eight_bit_terminal() -> dict[str, str]:
     raise AssertionError  # unreachable; pytest.skip raises
 
 
+#: The character the reported failure died on: the PLUS-MINUS sign in the
+#: tolerance label of ``beadloom docs audit``. Written as an escape so this
+#: source file stays ASCII and the assertion below cannot be satisfied by the
+#: file's own encoding.
+_TOLERANCE_GLYPH = "\u00b1"
+
+#: A rich write of that glyph, through the product's own policy rather than
+#: past it. ``rich`` writes to ``sys.stdout`` as it finds it — the frame the
+#: reported traceback names is ``self.file.write(text)`` — while ``click``
+#: replaces an ASCII stdout with a UTF-8 writer of its own, which is why the
+#: ``--help`` rows above pass in this room with or without the fix.
+#: The CLI entered as a module rather than as the installed console script, so
+#: the interpreter's own ``PYTHONPATH`` decides which source answers.
+_CLI_ENTRY = "from beadloom.services.cli import main; main()"
+
+#: The control room for the row below: UTF-8 STATED rather than inherited.
+#: ``PYTHONUTF8=1`` overrides the locale, MEASURED — under both ``LC_ALL=C`` and
+#: ``LC_ALL=en_US.ISO8859-1`` a child reports ``utf-8``. Inheriting the parent's
+#: environment instead would make the control ASCII on exactly the
+#: ``tests-locale`` legs, so the row would skip on the two legs whose subject
+#: this is.
+_UTF8_ENV = {"PYTHONUTF8": "1", "PYTHONCOERCECLOCALE": "0"}
+
+_RICH_WRITE_PROBE = (
+    "from beadloom.infrastructure.console_streams import tolerate_unencodable_output\n"
+    "tolerate_unencodable_output()\n"
+    "from rich.console import Console\n"
+    "Console().print('tolerance " + _TOLERANCE_GLYPH + " 10 percent')\n"
+)
+
+
+@pytest.fixture(scope="module")
+def ascii_terminal() -> dict[str, str]:
+    """An environment whose stdout is ASCII with the handler CPython chose for it.
+
+    The C room is not a smaller version of the 8-bit one, and the difference is
+    this fixture's whole reason to exist: here the handler is
+    ``surrogateescape`` rather than ``strict``, so a policy that reads every
+    non-strict handler as an operator's decision steps aside exactly where it is
+    needed. :func:`eight_bit_terminal` requires ``strict`` and therefore skips
+    this room by construction.
+
+    Both halves are probed rather than assumed. The C-locale stdio handler is
+    CPython's choice, not a fact about POSIX, and the measurement behind this
+    class is one platform: an image that hands out ``backslashreplace`` here has
+    nothing for these rows to prove, and says so instead of failing.
+    """
+    encoding, errors = _stdout_policy_under(_ASCII_ENV)
+    if encoding in ("", "utf-8"):
+        pytest.skip(
+            f"this image coerces {_ASCII_ENV['LC_ALL']} back to UTF-8 (stdout={encoding!r}), "
+            "so an unencodable character cannot be arranged here and these rows would "
+            "assert nothing"
+        )
+    if errors != "surrogateescape":
+        pytest.skip(
+            f"this image hands a {_ASCII_ENV['LC_ALL']}-locale stdout the {errors!r} handler "
+            "rather than 'surrogateescape', so it is not the room this defect needs; the "
+            "8-bit rows cover the 'strict' one"
+        )
+    return dict(_ASCII_ENV)
+
+
 class TestTheConsoleSurvivesATerminalItCannotSpell:
     """The third group the dimension found, and the one where UTF-8 is wrong.
 
@@ -472,11 +649,266 @@ class TestTheConsoleSurvivesATerminalItCannotSpell:
         assert done.returncode == 0, done.stderr
 
 
+class TestTheConsoleSurvivesTheHandlerTheImageChose:
+    """The C room, which no leg of this project's CI ever enters with this command.
+
+    The ``tests-locale`` legs run ``pytest``, and ``beadloom ci`` runs under the
+    default UTF-8 locale, so this reaches an adopter on a C-locale container
+    rather than us — the same shape as BDL-UX #240.
+
+    MEASURED before the fix on CPython 3.13.7 / Darwin arm64, streams separated
+    and the exit code read from ``$?`` without a pipe: ``beadloom docs audit``
+    under ``LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`` exits **1** after
+    writing 1321 bytes of a partial report, with ``UnicodeEncodeError: 'ascii'
+    codec can't encode character '\\xb1' in position 111`` raised at
+    ``rich/console.py`` in ``self.file.write(text)``.
+    """
+
+    def test_a_rich_write_of_a_glyph_the_terminal_cannot_spell_does_not_raise(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """The class, in one process that needs no project state.
+
+        Before the fix this exits 1 with ``UnicodeEncodeError`` out of
+        ``rich``'s own write, because ``surrogateescape`` re-encodes lone
+        surrogates and nothing else.
+        """
+        done = _run_source_under(ascii_terminal, _RICH_WRITE_PROBE, Path.cwd())
+
+        assert done.returncode == 0, done.stderr
+
+    def test_the_glyph_it_cannot_show_is_named_rather_than_dropped(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """Same requirement as the 8-bit room's: degrade visibly, never silently."""
+        done = _run_source_under(ascii_terminal, _RICH_WRITE_PROBE, Path.cwd())
+
+        assert r"\xb1" in done.stdout, done.stdout
+
+    def test_the_reported_command_returns_the_same_verdict_in_both_rooms(
+        self, ascii_terminal: dict[str, str]
+    ) -> None:
+        """The instance, and the assertion is the verdict rather than a fixed code.
+
+        ``docs audit`` answers about the project it runs in, so pinning its exit
+        code would make this row a claim about that project's documents. What
+        the locale must not change is the ANSWER, which is why the control run
+        supplies it.
+
+        The control also locks the row against vacuity: a project whose report
+        carries no tolerance label offers the ASCII run no unencodable character
+        at all, and a pass would mean nothing. It runs in a STATED UTF-8 room
+        rather than the parent's, because a control that inherits an ASCII
+        parent produces an ASCII report and skips the row on the two legs that
+        exist for this dimension.
+
+        The CLI is entered through :mod:`beadloom.services.cli` rather than
+        through the installed ``beadloom`` script, and that is the difference
+        between measuring a clean room and measuring the tree: the script is an
+        editable install whose shebang and import path lead back to the working
+        tree, so in a room it would report on the tree's source and a
+        neighbour's edits. ``sys.executable -c`` follows ``PYTHONPATH``, which
+        is what ``beadloom clean-room`` sets. The installed script has its own
+        row in the 8-bit class above.
+        """
+        control = _run_under(
+            _UTF8_ENV, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+        )
+        if _TOLERANCE_GLYPH not in control.stdout:
+            pytest.skip(
+                "this project's audit report carries no tolerance label, so the ASCII run "
+                "would meet no unencodable character and this row would assert nothing"
+            )
+
+        done = _run_under(
+            ascii_terminal, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+        )
+
+        assert "UnicodeEncodeError" not in done.stderr, done.stderr
+        assert done.returncode == control.returncode, done.stderr
+        assert r"\xb1" in done.stdout, done.stdout
+
+
+class TestTheSourceReachesTheChildWhateverDecodesTheCommandLine:
+    """PR #63's red, and it was the harness above rather than its subject.
+
+    The two rows in :class:`TestTheConsoleSurvivesTheHandlerTheImageChose` passed
+    on this machine and failed on all six CI legs. The cause is the CHANNEL, not
+    the platform and not the console policy: ``subprocess`` encodes ``argv`` with
+    the PARENT's filesystem codec (``os.fsencode``) and CPython decodes it with
+    the CHILD's, so a source carrying ``\\xb1`` crosses a command line only while
+    both ends happen to be UTF-8. This module arranges children whose codec is
+    ASCII on purpose, which is exactly where that stops being true.
+
+    IT IS UNREACHABLE FROM A DEVELOPER MACHINE, and that is a fact about macOS
+    rather than about the test. MEASURED here on CPython 3.13.7 / Darwin arm64:
+    under ``_ASCII_ENV`` a child reports ``preferred=ascii`` and ``fs=utf-8`` --
+    macOS forces the filesystem codec whatever the locale says, so argv survives
+    and the rows pass. On Linux the same knobs make the child's filesystem codec
+    ASCII too, and it does not.
+
+    THREE FAILURES, ONE CAUSE, read from PR #63's own logs rather than inferred:
+
+    ==============================  ================  ==================================
+    leg                             parent fs codec   what happened
+    ==============================  ================  ==================================
+    ``tests`` (3.10-3.13)           utf-8             the child decoded ``\\xc2\\xb1``
+                                                      as two surrogates at 170-171 and
+                                                      refused the command
+    ``tests-locale (en_US.ISO-      iso8859-1         the child decoded ``\\xb1`` as one
+    8859-1)``                                         surrogate at 170 and refused it
+    ``tests-locale (C)``            ascii             the PARENT raised
+                                                      ``UnicodeEncodeError`` at 170 and
+                                                      nothing was spawned at all
+    ==============================  ================  ==================================
+
+    The offset is the same 170 in all three because it is the offset of the glyph
+    in :data:`_RICH_WRITE_PROBE`; the count differs because UTF-8 spells ``\\xb1``
+    in two bytes and ISO 8859-1 in one. Both symptoms CI reported -- a non-zero
+    child AND an empty stdout -- are the same event: the command is decoded
+    before a byte of it runs, so a refused command prints nothing.
+
+    AND THE FAILURE MODE ITSELF READS THE ROOM, which cost this class a second
+    round. The first version of the row below inherited its environment and
+    asserted that a surrogate in argv always kills the child. It does where the
+    child's codec REFUSES the byte; where the codec decodes every byte -- any
+    8-bit one -- ``surrogateescape`` round-trips it back and the child RUNS,
+    holding a different character. Measured: byte ``0xff`` is refused by ``ascii``
+    and by ``utf-8`` and decodes to ``U+00FF`` under ``iso8859-1``. So the row was
+    green on five legs and red on ``tests-locale (en_US.ISO-8859-1)``, and the
+    silent-corruption room is the worse of the two -- the loud death is the lucky
+    one. Both rooms are now SUPPLIED and probed rather than inherited, which is
+    the answer `beadloom-0mdo.49` reached one slice earlier for the same shape.
+    """
+
+    def test_a_command_line_carries_a_source_through_a_codec_neither_end_states(
+        self,
+    ) -> None:
+        """The mechanism, reproduced from the leg's own codec supplied as data.
+
+        The platform cannot be arranged here, so it is not the thing arranged:
+        what the CI child did is decode the parent's bytes with ASCII and
+        ``surrogateescape``, and that is a pure function this room can compute.
+        """
+        sent = _RICH_WRITE_PROBE.encode("utf-8")
+
+        received = sent.decode("ascii", "surrogateescape")
+
+        surrogates = [index for index, ch in enumerate(received) if _is_surrogate(ch)]
+        assert surrogates, "an ASCII-decoding child would have received the source intact"
+        assert received != _RICH_WRITE_PROBE, "the source arrived unchanged, so this row is moot"
+
+    def test_where_the_childs_codec_refuses_a_byte_the_command_dies_with_an_empty_stdout(
+        self, a_child_whose_codec_refuses_a_byte: tuple[dict[str, str], int]
+    ) -> None:
+        """One event, both of CI's symptoms -- which is why the two rows fell together.
+
+        THE ROOM IS SUPPLIED, and the first version of this row did not supply it.
+        It inherited the leg's environment and asserted that a surrogate in argv
+        always kills the child, which is true where the child's codec refuses the
+        byte and false where it decodes it. Green on five legs and red on
+        ``tests-locale (en_US.ISO-8859-1)``, where the child ran and printed. The
+        byte is now derived from the codec the child actually reports.
+
+        Built by hand rather than through :func:`_run_under`, because this row is
+        ABOUT the channel that function now refuses.
+        """
+        environment, byte = a_child_whose_codec_refuses_a_byte
+        unspellable = "print('this never runs')\n#" + chr(0xDC00 + byte) + "\n"
+
+        done = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [sys.executable, "-c", unspellable],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, **environment},
+            check=False,
+        )
+
+        assert done.returncode != 0, done.stdout
+        assert done.stdout == "", done.stdout
+        assert "surrogates not allowed" in done.stderr, done.stderr
+
+    def test_where_the_childs_codec_decodes_every_byte_the_command_runs_and_is_wrong(
+        self, a_child_whose_codec_decodes_every_byte: tuple[dict[str, str], str]
+    ) -> None:
+        """The same channel in the other room, and it is the WORSE of the two.
+
+        An 8-bit codec decodes all 256 bytes, so nothing can reach that child as a
+        surrogate: the byte the parent sent becomes an ordinary character of the
+        child's codec and the command runs. The loud death the row above measures
+        is therefore the LUCKY room, and this one corrupts in silence -- which is
+        the argument for removing the channel rather than for characterising it.
+
+        Found the hard way: it is why the row above was red on one leg and green
+        on five, and it is the second half of BDL-UX #280.
+        """
+        environment, codec = a_child_whose_codec_decodes_every_byte
+        byte = 0xFF
+        arrives_as = bytes([byte]).decode(codec)
+        smuggled = chr(0xDC00 + byte)
+        source = "import sys\nsys.stdout.write(str(ord('" + smuggled + "')))\n"
+
+        done = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [sys.executable, "-c", source],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, **environment},
+            check=False,
+        )
+
+        assert done.returncode == 0, done.stderr
+        assert done.stdout == str(ord(arrives_as)), (
+            f"the child decodes argv with {codec}, so byte {byte:#04x} should reach it as "
+            f"U+{ord(arrives_as):04X}: {done.stdout!r}, {done.stderr!r}"
+        )
+        assert ord(arrives_as) != ord(smuggled), (
+            "the character arrived unchanged, so this room delivers argv faithfully "
+            "and the row has nothing to report"
+        )
+
+    def test_the_command_line_refuses_a_source_it_cannot_promise_to_carry(self) -> None:
+        """The mechanism is removed rather than re-measured: no row may rebuild it.
+
+        A future row that puts a non-ASCII source back on a command line fails
+        HERE, in every room including this one, rather than on a CI leg nobody
+        can enter locally.
+        """
+        with pytest.raises(AssertionError, match="argv"):
+            _run_under(_ASCII_ENV, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+
+    def test_the_source_channel_hands_the_child_the_glyph_under_an_ascii_locale(
+        self, ascii_locale_is_real: str
+    ) -> None:
+        """The positive half, and the half a Darwin machine CAN hold.
+
+        The child's PREFERRED encoding here is ASCII -- the fixture probed it and
+        skips otherwise -- so a channel that read the source in the locale's codec
+        would fail on this machine as well as on a leg. It does not: PEP 263 makes
+        UTF-8 a script's default source encoding, on stdin exactly as on disk.
+
+        The child answers with a name rather than with the glyph, because printing
+        it would make this row a second measurement of the console policy instead
+        of the first measurement of the channel.
+        """
+        answer = "'arrived' if '" + _TOLERANCE_GLYPH + "' == chr(0xb1) else 'mangled'"
+        source = "import sys\nsys.stdout.write(" + answer + ")\n"
+
+        done = _run_source_under(_ASCII_ENV, source, Path.cwd())
+
+        assert done.returncode == 0, f"preferred={ascii_locale_is_real}: {done.stderr}"
+        assert done.stdout == "arrived", done.stdout
+
+
 class TestTheStreamPolicyDoesOnlyWhatItSays:
     """``tolerate_unencodable_output`` is applied to every run, so it needs pinning."""
 
-    def test_a_strict_stream_is_relaxed_and_reported(self, tmp_path: Path) -> None:
+    def test_a_strict_stream_is_relaxed_and_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="strict") as stream:
             relaxed = tolerate_unencodable_output([stream])
 
@@ -486,12 +918,62 @@ class TestTheStreamPolicyDoesOnlyWhatItSays:
 
         assert r"\u2192" in target.read_text(encoding="ascii")
 
-    def test_an_explicit_handler_outranks_ours(self, tmp_path: Path) -> None:
+    def test_the_c_locales_own_handler_is_a_default_and_is_relaxed_too(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``surrogateescape`` is what CPython hands stdout under C/POSIX.
+
+        Nobody chose it, and it still raises on an ordinary non-ASCII character
+        because it re-encodes lone surrogates and nothing else. Treating it as
+        an operator's decision is what let ``beadloom docs audit`` exit 1 in
+        that room.
+        """
+        target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+        with target.open("w", encoding="ascii", errors="surrogateescape") as stream:
+            relaxed = tolerate_unencodable_output([stream])
+
+            assert relaxed == (str(target),)
+            assert stream.errors == TOLERANT_ERRORS
+            stream.write(_TOLERANCE_GLYPH)  # would raise under `surrogateescape`
+
+        assert r"\xb1" in target.read_text(encoding="ascii")
+
+    def test_an_explicit_handler_outranks_ours(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """An operator's ``PYTHONIOENCODING=...:replace`` is a decision, not a default."""
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="replace") as stream:
             assert tolerate_unencodable_output([stream]) == ()
             assert stream.errors == "replace"
+
+    def test_the_operator_can_still_ask_for_the_handler_the_image_also_gives(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``surrogateescape`` is a default in one channel and a decision in the other.
+
+        The handler name alone cannot tell them apart, so the variable is read:
+        ``PYTHONIOENCODING`` is the one way an operator states a handler for the
+        standard streams, and an operator piping byte-exact names asks for
+        exactly this one.
+        """
+        target = tmp_path / "out.txt"
+        monkeypatch.setenv("PYTHONIOENCODING", "utf-8:surrogateescape")
+        with target.open("w", encoding="ascii", errors="surrogateescape") as stream:
+            assert tolerate_unencodable_output([stream]) == ()
+            assert stream.errors == "surrogateescape"
+
+    def test_a_codec_without_a_handler_is_not_a_choice_of_handler(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``PYTHONIOENCODING=utf-8`` names a codec and leaves the handler to CPython."""
+        target = tmp_path / "out.txt"
+        monkeypatch.setenv("PYTHONIOENCODING", "utf-8")
+        with target.open("w", encoding="ascii", errors="strict") as stream:
+            assert tolerate_unencodable_output([stream]) == (str(target),)
+            assert stream.errors == TOLERANT_ERRORS
 
     def test_a_stream_that_cannot_be_reconfigured_is_left_alone(self) -> None:
         """Click's runner, a captured pipe: no ``reconfigure``, and no crash."""
@@ -499,9 +981,12 @@ class TestTheStreamPolicyDoesOnlyWhatItSays:
 
         assert tolerate_unencodable_output([buffer]) == ()
 
-    def test_the_codec_is_never_changed(self, tmp_path: Path) -> None:
+    def test_the_codec_is_never_changed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The terminal's encoding belongs to the operator; only the handler moves."""
         target = tmp_path / "out.txt"
+        monkeypatch.delenv("PYTHONIOENCODING", raising=False)
         with target.open("w", encoding="ascii", errors="strict") as stream:
             tolerate_unencodable_output([stream])
 

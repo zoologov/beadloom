@@ -1,0 +1,13 @@
+  # Feature: Rule Engine (rules/ package — see SPEC; rule_engine.py is the
+  # back-compat re-export shim, annotated to the `graph` domain).
+nodes:
+  - ref_id: rule-engine
+    kind: feature
+    summary: "Architecture-as-Code rule engine (rules/ package: types, loader, evaluators, cycles)"
+    source: src/beadloom/graph/rules/
+    docs:
+      - docs/domains/graph/features/rule-engine/SPEC.md
+edges:
+  - src: rule-engine
+    dst: graph
+    kind: part_of

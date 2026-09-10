@@ -26,7 +26,7 @@ from beadloom.application.active_table import (
 from beadloom.application.active_table import (
     split_table_row as _split_table_row,
 )
-from beadloom.application.gate import run_ci_gate
+from beadloom.application.gate import GateResult, run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.application.waves import compose_declaration, declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
@@ -49,6 +49,7 @@ from beadloom.services.bd_seam.creation import (
     allocated_ids,
     graph_plan,
 )
+from beadloom.services.guard_probes import BdWorkTracker
 
 if TYPE_CHECKING:
     import sqlite3
@@ -844,6 +845,41 @@ def _verdict_room(project_root: Path) -> dict[str, object]:
     }
 
 
+def _not_run(gate: GateResult) -> list[str]:
+    """The verifications this project declares that this run did not perform.
+
+    The room says which rooms the verdict covers; this says which verifications
+    it is a verdict about. Names only, because the agent reading it is inside
+    the project and the commands are in its own pipeline.
+    """
+    if gate.coverage is None:
+        return []
+    return [item.duty for item in gate.coverage.not_performed]
+
+
+def _finding_owners(gate: GateResult) -> dict[str, object]:
+    """Which bead claimed now owns each finding this run is refusing to close on.
+
+    The agent reading this holds one of those beads, so the distinction it needs
+    is between a finding its own claim covers and one nobody's does. A report
+    that could not be produced states its reason rather than an empty list, so
+    "nobody owns these" and "nobody was asked" do not read alike (BDL-068 S6).
+    """
+    ownership = gate.ownership
+    if ownership is None:
+        return {}
+    return {
+        "reason": ownership.reason,
+        "claimed": list(ownership.claimed),
+        "none_owned": ownership.none_owned,
+        "findings": [
+            {"rule": owner.rule, "verdict": owner.verdict, "node": owner.node,
+             "beads": list(owner.beads)}
+            for owner in ownership.owners
+        ],
+    }
+
+
 def handle_complete_bead(
     project_root: Path,
     *,
@@ -875,8 +911,17 @@ def handle_complete_bead(
     This is advisory-strong, not the true enforcement point: CI still runs
     ``beadloom ci`` independently (G5).
     """
+    # The suite this tool runs itself is named to the gate, so one run cannot
+    # report the suite as not run while that run ran it (BDL-UX #247).
     gate = run_ci_gate(
-        project_root, fail_on=None, hub_exports=[], no_reindex=False
+        project_root,
+        fail_on=None,
+        hub_exports=[],
+        no_reindex=False,
+        performed_elsewhere=("tests",) if run_tests else (),
+        # The tracker adapter is wired in from this layer: the `bd` seam lives
+        # here and the application layer must not import it.
+        tracker=BdWorkTracker(project_root),
     )
     findings: list[dict[str, object]] = list(gate.findings)
     gate_ok = gate.ok
@@ -897,8 +942,16 @@ def handle_complete_bead(
             )
 
     room = _verdict_room(project_root)
+    not_run = _not_run(gate)
     if not (gate_ok and tests_ok):
-        return {"status": "FAIL", "bead": bead, "findings": findings, "room": room}
+        return {
+            "status": "FAIL",
+            "bead": bead,
+            "findings": findings,
+            "room": room,
+            "not_run": not_run,
+            "owners": _finding_owners(gate),
+        }
 
     try:
         # Locate the bead's epic ACTIVE.md before closing (best-effort, mocked in tests).
@@ -923,6 +976,7 @@ def handle_complete_bead(
         "bead": bead,
         "findings": [],
         "room": room,
+        "not_run": not_run,
         "next": list(suggestion.confirmed),
         "next_candidates": list(suggestion.candidates),
         "next_still_blocked": list(suggestion.still_blocked),

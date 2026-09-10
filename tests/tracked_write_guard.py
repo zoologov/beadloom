@@ -12,11 +12,16 @@ a project-local paragraph to adopters.
 The class of defect is "the measurement mutates what it measures", the same one
 as a lint that writes its own index (BDL-UX #147). It is invisible to
 ``git status`` whenever the write happens to be byte-identical, which is exactly
-why it survived: the remaining four ``agents/*.md.txt`` writes were idempotent on
-an unchanged tree and left no trace — until somebody edited a live role file,
-after which one red run and one green run put the edit in the shipped artifact
+why it survived: the remaining ``agents/*.md.txt`` writes were idempotent on an
+unchanged tree and left no trace — until somebody edited a live role file, after
+which one red run and one green run put the edit in the shipped artifact
 (measured in a clean room at HEAD: template sha ``77dfc84…`` → ``b8bf376…``, run
 1 failed, run 2 passed with the edit inside the package).
+
+BDL-068 ``beadloom-iur5`` removed that writer and the assets it wrote, so no
+test calls a package-data writer any more. This guard stays, and its subject is
+now the whole tracked tree rather than one function: what it enforces is that a
+run cannot mutate what it measures, and that property has no expiry date.
 
 So the property is enforced structurally instead of by review: a test may write
 anywhere it likes — ``tmp_path``, a temp git repo, the index under
@@ -28,6 +33,9 @@ against:
 * it sees the Python-level write surface listed in :data:`_PATCHED_OPERATIONS`;
   a write through a C extension, an editor subprocess or ``git`` itself is not
   visible to it;
+* a relative path handed to ``os.remove`` / ``os.unlink`` together with a
+  ``dir_fd`` is not classified at all, because it does not resolve against the
+  process's directory (see :func:`_resolves_against_cwd`);
 * it needs ``git ls-files`` to know what "tracked" means. In a clean room (a
   ``git archive`` extraction has no ``.git``) there is no tracked set, the guard
   is INERT, and it says so once per session rather than reporting a silent pass;
@@ -84,6 +92,30 @@ def _absolute(raw: str) -> str:
 
 def _is_write_mode(mode: object) -> bool:
     return isinstance(mode, str) and any(c in mode for c in _WRITE_MODE_CHARS)
+
+
+def _resolves_against_cwd(path: object, dir_fd: object) -> bool:
+    """Whether a relative *path* means what :func:`_absolute` would make of it.
+
+    ``os.unlink(name, dir_fd=fd)`` resolves ``name`` against the DESCRIPTOR, not
+    against the process's directory, so joining it to ``os.getcwd()`` names a
+    different file. Measured: ``shutil.rmtree`` walks with ``dir_fd`` on every
+    platform whose ``os`` supports it, so removing a temp directory holding a
+    ``pyproject.toml`` was reported as a write to THIS repository's tracked
+    ``pyproject.toml`` — a finding about a file nothing touched. The whole-tree
+    ``shutil.rmtree`` wrapper still records the tracked files under a real
+    tracked directory, so what is given up is narrower than what was wrong: a
+    test calling ``os.unlink`` with an explicit ``dir_fd`` is not covered.
+    """
+    if dir_fd is None:
+        return True
+    try:
+        raw = os.fspath(path)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", "replace")
+    return os.path.isabs(raw)  # noqa: PTH117 - string-level, like `_absolute`
 
 
 def tracked_files(root: Path) -> frozenset[str]:
@@ -267,6 +299,8 @@ class TrackedWriteGuard:
             self._originals[label] = original
 
             def _wrapper(path: Any, *args: Any, **kwargs: Any) -> Any:
+                if not _resolves_against_cwd(path, kwargs.get("dir_fd")):
+                    return original(path, *args, **kwargs)
                 guard.note(path, label)
                 return original(path, *args, **kwargs)
 

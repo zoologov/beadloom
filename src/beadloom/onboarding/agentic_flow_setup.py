@@ -8,16 +8,28 @@ the EXACT wording of ``.claude/agents/*.md`` + ``.claude/commands/*.md`` (the
 role protocols + coordinator playbook), refined over ~46 epics — so we
 **preserve it 1:1**, never rewrite or condense (the owner's hard requirement).
 
-Vendor-1:1 + drift-guard
-------------------------
-The scaffold's templates for ``agents/*`` + ``commands/*`` are **vendored
-byte-identical copies** of Beadloom's own live ``.claude/`` (Beadloom is the
-reference implementation), shipped as inert ``*.md.txt`` package data so they
-are not picked up as docs/linted as live config. :func:`sync_agentic_flow`
-copies the live ``.claude/`` -> templates, and a drift-guard test asserts each
-vendored template byte-matches the live file (mirrors the F4.1
-``sync_vendored_harness`` pattern). If the live flow improves, the test fails
-until re-vendored, so the scaffold always ships the latest proven flow.
+Composed, never copied
+----------------------
+Every artifact this module writes is COMPOSED from authored package data plus
+the overlays the target project's own ``flow.yml`` selects — the slash commands
+and ``CLAUDE.md`` from ``templates/agentic_flow/``, the role protocols from
+``templates/roles/`` through
+:func:`~beadloom.onboarding.role_composer.compose_all_roles`.
+
+The role protocols were the exception until BDL-068 `beadloom-iur5`. Five
+``templates/agentic_flow/agents/*.md.txt`` assets were a byte-snapshot of THIS
+repository's live ``.claude/agents/``, refreshed by a ``sync_agentic_flow``
+function that no production code called and held byte-identical by two tests.
+That is BDL-UX #177's shape — the shipped artifact defined as a copy of one
+project's local file — left standing on the one leg BDL-061 S3 did not reach.
+It was harmless only while this repository declared no
+``.beadloom/flow/roles/`` fragment, because the snapshot then happened to equal
+the pure shipped composition; a fragment added here would have been written
+into the package by the next refresh and shipped to every adopter, silently and
+byte-identically to what the tests asserted. It also had a cost that needed no
+fragment: the snapshot was ONE composition — this project's DDD and Python — so
+a project declaring anything else received role protocols for an architecture it
+does not use.
 
 Per-project facts, never hardcoded
 -----------------------------------
@@ -30,6 +42,26 @@ already generates per-project. The scaffold drops a base ``CLAUDE.md`` (the
 live one with the project name templated) and then reuses that machinery to
 fill in the TARGET project's facts — so Beadloom's own facts never leak into a
 scaffolded repo.
+
+One policy for every artifact this command writes
+-------------------------------------------------
+The command writes three kinds of artifact into a repository it does not own:
+the composed role adapters (``.claude/agents/*``, written by
+:func:`~beadloom.onboarding.role_adapters.generate_adapters`), the slash
+commands, and ``CLAUDE.md``. All three answer a hand edit the same way — a body
+the flow manifest cannot prove Beadloom wrote is REPORTED with somewhere to move
+the edit and left exactly as it is, everything Beadloom did write is recomposed
+so an upgrade lands, and ``--force`` is the single explicit door.
+
+That was true of two of the three until BDL-068 `.67`. Measured on a scratch
+project scaffolded by the shipped command, with the same two lines appended to
+one file of each kind and one re-run with no flags: the commands and
+``CLAUDE.md`` were preserved and reported, ``.claude/agents/dev.md`` was
+recomposed over, and the run printed ``Wrote .claude/agents/dev.md`` for the
+file it had just eaten. ``config-check`` printed "It will NOT be rewritten" over
+both of the first two under a remediation that says to re-run this command, so
+following that remediation literally destroyed the edit it was printed to
+protect (BDL-UX #191, the #139/#151/#186 shape in the sibling command).
 
 Honest boundary (G4/G5)
 -----------------------
@@ -64,7 +96,7 @@ from beadloom.onboarding.flow_manifest import (
     record,
     state_of,
 )
-from beadloom.onboarding.role_composer import ROLE_NAMES
+from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.scanner import (
     _detect_project_name,
     blank_auto_regions,
@@ -74,7 +106,7 @@ from beadloom.onboarding.scanner import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-#: Role subagent files vendored byte-identical from the live ``.claude/agents/``.
+#: The role subagents this flow composes.
 #: This is :data:`~beadloom.onboarding.role_composer.ROLE_NAMES` itself and not
 #: a copy of it: until BDL-068 S1.5 the two were separate literals whose comments
 #: each claimed to mirror the other, with eight readers between them, so a fifth
@@ -84,7 +116,7 @@ if TYPE_CHECKING:
 #: adding one adds the role here too, by the same act.
 AGENT_FILES: tuple[str, ...] = ROLE_NAMES
 
-#: Slash-skill command files vendored byte-identical from ``.claude/commands/``.
+#: The slash-skill command files this flow composes.
 COMMAND_FILES: tuple[str, ...] = ("coordinator", "task-init", "checkpoint", "templates")
 
 #: Asset name for the vendored base ``CLAUDE.md`` (project name templated out).
@@ -109,6 +141,14 @@ class ScaffoldResult:
     commands_skipped: list[str] = field(default_factory=list)
     claude_md: Path | None = None
     claude_md_sections_changed: list[str] = field(default_factory=list)
+    #: True when the ``CLAUDE.md`` BODY was left alone (hand-edited or
+    #: unverified); its auto-regions are refreshed either way, so ``claude_md``
+    #: still names the file. Carried as its own field because the skip used to
+    #: travel in ``commands_skipped``, where the caller rendered it through the
+    #: commands path template and printed ``.claude/commands/CLAUDE.md.md`` —
+    #: a path that exists in no project — beside a ``Wrote .claude/CLAUDE.md``
+    #: line for the same run that had preserved it.
+    claude_md_skipped: bool = False
     #: Files from a PRIOR flow layout that this version no longer owns, with the
     #: exact cleanup command. Reported, never deleted (BDL-UX #137).
     orphans: list[str] = field(default_factory=list)
@@ -127,19 +167,9 @@ def templates_root() -> Path:
     return templates_dir() / "agentic_flow"
 
 
-def vendored_flow_root() -> Path:
-    """Directory holding the vendored ``agents/`` + ``commands/`` assets."""
-    return templates_root()
-
-
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-
-
-def _vendored_asset(kind: str, name: str) -> str:
-    """Read a vendored ``agents/`` or ``commands/`` asset (``*.md.txt``)."""
-    return (vendored_flow_root() / kind / f"{name}.md.txt").read_text(encoding="utf-8")
 
 
 def composed_command(name: str, config: FlowConfig, project_root: Path | None) -> str:
@@ -249,35 +279,6 @@ def _scaffold_composed(
     return written, skipped, notes
 
 
-def _scaffold_vendored(
-    target_dir: Path,
-    kind: str,
-    names: tuple[str, ...],
-    *,
-    force: bool,
-) -> tuple[list[str], list[str]]:
-    """Drop the vendored ``agents/*`` files for one kind; return (written, skipped).
-
-    Retained for the plain BDL-048 byte-identical agents path (and used by
-    ``config-check --fix``); the composed kinds go through
-    :func:`_scaffold_composed`.
-    """
-    written: list[str] = []
-    skipped: list[str] = []
-    for name in names:
-        content = _vendored_asset(kind, name)
-        dest = target_dir / f"{name}.md"
-        if dest.is_file() and not force:
-            if dest.read_text(encoding="utf-8") == content:
-                written.append(name)
-            else:
-                skipped.append(name)
-            continue
-        _write(dest, content)
-        written.append(name)
-    return written, skipped
-
-
 def orphaned_flow_files(project_root: Path) -> list[str]:
     """Files a PRIOR flow layout left behind, with the exact cleanup command.
 
@@ -375,9 +376,14 @@ def scaffold(
 
     Since BDL-052 S3 the role files (``.claude/agents/*``) are **composed** by
     :func:`~beadloom.onboarding.role_adapters.generate_adapters` (the source of
-    truth for those files). Pass ``include_agents=False`` so this function
-    leaves them to the composer; the default still drops the vendored agents for
-    the plain BDL-048 byte-identical scaffold path.
+    truth for those files), which writes one adapter set per configured tool.
+    Pass ``include_agents=False`` so this function leaves them to it — the CLI
+    does. The default writes the single ``.claude/agents/`` set for the one
+    caller that has no adapter generator to defer to:
+    :func:`~beadloom.onboarding.config_sync.refresh_agentic_flow_files`, for a
+    repository that adopted the flow before ``.beadloom/flow.yml`` existed.
+    Since ``beadloom-iur5`` those bodies are the same composition every other
+    writer produces, rather than a snapshot of this repository's own role files.
     """
     result = ScaffoldResult()
     # A caller that already resolved the config (the CLI, with its flags) passes
@@ -388,10 +394,19 @@ def scaffold(
         config = resolve_flow_config(project_root)
     result.flow_config_written = persist_flow_config(project_root, config)
     result.orphans = orphaned_flow_files(project_root)
+    agent_notes: list[str] = []
     if include_agents:
-        agents_dir = project_root / ".claude" / "agents"
-        result.agents_written, result.agents_skipped = _scaffold_vendored(
-            agents_dir, "agents", AGENT_FILES, force=force
+        (
+            result.agents_written,
+            result.agents_skipped,
+            agent_notes,
+        ) = _scaffold_composed(
+            project_root,
+            "roles",
+            AGENT_FILES,
+            compose_all_roles(config, project_root),
+            target_subdir="agents",
+            force=force,
         )
     bodies = {
         name: composed_command(name, config, project_root) for name in COMMAND_FILES
@@ -414,38 +429,6 @@ def scaffold(
         claude_skipped,
         claude_notes,
     ) = _scaffold_claude_md(project_root, config, force=force)
-    result.commands_skipped.extend(claude_skipped)
-    result.migration_notes = [*command_notes, *claude_notes]
+    result.claude_md_skipped = bool(claude_skipped)
+    result.migration_notes = [*agent_notes, *command_notes, *claude_notes]
     return result
-
-
-def sync_agentic_flow(live_claude_root: Path) -> list[str]:
-    """Refresh the packaged ``agents/*.md.txt`` assets from the live ``.claude/``.
-
-    Drift guard (preserve the flow 1:1): copies every live ``agents/*.md`` into
-    the package as inert ``.md.txt`` data. Returns the asset names written
-    (relative to the templates root). Asserted byte-for-byte in the test suite.
-
-    **``CLAUDE.md`` and the commands are deliberately NOT synced.** They used to
-    be: this function snapshotted Beadloom's own live ``CLAUDE.md`` into the
-    shipped template, so the distributed artifact was pinned to one project's
-    local text by construction and any attempt to separate them survived exactly
-    until the next run (BDL-UX #177 — measured: one bead id and one false claim
-    about this repo's branch protection reached the shipped template twice). The
-    direction is now the other way round. The shipped core is authored package
-    data, the live file is COMPOSED from it, and a local divergence is reported
-    by ``config-check`` instead of flowing outward. That also removes #132: a
-    ``--force`` run can no longer write a substituted project name over the
-    ``__BEADLOOM_PROJECT_NAME__`` placeholder, because nothing writes the core.
-    """
-    root = vendored_flow_root()
-    written: list[str] = []
-    dest_dir = root / "agents"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    for name in AGENT_FILES:
-        content = (live_claude_root / "agents" / f"{name}.md").read_text(
-            encoding="utf-8"
-        )
-        (dest_dir / f"{name}.md.txt").write_text(content, encoding="utf-8")
-        written.append(f"agents/{name}.md.txt")
-    return written

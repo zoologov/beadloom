@@ -36,7 +36,11 @@ rooms. Two scalars out of one known file do not need one; the same reasoning
 
 from __future__ import annotations
 
+import codecs
+import functools
+import importlib.metadata as metadata
 import itertools
+import locale
 import os
 import platform
 import re
@@ -48,7 +52,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
 #: Runner-label families and the platform each names. A VOCABULARY, not a room
 #: list: it translates the names GitHub gives its images into what
@@ -83,7 +87,77 @@ _MATRIX_EXPRESSION_RE = re.compile(r"^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$"
 #: ``${{ anything }}`` — an expression this report cannot resolve.
 _ANY_EXPRESSION_RE = re.compile(r"\$\{\{(.+?)\}\}")
 
-_WORKFLOW_DIR = Path(".github") / "workflows"
+#: Where a project declares its pipeline. Public because two derivations read
+#: one declaration: this module's rooms, and the verifications a gate run did
+#: not perform (:mod:`beadloom.application.gate_coverage`).
+WORKFLOW_DIR = Path(".github") / "workflows"
+
+#: The dimension this module gives the optional extras an environment installed.
+EXTRAS_DIMENSION = "extras"
+
+#: The dimension this module gives the character encoding a run's locale chose.
+#: The CODEC and never the name: `en_US.ISO-8859-1` and `en_US.ISO8859-1` name
+#: one room, and only the second is a locale macOS has (BDL-UX #249).
+LOCALE_DIMENSION = "locale"
+
+#: The dimension a room carries when the locale it ASKED for is not the one it
+#: got. Present only then, so its presence is itself the finding.
+LOCALE_ASKED_DIMENSION = "locale_asked"
+
+#: The variables a locale can be named in, most specific first (POSIX 8.2).
+_LOCALE_ENV_VARS = ("LC_ALL", "LC_CTYPE", "LANG")
+
+#: `C` and `POSIX` carry no codeset and are defined over the portable character
+#: set, so the encoding they declare is ASCII.
+_C_LOCALE_NAMES = frozenset({"C", "POSIX"})
+_C_LOCALE_CODEC = "ascii"
+
+#: ``name = "beadloom"`` in the packaging metadata. Read with a regular
+#: expression for the reason the module docstring states about ``tomllib``.
+_PROJECT_NAME_RE = re.compile(r'^\s*name\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+
+#: ``extra == "dev"`` — a marker that says the requirement belongs to one extra
+#: and to nothing else. A marker carrying any further clause is NOT this, and
+#: the extra it names is reported unresolved rather than decided.
+#: The ``[project.optional-dependencies]`` table and the keys inside it. Ends at
+#: the next table header or at the end of the file, because a project may
+#: declare its extras last.
+_OPTIONAL_TABLE_RE = re.compile(
+    r"^\[project\.optional-dependencies\]\s*$(.*?)(?=^\[|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_EXTRA_KEY_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*=", re.MULTILINE)
+
+_EXTRA_MARKER_RE = re.compile(r"""^extra\s*==\s*["']([^"']+)["']$""")
+
+#: ``extra`` appearing anywhere in a marker this report cannot read whole.
+_EXTRA_MENTION_RE = re.compile(r"""extra\s*==\s*["']([^"']+)["']""")
+
+#: ``some-dist[a,b]>=1.2`` — the distribution a requirement names, and the
+#: extras of it the requirement asks for.
+_REQUIREMENT_RE = re.compile(
+    r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[(?P<extras>[^\]]*)\])?"
+)
+
+#: ``uv sync --extra dev --extra=languages`` in a workflow step.
+_UV_EXTRA_RE = re.compile(r"--extra[=\s]+([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+#: ``pip install`` in any of its spellings, including ``uv pip install``. It is
+#: NOT ``uv python install``, which carries the word and installs no project.
+_PIP_INSTALL_RE = re.compile(r"\bpip\s+install\b")
+
+#: ``pip install -e .`` / ``pip install .`` — the project itself, with no extra.
+_PIP_LOCAL_RE = re.compile(r"""(?:-e\s+)?['"]?\.(?:/[\w./-]*)?['"]?(?:\s|$)""")
+
+#: What ``--all-extras`` stands for until the declaration is known.
+ALL_EXTRAS = "*"
+
+#: The private spelling kept so this module's own reads stay unchanged; the
+#: public name exists because a room BUILDER has to recognise the same token.
+_ALL_EXTRAS = ALL_EXTRAS
+
+#: ``pip install -e '.[all,dev]'`` — the bracket on a local path requirement.
+_PIP_EXTRAS_RE = re.compile(r"""[.'"][.\w/-]*\[([^\]]+)\]""")
 
 
 @dataclass(frozen=True)
@@ -119,6 +193,52 @@ class UnresolvedRoom:
 
 
 @dataclass(frozen=True)
+class AbsentExtra:
+    """An extra a project declares that this environment does not satisfy.
+
+    ``absent`` names the distributions that decided it, because "you are missing
+    ``tui``" is a fact a reader can act on only once it says what ``tui`` is.
+    """
+
+    extra: str
+    absent: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LegInstall:
+    """One job's install step, and the extras it names by hand.
+
+    ``extras`` carries what the workflow TYPED, canonically spelled — including
+    ``*`` for ``--all-extras``, which names no extra and asks for all of them.
+    """
+
+    source: str
+    extras: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExtraSet:
+    """The optional extras an environment has, and the ones it does not.
+
+    Three states, never two. ``resolved`` is false when the project's
+    distribution is not installed under this interpreter or its metadata cannot
+    be read: an unresolved answer is not an empty one, and reporting "no extras"
+    for "I could not look" is the shape this module exists to refuse.
+    """
+
+    distribution: str | None = None
+    installed: tuple[str, ...] = ()
+    absent: tuple[AbsentExtra, ...] = ()
+    unresolved: tuple[UnresolvedRoom, ...] = ()
+    resolved: bool = False
+
+    @property
+    def label(self) -> str:
+        """``dev+languages``, or ``none`` — the value the room dimension carries."""
+        return "+".join(self.installed) if self.installed else "none"
+
+
+@dataclass(frozen=True)
 class RoomComparison:
     """One declared room, and whether this run was in it."""
 
@@ -135,6 +255,7 @@ class DeclaredRooms:
     unresolved: tuple[UnresolvedRoom, ...] = ()
     supported: tuple[str, ...] = ()
     floor: str | None = None
+    extras: ExtraSet = field(default_factory=ExtraSet)
 
 
 @dataclass(frozen=True)
@@ -147,6 +268,7 @@ class RoomCensus:
     supported: tuple[str, ...] = ()
     floor: str | None = None
     supported_without_a_leg: tuple[str, ...] = field(default=())
+    extras: ExtraSet = field(default_factory=ExtraSet)
 
     @property
     def entered(self) -> tuple[RoomComparison, ...]:
@@ -157,6 +279,82 @@ class RoomCensus:
     def not_entered(self) -> tuple[RoomComparison, ...]:
         """The declared rooms this run says nothing about."""
         return tuple(c for c in self.comparisons if not c.entered)
+
+
+# ---------------------------------------------------------------------------
+# The locale a run is under
+# ---------------------------------------------------------------------------
+
+
+def codec_in_force() -> str | None:
+    """The character encoding this process's locale chose, or ``None``.
+
+    The same two calls ``ci.yml``'s anti-vacuity step makes, so the product and
+    the pipeline answer the question the same way. ``None`` when the name the C
+    library reports is not a codec this interpreter carries: an inability is not
+    an answer, and a room that cannot describe a dimension must not compare
+    equal along it.
+    """
+    try:
+        return codecs.lookup(locale.getpreferredencoding(False)).name
+    except LookupError:
+        return None
+
+
+def requested_locale_name() -> str | None:
+    """The locale this environment ASKED for, in POSIX's own precedence.
+
+    Read from the environment rather than from ``locale.getlocale``, because the
+    question is what somebody spelled — the answer to what they got is
+    :func:`codec_in_force`, and the whole of BDL-UX #249 is that the two can
+    differ without anything saying so.
+    """
+    for variable in _LOCALE_ENV_VARS:
+        value = os.environ.get(variable, "").strip()
+        if value:
+            return value
+    return None
+
+
+def codec_of_locale_name(name: str) -> str | None:
+    """The character encoding a locale name declares, or ``None`` when it declares none.
+
+    A locale name is ``language[_territory][.codeset][@modifier]``, so the
+    codeset is what a name says about encoding and the rest is not. ``C`` and
+    ``POSIX`` carry no codeset and are defined by POSIX over the portable
+    character set, which is ASCII.
+
+    Nothing is normalised beyond what :mod:`codecs` itself does. ``locale -a``
+    on glibc spells the same codeset ``iso88591``, which ``codecs.lookup``
+    refuses; guessing a normalisation would make this module the owner of a
+    spelling rule, and a spelling is what it is here to stop comparing.
+    """
+    spelled = name.strip().split("@", 1)[0]
+    if spelled in _C_LOCALE_NAMES:
+        return _C_LOCALE_CODEC
+    _, dot, codeset = spelled.partition(".")
+    if not dot:
+        return None
+    try:
+        return codecs.lookup(codeset).name
+    except LookupError:
+        return None
+
+
+def locale_dimensions(codec: str | None, asked: str | None) -> dict[str, str]:
+    """The locale dimensions a room carries: the codec, and any name that missed.
+
+    ``LOCALE_ASKED_DIMENSION`` appears only when the environment named a locale
+    whose codec is not the one in force, so its presence IS the finding rather
+    than something a reader has to compare two values to notice. A name that
+    declares no codeset promised nothing and so cannot have failed to keep it.
+    """
+    if codec is None:
+        return {}
+    dimensions = {LOCALE_DIMENSION: codec}
+    if asked is not None and codec_of_locale_name(asked) not in (None, codec):
+        dimensions[LOCALE_ASKED_DIMENSION] = asked
+    return dimensions
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +376,7 @@ def current_room() -> Room:
             "python_full": platform.python_version(),
             "implementation": platform.python_implementation(),
             "cores": str(os.cpu_count() or 1),
+            **locale_dimensions(codec_in_force(), requested_locale_name()),
         },
         source="this process",
     )
@@ -191,7 +390,23 @@ def room_line(room: Room) -> str:
     parts.append(interpreter.strip())
     if "cores" in d:
         parts.append(f"{d['cores']} cores")
+    if EXTRAS_DIMENSION in d:
+        parts.append(f"extras {d[EXTRAS_DIMENSION]}")
+    if LOCALE_DIMENSION in d:
+        parts.append(_locale_clause(d[LOCALE_DIMENSION], d.get(LOCALE_ASKED_DIMENSION)))
     return " · ".join(p for p in parts if p)
+
+
+def _locale_clause(codec: str, asked: str | None) -> str:
+    """``locale ascii``, and what was asked for when that is not what happened.
+
+    On every verdict this project prints, because reproduction is where the
+    census claims its value and a developer reproducing a locale leg with the
+    name CI publishes gets a different room on macOS without being told.
+    """
+    if asked is None:
+        return f"locale {codec}"
+    return f"locale {codec} (asked for {asked}, which did not apply here)"
 
 
 # ---------------------------------------------------------------------------
@@ -206,12 +421,18 @@ def derive_declared_rooms(project_root: Path) -> DeclaredRooms:
     interpreter to the classifiers, changes the answer by the same act.
     """
     supported, floor, packaging_unresolved = _read_packaging(project_root)
-    rooms, workflow_unresolved = _read_workflows(project_root)
+    extras = installed_extras(project_root)
+    rooms, workflow_unresolved = _read_workflows(project_root, extras.distribution)
     return DeclaredRooms(
         rooms=rooms,
-        unresolved=tuple(packaging_unresolved) + tuple(workflow_unresolved),
+        unresolved=(
+            tuple(packaging_unresolved)
+            + tuple(workflow_unresolved)
+            + (extras.unresolved if not extras.resolved else ())
+        ),
         supported=supported,
         floor=floor,
+        extras=extras,
     )
 
 
@@ -259,16 +480,521 @@ def _floor_clause(floor: str | None) -> str:
     return f" (the floor is `{floor}`)" if floor else ""
 
 
+# ---------------------------------------------------------------------------
+# The extras an environment installed
+# ---------------------------------------------------------------------------
+#
+# BDL-UX #236. Measured on this repository at `6c4d0a9`, in one clean room over
+# one code base at one commit: `mypy src/` reports 0 errors under `.[all,dev]`
+# and 82 under `.[dev]`, and under the second the whole `tui` suite leaves the
+# run — three of its four modules skip and the fourth stops the collection with
+# an error. Nothing
+# about the code differs between the two runs; the environment does, and no
+# report said so. A room's name isolates its FILES — which extras its
+# interpreter has is a second question, and until it is answered two correct
+# agents following one convention return different verdicts and neither is
+# wrong.
+#
+# Both sides are DERIVED, for the reason the module derives every other
+# dimension. What this run has comes from the project distribution's own
+# metadata held against the distributions the interpreter can see; what a leg
+# installs comes from the install step its workflow declares. Neither is a list
+# this module owns, so an extra added to `pyproject.toml` or to a workflow
+# changes the answer by the same act.
+
+
+def project_distribution(project_root: Path) -> str | None:
+    """The distribution name a project's packaging declares, or ``None``.
+
+    The name matters because the extras are the ANALYSED project's, not this
+    tool's. Under `uv tool install beadloom` those are different distributions,
+    and reading Beadloom's own extras while reporting on somebody else's project
+    would be a confident wrong answer rather than an unresolved one.
+    """
+    try:
+        text = (project_root / "pyproject.toml").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    match = _PROJECT_NAME_RE.search(text)
+    return match.group(1).strip() if match else None
+
+
+def canonical_distribution(name: str) -> str:
+    """The PEP 503 form of a distribution name, so two spellings compare equal."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+@functools.cache
+def _installed_distributions(search_path: tuple[str, ...] = ()) -> frozenset[str]:
+    """Every distribution name an interpreter can see, canonically spelled.
+
+    *search_path* is empty for the running interpreter and names another
+    environment's ``site-packages`` otherwise — a clean room's own, which is a
+    different interpreter's answer to the same question and must not be read off
+    this process (BDL-UX #256). Installed metadata is files on disk, so it is
+    read without importing anything that environment holds.
+
+    Cached because an interpreter does not gain a distribution part-way through
+    a process, and the scan costs about 27 ms against a census that several
+    verdicts take.
+    """
+    found: set[str] = set()
+    for distribution in _distributions(search_path):
+        name = distribution.metadata["Name"]
+        if name:
+            found.add(canonical_distribution(name))
+    return frozenset(found)
+
+
+def _distributions(search_path: tuple[str, ...]) -> Iterable[metadata.Distribution]:
+    """The distributions of the named environment, or of this process."""
+    if search_path:
+        return metadata.distributions(path=list(search_path))
+    return metadata.distributions()
+
+
+@dataclass(frozen=True)
+class _ExtraDeclaration:
+    """What one distribution's metadata says about the extras it declares.
+
+    ``self_referenced`` exists because setuptools writes
+    ``mypkg[a,b]; extra == "all"`` rather than flattening it, and a
+    self-reference read as a plain requirement resolves to "installed" for every
+    extra of every project that has one. ``conditional`` is the extras carrying
+    a marker this report cannot read whole, kept apart from the ones it decided.
+    """
+
+    requirements: Mapping[str, frozenset[str]]
+    self_referenced: Mapping[str, frozenset[str]]
+    conditional: frozenset[str]
+    base: frozenset[str]
+    failure: str | None = None
+
+
+def _find_distribution(
+    distribution: str, search_path: tuple[str, ...]
+) -> metadata.Distribution | None:
+    """One distribution's metadata, in this process or in another environment.
+
+    The name is matched canonically here rather than handed to the finder,
+    because the finder's own name matching is not the same across every
+    interpreter this project declares and a room census must not answer
+    differently on 3.10 than on 3.13.
+    """
+    if not search_path:
+        try:
+            return metadata.distribution(distribution)
+        except (metadata.PackageNotFoundError, OSError, ValueError):
+            return None
+    want = canonical_distribution(distribution)
+    for found in _distributions(search_path):
+        name = found.metadata["Name"]
+        if name and canonical_distribution(name) == want:
+            return found
+    return None
+
+
+@functools.cache
+def _declared_requirements(
+    distribution: str, search_path: tuple[str, ...] = ()
+) -> _ExtraDeclaration:
+    """One distribution's extras: their requirements, and what could not be read."""
+    found = _find_distribution(distribution, search_path)
+    if found is None:
+        return _ExtraDeclaration(
+            requirements={},
+            self_referenced={},
+            conditional=frozenset(),
+            base=frozenset(),
+            failure=(
+                f"this interpreter holds no distribution named `{distribution}`, "
+                "so the extras it declares cannot be told from the ones it "
+                "installed"
+            ),
+        )
+    declared = [
+        canonical_distribution(name)
+        for name in (found.metadata.get_all("Provides-Extra") or [])
+    ]
+    requirements: dict[str, set[str]] = {name: set() for name in declared}
+    self_referenced: dict[str, set[str]] = {name: set() for name in declared}
+    conditional: set[str] = set()
+    base: set[str] = set()
+    own = canonical_distribution(distribution)
+    for raw in found.metadata.get_all("Requires-Dist") or []:
+        _record_requirement(
+            str(raw), own, requirements, self_referenced, conditional, base
+        )
+    return _ExtraDeclaration(
+        requirements={k: frozenset(v) for k, v in requirements.items()},
+        self_referenced={k: frozenset(v) for k, v in self_referenced.items()},
+        conditional=frozenset(conditional),
+        base=frozenset(base),
+    )
+
+
+def _record_requirement(
+    raw: str,
+    own: str,
+    requirements: dict[str, set[str]],
+    self_referenced: dict[str, set[str]],
+    conditional: set[str],
+    base: set[str],
+) -> None:
+    """File one ``Requires-Dist`` line under the extra its marker names."""
+    body, _, marker = raw.partition(";")
+    marker = marker.strip()
+    parsed_base = _REQUIREMENT_RE.match(body.strip())
+    if not marker:
+        # A base requirement: it belongs to no extra and is present in every
+        # environment, so a leg's satisfied set must count it as available.
+        if parsed_base is not None:
+            base.add(canonical_distribution(parsed_base.group("name")))
+        return
+    named = _EXTRA_MARKER_RE.match(marker)
+    if named is None:
+        mentioned = _EXTRA_MENTION_RE.search(marker)
+        if mentioned is not None:
+            conditional.add(canonical_distribution(mentioned.group(1)))
+        return
+    extra = canonical_distribution(named.group(1))
+    if extra not in requirements:
+        requirements[extra] = set()
+        self_referenced[extra] = set()
+    parsed = _REQUIREMENT_RE.match(body.strip())
+    if parsed is None:
+        conditional.add(extra)
+        return
+    name = canonical_distribution(parsed.group("name"))
+    if name == own:
+        self_referenced[extra].update(
+            canonical_distribution(part)
+            for part in (parsed.group("extras") or "").split(",")
+            if part.strip()
+        )
+        return
+    requirements[extra].add(name)
+
+
+def _closure(extra: str, declaration: _ExtraDeclaration) -> frozenset[str]:
+    """Every distribution *extra* asks for, following its self-references."""
+    seen: set[str] = set()
+    pending = [extra]
+    needed: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        needed.update(declaration.requirements.get(current, frozenset()))
+        pending.extend(declaration.self_referenced.get(current, frozenset()))
+    return frozenset(needed)
+
+
+def extras_satisfied_by(distribution: str, available: frozenset[str]) -> tuple[str, ...]:
+    """The declared extras every requirement of which is in *available*.
+
+    The question is asked this way round on purpose. A leg's install step names
+    the extras somebody TYPED, and an environment is what those requirements
+    make it: a leg installing ``dev,languages,tui,watch,graphql`` also satisfies
+    ``all``, and comparing the typed lists would report two identical
+    environments as different rooms.
+    """
+    declaration = _declared_requirements(distribution)
+    if declaration.failure is not None:
+        return ()
+    present = available | declaration.base
+    satisfied: list[str] = []
+    for extra in sorted(declaration.requirements):
+        if extra in declaration.conditional:
+            continue
+        needed = _closure(extra, declaration)
+        if needed and needed <= present:
+            satisfied.append(extra)
+    return tuple(satisfied)
+
+
+def installed_extras(
+    project_root: Path, *, search_path: tuple[str, ...] = ()
+) -> ExtraSet:
+    """Which of the project's declared extras an interpreter actually has.
+
+    The answer is about the ANALYSED project's distribution as that interpreter
+    holds it, which is why it is unresolved rather than empty when the
+    interpreter holds no such distribution.
+
+    *search_path* names the environment to read, and is empty for the running
+    process. A clean room builds an interpreter of its own, and reading this
+    process's extras onto that room's record would state the extras of an
+    environment no verdict was taken in (BDL-UX #256).
+    """
+    distribution = project_distribution(project_root)
+    if distribution is None:
+        return ExtraSet(
+            unresolved=(
+                UnresolvedRoom(
+                    source="pyproject.toml",
+                    why=(
+                        "the packaging metadata names no distribution, so the "
+                        "optional extras an environment installed cannot be "
+                        "named and a verdict cannot state them"
+                    ),
+                ),
+            )
+        )
+    declaration = _declared_requirements(distribution, search_path)
+    if declaration.failure is not None:
+        return ExtraSet(
+            distribution=distribution,
+            unresolved=(
+                UnresolvedRoom(source="pyproject.toml", why=declaration.failure),
+            ),
+        )
+    available = _installed_distributions(search_path) | declaration.base
+    installed: list[str] = []
+    absent: list[AbsentExtra] = []
+    unresolved: list[UnresolvedRoom] = [
+        UnresolvedRoom(
+            source=f"{distribution}[{extra}]",
+            why=(
+                "its requirements carry a marker beyond `extra ==`, so whether "
+                "this environment installed it cannot be decided from what is "
+                "present"
+            ),
+        )
+        for extra in sorted(declaration.conditional)
+        if extra in declaration.requirements
+    ]
+    for extra in sorted(declaration.requirements):
+        if extra in declaration.conditional:
+            continue
+        needed = _closure(extra, declaration)
+        if not needed:
+            unresolved.append(
+                UnresolvedRoom(
+                    source=f"{distribution}[{extra}]",
+                    why=(
+                        "it names no requirement, so no environment can be told "
+                        "apart by having installed it"
+                    ),
+                )
+            )
+            continue
+        missing = tuple(sorted(needed - available))
+        if missing:
+            absent.append(AbsentExtra(extra=extra, absent=missing))
+        else:
+            installed.append(extra)
+    return ExtraSet(
+        distribution=distribution,
+        installed=tuple(installed),
+        absent=tuple(absent),
+        unresolved=tuple(unresolved),
+        resolved=True,
+    )
+
+
+def _leg_extras(
+    distribution: str | None, source: str, job: Mapping[str, Any]
+) -> tuple[str | None, list[UnresolvedRoom]]:
+    """The extras a job installs, as the set of extras that environment satisfies.
+
+    Three answers, and the third is the point. A job whose step names them gets
+    the label; a job that installs the project through something this report
+    does not follow — a local composite action — gets an unresolved entry rather
+    than a room with one fewer dimension; and a job that installs the project at
+    all gets neither, because a job that runs no verdict declares no
+    environment for one.
+    """
+    typed, composite = typed_extras_of_job(job)
+    if typed is None:
+        if composite:
+            return None, [
+                UnresolvedRoom(
+                    source=source,
+                    why=(
+                        "the job installs the project through a local action, so "
+                        "the optional extras its verdict is taken under are "
+                        "declared somewhere this report does not follow"
+                    ),
+                )
+            ]
+        return None, []
+    if distribution is None:
+        return None, []
+    declaration = _declared_requirements(distribution)
+    if declaration.failure is not None:
+        return None, []
+    if _ALL_EXTRAS in typed:
+        typed = (typed - {_ALL_EXTRAS}) | set(declaration.requirements)
+    unresolved: list[UnresolvedRoom] = []
+    unknown = sorted(typed - set(declaration.requirements))
+    if unknown:
+        unresolved.append(
+            UnresolvedRoom(
+                source=source,
+                why=(
+                    f"the job installs `{', '.join(unknown)}`, which "
+                    f"`{distribution}` does not declare as an extra, so the "
+                    "environment it creates cannot be named from the packaging"
+                ),
+            )
+        )
+    available = frozenset(declaration.base).union(
+        *(_closure(extra, declaration) for extra in typed)
+    )
+    satisfied = extras_satisfied_by(distribution, available)
+    return ("+".join(satisfied) if satisfied else "none"), unresolved
+
+
+def typed_extras_of_job(
+    job: Mapping[str, Any],
+) -> tuple[set[str] | None, bool]:
+    """The extras one job's steps TYPE, and whether it installs through an action.
+
+    Two questions read this, and they are not the same question. A room census
+    asks which extras that environment SATISFIES, because comparing typed lists
+    would report two identical environments as two rooms. A room BUILDER asks
+    what to type, because an install command takes names and not a satisfied
+    set. Both start here, so a leg's install step is parsed once.
+
+    ``None`` for the typed set means the job installs the project nowhere; an
+    empty set means it installs it with no extras. The flag is true when a step
+    runs a local action, which is an install this reader does not follow.
+    """
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return None, False
+    typed: set[str] | None = None
+    composite = False
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        uses = step.get("uses")
+        if isinstance(uses, str) and uses.strip().startswith("./"):
+            composite = True
+        run = step.get("run")
+        if not isinstance(run, str):
+            continue
+        found = _extras_of_command(run)
+        if found is not None:
+            typed = found if typed is None else typed | found
+    return typed, composite
+
+
+def declared_extra_names(project_root: Path) -> tuple[str, ...]:
+    """The extras a project's packaging declares, read without a TOML parser.
+
+    Needed because a leg spelling ``--all-extras`` names every extra and
+    enumerates none, and the satisfied-set derivation cannot enumerate them for
+    a project whose distribution the running interpreter does not hold — which
+    is the ordinary case for a project this tool is merely pointed at.
+
+    Read by the same means as the rest of the packaging in this module, and for
+    the reason the module docstring states: ``tomllib`` is 3.11+ and this
+    project supports 3.10. A key spelled across lines or inside an inline table
+    is therefore not found, so the answer is a LOWER bound on what the project
+    declares and never a claim to be the whole of it.
+    """
+    try:
+        text = (Path(project_root) / "pyproject.toml").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ()
+    table = _OPTIONAL_TABLE_RE.search(text)
+    if table is None:
+        return ()
+    return tuple(
+        sorted(
+            {
+                canonical_distribution(name)
+                for name in _EXTRA_KEY_RE.findall(table.group(1))
+            }
+        )
+    )
+
+
+def leg_installs(project_root: Path) -> tuple[LegInstall, ...]:
+    """Every job of this project's workflows that installs it, and what it names.
+
+    Deliberately NOT the satisfied set :func:`extras_satisfied_by` produces. That
+    one needs the analysed project's distribution installed under the running
+    interpreter, so it is unresolved for a project this tool is merely pointed
+    at; the typed names are read out of the workflow file and are available
+    whether or not anything is installed. A room is built from these, and
+    compared with the other.
+    """
+    directory = Path(project_root) / WORKFLOW_DIR
+    installs: list[LegInstall] = []
+    for path in sorted(p for p in directory.glob("*.y*ml") if p.is_file()):
+        rel = path.relative_to(project_root).as_posix()
+        jobs, failure = load_jobs(path)
+        if failure is not None:
+            continue
+        for name, job in jobs.items():
+            typed, _ = typed_extras_of_job(job)
+            if typed is None:
+                continue
+            installs.append(
+                LegInstall(source=f"{rel}: {name}", extras=tuple(sorted(typed)))
+            )
+    return tuple(installs)
+
+
+def _extras_of_command(run: str) -> set[str] | None:
+    """The extras one ``run:`` block installs, or ``None`` if it installs none.
+
+    An empty set and ``None`` are different answers: ``uv sync`` with no
+    ``--extra`` DECLARES an environment with no extras, and a step that installs
+    nothing declares nothing at all. `uv python install 3.12` is the trap this
+    separation exists for — it carries the word and installs no project.
+    """
+    found: set[str] | None = None
+    for line in run.splitlines():
+        if "uv sync" in line:
+            found = (found or set()) | _uv_sync_extras(line)
+            continue
+        pip = _pip_project_extras(line)
+        if pip is not None:
+            found = (found or set()) | pip
+    return found
+
+
+def _uv_sync_extras(line: str) -> set[str]:
+    """``--extra dev --extra=languages``, or every declared extra for ``--all-extras``."""
+    if "--all-extras" in line:
+        return {_ALL_EXTRAS}
+    return {canonical_distribution(name) for name in _UV_EXTRA_RE.findall(line)}
+
+
+def _pip_project_extras(line: str) -> set[str] | None:
+    """The extras a ``pip install`` of THIS project names, or ``None``.
+
+    A ``pip install`` of something else — a requirements file, a pinned tool —
+    declares nothing about the project's own extras, so it is not an install
+    this report reads.
+    """
+    if not _PIP_INSTALL_RE.search(line):
+        return None
+    bracketed = _PIP_EXTRAS_RE.search(line)
+    if bracketed is not None:
+        return {
+            canonical_distribution(part)
+            for part in bracketed.group(1).split(",")
+            if part.strip()
+        }
+    return set() if _PIP_LOCAL_RE.search(line) else None
+
+
 def _read_workflows(
-    project_root: Path,
+    project_root: Path, distribution: str | None = None
 ) -> tuple[tuple[Room, ...], list[UnresolvedRoom]]:
     """One room per matrix combination, per job, per workflow file."""
-    directory = project_root / _WORKFLOW_DIR
+    directory = project_root / WORKFLOW_DIR
     files = sorted(p for p in directory.glob("*.y*ml") if p.is_file())
     if not files:
         return (), [
             UnresolvedRoom(
-                source=str(_WORKFLOW_DIR),
+                source=str(WORKFLOW_DIR),
                 why=(
                     "no workflow file declares a leg, so this project declares no "
                     "room a verdict could be held against"
@@ -279,19 +1005,27 @@ def _read_workflows(
     unresolved: list[UnresolvedRoom] = []
     for path in files:
         rel = path.relative_to(project_root).as_posix()
-        jobs, failure = _load_jobs(path)
+        jobs, failure = load_jobs(path)
         if failure is not None:
             unresolved.append(UnresolvedRoom(source=rel, why=failure))
             continue
         for name, job in jobs.items():
-            job_rooms, job_unresolved = _rooms_of_job(f"{rel}: {name}", job)
+            job_rooms, job_unresolved = _rooms_of_job(
+                f"{rel}: {name}", job, distribution
+            )
             rooms.extend(job_rooms)
             unresolved.extend(job_unresolved)
     return tuple(rooms), unresolved
 
 
-def _load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
-    """The ``jobs`` mapping of a workflow, or the reason there is none."""
+def load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
+    """The ``jobs`` mapping of a workflow, or the reason there is none.
+
+    Public alongside :data:`WORKFLOW_DIR` because the gate's coverage report
+    reads the same declaration for a different question, and one reader means
+    one answer to "this workflow could not be parsed" rather than two that can
+    word it differently.
+    """
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
@@ -305,12 +1039,14 @@ def _load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
 
 
 def _rooms_of_job(
-    source: str, job: Mapping[str, Any]
+    source: str, job: Mapping[str, Any], distribution: str | None = None
 ) -> tuple[list[Room], list[UnresolvedRoom]]:
-    """Expand one job's ``runs-on`` and matrix into the rooms it declares."""
+    """Expand one job's ``runs-on``, matrix and install step into its rooms."""
     unresolved: list[UnresolvedRoom] = []
     matrix, matrix_unresolved = _matrix_of(source, job)
     unresolved.extend(matrix_unresolved)
+    extras, extras_unresolved = _leg_extras(distribution, source, job)
+    unresolved.extend(extras_unresolved)
     runs_on = _runs_on_of(job)
     if runs_on is None:
         return [], [
@@ -330,6 +1066,8 @@ def _rooms_of_job(
         dimensions.update(
             {k: v for k, v in combination.items() if k != _matrix_os_key(runs_on)}
         )
+        if extras is not None:
+            dimensions[EXTRAS_DIMENSION] = extras
         rooms.append(Room(dimensions=dimensions, source=source))
     return rooms, unresolved
 
@@ -455,7 +1193,8 @@ def take_census(
     ``declared`` is for a caller that already derived the population; passing it
     skips the file derivation rather than deriving it twice.
     """
-    current = current_room()
+    extras = installed_extras(project_root)
+    current = _room_with_extras(current_room(), extras)
     if declared is None:
         found = derive_declared_rooms(project_root)
         rooms, unresolved = found.rooms, list(found.unresolved)
@@ -463,12 +1202,13 @@ def take_census(
     else:
         rooms, unresolved = declared, []
         supported, floor = (), None
+        if not extras.resolved:
+            unresolved.extend(extras.unresolved)
     comparisons: list[RoomComparison] = []
     for room in rooms:
-        entered, why, label_unknown = _compare(current, room)
+        entered, why, undeclared = _compare(current, room)
         comparisons.append(RoomComparison(room=room, entered=entered, why=why))
-        if label_unknown is not None:
-            unresolved.append(UnresolvedRoom(source=room.source, why=label_unknown))
+        unresolved.extend(UnresolvedRoom(source=room.source, why=note) for note in undeclared)
     legs = {r.dimensions.get("python") for r in rooms}
     return RoomCensus(
         current=current,
@@ -477,19 +1217,37 @@ def take_census(
         supported=supported,
         floor=floor,
         supported_without_a_leg=tuple(v for v in supported if v not in legs),
+        extras=extras,
     )
 
 
-def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
-    """Whether this run is in ``room``, why not, and any label it could not read.
+def _room_with_extras(room: Room, extras: ExtraSet) -> Room:
+    """The room this run is in, carrying the extras dimension when it has one.
 
-    Every dimension must be comparable AND equal. The two other outcomes — a
-    dimension this run cannot describe, and a runner label naming no platform —
-    both resolve to "not entered", because the alternative is a report that
-    claims coverage from an inability to check.
+    An unresolved answer adds no dimension. The alternative — an ``extras``
+    value spelling "unknown" — would compare unequal to every leg and read as a
+    difference in the environment, when what happened is that nothing looked.
+    """
+    if not extras.resolved:
+        return room
+    return Room(
+        dimensions={**room.dimensions, EXTRAS_DIMENSION: extras.label},
+        source=room.source,
+    )
+
+
+def _compare(current: Room, room: Room) -> tuple[bool, str, list[str]]:
+    """Whether this run is in ``room``, why not, and what it could not read.
+
+    Every dimension must be comparable AND equal. The three other outcomes — a
+    dimension this run cannot describe, a runner label naming no platform, and a
+    locale name declaring no encoding — all resolve to "not entered", because
+    the alternative is a report that claims coverage from an inability to check.
+    The last two are ALSO returned as unresolved notes: they are things the
+    DECLARATION does not say, so a reader has a file to go and change.
     """
     reasons: list[str] = []
-    label_unknown: str | None = None
+    undeclared: list[str] = []
     for key in sorted(room.dimensions):
         want = room.dimensions[key]
         if key == "os":
@@ -499,6 +1257,7 @@ def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
                     f"the runner label `{want}` names no platform this report "
                     "knows, so no run can be said to have entered it"
                 )
+                undeclared.append(label_unknown)
                 reasons.append(f"os: {label_unknown}")
                 continue
             have = current.dimensions.get("os", "")
@@ -510,11 +1269,93 @@ def _compare(current: Room, room: Room) -> tuple[bool, str, str | None]:
             if want != have:
                 reasons.append(f"python: the leg is {want} and this run is {have}")
             continue
+        if key == EXTRAS_DIMENSION:
+            difference = _extras_difference(current.dimensions.get(key), want)
+            if difference is not None:
+                reasons.append(f"{EXTRAS_DIMENSION}: {difference}")
+            continue
+        if key == LOCALE_DIMENSION:
+            difference = _locale_difference(current.dimensions.get(key), want)
+            if difference is not None:
+                reasons.append(f"{LOCALE_DIMENSION}: {difference}")
+            if codec_of_locale_name(want) is None:
+                undeclared.append(_no_codec_note(want))
+            continue
         reasons.append(
             f"{key}: this run cannot describe the dimension `{key}`, which the "
             f"leg declares as {want}"
         )
-    return not reasons, "; ".join(reasons), label_unknown
+    return not reasons, "; ".join(reasons), undeclared
+
+
+def _no_codec_note(want: str) -> str:
+    """What a leg declaring a locale with no codeset leaves undeclared."""
+    return (
+        f"the leg declares the locale `{want}`, which names no character "
+        "encoding, so the codec its runs are taken under is declared nowhere "
+        "this report can read"
+    )
+
+
+def _locale_difference(have: str | None, want: str) -> str | None:
+    """Why this run's locale is not the leg's, or ``None`` when it is.
+
+    Both sides resolve to a CODEC, because a locale name is a spelling the
+    platform owns: `en_US.ISO-8859-1` is the name this project's own `ci.yml`
+    publishes and macOS has no locale by it, while `en_US.ISO8859-1` is the same
+    room and does exist there (measured on Darwin 25.6.0, CPython 3.13.7).
+
+    The third clause is BDL-UX #249. When the environment asked for this leg's
+    own name and the process is in another room, the run is not "outside the
+    leg" the way a Darwin run is outside an Ubuntu one — it was pointed at the
+    leg and silently landed elsewhere, and a reason that did not say so would
+    read as a locale nobody set.
+    """
+    if have is None:
+        return (
+            "this run cannot describe the locale it is running under, which the "
+            f"leg declares as {want}"
+        )
+    wanted = codec_of_locale_name(want)
+    if wanted is None:
+        return _no_codec_note(want)
+    if wanted == have:
+        return None
+    asked = requested_locale_name()
+    if asked is not None and asked.strip() == want.strip():
+        return (
+            f"this environment asks for `{want}` and the process is in the "
+            f"{have} room, so the name did not apply here — the leg's room is "
+            f"{wanted}, and a verdict taken like this is the {have} room under "
+            "the other room's name"
+        )
+    return f"the leg is {want} ({wanted}) and this run is {have}"
+
+
+def _extras_difference(have: str | None, want: str) -> str | None:
+    """Why this run's extras are not the leg's, or ``None`` when they are.
+
+    Named in both directions. An extra the leg installs and this run has not is
+    the failure BDL-UX #236 records — 82 mypy errors against 0, and 363 tests
+    that do not exist — and an extra this run has and the leg does not is the
+    same failure read the other way, which is how a green taken here can be red
+    there.
+    """
+    if have is None:
+        return (
+            "this run cannot describe the extras it installed, which the leg "
+            f"declares as {want}"
+        )
+    if have == want:
+        return None
+    here = {name for name in have.split("+") if name and name != "none"}
+    there = {name for name in want.split("+") if name and name != "none"}
+    clauses = []
+    if there - here:
+        clauses.append(f"the leg installs {', '.join(sorted(there - here))} and this run has not")
+    if here - there:
+        clauses.append(f"this run has {', '.join(sorted(here - there))} and the leg does not")
+    return "; ".join(clauses) if clauses else f"the leg is {want} and this run is {have}"
 
 
 def _platform_of(runner_label: str) -> str | None:

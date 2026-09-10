@@ -66,12 +66,20 @@ _HOOK_SCRIPT = '''\
 # Beadloom CLI, which owns every decision. Configure guards, strictness per work
 # kind, and exclusions in `.beadloom/flow.yml`.
 #
-# Exit codes this adapter can return: 0 = pass/skip, 1 = warn (shown, never
-# blocking), 2 = block, or error — the guard could not answer, so the edit stops.
-# A defect in `.beadloom/flow.yml` or in the command line arrives as 2 here too.
-# Run the same command without `--hook` and it exits 3 instead, which keeps a
-# broken configuration distinguishable from a guard that fired; through a hook
-# that distinction would only mean "the edit went through unguarded".
+# Exit codes this adapter can return, and what each one means for the edit:
+#   0 = pass, or skip — the guard answered, and nothing stops the edit.
+#   1 = warn — the guard answered and found something, without stopping the edit.
+#       Also `unresolved`: the guard could not evaluate ITSELF (its own code, its
+#       configuration, or the evaluation), so the edit went through UNCHECKED and
+#       the verdict on stderr says exactly that. It does not block, because every
+#       repair for that class is a file write and this adapter is bound to every
+#       tool that makes one — blocking there leaves a project no session can fix.
+#   2 = block, or error — the guard refuses to interpret THIS edit's target, so
+#       this edit stops. A different target is unaffected.
+# Run the same command without `--hook` and `unresolved` exits 3 instead, which
+# keeps it distinguishable from a guard that fired for a reader at a terminal;
+# through a hook only the code is read, so the distinction is made by the outcome
+# name and not by the number.
 exec beadloom guard "$1" --hook claude-code
 '''
 

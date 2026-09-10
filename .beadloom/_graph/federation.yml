@@ -1,0 +1,13 @@
+  # Feature: Federation (federation/ package — see SPEC; __init__.py is the
+  # back-compat re-export hub and remains this node's nominal source file).
+nodes:
+  - ref_id: federation
+    kind: feature
+    summary: "Cross-repo federation (federation/ package: refs, export, reconcile, gate)"
+    source: src/beadloom/graph/federation/
+    docs:
+      - docs/domains/graph/features/federation/SPEC.md
+edges:
+  - src: federation
+    dst: graph
+    kind: part_of

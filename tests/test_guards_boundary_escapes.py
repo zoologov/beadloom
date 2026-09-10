@@ -10,10 +10,14 @@ was the deliverable's own guarantee:
 1. :class:`TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure` — ``_answer``
    handled ``Exception`` and ``SystemExit``. ``KeyboardInterrupt`` is neither,
    so an interrupt during an evaluation left the boundary with no verdict and no
-   record and Click turned it into exit **1**, the WARN code a harness reads as
-   "carry on". Closed by widening the last-resort handler to ``BaseException``,
-   with the consequence argued in ``flow-guards/SPEC.md``: an interrupt is now a
-   recorded "I could not tell" at exit 2, which BLOCKS the edit.
+   record and Click turned it into exit **1** with nothing said. Closed by
+   widening the last-resort handler to ``BaseException``. What the class pins is
+   the verdict and the record, not the code: since BDL-UX #254 an interrupt is a
+   recorded ``unresolved`` — the guard could not evaluate itself — which is
+   visible, is counted as an evaluation that reached no verdict, and does not
+   stop the edit. The 1 an escaping interrupt produced and the 1 this produces
+   are not the same answer: one was silent and unrecorded, the other names
+   itself on stderr and in ``guard-firings.jsonl``.
 2. :class:`TestControlLeavesTheBoundaryPathInExactlyOnePlace` — the structural
    pins checked a *spelling*. Measured by ``.30``: ``sys.exit(0)`` inside
    ``run_invocation`` shipped 628/628 green while ``beadloom guard ""`` exited 0
@@ -138,13 +142,16 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
     so an interrupted guard let the edit through at exit 1 AND left no trace,
     the one combination this slice exists to prevent.
 
-    THE COST OF THE FIX, because it is not free: an interrupt is now a recorded
-    ``error`` at exit 2, so pressing Ctrl-C during a guarded edit BLOCKS that
-    edit instead of waving it through. That is argued in ``flow-guards/SPEC.md``
-    rather than assumed here, and the short form is: SIGINT reaches the whole
-    foreground process group, so the harness's own tool call is interrupted with
-    the guard, and a guard that did not answer must not be read as one that
-    passed.
+    WHAT THE FIX BUYS, and what it does not: an interrupt is a recorded
+    ``unresolved``, so it is a verdict and a firing rather than a silence. It
+    does not block. BDL-061.30 made it block and stated the cost; BDL-UX #254
+    measured the cost of blocking on any inability of the guard's own and moved
+    the whole class, this row included. SIGINT reaches the whole foreground
+    process group, so the harness's own tool call is interrupted with the guard
+    and there is usually no edit left to decide about — which is why the row was
+    never the expensive half. The sentence that had to survive did: a guard that
+    did not answer must not be READ as one that passed, and ``unresolved`` is not
+    ``pass``, is not exit 0, and does not clear ``never-fired``.
     """
 
     def _install(self, monkeypatch, check) -> None:
@@ -175,10 +182,10 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
 
         result = _must_not_escape(lambda: run_invocation(self._invocation(root)))
 
-        assert result.exit_code == 2
+        assert result.exit_code == 3
         assert result.recorded is True
         assert "interrupted" in result.verdict.why
-        assert [record.outcome for record in read_firings(root)] == ["error"]
+        assert [record.outcome for record in read_firings(root)] == ["unresolved"]
 
     def test_the_same_seam_by_contrast_is_a_verdict_when_it_is_an_exception(
         self, tmp_path, monkeypatch
@@ -198,7 +205,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
 
         result = run_invocation(self._invocation(root))
 
-        assert result.exit_code == 2
+        assert result.exit_code == 3
         assert result.recorded is True
 
     class _AnExitNobodyNamed(BaseException):
@@ -231,7 +238,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
 
         result = _must_not_escape(lambda: run_invocation(self._invocation(root)))
 
-        assert result.exit_code == 2, label
+        assert result.exit_code == 3, label
         assert result.recorded is True, label
         assert result.verdict.why, label
 
@@ -272,10 +279,10 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
         assert result.exit_code == 2, result.output
         assert "not recorded" in result.output, result.output
 
-    def test_through_real_click_dispatch_an_interrupt_blocks_and_leaves_a_record(
+    def test_through_real_click_dispatch_an_interrupt_is_named_and_leaves_a_record(
         self, tmp_path
     ) -> None:
-        """Measured, not reasoned: rc 2, a verdict, a record — and no "Aborted!".
+        """Measured, not reasoned: rc 3, a verdict, a record — and no "Aborted!".
 
         Seam (rule 4): the interrupt is injected at the probe seam and the
         harness is Click's own ``main()`` in a real subprocess — that is the
@@ -324,10 +331,10 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             check=False,
         )
 
-        assert completed.returncode == 2, completed.stderr
+        assert completed.returncode == 3, completed.stderr
         assert "Aborted!" not in completed.stderr
-        assert "bead-claimed: ERROR" in completed.stderr, completed.stderr
-        assert [record.outcome for record in read_firings(root)] == ["error"]
+        assert "bead-claimed: UNRESOLVED" in completed.stderr, completed.stderr
+        assert [record.outcome for record in read_firings(root)] == ["unresolved"]
 
 
 # ==========================================================================
@@ -564,14 +571,20 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
 #: failed three times in this slice — "the guard manufactures no root" — is
 #: quantified over this table instead of being asserted about the walk alone,
 #: because it was true of the walk and false through the flag every time.
+#: ``(label, kind, exit_code)``. The two roots that ARE the project block at 2 —
+#: the guard is declared blocking and it answered. The five that name no project
+#: exit 3, because since BDL-UX #254 "I could not locate a project" is an
+#: inability the guard has about itself rather than an answer about the edit.
+#: What every row asserts is unchanged and is the class's subject: no directory
+#: that did not already carry the marker acquires one.
 _WAYS_A_ROOT_IS_NAMED = (
     ("discovery from a directory inside the project", "inside", 2),
-    ("discovery from a directory that is not in a project", "outside", 2),
+    ("discovery from a directory that is not in a project", "outside", 3),
     ("--project naming the project", "declared-project", 2),
-    ("--project naming a directory that is not a project", "declared-plain", 2),
-    ("--project naming a subdirectory of the project", "declared-subdir", 2),
-    ("--project naming a directory that does not exist", "declared-missing", 2),
-    ("--project naming a file", "declared-file", 2),
+    ("--project naming a directory that is not a project", "declared-plain", 3),
+    ("--project naming a subdirectory of the project", "declared-subdir", 3),
+    ("--project naming a directory that does not exist", "declared-missing", 3),
+    ("--project naming a file", "declared-file", 3),
 )
 
 
@@ -615,9 +628,10 @@ class TestADeclaredProjectMustBeAProject:
     ) -> None:
         """The claim, quantified over every way the root is chosen — not over one.
 
-        Every row blocks at exit 2 (the guard is declared blocking, and where no
-        project can be located "I could not tell" blocks too), and no directory
-        that did not already carry the marker acquires one.
+        Each row carries the code its own case earns (see the table), and no
+        directory that did not already carry the marker acquires one. The second
+        half is the claim; the codes are there so a row cannot pass by failing
+        for a reason nobody expected.
         """
         start, tail = self._roots(tmp_path, kind)
         monkeypatch.chdir(start)
@@ -649,7 +663,7 @@ class TestADeclaredProjectMustBeAProject:
             ]
         )
 
-        assert result.exit_code == 2, result.output
+        assert result.exit_code == 3, result.output
         assert "not a Beadloom project" in result.output, result.output
         assert not (not_a_project / FIRINGS_RELPATH).exists()
 
@@ -667,8 +681,8 @@ class TestADeclaredProjectMustBeAProject:
 
         assert blocked.exit_code == 2, blocked.output
         assert json.loads(blocked.stdout)["outcome"] == "block"
-        assert wandered.exit_code == 2, wandered.output
-        assert json.loads(wandered.stdout)["outcome"] == "error"
+        assert wandered.exit_code == 3, wandered.output
+        assert json.loads(wandered.stdout)["outcome"] == "unresolved"
 
     def test_the_module_says_what_the_code_does_about_manufacturing_a_root(
         self,

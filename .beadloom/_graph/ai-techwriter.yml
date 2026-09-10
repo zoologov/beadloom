@@ -1,0 +1,29 @@
+  # Feature: AI Tech-Writer (the deterministic doc-refresh harness)
+nodes:
+  - ref_id: ai-techwriter
+    kind: feature
+    summary: "Deterministic, seam-isolated PR-triggered doc-refresh harness (discover drift -> packet -> agent -> fixpoint -> gate -> publish; verdict ok/flagged/infra)"
+    source: src/beadloom/ai_agents/ai_techwriter/
+    docs:
+      - docs/domains/ai_agents/features/ai-techwriter/SPEC.md
+edges:
+  - src: ai-techwriter
+    dst: ai_agents
+    kind: part_of
+  # --- Non-import coupling, declared because derivation cannot see it -------
+  #
+  # Import edges are DERIVED from code. These two relations are real and are
+  # invisible to that derivation, so they are AUTHORED here — otherwise the
+  # `ai-techwriter` node reads as an island while it is the hub of a workflow.
+  #
+  # `uses`, not `depends_on`, on purpose: `depends_on` is import-time coupling
+  # (the module cannot load without the other), which is what the layer and
+  # cycle rules judge. These are RUNTIME couplings between separate processes —
+  # the harness runs as `python -m beadloom.ai_agents.ai_techwriter` in CI and
+  # shells out to the published `beadloom` CLI exactly as any external client
+  # would. Calling a public interface across a process boundary is not a
+  # layering break, and recording it as `depends_on` would assert a binding
+  # that does not exist.
+  - src: ai-techwriter
+    dst: cli
+    kind: uses

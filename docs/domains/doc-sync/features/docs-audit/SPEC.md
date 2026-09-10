@@ -82,8 +82,86 @@ collector now records why it declared nothing, and the audit reports three popul
 | declared but unverified | `unverified_facts` | A value exists and nothing checked it. Named, never counted as fine |
 
 `version` on this repository sits in the third population with zero mentions -- every version
-literal in the tree is a dependency pin or a `docs_audit.ignore` triple with a stated reason,
-so the audit is correctly reporting that no document states the current version as a claim.
+literal in the tree is a dependency pin, a token attributed to another product, or one of two
+`docs_audit.ignore` triples with a stated reason, so the audit is correctly reporting that no
+document states the current version as a claim.
+
+### Version attribution: whose version a version is
+
+A semantic version is attributed to the nearest subject NAME to its left inside its own
+clause. Only a version whose nearest name is this project's -- or that has no name at all --
+is compared against this project's version; everything else is that product's release, is
+never compared, and is reported with its subject under `attributed_versions`.
+
+The rule replaced a suppression per document. `_extract_versions` used to match every
+`\bv?\d+\.\d+\.\d+\b` outside a pin and hand each one to an exact comparison, so
+"Measured on bd 1.0.4" was a Gate finding; ten `docs_audit.ignore` triples stood on this
+repository for that one sentence shape, three of them in user-facing guides (BDL-UX #253, and
+the foreign-subject face of #190). Eight went inert when the rule landed, measured with a real
+`DocScanner` over the audit's 68-document surface.
+
+| Sentence | Nearest name | Read as |
+|----------|--------------|---------|
+| `Measured on bd 1.0.4` | `bd` | the tracker's release |
+| `Every verdict on CPython 3.13.7` | `cpython` | the interpreter's release |
+| `The current release is 3.0.2` | none | this project's version |
+| `bd 1.0.4 answers and beadloom 3.0.2 asks` | `bd`, then `beadloom` | one each |
+
+**The vocabulary is derived where a project already declares it** and configured where it
+cannot be: every distribution in `pyproject.toml`, `package.json` or `Cargo.toml`; the
+interpreter families implied by `requires-python`, `engines.node` or `rust-version`; `git`
+when the project is a git repository; and `docs_audit.subjects` for a name no manifest
+carries. Each entry records where it came from, and the audit prints them.
+
+**A source that cannot be consulted answers neither yes nor no.** `git` is confirmed by the
+environment rather than by a file the project ships, and the absent `.git` was read as the
+assertion that this project has nothing to do with git. A directory built by
+`git archive HEAD` -- every clean room `beadloom clean-room` builds -- carries no `.git` by
+construction, so `git 2.49.0` lost its subject and was compared against this project's own
+version. Every clean-room Gate run on this repository was rc 1 for that one line, in
+`docs/domains/application/components/active-table/DOC.md:227`, from `beadloom-0mdo.63`
+landing until this repair (BDL-UX #266).
+
+Such a name is UNRESOLVED. It stays in the vocabulary and still wins the attribution walk, so
+the version beside it is not judged against this project; and the audit reports the token it
+declined rather than dropping it. The two exempt populations stay separate because they are
+exempt for different reasons: `attributed_versions` is a subject this project confirmed,
+`unjudged_versions` is a subject this DIRECTORY could not confirm. Merging them would hide a
+directory that cannot see its own environment behind a rule that works.
+
+| Surface | What it carries |
+|---------|-----------------|
+| `docs audit --json` | `unjudged_versions`, `summary.unjudged_version_count`, `unresolved_version_subjects` (name + reason) |
+| `docs audit` | `N version token(s) the audit could not judge here: git x1 (no .git here ...)` |
+| `beadloom ci` docs-audit line | `COULD NOT JUDGE N version token(s) naming git — unconfirmed here` |
+
+A project that names `git` under `docs_audit.subjects` has answered the question the marker
+could not, and the name resolves. The repair was NOT to add `git` to a declared list: the
+derivation exists so that no second vocabulary can drift from the first, and the shipped
+change is to what an absent source MEANS, not to what the vocabulary contains.
+
+**It is a vocabulary and not a silencer**, and the difference is the failure mode. A name
+nobody declared still produces a finding, so an unknown subject fails LOUD. The alternative
+shape -- read any word beside a version as a subject unless it is a function word -- was
+measured against this repository's own prose and rejected: `Phase 3.0.0`, `Implemented 3.0.0`,
+`Release 2.1.0`, `dated 3.0.0` and `published 2.2.0` all put an ordinary English word beside
+this project's OWN version, so that rule trades a loud false positive for a silent false
+negative.
+
+**Two faces of the same sentence family are outside this rule**, and are declared rather than
+assumed covered:
+
+- a version MENTIONED rather than used -- the example token `v2.2.0` inside the sentence
+  stating what the extractor must not read. No subject stands beside it, because the sentence
+  is about the token itself (BDL-UX #190's example face).
+- this project's OWN past version -- "the alternative shipped in 3.0.0 was worse". There is no
+  foreign subject to find, so no attribution rule reaches it; it needs a notion of past tense
+  (BDL-UX #205).
+
+`graph-summary-facts` reads node summaries through the same `scan_line` seam with an EMPTY
+vocabulary, so every version in a summary stays this project's claim. That rule declares
+itself pure of the filesystem and the vocabulary is derived from a manifest; the limit is
+stated here rather than worked around.
 
 ### False-Positive Filtering
 

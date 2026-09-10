@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: agentic-flow-setup
+    kind: feature
+    summary: "`setup-agentic-flow` — scaffold Beadloom's proven multi-agent dev flow (agents/commands templates, vendored 1:1 + drift-guard) into any repo"
+    source: src/beadloom/onboarding/agentic_flow_setup.py
+    docs:
+      - docs/domains/onboarding/features/agentic-flow-setup/SPEC.md
+edges:
+  - src: agentic-flow-setup
+    dst: onboarding
+    kind: part_of

@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from beadloom.doc_sync.doc_quality import sections_with_a_decision_table
 from beadloom.onboarding.doc_templates import required_sections_by_node_kind
 from beadloom.onboarding.flow_config import FlowConfigError
 
@@ -136,6 +137,69 @@ def _outside(match: re.Match[str], code: list[tuple[int, int]]) -> bool:
     return not any(cs <= start and end <= ce for cs, ce in code)
 
 
+def _composed_templates(project_root: Path) -> str | None:
+    """The composed ``/templates`` command's text, or ``None`` when unresolvable.
+
+    ``None`` for a malformed ``flow.yml``, which ``config-check`` reports by
+    name: the two derivations below both answer "nothing is declared" in that
+    case, which reports no placeholder and classifies no section, rather than
+    failing the run under a message about the wrong file.
+    """
+    from beadloom.onboarding.composer import compose
+    from beadloom.onboarding.doc_templates import doc_flow_config
+
+    try:
+        return compose(
+            "commands",
+            "templates",
+            config=doc_flow_config(project_root),
+            project_root=project_root,
+        ).text
+    except FlowConfigError:
+        return None
+
+
+def _template_bodies(text: str) -> str:
+    """The text INSIDE the fenced blocks — the templates, without the prose around them.
+
+    Symmetric with :func:`shipped_placeholders`: a fenced block IS a template,
+    and the commentary between blocks is about templates rather than one of
+    them. A heading in that commentary is not a section any document carries.
+    """
+    lines: list[str] = []
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def shipped_decision_sections(project_root: Path) -> tuple[str, ...]:
+    """Sections the shipped templates put a reason-carrying decision table under.
+
+    DERIVED from the composed ``/templates`` command for the reason
+    :func:`shipped_placeholders` is: a list kept here is a second source of
+    truth about the documents this flow tells an author to write, and it goes
+    stale the first time a template gains a section. On this repository the
+    derivation returns ``architectural decisions``, ``axes`` and
+    ``non-behavioural declaration`` — the three template tables that pair a
+    decision with its reason.
+
+    ``decision-reason`` needs this because a ``Reason`` column does not make a
+    table a decision table: the ``Axes`` table names its decision ``In scope``,
+    and a coordinator's verification table names a measurement (BDL-UX #213).
+    A section the templates never declare is answered ``not classified`` rather
+    than judged.
+    """
+    text = _composed_templates(project_root)
+    if text is None:
+        return ()
+    return sections_with_a_decision_table(_template_bodies(text))
+
+
 def shipped_placeholders(project_root: Path) -> tuple[str, ...]:
     """Placeholder tokens the shipped document templates leave for the author.
 
@@ -150,17 +214,8 @@ def shipped_placeholders(project_root: Path) -> tuple[str, ...]:
     metavariable, and treating it as a placeholder would report the correct
     documentation of every command this project ships.
     """
-    from beadloom.onboarding.composer import compose
-    from beadloom.onboarding.doc_templates import doc_flow_config
-
-    try:
-        text = compose(
-            "commands",
-            "templates",
-            config=doc_flow_config(project_root),
-            project_root=project_root,
-        ).text
-    except FlowConfigError:
+    text = _composed_templates(project_root)
+    if text is None:
         return ()
 
     tokens: set[str] = set()

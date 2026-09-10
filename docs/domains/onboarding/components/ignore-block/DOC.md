@@ -32,6 +32,10 @@ wholesale.
   reason is not representable in the tests that pin this: a bare pattern in someone
   else's ignore file is indistinguishable from a mistake.
 - `BLOCK_MARKER`, `IGNORE_RELPATH` — the block's identity and location.
+- `undeclared_patterns(text)` / `ignore_block_findings(project_root)` — the generated
+  patterns a file does not declare, each an `IgnoreFinding` carrying the `IgnoreEntry` itself
+  plus the declared lines the pattern `supersedes`. `ensure_ignore_block` writes what the
+  first of these returns, so the writer and the check cannot disagree about what is missing.
 
 ## Where the entry belongs, and why not in the guard scaffolder
 
@@ -63,13 +67,50 @@ prose an adopter reads before deciding, so a project holding a block written bef
 `beadloom-0mdo.43` still carries the older invitation — the one that offered the audit trail
 without naming its contents — over a `guard-firings.1.jsonl` that may still hold command lines
 written before the reduction. Nothing here reaches either: this component does not rewrite a
-block it finds, and `firing.py` does not rewrite a record already written. BDL-UX #238 files the
-check that would make the drift visible — `config-check` comparing the block on disk against
-the block this version emits — and it is not built.
+block it finds, and `firing.py` does not rewrite a record already written. Since
+`beadloom-0mdo.40` the PATTERN half of that cost is reported — see *Reported, never
+rewritten* below — and the `why` half is not: the check compares patterns, so a stale reason
+is still invisible.
 
 Both writers report what they did (`✓ Ignored: N generated path(s) …` from `init`,
 `Wrote .gitignore (…)` from `setup-agentic-flow`). Editing someone's `.gitignore`
 silently would be its own surprise.
+
+## Reported, never rewritten
+
+`undeclared_patterns(text)` returns every pattern in `GENERATED_WORKING_SET` that a
+`.gitignore`'s text does not declare, and `ignore_block_findings(project_root)` applies it to
+a project. `config-check` turns each finding into a `warn` drift against `.gitignore`.
+
+**The drift it exists for was this repository's own, and nobody found it.** Until
+`beadloom-0mdo.39` this `.gitignore` carried the exact filename `.beadloom/guard-firings.jsonl`
+while this module had emitted the glob `.beadloom/guard-firings*.jsonl` since rotation shipped.
+The gap was invisible because the second file did not exist: widening the guard matcher to
+`Bash` tripled the firings, the record rotated for the first time in this repository's history,
+and `guard-firings.1.jsonl` appeared as untracked churn. An adopter is worse off than this
+repository was, because the upgrade path writes no ignore block at all.
+
+**What is compared is the patterns, not the block's bytes.** The reason comments are prose in a
+file people edit, and a project that ignores the same paths under a heading it wrote itself is
+correct — this repository is that project, and has no generated block at all. Comparing text
+would report every such project on every run, which is how a check gets switched off wholesale.
+
+**A finding names the line it supersedes** when the file declares something the current pattern
+glob-matches, so the remediation reads "replace `.beadloom/guard-firings.jsonl` with
+`.beadloom/guard-firings*.jsonl`" rather than "add a line". The relation is computed with
+`fnmatchcase` against the emitted pattern, not looked up in a table of known renames — a table
+is the second list this check exists to avoid.
+
+**`warn`, and never `fixable`.** Warn because the file is the adopter's and the pattern set is
+Beadloom's: a release that adds a pattern would otherwise turn every adopter's green project
+red on upgrade. Not fixable because this module's published contract is that the block is
+written once and never rewritten, there is no manifest that could prove a line is Beadloom's,
+and the repair is a human's line in a human's file. That reason is this component's own and
+settles nothing for the composed role adapters, whose ownership question is decided elsewhere.
+
+**The two states it declines to judge** are the two `ensure_ignore_block` declines to write in:
+a project outside a git working tree, and a project where Beadloom has generated nothing under
+`.beadloom/` for an ignore file to name.
 
 ## Why the firing record is ignored by default
 

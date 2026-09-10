@@ -132,6 +132,17 @@ def run(flag, data, path):
         helper({}, path)
 '''
 
+#: A `.py` file saved mid-edit. BDL-UX #255 reached `ast.parse` through the
+#: TARGET rather than through the sweep, and the sweep has kept a failure like
+#: this one since the package was written -- so the crash was one keystroke away
+#: from a file whose suffix is right.
+_HALF_SAVED = """\
+\"\"\"A module saved half-way through an edit.\"\"\"
+
+
+def broken(
+"""
+
 _MODULES = {
     "atomic": _ATOMIC,
     "bootstrap": _BOOTSTRAP,
@@ -451,3 +462,62 @@ def then_json_shape(world: dict[str, Any]) -> None:
         "boundary",
         "unresolved",
     }
+
+
+@given("a project holding a Python file that does not parse")
+def given_a_half_saved_module(world: dict[str, Any]) -> None:
+    """A `.py` file that reaches the same `ast.parse` the document reaches.
+
+    The suffix is the only thing that separates it from the document above, and
+    both ended BDL-UX #255 the same way, so the fix is checked over both rather
+    than over the shape that happened to be reported.
+    """
+    (world["root"] / "src" / "pkg" / "half_saved.py").write_text(_HALF_SAVED, encoding="utf-8")
+
+
+@when("impact runs against a document in that project")
+def when_run_document(world: dict[str, Any]) -> None:
+    _run(world, "docs/lonely.md")
+
+
+@when("impact runs against that file")
+def when_run_half_saved(world: dict[str, Any]) -> None:
+    _run(world, "src/pkg/half_saved.py")
+
+
+@when("impact runs against the package holding it")
+def when_run_the_whole_package(world: dict[str, Any]) -> None:
+    _run(world, "src/pkg")
+
+
+@then("the run ends with an answer rather than a traceback")
+def then_an_answer_rather_than_a_traceback(world: dict[str, Any]) -> None:
+    result = world["result"]
+    assert result.exception is None, result.exception
+    assert result.exit_code == 0, result.output
+    assert "Traceback" not in world["human"].output
+
+
+@then("the unresolved population names the target it could not read")
+def then_unreadable_target_reported(world: dict[str, Any]) -> None:
+    gaps = [
+        entry for entry in _payload(world)["unresolved"] if entry["kind"] == "unreadable-target"
+    ]
+    assert gaps, _payload(world)["unresolved"]
+    assert all(gap["where"] for gap in gaps)
+    assert all(gap["detail"] for gap in gaps)
+    assert "[unreadable-target]" in world["human"].output
+
+
+@then("the answer still reports the branches of the files that did parse")
+def then_the_readable_files_still_answer(world: dict[str, Any]) -> None:
+    """The unreadable file costs the answer that file and no other.
+
+    Recall over precision, applied to the fix itself: refusing the whole answer
+    because one file of a package did not parse would trade a traceback for a
+    silence, which is the trade this epic exists to refuse.
+    """
+    commands = {command["name"]: command for command in _payload(world)["commands"]}
+    assert "half_saved" not in {command["path"] for command in _payload(world)["commands"]}
+    assert len(commands["run"]["branches"]) == 4
+    assert "sys.exit(0)" in commands["run"]["exits"]

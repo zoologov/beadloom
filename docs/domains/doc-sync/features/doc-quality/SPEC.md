@@ -20,7 +20,7 @@ document back to see whether they held.
 | Check | Reports | Scope |
 |-------|---------|-------|
 | `measurable-goal` | a goal that states an unbounded improvement and names no witness | the `## Goal` / `## Goals` section |
-| `decision-reason` | a decision row whose reason cell is empty | any table with a Reason / Rationale / Why column |
+| `decision-reason` | a decision row whose reason cell is empty | a table carrying a Reason / Rationale / Why column that the document declares as decisions; one it does not declare is reported `not classified` |
 | `risk-mitigation` | a risk row with no mitigation, or one that names no action | any table with a Mitigation column |
 | `pending-in-approved` | a question still answered `Pending` | the `## Open Questions` section of a document whose status is Approved or Accepted |
 | `unfilled-placeholder` | a shipped template token nobody replaced | the whole document, outside fenced blocks and inline code |
@@ -73,6 +73,71 @@ Stated here rather than discovered by a reader who trusted it.
   check.
 - **A `Pending` outside `## Open Questions` is not a finding.** PLAN's bead table marks unstarted
   beads `Pending`; that is a status, not an undecided design.
+
+### A table ends where its rows end, and a reason column is not a declaration
+
+`decision-reason` reported *"the decision carries no reason"* four times against BDL-067's
+`ACTIVE.md`, where every cell was filled (BDL-UX #213). Two faults, and only the second is about
+vocabulary.
+
+**A section was read as one table.** The reader collected every table row under a heading into
+one list, took the first as the header and judged the rest against its column index. So a second
+table below the first was read as continuation rows of it, and that table's own header row was
+read as a row with a missing cell. On `ACTIVE.md` the second table was
+`Claim | Coordinator's measurement` — the coordinator's verification of a subagent's report,
+under the same `## Notes` heading as the decision table. `_tables()` now splits a section into
+contiguous blocks, each led by its own header row; a separator row belongs to its table and does
+not end it. This needs no vocabulary: a table ends where the table rows stop. `risk-mitigation`
+and `pending-in-approved` read tables through the same helper and were fixed with it.
+
+The rule then moved one module over, to `markdown-tables` (`doc_sync.tables.table_blocks`), and
+`_tables()` is the name this module's checks are still written in. It moved because the same
+sentence was true of a second reader: `axes-section` read a `## Axes` section holding one table
+per slice as one table, and its second table's header row became an approved node named `Node`
+(BDL-UX #244). Two readers of a table boundary is how one defect was found twice; a third would
+have been a third.
+
+**A reason column does not make a table a decision table.** After the boundary is fixed the
+residual class survives — a table of measurements with a `Reason` or `Why` column of its own —
+and no checker can decide it from the cells. `| 7341 passing | confirmed, 0 failed |` and
+`| guards are data | a shell script is not portable |` are the same two strings. So
+`declares_decisions()` asks whether the DOCUMENT declares the table as decisions, in either of
+two places it declared itself:
+
+- a column naming the thing decided (`Decision`, `Scope decision`), or
+- a section the shipped templates put a reason-carrying table under — derived by
+  `shipped_decision_sections()` from the composed `/templates` command, the same derivation
+  `unfilled-placeholder` uses for its tokens, so it cannot drift from the documents this flow
+  tells an author to write. On this repository it returns `architectural decisions`, `axes` and
+  `non-behavioural declaration`. The `## Axes` table names its decision `In scope`, and is judged
+  because the template declares the section, not because anything lists that phrase.
+
+Where neither holds, the answer is **`not classified`**: a `UnclassifiedTable` naming the path,
+the header line, the section and the row count, reported by the CLI and counted in the gate
+step's summary. Its rows are absent from `applicable` as well as from `findings`, so the
+population the check entered shrinks with the part of it that went unjudged — `not classified`
+is a verdict, and a quieter way of passing is what it must not become.
+
+**Measured on this repository's 259 planning documents, 2026-09-08.** Before: `decision-reason`
+read **389** rows and reported 0. After: **324** rows judged and 0 reported, **58** rows in **12**
+tables answered `not classified`, and **7** rows that were never rows of any decision table gone
+from the population — those are the second-table rows the old boundary invented, and the reader
+can no longer reach them. `risk-mitigation` (144) and `pending-in-approved` (74) are unchanged,
+because no section in this corpus states two tables that both carry those columns.
+
+No finding was removed from the present corpus, because `decision-reason` reported none on it.
+The findings that were removed are the four on BDL-067's `ACTIVE.md`, re-measured from
+`cd28e29c`: **4 before, 0 after**, and all four were false — three rows of a measurement table
+plus that table's header row. The 58 unclassified rows contain no empty reason cell, so nothing
+that was reported has become silent; what changed is that the check now says which 58 it did not
+judge. The twelve tables are named in `beadloom docs quality` output; they are shapes like
+`Item | RFC Plan | Actual | Reason` (a deviations table), `Wave | Beads | Rationale` (an
+execution order) and `Bead | What it is | Why it was not done here` (a routing record).
+
+**The same fault exists one reader over**, in `axes-section`: a second markdown table under
+`## Axes` contributes its header row as an approved node name (BDL-UX #244, `beadloom-0mdo.46`).
+It is not fixed here — it is that bead's subject — and `sections_with_a_decision_table()` and
+`_tables()` are the shape of the answer.
 
 ### These five are not the whole of `docs quality`
 
@@ -184,8 +249,12 @@ channel was populated and printed nowhere, which left the document silently abse
 | `CHECK_NAMES` and the five check constants | constant |
 | `CONTENT_CHECKS` — the four that read items | constant |
 | `APPROVED_STATUSES` | constant |
+| `REASON_COLUMNS` — the header cells a table states its reasons under | constant |
 | `QualityFinding` / `QualityReport` / `KindCoverage` | dataclass |
+| `UnclassifiedTable` — a table with a reason column the document never declared | dataclass |
 | `document_status` / `is_approved` / `document_kind` | function |
+| `declares_decisions` — whether a document declares a table as decisions | function |
+| `sections_with_a_decision_table` — the derivation run over the shipped templates | function |
 | `check_document` / `check_documents` | function |
 
 ## Dependencies
@@ -202,6 +271,11 @@ channel was populated and printed nowhere, which left the document silently abse
 `tests/test_doc_quality.py` — every check proved on a document that violates it and one that does
 not, the CLI and gate surfaces, and a class that fires all five at this repository's own planning
 documents and fails if any of them reads nothing.
+
+`tests/test_decision_table_classification.py` — the table boundary and the `not classified`
+verdict, on the two-table section BDL-UX #213 was measured on. Both legs are proved able to fail:
+a declared decision table with an empty reason cell is still reported, and an undeclared one with
+the same empty cell is not.
 
 The per-kind rows are proved on a two-kind corpus where every check reads something and one kind
 is still entered by none — so `checks_that_read_nothing == ()` and `kinds_that_read_nothing` is

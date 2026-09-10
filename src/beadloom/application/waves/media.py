@@ -22,9 +22,71 @@ about:
   before a commit grants nothing in the form this project instructs it — one
   tracker actor for every role, a release nobody checks, and a ``--wait`` that
   queues and returns (BDL-UX #194, #237).
+* the **focus document** is one file per work item that every one of its beads
+  writes and no bead's code owns, so a plan that resolves a bead to the nodes and
+  files its CODE occupies reports ``0 serialisations`` truthfully about the wrong
+  population (BDL-UX #257). Confirmed four times in one slice, the last of them
+  by an agent that did everything right: it took the landing lock in the form
+  that grants it, waited, and its 43-line entry still landed inside a
+  neighbour's commit — because the lock orders the COMMITS and the edit had
+  already happened;
+* the **graph files** are this plan's own input, and a bead that adds a node
+  writes them. Measured by `beadloom-0mdo.59` in the same slice: four artifacts
+  were shared by three beads whose code scopes are disjoint, and
+  ``.beadloom/_graph/services.yml`` was one of them. The self-reference is
+  stated rather than left for a reader to find — a derivation cannot describe
+  its own input by asking it, because the node a bead is about to add is not in
+  the graph the plan read (BDL-UX #261). On THIS repository the sharing is gone
+  rather than reported: `beadloom-0mdo.80` split that file into one per node, so
+  two node-adding beads write two files (BDL-UX #265). The medium stays, because
+  the layout is a property of a project and not of the command, and because the
+  half no plan can reach only moved — under one file per node it cannot see the
+  FILE a bead is about to create either.
+
+**Why the focus document is a medium and not a serialisation** (BDL-UX #257).
+It cannot be one: ``docs.ref_id`` holds at most one node per document, and
+:func:`~beadloom.application.waves.independence.conflict_between` already
+serialises on ``shared_node`` whenever two scopes' refs intersect — so two beads
+that reach a document comparison have disjoint refs, and disjoint refs give
+disjoint owned documents by construction. Measured on this repository: a
+``shared_document`` reason derived from document OWNERSHIP produces no
+serialisation ``shared_node`` does not already produce, which is a check that
+cannot fail. And it could not reach the measured case regardless: BDL-068's
+ACTIVE.md is in the docs table nowhere, and the wave-2 collision was over
+``docs/domains/application/README.md``, owned by ``application`` — an ancestor of
+one of the two scopes and of neither.
+
+**Why the graph files are a medium and not a serialisation either** (BDL-UX
+#261, then #265). The entry sketched one: a bead's scope reaching the graph FILE
+its declared nodes are defined in. Measured on this repository before it was
+built, one file held every one of this project's 100 nodes, so that reason fired
+on EVERY pair and collapsed every wave to a wave of one — BDL-UX #245's failure
+mode — against a real write rate of 8 of the 55 commits this epic's branch
+carries. It would also miss the case it was drawn from, because both beads that
+collided were ADDING nodes and a node being added is in no graph the plan can
+read. The condition named for reopening it was a graph split across files, and
+`beadloom-0mdo.80` met that condition. The answer did not change, and the reason
+it did not is the OPPOSITE one: one node per file makes the node-to-file map
+injective, so the reason fires exactly when two beads declare the same node —
+which ``conflict_between`` already reports as ``shared_node``. It was noise on a
+single-file graph and it is redundant on a split one, and there is no layout
+between the two where it is neither. Measured in
+``tests/test_the_graph_is_one_file_per_node.py``,
+``TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful``.
+
+**And the population is still wider than these seven.** Two of `beadloom-0mdo.59`'s
+four artifacts are answered here and two are not.
+``tests/test_bead77_kind_and_root_disagree.py`` carries hand-maintained
+population literals any node-adding bead must bump: one derivable fact with two
+homes, whose answer is to remove the copy rather than to serialise around it.
+``docs/services/components/cli-commands/DOC.md`` is owned by node
+``cli-commands``, whose source covers both colliding beads' files and which
+neither declared — so ``shared_node`` would have fired had either declared it,
+and the plan already reports the gap as ``unguarded_axis``. Neither is absorbed
+here; both are filed, with their paths.
 
 So the media are STATED by every wave, at every size, each with the evidence it
-comes from. A shape that quietly claimed independence in these five would be
+comes from. A shape that quietly claimed independence in these seven would be
 exactly the advisory answer this command exists to replace.
 
 **Why every size, when the first version said a wave of one shares nothing**
@@ -46,7 +108,7 @@ because a medium in this module is one with a plan-time precondition a command
 can OBSERVE — git, the installed hook, the doc index, the bead records — and a
 session scratchpad has none: its path exists only inside a running agent
 session, the same reason a launch prompt is ``not_inspected`` rather than a
-finding in :mod:`beadloom.onboarding.role_duties`. Adding it would buy a fifth
+finding in :mod:`beadloom.onboarding.role_duties`. Adding it would buy a further
 verdict that is permanently ``unmeasured`` (a finding on every plan) or
 permanently true (a check that cannot fail), and this epic forbids both. What is
 observable is the REMEDY, so the remedy is what ships: :func:`room_for` names
@@ -65,15 +127,33 @@ MEDIUM_COMMIT_GATE = "commit-gate"
 MEDIUM_DOC_BASELINE = "doc-baseline"
 MEDIUM_TRACKER_IDS = "tracker-ids"
 MEDIUM_LANDING_ORDER = "landing-order"
+MEDIUM_FOCUS_DOCUMENT = "focus-document"
+MEDIUM_GRAPH_FILES = "graph-files"
 
 #: The prefix a clean room's directory carries, so the room names its owner.
 #: A constant because the role cores promise this exact spelling and a test
 #: binds the two — a rename here reddens the prose that offers it.
 ROOM_PREFIX = "room-"
 
-#: Stated in the order a wave meets them: it edits, its commit is judged, it
-#: lands, it documents, and it files follow-up work.
+#: Stated in the order a wave meets them: it is derived from the graph before it
+#: exists, then it edits, its commit is judged, it lands, it records where it got
+#: to, it documents, and it files follow-up work.
 SHARED_MEDIA: tuple[SharedMedium, ...] = (
+    SharedMedium(
+        name=MEDIUM_GRAPH_FILES,
+        statement=(
+            "One graph, in files no bead's code owns and every bead that adds, "
+            "renames or moves a node writes — and it is what this plan derived "
+            "every serialisation above FROM. A derivation cannot describe its "
+            "own input by asking it: the node a bead is about to add is not in "
+            "the graph this plan read, so two beads that each add one hold "
+            "disjoint scopes here and write the same file. Stage that file by "
+            "path with your own commit, reindex before you trust a plan you "
+            "computed while a neighbour was editing it, and take a graph "
+            "conflict as a re-plan rather than a merge."
+        ),
+        evidence="BDL-UX #261",
+    ),
     SharedMedium(
         name=MEDIUM_WORKING_TREE,
         statement=(
@@ -111,6 +191,26 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
             "without waiting."
         ),
         evidence="BDL-UX #194, #237",
+    ),
+    SharedMedium(
+        name=MEDIUM_FOCUS_DOCUMENT,
+        statement=(
+            "One focus document per work item, written by every bead of it and "
+            "owned by no bead's code. `/task-init` routes every work-item type "
+            "through a document both of its flows write, so a wave shares one "
+            "whatever this plan says — and this plan says nothing, because it "
+            "resolves a bead to the nodes and files its CODE occupies and no "
+            "node owns that document. Write only the row that names your bead, "
+            "stage that file by path with your own commit, and never commit it "
+            "whole: a hunk written by one bead and committed by another is "
+            "correct in the tree and wrong in the history, which is a defect "
+            "whose only symptom is a wrong author. Taking the landing lock does "
+            "not prevent it, measured: a bead that acquired the slot in the form "
+            "that grants it, and waited, still had 43 lines of its entry "
+            "committed by a neighbour — the lock orders the commits and the edit "
+            "had already happened."
+        ),
+        evidence="BDL-UX #257",
     ),
     SharedMedium(
         name=MEDIUM_DOC_BASELINE,

@@ -350,3 +350,82 @@ def _reported_without_a_scope_decision(world: dict[str, Any]) -> None:
 @then("it names the two nodes kept in scope and not the third")
 def _refs_names_the_kept(world: dict[str, Any]) -> None:
     assert world["refs"] == "refs: writer, flow-composer"
+
+
+# ---------------------------------------------------------------------------
+# BDL-UX #244 — a second table under `## Axes` is a second table
+# ---------------------------------------------------------------------------
+
+
+_TABLE_HEADER = (
+    "| Axis | Node | Sites | In scope | Why |\n"
+    "|------|------|-------|----------|-----|\n"
+)
+
+
+def _derivation_block(target: str, row: str) -> str:
+    return (
+        f"> **Derived by:** `beadloom impact` over `{target}`\n"
+        "> **Seed:** `none`, under the rule `reaches-an-effect-sink`\n"
+        "\n" + _TABLE_HEADER + row + "\n"
+    )
+
+
+@given(
+    'a work item whose "Axes" section carries two derivation blocks, '
+    "each with its own table"
+)
+def _two_derivation_blocks(world: dict[str, Any]) -> None:
+    world["text"] = (
+        "# RFC: KEY-1 — a work item\n\n## Axes\n\n"
+        + _derivation_block(
+            "src/pkg/one.py",
+            "| callers | writer | 1 — `src/pkg/save.py:3` | yes | S1 writes it |\n",
+        )
+        + _derivation_block(
+            "src/pkg/two.py",
+            "| callers | reader | 2 — `src/pkg/read.py:8` | yes | S2 writes it |\n",
+        )
+    )
+
+
+@given("a work item whose second derivation block orders its columns differently")
+def _second_block_reorders_its_columns(world: dict[str, Any]) -> None:
+    world["text"] = (
+        "# RFC: KEY-1 — a work item\n\n## Axes\n\n"
+        + _derivation_block(
+            "src/pkg/one.py",
+            "| callers | writer | 1 — `src/pkg/save.py:3` | yes | S1 writes it |\n",
+        )
+        + "> **Derived by:** `beadloom impact` over `src/pkg/two.py`\n"
+        "\n"
+        "| Node | Axis | In scope | Sites | Why |\n"
+        "|------|------|----------|-------|-----|\n"
+        "| reader | co-writers | no | 2 — `src/pkg/read.py:8` | only read here |\n"
+    )
+
+
+@when("the Axes section is read back")
+def _read_back(world: dict[str, Any]) -> None:
+    world["section"] = read_axes_section(world["text"])
+
+
+@then("the rows read are the rows the two tables state")
+def _rows_are_the_stated_rows(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    assert [axis.node for axis in section.axes] == ["writer", "reader"]
+
+
+@then("no node named after a column heading is kept in scope")
+def _no_column_heading_is_kept(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert refs_line(section) == "refs: writer, reader"
+
+
+@then("the second table's row is read with its own node and its own scope decision")
+def _second_row_reads_against_its_own_header(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    second = section.axes[1]
+    assert (second.node, second.axis, second.in_scope) == ("reader", "co-writers", False)

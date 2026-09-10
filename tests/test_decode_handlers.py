@@ -605,16 +605,6 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "onboarding/config_sync.py::_agentic_flow_drifts#1": NarrowDecode(
-        reads="a vendored role adapter beadloom wrote into the agent's own directory",
-        catches="OSError",
-        reason=(
-            "the same `continue` one loop over, and it compares against a vendored asset, so a "
-            "file that cannot be decoded is reported identical to the asset it may well differ "
-            "from"
-        ),
-        until=_JUDGED_BY_67,
-    ),
     "onboarding/config_sync.py::_agents_md_drift#1": NarrowDecode(
         reads="AGENTS.md as it stands on disk, compared against a regeneration held in memory",
         catches="OSError",

@@ -295,17 +295,20 @@ The migration itself:
    body is Beadloom's again.
 5. **Verify:** `beadloom config-check` should exit 0.
 
-> **`config-check --fix` will not do this for you, and will not undo it either.** It
-> declines to rewrite any adapter whose body Beadloom cannot prove it wrote, names the
-> file under *Declined to rewrite*, and leaves the finding standing — so running it on a
-> hand-edited role adapter is safe but changes nothing. Move the text into the project
-> layer first, then recompose with `setup-agentic-flow`. (Until BDL-UX #186 was closed
-> it recomposed the file unconditionally and the edit was gone, one line after the check
-> printed *"It will NOT be rewritten"*.)
+> **Neither command will do this for you, and neither will undo it.** Both decline to
+> rewrite any artifact whose body Beadloom cannot prove it wrote, name the file, and
+> leave the finding standing — so running either on a hand-edited role adapter is safe
+> and changes nothing. Move the text into the project layer first, then recompose.
+> (Until BDL-UX #186 was closed, `config-check --fix` recomposed the file
+> unconditionally and the edit was gone one line after the check printed *"It will NOT
+> be rewritten"*. Until BDL-UX #191 was closed, `setup-agentic-flow` — the command in
+> step 4, and the one that sentence's own remediation names — still did, so running the
+> steps out of order destroyed the edit.)
 
-`setup-agentic-flow` without `--force` never overwrites a hand-edited file — it prints
-`Skipped .claude/commands/<name>.md (hand-edited; use --force)` and leaves it alone.
-`--force` overwrites it, so use it only once the edit is safely in the project layer.
+`setup-agentic-flow` without `--force` never overwrites a hand-edited file, in any of the
+three artifact kinds it writes. It prints `Skipped <path> (hand-edited)` and, under
+*Left alone*, the project-layer path the edit belongs in. `--force` overwrites, so use it
+only once the edit is safely in the project layer.
 
 ### Files an older layout left behind
 

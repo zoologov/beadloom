@@ -1,0 +1,12 @@
+  # Feature: Status (data-gathering for `beadloom status`; BDL-059 S4)
+nodes:
+  - ref_id: status
+    kind: feature
+    summary: "Status data-gathering — index/coverage/health/trend counts + context-bundle metrics for the status command"
+    source: src/beadloom/application/status.py
+    docs:
+      - docs/domains/application/features/status/SPEC.md
+edges:
+  - src: status
+    dst: application
+    kind: part_of

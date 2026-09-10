@@ -407,31 +407,17 @@ def _uninspected(
     return entries
 
 
-def _is_vendored_snapshot(path: Path) -> bool:
-    """Whether *path* is the byte-identical copy of a composed role file.
-
-    ``templates/agentic_flow/agents/*.md.txt`` is a SNAPSHOT of the live
-    ``.claude/agents/*.md``, held byte-identical by the vendoring drift guard and
-    dropped verbatim into an adopter's roles directory by the plain scaffold
-    path. It therefore carries every marker its composed role carries, and
-    subtraction listed all five of them the moment a role core first declared a
-    duty — under a reason that says the duties in it reach no role, which is
-    false twice over: the marker is inspected in its composed form, and the file
-    reaches an adopter's roles directory. Excluding output is not the list this
-    derivation avoids; it is the derivation declining to report its own input
-    back to itself.
-    """
-    return path.parent == templates_dir() / "agentic_flow" / "agents"
-
-
 def _marked_files(project_root: Path) -> Iterator[Path]:
     """Fragment files carrying any duty marker, shipped and project alike."""
+    # Every shipped fragment, with no exclusion. There used to be one: the
+    # `templates/agentic_flow/agents/*.md.txt` snapshot carried every marker its
+    # composed role carried, so subtraction listed all five of them the moment a
+    # role core first declared a duty — under a reason that says the duties in it
+    # reach no role, which was false twice over. `beadloom-iur5` deleted the
+    # snapshot, so the derivation no longer has its own output in its input and
+    # no longer needs a rule to say so.
     candidates = [
-        *(
-            path
-            for path in templates_dir().rglob("*.md.txt")
-            if not _is_vendored_snapshot(path)
-        ),
+        *templates_dir().rglob("*.md.txt"),
         *(project_root / PROJECT_FLOW_DIRNAME).rglob("*.md"),
     ]
     for path in candidates:

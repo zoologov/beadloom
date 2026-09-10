@@ -23,8 +23,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 # A test that mutates the tree it measures cannot be trusted about it, and the
 # mutation is invisible to `git status` whenever it happens to be byte-identical
 # — which is exactly how the shipped CLAUDE.md template came to be a snapshot of
-# this project's local file, and how four `agents/*.md.txt` writes per run
-# survived unnoticed after the CLAUDE.md leg was closed.
+# this project's local file, and how the `agents/*.md.txt` writes per run
+# survived unnoticed after the CLAUDE.md leg was closed. `beadloom-iur5` removed
+# that writer; the guard's subject is the tracked tree, not that one function.
 #
 # Enforced as a hook rather than a fixture so the verdict lands in the CALL
 # phase: a teardown-phase failure is reported as ERROR, and ERROR is not FAILED

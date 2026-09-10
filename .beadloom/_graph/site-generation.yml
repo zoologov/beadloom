@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: site-generation
+    kind: feature
+    summary: "`docs site` — generate the VitePress content tree from the indexed graph (About/architecture/per-node pages, dashboard, landscape, nav, mermaid guard)"
+    source: src/beadloom/application/site.py
+    docs:
+      - docs/domains/application/features/site-generation/SPEC.md
+edges:
+  - src: site-generation
+    dst: application
+    kind: part_of

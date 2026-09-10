@@ -1,7 +1,7 @@
 # The Architecture Model: Domain vs Feature
 
-Beadloom models a codebase as a small graph of **nodes** (declared in
-`.beadloom/_graph/services.yml`) backed by **code annotations** in the source.
+Beadloom models a codebase as a small graph of **nodes** (declared in the YAML
+files under `.beadloom/_graph/`) backed by **code annotations** in the source.
 Three node kinds carry most of the modeling weight: **domain**, **feature**,
 and **component**. Getting the boundary between them right is what keeps the
 graph honest — neither so coarse that everything hides inside one domain, nor so
@@ -13,7 +13,7 @@ A **domain** is a DDD package — one directory under `src/beadloom/<pkg>/`
 (for example `graph/`, `context_oracle/`, `onboarding/`). It is the unit of
 **coarse ownership**: a bounded area of the system with a single owning
 responsibility and a layer position (services to application to domains to
-infrastructure). Domains are declared once in `services.yml` and each maps to
+infrastructure). Domains are declared once in a graph file and each maps to
 its source prefix.
 
 Rule of thumb: if you would draw it as a box on the high-level architecture
@@ -34,7 +34,7 @@ distinct from its sibling modules in the same domain, it is a feature and
 deserves a node plus a `SPEC.md`. If the best you can write is "shared helpers
 used by the rest of the domain", it is not a feature — it is plumbing.
 
-Features are declared in `services.yml` with a `part_of` edge to their domain,
+Features are declared in a graph file with a `part_of` edge to their domain,
 and every feature must have a `SPEC.md` describing that contract.
 
 ## Component
@@ -48,7 +48,7 @@ its own. (The code indexer, by contrast, *is* a feature — it has a distinct
 input/output contract: source files → `code_symbols` rows — so it earns a
 `SPEC.md`, not a `DOC.md`.)
 
-A component is declared in `services.yml` exactly like a feature — `kind:
+A component is declared in a graph file exactly like a feature — `kind:
 component`, a `source: <file>`, a `part_of` edge to its domain, and a `docs:
 <DOC.md>` — and it is attributed in code with a `# beadloom:component=<id>`
 annotation (the mirror of `# beadloom:feature=`). The distinction from a
@@ -81,7 +81,7 @@ code indexer into `code_symbols.annotations` (a JSON object per symbol):
   component (in addition to its domain). This promotes a module from plumbing
   to a tracked internal/infra building block.
 
-The matching nodes are declared in `services.yml`:
+The matching nodes are declared in a graph file:
 
 - a `domain` node per package,
 - a `feature` node per capability, with a `part_of` edge to its domain and a
@@ -101,8 +101,37 @@ under a node's `source`" the same way it treats "the module's path *is* a
 node's `source`". This keeps a cohesive leaf package (like `tui/`) modeled as
 one node without forcing a node per file.
 
-After editing annotations or `services.yml`, run `beadloom reindex` (then
+After editing annotations or a graph file, run `beadloom reindex` (then
 `beadloom sync-check`) so the index reflects reality.
+
+## Where a node is declared: one file or many
+
+Every reader of `.beadloom/_graph/` globs `*.yml` and unions what it finds, so the
+graph may live in one file or in a hundred. `beadloom init` writes one
+`services.yml`, which is the easier thing to review once, and that stays valid
+forever.
+
+**One file per node is what a project moves to when several agents write its graph
+at the same time.** A graph held in one file is written by every bead that adds,
+renames or moves a node, so two agents adding two nodes edit one file — and the
+node one of them is about to add is in no graph the other's tooling could have
+read. Splitting the directory into one file per node, named after the node, makes
+that collision impossible instead of detectable: two node-adding beads write two
+files. An edge goes in a file named after one of its two endpoints — under its
+`src` by default, and under the NEW node when a bead adds one, since that is the
+placement that leaves every existing node's file untouched.
+
+Hand-editing a node is then `vi .beadloom/_graph/<ref-id>.yml`. Nothing else about
+the workflow changes: `beadloom reindex` after a graph edit, `beadloom lint
+--strict`, `beadloom doctor` and `beadloom ctx` all read the directory exactly as
+before, and `rules.yml` was already a separate file that holds no nodes.
+
+`beadloom waves` reports where a project stands, because the answer matters most
+to a wave: its `graph-files` medium names the file every node-adding bead writes
+and how many nodes it holds, or says that each node has a file of its own. This
+repository took the split in BDL-UX #265. Measured over its whole graph, a full
+reindex went from 1895 ms to 1950 ms, and every command that reads the index
+rather than the YAML did not move at all.
 
 ## The `module-coverage` lint (no shadow code)
 

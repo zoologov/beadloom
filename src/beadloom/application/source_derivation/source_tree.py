@@ -24,6 +24,14 @@ if TYPE_CHECKING:
 #: body holding the same shape.
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
+#: What reading a file as Python raises when it is not Python, or not this
+#: Python. Named once because two callers reach the same `ast.parse` over a file
+#: nobody vetted — the sweep, which has caught these since this module was
+#: written, and `impact`'s target, which did not: BDL-UX #255 is that second
+#: caller ending a command in a traceback over a file whose only fault was a
+#: `.md` suffix. Two spellings of one list are two things that can disagree.
+UNPARSEABLE = (SyntaxError, ValueError, UnicodeDecodeError)
+
 
 class NoSuchFunctionError(LookupError):
     """A derivation was asked for a function the parsed source does not define."""
@@ -86,7 +94,7 @@ def sweep_modules(root: Path) -> ModuleSweep:
     for path in python_files(root):
         try:
             parsed.append((path, module_tree(path)))
-        except (SyntaxError, ValueError, UnicodeDecodeError) as failure:
+        except UNPARSEABLE as failure:
             unparsed.append(UnparsedModule(path, f"{type(failure).__name__}: {failure}"))
     return ModuleSweep(tuple(parsed), tuple(unparsed))
 

@@ -1,0 +1,12 @@
+  # Feature: Import Resolver
+nodes:
+  - ref_id: import-resolver
+    kind: feature
+    summary: "Multi-language import analysis and depends_on edge generation"
+    source: src/beadloom/graph/import_resolver.py
+    docs:
+      - docs/domains/graph/features/import-resolver/SPEC.md
+edges:
+  - src: import-resolver
+    dst: graph
+    kind: part_of

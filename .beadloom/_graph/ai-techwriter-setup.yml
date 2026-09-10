@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: ai-techwriter-setup
+    kind: feature
+    summary: "`setup-ai-techwriter` — scaffold the packaged AI tech-writer harness (CI workflow + recipe + guide) into any repo; no vendoring"
+    source: src/beadloom/onboarding/ai_techwriter_setup.py
+    docs:
+      - docs/domains/onboarding/features/ai-techwriter-setup/SPEC.md
+edges:
+  - src: ai-techwriter-setup
+    dst: onboarding
+    kind: part_of

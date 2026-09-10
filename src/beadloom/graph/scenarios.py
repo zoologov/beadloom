@@ -543,11 +543,22 @@ class ReferenceSet:
     returns. The suite reader has held this shape since `.66`; the reference
     reader did not, and swallowed ``OSError`` and ``UnicodeDecodeError`` with a
     bare ``continue`` one function away from it.
+
+    ``documents`` names the third outcome, which this set reported by silence
+    until `beadloom-0mdo.79`: a document the globs matched and the reader READ.
+    Without it a reader could tell a dead glob from an undecodable file and
+    could not tell either from a document dropped between the two — measured on
+    this repository, where 53 of 56 shipped PRDs and BRIEFs state no scenario,
+    so dropping any of them changes ``references`` by nothing at all. That is
+    the hole `beadloom-mr2l.77` found one domain over in ``documents_in``,
+    stated here before it costs anything: a fact nobody can place must still
+    appear in a count.
     """
 
     references: tuple[ScenarioReference, ...] = ()
     dead_globs: tuple[str, ...] = ()
     unreadable: tuple[UnreadableDocument, ...] = ()
+    documents: tuple[str, ...] = ()
 
 
 def load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet:
@@ -565,6 +576,7 @@ def load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet:
     references: list[ScenarioReference] = []
     dead: list[str] = []
     unreadable: list[UnreadableDocument] = []
+    read: dict[str, None] = {}
     for glob in globs:
         matched = False
         for path in sorted(project_root.glob(glob)):
@@ -583,7 +595,10 @@ def load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet:
                     )
                 )
                 continue
+            read.setdefault(relative, None)
             references.extend(parse_scenario_references(text, path=relative))
         if not matched:
             dead.append(glob)
-    return ReferenceSet(tuple(references), tuple(dead), tuple(unreadable))
+    return ReferenceSet(
+        tuple(references), tuple(dead), tuple(unreadable), tuple(read)
+    )

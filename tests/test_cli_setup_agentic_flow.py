@@ -2,26 +2,29 @@
 
 The command scaffolds Beadloom's proven multi-agent dev flow into ANY target
 repo, preserving the flow 1:1: the ``.claude/agents/*`` + ``.claude/commands/*``
-are vendored byte-identical to Beadloom's own live ``.claude/`` (a drift-guard
-test keeps them in sync), and the ``.claude/CLAUDE.md`` auto-regions are
-generated per-project (never hardcoding Beadloom's facts). The scaffold is
-idempotent and never touches user prose outside the auto-regions.
++ ``.claude/CLAUDE.md`` are COMPOSED from authored package data plus the
+overlays the target's own ``flow.yml`` selects, and the ``CLAUDE.md``
+auto-regions are generated per-project (never hardcoding Beadloom's facts). The
+scaffold is idempotent and never touches user prose outside the auto-regions.
+
+Until BDL-068 ``beadloom-iur5`` the role files were the exception: they came
+from five ``agents/*.md.txt`` assets that this suite refreshed from — and then
+asserted byte-identical to — this repository's own live ``.claude/agents/``.
+The tests for that round trip are gone with it; what replaces them is
+``tests/acceptance/features/composed_role_scaffold.feature``.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pytest
 from click.testing import CliRunner
 
-from beadloom.onboarding import agentic_flow_setup
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
     scaffold,
-    sync_agentic_flow,
-    vendored_flow_root,
+    templates_root,
 )
 from beadloom.services.cli import main
 
@@ -54,31 +57,27 @@ def _run(project: Path, *extra: str) -> object:
     )
 
 
-class TestVendoredFlowAssets:
-    def test_vendored_root_exists_and_has_all_assets(self) -> None:
-        root = vendored_flow_root()
+class TestShippedFlowAssets:
+    """What the package ships, and the one direction the guard runs in.
+
+    Every asset here is AUTHORED package data. The live ``.claude/`` files are
+    composed from it plus this repo's own project layer, so the guard asserts
+    that direction and never the reverse. Asserting "the template equals our
+    file" is the loop BDL-UX #177 measured: it makes the distributed artifact
+    unable to differ from one project's local text. The commands and CLAUDE.md
+    left that loop in BDL-061 S3; the role assets left it by being deleted in
+    BDL-068 ``beadloom-iur5``, which is why no ``agents/`` assertion remains.
+    """
+
+    def test_shipped_root_holds_every_composed_command_core(self) -> None:
+        root = templates_root()
         assert root.is_dir()
-        for name in AGENT_FILES:
-            assert (root / "agents" / f"{name}.md.txt").is_file(), name
         for name in COMMAND_FILES:
             assert (root / "commands" / f"{name}.md.txt").is_file(), name
 
-    def test_vendored_flow_matches_live_claude(self) -> None:
-        """Drift guard: every vendored AGENT template byte-matches the live file.
-
-        Agents only. The commands and ``CLAUDE.md`` are no longer snapshots of
-        this repo's live files — they are the shipped CORE, and the live files
-        are COMPOSED from them plus this repo's own project layer. Asserting
-        byte-equality on those is exactly the loop BDL-UX #177 measured: it made
-        the distributed artifact unable to differ from one project's local text.
-        Their guard is :meth:`test_live_flow_equals_its_composition`.
-        """
-        root = vendored_flow_root()
-        live = _live_claude_root()
-        for name in AGENT_FILES:
-            assert (root / "agents" / f"{name}.md.txt").read_text(
-                encoding="utf-8"
-            ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
+    def test_no_role_body_is_shipped_as_a_flow_asset(self) -> None:
+        """The role cores live in ``templates/roles/``; nothing mirrors them here."""
+        assert not (templates_root() / "agents").exists()
 
     def test_live_flow_equals_its_composition(self) -> None:
         """This repo's own ``.claude/`` is the composition of what it ships.
@@ -86,7 +85,9 @@ class TestVendoredFlowAssets:
         The replacement guard: instead of "the template equals our file", which
         forced our local text outward, "our file equals CORE + overlays + OUR
         project layer", which lets the two differ exactly where we declared they
-        should.
+        should. The roles are in it since ``beadloom-iur5``, and they are the
+        reason it is the only guard: with the snapshot gone, this is what would
+        catch a live role file that stopped matching what an adopter receives.
         """
         from pathlib import Path
 
@@ -95,6 +96,7 @@ class TestVendoredFlowAssets:
             composed_command,
         )
         from beadloom.onboarding.flow_config import resolve_flow_config
+        from beadloom.onboarding.role_composer import compose_all_roles
         from beadloom.onboarding.scanner import (
             _detect_project_name,
             blank_auto_regions,
@@ -106,6 +108,11 @@ class TestVendoredFlowAssets:
         for name in COMMAND_FILES:
             assert composed_command(name, config, repo) == (
                 live / f"commands/{name}.md"
+            ).read_text(encoding="utf-8"), name
+        composed_roles = compose_all_roles(config, repo)
+        for name in AGENT_FILES:
+            assert composed_roles[name] == (
+                live / f"agents/{name}.md"
             ).read_text(encoding="utf-8"), name
         expected = blank_auto_regions(
             composed_claude_md(
@@ -202,87 +209,6 @@ class TestCoordinatorVendoredDriftGuard:
         assert vendored.read_text(encoding="utf-8") == live.read_text(encoding="utf-8")
 
 
-class TestSyncAgenticFlow:
-    """Re-vendoring the ROLE files from a live ``.claude/`` — into tmp_path.
-
-    ``sync_agentic_flow`` writes package data. Until BDL-061.10 these tests
-    called it against the REAL package, so every ``pytest`` run — and ``pytest``
-    runs inside ``beadloom ci`` — copied whatever this maintainer's local
-    ``.claude/agents/*`` happened to say into the shipped templates, and the
-    drift guard that exists to catch that then compared the template against the
-    file it had just been copied from.
-
-    Measured in a clean room at HEAD, with one line appended to the live
-    ``.claude/agents/dev.md``: run 1 FAILED and shipped the edit anyway (the
-    tracked template's sha256 moved ``77dfc84…`` → ``b8bf376…``), run 2 passed
-    with the edit inside the package. That is BDL-UX #177's loop, surviving on
-    the one leg the CLAUDE.md fix did not cover — and it left no trace in ``git
-    status`` on an unedited tree, because the write is byte-identical there.
-
-    The destination is redirected here, so the round trip is exercised without
-    the suite mutating the artifact it measures. The structural half of the fix
-    is in ``tests/conftest.py``: any test that writes a git-tracked file fails.
-    """
-
-    @pytest.fixture()
-    def vendor_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        """A throw-away stand-in for the installed package's template root."""
-        root = tmp_path / "package-templates"
-        root.mkdir()
-        monkeypatch.setattr(
-            agentic_flow_setup, "vendored_flow_root", lambda: root
-        )
-        return root
-
-    def test_sync_round_trips_live_source(self, vendor_root: Path) -> None:
-        # Arrange
-        live = _live_claude_root()
-
-        # Act
-        written = sync_agentic_flow(live)
-
-        # Assert — every role file arrives, byte-identical to its live source
-        assert sorted(written) == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
-        for name in AGENT_FILES:
-            assert (vendor_root / "agents" / f"{name}.md.txt").read_text(
-                encoding="utf-8"
-            ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
-
-    def test_sync_does_not_touch_the_claude_md_core(self, vendor_root: Path) -> None:
-        """BDL-UX #177's first leg: the shipped CLAUDE.md is not a snapshot.
-
-        It used to be. Running this very function rewrote
-        ``templates/agentic_flow/CLAUDE.md.txt`` from ``.claude/CLAUDE.md``,
-        which is why a project-local paragraph — a bead id and a false claim
-        about this repo's branch protection — reached the shipped template
-        twice, the second time OVER the correction.
-
-        Asserted over what the sync PRODUCED rather than over the package's
-        unchanged sha256: with the destination redirected, "the packaged file
-        did not change" would be true by construction and would check nothing.
-        """
-        # Act
-        written = sync_agentic_flow(_live_claude_root())
-
-        # Assert
-        assert not any("CLAUDE" in name for name in written)
-        assert not (vendor_root / "CLAUDE.md.txt").exists()
-
-    def test_sync_does_not_touch_the_command_cores(self, vendor_root: Path) -> None:
-        """The commands compose too, so they are not snapshotted either."""
-        # Act
-        written = sync_agentic_flow(_live_claude_root())
-
-        # Assert — the produced set is exactly the roles, nothing else
-        produced = sorted(
-            path.relative_to(vendor_root).as_posix()
-            for path in vendor_root.rglob("*")
-            if path.is_file()
-        )
-        assert produced == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
-        assert not any(name.startswith("commands/") for name in written)
-
-
 class TestScaffoldFiles:
     def test_drops_all_agents_and_commands(self, tmp_path: Path) -> None:
         project = _make_project(tmp_path)
@@ -293,15 +219,6 @@ class TestScaffoldFiles:
             assert (project / ".claude" / "commands" / f"{name}.md").is_file(), name
         assert result.agents_written
         assert result.commands_written
-
-    def test_vendored_files_byte_identical_after_scaffold(self, tmp_path: Path) -> None:
-        project = _make_project(tmp_path)
-        scaffold(project)
-        live = _live_claude_root()
-        for name in AGENT_FILES:
-            assert (project / ".claude" / "agents" / f"{name}.md").read_text(
-                encoding="utf-8"
-            ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
 
     def test_writes_claude_md(self, tmp_path: Path) -> None:
         project = _make_project(tmp_path)
@@ -399,10 +316,13 @@ class TestPartialPreExisting:
         project = _make_project(tmp_path)
         agents_dir = project / ".claude" / "agents"
         agents_dir.mkdir(parents=True)
-        # Pre-place ONE agent file (byte-identical to the vendored template).
-        live = _live_claude_root()
+        # Pre-place ONE agent file, byte-identical to what the scaffold composes
+        # for this project, so the run has a matching file to leave alone.
+        from beadloom.onboarding.flow_config import resolve_flow_config
+        from beadloom.onboarding.role_composer import compose_all_roles
+
         (agents_dir / "dev.md").write_text(
-            (live / "agents" / "dev.md").read_text(encoding="utf-8"),
+            compose_all_roles(resolve_flow_config(project), project)["dev"],
             encoding="utf-8",
         )
 
@@ -487,20 +407,60 @@ class TestCli:
         result = _run(project, "--force")
         assert result.exit_code == 0, result.output
 
-    def test_cli_recomposes_hand_edited_agent_file(self, tmp_path: Path) -> None:
-        """BDL-052 S3: role files (.claude/agents/*) are now COMPOSED from
-        CORE+overlays — the composer is their source of truth, so a hand-edit is
-        recomposed away on the next run (drift-guard semantics), not preserved.
-        Hand-edit preservation now applies only to the vendored commands/CLAUDE.md."""
+    def test_cli_preserves_hand_edited_agent_file(self, tmp_path: Path) -> None:
+        """BDL-068 `.67` (BDL-UX #191): a hand-edited role adapter is preserved.
+
+        THIS ASSERTION USED TO BE ITS OWN OPPOSITE, and its docstring was the
+        only place the old decision was ever written: "role files are now
+        COMPOSED from CORE+overlays — the composer is their source of truth, so
+        a hand-edit is recomposed away on the next run ... Hand-edit
+        preservation now applies only to the vendored commands/CLAUDE.md."
+
+        So the asymmetry was deliberate at BDL-052 S3 and was recorded in a test
+        docstring, which is exactly #191's complaint: the same command answered
+        one hand edit two ways, and nothing an adopter could read said which was
+        intended. The reading is retired because the command's own `--force`
+        help already promised the opposite for every scaffolded flow file, and
+        `config-check` printed "It will NOT be rewritten" over this very file
+        under a remediation that says to re-run this command.
+        """
         project = _make_project(tmp_path)
         _run(project)
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED", encoding="utf-8")
         result = _run(project)
         assert result.exit_code == 0, result.output
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED"
+        assert "Skipped .claude/agents/dev.md" in result.output
+        assert ".beadloom/flow/roles/dev.md" in result.output
+
+    def test_cli_force_adopts_the_composed_role_body(self, tmp_path: Path) -> None:
+        """`--force` is the one door: it replaces the hand edit with the composition."""
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED", encoding="utf-8")
+        result = _run(project, "--force")
+        assert result.exit_code == 0, result.output
         assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
-        # The composed body is back.
         assert "## CORE" in agent.read_text(encoding="utf-8")
+
+    def test_cli_recomposes_a_role_file_it_wrote_itself(self, tmp_path: Path) -> None:
+        """Preserving a hand edit must not stop an UPGRADE from landing.
+
+        The whole point of the manifest is that "we wrote this" and "somebody
+        changed it" are told apart by evidence rather than by policy, so a file
+        Beadloom wrote and nobody touched is still recomposed on every run.
+        """
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        composed = agent.read_text(encoding="utf-8")
+        agent.unlink()
+        result = _run(project)
+        assert result.exit_code == 0, result.output
+        assert agent.read_text(encoding="utf-8") == composed
+        assert "Wrote .claude/agents/dev.md" in result.output
 
     def test_cli_hand_edited_command_still_skipped(self, tmp_path: Path) -> None:
         """Without --force, a hand-edited vendored command file is left untouched."""

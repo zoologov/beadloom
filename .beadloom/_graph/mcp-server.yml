@@ -1,0 +1,31 @@
+  # Service: MCP Server
+nodes:
+  - ref_id: mcp-server
+    kind: service
+    summary: "MCP stdio server with 18 tools for AI agents"
+    source: src/beadloom/services/mcp_server.py
+    tags: [layer-service]
+    docs:
+      - docs/services/mcp.md
+edges:
+  - src: mcp-server
+    dst: beadloom
+    kind: part_of
+  - src: mcp-server
+    dst: application
+    kind: uses
+  - src: mcp-server
+    dst: context-oracle
+    kind: uses
+  - src: mcp-server
+    dst: doc-sync
+    kind: uses
+  - src: mcp-server
+    dst: graph
+    kind: uses
+  - src: mcp-server
+    dst: infrastructure
+    kind: uses
+  - src: mcp-server
+    dst: onboarding
+    kind: uses

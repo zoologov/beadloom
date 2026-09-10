@@ -13,12 +13,23 @@ Codes (the contract a caller may rely on):
   could not be read (it declared none, named a ref the graph does not have, wrote
   the declaration inside a sentence, or wrote a second ref the parser had to drop),
   an override past its exit condition, an override that changed nothing, a shared
-  medium whose precondition failed, a shared medium nobody measured, a bead
-  declaring a node its work item rules out of scope, and a concurrent wave whose
-  beads leave part of that work item's approved scope undeclared. Visible,
-  never blocking — the shape is still usable.
+  medium whose precondition failed (including a bead the document every route
+  writes carries no row for), a shared medium nobody measured, a bead declaring a
+  node its work item rules out of scope, a concurrent wave whose beads leave
+  part of that work item's approved scope undeclared, and a ready list the
+  tracker capped, which makes the population this plan was held against a part
+  of one. Visible, never blocking — the shape is still usable.
 * ``2`` — no shape could be decided: no index, no answer from the tracker, a
-  bead the tracker does not have, or a ``waves:`` block that would not parse.
+  bead the tracker does not have, a ``--parent`` whose beads could not be
+  derived, neither a bead nor a ``--parent``, or a ``waves:`` block that would
+  not parse.
+
+**How many ready beads this plan was NOT asked about is printed and is never a
+finding** (BDL-UX #274). The bead list was the one thing here a human typed, and
+this project's own coordinator lost three beads of a slice that way. Narrowing a
+wave deliberately stays legitimate — measured over BDL-068's S6, 15 of 15
+launches were subsets — so the count is a notice, and ``--parent`` is the half
+that removes the typing instead of reporting on it.
 
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
 the same counts and the same verdict, and neither depends on whether stdout is a
@@ -45,8 +56,13 @@ from beadloom.services.commands._root import main
 if TYPE_CHECKING:
     from beadloom.application.waves import (
         BeadRecord,
+        FocusDocument,
+        GraphInput,
+        TrackerBead,
+        TrackerCensus,
         WaveEnvironment,
         WavePlan,
+        WorkItemAxes,
     )
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
@@ -107,6 +123,113 @@ def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecor
     return records
 
 
+def _bead_ids(
+    beads: tuple[str, ...], parent: str | None, census: TrackerCensus
+) -> tuple[str, ...]:
+    """The beads to plan: the ones named, plus the ones *parent* derives.
+
+    Without ``--parent`` this is the caller's list unchanged — passing a subset
+    stays legitimate and is reported rather than refused. With it, the list is
+    derived from the tracker, which is the half of BDL-UX #274 that removes the
+    typing rather than reporting on it.
+
+    A ``--parent`` the census cannot answer for is an error and not an empty
+    plan: the caller asked this command to derive a list, and a plan of no beads
+    would read as "nothing is ready under it", which is a different fact.
+    """
+    from beadloom.application.waves import ready_under
+
+    if not parent:
+        return beads
+    derived = ready_under(parent, census)
+    if derived is None:
+        msg = (
+            f"the tracker could not be read, so the beads ready under {parent!r} "
+            f"could not be derived"
+        )
+        raise LookupError(msg)
+    return tuple(sorted(set(beads) | set(derived)))
+
+
+def _tracker_census(project_root: Path) -> TrackerCensus:
+    """What the tracker holds beyond the beads this call names.
+
+    Two call forms and one purpose: the whole tracker, so a work item's
+    population can be walked, and the ready list, so the population can be cut
+    down to beads that could actually have been planned. Both name the
+    population they want — ``--all`` lifts a status filter bd does not announce
+    at all, and ``--limit 0`` lifts a cap bd announces on stderr only (BDL-UX
+    #187) — and the ready answer is then held against
+    :func:`~beadloom.services.bd_seam.coverage_of`, so a cap applied anyway is
+    reported rather than silently narrowing the count.
+
+    Fail-safe by construction: every failure leaves the corresponding field
+    ``None``, and a plan whose census could not be read says so instead of
+    reporting that nothing was left out. A tracker that cannot answer must not
+    stop a shape being decided — the population is a notice beside the plan, not
+    an input to it.
+    """
+    from beadloom.application.waves import TrackerCensus
+    from beadloom.services.bd_seam import BdUnavailableError, run_bd
+    from beadloom.services.bd_seam.answers import coverage_of, ready_ids
+
+    try:
+        listed = run_bd(["list", "--all", "--json"], cwd=str(project_root))
+        ready = run_bd(["ready", "--json", "--limit", "0"], cwd=str(project_root))
+    except BdUnavailableError:
+        return TrackerCensus()
+    beads = _census_beads(listed.stdout) if listed.ok else None
+    ids = ready_ids(ready.stdout) if ready.ok else None
+    coverage = coverage_of(("ready", "--json", "--limit", "0"), ready.stderr)
+    return TrackerCensus(
+        beads=beads,
+        ready=ids,
+        ready_whole=coverage.as_asked,
+        ready_note=coverage.stated,
+    )
+
+
+def _census_beads(stdout: str) -> tuple[TrackerBead, ...] | None:
+    """One :class:`TrackerBead` per row of a ``bd list --json`` answer.
+
+    ``None`` when the answer could not be read: an unreadable tracker is not a
+    tracker holding no bead, and reporting it as one would say every bead of
+    every work item was planned.
+
+    The dependency rows are read in ``bd list``'s own spelling — ``type`` and
+    ``depends_on_id``, where ``bd show`` writes ``dependency_type`` and ``id``
+    for the same edge. Two spellings of one fact in one tracker, so the reader
+    of each answer owns its own.
+    """
+    from beadloom.application.waves import TrackerBead
+
+    try:
+        rows = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(rows, list):
+        return None
+    found: list[TrackerBead] = []
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+            return None
+        deps = row.get("dependencies")
+        found.append(
+            TrackerBead(
+                bead_id=row["id"],
+                parent=str(row.get("parent") or ""),
+                depends_on=frozenset(
+                    str(dep["depends_on_id"])
+                    for dep in (deps if isinstance(deps, list) else [])
+                    if isinstance(dep, dict)
+                    and dep.get("type") != _PARENT_CHILD
+                    and dep.get("depends_on_id")
+                ),
+            )
+        )
+    return tuple(found)
+
+
 def _commit_gate(project_root: Path) -> str | None:
     """What the installed pre-commit hook judges, read where the installer writes.
 
@@ -149,8 +272,126 @@ def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
         conn.close()
 
 
-def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
-    """Measure the four media the graph cannot see, here at the services edge.
+def _graph_input(project_root: Path, db_path: Path) -> GraphInput | None:
+    """The graph this plan is derived from, read from both of the homes it has.
+
+    Read through :func:`~beadloom.onboarding.graph_files.each_graph_file`, which
+    is the one policy every reader of that directory holds — a second reader
+    with a skip policy of its own is how two readers of one directory come to
+    disagree about what a node is, which is what that module exists to stop.
+
+    ``None`` when there is no graph directory or the index will not answer:
+    neither is a project whose graph declares nothing, and an unknown population
+    must not print like an empty one.
+    """
+    from beadloom.application.waves import GraphFile, GraphInput
+    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.repository import get_all_nodes
+    from beadloom.onboarding.graph_files import each_graph_file
+
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if not graph_dir.is_dir():
+        return None
+    files = tuple(
+        GraphFile(
+            path=_relative(yml, project_root),
+            nodes=tuple(
+                sorted(
+                    str(node["ref_id"])
+                    for node in data.get("nodes") or []
+                    if isinstance(node, dict) and node.get("ref_id")
+                )
+            ),
+        )
+        for yml, data in each_graph_file(graph_dir)
+    )
+    conn = open_db(db_path)
+    try:
+        indexed = frozenset(node.ref_id for node in get_all_nodes(conn))
+    except sqlite3.Error:
+        # An index that will not answer is not an index holding no node.
+        return None
+    finally:
+        conn.close()
+    return GraphInput(files=files, indexed=indexed)
+
+
+def _focus_documents(
+    project_root: Path, axes: WorkItemAxes
+) -> tuple[FocusDocument, ...] | None:
+    """The documents every work-item type writes, and the rows each carries.
+
+    Two derivations already in the codebase, joined and read once. WHICH kind
+    every route writes is
+    :attr:`~beadloom.application.work_item_routing.Routing.shared_kinds`, off the
+    composed ``/task-init`` command. WHICH work item this plan belongs to is
+    *axes*, the same read the commit gate makes, and its document names the
+    folder the work item's own files live in — so no path is spelled here and a
+    project with another convention is not measured against this one.
+
+    **Scoped to ONE work item, and the reason is a measurement.** The first
+    version read every focus document in the project and asked whether any row
+    named the bead. Run on this repository it reported ``passed`` for all three
+    beads of BDL-068's S6 wave over 58 documents, none of which carries a row for
+    any of them: an ACTIVE table abbreviates ``beadloom-0mdo.75`` to ``.75``, and
+    BDL-061's table has a ``.75`` row of its own. That is the ambiguity
+    :func:`~beadloom.application.active_table.row_ids.resolve_row_bead_id`
+    already refuses to guess at, met from the other side — this project holds
+    eight beads numbered ``.17`` in eight epics.
+
+    ``None`` when the routing could not be read, or when the branch names no work
+    item: neither is a flow whose routes write nothing, and an unknown population
+    must not print like an empty one.
+    """
+    from beadloom.application.doc_shape import planning_document_globs
+    from beadloom.application.waves import FocusDocument
+    from beadloom.application.work_item_routing import task_init_routing
+    from beadloom.doc_sync.tables import cells_of
+
+    routing = task_init_routing(project_root=project_root)
+    if not routing.routes or not axes.readable or not axes.document:
+        return None
+    kinds = routing.shared_kinds
+    if not kinds:
+        return ()
+    folder = (project_root / axes.document).parent
+    found: list[FocusDocument] = []
+    for pattern in planning_document_globs(project_root):
+        for path in sorted(project_root.glob(pattern)):
+            kind = path.stem.upper()
+            if kind not in kinds or path.parent != folder:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                # A focus document nobody could read is not one with no rows.
+                return None
+            found.append(
+                FocusDocument(
+                    path=_relative(path, project_root),
+                    kind=kind,
+                    row_cells=tuple(
+                        cells[0]
+                        for line in text.splitlines()
+                        if (cells := cells_of(line))
+                    ),
+                )
+            )
+    return tuple(found)
+
+
+def _relative(path: Path, project_root: Path) -> str:
+    """*path* as the project writes it, whether the root was absolute or not."""
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _environment(
+    project_root: Path, db_path: Path, axes: WorkItemAxes
+) -> WaveEnvironment:
+    """Measure the media the graph cannot see, here at the services edge.
 
     Gathered here rather than inside the planner so the application layer keeps
     taking its input as data: the decision stays runnable without git, without a
@@ -171,6 +412,8 @@ def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
         landing_lock_sites=lock_sites(
             lock_invocations(text_invocations(flow_artifacts(project_root)))
         ),
+        focus_documents=_focus_documents(project_root, axes),
+        graph_input=_graph_input(project_root, db_path),
     )
 
 
@@ -205,6 +448,16 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             }
             for a in plan.agreements
         ],
+        "population": {
+            "work_item": plan.population.work_item,
+            "asked": list(plan.population.asked),
+            "under": len(plan.population.under),
+            "ready_under": list(plan.population.ready_under),
+            "unasked": list(plan.population.unasked),
+            "reason": plan.population.reason,
+            "ready_whole": plan.population.ready_whole,
+            "ready_note": plan.population.ready_note,
+        },
         "unguarded_axes": [
             {"wave": g.wave, "beads": list(g.beads), "nodes": list(g.nodes)}
             for g in plan.unguarded_axes
@@ -259,7 +512,7 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
 
 def _render(plan: WavePlan) -> None:
     """Print the decided shape, its reasons, and what it did not decide."""
-    from beadloom.application.waves import room_for
+    from beadloom.application.waves import population_lines, room_for
 
     click.echo(
         f"{len(plan.waves)} wave(s) for {len(plan.scopes)} bead(s), "
@@ -291,6 +544,9 @@ def _render(plan: WavePlan) -> None:
         )
     _render_axes(plan)
     click.echo("")
+    for line in population_lines(plan.population):
+        click.echo(line)
+    click.echo("")
     click.echo("Shared by every wave, and NOT decided by code independence:")
     for medium in plan.shared_media:
         click.echo(f"  {medium.name} ({medium.evidence}) — {medium.statement}")
@@ -316,6 +572,7 @@ def _render_axes(plan: WavePlan) -> None:
         AXIS_AGREES,
         AXIS_NOT_ATTRIBUTED,
         AXIS_NOT_DERIVED,
+        AXIS_SWEPT_UNDECIDED,
     )
 
     axes = plan.axes
@@ -329,6 +586,7 @@ def _render_axes(plan: WavePlan) -> None:
         f"{len(axes.approved)} node(s) approved, "
         f"{counts[AXIS_AGREES]} declared ref(s) agree, "
         f"{counts[AXIS_NOT_DERIVED]} the derivation did not reach, "
+        f"{counts[AXIS_SWEPT_UNDECIDED]} swept and not ruled on, "
         f"{counts[AXIS_NOT_ATTRIBUTED]} axis row(s) name no node."
     )
     click.echo(f"  seed: {axes.seed or 'not stated'}")
@@ -343,7 +601,16 @@ def _render_axes(plan: WavePlan) -> None:
 
 # beadloom:domain=application
 @main.command("waves")
-@click.argument("beads", nargs=-1, required=True)
+@click.argument("beads", nargs=-1)
+@click.option(
+    "--parent",
+    "parent",
+    default=None,
+    help=(
+        "Plan every bead the tracker lists as ready under this work item, "
+        "instead of a list typed on the command line."
+    ),
+)
 @click.option("--json", "output_json", is_flag=True, help="Structured JSON output.")
 @click.option(
     "--project",
@@ -351,13 +618,23 @@ def _render_axes(plan: WavePlan) -> None:
     default=None,
     help="Project root (default: current directory).",
 )
-def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) -> None:
+def waves(
+    *,
+    beads: tuple[str, ...],
+    parent: str | None,
+    output_json: bool,
+    project: Path | None,
+) -> None:
     """Decide which of these beads may run at the same time.
 
     Parallelism is decided from the code-level independence of the beads' node
     scopes: independent subgraphs share a wave, a shared node serialises, and a
     bead that has not declared what it occupies is serialised against everything
     rather than assumed independent.
+
+    ``--parent`` derives the bead list from the tracker instead of taking it from
+    the command line, and without it every plan still reports how many ready
+    beads under the same work item it was not asked about (BDL-UX #274).
     """
     from beadloom.application.declared_scope import work_item_axes
     from beadloom.application.waves import WaveConfigError, load_overrides, plan_waves
@@ -369,16 +646,25 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
     if not db_path.exists():
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(_EXIT_UNDECIDABLE)
+    if not beads and not parent:
+        click.echo(
+            "Error: name the beads to plan, or the work item to derive them from "
+            "with `--parent`.",
+            err=True,
+        )
+        sys.exit(_EXIT_UNDECIDABLE)
 
+    census = _tracker_census(project_root)
     try:
+        asked = _bead_ids(beads, parent, census)
         overrides = load_overrides(project_root)
-        records = _read_beads(beads, project_root)
+        records = _read_beads(asked, project_root)
     except (WaveConfigError, LookupError, BdUnavailableError, json.JSONDecodeError) as exc:
         click.echo(f"Error: no wave shape could be decided — {exc}", err=True)
         sys.exit(_EXIT_UNDECIDABLE)
 
-    environment = _environment(project_root, db_path)
     axes = work_item_axes(project_root)
+    environment = _environment(project_root, db_path, axes)
     conn = open_db(db_path)
     try:
         plan = plan_waves(
@@ -387,6 +673,8 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
             overrides=overrides,
             environment=environment,
             axes=axes,
+            census=census,
+            work_item=parent or "",
         )
     finally:
         conn.close()

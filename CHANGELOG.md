@@ -7,7 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nine new top-level commands, from BDL-068.** The epic added them one slice at a time and
+  this section recorded none of them until its last slice, so they are listed here together
+  rather than under the release each landed in. The first three are already on `main` via
+  PR #59; this is an omission being repaired epic-wide, not a regression of the final slice.
+
+  - `beadloom impact <ref-id>` -- who else writes a node, who else calls it, and how many
+    branches it has (S1).
+  - `beadloom scope-check` -- whether a commit stays inside the axes its work item declared (S1).
+  - `beadloom axes <work-item>` -- a work item's `## Axes` section read back: what it declares
+    and the refs it names (S1).
+  - `beadloom rooms` -- the room a run is in and the rooms the project declares, derived from
+    packaging metadata and CI workflows rather than a checklist (S2/S3).
+  - `beadloom mutation` -- the mutation score a run produced over the declared scope; the scope
+    findings alone were already a `config-check` leg, and the SCORE needs counters a runner
+    wrote (S2/S3).
+  - `beadloom typed-surface` -- the surface the project declares typed, derived from its own
+    type-checker configuration (S4).
+  - `beadloom bd-calls` -- every place the project reaches `bd`, and what each call form assumes
+    about the answer it gets back (S5).
+  - `beadloom clean-room <bead-id>` -- a room built from `HEAD` plus the files named, taking its
+    directory from the bead so two agents of one wave cannot be handed the same one (S6).
+  - `beadloom issue-number` -- an issue-log number allocated by exclusive create rather than read
+    off the end of a shared file, plus three legs over the numbers already taken (S6).
+
+### Removed
+
+- **The vendored role snapshot, and the function that refreshed it** (BDL-UX #177's last leg).
+  `src/beadloom/onboarding/templates/agentic_flow/agents/*.md.txt` — five assets, 97 KB — were
+  a byte-snapshot of THIS repository's live `.claude/agents/`, refreshed by
+  `agentic_flow_setup.sync_agentic_flow()` and asserted byte-identical by two tests. Both are
+  gone, along with `vendored_flow_root()`, `_vendored_asset()` and `_scaffold_vendored()`.
+
+  BDL-061 S3 removed this shape for `CLAUDE.md` and the slash commands and left it standing for
+  the roles. It was harmless only while this repository declared no `.beadloom/flow/roles/`
+  fragment, because the snapshot then happened to equal the pure shipped composition; a
+  fragment added here would have been written into the package by the next refresh and shipped
+  to every adopter, silently and byte-identically to what the tests asserted. Measured on this
+  tree: `sync_agentic_flow()` had no production caller — a grep over `src/` found only its own
+  module — so the snapshot was kept current by a manual step nobody was reminded of.
+
+  **No function in `agentic_flow_setup` writes package data now.** That is what makes the
+  reversal structural for every artifact the command writes, rather than a convention: there is
+  nothing left to run that could carry a local file outward.
+
+### Changed
+
+- **The scaffold's role path composes instead of copying.** `scaffold(include_agents=True)`
+  now writes `compose_all_roles(config, project_root)` through `_scaffold_composed()`, the same
+  function, manifest recording and hand-edit policy the slash commands use, so a hand-edited
+  role file on that path is preserved and reported with the project-layer path the edit belongs
+  in instead of being skipped without a remedy. The path is reached from
+  `config_sync.refresh_agentic_flow_files()`, which passes `include_agents=not has_flow` — so
+  `config-check --fix` on a repository that adopted the flow before `.beadloom/flow.yml`
+  existed is what it serves.
+
+  This has a consequence for adopters that needed no snapshot to appear: those bodies were ONE
+  composition, this project's `ddd` and `python`, so a project whose flow declared anything else
+  received role protocols for an architecture it does not use. It now receives its own.
+
+- **`config-check` compares role files against a composition on every path.** The branch for a
+  repository with no `.beadloom/flow.yml` used to byte-compare each `.claude/agents/*.md`
+  against the snapshot and report *drifted from the shipped template* with `fixable=False`,
+  under a remediation telling the adopter to adopt a `flow.yml`. It now runs through the same
+  `_state_drift` projection every other artifact kind reads.
+
+  One narrowing, in the reporting direction and stated rather than hidden: `_adapter_states()`
+  offered the snapshot as a second `alternate` beside the shipped-only composition, for a
+  repository scaffolded before it declared a `flow.yml`. That case is covered at the write end
+  now, because the scaffold path records a digest. A repository scaffolded by a Beadloom older
+  than this change, whose `flow.yml` then declares an architecture or stack other than
+  `ddd`/`python`, reads `unverified` on its role files instead of clean — reported and left
+  exactly as it is, never rewritten.
+
 ### Fixed
+
+- **A guard that cannot evaluate itself no longer blocks the write that would repair it**
+  (BDL-UX #254). `beadloom guard` now has a sixth outcome, `unresolved`, and the two outcomes
+  that mean "the guard did not answer" are told apart by what it could not answer ABOUT.
+  `error` is a target the guard refuses to interpret — an undecodable hook payload, a malformed
+  path — where the guard ran and genuinely does not know which file is being written; it still
+  exits 2 and still stops that edit. `unresolved` is an inability the guard has about itself —
+  its own code will not import, `.beadloom/flow.yml` will not parse, a guard name is not
+  registered, the command line could not be used, no project could be located, the evaluation
+  crashed, exited or was interrupted — and it **warns and permits**: exit 1 through a `--hook`
+  harness, exit 3 from a shell.
+
+  **This is a behaviour change for anyone reading the guard's exit code.** The whole
+  self-inability class previously exited 2 through a harness, and its crash and no-project
+  members exited 2 from a shell as well.
+
+  The reason is a measurement rather than a position: every repair for that class is a **file
+  write**, and the guard is bound to every tool that makes one — `Bash` included since BDL-UX
+  #170 was closed. Hit live in this project's own S5 slice, when `git mv` left a package
+  without its `__init__.py` and the module the tracker probe imports became unimportable:
+  `Bash`, `Write` and `Edit` all returned the same `ImportError` at the blocking code, `Read`
+  was the only tool outside the surface, and the remediation printed on every attempt read "fix
+  the reported error, then re-run" — the write that verdict had just disabled. It was cleared
+  by typing a heredoc in a shell outside the session, because nothing inside one could. A gate
+  that blocks on its own inability is not strict, it is unavailable.
+
+  **Permitting is not passing.** The outcome is named on stderr, carries a line stating that
+  the edit was not checked and was allowed through, is written to `guard-firings.jsonl`, and
+  does not clear `never-fired` in `beadloom guard --liveness` — so a guard nothing can run
+  keeps reading as a dead gate. The enforcement surface was **not** narrowed: `EDIT_MATCHER` is
+  still `Edit|Write|MultiEdit|NotebookEdit|Bash`.
+
+  The emitted hook adapter (`.claude/hooks/beadloom-guard.sh`) changes with it: its comment now
+  enumerates the three codes an invocation through it can return and what each means for the
+  edit. Re-run `beadloom setup-agentic-flow` to pick it up.
 
 - **`beadloom init` no longer reports success over a graph that fails the rules it just
   wrote** (BDL-UX #192). Every entry point that writes a file under `.beadloom/_graph/` —

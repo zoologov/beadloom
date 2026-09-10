@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: mcp-tools
+    kind: component
+    summary: "Canonical catalog of MCP tool names — single source of truth shared by the MCP server and the docs generator"
+    source: src/beadloom/infrastructure/mcp_tools.py
+    docs:
+      - docs/domains/infrastructure/components/mcp-tools/DOC.md
+edges:
+  - src: mcp-tools
+    dst: infrastructure
+    kind: part_of

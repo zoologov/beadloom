@@ -4,6 +4,22 @@
 
 Beadloom CLI is built on Click and provides a set of commands for managing the knowledge index.
 
+**What checks that this page is complete: nothing.** Two instruments count the CLI surface and
+neither compares its count against this document. `doctor`'s `agent_instructions_cli_commands`
+leg reports the registered names at `OK` severity unconditionally
+(`application/doctor.py:_get_actual_cli_commands`), and `docs audit` lists `cli_command_count`
+among the facts it declares and marks NOT VERIFIED, because no document states it. The two also
+count different populations -- `doctor` takes the top-level names off the Click group, while the
+audit walks nested groups and counts leaves and groups together -- so they answer with different
+numbers under one name, and no check reads either against this file.
+
+The consequence is measured, not hypothetical: an S6 review derived the registered names and
+compared each against a `### beadloom <cmd>` heading here, and found `beadloom issue-number`
+documented nowhere on this page four days after it shipped. The peer command of the same slice,
+`beadloom clean-room`, was documented in the commit that shipped it. A page kept current by
+convention drifts wherever the convention is missed, and the drift is invisible until somebody
+derives the comparison by hand.
+
 ## Specification
 
 ### Global Options
@@ -116,7 +132,7 @@ unreadable file with it, before writing.
 
 Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
-**`--bootstrap` also appends an ignore block to the project's `.gitignore`, once** (BDL-061.35). Before it, Beadloom wrote an ignore entry nowhere, so an adopter collected untracked churn from the very first `reindex`. The block names the derived state only — `.beadloom/**/*.db{,-wal,-shm}` and `.beadloom/guard-firings*.jsonl`, a glob so the rotated generation is ignored beside the active one — and each pattern carries its reason in the file; the graph under `.beadloom/_graph/` and `flow.yml` are source and stay committable. It is **written once and never rewritten**: a run that finds the marker does nothing, so deleting a line is a real override rather than an edit the next run undoes. **The firing-record entry states what a team would be committing** before it invites them to: one line per guarded edit carrying the verdict, the file an edit named, and for a shell edit the program that ran and the files it was seen to write — never the command line, which since `beadloom-0mdo.43` is reduced at the door the context is built at and reaches no record. The sentence was written when the record held paths only, and binding the shell tool (BDL-UX #170) made it hold command lines; following the old invitation would have put an agent's shell history into git. Because the block is never rewritten, **a project that already carries it keeps the older wording** — the entry a `beadloom init` from before this change wrote is not revisited, and neither are the records already on disk (BDL-UX #238 covers the class: nothing yet compares the block on disk against the block this version emits). Nothing is written outside a git working tree, a pattern the project already declares is not duplicated, and the project's own lines are untouched. The write is reported (`✓ Ignored: N generated path(s) …`), because silently editing someone's `.gitignore` is its own surprise.
+**`--bootstrap` also appends an ignore block to the project's `.gitignore`, once** (BDL-061.35). Before it, Beadloom wrote an ignore entry nowhere, so an adopter collected untracked churn from the very first `reindex`. The block names the derived state only — `.beadloom/**/*.db{,-wal,-shm}` and `.beadloom/guard-firings*.jsonl`, a glob so the rotated generation is ignored beside the active one — and each pattern carries its reason in the file; the graph under `.beadloom/_graph/` and `flow.yml` are source and stay committable. It is **written once and never rewritten**: a run that finds the marker does nothing, so deleting a line is a real override rather than an edit the next run undoes. **The firing-record entry states what a team would be committing** before it invites them to: one line per guarded edit carrying the verdict, the file an edit named, and for a shell edit the program that ran and the files it was seen to write — never the command line, which since `beadloom-0mdo.43` is reduced at the door the context is built at and reaches no record. The sentence was written when the record held paths only, and binding the shell tool (BDL-UX #170) made it hold command lines; following the old invitation would have put an agent's shell history into git. Because the block is never rewritten, **a project that already carries it keeps the older wording** — the entry a `beadloom init` from before this change wrote is not revisited, and neither are the records already on disk (since `beadloom-0mdo.40` the PATTERNS are compared — `config-check` reports at `warn` every pattern this version emits that the file does not declare, and names the declared line a wider pattern supersedes — but the `why` text is not compared, so the older wording stays invisible). Nothing is written outside a git working tree, a pattern the project already declares is not duplicated, and the project's own lines are untouched. The write is reported (`✓ Ignored: N generated path(s) …`), because silently editing someone's `.gitignore` is its own surprise.
 
 ### beadloom reindex
 
@@ -756,17 +772,52 @@ enforceable for a project that wants it.
 
 **What counts as a claim.** A line is split on whitespace and only a token whose whole core is a number is a candidate — all digits, or digits in thousands groups (`6,390`, read whole as `6390`). A number inside a larger token is an identifier rather than a claim (`BDL-061.33`, `v2.2.0`, `utf-8`) and is never extracted; markdown emphasis, brackets and trailing punctuation around the token are stripped first. A claim also reaches only to the end of its own clause: a modifier or a noun on the far side of `,` `;` `:` or a dash belongs to the rest of the sentence, so `The graph holds 316 edges, one per import.` is read (the `per` is not modifying the count) while the `14` in `exposes 18 tools: 14 over the graph` is not (it is a breakdown, not the total). See `docs/domains/doc-sync/features/docs-audit/SPEC.md` for the layer model and the declared blind spots.
 
-**Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Two `.beadloom/config.yml` keys handle the rest:
+**Whose version a version is.** A semantic version is attributed to the nearest subject NAME
+to its left inside its own clause, and only a version whose nearest name is this project's --
+or that has no name at all -- is compared against this project's version. So
+`Measured on bd 1.0.4` states the release of the tracker and `The current release is 3.0.2`
+states this project's, and each number in `bd 1.0.4 answers and beadloom 3.0.2 asks` goes to
+the name beside it. The tokens given to another product are counted with their subjects in the
+audit's own output, and carried in `--json` under `attributed_versions` with the vocabulary
+that decided them under `version_subjects`, so the exemption is visible rather than silent.
+
+The vocabulary is derived where a project already declares it: every distribution in
+`pyproject.toml`, `package.json` or `Cargo.toml`, the interpreter families implied by
+`requires-python` / `engines.node` / `rust-version`, and `git` when the project is a git
+repository. A name no manifest declares -- a CLI, a database, a service -- is named once under
+`docs_audit.subjects`. A name nobody declared still produces a finding, so an unknown subject
+fails loud rather than quietly going unchecked.
+
+**A subject the environment cannot confirm here is unresolved, not absent.** `git` is
+confirmed by a `.git` rather than by a file the project ships, and a directory built by
+`git archive HEAD` -- every clean room `beadloom clean-room` builds -- carries none. Reading
+that absence as a denial compared `git 2.49.0` against this project's own version, which made
+every clean-room Gate run on this repository rc 1 for one line of one document (BDL-UX #266).
+The name now stays in the vocabulary as unresolved: it still wins the attribution walk, and
+the audit reports the token it declined to judge instead of judging it. `--json` carries them
+under `unjudged_versions` with the reason under `unresolved_version_subjects`, and the
+`beadloom ci` docs-audit line names the count and the subject. Do not declare `git` under
+`docs_audit.subjects` to work around this -- a second, hand-written vocabulary entry is the
+drift the derivation exists to prevent.
+
+**Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Three `.beadloom/config.yml` keys handle the rest:
 
 ```yaml
 docs_audit:
   tolerances:
     node_count: 0.1          # accept counts within 10% of ground truth
+  subjects:                  # products this project cites that no manifest declares
+    - bd
   ignore:                    # suppress one {path, fact, value} false match each
     - path: docs/guides/vitepress-site.md
       fact: cli_command_count
       value: 404
 ```
+
+`docs_audit.subjects` is a list of NAMES, not of documents. One entry covers every sentence in
+every document that measures that product, which is what it replaced: ten `ignore` triples
+stood on this repository for one sentence shape, and eight of them went inert when the
+attribution rule landed.
 
 `docs_audit.ignore` is a list of `{path, fact, value}` triples. Each suppresses exactly one keyword-proximity false positive — for example a subset count stated next to the correct total, or an HTTP status code matched as a command count — **without** rewording correct prose and **without** masking a genuine stale fact of the same type elsewhere. Use it only for confirmed false positives; genuine stale facts must be corrected in the doc.
 
@@ -1186,6 +1237,8 @@ Two things this closed, both measured:
 
 The remedy is unchanged and now actually terminates: move the additions into `.beadloom/flow/roles/<role>.md`, then re-run `beadloom setup-agentic-flow`.
 
+**And the remedy is now safe to follow literally (BDL-068 `.67`, BDL-UX #191).** Until then `setup-agentic-flow` recomposed the adapter that this finding had just promised would not be rewritten, so an adopter who ran the remediation without doing the move first lost the edit — the same shape as #186, in the sibling command. Both commands now derive their preserve set from one function, `config_sync.declined_adapter_rewrites()`, so the sentence printed about a file and the decision taken about it cannot disagree whichever command took it.
+
 Which of the two a divergence *is*, is decided by the flow manifest (`.beadloom/flow-manifest.json`): every write records the body's sha256, so `stale` (Beadloom wrote it, the composition moved — `error`, recompose), `hand_edited` (`error`, never rewritten) `missing` (we wrote it and it is gone — `error`) and `unverified` (nothing accounts for it, so the two cannot be told apart — `warn`) are separate findings and not one word. The `CLAUDE.md` body is JUDGED only when the file is Beadloom's: a manifest entry, or the `<!-- beadloom:composed` stamp the shipped core begins with — a project's own hand-written `CLAUDE.md` is never policed. Not judged is not the same as not mentioned: in a project that adopted the flow, a `CLAUDE.md` with neither signal is named at `unverified`/`warn` rather than passed over. Those two signals are independent on purpose: deleting the generated manifest used to downgrade a hand edit to `warn` and the command to exit 0, and deleting one scaffolded file used to switch the checks off for every other one. Neither does now — the deletions are themselves reported (BDL-061 `.57`). `config-check` also names, at `warn`, a project layer in effect (its prose is composed but not judged) and an `overlays.suppress` entry that has expired or that names no rule in the composed flow.
 
 **It also checks that a duty declared for a role reaches that role's composed core, in both directions** (BDL-068 S4). A duty an agent is obliged to perform, written somewhere the performer does not read, is the class this check exists for: the clean-room rule lived in the coordinator's prose and occurred zero times in the role cores the roles receive. Duties are **declared, never inferred** — `<!-- beadloom:duty=<id> roles=<a,b> -->` in a composed flow artifact, `<!-- beadloom:carries=<id> -->` in a fragment that composes into one — because a detector over English role prose would repeat the docs-audit keyword-proximity class. Four findings, all `error` and none `fixable` (the repair is prose in a role core, and `--fix` writes compositions): `undelivered` (declared for a role whose composed core carries it nowhere), `undeclared` (carried and declared by nothing), `unknown-role` (a declaration naming a role no CORE fragment ships) and `malformed` (a `duty=` marker with no `roles=` list, which names no performer).
@@ -1288,15 +1341,31 @@ The path is model-supplied, so its **shape is narrowed rather than repaired**: a
 Decide which of these beads may run at the same time.
 
 ```bash
-beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+beadloom waves BEAD [BEAD ...] [--parent WORK-ITEM] [--json] [--project DIR]
 ```
 
 Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
 shape was decided and carries findings (a bead whose declared scope could not be
 read, an override past its exit condition, an override that changed nothing, a
-shared medium that failed its check or that nobody measured) -- visible, never
-blocking; `2` = no shape could be decided (no index, no answer from the
-tracker, a bead the tracker does not have, a `waves:` block that would not parse).
+shared medium that failed its check or that nobody measured, a ready list the
+tracker capped) -- visible, never blocking; `2` = no shape could be decided (no
+index, no answer from the tracker, a bead the tracker does not have, a `--parent`
+whose beads could not be derived, neither a bead nor a `--parent`, a `waves:`
+block that would not parse).
+
+**Every plan says how many ready beads under the same work item it was not asked
+about**, and that count is a notice rather than a finding. The bead list was the
+one input here a human typed, and this project's own coordinator lost three beads
+of a slice that way -- all three sat in `bd ready --limit 0` through fifteen
+launches and no plan could report their absence, because nothing knew they should
+have been present. `--parent WORK-ITEM` is the other half: it derives the list
+from the tracker -- every bead ready under that work item -- so the caller states
+the work item instead of the list. Passing a subset stays legitimate; what the
+notice adds is that the narrowing is visible.
+
+A work item's population is its parent-child closure plus every bead any member
+of that closure depends on. The parent link alone is not enough: two of the three
+lost beads had no parent at all and belonged to the slice because they blocked it.
 
 It **decides**, it does not advise. Parallelism follows from the code-level
 independence of the beads' node scopes, which only the architecture graph holds:
@@ -1323,9 +1392,10 @@ second ref written without a comma that the graph confirms is a node
 a wave shape is acted on, so a parser whose errors widen a wave is worse than no
 parser.
 
-**Every wave prints the five media it shares, whatever its width**, each with
-the evidence it comes from: the working tree (#181, #235), the commit gate
-(#118), the landing order (#194, #237), the doc baseline (#163, #182, #133) and
+**Every wave prints the seven media it shares, whatever its width**, each with
+the evidence it comes from: the graph the plan is derived from (#261), the
+working tree (#181, #235), the commit gate (#118), the landing order (#194,
+#237), the focus document (#257), the doc baseline (#163, #182, #133) and
 the tracker's id space (#171).
 Until BDL-068 S4 a wave of one printed `not_applicable` against three of them;
 that verdict is gone (`beadloom-67t1`). A plan is one slice of one epic, so a
@@ -1463,6 +1533,159 @@ plan included.
 `axes` (the work item, its document, the seed and what the derivation could not
 reach), `agreements[]` (`bead`, `ref`, `verdict`, `detail`), `unguarded_axes[]`,
 `findings[]` and `exit_code`.
+
+### beadloom clean-room
+
+Build the clean room a bead measures in, from `HEAD` plus the files you name.
+
+```bash
+beadloom clean-room BEAD [--at DIR] [--carry PATH]... [--extras LIST] [--no-environment]
+                    [--rebuild] [--project DIR] [--json]
+```
+
+`beadloom waves` prints the room each bead owes (`clean room: <bead> -> room-<bead>`);
+this command is what creates it. The two are one spelling — the path comes from the same
+`room_for(bead_id)` the plan prints — so a room cannot be named after the concept instead
+of after its occupant.
+
+**Why the command exists, measured.** In BDL-068 S4 wave 1 two agents each built a room at
+the same session-scratchpad path. Reconstructed from mtimes: one agent's `git archive` at
+22:53, the other's files copied in at 23:16, the first's at 23:26. The suite run there
+reported 8 failures and five of them belonged to the neighbour, none a defect in either
+bead; rebuilt under a bead-unique name it reported 1, a stated property of the room
+(BDL-UX #235). Separately, copying changed files into a room that had already been indexed
+produced `sync-check` exit 2 with `stale: 2` against a change that is clean at `HEAD`,
+because the copy postdates the room's own freshness baseline (BDL-UX #243). Both are the
+same missing guarantee, and both are answered by deriving the path from the bead and
+**creating** the directory rather than entering one.
+
+So a directory that already exists is refused, never written into, and `--rebuild`
+REPLACES a room rather than refreshing it. A rebuild deletes only a directory whose
+`.beadloom-room.json` names this bead: a directory that merely carries the right name is
+refused, because removing a path chosen by a caller's typing is a worse failure than the
+one this command was written for.
+
+`--carry` copies exactly the files you name, and there is deliberately no "copy everything
+that differs from `HEAD`" mode — on a shared working tree that set holds your neighbour's
+work, which is #235 reached by a second route. A room under the project root is refused
+too: it would become untracked work in the tree it copies.
+
+**`--rebuild` does not make you retype that list.** It reads the request out of the
+`.beadloom-room.json` it is about to delete: the carried files, and the extras you pinned.
+Measured on the bead that built this command, 16 `--carry` flags were entered twice, once
+after each fix the room itself caught — and the alternative an agent reaches for under that
+friction is to copy files into the live room, which is #243 again. What is reused is the
+LIST and never the content: the files are copied from the working tree at build time, so a
+rebuild is still a room nothing inside postdates. A `--carry` or `--extras` given beside
+`--rebuild` REPLACES its remembered counterpart rather than adding to it, so the remembered
+list cannot grow into the mode that deliberately does not exist, and a remembered path the
+tree no longer holds refuses the rebuild with `file_missing` while the room is still there.
+`--no-environment` is recorded and NOT reused: remembering a decline would hand back a room
+whose verdict the machine decides (BDL-UX #256) with no way to ask for one short of
+deleting the room, while forgetting it costs 3.6 s and gives the room its own interpreter.
+`reused[]` in `--json`, and one line in the human shape, name what was taken from the
+replaced room.
+
+```
+$ beadloom clean-room proj-1 --at /tmp/rooms --carry src/billing.py
+room-proj-1 built at /tmp/rooms/room-proj-1
+  from commit 4f2c1ab9…, holder recorded as proj-1
+  carried from the working tree: src/billing.py
+  extras the invocation's interpreter has: all+dev+graphql+languages+tui+watch
+  environment: built by uv in 1.07s with extras dev+graphql+languages+tui+watch — the
+    union of every extra the 8 installing leg(s) of this project name, because a missing
+    extra removes tests from a run without failing it and a surplus one removes nothing
+  tracker status: in_progress
+
+Measure in the room, not in the tree:
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /tmp/rooms/room-proj-1/.venv/bin/python -c "import beadloom; print(beadloom.__file__)"  # must print a path under /tmp/rooms/room-proj-1
+  PYTHONPATH=/tmp/rooms/room-proj-1/src /tmp/rooms/room-proj-1/.venv/bin/python -m pytest /tmp/rooms/room-proj-1/tests
+
+What this room cannot answer: it carries no .git, so a freshness check inside it has no
+baseline; and its verdict is a claim about these files only, never about the combined
+tree — that measurement belongs to the wave's gate owner. Report it in those words, with
+the extras above: on this project one code base gave 0 mypy errors under `[all,dev]` and
+82 under `[dev]` (BDL-UX #236).
+```
+
+The `PYTHONPATH` line is a measured trap rather than a formality: with an editable
+install, running the suite from inside the room under the project's environment imports
+the **tree's** source, and the first run that did it was caught from a warning path rather
+than from a failure — a green that is a measurement of the tree wearing a room's name.
+The import line is the check, and it must print a path under the room.
+
+**The extras line is the second half of that trap (BDL-UX #236).** A room's name isolates its
+FILES; which optional extras its interpreter has is a separate question, and it decides the
+verdict. Measured on this project at `6c4d0a9`, over one code base at one commit: `mypy src/`
+reported 0 errors under `.[all,dev]` and 82 under `.[dev]`, and under the second the whole
+`tui` suite left the run — three of its four modules skipped and the fourth stopped the
+collection with an error. The room therefore
+STATES the extras its invocation's interpreter has — the same derivation
+[`beadloom rooms`](#beadloom-rooms) reports, and recorded in `.beadloom-room.json` under
+`interpreter.extras` so a report can be checked against the room it was taken in.
+
+**And the room BUILDS that interpreter (BDL-UX #256).** A room isolates the files a verdict
+is taken over; until this landed, nothing isolated the interpreter they run under, so a
+correctly-named room still returned a verdict decided by whatever the machine held. The
+command therefore creates a virtual environment inside the room and installs the room's own
+sources into it, and the invocation above names that interpreter rather than the project's.
+
+**Which extras: the union of every extra any leg of this project's workflows installs**, not
+a constant and not the set most legs declare. The modal reading is wrong on this repository —
+of the 8 installing jobs, four install `dev, languages` to build a site or run a release gate
+and two run the suite — and the two errors are not symmetric: a missing extra removes tests
+from a run without failing it, a surplus one removes nothing. Measured warm, macOS/APFS: the
+union installs in 1.07 s for 169 MB against 1.78 s and 160 MB for `.[all,dev]`. A leg
+spelling `--all-extras` is expanded from `[project.optional-dependencies]`.
+
+`--extras dev,tui` names them instead, to reproduce one particular leg; `--extras ""` asks
+for an environment with no extras, which is a different request from naming none. A set you
+pinned survives a `--rebuild` and a set the legs derived is derived again — pinning that one
+would carry a set nobody named into every later room. To leave a pinned set, name another:
+[`beadloom rooms --dimension extras`](#beadloom-rooms) prints the sets the legs declare.
+`--no-environment` builds the files and no interpreter, and is the only way to get that
+without a finding.
+
+**Cost, paid per room and never cached.** `uv venv` 0.082 s, `uv pip install -e` 1.07 s, room
+184 MB apparent — under half a percent of a seven-minute suite. Every `--rebuild` pays it
+again on purpose: an environment kept outside the room and reused is a directory two rooms
+share, which is BDL-UX #235. The reuse that matters is `uv`'s own content-addressed package
+cache. Without `uv`, `python -m venv` plus `pip install -e` is used instead and measured 1.84
+s plus 39.6 s over the same tree, so the room records which installer built it.
+
+Exit codes: `0` the room was built, it holds its own interpreter, and the tracker says the
+bead is `in_progress`; `1` the room was built and something about the measurement it supports
+is unconfirmed — the bead is not in progress, the tracker could not be reached, or the room
+holds no interpreter of its own and its verdict will be the project environment's; `2` no
+room was built. A run that exits `2` leaves the directory it declined to enter exactly as it
+found it.
+
+Refusals are named rather than described, so a caller can branch on them: `already_exists`,
+`not_a_room`, `inside_the_project`, `no_commit`, `file_missing`, `not_a_file`,
+`file_outside_the_project` and `unknown_bead`.
+
+`--json` carries the same facts: `bead`, `room`, `built`, `refusal`, `detail`, `commit`,
+`carried[]`, `reused[]`, `invocation[]`, `extras`, `environment`, `claim`, `findings[]` and
+`exit_code`. `reused[]` names the request parts a rebuild took from the room it replaced,
+`carry` and `extras`, and is empty on every build that was not one.
+`environment` carries `built`, `source` (`legs`, `caller` or `underived`), `asked[]`,
+`installer`, `seconds`, `python` and `detail`.
+
+The room's `.beadloom-room.json` records the bead, the room's name, the project, the
+commit, the build time, the carried files, the REQUEST that built it, two interpreters, the
+extras, the environment and the Beadloom
+version. `request` carries `carry[]`, `extras` (a list, or `null` when the derivation was
+left to the legs) and `environment`, and it is what a `--rebuild` reads. It is recorded
+beside the outcome rather than read back out of it because the two come apart: a room given
+no environment records no extras choice at all, so a request reconstructed from the outcome
+would lose the set you pinned. The two interpreters are not the same one: the invocation names the environment the
+SUITE runs under — the room's own when it has one — while `built_by` is the
+process that made the room, which under a `uv` tool install is a different interpreter with
+neither `pytest` nor the project's development dependencies. `interpreter.extras` carries
+`distribution`, `resolved`, `label`, `installed[]` and `absent[]`, read off the ROOM's
+interpreter when it has one; `resolved: false` means that interpreter holds no distribution
+of that name, and it is not the same answer as no extras. What `environment.asked` records is
+a request and what `interpreter.extras` records is the answer, and the two can differ.
 
 ### beadloom review-brief
 
@@ -1833,7 +2056,10 @@ beadloom rooms [--project DIR] [--dimension AXIS] [--json]
 from every job of every `.github/workflows/*.y*ml`, each matrix expanded as a product and a
 `matrix.<axis>` expression in `runs-on` resolved through it. The module owns a runner-label
 vocabulary (`ubuntu` / `macos` / `windows`) and no room list, so a leg added to a workflow is
-covered by the same act that adds it. A hand-written list satisfies every test beside it and
+covered by the same act that adds it. Since BDL-068 S6 a leg's **optional extras** are derived
+the same way — from the install step the job declares (`uv sync --extra …`, `--all-extras`, or a
+`pip install` of a local path with a bracket) against what the project's own distribution
+declares in its installed metadata. A hand-written list satisfies every test beside it and
 goes stale the first time a leg moves: this repository's own
 `DEFAULT_STATUS_CHECK_CONTEXTS` has drifted from what CI reports three times, and a required
 check that never reports makes `main` unmergeable.
@@ -1842,28 +2068,39 @@ check that never reports makes `main` unmergeable.
 see which declared rooms the run covers and which it does not. It is not a step and carries
 no status.
 
-Measured on this repository, 2026-09-03, with rows elided:
+Measured on this repository, 2026-09-08, with rows and reasons elided:
 
 ```
 $ beadloom rooms
 Rooms — derived from this project's declaration, never from a list
 
-  This run is in: Darwin arm64 · CPython 3.13.7 · 10 cores
+  This run is in: Darwin arm64 · CPython 3.13.7 · 10 cores · extras all+dev+graphql+languages+mutation+tui+watch
 
   Declared rooms: 21, entered by this run: 0
-    [  ] os=ubuntu-latest python=3.13    .github/workflows/ci.yml: tests
-         os: the leg is ubuntu-latest (Linux) and this run is Darwin
-    [  ] locale=C os=ubuntu-latest    .github/workflows/ci.yml: tests-locale
-         locale: this run cannot describe the dimension `locale`, which the leg declares as C; os: ...
-    [  ] os=ubuntu-latest    .github/workflows/mutation.yml: mutation
+    [  ] extras=all+dev+graphql+languages+tui+watch os=ubuntu-latest python=3.13    .github/workflows/ci.yml: tests
+         extras: this run has mutation and the leg does not; os: the leg is ubuntu-latest (Linux) and this run is Darwin
+    [  ] extras=dev+languages os=ubuntu-latest    .github/workflows/ci.yml: site-build
+         extras: the leg installs all, graphql, mutation, tui, watch and this run has not; os: ...
+    [  ] extras=all+dev+graphql+languages+mutation+tui+watch os=ubuntu-latest    .github/workflows/mutation.yml: mutation
          os: the leg is ubuntu-latest (Linux) and this run is Darwin
     ... and 9 more
 
   Interpreters this project supports: 3.10, 3.11, 3.12, 3.13 (floor >=3.10)
 
-  Unresolved (1):
+  Extras of `beadloom` installed here: all+dev+graphql+languages+mutation+tui+watch
+    not installed: search — needs fastembed, sqlite-vec
+
+  Unresolved (2):
+    .github/workflows/ci.yml: gate — the job installs the project through a local action, so the optional extras its verdict is taken under are declared somewhere this report does not follow
     .github/workflows/ci.yml: ai-techwriter — the runner label `self-hosted+ai-techwriter` names no platform this report knows, so no run can be said to have entered it
 ```
+
+**The extras axis found a difference nothing had named.** This development environment carries
+`mutation`, which only `mutation.yml` installs, so it differs from every `tests` leg by an extra
+that was invisible before the dimension existed. That is BDL-UX #236: measured at `6c4d0a9`, one
+code base at one commit gave **0 mypy errors under `.[all,dev]` and 82 under `.[dev]`**, and the
+whole `tui` suite left the run under the second, three modules skipping and one erroring. A verdict that does not
+state its extras cannot be reproduced from what it prints.
 
 A local run is in **0 of the 21 rooms this project declares**, and that is the point rather
 than a caveat: nine "green on the tree" reports across BDL-067 were taken in exactly this
@@ -1881,15 +2118,19 @@ manufacture coverage.
   loops over instead of spelling out a set that goes stale. The Python overlay's type-check
   step is `for v in $(beadloom rooms --dimension python)`, and the honest limit of that local
   form is that it varies the TARGET version only — the interpreter the checker runs under is
-  still one, which is a difference only CI measures.
+  still one, which is a difference only CI measures. `--dimension extras` prints the distinct
+  environments the legs declare, four on this repository.
 - `--json` — `current`, `declared` (each with `dimensions`, `source`, `entered` and `why`),
-  `supported`, `floor`, `supported_without_a_leg` and `unresolved`.
+  `extras` (`distribution`, `resolved`, `label`, `installed`, and `absent` as
+  `{extra, needs}` pairs), `supported`, `floor`, `supported_without_a_leg` and `unresolved`.
 
 Exit `0` when the census was taken; a project declaring no leg also exits `0`, because this
 command grades nothing. Exit `2` when `--dimension` names an axis no declared room carries,
 and the refusal names the axes that exist (`no declared room carries a 'nonesuch' axis; the
-axes declared are: locale, os, python`). An empty answer would read as "this project has no
-such axis", which is the clean list an agent trusts and stops at.
+axes declared are: extras, locale, os, python`). An empty answer would read as "this project has
+no such axis", which is the clean list an agent trusts and stops at. Values of one axis are
+printed in a stable order — an axis whose values are not versions was previously printed in the
+hash order of a set, which differs between processes.
 
 The derivation, the floor-is-not-a-set rule and why the packaging metadata is read without a
 TOML parser are in the
@@ -2033,6 +2274,51 @@ over, or it states nothing.
 The grammar, the assumption table and the regions the derivation cannot reach are in the
 [bd Seam DOC](components/bd-seam/DOC.md).
 
+### beadloom issue-number
+
+Allocate an issue-log number, or check the ones already taken (BDL-068 S6, `beadloom-0mdo.66`).
+
+```bash
+beadloom issue-number allocate --holder BEAD-ID [--project DIR] [--json]
+beadloom issue-number check [--project DIR] [--json]
+```
+
+**Allocated, not read off the end of a shared file.** The convention this replaces was "read the
+last number in the log and add one", and following it exactly produced five collisions on this
+repository -- BDL-UX #187, #211, #253 and, within one hour on 2026-09-09, a number another bead
+already held and a number that never reached the file. `allocate` is an exclusive create of one
+claim file per number, which is a thing a command can make indivisible and a paragraph cannot.
+`--holder` is required and names a bead, so a held number says who is holding it.
+
+**Three legs, over a population one filesystem cannot span.** `check` reports `duplicate-number`
+(one number, two entries), `unwritten-claim` (a number claimed and never written into the log)
+and `unclaimed-number` (an entry above the ledger's floor that no claim holds). It states the
+population each leg REACHED and not only what it found: the entries below the floor are the ones
+`unclaimed-number` never entered because they predate the ledger, and the numbers below the
+highest that are stated nowhere are NAMED rather than counted, because a count is not something a
+reader can go and look for (BDL-UX #267). The naming is bounded at twelve, so an adopter with a
+hundred unaccounted numbers gets a line that is still readable.
+
+Measured on this repository, 2026-09-10:
+
+```
+$ beadloom issue-number check
+253 entr(ies), 18 claim(s), floor 262
+  235 of 253 entr(ies) are below floor 262: `unclaimed-number` did not enter them, and no claim holds their numbers
+  1 number(s) below the highest are stated nowhere; they are unaccounted for, not free: #196
+No duplicate, unwritten or unclaimed number.
+```
+
+Exit codes are the contract a caller may rely on: `0` the number was allocated or the check found
+nothing, `1` the check found at least one finding, `2` nothing was allocated because the project
+declares no `issue_log:` block. Two states report that a leg ran over nothing rather than passing:
+a project that declares no log is told so and no leg runs, and a ledger holding no claim leaves
+`unwritten-claim` and `unclaimed-number` with no number to enter. An absent log is not an empty
+one.
+
+The grammar, the two populations a numbered log states and the regions the legs cannot reach are
+in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -2058,7 +2344,40 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 
 **Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
 
-**The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-03: a local macOS run reports `0 of 21 declared room(s) not entered by this run`, which is the verdict's address rather than a caveat on it. The census itself is [`beadloom rooms`](#beadloom-rooms).
+**The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-10: a local macOS run enters NONE of the declared rooms -- `--format github` prints `0 of 21 declared room(s) entered by this run` and the rich block prints the complement, `21 of 21 declared room(s) not entered by this run`, naming the first three. The two shapes count opposite populations and a number carried between them inverts the claim: this passage previously read `0 of 21 declared room(s) not entered`, which says a local run misses nothing. It is the verdict's address rather than a caveat on it, and the address of a local run is a room this project's CI declares no leg for. The census itself is [`beadloom rooms`](#beadloom-rooms).
+
+**The verdict also names what no step of it performed (BDL-068 S6, BDL-UX #247).** `beadloom ci`
+does not run the test suite, and until this slice it never said so. `GateResult` carries a
+`GateCoverage` beside the census: the verifications this project's pipeline declares that no step
+of the run performed, each with the command the pipeline runs for it and the workflow job it was
+read from. All three shapes print it — a `Not run by this gate:` block under the rich verdict, a
+`not_run` object in `--format json` (`performed`, `not_performed`, `unresolved`, `inspected`) and
+one `::notice::not run by this gate: ...` line in `--format github`. Measured on this repository:
+the block names three — `the test suite`, `the style linter` and `the type checker`, all read
+from the `tests` job of `.github/workflows/ci.yml`. Both sides are derived: what the run performed
+comes from its own step list, so a suite step added later removes the line by the same act, and
+what the project verifies comes from its workflows through the reader the room census uses. A
+pipeline verifying under a name the vocabulary does not read (`pytest`; `ruff`/`flake8`/`pylint`;
+`mypy`/`pyright`) is told the population is empty with the vocabulary named, never that nothing is
+left to run. Like the room, it is not a step: same verdict, same exit code, same findings.
+
+**And the verdict names who owns what it found (BDL-068 S6).** This project's own branch
+carried a red Gate across two waves — two stale docs owned by no bead in the running plan —
+and every gate owner in those waves had to be told by the coordinator, by hand, that the red
+was not theirs. `GateResult` carries a `GateOwnership`: one verdict per finding, held against
+the beads the tracker reports claimed while the run happened. `owned` names the beads;
+`unowned` says a node was derived and no claim covers it; `unattributed` says no node could be
+derived from the finding at all. A tracker that cannot answer, and a project with no index,
+are a reason on the whole report rather than a page of `unowned` — telling every gate owner
+"not yours" when nobody was asked would be the same false green in a new vocabulary. All three
+shapes print it: a `Findings by owner:` block under the rich verdict, an `ownership` object in
+`--format json` (`reason`, `claimed`, `none_owned`, `findings`, `unread_claims`) and one
+`::notice::` per owning bead in `--format github`, plus the headline `no finding of this run
+is owned by a bead claimed now`. The owner is a BEAD and never the work item: the work item's
+`## Axes` answer whether a change is inside the approval, which the `scope-check` step of the
+same run already asks and which every agent on one branch shares. Like the room and the
+coverage block, it is not a step — same verdict, same exit code, same findings — and the
+tracker is asked only when the run produced a finding, so a green run shells out to nothing.
 
 ### beadloom setup-mcp
 
@@ -2199,12 +2518,40 @@ The command makes the same whole-working-set `.gitignore` call `init` makes (see
 the block: the guards' firing record is one entry in that set, not a special case owned
 by the guard scaffolder.
 
-A composed command or `CLAUDE.md` that already matches is left alone; a
-hand-edited one is **skipped** (reported as such) so user edits are not silently
-clobbered; `--force` overwrites it. Composed role adapters are owned by the
-configurator (re-running recomposes them). Delegates to
+**One policy for all three artifact kinds (BDL-068 `.67`, BDL-UX #191).** An
+artifact that already matches its composition is left alone; one Beadloom wrote
+and nobody touched is recomposed, so an upgrade lands; one whose body the flow
+manifest cannot prove Beadloom wrote — `hand_edited` or `unverified` — is
+**skipped**, named on stdout as `Skipped <path> (hand-edited)` and reported in
+the `Left alone` block with the project-layer path the edit belongs in. `--force`
+is the one door that adopts the composed body over it. Delegates to
 `onboarding/role_adapters.py:generate_adapters()` (the adapters) +
-`onboarding/agentic_flow_setup.py:scaffold()` (the commands + CLAUDE.md).
+`onboarding/agentic_flow_setup.py:scaffold()` (the commands + CLAUDE.md), and
+both are given the same declined set, `config_sync.declined_adapter_rewrites()`,
+that `config-check --fix` reads.
+
+> Until BDL-068 `.67` the role adapters were the exception: they were composed
+> with no `preserve` argument and recomposed over silently, so the same command
+> answered one hand edit two ways and nothing an adopter could read said which
+> was intended. Measured on a scratch project scaffolded by the shipped command,
+> with the same two lines appended to `.claude/agents/dev.md`,
+> `.claude/commands/coordinator.md` and `.claude/CLAUDE.md` and one re-run with
+> no flags: the first was destroyed and reported as `Wrote`, the other two were
+> preserved and reported. `config-check` printed "hand-edited: … It will **NOT**
+> be rewritten" over both of the first two, under a remediation that says to
+> re-run this command — so following that remediation literally destroyed one of
+> the two edits it was printed to protect. The `--force` help had promised the
+> new behaviour since the flag shipped. The one artifact still rewritten
+> unconditionally is `.cursor/rules/beadloom-flow.md`, a four-line pointer whose
+> own body says it is generated and which no check compares — stated here rather
+> than left to be discovered.
+
+The same run also stopped printing two false lines about `CLAUDE.md`: a
+preserved body was reported as `Wrote .claude/CLAUDE.md`, and its skip travelled
+in `ScaffoldResult.commands_skipped`, where the caller rendered it through the
+commands path template and printed `Skipped .claude/commands/CLAUDE.md.md` — a
+path that exists in no project. `ScaffoldResult.claude_md_skipped` carries it
+now.
 
 The command **prints what it found**, not only what it wrote: the files an older
 layout left behind, each with the exact `rm -f` command (BDL-UX #137), and a

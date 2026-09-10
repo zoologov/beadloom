@@ -47,6 +47,19 @@ class ClaimedBead:
     id: str
     title: str = ""
 
+    declaration: str = ""
+    """Everything the bead says about itself, joined the one way every caller joins it.
+
+    Added for the gate's ownership report (BDL-068 S6), which has to ask what
+    NODES a claim covers and cannot answer that from an id and a title. The
+    string is composed by the adapter with
+    :func:`beadloom.application.waves.compose_declaration`, so the population the
+    gate attributes findings to and the population the wave planner schedules are
+    read from one parser rather than two. Empty when the adapter had nothing to
+    compose, which reads as a bead that declares no scope — never as a bead whose
+    scope is everything.
+    """
+
 
 @runtime_checkable
 class WorkTracker(Protocol):

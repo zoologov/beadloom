@@ -29,7 +29,6 @@ from beadloom.graph.rules import exit_condition_deadline
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
-    _vendored_asset,
     composed_claude_md,
     composed_command,
 )
@@ -58,13 +57,19 @@ from beadloom.onboarding.flow_suppression import (
     expired_suppressions,
     suppresses_nothing,
 )
+from beadloom.onboarding.ignore_block import (
+    IGNORE_RELPATH,
+    ignore_block_findings,
+)
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
     cursor_rules_relpath,
     generate_adapters,
+    orphaned_adapters,
 )
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.role_duties import duty_report
+from beadloom.onboarding.role_map import role_map_report
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
@@ -483,11 +488,11 @@ def _adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     return drifts
 
 
-#: Kinds of vendored flow file, paired with their canonical name tuple. The
-#: scaffold drops each under ``.claude/<kind>/<name>.md`` byte-identical to the
-#: vendored ``<kind>/<name>.md.txt`` template (no per-project tokens — unlike
-#: CLAUDE.md, the agents/commands are project-agnostic, so a plain byte compare
-#: is exact). Mirrors :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
+#: Kinds of canonical flow file, paired with their name tuple. The scaffold
+#: writes each under ``.claude/<kind>/<name>.md`` as the composition for that
+#: project's own flow, so the comparison is against a composition rather than
+#: against fixed bytes. Mirrors
+#: :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
 _AGENTIC_FLOW_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("agents", AGENT_FILES),
     ("commands", COMMAND_FILES),
@@ -598,10 +603,18 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
     Only checked when the flow is fully scaffolded (see
     :func:`_agentic_flow_scaffolded`). The **commands** are compared against
     their composition (CORE + the flow.yml overlays + the project layer) rather
-    than against the vendored bytes, so a project extension in
+    than against fixed bytes, so a project extension in
     ``.beadloom/flow/commands/`` is part of the expected result while a change
-    to the shipped core still differs from it. Agents are the role composer's
-    responsibility (:func:`_composed_adapter_drifts`).
+    to the shipped core still differs from it.
+
+    The **agents** belong to :func:`_composed_adapter_drifts` whenever a valid
+    ``flow.yml`` is present, which is every project scaffolded since BDL-052 S3.
+    The block here covers the one case that function returns empty for — no
+    ``flow.yml`` at all — and since ``beadloom-iur5`` it covers it the same way:
+    the composition for the config resolved from the project, through the same
+    :func:`_state_drift` projection. It used to be a byte-compare against a
+    snapshot of THIS repository's ``.claude/agents/``, under a remediation that
+    told the adopter to adopt a ``flow.yml`` and offered no fix.
     """
     manifest, manifest_usable = read_manifest(project_root)
     scaffold_state = _flow_scaffold(project_root, manifest)
@@ -638,37 +651,33 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
             drifts.append(drift)
 
     if not flow_yml:
-        # Without a flow.yml the agents are the plain BDL-048 byte-identical
-        # scaffold, so the vendored compare is exact for them too.
+        # Without a flow.yml the role files come from this same function's own
+        # scaffold path (`include_agents=True`), which since `beadloom-iur5`
+        # composes them exactly as it composes the commands above. So the role
+        # files are checked the same way the commands are, through the one
+        # `_state_drift` projection every other artifact kind reads — the
+        # composition for the config resolved from this project, with the
+        # shipped-only composition as an alternate for a repo that has not
+        # declared a project layer. It used to be a byte-compare against a
+        # snapshot of THIS repository's `.claude/agents/`, which reported drift
+        # against a body composed for another project's architecture.
+        shipped_roles = compose_all_roles(config)
+        composed_roles = compose_all_roles(config, project_root)
         for name in AGENT_FILES:
-            path = project_root / ".claude" / "agents" / f"{name}.md"
-            try:
-                on_disk = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if on_disk == _vendored_asset("agents", name):
-                continue
-            drifts.append(
-                ConfigDrift(
-                    file=f".claude/agents/{name}.md",
-                    reason=(
-                        "scaffolded agentic-flow file drifted from the shipped "
-                        "template"
-                    ),
-                    remediation=(
-                        "this repo has no .beadloom/flow.yml, so the role files "
-                        "are the plain vendored scaffold and there is no project "
-                        "layer to hold an addition. Add a flow.yml (`beadloom "
-                        "setup-agentic-flow`), then move the edit to "
-                        f"{PROJECT_FLOW_DIRNAME / 'roles' / f'{name}.md'}"
-                    ),
-                    # The scaffold's non-forcing path skips a divergent vendored
-                    # file, so `--fix` leaves this one standing. Offering it as
-                    # the remedy would be the #186 contradiction in the other
-                    # direction: advice that does nothing.
-                    fixable=False,
-                )
+            relpath = f".claude/agents/{name}.md"
+            if relpath in scaffold_state.missing:
+                continue  # already reported as missing; there is nothing to diff
+            state = state_of(
+                project_root,
+                relpath,
+                expected=composed_roles[name],
+                manifest=manifest,
+                alternates=(shipped_roles[name],),
+                accounted=manifest_usable,
             )
+            drift = _state_drift(relpath, state, kind="roles", name=name)
+            if drift is not None:
+                drifts.append(drift)
     return drifts
 
 
@@ -845,6 +854,140 @@ def _duty_drifts(project_root: Path) -> list[ConfigDrift]:
     ]
 
 
+def _role_map_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report roles this flow composes that its own map does not enumerate.
+
+    The third direction of the graph :func:`_duty_drifts` checks two directions
+    of. That one asks whether a duty declared for a role reaches that role's
+    core; this one asks whether a role that EXISTS reaches the document that
+    lists roles. The edge was missing because nobody had added a role since the
+    map was written, and `Explore` — composed, invoked by two slash skills and
+    named zero times in `CLAUDE.md` — is the first one that could expose it.
+
+    ONE MAP PER DECLARED TOOL since BDL-068 `.84`. The corpus is
+    ``config.tools``, so a cursor-only project is checked against
+    ``.cursor/rules/beadloom-flow.md`` — the document a Cursor agent reads —
+    rather than against a ``CLAUDE.md`` composition its flow does not declare. A
+    declared tool this release names no map artifact for is stated as an
+    unreached population by ``config-check`` and produces no drift here: the gap
+    is Beadloom's and failing a project for it would report the release's hole as
+    the adopter's.
+
+    Severity comes from the finding rather than from here, and the two values
+    mean two different things. A DESIGNATION (`subagent_type: …`,
+    `agents/<name>.md`) was written on purpose, so a role it omits or a name it
+    invents is an `error` — Beadloom ships both sides of its own map, so a
+    mismatch introduced by a release is caught by this repository's own Gate
+    before it reaches anyone. An INFERRED roster is this derivation's guess
+    about punctuation in prose that may be an adopter's, so it can only warn:
+    turning a green project red on upgrade over ``we deploy to `dev`, `test``` is
+    how a check gets switched off wholesale.
+
+    Never ``fixable``: the repair is a sentence in the map, and ``--fix`` writes
+    compositions rather than prose. Offering it would be the BDL-UX #186 shape —
+    recommending the command that will decline.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        report = role_map_report(project_root)
+    except FlowConfigError:
+        # Reported by :func:`_flow_config_drift`; don't double-report.
+        return []
+    return [
+        ConfigDrift(
+            file=finding.sites[0] if finding.sites else finding.artifact,
+            reason=finding.why,
+            severity=finding.severity,
+            remediation=finding.remediation,
+            fixable=False,
+        )
+        for finding in report.findings
+    ]
+
+
+def _ignore_block_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report generated paths the project's ignore file no longer declares.
+
+    The third artifact ``init`` writes into a repository Beadloom does not own,
+    and until now the only one with no check. Generated-then-hand-maintained can
+    only stay correct by coincidence, and it stopped: this repository's
+    ``.gitignore`` carried ``.beadloom/guard-firings.jsonl`` while the generator
+    had emitted ``.beadloom/guard-firings*.jsonl`` since rotation shipped. Nobody
+    found it. An unrelated change tripled the firings, the record rotated for the
+    first time, and the second file turned up as untracked churn. An adopter is
+    worse off, because the upgrade path writes no ignore block at all.
+
+    Derived from :data:`~beadloom.onboarding.ignore_block.GENERATED_WORKING_SET`
+    through the same predicate the writer uses, so a pattern a later release adds
+    is checked without anyone editing a second list.
+
+    ``warn``, for the reason :func:`_suppression_drifts` warns: the file is the
+    adopter's and the pattern set is Beadloom's, so a release that adds a pattern
+    would otherwise turn every adopter's green project red on upgrade.
+
+    Never ``fixable``, and this settles nothing for the composed adapters, whose
+    ownership question ``beadloom-0mdo.67`` is deciding separately. The reason
+    here is narrower and is the module's own published contract: the block is
+    written once and never rewritten, there is no manifest that could prove a
+    line is Beadloom's, and the repair is a human's line in a human's file.
+    """
+    return [
+        ConfigDrift(
+            file=str(IGNORE_RELPATH),
+            reason=finding.why,
+            severity="warn",
+            remediation=finding.remediation,
+            fixable=False,
+        )
+        for finding in ignore_block_findings(project_root)
+    ]
+
+
+def _orphaned_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report role adapters left behind by a tool that left ``flow.yml``.
+
+    The gap the other adapter checks cannot have. Every one of them opens with
+    ``for tool in config.tools``, so narrowing the subset does not add a finding
+    about the dropped tool's files — it removes them from the population. The
+    files stay on disk, the tool that reads them goes on reading them, and the
+    same edit that is an ``error`` under ``.claude/agents/`` is exit 0 under
+    ``.cursor/agents/`` (measured 2026-09-09, with that control).
+
+    ``warn``, for the reason :func:`_suppression_drifts` and
+    :func:`_ignore_block_drifts` warn, under the test :func:`_duty_drifts`
+    states: who can introduce the finding. An orphan comes from exactly one act
+    — an adopter editing ``tools:`` in their own ``flow.yml`` — and adding this
+    check would otherwise turn every project that has ever narrowed its tool set
+    red on upgrade, which is CONTEXT's standing constraint and is how a check
+    gets switched off wholesale.
+
+    Never ``fixable``, for a reason stronger than the ignore block's. The two
+    repairs are re-declaring the tool and deleting the file, and both are the
+    adopter's decision: ``--fix`` writes compositions and deletes nothing.
+    Deleting would also be the far side of what ``beadloom-0mdo.67`` settled
+    toward preservation, one bead after it settled it. Offering ``--fix`` here
+    would be the BDL-UX #186 shape — recommending the command that will decline.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        # The invalid-config drift is reported separately; don't double-report.
+        return []
+    return [
+        ConfigDrift(
+            file=orphan.file,
+            reason=orphan.why,
+            severity="warn",
+            remediation=orphan.remediation,
+            fixable=False,
+        )
+        for orphan in orphaned_adapters(project_root, config)
+    ]
+
+
 def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     """Every artifact this project composes — the text a suppression is matched against."""
     texts = [composed_command(name, config, project_root) for name in COMMAND_FILES]
@@ -857,16 +1000,6 @@ def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     return tuple(texts)
 
 
-def _vendored_role_body(role: str) -> str | None:
-    """The plain vendored ``agents/<role>.md`` body, if this release ships one."""
-    if role not in AGENT_FILES:
-        return None
-    try:
-        return _vendored_asset("agents", role)
-    except OSError:
-        return None
-
-
 def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
     """``(relpath, role, state)`` for every composed role adapter on disk.
 
@@ -875,12 +1008,24 @@ def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
     is exactly what BDL-UX #186 was: one command saying "It will NOT be
     rewritten" while another line of the same command rewrote it.
 
-    The plain vendored scaffold is offered as an ``alternate``. Those bytes are
-    Beadloom's own — ``_scaffold_vendored`` wrote them and simply never recorded
-    a digest — so without this a repo that adopts a ``flow.yml`` after
-    scaffolding reads ``hand_edited`` on four files nobody has touched
-    (measured), and ``--fix`` would then refuse to recompose them for ever.
-    Unowned is not the same as somebody's only copy.
+    The SHIPPED-ONLY composition is offered as an ``alternate``. Those bytes are
+    Beadloom's own, written by a scaffold run that predates the project layer,
+    so without this a repo that adds a ``.beadloom/flow/roles/`` fragment after
+    scaffolding reads ``hand_edited`` on files nobody has touched, and ``--fix``
+    would then refuse to recompose them for ever. Unowned is not the same as
+    somebody's only copy.
+
+    Until ``beadloom-iur5`` a SECOND alternate was offered beside it: the
+    vendored ``agents/*.md.txt`` snapshot, for a repo scaffolded before it
+    declared a ``flow.yml``. That alternate is gone with the snapshot, and it is
+    no longer needed for the case it was added for, because the scaffold path
+    that writes those files now writes this same composition and records its
+    digest. The narrow case it no longer covers is stated in this bead's
+    comments rather than hidden: a repo scaffolded by a Beadloom older than this
+    change, whose flow.yml then declares an architecture or stack other than
+    ``ddd``/``python``, reads ``unverified`` on its role files instead of clean.
+    That is the reporting direction, not the destroying one — the file is left
+    alone and named.
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return []
@@ -900,16 +1045,12 @@ def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
             rel = str(agent_dir / f"{role}.md")
             if not (project_root / rel).is_file():
                 continue
-            vendored = _vendored_role_body(role)
-            alternates = [shipped_only[role]]
-            if vendored is not None:
-                alternates.append(vendored)
             state = state_of(
                 project_root,
                 rel,
                 expected=composed[role],
                 manifest=manifest,
-                alternates=tuple(alternates),
+                alternates=(shipped_only[role],),
                 accounted=manifest_usable,
             )
             states.append((rel, role, state))
@@ -942,6 +1083,43 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
 _UNOWNED_STATES = (ArtifactState.HAND_EDITED, ArtifactState.UNVERIFIED)
 
 
+def declined_adapter_rewrites(project_root: Path) -> tuple[DeclinedRewrite, ...]:
+    """The role adapters no writer may recompose over, each with why and what to do.
+
+    An adapter is declined when its body on disk is not demonstrably Beadloom's
+    output — ``hand_edited`` (we wrote it and somebody changed it) or
+    ``unverified`` (nothing records whether we wrote it at all). The reason and
+    remediation are the ones :func:`check_config_drift` prints for the same file,
+    read off the same :func:`_adapter_states` classification, so the sentence an
+    adopter is shown and the decision taken about their file cannot disagree.
+
+    BOTH WRITERS READ THIS. ``config-check --fix`` has since BDL-061 `.59`;
+    ``setup-agentic-flow`` does now. Measured before this bead, on a scratch
+    project scaffolded by the shipped command: the same two lines appended to
+    ``.claude/agents/dev.md``, ``.claude/commands/coordinator.md`` and
+    ``.claude/CLAUDE.md``, then one re-run with no flags, left the second and
+    third alone and recomposed over the first — while ``config-check`` printed
+    "It will NOT be rewritten" over both of the first two, under a remediation
+    that says to re-run that command (BDL-UX #191, and #139/#152/#186 before it).
+
+    Empty when the project declares no valid ``flow.yml``: with no config there
+    is no composition to compare a body against, and a writer with nothing to
+    write cannot destroy anything.
+    """
+    declined: list[DeclinedRewrite] = []
+    for relpath, role, state in _adapter_states(project_root):
+        if state not in _UNOWNED_STATES:
+            continue
+        drift = _state_drift(relpath, state, kind="roles", name=role)
+        if drift is not None:
+            declined.append(
+                DeclinedRewrite(
+                    file=relpath, reason=drift.reason, remediation=drift.remediation
+                )
+            )
+    return tuple(sorted(declined, key=lambda d: d.file))
+
+
 def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     """Recompose the per-tool role adapters for this flow.yml — except the unowned ones.
 
@@ -957,6 +1135,10 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     deletion. The promise is now the behaviour: an adapter whose body Beadloom
     cannot prove it wrote is left alone and returned in ``declined``, the rest
     are recomposed, and the standing finding keeps the exit code honest.
+
+    Since BDL-068 `.67` the set it declines is :func:`declined_adapter_rewrites`,
+    which ``setup-agentic-flow`` reads too — so the repair and the scaffold
+    cannot disagree about whose file a body is (BDL-UX #191).
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return AdapterRefresh()
@@ -965,17 +1147,7 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     except FlowConfigError:
         return AdapterRefresh()
 
-    declined: list[DeclinedRewrite] = []
-    for relpath, role, state in _adapter_states(project_root):
-        if state not in _UNOWNED_STATES:
-            continue
-        drift = _state_drift(relpath, state, kind="roles", name=role)
-        if drift is not None:
-            declined.append(
-                DeclinedRewrite(
-                    file=relpath, reason=drift.reason, remediation=drift.remediation
-                )
-            )
+    declined = declined_adapter_rewrites(project_root)
     result = generate_adapters(
         config, project_root, preserve=frozenset(d.file for d in declined)
     )
@@ -983,10 +1155,7 @@ def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
     for files in result.agents.values():
         written.extend(files)
     written.extend(result.extra)
-    return AdapterRefresh(
-        rewritten=tuple(sorted(written)),
-        declined=tuple(sorted(declined, key=lambda d: d.file)),
-    )
+    return AdapterRefresh(rewritten=tuple(sorted(written)), declined=declined)
 
 
 def refresh_agentic_flow_files(project_root: Path) -> list[str]:
@@ -1123,6 +1292,9 @@ def check_config_drift(
         drifts.append(layer)
     drifts.extend(_suppression_drifts(project_root))
     drifts.extend(_duty_drifts(project_root))
+    drifts.extend(_role_map_drifts(project_root))
+    drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
+    drifts.extend(_orphaned_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

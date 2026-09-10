@@ -31,6 +31,7 @@ The invariant these pin, rather than the three symptoms:
 
 from __future__ import annotations
 
+from itertools import combinations
 from typing import TYPE_CHECKING
 
 import pytest
@@ -286,6 +287,41 @@ class TestTheHoleIsInvisibleOnThisRepositoryAndOnAnAdopter:
 
         assert spaces.classify(REPO_ROOT).outside_declared_root == ()
 
+    def test_no_two_spaces_of_this_repository_hold_the_same_document(self) -> None:
+        """A document counted twice adds up as well as a document counted once.
+
+        The sum above is one equation with two unknowns and cannot tell a double
+        count from a drop, so the partition is stated as two claims rather than
+        one. Verified red by making ``classify`` append each path to the WORKING
+        bucket as well as to its own.
+        """
+        classified = resolve_doc_spaces(REPO_ROOT).classify(REPO_ROOT)
+        buckets = {space: set(classified.by_space[space]) for space in SPACES}
+
+        shared = {
+            f"{left}+{right}": sorted(str(p) for p in buckets[left] & buckets[right])
+            for left, right in combinations(SPACES, 2)
+            if buckets[left] & buckets[right]
+        }
+
+        assert shared == {}
+
+    def test_no_space_this_repository_declares_is_empty(self) -> None:
+        """The floor the three deleted literals were also holding, without them.
+
+        `203`, `116` and `58` pinned an exact size, and every move in them since
+        they were written was a document this project added on purpose. What
+        they could actually CATCH was a space collapsing — a root that stopped
+        matching, a kind list withdrawn — and that is a relation, so it is
+        stated as one. Verified red by withdrawing the WORKING kind list, which
+        is the whole of that space's declaration.
+        """
+        classified = resolve_doc_spaces(REPO_ROOT).classify(REPO_ROOT)
+
+        empty = [space for space in SPACES if not classified.by_space[space]]
+
+        assert empty == []
+
     def test_an_adopter_whose_planning_documents_are_readmes_is_told(
         self, tmp_path: Path
     ) -> None:
@@ -371,51 +407,46 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
             assert not (kinds & seen)
             seen |= kinds
 
-    def test_this_repository_keeps_its_three_populations(self) -> None:
-        """The measured denominators `.19` recounted a third time, unchanged."""
-        spaces = resolve_doc_spaces(REPO_ROOT)
-        populations = _populations(REPO_ROOT, spaces)
+    def test_this_repository_declares_no_kind_in_two_spaces(self) -> None:
+        """The precedence question asked of this repository, instead of counted.
 
-        # 190 -> 194 in BDL-062, -> 198 in BDL-066, -> 199 in BDL-067, -> 203 in BDL-068:
-        # each feature's own PRD, RFC, CONTEXT and PLAN. This literal has been
-        # hand-edited once per feature since it was written, which is the class
-        # `mr2l.72` exists to remove: a count a human maintains where the tool could
-        # compute it. The BDL-068 increment is the measurement rather than the claim —
-        # the epic's own planning commit `409e977` moved it and left this case red,
-        # and nobody saw it, because `beadloom ci` does not run pytest.
-        assert populations[SPACE_TO_BE] == 203
-        # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
-        # then `docs/domains/application/features/review-brief/SPEC.md`, then
-        # `docs/guides/parallel-waves.md` in the documentation pass `.24`. 96 -> 98 in
-        # `.87`, which added the two components that carry intent into a context
-        # bundle. 98 -> 100 in BDL-062 `.4`, which documented the two undocumented
-        # nodes that could be documented (`status`, `cli-commands`). The number moves
-        # when this repository gains a document, which is what makes it a denominator
-        # rather than a constant. 100 -> 101 in BDL-067 `.24`, which documented the
-        # `graph-files` component: the four readers of `.beadloom/_graph/` became one
-        # body, and a body with a single responsibility is a node with a DOC. 101 -> 102
-        # in BDL-068 `.1`, which lifted the three AST derivations into
-        # `application/source_derivation/` and documented them as a component.
-        # 102 -> 103 in BDL-068 `.2`, which documented `impact` — the feature an
-        # adopter runs over that component. 103 -> 105 in BDL-068 `.4`: the
-        # `axes-section` grammar and the `planning-report` composition, each a
-        # node with its own responsibility and therefore its own document.
-        # 105 -> 107 in BDL-068 `.5`: `work-item-routing` (the routes derived from
-        # the composed /task-init) and `work-item-type` (the two checks over a
-        # work-item folder), which are a derivation and a check and not one thing.
-        # 107 -> 109 in BDL-068 `.6`: `scope-check` (the paths a commit stages
-        # judged against a declared scope) and `declared-scope` (the branch, the
-        # index and the planning corpus joined for it), which are again a check
-        # and the composition that feeds it and not one thing.
-        # 109 -> 110 in BDL-068 `.23`: `verdict-room`, the rooms a verdict can be
-        # taken in, derived from the packaging metadata and the CI workflows.
-        # 110 -> 111 in BDL-068 `.27`: `role-duties`, the duties a composed flow
-        # declares checked against the composed core of every role each one names.
-        # 111 -> 112 in BDL-068 `gsal`: `typed-surface`, the files a project
-        # declares type-checked, derived from its own `[tool.mypy]`.
-        assert populations[SPACE_AS_IS] == 112
-        # 55 -> 56 in BDL-062, -> 57 in BDL-067, -> 58 in BDL-068: this feature's ACTIVE.md.
-        assert len(spaces.working_documents(REPO_ROOT)) == 58
+        This case asserted ``populations[SPACE_TO_BE] == 203``,
+        ``populations[SPACE_AS_IS] == 116`` and
+        ``len(spaces.working_documents(REPO_ROOT)) == 58``, under forty lines of
+        comment recording every increment, because each bead that added a
+        planning document or a node document had to find and bump one of them.
+        That is `beadloom-mr2l.72`'s class in its sharpest form: a fact about
+        this repository's own documents, maintained by hand, in a file the bead
+        that moves it has no other reason to touch. Measured on this tree at
+        `9d0c02a`: planting one feature directory holding a BRIEF and an ACTIVE
+        plus one node SPEC reddened exactly two cases in the whole suite,
+        holding four literals between them.
+
+        WHAT THE COUNTS WERE NOT. This class is about kind precedence, and its
+        claim is that ``space_of_kind`` cannot be decided by the order ``SPACES``
+        is walked in. The counts stated a CONSEQUENCE of that for one tree at one
+        moment. The condition itself is that no kind is claimed by two spaces,
+        and it is checkable directly on the resolved declaration — including on
+        a future configuration of this repository that creates the case by
+        declaring a kind twice, which is the only way this can now go red.
+
+        WHERE THE POPULATION CLAIMS WENT.
+        `TestTheHoleIsInvisibleOnThisRepositoryAndOnAnAdopter` states them as
+        relations: the populations sum to what the roots found, no two spaces
+        share a document, and no declared space is empty.
+        """
+        spaces = resolve_doc_spaces(REPO_ROOT)
+
+        declaring: dict[str, list[str]] = {}
+        for space in SPACES:
+            for kind in spaces.kinds.get(space, ()):
+                declaring.setdefault(kind.upper(), []).append(space)
+
+        claimed_twice = {k: v for k, v in declaring.items() if len(v) > 1}
+        resolved = {kind: spaces.space_of_kind(kind) for kind in declaring}
+
+        assert claimed_twice == {}
+        assert resolved == {kind: declared[0] for kind, declared in declaring.items()}
 
 
 class TestEachDeclaredHalfReportsWhatItReached:

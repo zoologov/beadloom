@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: git-activity
+    kind: component
+    summary: "Git history analysis — per-node commit activity, contributors, and activity classification"
+    source: src/beadloom/infrastructure/git_activity.py
+    docs:
+      - docs/domains/infrastructure/components/git-activity/DOC.md
+edges:
+  - src: git-activity
+    dst: infrastructure
+    kind: part_of

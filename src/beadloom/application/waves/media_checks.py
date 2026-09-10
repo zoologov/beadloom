@@ -10,19 +10,22 @@ answer that reads as a clean one is the defect this whole command exists for.
 
 **What these checks are, precisely.** They are PRECONDITIONS, measured before the
 wave runs: the tree it starts from, the hook that will judge its commits, what its
-artifacts tell an agent about the landing lock, the doc baseline it inherits, and
-the ids its beads already carry. They are not
+artifacts tell an agent about the landing lock, whether the document every one of
+its beads writes gives each of them a row, the doc baseline it inherits, and the
+ids its beads already carry. They are not
 verification of the wave's conduct. Nothing here can check that the gate owner
 actually ran the tree afterwards, because that happens after the plan exists and
 no plan can reach it. The sentence in :mod:`beadloom.application.waves` names
 that split rather than leaving a reader to discover it.
 
-**Where the observations come from.** Four of the five are facts about files —
-git, the installed hook, the doc index, the composed flow artifacts — and they
-arrive as a :class:`WaveEnvironment` gathered by the caller rather than read
-here, so this layer keeps taking its input as data and the checks stay runnable
-without a git binary, a repository, a hook or a scaffolded flow. The fifth needs
-nothing but the bead records the planner already holds.
+**Where the observations come from.** Five of the six are facts about files —
+git, the installed hook, the doc index, the composed flow artifacts, the flow's
+own planning documents — and they arrive as a :class:`WaveEnvironment` gathered
+by the caller rather than read here, so this layer keeps taking its input as data
+and the checks stay runnable without a git binary, a repository, a hook or a
+scaffolded flow. The sixth needs nothing but the bead records the planner already
+holds, and the focus-document check needs both: the file's rows as data, and the
+records to say whose row each is.
 """
 
 # beadloom:feature=wave-plan
@@ -32,10 +35,13 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from beadloom.application.active_table import names_bead
 from beadloom.application.waves.landing import LOCK_COMMAND, defect_detail
 from beadloom.application.waves.media import (
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
+    MEDIUM_FOCUS_DOCUMENT,
+    MEDIUM_GRAPH_FILES,
     MEDIUM_LANDING_ORDER,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
@@ -49,11 +55,12 @@ from beadloom.application.waves.models import (
     MediumCheck,
     WaveEnvironment,
 )
+from beadloom.onboarding.graph_layout import shared_files
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from beadloom.application.waves.models import BeadRecord
+    from beadloom.application.waves.models import BeadRecord, GraphInput
 
 #: A bead reference as this project's title convention writes one: an identifier
 #: that starts with a letter, a dot, and a number (``BDL-061.39``,
@@ -135,6 +142,129 @@ def _check_tracker_ids(records: Sequence[BeadRecord]) -> MediumCheck:
         f"{named}. Verify every dependency edge against the titles the tracker "
         "echoes, not against the ids you intended (BDL-UX #171)",
     )
+
+
+#: How many missing node ids the failure names before it stops. A verdict a
+#: reader cannot finish is one they skip, and the count is stated beside them.
+_NAMED_NODES = 5
+
+
+def _check_graph_files(environment: WaveEnvironment) -> MediumCheck:
+    """Whether the graph on disk is still the graph these scopes were resolved from.
+
+    The medium is this plan's own INPUT, which is what makes it different from
+    the six above: every serialisation this command reports was derived from the
+    graph, and a bead of the wave may be writing it. That has one observable
+    plan-time half and one that no plan can reach, and the two are reported
+    differently rather than blended.
+
+    **The observable half.** The graph has two homes — the files under
+    ``.beadloom/_graph/`` and the index the scopes were resolved from — and a
+    difference between their node populations means this plan was computed from
+    a graph that is no longer the graph on disk. Compared by node id rather than
+    by timestamp: an mtime says a file was touched, and the fact that matters is
+    whether the answer would change.
+
+    **The half no plan can reach**, stated in the pass rather than left out of
+    it. A bead that ADDS a node writes the graph file, and the node it adds is
+    in no graph this command can read, so two such beads hold disjoint scopes
+    here and write the same file. That is why the entry's own suggestion — a
+    serialisation keyed on the graph file a bead's declared nodes are defined in
+    — was measured and declined: on a graph held in one file it fires on every
+    pair and still misses this case.
+    """
+    graph = environment.graph_input
+    if graph is None:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_UNMEASURED,
+            "the graph this plan derived its scopes from was not read, so "
+            "whether it is still the graph on disk is unknown",
+        )
+    if not graph.files:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_PASSED,
+            "no graph file declares a node, so this plan resolved no scope from "
+            "one and every bead above is unresolved for that reason",
+        )
+    declared = graph.declared
+    unindexed = tuple(sorted(declared - graph.indexed))
+    unwritten = tuple(sorted(graph.indexed - declared))
+    if unindexed or unwritten:
+        return MediumCheck(
+            MEDIUM_GRAPH_FILES,
+            STATUS_FAILED,
+            _graph_drift_detail(unindexed, unwritten),
+        )
+    return MediumCheck(
+        MEDIUM_GRAPH_FILES,
+        STATUS_PASSED,
+        f"the {len(declared)} node(s) of this project are declared across "
+        f"{len(graph.files)} graph file(s) and the index resolved these scopes "
+        f"from the same set — {_graph_write_surface(graph)}",
+    )
+
+
+def _graph_write_surface(graph: GraphInput) -> str:
+    """What a bead that ADDS a node writes, which is a fact about the LAYOUT.
+
+    Two sentences rather than one, because the answer stopped being the same for
+    every project when `beadloom-0mdo.80` split this repository's graph into one
+    file per node (BDL-UX #265). While some file holds several nodes, every bead
+    that adds one writes it and the medium names it with the count it holds.
+    Once every node has a file of its own, two node-adding beads write two files
+    and there is no collision left to report.
+
+    The half no plan can reach is stated either way. It moved rather than
+    disappearing: under a shared file the plan cannot see the NODE a bead is
+    about to add, and under one file per node it cannot see the FILE that node
+    will be created in.
+    """
+    shared = shared_files({file.path: file.nodes for file in graph.files})
+    if shared:
+        largest = max(shared, key=lambda file: (len(file.nodes), file.name))
+        return (
+            f"but a bead that ADDS one writes {largest.name}, which holds "
+            f"{len(largest.nodes)} of them, and the node it adds is in no graph "
+            "this plan could read (BDL-UX #261)"
+        )
+    return (
+        "and every one of them is declared in a file of its own, so two beads "
+        "that add nodes write two files and the collision cannot be attempted "
+        "rather than being detected afterwards (BDL-UX #265). The file each of "
+        "them creates is still in no graph this plan could read"
+    )
+
+
+def _graph_drift_detail(
+    unindexed: tuple[str, ...], unwritten: tuple[str, ...]
+) -> str:
+    """Which way the graph and the index disagree, and what to do about it."""
+    parts: list[str] = []
+    if unindexed:
+        parts.append(
+            f"{len(unindexed)} node(s) the graph files declare that the index "
+            f"does not hold ({_named(unindexed)})"
+        )
+    if unwritten:
+        parts.append(
+            f"{len(unwritten)} node(s) the index holds that no graph file "
+            f"declares ({_named(unwritten)})"
+        )
+    return (
+        f"this plan resolved its scopes from an index that disagrees with the "
+        f"graph on disk — {'; '.join(parts)}. Every serialisation above was "
+        "computed from the older population, so a scope naming one of those "
+        "nodes was decided wrongly or not at all. Run `beadloom reindex` and "
+        "re-run this plan; if a graph file will not parse it is skipped in "
+        "silence and reads here as a node nobody declares (BDL-UX #261)"
+    )
+
+
+def _named(refs: tuple[str, ...]) -> str:
+    """Up to :data:`_NAMED_NODES` of *refs*, and an ellipsis when there are more."""
+    return ", ".join(refs[:_NAMED_NODES]) + (" ..." if len(refs) > _NAMED_NODES else "")
 
 
 def _check_working_tree(
@@ -300,6 +430,78 @@ def _check_landing_order(environment: WaveEnvironment) -> MediumCheck:
     )
 
 
+def _check_focus_document(
+    environment: WaveEnvironment, records: Sequence[BeadRecord]
+) -> MediumCheck:
+    """Whether the document every bead of this plan writes gives each of them a row.
+
+    The medium is shared by construction and cannot be planned away, so the
+    precondition is not *do these beads share it* — they do — but whether the
+    document gives each of them a place of its own to write in. A bead the
+    document carries no row for has only the shared prose, and that is where a
+    hunk written by one bead lands inside another bead's commit (BDL-UX #257).
+
+    Read with the reader that already exists.
+    :func:`~beadloom.application.active_table.names_bead` is how ``active-sync``
+    decides which bead a row names, in both the full form the tracker allocates
+    and the short form a table abbreviates it to, under whatever Markdown the
+    author wrapped it in. A second reader of that one fact is the defect
+    ``beadloom-0mdo.46`` lifted ``doc_sync/tables.py`` to stop happening a third
+    time.
+
+    **A bead named in ANY focus document counts as named.** The population is
+    every work item's focus document rather than this plan's own, because the
+    plan does not carry a work item id and deriving one would be a second source
+    for a fact ``declared-scope`` already owns. The looseness can only turn a
+    failure into a pass, and only for a wave whose beads span two work items —
+    which would not collide in one document anyway.
+    """
+    documents = environment.focus_documents
+    if documents is None:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_UNMEASURED,
+            "the flow's routing and its planning documents were not read, so "
+            "which document every bead of this plan writes into is unknown",
+        )
+    if not documents:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_PASSED,
+            "no work item of this project holds a document every route writes, "
+            "so this plan's beads share no focus document — their landings are "
+            "serialised by the derived scopes above and by nothing else",
+        )
+    cells = tuple(cell for document in documents for cell in document.row_cells)
+    missing = tuple(
+        sorted(
+            record.bead_id
+            for record in records
+            if not any(names_bead(cell, record.bead_id) for cell in cells)
+        )
+    )
+    where = ", ".join(sorted({document.path for document in documents})[:3])
+    if not missing:
+        return MediumCheck(
+            MEDIUM_FOCUS_DOCUMENT,
+            STATUS_PASSED,
+            f"all {len(records)} bead(s) of this plan are named by a row of the "
+            f"{len(documents)} focus document(s) read, so each writes a line of "
+            "its own rather than the prose around it",
+        )
+    named = ", ".join(missing)
+    return MediumCheck(
+        MEDIUM_FOCUS_DOCUMENT,
+        STATUS_FAILED,
+        f"{len(missing)} of {len(records)} bead(s) of this plan write into a "
+        f"focus document no row of it names — {named}. The document is owned by "
+        f"no bead's code, so the serialisation count above did not compare it; "
+        f"give each bead a row in {where} before the wave starts, or its edit "
+        "lands in the shared prose and is committed by whoever gets there first "
+        "(BDL-UX #257)",
+    )
+
+
 def check_media(
     records: Sequence[BeadRecord],
     *,
@@ -320,9 +522,11 @@ def check_media(
     """
     observed = environment or WaveEnvironment()
     return (
+        _check_graph_files(observed),
         _check_working_tree(observed, owned_paths),
         _check_commit_gate(observed),
         _check_landing_order(observed),
+        _check_focus_document(observed, records),
         _check_doc_baseline(observed),
         _check_tracker_ids(records),
     )

@@ -1,0 +1,15 @@
+  # Component: the concrete read-only probes the flow guards read the world
+  # through (bd + git). In the SERVICES layer because the bd seam is, and the
+  # application layer must not import services.
+nodes:
+  - ref_id: guard-probes
+    kind: component
+    summary: "Concrete read-only guard probes over the real bd (claimed beads) and git (current branch)"
+    source: src/beadloom/services/guard_probes.py
+    tags: [layer-service]
+    docs:
+      - docs/services/components/guard-probes/DOC.md
+edges:
+  - src: guard-probes
+    dst: cli
+    kind: part_of

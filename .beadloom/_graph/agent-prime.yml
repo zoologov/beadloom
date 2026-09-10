@@ -1,0 +1,12 @@
+  # Feature: Agent Prime
+nodes:
+  - ref_id: agent-prime
+    kind: feature
+    summary: "Cross-IDE context injection via prime CLI/MCP + AGENTS.md + IDE adapters"
+    source: src/beadloom/onboarding/scanner/
+    docs:
+      - docs/domains/onboarding/features/agent-prime/SPEC.md
+edges:
+  - src: agent-prime
+    dst: onboarding
+    kind: part_of

@@ -45,12 +45,16 @@ stay committable.
 
 from __future__ import annotations
 
+import fnmatch
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
 #: The project's ignore file, relative to the project root.
 IGNORE_RELPATH = Path(".gitignore")
+
+#: The directory whose contents the block names; nothing generated, nothing to ignore.
+_WORKING_SET_DIR = Path(".beadloom")
 
 #: Opens the block; its presence means "already written — hands off".
 BLOCK_MARKER = "# Beadloom: generated working set under .beadloom/"
@@ -109,6 +113,105 @@ GENERATED_WORKING_SET: tuple[IgnoreEntry, ...] = (
         ),
     ),
 )
+
+
+@dataclass(frozen=True)
+class IgnoreFinding:
+    """One generated pattern a project's ignore file does not declare.
+
+    Carries the :class:`IgnoreEntry` rather than a copy of it, so the finding's
+    text is the generator's text and a pattern added later needs no second list.
+    """
+
+    entry: IgnoreEntry
+    supersedes: tuple[str, ...] = ()
+
+    @property
+    def pattern(self) -> str:
+        """The pattern this version emits and the file does not declare."""
+        return self.entry.pattern
+
+    @property
+    def why(self) -> str:
+        """What drifted, in the words a reader of the ignore file needs."""
+        subject = (
+            f"the ignore block this version generates declares {self.pattern!r} "
+            f"and {IGNORE_RELPATH} does not"
+        )
+        if not self.supersedes:
+            return (
+                f"{subject}. The block is written once, at init, and never rewritten, "
+                "so a pattern a later release adds never reaches a project that "
+                "already ran it"
+            )
+        declared = ", ".join(repr(p) for p in self.supersedes)
+        return (
+            f"{subject} — it declares {declared} instead, which the current pattern "
+            "covers and supersedes. The narrower line goes on matching until the "
+            "wider one has something extra to match, and then stops silently"
+        )
+
+    @property
+    def remediation(self) -> str:
+        """The human's edit, in the human's file — never a command."""
+        if not self.supersedes:
+            return (
+                f"add {self.pattern} to {IGNORE_RELPATH} by hand; Beadloom will not "
+                "add it, because the file is the project's from the moment the block "
+                "is first written"
+            )
+        declared = " and ".join(self.supersedes)
+        return (
+            f"replace {declared} in {IGNORE_RELPATH} with {self.pattern} by hand; "
+            "Beadloom does not edit a block it has already written"
+        )
+
+
+def supersedes(pattern: str, declared: str) -> bool:
+    """Whether *pattern* covers *declared* and is a widening of it.
+
+    The measured case is a filename a later release widened into a glob:
+    ``.beadloom/guard-firings.jsonl`` against ``.beadloom/guard-firings*.jsonl``.
+    Glob-matching the declared line against the expected one answers that
+    without a table of known renames — a table is the second list this check
+    exists to avoid. ``fnmatchcase`` rather than ``fnmatch`` so the answer does
+    not depend on the case-folding of the filesystem the check runs on.
+    """
+    return declared != pattern and fnmatch.fnmatchcase(declared, pattern)
+
+
+def undeclared_patterns(text: str) -> list[IgnoreFinding]:
+    """Every generated pattern *text* does not declare, in generator order.
+
+    The single predicate behind both directions: :func:`ensure_ignore_block`
+    writes what it returns, and the drift check reports it. Comparing the
+    PATTERNS and not the block's bytes is deliberate — the reason comments are
+    prose in a file people edit, and a project that ignores the same paths under
+    a heading it wrote itself is correct. This repository is that project.
+    """
+    declared = _declared_patterns(text)
+    return [
+        IgnoreFinding(
+            entry=entry,
+            supersedes=tuple(sorted(d for d in declared if supersedes(entry.pattern, d))),
+        )
+        for entry in GENERATED_WORKING_SET
+        if entry.pattern not in declared
+    ]
+
+
+def ignore_block_findings(project_root: Path) -> list[IgnoreFinding]:
+    """The undeclared patterns for a project, or none where there is nothing to check.
+
+    Silent in the two states :func:`ensure_ignore_block` also declines to act on:
+    outside a git working tree, where the writer never wrote and which VCS the
+    project uses is not ours to guess, and where Beadloom has generated nothing
+    under ``.beadloom/`` for an ignore file to name.
+    """
+    if _git_root(project_root) is None or not (project_root / _WORKING_SET_DIR).is_dir():
+        return []
+    path = project_root / IGNORE_RELPATH
+    return undeclared_patterns(path.read_text(encoding="utf-8") if path.is_file() else "")
 
 
 @dataclass
@@ -180,8 +283,7 @@ def ensure_ignore_block(project_root: Path) -> IgnoreBlockResult:
         )
         return result
 
-    declared = _declared_patterns(existing)
-    missing = [entry for entry in GENERATED_WORKING_SET if entry.pattern not in declared]
+    missing = [finding.entry for finding in undeclared_patterns(existing)]
     if not missing:
         result.path = path
         result.skipped_reason = (

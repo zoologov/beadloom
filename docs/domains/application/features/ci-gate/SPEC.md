@@ -43,21 +43,26 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    a `warn` and the step is `passed` unconditionally, so a project whose
    documents predate the checks does not go red on upgrade. A project with no
    planning document is a NAMED skip that states the globs it looked under.
-   Three states set `not_verified`, and the step then reports **WARN** rather
+   Four states set `not_verified`, and the step then reports **WARN** rather
    than PASS — *unverifiable is not clean*: a check that found no document with
    anything to read (`NOT CHECKED: <checks>`), a document KIND no content check
-   enters (`NO CHECK READS: <kinds>`), and a document nothing could decode
-   (`UNREADABLE: N`). The second exists because the first is a global OR over
-   the corpus and goes silent as soon as one document carries one row, so it
-   cannot see a check that is blind on an entire shipped document kind.
-   Measured on this repository, 2026-08-24, the step reports:
+   enters (`NO CHECK READS: <kinds>`), a table `decision-reason` could not place
+   as a table of decisions (`NOT CLASSIFIED: N table(s), M row(s)`), and a
+   document nothing could decode (`UNREADABLE: N`). The second exists because
+   the first is a global OR over the corpus and goes silent as soon as one
+   document carries one row, so it cannot see a check that is blind on an entire
+   shipped document kind. The third is BDL-UX #213: a `Reason` column does not
+   make a table a decision table, and the check names the tables it did not
+   judge instead of reporting a measurement row as a decision with no reason.
+   None of the four can redden a project — the step is `passed` unconditionally.
+   Measured on this repository, 2026-09-08, the step reports:
 
    ```
    docs-quality WARN | 259 document(s) read; measurable-goal 4,
-                       pending-in-approved 7, missing-section 102;
-                       NOT CHECKED: axes-without-a-seed,
-                       axis-without-a-scope-decision;
-                       NO CHECK READS: BRIEF, PLAN, SUMMARY
+                       pending-in-approved 2, missing-section 102,
+                       routed-without-axes 12;
+                       NO CHECK READS: BRIEF, PLAN, SUMMARY;
+                       NOT CLASSIFIED: 12 table(s), 58 row(s)
    ```
 
    Measured again on 2026-09-02, after S1.4. The two axes checks read **0**
@@ -71,7 +76,43 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    this line — filed by review `beadloom-mr2l.19` as a MINOR, and left as a
    stated limit rather than a silent one.
    
-6. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
+6. **issue-log** — the issue log's numbers (BDL-068 S6). Three legs over a
+   numbered log and the ledger that allocates its numbers: `duplicate-number`
+   (one number defined by two entries), `unwritten-claim` (a number claimed and
+   never written into the log) and `unclaimed-number` (an entry past the
+   ledger's floor holding a number no claim holds). Unlike its two neighbours
+   this step **BLOCKS**, and the difference is the kind of claim each makes: a
+   writing-standard finding is an opinion about prose a project may reasonably
+   carry for a release, while a duplicate number is a reference that resolves to
+   two entries and to neither — this repository shipped one for fifteen days
+   across a CHANGELOG, a ROADMAP, eight test files and thirty-six tracker
+   records (BDL-UX #187). Every leg's repair fits in the commit that trips it,
+   which is what makes blocking fair. It cannot redden a project that has not
+   opted in: the log is DECLARED under `issue_log:` in `.beadloom/config.yml`,
+   and a project declaring none is a NAMED skip that states the key to add.
+   `not_verified` carries the honest half — before a project's first allocation
+   the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
+   number at all and the summary says `NOT CHECKED:` rather than reporting them
+   clean.
+
+   Since `beadloom-l9ee` the line also carries the PARTIAL case, which is the one
+   every adopter is in from their first allocation onwards: `unclaimed-number`
+   skips every entry below the floor by design, and the summary said nothing
+   about how many that was. The line read `240 entr(ies) uniquely numbered; 5
+   claim(s), floor 262` over a log whose leg had entered five of those entries
+   (BDL-UX #267). `PARTLY CHECKED` states the population, and it is not a
+   finding — an unreached population is coverage, and making it one would redden
+   every project that adopts the allocator with a log already written. Measured
+   on this repository, 2026-09-09:
+
+   ```
+   issue-log PASS | 241 entr(ies) uniquely numbered; 6 claim(s), floor 262;
+                    PARTLY CHECKED: 235 of 241 entr(ies) are below floor 262,
+                    where unclaimed-number did not enter; 1 number(s) below the
+                    highest are stated nowhere and are unaccounted for, not free
+   ```
+
+7. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
    with at least one closed bead that declared a graph node with no AS-IS
    document, plus a WORKING exemption that excuses nothing and a WORKING
    declaration the graph contradicts. Every finding is a `warn` and the step is
@@ -134,7 +175,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-7. **scope-check** — did this branch leave the axes its work item declared?
+8. **scope-check** — did this branch leave the axes its work item declared?
    (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
    push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
@@ -150,7 +191,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
-8. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+9. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -160,8 +201,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-9. **doctor** — graph integrity.
-10. **federate** — `federate --fail-on` when hub exports are supplied.
+10. **doctor** — graph integrity.
+11. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —
@@ -188,6 +229,17 @@ silence — measured in-process on this repository, an unregistered CLI surface
 turned `3/9 declared fact(s) verified` into `3/8` with nothing naming the fact
 that had left. The clause appears only when something was declined, so a project
 where every declared fact applies reads exactly as it did before.
+
+Since BDL-068 `.81` it also names the version tokens the audit declined to judge:
+`..., COULD NOT JUDGE 1 version token(s) naming git — unconfirmed here`. A version
+belongs to the subject named beside it, and `git` is confirmed by the environment
+rather than by a file the project ships. A directory built by `git archive HEAD` —
+every clean room `beadloom clean-room` builds — carries no `.git`, so `git 2.49.0`
+was compared against this project's version and every clean-room Gate run on this
+repository was rc 1 for one line of one document (BDL-UX #266). An unconfirmed
+subject is now unresolved rather than absent, and the token is reported instead of
+judged. This clause also appears only when something was declined, so a run in a
+git working tree reads exactly as it did before.
 
 Each step reports a `GateStep` with `PASS` / `WARN` / `FAIL` / `SKIP` — never an
 ambiguous green — and its findings in the shared finding shape. `GateResult.ok`
@@ -233,6 +285,56 @@ claim that can pass or fail: the same `ok`, the same exit code, the same finding
 changes is that a green is answerable — a reader can see which of the declared rooms it covers.
 Do not read a room-naming verdict as a stronger one.
 
+### The verdict names what no step of it performed
+
+`beadloom ci` does not run the test suite, and until BDL-UX #247 it never said so — while
+`CLAUDE.md` calls the pre-push hook "the full `beadloom ci`" and the coordinator skill calls it
+"the authoritative blocking backstop". Measured twice in one slice: a document change reddened
+two tests under a gate that returned rc 0, and a docs wave spilled an inline code span past a
+line under a gate that returned rc 0 over that tree twice, after which all six test legs went red
+on one assertion that reproduces locally in 0.07 s.
+
+`GateResult` therefore carries a `GateCoverage` beside its room census: the verifications this
+project's pipeline declares that no step of this run performed, each with the command the
+pipeline runs for it and the workflow job it was read from. On this repository the block names
+three — the test suite, the style linter and the type checker. The second and third are the ones
+nobody had filed: the gate's own step is called `lint` and checks the architecture boundaries,
+not the source style.
+
+**Both sides are derived.** What the run performed comes from its own step list, so a suite step
+added to the gate later removes the line by the same act rather than by somebody deleting a
+sentence. What the project verifies comes from its workflows, through the same `load_jobs` reader
+the room census uses. A project whose pipeline verifies under a name the vocabulary does not hold
+is told the population is empty with that limit named, never that nothing is left to run.
+`gate-coverage` (DOC) states the vocabulary and the four statements a run can make.
+
+**It is not a step either.** Same `ok`, same exit code, same findings.
+
+### The verdict names who owns what it found
+
+The branch that built this feature carried a red Gate across two waves of BDL-068 S6 — two
+stale docs owned by no bead in the running plan — and every gate owner in those waves had to
+be told by the coordinator, by hand, that the red was not theirs, so their reports would
+attribute the finding rather than discount it. A known red trains its reader to discount the
+next one, and the cost is never the red itself but the work of proving a second finding is
+real against a background that already holds one.
+
+`GateResult` therefore carries a `GateOwnership` beside its room census and its coverage
+statement: one verdict per finding, held against the beads the tracker reports claimed while
+the run happened. `owned` names the beads. `unowned` says a node was derived and no claim
+covers it. `unattributed` says no node could be derived from the finding at all, which is a
+different absence and must not read as the same one. A tracker that cannot answer, and a
+project with no index, are a reason on the whole report rather than a page of `unowned`.
+
+**The claim is a bead, not the branch's approval.** The work item's `## Axes` answer whether a
+change is inside the approval, which the `scope-check` step of this same run already asks, and
+which every agent on one branch shares; a wave's plan names beads that have not started and
+beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and the three routes a
+finding takes to reach a node.
+
+**It is not a step either, and the tracker is asked only when there is a finding.** Same `ok`,
+same exit code, same findings; a green run attributes nothing and shells out to nothing.
+
 ## Invariants
 
 - Every step runs; the gate never short-circuits on the first failure.
@@ -247,6 +349,13 @@ Do not read a room-naming verdict as a stronger one.
   verified.
 - The room census never changes the verdict. It adds no step, no finding and no
   exit code, and `tests/test_gate_verdict_room.py` fails if it starts to.
+- The coverage block never changes the verdict either, and
+  `tests/test_gate_not_run.py` fails if it starts to. It names a verification
+  only when the project's own pipeline declares one this report can read.
+- The ownership block never changes the verdict either, and
+  `tests/test_gate_finding_owner.py` fails if it starts to. A finding nobody
+  claims is still a finding; a gate that went green because no bead owned a red
+  would be the false green this whole slice exists to remove.
 - `fail_on=None` selects the safe default federate set
   (`breaking,drift,orphaned_consumer,undeclared_producer`); the
   no-false-gate verdicts are never included.
@@ -261,12 +370,34 @@ Module `src/beadloom/application/gate.py`:
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
-  `RoomCensus | None`), plus the `ok` and `findings` properties. `None` means no
-  census was taken, and a surface that was not told makes no room claim.
-- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex) -> GateResult`
-  — run every gate step and aggregate the result.
+  `RoomCensus | None`), the coverage statement (`coverage`, a
+  `GateCoverage | None`), the ownership report (`ownership`, a
+  `GateOwnership | None`), plus the `ok` and `findings` properties. `None` means
+  nothing derived it, and a surface that was not told makes no claim.
+- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
+  performed_elsewhere=(), tracker=None) -> GateResult` — run every gate step and
+  aggregate the result. `performed_elsewhere` names verifications the CALLER runs
+  beside the gate, in the vocabulary a step would use: the MCP `complete_bead`
+  tool runs the suite itself and passes `("tests",)`, so one run cannot report
+  the suite as not run while that run ran it. `tracker` is the read port over the
+  work tracker, supplied by the service that runs the gate because the `bd` seam
+  lives in the services layer this one must not import; a run given none makes no
+  ownership claim rather than reporting every finding as owned by nobody.
+
+Module `src/beadloom/application/gate_coverage.py`:
+
+- `derive_gate_coverage(project_root, *, performed) -> GateCoverage` — the
+  verifications the project declares that `performed` does not cover.
+- `gate_coverage_lines(coverage) -> list[str]` — the block all surfaces quote.
+
+Module `src/beadloom/application/gate_ownership.py`:
+
+- `derive_gate_ownership(project_root, *, findings, tracker) -> GateOwnership` —
+  one verdict per finding, held against the beads the tracker reports claimed.
+- `gate_ownership_lines(ownership) -> list[str]` — the block all surfaces quote.
 
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
+`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
 `tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`

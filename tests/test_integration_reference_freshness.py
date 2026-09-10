@@ -173,6 +173,9 @@ class TestLayer1GateIntegration:
             "sync-check",
             "docs-audit",
             "docs-quality",
+            # BDL-068 S6: the issue log's numbers, beside the other
+            # document checks and before the composed-config ones.
+            "issue-log",
             "doc-spaces",
             # BDL-068 S1.6: the branch judged against the axes its work item
             # declares. It sits before `config-check` because it reads the
@@ -185,6 +188,9 @@ class TestLayer1GateIntegration:
         after = names[names.index("docs-audit") + 1 :]
         assert after == [
             "docs-quality",
+            # BDL-068 S6: the issue log's numbers, beside the other
+            # document checks and before the composed-config ones.
+            "issue-log",
             "doc-spaces",
             "scope-check",
             "config-check",

@@ -236,9 +236,17 @@ explicit tool calls, branching on the Gate's exit code — not prose to remember
 ```
 
 The push step relies on the **pre-push Beadloom Gate hook** (`beadloom install-hooks`
-installs `pre-push`) as the authoritative blocking backstop: even if the loop above
-is skipped, a red Gate blocks the push. `git push --no-verify` is the documented,
-discouraged escape hatch.
+installs `pre-push`) as the authoritative blocking backstop **for what it runs**: even
+if the loop above is skipped, a red Gate blocks the push. `git push --no-verify` is the
+documented, discouraged escape hatch.
+
+**It does not run the test suite**, and a green Gate is not a green suite. The verdict
+names the verifications no step of it performed — on a Python project typically the
+suite, the style linter and the type checker — so read that block rather than the word
+*authoritative*. Two measurements: a document change reddened two tests under a Gate that
+returned rc 0, and a docs wave opened a pull request whose six test legs went red on one
+assertion that reproduces locally in 0.07 s, after `beadloom ci` had returned rc 0 over
+that tree twice. Running the suite stays the wave's job, at the gate owner.
 
 ### Drive deterministic steps through the process-tools
 

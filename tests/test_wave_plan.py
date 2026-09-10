@@ -22,6 +22,8 @@ from beadloom.application.waves import (
     REASON_UNRESOLVED_SCOPE,
     SHARED_MEDIA,
     BeadRecord,
+    GraphFile,
+    GraphInput,
     WaveConfigError,
     WaveEnvironment,
     WaveOverride,
@@ -164,6 +166,16 @@ class TestSerialisationReasons:
                 commit_gate=GATE_COMMIT_SCOPED,
                 doc_baseline_stale_pairs=0,
                 landing_lock_sites=(),
+                focus_documents=(),
+                graph_input=GraphInput(
+                    files=(
+                        GraphFile(
+                            path=".beadloom/_graph/services.yml",
+                            nodes=("billing", "shipping"),
+                        ),
+                    ),
+                    indexed=frozenset({"billing", "shipping"}),
+                ),
             ),
             axes=_approving("billing", "shipping"),
         )
@@ -315,12 +327,12 @@ class TestOverrides:
 
 
 class TestSharedMedia:
-    def test_a_wave_of_more_than_one_bead_names_four_media(
+    def test_a_wave_of_more_than_one_bead_names_every_medium(
         self, conn: sqlite3.Connection
     ) -> None:
         plan = plan_waves([_bead("a", "billing"), _bead("b", "shipping")], conn=conn)
         assert plan.shared_media == SHARED_MEDIA
-        assert len(SHARED_MEDIA) == 5
+        assert len(SHARED_MEDIA) == 7
 
     def test_a_plan_that_runs_nothing_concurrently_names_the_same_media(
         self, conn: sqlite3.Connection

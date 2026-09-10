@@ -50,20 +50,26 @@ is what holds that line.
 | `snapshot.py` | `snapshot save`, `snapshot list`, `snapshot compare` |
 | `guard.py` | `guard` |
 | `waves.py` | `waves` |
+| `clean_room.py` | `clean-room` |
 | `review_brief.py` | `review-brief` |
 | `impact.py` | `impact`, `axes`, `scope-check` |
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
 | `typed_surface.py` | `typed-surface` |
 | `bd_calls.py` | `bd-calls` |
+| `issue_number.py` | `issue-number allocate`, `issue-number check` |
 
-`config-check` prints two derivations beside the drift list, because neither has a Gate
+`config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
-owns no runner to hang a step on) and, whenever a project declares at least one duty, the
-population `role_duties.duty_report()` could not inspect. The second prints on the clean path
-as well as the blocking one: a check that speaks only when it finds something hands the reader
-a clean list, and a clean list is trusted and stopped at. It stays silent for a project that
-declares no duty, where there is no verdict to qualify.
+owns no runner to hang a step on); whenever a project declares at least one duty, the
+population `role_duties.duty_report()` could not inspect; and, for any project with a
+`flow.yml`, the per-tool corpora, the unreached tools and the not-judged population of
+`role_map.role_map_report()`.
+
+The last two print on the clean path as well as the blocking one: a check that speaks only
+when it finds something hands the reader a clean list, and a clean list is trusted and
+stopped at. The duty block stays silent for a project that declares no duty, where there is
+no verdict to qualify.
 
 The duty block also names the corpus it read — the COMPOSITION this flow would write, not the
 role files on disk — and counts the adapters that exist there, printing `NOTHING TO CHECK`
@@ -71,6 +77,29 @@ when none do. Until BDL-068 S4's fix bead a project that had never run `setup-ag
 was told a duty was checked over ten composed artifacts with no blocking drift, which is true
 of the composition and says nothing about a corpus no role could receive (BDL-UX #241). The
 exit code is unchanged: an unscaffolded project is not in drift.
+
+The role-map block (BDL-068 S6, BDL-UX #252) names how many roles this flow composes and how
+many of the DECLARED TOOLS a map artifact was read for, then one line per map — the tool, the
+artifact its reader opens and the designation count in it — then the unreached tools, then
+every line that mentions two or more roles in a shape the derivation does not read. It names
+those rather than judging them, because some of them should enumerate every role and some
+should not: a wave order `dev → test → review → tech-writer` names four roles and `Explore`
+is not a wave.
+
+The tool axis is printed since BDL-068 `.84`, and printed at zero: `Unreached: 0 of 1
+declared tool(s)` is a sentence rather than an empty list, because an empty list under a
+heading reads as "nothing to say here". Before `.84` the block named the composed
+`CLAUDE.md` for every project, including one whose `flow.yml` declares `cursor` alone.
+Measured on this repository, which declares `claude` alone: 1 of 1 tool, 16 designations, 6
+of them rosters, 5 not-judged lines. On a `cursor`-only project: 1 of 1 tool,
+`.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines.
+
+`guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
+not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the
+edit was allowed through unchecked. The sentence is `PERMITTED_UNGUARDED` and it lives in the
+application layer, so a second harness renderer cannot phrase it differently. It is printed
+before the remediation because a permitted edit read as a failed one is the misreading this
+outcome exists to prevent (BDL-UX #254).
 
 `guard.py` renders the binding surface above the firing rows, in three sentences rather than
 two. `NOT CHECKED` when a source could not be read, `NOTHING TO CHECK` when both were read and
@@ -88,7 +117,7 @@ tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carry
 at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
 (BDL-UX #181).
 
-`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads four things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, and every instruction of the landing lock in the composed flow artifacts. The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
+`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads six things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, every instruction of the landing lock in the composed flow artifacts, the rows of the document every route of the composed `/task-init` writes, and the node population of the graph itself -- from the files through `each_graph_file` and from the index through `get_all_nodes`, held apart so that a difference between the plan's own two inputs is a verdict the application layer takes rather than one this edge takes for it (BDL-UX #261). The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
 wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
 each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate
 owner and the shared media were printed only for a wave of more than one bead, so the
@@ -99,10 +128,44 @@ built one at a shared scratchpad path and one measured over the other's files (B
 It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
 media and for the same reason — the application layer keeps taking its input as data — and
 prints what every bead's declared `refs:` was held against: the work item, the document, how
-many nodes it approves, how many declared refs agree, how many the derivation did not reach
-and how many axis rows name no node. That block is printed for a clean plan too, because the
+many nodes it approves, how many declared refs agree, how many the derivation did not reach,
+how many it swept and nobody ruled on, and how many axis rows name no node. The fourth count
+arrived with BDL-UX #250, when a node stopped being approved for having been swept: calling
+such a node `not_derived` would state something false, so it is counted under a name of its
+own. That block is printed for a clean plan too, because the
 counts are how a reader tells a plan whose declarations agreed from one whose declarations
 nothing could be compared against (BDL-UX #232).
+
+`clean_room.py` builds the room `waves.py` names. It is the same spelling — the path comes
+from `room_for`, so the room a plan prints and the room a command creates cannot diverge — and
+it adds the two properties a printed name cannot carry: the directory is created rather than
+entered, and `--rebuild` replaces a room rather than refreshing one. A rebuild reads the
+request out of the record it is about to delete — the carried files and the extras the caller
+pinned — because retyping that list was measured at 16 `--carry` flags twice on one bead, and
+what an agent reaches for under that friction is copying files into the live room, which is
+#243 again. What is reused is the LIST: the files are copied from the working tree at build
+time, and an option named beside `--rebuild` replaces its remembered counterpart. `reused[]`
+in `--json`, and one line in the human shape, name what was taken from the replaced room. The bead is looked up
+through the `bd` seam at this edge, which is what makes the three exit codes distinguishable:
+`0` the room was built, it holds its own interpreter, and the tracker says the bead is
+`in_progress`; `1` it was built and something about the measurement it supports
+is unconfirmed (the bead is not in progress, the tracker did not answer, or the room holds no
+interpreter of its own); `2` no room was built. A tracker that answers and has no such
+bead is a refusal rather than a finding, because a room named after a bead nobody holds cannot
+say whose it is; a tracker that cannot be reached is a finding, because refusing there would
+make the command unusable wherever `bd` is not installed. The room's own limits are printed
+beside its path — no `.git`, so a freshness check inside has no baseline, a verdict that is a
+claim about its files and never about the combined tree, and the optional extras its
+invocation's interpreter has, because those and not the files decided 82 mypy errors against 0
+on one code base (BDL-UX #235, #243, #181, #236).
+
+Since BDL-UX #256 the command also gives the room the interpreter that verdict is taken
+under: `--extras` names the optional extras to install, the default being the union of every
+extra any leg of the project's workflows installs, and `--no-environment` declines one. The
+option surface is thin here on purpose — the choice and the install are
+`application.waves.room_env`, and this module only turns a room without an interpreter into
+one finding and one exit code. A caller who DECLINED an environment is told nothing, because a
+finding reports what a run did not do that it was asked to do.
 
 `rooms.py` renders what `application.rooms` derived: the room this run is in, the rooms the
 project declares — interpreters from its packaging metadata, legs from its CI workflows — and
@@ -110,7 +173,11 @@ the ones the run did not enter (BDL-068 S3.2). `--dimension <axis>` prints one a
 per line, which is the form a completion checklist loops over instead of a spelled-out list
 that goes stale. It exits 2 when the named axis is carried by no declared room, and names the
 axes that exist: an empty answer would read as "this project has no such axis", which is the
-clean list an agent trusts and stops at.
+clean list an agent trusts and stops at. Since BDL-068 S6 the census carries an `extras` axis —
+the optional extras a leg installs against the ones this run has — and this renderer prints the
+project's own extras with the distributions each absent one needs. The values of an axis are
+printed in a stable order: they come from a set, so an axis whose values are not versions was
+previously printed in the hash order of that set, which differs between processes.
 
 `typed_surface.py` renders what `application.typed_surface` derived: the files this project
 declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`
@@ -145,9 +212,13 @@ row. The counts, and the run they were taken on, are in the
 
 `impact.py` holds three commands over one subject and not three subjects: `impact` derives a
 work item's axes from the source and renders the `## Axes` section, `axes` reads a section
-back and generates the bead's `refs:` from it, and `scope-check` (BDL-068 S1.6) compares the
+back and generates the `refs:` line from it, and `scope-check` (BDL-068 S1.6) compares the
 paths a commit stages against the section the work item declared. One document, written by
-the first, read by the second and enforced by the third. `scope-check` exits 2 when a path
+the first, read by the second and enforced by the third. `axes --refs` renders ONE line for
+the whole work item, and its help says so since BDL-UX #245: a work item's axes are the UNION
+of its slices' and a bead's scope is a SUBSET chosen for that bead, so this line is the ceiling
+a bead's own scope sits inside and never that scope itself. Handing it to every bead would make
+every pair share a node and collapse every wave to a wave of one. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
 or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
 marked `# ` and on standard output, whether the run compared anything or not: the reason used
@@ -168,6 +239,20 @@ with `--no-verify`.
 Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph
 silently.
+
+## The one adapter these commands wire in
+
+The rule above — parse, call one entry point, render — has one deliberate
+exception, and it is a wiring decision rather than a computation. `ci` constructs
+`services.guard_probes.BdWorkTracker` and hands it to `run_ci_gate`, because the
+Gate's ownership report (BDL-068 S6) has to ask the tracker which beads are
+claimed and the `bd` seam lives in THIS layer: `architecture-layers` (severity
+`error`) forbids the application layer from importing it. The command decides
+nothing about ownership; it supplies the port and renders the block the
+application layer computed, under the verdict beside the room and coverage lines.
+`--format json` carries the same report as `ownership`, and `--format github`
+renders one `::notice::` per owning bead plus the headline when nothing is owned.
+It is the same arrangement `guard` already uses for the flow guards.
 
 ## The one command that ends in a verdict
 
@@ -321,6 +406,8 @@ constant, so a second string added later is judged by the same claim.
 - `cli` — the registration shell this component is wired into
   ([docs/services/cli.md](../../cli.md))
 - `guard-probes`, `bd-seam` — the other two `services`-layer components
+
+`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187). `check`'s verdict names the population it did NOT reach: the entries below the ledger's floor, which `unclaimed-number` skips by design, and the numbers it cannot account for, spelled out rather than counted and bounded so an adopter with a hundred gaps gets a line they can read (BDL-UX #267).
 
 `bd_calls.py` renders the derived `bd` call-site population that `bd_seam` computes. BDL-068's
 CONTEXT Q4 decided the shape: an External `bd` finding is answered by deriving our own call

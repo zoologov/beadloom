@@ -1,0 +1,14 @@
+  # Component: where each documentation space lives (BDL-061 S5). A config
+  # reader beside scan-paths, so a domain resolves doc roots without importing
+  # application.
+nodes:
+  - ref_id: doc-roots
+    kind: component
+    summary: "Documentation space resolution — TO-BE / AS-IS / WORKING roots and kinds from config.yml, and which space a document belongs to"
+    source: src/beadloom/infrastructure/doc_roots.py
+    docs:
+      - docs/domains/infrastructure/components/doc-roots/DOC.md
+edges:
+  - src: doc-roots
+    dst: infrastructure
+    kind: part_of

@@ -16,6 +16,14 @@ derivation is known to be blind:
     A file the answer is about that does not lie under the swept root. Nothing
     it defines was read, so the caller axis has no population at all rather than
     an empty one.
+``unreadable-target``
+    A file the answer is about that this derivation could not read as Python: a
+    document, or a module saved half-way through an edit. Nothing it defines was
+    read, so the axes over it are unresolved rather than empty. BDL-UX #255 is
+    the absence of this entry — a target that EXISTS and is not Python reached
+    ``ast.parse`` and ended the command in a traceback, while an ABSENT target
+    was answered in one sentence, so the worse failure belonged to the more
+    plausible request.
 ``sweep-narrower-than-the-project``
     The swept root is not the project's source root, so every axis is an answer
     about a subtree. BDL-068 `.15` measured what its absence did: on a PEP 420
@@ -53,16 +61,25 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.source_derivation import functions_in, stdlib_names_of
+from beadloom.application.source_derivation import (
+    UNPARSEABLE,
+    functions_in,
+    module_tree,
+    stdlib_names_of,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
     from beadloom.application.source_derivation import ModuleSweep
 
 #: The dispatch this derivation cannot follow, by the name the source spells it.
 _DYNAMIC_DISPATCH = "getattr"
+
+#: The suffix this derivation reads. A target carrying any other one exists, is
+#: a file and holds nothing an AST derivation can answer about.
+_PYTHON_SUFFIX = ".py"
 
 
 @dataclass(frozen=True)
@@ -72,6 +89,55 @@ class Unresolved:
     kind: str
     detail: str
     where: str = ""
+
+
+def readable_targets(
+    targets: frozenset[Path], spell: Callable[[Path], str]
+) -> tuple[frozenset[Path], tuple[Unresolved, ...]]:
+    """The targets this derivation can parse, and a gap for each one it cannot.
+
+    *spell* renders a path the way the answer spells it, so the gap names the
+    place a human would go to rather than an absolute path.
+
+    The file is parsed here and again where its branches are read. That is the
+    same trade :func:`~beadloom.application.source_derivation.sweep_modules`
+    makes and for the same reason: a cache of what parsed would be a second
+    thing that can disagree with the tree.
+    """
+    readable: set[Path] = set()
+    gaps: list[Unresolved] = []
+    for path in sorted(targets):
+        reason = _why_it_is_not_python(path)
+        if reason is None:
+            readable.add(path)
+            continue
+        where = spell(path)
+        gaps.append(
+            Unresolved(
+                kind="unreadable-target",
+                detail=f"{where} could not be read as Python source: {reason}",
+                where=where,
+            )
+        )
+    return frozenset(readable), tuple(gaps)
+
+
+def _why_it_is_not_python(path: Path) -> str | None:
+    """Why *path* cannot be read as Python source, or ``None`` when it can.
+
+    Two classes, one call. The suffix is checked first because a document is the
+    request a reader of this flow actually makes, and reporting it as a
+    ``SyntaxError`` at some line of prose would name a symptom of the wrong
+    thing.
+    """
+    if path.suffix != _PYTHON_SUFFIX:
+        spelt = path.suffix or "(none)"
+        return f"its suffix is {spelt} and this derivation reads {_PYTHON_SUFFIX} source"
+    try:
+        module_tree(path)
+    except UNPARSEABLE as failure:
+        return f"{type(failure).__name__}: {failure}"
+    return None
 
 
 def unparsed_modules(sweep: ModuleSweep, root: Path) -> tuple[Unresolved, ...]:

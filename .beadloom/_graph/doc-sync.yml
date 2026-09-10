@@ -1,0 +1,16 @@
+  # Domain: Doc Sync
+nodes:
+  - ref_id: doc-sync
+    kind: domain
+    summary: "Doc-code synchronization tracking and stale detection"
+    source: src/beadloom/doc_sync/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/doc-sync/README.md
+edges:
+  - src: doc-sync
+    dst: beadloom
+    kind: part_of
+  - src: doc-sync
+    dst: infrastructure
+    kind: depends_on

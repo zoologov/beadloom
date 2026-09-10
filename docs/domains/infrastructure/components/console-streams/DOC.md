@@ -9,9 +9,15 @@ Internal building block of the infrastructure domain.
 ## Overview
 
 `tolerate_unencodable_output()` relaxes the error handler on this process's own
-`sys.stdout` / `sys.stderr` from `strict` to `backslashreplace`, so a character
-the operator's terminal cannot represent is printed as its escape instead of
-killing the command. It does **not** change the streams' codec.
+`sys.stdout` / `sys.stderr` to `backslashreplace`, so a character the operator's
+terminal cannot represent is printed as its escape instead of killing the
+command. It does **not** change the streams' codec.
+
+It relaxes the two handlers a console stream carries when nobody chose one —
+`strict` under a named locale and `surrogateescape` under C/POSIX — and leaves
+alone any handler the operator named through `PYTHONIOENCODING`. The handler's
+name cannot answer which of the two it is, which is what the second measurement
+below cost.
 
 That distinction is the whole decision. Every other byte stream Beadloom writes
 is a **contract** — an installed git hook, `AGENTS.md`, a rules adapter, graph
@@ -31,12 +37,63 @@ Linux image, before this component:
 | `python -m beadloom.ai_agents.ai_techwriter --help` | exit **1**, `UnicodeEncodeError: 'latin-1' codec can't encode character '→'` from inside `click.echo` — the help text carries an arrow |
 | `beadloom guard working-branch` on a passing project | **nothing** on stdout: the verdict line carries an em dash, the write died, and a guard whose PASS is silent cannot be told from one that never ran |
 
-The asymmetry that hid it for two slices: under the **C/POSIX** locale CPython
-already gives `sys.stdout` the `backslashreplace` handler, so the same glyph
-degrades quietly and the ASCII leg stayed green. A *named* 8-bit locale is a
-real locale, gets `strict`, and raises. This is the defect that only the second
-`tests-locale` row could find — "non-UTF-8" and "ASCII" are not the same
-environment.
+A *named* 8-bit locale is a real locale, gets `strict`, and raises, so only the
+second `tests-locale` row could find this — "non-UTF-8" and "ASCII" are not the
+same environment.
+
+## Why the C room stayed broken afterwards (measured, BDL-068 `beadloom-0mdo.65`)
+
+The paragraph that stood here said the ASCII leg was green because under the
+C/POSIX locale CPython already gives `sys.stdout` the `backslashreplace`
+handler. That is false, and it is why the fix above stepped aside in the one
+room it was most needed in for two further slices.
+
+MEASURED in this room, to a pipe and to a tty alike, `sys.stdout` is `ascii`
+with **`surrogateescape`**:
+
+```
+Darwin arm64 · CPython 3.13.7 · LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0
+```
+
+The room is stated in a code block rather than in the sentence because
+`docs audit` reads every semantic-version token in scanned prose as a claim
+about *this project's* version, so a measurement naming its interpreter cannot
+be written as prose in a scanned document.
+
+That handler re-encodes lone surrogates and nothing else, so an ordinary
+non-ASCII character raises exactly as it does under `strict` — and the rule
+"a non-strict handler is the operator's decision" read CPython's own default as
+a choice and left it in place.
+
+| Invocation, same room | Before | After |
+|---|---|---|
+| `beadloom docs audit` | exit **1** after 1321 bytes of a partial report, `UnicodeEncodeError: 'ascii' codec can't encode character '\xb1' in position 111` at `rich/console.py` in `self.file.write(text)` — the `±` of the tolerance label | exit **0**, 2277 bytes, the label reading `\xb110%` |
+| `beadloom docs audit`, default locale | exit 0, 2275 bytes | unchanged |
+
+Rich is the reachable half and Click is not, which is why the `--help` rows of
+the 8-bit measurement above do not cover this: MEASURED in the same room, Click
+replaces an ASCII stdout with a UTF-8 writer of its own and emits the raw
+`e2 80 94` of an em dash, while a direct `sys.stdout.write` degrades it. Anything
+Rich-printing a non-ASCII glyph was in the same position as `docs audit`; the
+neighbours swept in that room — `status`, `prime`, `doctor`, `sync-check`,
+`lint --strict`, `bd-calls` and `rooms` — all exited 0, so `docs audit` is the
+one found rather than the only one possible.
+
+**No CI leg observes this and none will.** The `tests-locale` legs run `pytest`,
+and `beadloom ci` runs under the default UTF-8 locale, so the room that reaches
+it is an adopter's C-locale container. It was found while confirming the product
+was *not* at fault for a red locale leg (`beadloom-0mdo.64`), which is the only
+reason it was found at all.
+
+**This is an encode site and not the mirror of the decode sites.** Where
+Beadloom reads bytes it does not own — `bd`'s JSON, a git ref name, a filesystem
+path — `surrogateescape` is chosen deliberately and argued at each call site,
+because it is the only handler of the three that is injective and so no
+comparison can be given a wrong answer by a byte. Nothing here compares
+anything: the consumer is a terminal, the requirement is that the process
+finishes, and `backslashreplace` is total where `surrogateescape` is partial.
+Making the two directions agree would answer the encode question with the decode
+question's reason.
 
 ## Where it is applied
 
@@ -58,9 +115,12 @@ import a service; the decision and its reasons live only here.
 ## What it deliberately does not do
 
 - **Never changes the codec.** The terminal's encoding is the operator's.
-- **Never overrides an explicit choice.** A stream whose handler is already
-  non-strict — `PYTHONIOENCODING=utf-8:replace`, or `stderr`, which CPython
-  hands us as `backslashreplace` — is left alone.
+- **Never overrides an explicit choice**, and the channel is named rather than
+  guessed from the handler. `PYTHONIOENCODING=utf-8:replace` states a handler
+  and is left alone; `PYTHONIOENCODING=utf-8` states only a codec and leaves the
+  handler to CPython, so it is not a choice of handler. An operator who wants
+  byte-exact piping can still ask for `:surrogateescape` and keep it, which the
+  handler name alone could not have granted.
 - **Never touches a stream it does not understand.** Click's test runner, a
   captured pipe or a redirected buffer has no `reconfigure`; those keep their
   own policy and the command still runs.

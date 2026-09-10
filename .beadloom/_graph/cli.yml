@@ -1,0 +1,33 @@
+  # Service: CLI
+nodes:
+  - ref_id: cli
+    kind: service
+    summary: "Click-based CLI — registration shell wiring the services/commands/ groups"
+    source: src/beadloom/services/cli.py
+    tags: [layer-service]
+    docs:
+      - docs/services/cli.md
+edges:
+  # Services are part_of beadloom
+  - src: cli
+    dst: beadloom
+    kind: part_of
+  # Service → domain usage edges
+  - src: cli
+    dst: context-oracle
+    kind: uses
+  - src: cli
+    dst: doc-sync
+    kind: uses
+  - src: cli
+    dst: graph
+    kind: uses
+  - src: cli
+    dst: onboarding
+    kind: uses
+  - src: cli
+    dst: infrastructure
+    kind: uses
+  - src: cli
+    dst: application
+    kind: uses

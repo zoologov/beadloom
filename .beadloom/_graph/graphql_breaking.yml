@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: graphql_breaking
+    kind: component
+    summary: "Native typed GraphQL breaking analysis — names consumer references the producer breaks (absent / type-narrowed / nullability / arg break); additive changes benign"
+    source: src/beadloom/graph/graphql_breaking.py
+    docs:
+      - docs/domains/graph/components/graphql_breaking/DOC.md
+edges:
+  - src: graphql_breaking
+    dst: graph
+    kind: part_of

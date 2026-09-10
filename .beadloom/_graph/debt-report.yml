@@ -1,0 +1,13 @@
+  # Feature: Debt Report (debt_report/ package — see SPEC). Sourced at the
+  # PACKAGE: a node's source names a SCOPE, and the facade only re-exports.
+nodes:
+  - ref_id: debt-report
+    kind: feature
+    summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating (debt_report/ package: models, config, collect, scoring, trend, render)"
+    source: src/beadloom/application/debt_report/
+    docs:
+      - docs/domains/application/features/debt-report/SPEC.md
+edges:
+  - src: debt-report
+    dst: application
+    kind: part_of

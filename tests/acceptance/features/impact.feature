@@ -102,3 +102,33 @@ Feature: impact answers from the source, and names the seed it answered from
     When impact runs against the file the change was being made in
     Then the branches of the command that calls the target are reported too
     And every branch count says which seat it was taken from
+
+  # BDL-UX #255, found by `beadloom-0mdo.72` while deriving S6's axes -- by using
+  # this instrument for the job that slice exists to do. A target that EXISTS and
+  # is not Python reached `ast.parse` and ended the command in a traceback, while
+  # an ABSENT target was reported in one sentence: the worse failure belonged to
+  # the more plausible request. A file this derivation cannot read is a verdict
+  # like every other gap in this population.
+
+  @bead:beadloom-0mdo.73
+  Scenario: A target that exists and is not Python is a verdict rather than a traceback
+    Given a project whose module reaches no declared effect sink
+    When impact runs against a document in that project
+    Then the run ends with an answer rather than a traceback
+    And the unresolved population names the target it could not read
+    And the callers axis reads unresolved rather than empty
+    And the co-writers axis reads unresolved rather than empty
+
+  @bead:beadloom-0mdo.73
+  Scenario: A Python target that does not parse is a verdict rather than a traceback
+    Given a project holding a Python file that does not parse
+    When impact runs against that file
+    Then the run ends with an answer rather than a traceback
+    And the unresolved population names the target it could not read
+
+  @bead:beadloom-0mdo.73
+  Scenario: One unreadable file among many does not cost the answer the rest
+    Given a project holding a Python file that does not parse
+    When impact runs against the package holding it
+    Then the answer still reports the branches of the files that did parse
+    And the unresolved population names the target it could not read

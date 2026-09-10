@@ -82,11 +82,34 @@ named by two axes is one ref. `beadloom axes <document> --refs` prints it. The o
 sees in the document is the order the bead carries, so the two can be compared by eye as well
 as by a check.
 
+### A slice appends its rows under its own derivation block, and that is a second table
+
+An epic's axes are the UNION of its slices', and the RFC's rule is that each slice appends its
+rows under its own `Derived by` line. That is naturally a new table rather than more rows under
+one header, so a real section holds one table per slice — BDL-068's holds five.
+
+The reader took the first table's header as the header for everything under the heading, so a
+second table's rows were judged against the first table's column index and the second table's
+HEADER ROW came back as data: an axis named `Axis` on a node named `Node`, whose `In scope` cell
+reads the literal words "In scope" as a yes. Measured on BDL-068's own RFC laid out in the shape
+its rule describes — 74 rows in five per-slice tables — the reader returned 78 rows, four of them
+header rows, all four approved, and `Node` in the `refs:` line and therefore in the set
+`scope-check` compares every commit against (BDL-UX #244). After the fix the two layouts read
+identically: 74 rows, 52 kept, 51 nodes, from one table or from five.
+
+The section's body is therefore read twice, for the two different things it states. The
+blockquote fields are prose the derivation wrote and are collected across every block; the
+tables are its output and each is judged against its own header. Reading both in one pass is what
+made the table boundary depend on where a field happened to stop.
+
 ### The table it reads is read by one reader
 
-The row grammar is `doc_shape.table_cells`, not a parser of this module's own (BDL-068 S1.5).
-`/task-init`'s routing table is read for a different fact by the same function, so "what a row
-is" cannot disagree with itself between the two.
+The row grammar and the table boundary are `doc_sync.tables`, not a parser of this module's own
+(BDL-068 S1.5, S6). `/task-init`'s routing table is read for a different fact by the same
+`table_cells`, and `doc-quality` finds its decision tables with the same `table_blocks`, so
+"what a row is" and "where a table starts" cannot disagree with themselves between the readers.
+The second of those two was added because they did: BDL-UX #213 and #244 are one sentence found
+in two places, hours apart, in one slice.
 
 ## Public API
 
@@ -103,7 +126,8 @@ is" cannot disagree with itself between the two.
 ## Dependencies
 
 - Depends on: `doc_sync.doc_shape.read_sections` — the one fence-aware, depth-aware section
-  reader, so a `## Axes` quoted inside a fenced block is not read as this document's own; and
+  reader, so a `## Axes` quoted inside a fenced block is not read as this document's own;
+  `doc_sync.tables.table_blocks`, the one place that decides where a table starts; and
   `doc_sync.doc_quality.QualityFinding`, the shape every planning-document finding takes.
 - Used by: `application.planning_report` (the one composition behind the Gate step and
   `beadloom docs quality`), `application.impact.section` (the renderer), the
