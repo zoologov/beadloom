@@ -38,9 +38,15 @@ if TYPE_CHECKING:
 
 scenarios("../features/room_locale.feature")
 
-#: The locale leg the fixture declares. This project's own 8-bit spelling, so
-#: the scenario is about the name `ci.yml` publishes rather than an invention.
-_A_LOCALE_LEG = "en_US.ISO-8859-1"
+#: The locale legs the fixture may declare, each with the codec its codeset
+#: names. The first is this project's own 8-bit spelling, so the scenario is
+#: about the name `ci.yml` publishes rather than an invention; the second is
+#: there because the first is a name a RUN can be under, and a scenario that
+#: asserts a declared leg was NOT entered has to declare one this run is not in.
+#: Measured on PR #63: with the 8-bit name written as a constant, the scenario
+#: asserted the opposite of what was true on `tests-locale (en_US.ISO-8859-1)`
+#: and reddened the one leg that exists for this dimension.
+_LOCALE_LEG_CANDIDATES = (("en_US.ISO-8859-1", "iso8859-1"), ("C", "ascii"))
 
 #: A locale no platform has. `xx` is not an ISO 639 language, so this cannot
 #: resolve on any image — including the CI leg that builds a real 8-bit locale,
@@ -76,6 +82,20 @@ def _codec_here() -> str:
     return codecs.lookup(locale.getpreferredencoding(False)).name
 
 
+def _a_leg_in_another_room() -> tuple[str, str]:
+    """``(name, codec)`` of a locale leg whose codec is demonstrably not this run's.
+
+    Derived rather than written down, for the same reason the census derives the
+    other platform and the other interpreter: a constant names a room, and a room
+    is somewhere a run can be.
+    """
+    here = _codec_here()
+    for name, codec in _LOCALE_LEG_CANDIDATES:
+        if codec != here:
+            return name, codec
+    raise AssertionError(f"every candidate leg names the codec this run is under ({here})")
+
+
 def _write_workflow(world: dict[str, Any], job: str) -> None:
     workflows = world["root"] / ".github" / "workflows"
     workflows.mkdir(parents=True, exist_ok=True)
@@ -109,7 +129,7 @@ def _declared(world: dict[str, Any]) -> dict[str, Any]:
 
 @given("a workflow job declaring a locale leg")
 def _a_locale_leg(world: dict[str, Any]) -> None:
-    _write_workflow(world, _locale_job(_A_LOCALE_LEG))
+    _write_workflow(world, _locale_job(_a_leg_in_another_room()[0]))
 
 
 @given("a workflow job declaring a locale that names no character encoding")
@@ -204,7 +224,7 @@ def _the_leg_is_not_entered(world: dict[str, Any]) -> None:
 def _the_reason_names_both_codecs(world: dict[str, Any]) -> None:
     why = _declared(world)["why"]
 
-    assert codecs.lookup(_A_LOCALE_LEG.split(".", 1)[1]).name in why, why
+    assert _a_leg_in_another_room()[1] in why, why
     assert _codec_here() in why, why
 
 
@@ -233,4 +253,4 @@ def _the_leg_is_unresolved(world: dict[str, Any]) -> None:
 
 @then("the locale that leg declares is printed")
 def _the_locale_axis_is_printed(world: dict[str, Any]) -> None:
-    assert world["stdout"].split() == [_A_LOCALE_LEG]
+    assert world["stdout"].split() == [_a_leg_in_another_room()[0]]

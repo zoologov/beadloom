@@ -24,6 +24,12 @@ def _leg(**dimensions: str) -> Room:
     return Room(dimensions=dimensions, source="a workflow: a job")
 
 
+def _locale_here() -> str | None:
+    """The codec this run reports, or ``None`` where it cannot describe one."""
+    value = current_room().dimensions.get("locale")
+    return str(value) if value is not None else None
+
+
 class TestTheCurrentRoomIsDerivedNotTyped:
     def test_it_reports_the_running_interpreter_and_platform(self) -> None:
         import platform
@@ -82,8 +88,17 @@ class TestARunEntersOnlyWhatItCanBeHeldTo:
         assert comparison.entered is False
         assert "python" in comparison.why
 
-    def test_a_dimension_this_run_cannot_describe_is_not_a_match(self) -> None:
-        """The locale legs are a real room this process cannot claim to be in."""
+    def test_a_leg_in_another_locale_is_not_entered_and_the_axis_is_named(self) -> None:
+        """The locale a run is under is a room, so the OTHER one has to be derived.
+
+        This row declared ``locale="C"`` as a constant, on the premise that a
+        locale is a dimension no process can claim. Since `beadloom-0mdo.50` gave
+        the census a locale dimension that premise is false, and it was false on a
+        leg: PR #63's ``tests-locale (C)`` genuinely IS the C room, so the row
+        asserted the opposite of what is true and reddened the leg that exists for
+        this dimension. Derived the way the two rows above derive their platform
+        and their interpreter.
+        """
         import platform
 
         label = {
@@ -91,10 +106,11 @@ class TestARunEntersOnlyWhatItCanBeHeldTo:
             "Darwin": "macos-14",
             "Windows": "windows-latest",
         }[platform.system()]
+        other = "C" if _locale_here() != "ascii" else "en_US.ISO-8859-1"
         comparison = take_census(
-            Path("/nonexistent"), declared=(_leg(os=label, locale="C"),)
+            Path("/nonexistent"), declared=(_leg(os=label, locale=other),)
         ).comparisons[0]
-        assert comparison.entered is False
+        assert comparison.entered is False, f"this run reports locale={_locale_here()!r}"
         assert "locale" in comparison.why
 
     def test_a_runner_label_with_no_known_platform_is_not_a_match(self) -> None:

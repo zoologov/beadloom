@@ -341,19 +341,57 @@ class TestEverySuiteDecodeStatesItsCodec:
         )
 
 
+def _is_surrogate(character: str) -> bool:
+    """A lone surrogate is what an undecodable byte becomes, never a real character."""
+    return 0xD800 <= ord(character) <= 0xDFFF
+
+
+#: Why no row may put a non-ASCII word on a command line. `subprocess` encodes
+#: argv with the PARENT's filesystem codec and CPython decodes it with the
+#: CHILD's, and every child below is deliberately given a non-UTF-8 one, so the
+#: codec on each side is the image's rather than ours. PR #63 failed this way on
+#: all six legs in three different shapes — see
+#: :class:`TestTheSourceReachesTheChildWhateverDecodesTheCommandLine` for the
+#: measurements. Use :func:`_run_source_under` for a source: PEP 263 fixes a
+#: script's default codec at UTF-8, which is a promise argv cannot make.
+_ARGV_MUST_BE_ASCII = (
+    "this word of argv is not ASCII, and argv is encoded by the parent's "
+    "filesystem codec and decoded by the child's, neither of which this suite "
+    "chooses: {word!r}"
+)
+
+
 def _run_under(
-    env_extra: dict[str, str], argv: list[str], cwd: Path
+    env_extra: dict[str, str], argv: list[str], cwd: Path, stdin: str | None = None
 ) -> subprocess.CompletedProcess[str]:
+    for word in argv:
+        assert word.isascii(), _ARGV_MUST_BE_ASCII.format(word=word)
     env = {**os.environ, **env_extra}
     return subprocess.run(  # noqa: S603 — fixed argv, no shell
         argv,
         cwd=cwd,
+        input=stdin,
         capture_output=True,
         encoding="utf-8",  # the harness states its own codec; the child's is the subject
         errors="replace",
         env=env,
         check=False,
     )
+
+
+def _run_source_under(
+    env_extra: dict[str, str], source: str, cwd: Path, *arguments: str
+) -> subprocess.CompletedProcess[str]:
+    """Run *source* in a child through a channel whose codec is not the image's.
+
+    ``python -`` reads the script from stdin, and a Python script's default
+    source encoding is UTF-8 by PEP 263 wherever it is read from — so the parent
+    states the codec on the way out (``encoding="utf-8"``) and the language
+    states it on the way in. A temporary file would decode identically and was
+    measured to; stdin is used because a file puts a PATH back on the command
+    line, and a temporary directory's name is the machine's to choose.
+    """
+    return _run_under(env_extra, [sys.executable, "-", *arguments], cwd, stdin=source)
 
 
 def _preferred_encoding_under(env_extra: dict[str, str]) -> str:
@@ -559,7 +597,7 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
         ``rich``'s own write, because ``surrogateescape`` re-encodes lone
         surrogates and nothing else.
         """
-        done = _run_under(ascii_terminal, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+        done = _run_source_under(ascii_terminal, _RICH_WRITE_PROBE, Path.cwd())
 
         assert done.returncode == 0, done.stderr
 
@@ -567,7 +605,7 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
         self, ascii_terminal: dict[str, str]
     ) -> None:
         """Same requirement as the 8-bit room's: degrade visibly, never silently."""
-        done = _run_under(ascii_terminal, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+        done = _run_source_under(ascii_terminal, _RICH_WRITE_PROBE, Path.cwd())
 
         assert r"\xb1" in done.stdout, done.stdout
 
@@ -613,6 +651,119 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
         assert "UnicodeEncodeError" not in done.stderr, done.stderr
         assert done.returncode == control.returncode, done.stderr
         assert r"\xb1" in done.stdout, done.stdout
+
+
+class TestTheSourceReachesTheChildWhateverDecodesTheCommandLine:
+    """PR #63's red, and it was the harness above rather than its subject.
+
+    The two rows in :class:`TestTheConsoleSurvivesTheHandlerTheImageChose` passed
+    on this machine and failed on all six CI legs. The cause is the CHANNEL, not
+    the platform and not the console policy: ``subprocess`` encodes ``argv`` with
+    the PARENT's filesystem codec (``os.fsencode``) and CPython decodes it with
+    the CHILD's, so a source carrying ``\\xb1`` crosses a command line only while
+    both ends happen to be UTF-8. This module arranges children whose codec is
+    ASCII on purpose, which is exactly where that stops being true.
+
+    IT IS UNREACHABLE FROM A DEVELOPER MACHINE, and that is a fact about macOS
+    rather than about the test. MEASURED here on CPython 3.13.7 / Darwin arm64:
+    under ``_ASCII_ENV`` a child reports ``preferred=ascii`` and ``fs=utf-8`` --
+    macOS forces the filesystem codec whatever the locale says, so argv survives
+    and the rows pass. On Linux the same knobs make the child's filesystem codec
+    ASCII too, and it does not.
+
+    THREE FAILURES, ONE CAUSE, read from PR #63's own logs rather than inferred:
+
+    ==============================  ================  ==================================
+    leg                             parent fs codec   what happened
+    ==============================  ================  ==================================
+    ``tests`` (3.10-3.13)           utf-8             the child decoded ``\\xc2\\xb1``
+                                                      as two surrogates at 170-171 and
+                                                      refused the command
+    ``tests-locale (en_US.ISO-      iso8859-1         the child decoded ``\\xb1`` as one
+    8859-1)``                                         surrogate at 170 and refused it
+    ``tests-locale (C)``            ascii             the PARENT raised
+                                                      ``UnicodeEncodeError`` at 170 and
+                                                      nothing was spawned at all
+    ==============================  ================  ==================================
+
+    The offset is the same 170 in all three because it is the offset of the glyph
+    in :data:`_RICH_WRITE_PROBE`; the count differs because UTF-8 spells ``\\xb1``
+    in two bytes and ISO 8859-1 in one. Both symptoms CI reported -- a non-zero
+    child AND an empty stdout -- are the same event: the command is decoded
+    before a byte of it runs, so a refused command prints nothing.
+    """
+
+    def test_a_command_line_carries_a_source_through_a_codec_neither_end_states(
+        self,
+    ) -> None:
+        """The mechanism, reproduced from the leg's own codec supplied as data.
+
+        The platform cannot be arranged here, so it is not the thing arranged:
+        what the CI child did is decode the parent's bytes with ASCII and
+        ``surrogateescape``, and that is a pure function this room can compute.
+        """
+        sent = _RICH_WRITE_PROBE.encode("utf-8")
+
+        received = sent.decode("ascii", "surrogateescape")
+
+        surrogates = [index for index, ch in enumerate(received) if _is_surrogate(ch)]
+        assert surrogates, "an ASCII-decoding child would have received the source intact"
+        assert received != _RICH_WRITE_PROBE, "the source arrived unchanged, so this row is moot"
+
+    def test_a_command_string_that_arrived_as_surrogates_dies_with_an_empty_stdout(
+        self,
+    ) -> None:
+        """One event, both of CI's symptoms -- which is why the two rows fell together.
+
+        Built by hand rather than through :func:`_run_under`, because this row is
+        ABOUT the channel that function now refuses.
+        """
+        unspellable = "print('this never runs')\n#" + chr(0xDCFF) + "\n"
+
+        # Built here rather than through `_run_under`: the refused channel is the subject.
+        done = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [sys.executable, "-c", unspellable],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+
+        assert done.returncode != 0, done.stdout
+        assert done.stdout == "", done.stdout
+        assert "surrogates not allowed" in done.stderr, done.stderr
+
+    def test_the_command_line_refuses_a_source_it_cannot_promise_to_carry(self) -> None:
+        """The mechanism is removed rather than re-measured: no row may rebuild it.
+
+        A future row that puts a non-ASCII source back on a command line fails
+        HERE, in every room including this one, rather than on a CI leg nobody
+        can enter locally.
+        """
+        with pytest.raises(AssertionError, match="argv"):
+            _run_under(_ASCII_ENV, [sys.executable, "-c", _RICH_WRITE_PROBE], Path.cwd())
+
+    def test_the_source_channel_hands_the_child_the_glyph_under_an_ascii_locale(
+        self, ascii_locale_is_real: str
+    ) -> None:
+        """The positive half, and the half a Darwin machine CAN hold.
+
+        The child's PREFERRED encoding here is ASCII -- the fixture probed it and
+        skips otherwise -- so a channel that read the source in the locale's codec
+        would fail on this machine as well as on a leg. It does not: PEP 263 makes
+        UTF-8 a script's default source encoding, on stdin exactly as on disk.
+
+        The child answers with a name rather than with the glyph, because printing
+        it would make this row a second measurement of the console policy instead
+        of the first measurement of the channel.
+        """
+        answer = "'arrived' if '" + _TOLERANCE_GLYPH + "' == chr(0xb1) else 'mangled'"
+        source = "import sys\nsys.stdout.write(" + answer + ")\n"
+
+        done = _run_source_under(_ASCII_ENV, source, Path.cwd())
+
+        assert done.returncode == 0, f"preferred={ascii_locale_is_real}: {done.stderr}"
+        assert done.stdout == "arrived", done.stdout
 
 
 class TestTheStreamPolicyDoesOnlyWhatItSays:
