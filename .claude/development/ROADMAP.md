@@ -213,9 +213,17 @@ reproducible benchmark on a real codebase.
 bead comment, and a declared mutation target outside the configured source paths is
 reported rather than silently scoring zero.
 
-### P0 — A virgin `beadloom init` leaves the Gate red — CLOSED on the branch, not yet merged
+### P0 — A virgin `beadloom init` leaves the Gate red — SHIPPED in v4.0.0, verified on the published wheel
 
-**`beadloom-e8s4` · BDL-UX #192 · the adopter-facing blocker.**
+**`beadloom-e8s4` (closed) · BDL-UX #192 (closed) · the adopter-facing blocker.**
+
+> **Re-measured 2026-09-10 on the PUBLISHED 4.0.0 wheel, in a virgin git repository that is
+> not this one:** `beadloom init --yes --mode bootstrap` exits 0 and `beadloom ci` in that
+> project exits 0. `domain-needs-parent` now reports `cannot fire: its 'for' kind 'domain'
+> matches none of the 1 nodes in the graph … counted as evaluated but checks nothing`. The
+> rule that used to redden an adopter's first command now names its own empty population,
+> which is the whole of what this epic was for. The heading above said "not yet merged"
+> until this sweep; it had been merged for a week.
 
 `beadloom init --yes --mode bootstrap` exited 0 and then failed its own `beadloom ci`
 on `domain-needs-parent` — a rule the same command wrote one step earlier. The
@@ -250,6 +258,39 @@ neighbouring shape existed — which is the argument for the axes artifact ranke
 this item, not a separate observation.
 
 ## What is being worked on now
+
+### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel
+
+**`beadloom-4fdn` (BDL-UX #282) · `beadloom-5cpe` (BDL-UX #214) · both critical, both blocking
+outside validation.**
+
+Ranked above everything below because of what happens next: the owner is about to run Beadloom
+on another project and then hand it to a team for their own services. Everything in this list
+was found on THIS repository; these two were found on a project that is not it, which is the
+first time that has been true, and both are in the first two commands an outside user runs.
+
+**On a two-package `src/` project**, `init` exits 0 and `beadloom ci` then fails on the
+documents `init` itself just wrote (`missing modules: core`) — and the remediation the failure
+prints, `beadloom sync-update <ref>`, exits 0, reports the pairs re-attested, and leaves the
+verdict exactly where it was. `sync-update` re-baselines hashes; `missing_modules` is a claim
+about content. The adopter follows the instruction, is told it worked, and nothing moves.
+
+**On a single-package `src/` project** — the package named after the project — `init` writes two
+nodes with one `ref_id`, the loader keeps the empty root and discards the domain that carries
+the source, and no command says so. `beadloom ci` exits 0 because `domain-needs-parent` now
+matches nothing: `counted as evaluated but checks nothing`. The green comes from a population
+of zero produced by a silent data loss.
+
+**Why they belong at the top rather than in the debt list.** BDL-UX #192 held this rank as *the
+adopter-facing blocker* and was fixed and shipped in 4.0.0 — the `part_of` edge is emitted, and
+that was verified. The red did not go away; it moved to another leg. An entry named after one
+leg closes when that leg is fixed while the property it was about — *the first two commands
+disagree* — survives. #282 is written about the property.
+
+**Done when** a virgin `init` on either layout is followed by `beadloom ci` rc 0 with no hand
+editing, no check prints a remediation that cannot clear the reason it printed, and a graph file
+carrying a duplicate `ref_id` is reported rather than silently reduced.
+
 
 ### P1 — BDL-066: agent behaviour observability, trace and result
 
@@ -347,15 +388,20 @@ exist. Recorded rather than reopened, because the work is being done here.
 
 | Bead | What |
 |---|---|
-| `beadloom-iur5` | **P1** — the vendored agents snapshot is the #177 loop, one direction short of closed |
 | `beadloom-uxqc` | **P1** — `doctor` should audit the PRODUCED graph, not just the code: islands, unexplained nodes |
 | `beadloom-9glj` | `sync-update` can re-attest a doc nobody read |
 | `beadloom-431c` | `docs audit` checks numbers but never that a documented identifier still exists |
 | `beadloom-1d70` | no signal for a bounded context too large by SUBTREE |
 | `beadloom-2qwb` | centralize remaining inline node-reads |
 | `beadloom-g0c5` | `test_tui.py` connection leak during textual GC |
-| `beadloom-ec1a` | `config-check` does not flag ORPHANED tool adapters |
-| `beadloom-l2f2` | the beads git-hook prints a remediation command that does not exist |
+
+> **Three rows left this table on 2026-09-10, and are named rather than silently dropped:**
+> `beadloom-iur5` (the vendored agents snapshot — removed in BDL-068, and the CHANGELOG's
+> `### Removed` entry is the record), `beadloom-ec1a` (orphaned tool adapters) and
+> `beadloom-l2f2` (the beads git-hook's nonexistent remediation command, whose UX entry #164
+> was withdrawn because `bd import -i` does exist). All three read CLOSED in the tracker while
+> this table still listed them as standing debt. The table is checked against `bd` rather than
+> remembered — that check is what found them, and it is worth repeating at every release.
 
 Two findings were checked on 2026-08-31 and are **still live**: BDL-UX **#147**
 (`beadloom lint` mutates the index — a read-only-sounding verb writes to the
