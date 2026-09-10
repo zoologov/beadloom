@@ -259,6 +259,39 @@ this item, not a separate observation.
 
 ## What is being worked on now
 
+### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel
+
+**`beadloom-4fdn` (BDL-UX #282) · `beadloom-5cpe` (BDL-UX #214) · both critical, both blocking
+outside validation.**
+
+Ranked above everything below because of what happens next: the owner is about to run Beadloom
+on another project and then hand it to a team for their own services. Everything in this list
+was found on THIS repository; these two were found on a project that is not it, which is the
+first time that has been true, and both are in the first two commands an outside user runs.
+
+**On a two-package `src/` project**, `init` exits 0 and `beadloom ci` then fails on the
+documents `init` itself just wrote (`missing modules: core`) — and the remediation the failure
+prints, `beadloom sync-update <ref>`, exits 0, reports the pairs re-attested, and leaves the
+verdict exactly where it was. `sync-update` re-baselines hashes; `missing_modules` is a claim
+about content. The adopter follows the instruction, is told it worked, and nothing moves.
+
+**On a single-package `src/` project** — the package named after the project — `init` writes two
+nodes with one `ref_id`, the loader keeps the empty root and discards the domain that carries
+the source, and no command says so. `beadloom ci` exits 0 because `domain-needs-parent` now
+matches nothing: `counted as evaluated but checks nothing`. The green comes from a population
+of zero produced by a silent data loss.
+
+**Why they belong at the top rather than in the debt list.** BDL-UX #192 held this rank as *the
+adopter-facing blocker* and was fixed and shipped in 4.0.0 — the `part_of` edge is emitted, and
+that was verified. The red did not go away; it moved to another leg. An entry named after one
+leg closes when that leg is fixed while the property it was about — *the first two commands
+disagree* — survives. #282 is written about the property.
+
+**Done when** a virgin `init` on either layout is followed by `beadloom ci` rc 0 with no hand
+editing, no check prints a remediation that cannot clear the reason it printed, and a graph file
+carrying a duplicate `ref_id` is reported rather than silently reduced.
+
+
 ### P1 — BDL-066: agent behaviour observability, trace and result
 
 Docs drafted 2026-08-31, `Status: Draft`, beads not created.

@@ -35,6 +35,44 @@
 
 ## Open Issues
 
+282. [2026-09-10] [CRITICAL] a virgin `init` leaves the Gate RED on the documents it just wrote, and the remediation the error names does not clear it
+
+    **Severity:** critical (it is the adopter's FIRST two commands, and following the instruction printed by the failure reports success while changing nothing about the verdict)
+    **Command:** `beadloom init --yes --mode bootstrap`, then `beadloom ci`, then `beadloom sync-update <ref>`
+    **Context:** measured on the PUBLISHED 4.0.0 wheel, before handing Beadloom to a team for outside validation. The project is not this one: a fresh git repository, `pyproject.toml` naming `myapp`, two packages `src/ledger/` and `src/billing/`, one function each. `uv run --isolated --no-project --with beadloom==4.0.0`.
+    **Measured on 2026-09-10:**
+
+    ```
+    beadloom init --yes --mode bootstrap   rc 0   Graph: 3 nodes, 2 edges
+    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)
+        doc-stale: ledger:  domains/ledger/README.md  (missing modules: core)
+        doc-stale: billing: domains/billing/README.md (missing modules: core)
+    ```
+
+    **Issue (a): `init` writes documents that fail `init`'s own freshness rule.** The skeleton it emits carries `# ledger`, a `## Source` section naming `src/ledger/`, `## Dependencies` and an empty `## Features`. It never names the module `core`, and `missing_modules` is exactly the check that requires it. Nothing the adopter did produced this: it is the output of one command failing the next command in the same quickstart.
+
+    **Issue (b), and the worse half: the remediation named in the failure does not work.** The error says *"run `beadloom sync-update ledger` to review and re-attest"*. Measured:
+
+    ```
+    beadloom sync-update --yes --all       rc 0
+        Re-baselined billing: attested 2 pair(s).
+        Re-baselined ledger:  attested 2 pair(s).
+        Marked 2 ref(s) synced (4 pair(s) total).
+    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)   <- unchanged
+    ```
+
+    `sync-update` re-baselines HASHES. `missing_modules` is a claim about the document's CONTENT — the module has to be named in the prose — so no amount of re-attesting can satisfy it. The command reports success on its own terms and the adopter is told, twice, that four documents are stale, with an instruction that will never move them. That is a loop with no exit inside the tool's own output.
+
+    **What actually clears it,** measured: add a section naming the module to each README by hand. `beadloom ci` then exits 0, `sync-check PASS: 4 pair(s) fresh`. Thirty seconds once you know; undiscoverable from the message.
+
+    **Why this is CRITICAL rather than MEDIUM.** BDL-UX #192 was filed as *"A virgin `beadloom init --yes` leaves `beadloom ci` RED"* and ranked in the ROADMAP as **the adopter-facing blocker**. It was fixed for the `domain-needs-parent` leg and shipped in 4.0.0 — verified. The red did not go away; it MOVED to `sync-check`. An entry that names one leg closes when that leg is fixed, and the property it was really about — *the first two commands disagree* — survives it. This entry is written about the property.
+
+    **Expected:**
+    - the skeleton `init` writes should pass the freshness rule `init` also installs, on the day it is written — either by naming the modules it already knows (they are in the index it just built) or by the pair starting attested;
+    - and separately, `missing_modules` must not print a remediation that cannot fix it. Either name the right action (edit the document; `beadloom docs polish` is the generator) or say plainly that re-attesting will not clear this reason.
+    **Also seen, minor:** every stale pair is reported TWICE — `4 stale doc(s)` for two documents.
+    **Related:** #192 (the same property, one leg earlier), #214 (the other first-run defect, on the single-package layout), #279 (`sync-update --all` re-baselines more than its help names).
+
 281. [2026-09-10] [MEDIUM] the release version is stated in NINE places, and no command names that population — three instruments each check a disjoint part of it and none knows the others exist
 
     **Severity:** medium (nothing ships wrong — every place was found; the cost is that three of the seven fail only once a release is already underway, and one of those is `severity: error`)
@@ -729,7 +767,7 @@
     **Why it is recorded as a class and not a typo:** BDL-067 found three instances of *a user-facing message asserting a fact the code knows to be false* — a comment counting monkeypatch bindings and calling them branches (#192 fix cycle 1), a message blaming Beadloom for the adopter's own rules (cycle 2), a withdrawal claiming a rule failed where none was evaluated (cycle 3). Each arrived the same way: careful reasoning about one shape, not carried across to the neighbouring shape. This is the fourth, one layer up, in the Gate every adopter runs. Three reviews found three of them and each was found only after the previous was fixed, which says the sweep is the deliverable and the individual fix is not.
     **Tracker:** `beadloom-uz8x`. Filed separately from BDL-067 by the same reasoning the owner applied to #214: a different defect on a different surface, deserving its own measurement.
 
-214. [2026-08-31] [HIGH] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
+214. [2026-08-31] [CRITICAL] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
 
     **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)
     **Command:** `beadloom init --yes --mode bootstrap`
@@ -750,6 +788,29 @@
     **Numbering:** first filed as #211, which is already taken by the closed 1.x-description issue of 2026-08-27 further down this file. Caught by the `beadloom-e8s4.6` subagent, which noticed `CHANGELOG.md:17` and `docs/domains/onboarding/README.md:31` citing #211, before the duplicate shipped. The coordinator's own check had missed it: `grep -nE '^21[0-9]\. \['` does not match a closed entry, which is written `211. ~~[`. That is the `mr2l.91` shape — two issues numbered 187 — one allocation away from happening a second time.
     **Tracker:** `beadloom-7c6k`. Filed separately from BDL-067 by owner decision — a different defect with a different fix, deserving its own measurement rather than a line at the end of another PR.
 
+
+    > **RE-MEASURED 2026-09-10 on the PUBLISHED 4.0.0 wheel, and RAISED to critical.** It still
+    > reproduces, and what the re-measurement added is the CONSEQUENCE, which this entry did not
+    > have. On a fresh repository whose package is named after the project (`myapp` /
+    > `src/myapp/`) — the ordinary single-package src-layout — `beadloom init --yes --mode
+    > bootstrap` reports `Graph: 2 nodes` and `beadloom status` then reports `Nodes: 1`. The node
+    > that survives is the empty `service` root; **the one that is dropped is the `domain` node
+    > carrying the source**. No command says so: not `status`, not `doctor` (which reports two
+    > unrelated warnings), not `beadloom ci`, which exits 0.
+    >
+    > **And the green is a population of zero.** With the domain node gone, `domain-needs-parent`
+    > reports `cannot fire: its 'for' kind 'domain' matches none of the 1 nodes in the graph …
+    > counted as evaluated but checks nothing`. Rename the root's `ref_id` by hand so both nodes
+    > survive, and the same Gate turns RED: `Node 'demoapp' (kind=domain) violates require rule
+    > 'domain-needs-parent'`. So on this layout the adopter's green Gate is green BECAUSE a node
+    > was silently discarded — the phantom-population class BDL-068 exists to remove, reached
+    > through the adopter's first command.
+    >
+    > This also narrows a claim made about #192 on 2026-09-10: that entry was verified fixed on a
+    > single-package tree where `beadloom ci` exited 0, and that particular zero was produced by
+    > THIS defect rather than by the fix. The fix itself is real and was confirmed separately —
+    > a two-package project emits both `part_of` edges — but "a virgin init leaves a green Gate"
+    > is false, and #282 records where the red actually is.
 213. [2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions
 
     **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
