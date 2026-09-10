@@ -478,3 +478,26 @@ first (BDL-UX #194, #237). Verify in a clean room built by
 from the bead and refuses a directory it did not create, and say so in those
 words: "green in a clean room over N files" is a different claim from "green on
 the tree" (BDL-UX #181).
+
+### The README pair: Russian is the source, English follows it
+
+`README.ru.md` is where positioning is decided and reviewed. `README.md` is
+brought into line with it afterwards. This is the opposite of the flow documents
+— PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF are English, set by `language: en` in
+`.beadloom/flow.yml` — and the two rules are about different files. Do not
+merge them.
+
+**Correspondence is checked structurally, not by eye.** Split both files on
+blank lines, classify each block as heading / paragraph / code / list / table,
+and compare the sequences, with the number of rows for a list or a table:
+
+    ru == en  ->  same kinds, same order, same lengths
+
+On 2026-09-10 that comparison found a paragraph present in Russian and absent in
+English — the punch line of a section, which the English file had folded into
+the paragraph above it. Both files read correctly on their own, which is exactly
+why reading them does not find this class.
+
+**Nothing enforces this.** There is no gate leg over the pair, so the check
+happens when someone runs it. That gap is filed rather than remembered:
+`beadloom-y8mi`.
