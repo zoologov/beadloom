@@ -47,7 +47,12 @@ graph TD
 | BEAD-08 | S4 dev: the declared document pair and the block comparison | P2 | - | Pending |
 | BEAD-09 | S4 dev: the `readme-pair` gate leg | P2 | 08 | Pending |
 | BEAD-13 | S1 dev: `init --yes` skeletons carry the Public API table (`beadloom-8lmj`) | P1 | - | Pending |
-| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13 | Pending |
+| BEAD-14 | `yn6i`: three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | - | Pending |
+| BEAD-15 | `rqma.1` (#283): `waves --parent` compares against beads already in progress | P1 | - | Pending |
+| BEAD-16 | `rqma.2` (#284): the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row | P1 | - | Pending |
+| BEAD-17 | `6rgr`: `docs polish` matches a node's source by path component, not string prefix | P1 | - | Pending |
+| ~~BEAD-18~~ | ~~`rqma.3` (#285)~~ — **withdrawn, not a defect** | — | — | Closed |
+| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13, 14, 15, 16, 17 | Pending |
 | BEAD-11 | review | P0 | 10 | Pending |
 | BEAD-12 | tech-writer | P1 | 11 | Pending |
 
@@ -212,6 +217,31 @@ the graph. The bead's own author corrected the description to say so.
 - [ ] `init --yes` on a virgin two-package project writes skeletons carrying the Public API table
 - [ ] `init --yes` and the wizard write the same skeleton for the same project, measured
 - [ ] the load-bearing order — skeletons before the reindex that loads their `docs:` patch — still holds
+
+### BEADS 14–17: the process-affecting extension of 2026-09-11
+
+Added at the owner's request under the rule *other critical or important defects that directly
+affect the development process*; the PRD's *Scope extension* section says why each qualifies.
+Their axes were DERIVED, with each Explore run told to mark non-Python ownership on every row —
+the lesson of #284 applied to the ruling that added #284.
+
+- **BEAD-14, `beadloom-yn6i`** — `tui/app.py`, `site_dashboard/alerts.py` and `scanner/prime.py`
+  print `stale doc(s)` over a count of pairs, and `prime` drops the code file. Done when each
+  surface counts pairs and says so, or counts documents and says that, and `prime` names the code
+  file. **Check before finalising:** `site/.vitepress/theme/components/AlertBanner.vue:38` displays
+  the alert text and is outside `scan_paths` — confirm whether it hard-codes the wording.
+- **BEAD-15, `beadloom-rqma.1` (BDL-UX #283)** — `waves --parent` builds membership from `bd ready`
+  (`waves/population.py:268`), so a bead in progress under the same parent is never compared. Done
+  when running beads are compared and a serialisation against running work is named separately.
+- **BEAD-16, `beadloom-rqma.2` (BDL-UX #284)** — the `/task-init` source template says, where a
+  person rules a row, that the axis a node surfaced under is not its role; and `impact` names a
+  node's unreadable ownership on that node's row. `axes-section` is in scope because it READS the
+  row format this changes.
+- **BEAD-17, `beadloom-6rgr`** — `doc_generator._symbols_for_node` matches with
+  `fp.startswith(source)`, so `src/ledger/` takes `src/ledger_archive/`. Done when the match is by
+  path component and a case covers a prefix-sharing sibling and a single-file source.
+
+**Withdrawn — BEAD-18, `beadloom-rqma.3` (BDL-UX #285).** Opened on a misdiagnosis; see the PRD.
 
 ### BEAD-10: test — the acceptance scenarios
 

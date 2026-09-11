@@ -73,7 +73,18 @@ reason it qualifies:
   surfaced under. Three nodes in this epic were ruled out as blast radius and turned out to be
   work sites. Found while running this epic.
 
-The goals below are unchanged; these four add to them rather than replacing any.
+- **`beadloom-6rgr`** — `docs polish` attributes a sibling directory's symbols to a node whose
+  source is a string prefix of it: `src/ledger/` takes `src/ledger_archive/`'s symbols. Found by
+  `beadloom-8lmj`. It qualifies under the owner's rule because `polish` output is what an AI agent
+  is told to describe a node from — an agent writing `ledger`'s documentation is handed a function
+  from a different package. Added on the owner's decision after being offered as a borderline P3.
+
+**One bead was added and withdrawn the same day.** `beadloom-rqma.3` (BDL-UX #285) was opened on
+the coordinator's diagnosis that `waves` ignores a `refs:` line appended to notes. An Explore run
+showed `waves` unions every line and had named the bad ref in its own output, which the
+coordinator had truncated. It is closed as not-a-defect and is not part of this epic's scope.
+
+The goals below are unchanged; these five add to them rather than replacing any.
 
 ## Impact
 
