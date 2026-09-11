@@ -521,3 +521,110 @@ def then_the_readable_files_still_answer(world: dict[str, Any]) -> None:
     assert "half_saved" not in {command["path"] for command in _payload(world)["commands"]}
     assert len(commands["run"]["branches"]) == 4
     assert "sys.exit(0)" in commands["run"]["exits"]
+
+
+# ---------------------------------------------------------------------------
+# BDL-UX #284 — a row names the files its node owns and this derivation did not read
+# ---------------------------------------------------------------------------
+
+_MANIFEST = '''\
+"""The target: reads a manifest and nothing else."""
+
+
+def read_manifest(root):
+    return (root / "manifest.txt").read_text()
+'''
+
+_GENERATOR = '''\
+"""The caller, which renders a template its own node owns."""
+from pathlib import Path
+
+from app.manifest import read_manifest
+
+TEMPLATES = Path(__file__).parent / "templates"
+
+
+def render_domain(root):
+    name = read_manifest(root)
+    return (TEMPLATES / "domain.md.txt").read_text().format(name=name)
+'''
+
+_OWNED_TEMPLATE = "src/app/skel/templates/domain.md.txt"
+
+
+@given("a project whose caller renders a template its own node owns")
+def given_templated_project(world: dict[str, Any]) -> None:
+    root = world["home"] / "templated"
+    files = {
+        "pyproject.toml": '[project]\nname = "app"\nversion = "0.1.0"\n',
+        "src/app/__init__.py": "",
+        "src/app/skel/__init__.py": "",
+        "src/app/manifest.py": _MANIFEST,
+        "src/app/skel/generator.py": _GENERATOR,
+        _OWNED_TEMPLATE: "# {name}\n\n## Source\n",
+        "docs/manifest.md": "# manifest\n\nReads the manifest.\n",
+        "docs/skel.md": "# skel\n\nRenders the skeleton.\n",
+    }
+    for relative, text in files.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text, encoding="utf-8")
+    nodes = [
+        {
+            "ref_id": "manifest",
+            "kind": "feature",
+            "summary": "reads the manifest",
+            "source": "src/app/manifest.py",
+            "docs": ["manifest.md"],
+        },
+        {
+            "ref_id": "skel",
+            "kind": "feature",
+            "summary": "renders the skeleton from its templates",
+            "source": "src/app/skel/",
+            "docs": ["skel.md"],
+        },
+    ]
+    graph = root / ".beadloom" / "_graph"
+    graph.mkdir(parents=True)
+    (graph / "graph.yml").write_text(yaml.dump({"nodes": nodes}), encoding="utf-8")
+    world["root"] = root
+
+
+@when("impact renders the Axes section for the target that caller calls")
+def when_render_the_section(world: dict[str, Any]) -> None:
+    argv = ["impact", "src/app/manifest.py", "--project", str(world["root"])]
+    world["section"] = CliRunner().invoke(main, [*argv, "--section"])
+    _run(world, "src/app/manifest.py")
+
+
+def _section_row(world: dict[str, Any], axis: str, node: str) -> dict[str, str]:
+    result = world["section"]
+    assert result.exit_code == 0, result.output + str(result.exception)
+    lines = result.stdout.splitlines()
+    header = next(line for line in lines if line.startswith("| Axis |"))
+    names = [cell.strip() for cell in header.strip("|").split("|")]
+    row = next(line for line in lines if line.startswith(f"| {axis} | {node} |"))
+    return dict(zip(names, (cell.strip() for cell in row.strip("|").split("|")), strict=True))
+
+
+@then("the caller's row names the template its node owns")
+def then_caller_row_names_the_template(world: dict[str, Any]) -> None:
+    row = _section_row(world, "callers", "skel")
+    assert row["Owns unread"] == f"1 — `{_OWNED_TEMPLATE}`"
+
+
+@then("the target's row states that its node owns no file the derivation could not read")
+def then_target_row_states_none(world: dict[str, Any]) -> None:
+    assert _section_row(world, "branches", "manifest")["Owns unread"] == "none"
+
+
+@then("the unresolved population names the node that owns the unread template")
+def then_unresolved_names_the_owner(world: dict[str, Any]) -> None:
+    gaps = [
+        entry
+        for entry in _payload(world)["unresolved"]
+        if entry["kind"] == "node-owns-unread-files"
+    ]
+    assert [gap["where"] for gap in gaps] == [_OWNED_TEMPLATE]
+    assert "skel" in gaps[0]["detail"]
+    assert "node-owns-unread-files" in world["human"].output

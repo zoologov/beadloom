@@ -78,6 +78,7 @@ derivation could not resolve.
 | `commands` | each function's branches, by the guard the source spells, and every way it ends |
 | `boundary` | the node and bounded context each site sits in, and whether the change leaves the target's own |
 | `unresolved` | what this derivation could not read |
+| `unread_ownership` | per node the answer names, the files that node owns and this derivation did not read |
 
 `co_writers` carries `resolved` as well as `sites`, because *no population* and
 *an empty population* are different statements and conflating them is how a
@@ -114,6 +115,7 @@ sentence, and a place, so a human can go and look.
 | `unresolved-terminator-name` | a name imported from outside the standard library, which could be a `NoReturn` helper this answer does not list |
 | `name-defined-more-than-once` | a name in this answer with two definitions under the root, which the bare-name call graph merges |
 | `no-node-for-path` | a found site the graph does not own |
+| `node-owns-unread-files` | a node this answer names owns files this derivation does not read — a template, a configuration file — so a change that has to reach them is on no axis here |
 
 Terminator names are bound from the module's **own** imports and only from the
 standard library. Asking a project-local object would mean importing the tree
@@ -161,6 +163,44 @@ record: extend `beadloom docs audit`, which already reads non-Python artifacts a
 already verifies command mentions, rather than teaching this derivation a second
 grammar. Until something is decided, a non-Python target is `unresolved` and says
 so, which is a true answer rather than a missing one.
+
+### What a named node owns that this derivation did not read
+
+BDL-UX #284, measured over BDL-069. Three nodes were ruled out of scope as blast radius and
+turned out to be the sites the fix had to reach, and every re-ruling moved the same way. Two of
+the three were Python and were misread. The third, `onboarding`, was invisible: it surfaced as a
+caller, the fix lived in `onboarding/templates/docs/core/*.md.txt`, and this derivation reads
+`.py`. Nothing in the answer pointed from those templates to the node that owns them.
+
+So `unread_ownership` lists, for every node in `boundary.nodes_touched`, the files that node
+owns and this derivation did not read. The population is every file under the node's declared
+source whose suffix is not `.py`, walking past the directories a tool generates — `.git`,
+`__pycache__`, `node_modules`, `.venv`, `venv` and the checkers' caches — and past `.DS_Store`.
+Ownership is `GraphBoundary.owner_of`, the one most-specific-wins rule, so a file a child node
+owns is never counted against its parent. Each owning node is also a `node-owns-unread-files`
+entry in `unresolved`, naming the first file, and the `## Axes` section writes the fact on the
+node's own row in the `Owns unread` column.
+
+Measured on this repository, macOS, foreground, on the tree: `impact
+src/beadloom/onboarding/presets.py --section` writes `49 —
+src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` on both `onboarding` rows. Over
+ten nodes, including `onboarding`, `beadloom` and `vitepress-site`, the walk took 0.119 s.
+
+Three limits are stated rather than hidden:
+
+- **It does not say the change reaches those files.** Whether a function reads a template is a
+  runtime fact, and inferring it from string literals would be a confident guess. The answer says
+  the node owns surface this derivation is blind to, which is what a person needs before reading
+  a `callers` row as "not changed".
+- **A node's linked documents are not counted.** Every node has one, and `sync-check` owns the
+  question of whether a change left it stale.
+- **Generated files outside the named directories are counted.** `vitepress-site` owns 755 such
+  files, most of them under `site/.vitepress/cache` and `site/.vitepress/dist`. That node owns no
+  Python, so no row names it. The count errs toward recall because the failure it answers was a
+  silence.
+
+With no index there is no owner, so `unread_ownership` is empty, `no-graph-index` says why, and
+the section writes `unknown — no index` on a row rather than `none`.
 
 ### How wide the sweep is, and how it says so
 
@@ -249,8 +289,9 @@ for another.
 |---|---|
 | `seeds.py` | the seed rule, the declared effect table, and the sinks a target reaches |
 | `axes.py` | the four questions, computed over a seed set, each branch count carrying the seat it was taken from |
-| `boundary.py` | which node owns a path, and the bounded context above it — `owner_of(path)` and, since BDL-068 S1.6, `context_of(node)` for a caller that starts from a DECLARED node and has no path to look it up by |
+| `boundary.py` | which node owns a path, and the bounded context above it — `owner_of(path)` and, since BDL-068 S1.6, `context_of(node)` for a caller that starts from a DECLARED node and has no path to look it up by; `source_of(node)` since BDL-UX #284 |
 | `unresolved.py` | what the derivation could not read, as a population |
+| `unread_ownership.py` | the files each node the answer names owns and the derivation did not read |
 | `answer.py` | the vocabulary and the one orchestration every rendering reads |
 | `render.py` | that one answer as a dictionary and as text |
 | `section.py` | that one answer as the `## Axes` section a work item's document carries |
@@ -274,8 +315,9 @@ from beadloom.application.impact.section import render_axes_section  # -> str
 
 `render_axes_section` is a THIRD rendering of the same computation, not a third
 answer (BDL-068 S1.4). It writes the derivation's half — the seed, the rule, the
-axes and the population the derivation could not read — and leaves the person's
-scope decision undecided, because a renderer that filled that column in would be
+axes, the files each row's node owns and the derivation could not read, and the
+population the derivation could not read — and leaves the person's scope decision
+undecided, because a renderer that filled that column in would be
 deciding the thing the section exists to record. An absent seed renders as the
 word `none` with every axis below it unresolved, never as an empty population.
 The grammar is `doc_sync.axes_section`'s, imported rather than restated, and a

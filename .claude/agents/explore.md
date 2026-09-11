@@ -24,15 +24,16 @@ One `## Axes` section, in the shape `beadloom impact --section` renders, and not
 > **Seed:** <the seed, and the rule that derived it>
 > **Unresolved:** <the population the derivation could not read>
 
-| Axis | Node | Sites | In scope | Why |
-|---|---|---|---|---|
-| co-writers | <node> | <n> — `<path>:<line>` | ? |  |
-| callers    | <node> | <n> — `<path>:<line>` | ? |  |
-| branches   | <node> | `<command>`: <n> branch(es), <n> exit form(s) | ? |  |
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|---|---|---|---|---|---|
+| co-writers | <node> | <n> — `<path>:<line>` | <n> — `<path>` or none | ? |  |
+| callers    | <node> | <n> — `<path>:<line>` | <n> — `<path>` or none | ? |  |
+| branches   | <node> | `<command>`: <n> branch(es), <n> exit form(s) | <n> — `<path>` or none | ? |  |
 ```
 
 - **Every site is a path and a line.** "Touches the loader" is not a site; ``src/pkg/loader.py:171`` is.
 - **The `In scope` column stays `?`.** The derivation's half is yours; the scope decision is the person's, and a row you decide for them is a decision nobody took.
+- **The axis a node surfaced under is not its role.** The axis is the node's relation to the seed, so do not describe a `callers` row as "not changed" or "blast radius" — that is the ruling, and a node that calls into the change can own what the change must edit. Carry the `Owns unread` cell exactly as the command writes it: it names the files the node owns that the derivation could not read, and it is the one place the person ruling the row sees them.
 - **No narrative.** No summary paragraph, no assessment, no recommendation. If something must be said that the table cannot hold, it goes in one line under the table headed `Not derivable:` — and it names what could not be derived, not what you think about it.
 
 ### Work-start protocol

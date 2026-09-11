@@ -132,3 +132,20 @@ Feature: impact answers from the source, and names the seed it answered from
     When impact runs against the package holding it
     Then the answer still reports the branches of the files that did parse
     And the unresolved population names the target it could not read
+
+  # BDL-UX #284. Three nodes were ruled out of an epic's scope as blast radius and
+  # turned out to be the sites the fix had to reach. One of them was not misread:
+  # it was invisible. The fix reached `.md.txt` templates that node owned, this
+  # derivation reads Python, and the one place an answer names what it could not
+  # read -- the section's `Unresolved` line -- said nothing about them. Nothing
+  # pointed from the unread population to the node that owns it, so a person
+  # ruling the node's `callers` row had no row that said so.
+
+  @bead:beadloom-rqma.2
+  Scenario: A row names the files its node owns that the derivation could not read
+    Given a project whose caller renders a template its own node owns
+    And the project is indexed
+    When impact renders the Axes section for the target that caller calls
+    Then the caller's row names the template its node owns
+    And the target's row states that its node owns no file the derivation could not read
+    And the unresolved population names the node that owns the unread template
