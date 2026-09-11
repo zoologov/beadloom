@@ -35,7 +35,15 @@
 
 ## Open Issues
 
-285. [2026-09-11] [MEDIUM] a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line
+285. [2026-09-11] [WITHDRAWN] ~~a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line~~
+
+    > **WITHDRAWN 2026-09-11, the same day, by the coordinator who filed it. The entry is wrong and the instrument was right.**
+    > An Explore run over the code found `waves/scope.py:175` `DECLARATION_FIELDS = (title, description, design, notes)` and `scope.py:138` unioning every anchored `refs:` line; `scope.py:225,239` mark the whole bead `ref_not_in_graph` when ANY one ref is unknown. The SPEC says so (`wave-plan/SPEC.md:51`, "every occurrence is read").
+    > So the appended line WAS read. It was unioned with the description's line, the union still carried `site-dashboard`, and one unknown ref poisons the bead. Removing `site-dashboard` resolved it — which is what a union predicts, and the entry misread as "the description wins".
+    > **And `waves` named the cause.** The same run's output carries, at line 52: `FINDING: unresolved_scope: beadloom-yn6i — ref_not_in_graph (site-dashboard)`. The filer read the output with `sed -n '1,22p'` and cut that line off. The diagnosis was drawn from a truncated answer — the pipe-masking shape, this time on content rather than an exit code.
+    > **The inferred unsafe case cannot happen.** A union can only widen a scope; a stale narrower line cannot narrow it.
+    > Bead `beadloom-rqma.3`, opened for this entry, is closed as not-a-defect. Kept rather than deleted, as this log keeps its withdrawals.
+    > **Not withdrawn, and not measured:** the same Explore run read that `mcp_server.py:759-763` takes the alphabetically FIRST declared ref and that `mcp.md:333` describes the fields as "design/description" — a second reader of the declaration that may disagree with `waves`. That is READ, not run, and is not this entry.
 
     **Severity:** medium (measured failing SAFE — an unreadable description scope serialises against everything; the unsafe case is inferred and not measured, see below)
     **Command:** `bd update <bead-id> --append-notes "refs: ..."`, then `beadloom waves`
