@@ -25,7 +25,7 @@ has been launched.
 | `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | ✓ done |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
-| `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | in progress |
+| `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -325,10 +325,20 @@ Gate owner of a wave of one, two claims. Green in a clean room over 18 carried f
 from `e3a0ab1d` with its own interpreter: pytest 10126 passed, 61 skipped, 17 xfailed; ruff
 clean; `mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. That room has no
 `.git`, so its sync-check verified none of 461 pairs and its scope-check skipped. Green on the
-tree at `e3a0ab1d` plus this bead's files, the only other difference being the tracker's own
-`.beads/` files: pytest 10174 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0 over 461 fresh
-pairs. Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs and both locale
-legs are unmeasured, and the target sweep does not vary the interpreter mypy runs under.
+tree at `801a9a9b`, after this bead landed on top of the coordinator's `5f135109`: pytest 10174
+passed, 13 skipped, 17 xfailed, with `HEAD` unchanged across the run; `beadloom ci` rc 0 over
+461 fresh pairs. An earlier tree run at the same commit failed one test,
+`test_the_live_repo_index_is_byte_identical_after_a_real_evaluation`, because this bead ran
+`beadloom waves` and `bd comments add` against the live repository while it ran. That test's
+own docstring names that confound, it passed alone, and the full re-run with nothing else
+writing is the verdict above. Neither verdict entered any of the 21 declared rooms, so the
+Ubuntu legs and both locale legs are unmeasured, and the target sweep does not vary the
+interpreter mypy runs under.
+
+Measured on this epic after landing, while this bead was still in progress:
+`beadloom waves --parent beadloom-rqma` answered `3 against 1 running bead(s)`. All three ready
+beads wait for `beadloom-rqma.1`: `6rgr` over `doc-generator`, and `rqma.2` and `yn6i` over
+`agent-prime`. Both nodes are reached through the `onboarding` ref this bead declares.
 
 ## Waves
 
