@@ -17,6 +17,7 @@ has been launched.
 |---|---|---|---|---|---|
 | `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ✓ done |
 | `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | ✓ done |
+| `beadloom-8lmj` | S1 | `init --yes` skeletons carry the Public API table | P1 | — | ✓ done |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
@@ -271,6 +272,30 @@ passed, `mypy --strict` against targets 3.10 to 3.13, and `beadloom ci` rc 0 ove
 A tree run taken while that commit was landing failed one issue-log test, and the same test
 passed at `44034c81` alone and at `1e63bf14`. Neither verdict entered any of the 21 declared
 rooms, so the Ubuntu and locale legs are unmeasured.
+
+**2026-09-11 — S1 dev (`beadloom-8lmj`) landed at `0754003a`.** A skeleton's Public API table
+is parsed from the code under the node's source, and no longer read from the index.
+
+The half of the bead that had only been read was measured first, and it held. On a wheel built
+from this tree, against a foreign project holding `src/ledger/` and `src/billing/`, the wizard
+wrote the table and `init --yes` did not. `diff -r` between the two `docs/` trees differed in
+exactly the two tables, and `beadloom ci` was rc 0 on both. The measurement found the defect
+wider than the bead said. `init --bootstrap` wrote the same table-less documents as `--yes`,
+and `docs generate` on a clone wrote them too, because `init` lists the index in `.gitignore`.
+Three of four ways to write a skeleton had no index, and only the wizard had one.
+
+That count chose the fix. Reindexing before and after inside `non_interactive_init` would have
+closed one of the four. It would also have left the document a function of index state, which
+every caller then has to remember — the shape BDL-067 `.18` and `.21` closed at two callers
+and the review of `.20` found open at a third. The parser is the one the reindex calls per
+file, so the two readers see one population. A test builds a real index and compares them.
+They differ in one corner that was measured: the index reader matches by string prefix and
+gives `src/ledger/` the symbols of `src/ledger_archive/`. That reader still serves
+`docs polish`, and the defect is filed as `beadloom-6rgr`.
+
+The init order is untouched. After the fix, the `--yes` `docs/` tree is byte-identical to the
+one the wizard wrote before it. Parsing is lazy because unconditional parsing was measured: on
+this repository it walked 17 294 files in about 13 s, for a run that wrote nothing.
 
 ## Waves
 
