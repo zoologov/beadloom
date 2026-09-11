@@ -17,13 +17,13 @@ has been launched.
 |---|---|---|---|---|---|
 | `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ready |
 | `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | blocked |
-| `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ready |
+| `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
-| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | blocked |
+| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ready |
 | `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ready |
 | `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | blocked |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
-| `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ready |
+| `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -122,6 +122,24 @@ Two corrections came out of the wave, and neither was made by the coordinator:
 A follow-up was opened rather than absorbed: `beadloom-4axf` — the graph-file skip policy lives
 in a domain the graph domain may not import, so three readers restate it. The duplication is
 forced by a boundary this project declared, not by carelessness.
+
+**2026-09-11 — wave 2 landed.** `beadloom-cgco` at `63430c9e`, `beadloom-dibq` at `b8b05e16`.
+The gate owner reported green in a clean room over 10 carried files and, separately, green on
+the tree at `b8b05e16` — pytest 9964 passed, ruff, `mypy --strict` on each of 3.10–3.13, and
+`beadloom ci` rc 0 with `readme-pair PASS: 1 pair(s) held, 109 block(s) compared, 0 finding(s)`.
+It then named what those two verdicts do NOT cover: both were taken in the same local room, so
+the eight Ubuntu legs and the two locale legs remain unmeasured. That sentence is the reason
+the wave can be trusted as far as it goes and no further.
+
+`beadloom-cgco` found the defect wider than the plan had it. The plan named two node emitters;
+the measurement found five sites — `bootstrap.py` and `doc_classify.py` emit, and
+`import_scan.py` and `parent_edges.py` were RECOMPUTING a cluster's `ref_id` rather than reading
+the one it was written under. Four independent derivations of one name, agreeing by luck. A
+single allocator (`scanner/ref_ids.py`) now hands them out and the others read.
+
+Ten unit cases and all three scenarios were measured red against HEAD before the fix, on a
+project built for the purpose. On a repository where the defect does not reproduce, a test that
+was never red is a population of zero wearing a green tick.
 
 ## Waves
 
