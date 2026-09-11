@@ -52,7 +52,8 @@ graph TD
 | BEAD-16 | `rqma.2` (#284): the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row | P1 | - | Pending |
 | BEAD-17 | `6rgr`: `docs polish` matches a node's source by path component, not string prefix | P1 | - | Pending |
 | ~~BEAD-18~~ | ~~`rqma.3` (#285)~~ — **withdrawn, not a defect** | — | — | Closed |
-| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13, 14, 15, 16, 17 | Pending |
+| BEAD-19 | `rqma.4`: one helper for 'a file lies under a node's source', called by all three sites | P1 | - | Pending |
+| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13, 14, 15, 16, 17, 19 | Pending |
 | BEAD-11 | review | P0 | 10 | Pending |
 | BEAD-12 | tech-writer | P1 | 11 | Pending |
 
@@ -240,6 +241,15 @@ the lesson of #284 applied to the ruling that added #284.
 - **BEAD-17, `beadloom-6rgr`** — `doc_generator._symbols_for_node` matches with
   `fp.startswith(source)`, so `src/ledger/` takes `src/ledger_archive/`. Done when the match is by
   path component and a case covers a prefix-sharing sibling and a single-file source.
+
+- **BEAD-19, `beadloom-rqma.4`** — a class fix. "A file lies under a node's source" is written three
+  times: `doc_generator._symbols_for_node` (path component, fixed by `6rgr`),
+  `reindex/enrichment.py` routes (string prefix, broken), `git_activity._map_file_to_node`
+  (path component, already right). One helper replaces all three. The sites are in three domains —
+  `onboarding`, `application`, `infrastructure` — so the helper goes where all three may import it,
+  chosen against `beadloom lint --strict` (the `beadloom-4axf` boundary is the precedent). Done when
+  all three call it, a case covers a prefix-sharing sibling and a single-file source, and the routes
+  on the measured foreign project no longer leak across siblings.
 
 **Withdrawn — BEAD-18, `beadloom-rqma.3` (BDL-UX #285).** Opened on a misdiagnosis; see the PRD.
 

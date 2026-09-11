@@ -79,12 +79,18 @@ reason it qualifies:
   is told to describe a node from — an agent writing `ledger`'s documentation is handed a function
   from a different package. Added on the owner's decision after being offered as a borderline P3.
 
+- **`beadloom-rqma.4`** — `reindex` attributes a prefix-sharing sibling's API routes to a node,
+  and `docs polish` hands them to an agent. Found by `beadloom-6rgr`, the same defect in a second
+  place. Taken on the owner's decision **as a class fix**: the rule "a file lies under a node's
+  source" is implemented three times independently — two right, one wrong — so the fix is one
+  shared helper all three call, which is what stops a fourth site being born with the defect.
+
 **One bead was added and withdrawn the same day.** `beadloom-rqma.3` (BDL-UX #285) was opened on
 the coordinator's diagnosis that `waves` ignores a `refs:` line appended to notes. An Explore run
 showed `waves` unions every line and had named the bad ref in its own output, which the
 coordinator had truncated. It is closed as not-a-defect and is not part of this epic's scope.
 
-The goals below are unchanged; these five add to them rather than replacing any.
+The goals below are unchanged; these six add to them rather than replacing any.
 
 ## Impact
 

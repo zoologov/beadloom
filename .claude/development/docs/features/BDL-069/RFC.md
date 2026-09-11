@@ -63,7 +63,7 @@ The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`
 `markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled as the work landed — `reindex`,
 `graph-diff` and `onboarding`. Sixteen at that point; the 2026-09-11 extension brought it to
 twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wave-plan` and
-`axes-section` re-ruled from out to in.
+`axes-section` re-ruled from out to in. `rqma.4` then added `git-activity`: twenty-four.
 
 ## Axes
 
@@ -117,6 +117,7 @@ twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wa
 | callers | graph | 1 | no | reader downstream of the loss |
 | callers | cli | — | **yes** | **extension, NEW, `yn6i` and `rqma.1`.** Surfaced in no run: it owns `docs/services/cli.md`, whose `prime` section (`:1224`) and `waves --parent` section (`:1371-1386`) both carry wording the two fixes change |
 | branches | impact | `render_axes_section`, `open_boundary` | **yes** | **extension, NEW, `rqma.2` (#284).** Renders the row that must name unreadable ownership; owns `impact/SPEC.md:107,145-151,230` and `impact.feature:17` |
+| callers | git-activity | 1 — `src/beadloom/infrastructure/git_activity.py` | **yes** | **extension, NEW, `rqma.4`.** `_map_file_to_node` is one of three independent implementations of 'a file lies under a node's source' — the correct one. Owned per `GraphBoundary.owner_of`; in scope because the fix is one helper all three call |
 | callers | doc-shape-requirements | 1 | no | extension; a caller of the freshness surface |
 | callers | doc-templates | 2 | no | extension; a caller, and `qylh` already changed the templates it serves |
 | callers | review-brief | 1 | no | extension; a caller |
