@@ -112,7 +112,60 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
                     highest are stated nowhere and are unaccounted for, not free
    ```
 
-7. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
+7. **readme-pair** — the project's DECLARED document pairs, compared by shape
+   (BDL-069 S4). This repository ships `README.md` and `README.ru.md` and
+   nothing held them against each other; on 2026-09-10 the Russian file carried
+   a paragraph the English one had folded away, and the only number that
+   differed between them was a line count — 362 against 360 — which nothing
+   reads and which a translator wrapping two sentences differently moves by the
+   same amount. The drift was found by a person reading the two files side by
+   side. The comparison is `doc_sync.document_pairs`, and it compares the
+   sequence of blocks each document is built from rather than its text: the
+   files are in two languages, so a text comparison is a check somebody has to
+   switch off.
+
+   Like `issue-log` beside it this step **BLOCKS**, and for the same kind of
+   reason: a block one document has and the other does not is not an opinion
+   about prose, it is a statement one language makes and the other does not, and
+   the repair fits in the commit that trips it. A declared file that could not be
+   read fails too — a declaration pointing at nothing would otherwise report
+   `0 finding(s)` having compared no document at all, which is the false green
+   this leg exists to remove.
+
+   **It cannot redden a project that has not opted in.** The pair is DECLARED
+   under `document_pairs:` in `.beadloom/config.yml`; an adopter's translated
+   README is their business and a check that guessed `README.<lang>.md` would
+   turn somebody's green tree red on the upgrade that ships it. A project
+   declaring none is a NAMED skip that states the key to add.
+
+   The line names the population and not only the verdict, because `0
+   finding(s)` alone cannot be told apart from a declaration that left nothing
+   to compare. Two clauses qualify it and are absent when there is nothing to
+   qualify: `UNREADABLE:` names each declared path nothing could read, and
+   `NOT COMPARED:` counts the pairs whose two files were read and hold no block
+   between them — that second case sets `not_verified`, so the step reports
+   **WARN** rather than PASS. The naming of pairs stops at three while the counts
+   in front of it cover all of them, so a project with a dozen translations gets
+   a line a reader can finish. Measured on this repository, 2026-09-11:
+
+   ```
+   readme-pair PASS | 1 pair(s) held, 109 block(s) compared, 0 finding(s);
+                      README.ru.md <-> README.md (109 block(s))
+   ```
+
+   The Russian file is the SOURCE in this repository's own declaration and the
+   English one follows it, which is the direction the drift ran on 2026-09-10.
+   Nothing in the check prefers one language; the pair states which document the
+   other is held against.
+
+   **A known limit, stated rather than silent.** A half-written `document_pairs:`
+   entry — one with a `source:` and no `follower:`, or a path resolving outside
+   the project — is refused by the resolver with a logged warning and reaches
+   this step as the same skip a project declaring nothing gets. The step cannot
+   tell the two apart, because what it receives is the resolved pair list. Making
+   the refusal visible belongs to `doc_sync.document_pairs`, not here.
+
+8. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
    with at least one closed bead that declared a graph node with no AS-IS
    document, plus a WORKING exemption that excuses nothing and a WORKING
    declaration the graph contradicts. Every finding is a `warn` and the step is
@@ -175,7 +228,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-8. **scope-check** — did this branch leave the axes its work item declared?
+9. **scope-check** — did this branch leave the axes its work item declared?
    (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
    push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
@@ -191,7 +244,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
-9. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+10. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -201,8 +254,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-10. **doctor** — graph integrity.
-11. **federate** — `federate --fail-on` when hub exports are supplied.
+11. **doctor** — graph integrity.
+12. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

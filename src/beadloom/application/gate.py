@@ -59,6 +59,12 @@ if TYPE_CHECKING:
     from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.doc_quality import QualityFinding
+    from beadloom.doc_sync.document_pairs import (
+        DocumentPair,
+        PairComparison,
+        PairReport,
+    )
+    from beadloom.doc_sync.document_pairs import Finding as PairFinding
     from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
@@ -261,6 +267,7 @@ def run_ci_gate(
     steps.append(_step_docs_audit(project_root))
     steps.append(_step_docs_quality(project_root))
     steps.append(_step_issue_numbers(project_root))
+    steps.append(_step_readme_pair(project_root))
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
@@ -768,6 +775,202 @@ def _issue_number_finding(finding: NumberFinding) -> Finding:
         "locations": [{"file": finding.where}],
         "why": finding.why,
         "remediation": finding.remediation,
+    }
+
+
+#: How many pairs the ``readme-pair`` line names before it stops listing. The
+#: counts in front of the list are over ALL of them; only the naming is bounded,
+#: so a project with a dozen translations gets a line a reader can finish
+#: without the numbers becoming a claim about three of twelve.
+_NAMED_PAIRS = 3
+
+
+def _step_readme_pair(project_root: Path) -> GateStep:
+    """``readme-pair`` — the declared document pairs, compared by SHAPE; BLOCKS.
+
+    This repository ships ``README.md`` and ``README.ru.md``, and on 2026-09-10
+    the Russian file carried a paragraph the English one had folded away. The
+    only number that differed was a line count, which nothing reads; the drift
+    was found by a person reading the two files side by side (BDL-069 S4). This
+    step is what reads them on every run.
+
+    **It cannot redden a project that has not opted in**, which is the epic's
+    binding constraint. The pair is DECLARED under ``document_pairs:`` in
+    ``.beadloom/config.yml`` — an adopter's translated README is their business
+    and a check that guessed ``README.<lang>.md`` would turn somebody's green
+    tree red on the upgrade that ships it. A project declaring none gets a named
+    skip that states the key to add, exactly as ``issue-log`` does.
+
+    Where it BLOCKS it blocks for the ``issue-log`` reason rather than the
+    ``docs-quality`` one: a block one document has and the other does not is not
+    an opinion about prose, it is a statement one language makes and the other
+    does not, and the repair fits in the commit that trips it. A declared file
+    nothing could read fails for the same reason its ``issue-log`` twin does —
+    a declaration pointing at nothing would otherwise report ``0 finding(s)``
+    having compared no document at all.
+
+    ``not_verified`` carries the honest half. Two readable files that hold no
+    block between them produce no finding and compare nothing, and a clean
+    result there describes the checker's own silence rather than the pair.
+    """
+    from beadloom.doc_sync.document_pairs import check_document_pairs
+
+    report = check_document_pairs(project_root)
+    if not report.declared:
+        return GateStep(
+            "readme-pair",
+            skipped=True,
+            summary=(
+                "skipped — no document pair is declared; add a `document_pairs:` block "
+                "of `source:`/`follower:` entries to .beadloom/config.yml"
+            ),
+        )
+    findings = [_unreadable_document_finding(path) for path in report.unreadable]
+    findings += [
+        _document_pair_finding(project_root, comparison, finding)
+        for comparison in report.comparisons
+        for finding in comparison.findings
+    ]
+    return GateStep(
+        "readme-pair",
+        passed=not findings,
+        not_verified=bool(_pairs_holding_nothing(report)),
+        findings=findings,
+        summary=_document_pair_summary(project_root, report),
+    )
+
+
+def _pairs_holding_nothing(report: PairReport) -> tuple[PairComparison, ...]:
+    """Pairs both of whose files were read and which hold no block at all.
+
+    Separate from ``unreadable``: a file that could not be opened is a defect in
+    the declaration, while two readable empty documents are a pair the check
+    genuinely had nothing to say about. Reporting the second as a pass is the
+    vacuity this project names rather than rounds off.
+    """
+    return tuple(
+        comparison
+        for comparison in report.comparisons
+        if not comparison.unreadable and comparison.compared == 0
+    )
+
+
+def _document_pair_summary(project_root: Path, report: PairReport) -> str:
+    """The readme-pair line, which states what it HELD and not only what it found.
+
+    The three numbers lead because the finding count alone cannot distinguish a
+    pair that agreed from a declaration that left nothing to compare — the shape
+    every other line in this module was rewritten against.
+    """
+    line = (
+        f"{len(report.comparisons)} pair(s) held, "
+        f"{report.compared} block(s) compared, "
+        f"{len(report.findings)} finding(s)"
+    )
+    named = [
+        f"{_pair_label(project_root, comparison.pair)} "
+        f"({comparison.compared} block(s))"
+        for comparison in report.comparisons[:_NAMED_PAIRS]
+    ]
+    if named:
+        line += "; " + ", ".join(named)
+    remaining = len(report.comparisons) - _NAMED_PAIRS
+    if remaining > 0:
+        line += f", and {remaining} more pair(s) not named here"
+    if report.unreadable:
+        line += "; UNREADABLE: " + ", ".join(report.unreadable)
+    nothing_held = _pairs_holding_nothing(report)
+    if nothing_held:
+        line += (
+            f"; NOT COMPARED: {len(nothing_held)} pair(s) were read and hold no "
+            "block at all, so nothing was held against anything"
+        )
+    return line
+
+
+def _pair_label(project_root: Path, pair: DocumentPair) -> str:
+    """``source <-> follower``, both relative to the project."""
+    source = _project_relative(project_root, pair.source)
+    follower = _project_relative(project_root, pair.follower)
+    return f"{source} <-> {follower}"
+
+
+def _project_relative(project_root: Path, path: Path) -> str:
+    """*path* as a project-relative string, or unchanged when it lies outside."""
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
+def _unreadable_document_finding(path: str) -> Finding:
+    """A declared document that could not be read, named against itself."""
+    return {
+        "kind": "readme-pair",
+        "rule": "readme-pair",
+        "severity": "error",
+        "locations": [{"file": path}],
+        "why": (
+            f"{path} is declared in a `document_pairs:` entry and could not be read, "
+            "so its pair was compared against nothing"
+        ),
+        "remediation": (
+            "point the `document_pairs:` entry at the document, or remove the "
+            "declaration if the pair no longer exists"
+        ),
+    }
+
+
+#: What to do about each check the comparison runs. Keyed by the check name it
+#: reports, so a check added there without a remediation here is a KeyError in
+#: this project's own suite rather than a finding an agent cannot act on.
+_PAIR_REMEDIATIONS = {
+    "unpaired-block": (
+        "add the missing block to the other document, or remove it from this one — "
+        "the two are held to the same shape, never to the same words"
+    ),
+    "block-kind": (
+        "give the two facing blocks the same kind, or the two headings the same level"
+    ),
+    "row-count": "give the list or table the same number of rows in both documents",
+}
+
+
+def _document_pair_finding(
+    project_root: Path, comparison: PairComparison, finding: PairFinding
+) -> Finding:
+    """Project one shape divergence onto the shared finding shape.
+
+    Both documents are located where both have a line, because the check says
+    where the two sequences diverge rather than which side is wrong: an unpaired
+    block is missing from one document or spurious in the other, and the
+    comparison cannot tell those apart. The heading travels in ``why`` for the
+    same reason — several paragraphs of one shape are indistinguishable, which
+    is exactly why the comparison works across two languages.
+    """
+    locations: list[dict[str, object]] = []
+    if finding.source_line is not None:
+        locations.append(
+            {
+                "file": _project_relative(project_root, comparison.pair.source),
+                "line": finding.source_line,
+            }
+        )
+    if finding.follower_line is not None:
+        locations.append(
+            {
+                "file": _project_relative(project_root, comparison.pair.follower),
+                "line": finding.follower_line,
+            }
+        )
+    where = f"under {finding.section!r}" if finding.section else "above the first heading"
+    return {
+        "kind": "readme-pair",
+        "rule": finding.check,
+        "severity": "error",
+        "locations": locations,
+        "why": f"{finding.detail} ({where})",
+        "remediation": _PAIR_REMEDIATIONS[finding.check],
     }
 
 

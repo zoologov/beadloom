@@ -176,6 +176,9 @@ class TestLayer1GateIntegration:
             # BDL-068 S6: the issue log's numbers, beside the other
             # document checks and before the composed-config ones.
             "issue-log",
+            # BDL-069 S4: the declared document pairs, beside the other
+            # opt-in declaration and before the composed-config steps.
+            "readme-pair",
             "doc-spaces",
             # BDL-068 S1.6: the branch judged against the axes its work item
             # declares. It sits before `config-check` because it reads the
@@ -191,6 +194,9 @@ class TestLayer1GateIntegration:
             # BDL-068 S6: the issue log's numbers, beside the other
             # document checks and before the composed-config ones.
             "issue-log",
+            # BDL-069 S4: the declared document pairs, beside the other
+            # opt-in declaration and before the composed-config steps.
+            "readme-pair",
             "doc-spaces",
             "scope-check",
             "config-check",
