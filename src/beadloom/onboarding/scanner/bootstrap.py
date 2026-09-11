@@ -26,6 +26,7 @@ from beadloom.onboarding.scanner.project_scan import (
     scan_project,
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
+from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 from beadloom.onboarding.scanner.rules_gen import generate_rules
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
 
@@ -66,7 +67,32 @@ def bootstrap_project(
 
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []
-    seen_ref_ids: set[str] = set()
+
+    # The ref_id of every node this function writes is handed out by one object,
+    # so that no two of them can be the same string. The root takes its name
+    # FIRST, before any cluster asks: on the classic `src/<project>/` layout the
+    # root and the single package want one name, and the root is the one that
+    # must keep it — `doc_generator` titles the architecture document with the
+    # root's ref_id and `generate_rules` names it as the parent every domain must
+    # have. The package is then written as `<project>-<kind>`. Until BDL-069 both
+    # took the plain name, the loader kept one node, and the one it dropped was
+    # the one carrying `source:` (BDL-UX #214).
+    project_name = _detect_project_name(project_root)
+    ref_ids = RefIdAllocator()
+    root_ref_id = ref_ids.take(project_name)
+
+    #: The ref_id each generated node was written under, keyed by the name it
+    #: asked for. Three later passes build edges by recomputing a cluster's
+    #: ref_id from its directory name; with a rename possible, a recomputed name
+    #: can name no node at all, which trades a lost node for a dangling edge.
+    #: The root is deliberately absent: a manifest dependency resolves to a
+    #: package, never to the project the packages sit in, which is what the
+    #: `seen_ref_ids` set this map replaced also did (it was built before the
+    #: root node existed).
+    ref_by_name: dict[str, str] = {}
+    #: The same, keyed by cluster name — exact where `ref_by_name` is not, since
+    #: two cluster names can sanitize to one string.
+    cluster_refs: dict[str, str] = {}
 
     # Discover entry points early so they can enrich cluster summaries.
     all_entry_points = _discover_entry_points(project_root, scan["source_dirs"] or [])
@@ -78,7 +104,10 @@ def bootstrap_project(
         source_dir: str = info["source_dir"]
 
         # Top-level node — contextual summary with symbols, README, entry points.
-        ref_id = _sanitize_ref_id(name)
+        preferred = _sanitize_ref_id(name)
+        ref_id = ref_ids.take(preferred, qualifier=kind)
+        ref_by_name[preferred] = ref_id
+        cluster_refs[name] = ref_id
         dir_path = project_root / source_dir / name
         summary = _build_contextual_summary(
             dir_path,
@@ -97,13 +126,14 @@ def bootstrap_project(
                 "source": f"{source_dir}/{name}/",
             }
         )
-        seen_ref_ids.add(ref_id)
 
         # Child nodes (level 2) + part_of edges.
         if preset.infer_part_of and children:
             for child_name, child_files in children.items():
                 child_kind, child_conf = preset.classify_dir(child_name)
-                child_ref_id = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
+                child_preferred = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
+                child_ref_id = ref_ids.take(child_preferred, qualifier=child_kind)
+                ref_by_name[child_preferred] = child_ref_id
                 child_dir_path = project_root / source_dir / name / child_name
                 child_summary = _build_contextual_summary(
                     child_dir_path,
@@ -122,7 +152,6 @@ def bootstrap_project(
                         "source": f"{source_dir}/{name}/{child_name}/",
                     }
                 )
-                seen_ref_ids.add(child_ref_id)
                 edges.append(
                     {
                         "src": child_ref_id,
@@ -134,16 +163,17 @@ def bootstrap_project(
     # Fallback: no clusters found, create minimal nodes from scan.
     if not nodes and scan["source_dirs"]:
         for sd in scan["source_dirs"]:
+            sd_ref_id = ref_ids.take(sd, qualifier=preset.default_kind)
+            ref_by_name[sd] = sd_ref_id
             nodes.append(
                 {
-                    "ref_id": sd,
+                    "ref_id": sd_ref_id,
                     "kind": preset.default_kind,
                     "summary": f"Source directory: {sd}",
                     "confidence": "low",
                     "source": f"{sd}/",
                 }
             )
-            seen_ref_ids.add(sd)
 
     # Monorepo: infer depends_on edges from manifest files.
     if preset.infer_deps_from_manifests:
@@ -151,33 +181,31 @@ def bootstrap_project(
             source_dir = info["source_dir"]
             pkg_dir = project_root / source_dir / name
             dep_names = _read_manifest_deps(pkg_dir)
-            sanitized_name = _sanitize_ref_id(name)
+            src_ref_id = cluster_refs[name]
             for dep in dep_names:
-                sanitized_dep = _sanitize_ref_id(dep)
-                if sanitized_dep in seen_ref_ids and sanitized_dep != sanitized_name:
+                dep_ref_id = ref_by_name.get(_sanitize_ref_id(dep))
+                if dep_ref_id is not None and dep_ref_id != src_ref_id:
                     edges.append(
                         {
-                            "src": sanitized_name,
-                            "dst": sanitized_dep,
+                            "src": src_ref_id,
+                            "dst": dep_ref_id,
                             "kind": "depends_on",
                         }
                     )
 
     # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, seen_ref_ids)
+    import_edges = _quick_import_scan(project_root, clusters, cluster_refs)
     edges.extend(import_edges)
 
     # Create root node + part_of edges from top-level nodes.
-    project_name = _detect_project_name(project_root)
     if nodes:
         root_node: dict[str, str] = {
-            "ref_id": project_name,
+            "ref_id": root_ref_id,
             "kind": "service",
             "summary": f"Root: {project_name}",
             "source": "",
         }
         nodes.insert(0, root_node)
-        seen_ref_ids.add(project_name)
 
         # Attach entry points to root (discovered earlier for cluster summaries).
         if all_entry_points:
@@ -223,11 +251,17 @@ def bootstrap_project(
                     )
                     root_node["summary"] = f"Root: {project_name} ({tech_str})"
 
-        # Top-level cluster nodes → part_of root.
+        # Top-level cluster nodes → part_of root. The edge names the ref_id the
+        # cluster was WRITTEN under, not one recomputed from its directory name.
+        # Until BDL-069 this loop skipped the cluster whose sanitized name equals
+        # the project's, because attaching it would have been a self-edge; that
+        # carve-out is gone with the collision it worked around, and the
+        # self-edge itself stays refused where it is decided for both writers
+        # (`parent_edges.missing_parent_edges`).
         for cluster_name in clusters:
-            sanitized_cluster = _sanitize_ref_id(cluster_name)
-            if sanitized_cluster != project_name:
-                edges.append({"src": sanitized_cluster, "dst": project_name, "kind": "part_of"})
+            edges.append(
+                {"src": cluster_refs[cluster_name], "dst": root_ref_id, "kind": "part_of"}
+            )
 
         # Post-condition: no node leaves this function without a parent.
         # The loop above only reaches nodes that came from `clusters`; this

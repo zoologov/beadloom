@@ -407,3 +407,42 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     And the command does not report success
     And the command does not ask for a bug report
     And the command says the failing node was already there
+
+  # BDL-069 S2, closing the writer half of BDL-UX #214. On the ordinary
+  # single-package src-layout — a project called `myapp` holding `src/myapp/` —
+  # the root service ref_id comes from the manifest name and the package's comes
+  # from its directory, and those are one string. Both nodes were written, the
+  # loader kept one, and the one it dropped carried the `source`. Measured on the
+  # published 4.0.0 wheel: `init --yes --mode bootstrap` reported `Graph: 2 nodes`
+  # and `beadloom status` then reported `Nodes: 1`.
+  #
+  # The scenarios are stated over what the graph HOLDS rather than over the
+  # collision, because there are two writers and the loader is deaf to which one
+  # produced the name. `domain-needs-parent` is not touched by this bead: it fired
+  # when the node existed and reported an empty population when it did not, which
+  # is why nothing went red while a node was being lost.
+  @bead:beadloom-cgco
+  Scenario: the package a project is named after is a node the graph keeps
+    Given a project whose only package is named after the project itself
+    When the project is bootstrapped
+    Then no two nodes in the graph on disk carry one ref_id
+    And the graph holds every node the bootstrap reported writing
+    And the root keeps the project's name and the package is qualified by its kind
+    And every edge the bootstrap wrote points at a node the bootstrap wrote
+
+  @bead:beadloom-cgco
+  Scenario: the bootstrapped graph of such a project passes the rules the same run wrote
+    Given a project whose only package is named after the project itself
+    When the project is bootstrapped
+    And the bootstrapped graph is linted
+    Then the lint reports no error-severity violation
+    And the lint ran over a population holding the package
+
+  @bead:beadloom-cgco
+  Scenario: a document named after a node does not take that node's ref_id
+    Given a project whose only package is named after the project itself
+    And the project has already been initialised from its code
+    And a docs directory holding a document named after the project
+    When beadloom init is run with the import flag
+    Then no two nodes in the graph on disk carry one ref_id
+    And every domain in the graph on disk has an outgoing part_of edge

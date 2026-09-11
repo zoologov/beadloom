@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
+from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,8 +44,24 @@ def classify_doc(doc_path: Path) -> str:
     return "other"
 
 
-def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
-    """Read the graph already on disk: its root node, and who already has a parent.
+@dataclass(frozen=True)
+class ExistingGraph:
+    """What a writer adding to a graph has to know about the one already there.
+
+    Three answers off one read, because they are three questions about the same
+    nodes: which node is the root to attach to, which ref_ids already have a
+    parent, and which ref_ids are spoken for. The third joined the other two in
+    BDL-069: a document named after an existing node was written as a second node
+    under that node's ref_id, and the loader kept one of them (BDL-UX #214).
+    """
+
+    root_ref_id: str | None
+    parented: frozenset[str]
+    ref_ids: frozenset[str]
+
+
+def _existing_graph(graph_dir: Path) -> ExistingGraph:
+    """Read the graph already on disk: its root node, who has a parent, what is named.
 
     The root is the one node of kind `service` that no `part_of` edge leaves —
     which is what `bootstrap_project` writes and why `generate_rules` dropped
@@ -57,14 +75,16 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
     `parented` and `parent_edges.missing_parent_edges`' `seen` are both sets of ref_ids — so
     a single root written twice is a single candidate. Until BDL-067 `.17` the
     candidates were collected into a list and counted there, and
-    `bootstrap_project` produces the duplicate on an ordinary project shape: it
-    writes the root service node under the project name and its top-level
-    attachment loop skips the cluster whose sanitized name equals that name
-    (`bootstrap.py`), so a repository named after one of its own source
-    directories yields two unparented `service` entries under one ref_id. The
-    import then attached nothing and `init --yes --mode both` exited 1 on every
-    run — measured on a project named `core` holding `src/core/` and
-    `src/orders/` (the review of BDL-067 `.16`, major 1).
+    `bootstrap_project` produced the duplicate on an ordinary project shape: it
+    wrote the root service node under the project name and skipped the cluster
+    whose sanitized name equalled that name, so a repository named after one of
+    its own source directories left two unparented `service` entries under one
+    ref_id. The import then attached nothing and `init --yes --mode both` exited
+    1 on every run — measured on a project named `core` holding `src/core/` and
+    `src/orders/` (the review of BDL-067 `.16`, major 1). Since BDL-069 no writer
+    produces that shape: ref_ids are handed out by `RefIdAllocator`, one per node.
+    The distinct-ref_id count stays, because this function reads a directory a
+    hand edit can reach and a graph file an earlier version wrote.
 
     The ref_id is read off the node as written rather than recomputed from the
     project name. Cluster refs pass through `_sanitize_ref_id` and the root ref
@@ -89,7 +109,11 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
             if n.get("kind") == "service" and n.get("ref_id") not in parented
         }
     )
-    return (roots[0] if len(roots) == 1 else None), parented
+    return ExistingGraph(
+        root_ref_id=roots[0] if len(roots) == 1 else None,
+        parented=frozenset(parented),
+        ref_ids=frozenset(str(n["ref_id"]) for n in nodes if n.get("ref_id") is not None),
+    )
 
 
 def import_docs(
@@ -120,6 +144,17 @@ def import_docs(
     results: list[dict[str, str]] = []
     nodes: list[dict[str, Any]] = []
 
+    # Read the graph before writing one, and hand out ref_ids against it. The
+    # ref_id a document asks for is its file name, which says nothing about the
+    # directory it sits in and nothing about the graph it is joining: two
+    # documents called `setup.md` in two areas ask for one name, and a document
+    # named after the project asks for the root's. Both were written and one of
+    # each pair was dropped at load (BDL-UX #214). `imported.yml` is not among
+    # the files read — this run replaces it — so a re-import hands out the same
+    # ref_ids it handed out last time.
+    existing = _existing_graph(graph_dir)
+    ref_ids = RefIdAllocator(existing.ref_ids)
+
     for md_path in sorted(docs_dir.rglob("*.md")):
         if not md_path.is_file():
             continue
@@ -128,21 +163,25 @@ def import_docs(
         results.append({"path": rel_path, "kind": kind})
 
         # Generate a node for classifiable docs.
-        ref_id = md_path.stem.replace(" ", "-").lower()
+        node_kind = kind if kind in ("feature", "adr", "domain", "service") else "domain"
+        ref_id = ref_ids.take(
+            md_path.stem.replace(" ", "-").lower(), qualifier=node_kind
+        )
         nodes.append(
             {
                 "ref_id": ref_id,
-                "kind": kind if kind in ("feature", "adr", "domain", "service") else "domain",
+                "kind": node_kind,
                 "summary": f"Imported from {rel_path}",
                 "docs": [f"docs/{rel_path}"],
             }
         )
 
     if nodes:
-        root_ref_id, parented = _existing_graph(graph_dir)
         graph_data: dict[str, Any] = {"nodes": nodes}
-        if root_ref_id is not None:
-            edges = missing_parent_edges(nodes, root_ref_id, parented)
+        if existing.root_ref_id is not None:
+            edges = missing_parent_edges(
+                nodes, existing.root_ref_id, set(existing.parented)
+            )
             if edges:
                 graph_data["edges"] = edges
         write_yaml_atomic(

@@ -64,8 +64,11 @@ A_TOP_LEVEL_LIST = "- ref_id: ledger\n- ref_id: payments\n"
 
 #: The readable file beside it, so every case below can also assert that the
 #: skip is a SKIP and not an abandonment of the whole directory. Its one node is
-#: an unparented `service`, which is the only shape all four readers can report:
-#: `_existing_graph` answers with the graph's root and not with its nodes.
+#: an unparented `service`, the shape every one of the four readers can report;
+#: `_existing_graph` answered only with the graph's root until BDL-069 gave it a
+#: second question to answer — which ref_ids are already spoken for — and the
+#: table below reads that answer, because it is the one stated as "the ref_ids it
+#: saw".
 THE_READABLE_NODE = "orders"
 A_READABLE_GRAPH_FILE = {
     "nodes": [
@@ -93,11 +96,9 @@ READERS: dict[str, Callable[[Path], set[str]]] = {
     "_load_graph_from_yaml": lambda project: {
         str(node["ref_id"]) for node in _load_graph_from_yaml(project)[0]
     },
-    "_existing_graph": lambda project: {
-        root
-        for root in [_existing_graph(project / ".beadloom" / "_graph")[0]]
-        if root is not None
-    },
+    "_existing_graph": lambda project: set(
+        _existing_graph(project / ".beadloom" / "_graph").ref_ids
+    ),
     "_graph_file_of_each_node": lambda project: set(_graph_file_of_each_node(project)),
     "_patch_docs_field": lambda project: _docs_patched(project),
 }

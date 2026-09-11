@@ -114,21 +114,31 @@ class TestEveryImportedNodeIsAttachedToTheRoot:
         data = _imported(project)
         assert {e["dst"] for e in data["edges"]} == {PARENTHESISED_NAME}, data["edges"]
 
-    def test_a_node_whose_ref_id_is_the_roots_own_gets_no_edge_to_itself(
+    def test_a_document_named_after_the_root_is_written_under_a_ref_id_of_its_own(
         self, tmp_path: Path
     ) -> None:
-        """An edge from a node to itself is not a parent.
+        """The classic collision, and since BDL-069 it is not reachable here.
 
-        The classic collision: a document named after the project. The duplicate
-        ref_id is a separate defect with a separate fix (`beadloom-7c6k`); what
-        must not happen here is a self-edge.
+        A document named after the project used to ask for the root's own ref_id.
+        It got it, the loader kept one of the two nodes, and the only thing this
+        case could assert was that nothing wrote a self-edge. `import_docs` now
+        hands out ref_ids against the graph already on disk (`beadloom-cgco`,
+        BDL-UX #214), so the document is written as `orders-web-domain` and is
+        attached like every other node. The self-edge assertion stays: it is
+        `missing_parent_edges`' own guard, and it is what would fire if the
+        allocator ever handed back a name the graph already holds.
         """
         _write_graph(tmp_path, _bootstrapped_graph())
         import_docs(tmp_path, _write_docs(tmp_path, names=("orders-web.md", "payments.md")))
 
         data = _imported(tmp_path)
-        assert "orders-web" in {n["ref_id"] for n in data["nodes"]}, data["nodes"]
+        written = {n["ref_id"] for n in data["nodes"]}
+        assert "orders-web-domain" in written, data["nodes"]
+        assert "orders-web" not in written, data["nodes"]
         assert not [e for e in data["edges"] if e["src"] == e["dst"]], data["edges"]
+        assert {"src": "orders-web-domain", "dst": "orders-web", "kind": "part_of"} in data[
+            "edges"
+        ], data["edges"]
 
     def test_a_node_that_already_has_a_parent_is_not_attached_a_second_time(
         self, tmp_path: Path
