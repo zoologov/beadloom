@@ -119,11 +119,32 @@ moves when a comment is added to a graph file and a node reader's does not, whic
   instrument names.
 - `SKIPPED_DIRECTORIES`, `READ_SUFFIXES` — the sweep's declared bounds, reported on every run.
 
+## The command over it
+
+`beadloom version-surface [--project DIR] [--json]` renders this surface:
+`src/beadloom/services/commands/version_surface.py`, presentation and wiring only. It groups rows
+by file **and reason together**, because most places are judged by nothing and nine of this
+repository's sit in one issue log — a flat per-line list is a report nobody finishes, which fails
+in the same way as not printing it. Places nothing checks do not make its exit code non-zero; the
+gap is what the report exists to state. Exit `2` is for a version that could not be derived, with
+the reason on standard output. The [CLI reference](../../../../services/cli.md#beadloom-version-surface)
+carries the output and the flags.
+
 ## Measured on this repository
 
 On 2026-09-11, against `4.0.0` as the manifest declares it: **41 places across 20 files**, read out
 of 1 375 files. Eight are judged — one by `packaging-manifest`, three by `docs-audit`, one by
 `graph-summary-facts`, one by `doctor`, two by `test-suite` — and 33 by nothing.
+
+**Re-measured the same day, on the working tree with the command beside it: 54 places across 27
+files, read out of 1 381.** Ten are judged and 44 by nothing. The records commit that closed
+wave 3 had already moved the count to 43 places across 22 files. The eleven that appeared after it
+are the command's own files — a scenario, two test modules, the command module, the epic's
+progress record, and the CLI reference, whose sample output alone holds five. Each of them states
+the current release while describing the thing that finds it. The difference was measured by running the derivation over
+`git archive HEAD` and over the working tree, not by counting the files by hand. That is the floor
+property in its plainest form: the surface grows with the work, which is why a written list of it
+goes stale and a derivation does not.
 
 The nine of 2026-09-10 are all among them, each with the checker that measurement recorded. The
 count is a floor and not a ceiling: this epic's own first two waves added documents that state the

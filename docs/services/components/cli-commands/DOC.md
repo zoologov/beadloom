@@ -58,6 +58,7 @@ is what holds that line.
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
 | `typed_surface.py` | `typed-surface` |
+| `version_surface.py` | `version-surface` |
 | `bd_calls.py` | `bd-calls` |
 | `issue_number.py` | `issue-number allocate`, `issue-number check` |
 
@@ -194,6 +195,19 @@ names until `beadloom-0mdo.42` (BDL-UX #240) — so on a flat-layout project, wh
 sits at the repository root, the filter admitted no package file and the leg's three sentences
 were unreachable. `staged_py` now selects by suffix, and each leg narrows that population by its
 own declaration.
+
+`version_surface.py` renders what `doc_sync.version_surface` derived: every place this project
+states its own version, each attributed to the instrument whose population holds it, and the ones
+no instrument holds (BDL-069 S3, BDL-UX #281). The rendering decision is the grouping. The
+derivation returned 54 places across 27 files on this repository on 2026-09-11,
+44 of them judged by nothing and nine of those in one issue log, so a flat per-line
+list is a report nobody finishes — which fails in the same way as not printing it. A group is one
+file AND one reason together, so a file whose lines fall outside for two different reasons reads
+as two facts rather than one averaged sentence. A header whose reason wraps continues deeper than
+the rows under it, because at a row's indent the second line reads as a place with no line number.
+Places nothing checks do not make the exit code non-zero: the gap is what the report exists to
+state. Exit `2` is for a version that could not be derived at all, and carries the reason on
+standard output.
 
 `docsync.py` also holds the two hook TEMPLATES, and since BDL-068 S5 the coherence block in
 them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected

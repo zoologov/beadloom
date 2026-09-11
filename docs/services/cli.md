@@ -2193,6 +2193,76 @@ The reading rule, why the declaration is parsed without a TOML parser, and the 2
 measurement behind the hook's scope are in the
 [Typed Surface DOC](../domains/application/components/typed-surface/DOC.md).
 
+### beadloom version-surface
+
+Every place this project states its own version, what checks each one, and the places checked by
+nothing (BDL-069 S3, BDL-UX #281).
+
+```bash
+beadloom version-surface [--project DIR] [--json]
+```
+
+**The places are derived; the instruments are named.** An instrument's name is a fact about the
+codebase and changes when an instrument is added. A place is a fact about the tree and changes on
+every release, so no place is written down anywhere in the derivation, and a test parses that
+module with its docstrings stripped and fails if one appears. Five instruments are named, and what
+each holds is read from the project's own declarations: `packaging-manifest` (the manifest chain
+a build back end follows), `docs-audit` (the documents `DocScanner` resolves as the audit's
+surface), `graph-summary-facts` (the `summary:` lines under `.beadloom/_graph/`, where the rules
+file declares the rule), `doctor` (the `beadloom:auto-start project-info` region of the adapters
+the flow manifest records), and `test-suite` (the `assert` statements under the manifest's
+`testpaths`).
+
+Measured on this repository on 2026-09-11, against `4.0.0`:
+
+```
+$ beadloom version-surface
+Version surface — every place this project states its version, derived, never listed
+
+  Source of truth: 4.0.0
+    src/beadloom/__init__.py:6    pyproject.toml dynamic version through [tool.hatch.version] path
+
+  Checked (10 place(s) in 8 file(s)):
+    .beadloom/_graph/beadloom.yml (1)    graph-summary-facts
+      5    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc S…
+    ...
+
+  Checked by nothing (44 place(s) in 22 file(s)):
+    .beadloom/flow/claude/CLAUDE.md (2)    — outside docs audit's scan globs
+      12    ### `setup-branch-protection` — the gap is closed as of 4.0.0, and will reopen
+      46    is the normal state, not an incident — and closing it, as 4.0.0 did, is a moment
+    .claude/CLAUDE.md (2)    — outside docs audit's scan globs; outside the project-info
+          auto-region: doctor reads the claim in that region and no other line of the file
+      427    ### `setup-branch-protection` — the gap is closed as of 4.0.0, and will reopen
+      461    is the normal state, not an incident — and closing it, as 4.0.0 did, is a moment
+    ...
+```
+
+Rows are grouped by file **and reason together**, so a file whose lines fall outside for two
+different reasons reads as two facts rather than one averaged sentence. The excerpt is cut at 80
+characters and every other line is wrapped at 100: a reason is the actionable half of an unjudged
+row, so it is wrapped rather than cut. A wrapped header continues deeper than the rows under it,
+because at a row's indent its second line reads as a place with no line number.
+
+**The sweep is by the current literal, which is the limit to read first.** A place that ALREADY
+states an older version is invisible to it, so run this BEFORE the bump and not after. The
+alternative was measured rather than assumed: reading every version token this project's prose
+attributes to itself returns 674 claims across 137 files, because the planning archive records
+every version the project ever had. Catching a place that has gone stale is what the instruments
+are for, and which places have one is what this report names.
+
+The report carries its own population — the files read, the directories pruned, the suffixes read,
+the suffixes NOT read with a count each, and every file that could not be decoded with its reason.
+
+Exit `0` when the surface was derived. Places checked by nothing do **not** make it non-zero: the
+gap is what the report exists to state, and a release that has to read it is not a release that
+failed. Exit `2` when no version could be derived, with the reason on standard output, because an
+empty answer and an empty answer with a reason are different answers.
+
+The instruments' populations, what the derivation cannot distinguish, and why two paths are
+restated rather than imported are in the
+[Version Surface SPEC](../domains/doc-sync/features/version-surface/SPEC.md).
+
 ### beadloom bd-calls
 
 Every place this project reaches `bd`, and what each call form assumes about the answer

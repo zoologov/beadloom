@@ -21,7 +21,7 @@ has been launched.
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
 | `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ✓ done |
-| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | ready |
+| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | in progress |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
@@ -180,6 +180,41 @@ Both beads found the ground wider than the plan:
   by hand, the instruments found nine, and the derivation finds forty-one — including all nine
   of 2026-09-10 with their checkers. No place is written down in the source and a test enforces
   that, which is the criterion that keeps the module from becoming the checklist it replaced.
+
+**2026-09-11 — S3 dev (`beadloom-jtcx`) landed.** `beadloom version-surface` renders what
+`doc_sync/version_surface.py` derives: the source of truth with the manifest chain it was followed
+through, every place grouped by file, the instrument each place belongs to, the places no
+instrument holds with the reason each falls outside, the five instruments with what each turned
+out to hold here, the sweep's own population, and the limit to read first.
+
+The grouping is the decision. Rows group by file AND reason together, so a file whose lines fall
+outside for two different reasons reads as two facts rather than one averaged sentence — and the
+nine issue-log lines that would otherwise be nine unattributed rows read as one group with one
+reason. `beadloom-w4cd` left this as a note: 33 of its 41 rows were unjudged and nine of those
+were one file, so a flat per-line list is a report nobody finishes, which fails the same way as
+not printing it at all.
+
+Exit `0` when the surface was derived, including when places are checked by nothing: the gap is
+what the report exists to state, and a release that has to read it is not a release that failed.
+Exit `2` is for a version that could not be derived, with the reason on standard output.
+
+**The answer was checked against what cutting 4.0.0 actually had to edit, rather than against the
+brief.** Commit `f3b5593e` added 23 lines carrying the new literal, across 13 files, measured
+with `git show --unified=0` on 2026-09-11. The command reports 22 of the 23 at their current line
+numbers. The 23rd is in `.beads/issues.jsonl`, the tracker's own export, which the sweep prunes
+because no release edits it by hand. `ROADMAP.md:3` was reworded by `0404280f` after the release
+and is still reported at that line, because it still states the literal. So every file the
+release touched for its version except the tracker export is named, and each of the nine that
+BDL-UX #281 lists carries the checker that release recorded for it.
+
+The count moved while this bead was open, and the first account of the move was wrong. The
+derivation measured 41 places in 20 files at `e41e7a10`, and 43 in 22 at `3693301d`, after the
+wave-3 records commit. This bead's own files then add eleven more, for 54 places in 27 files,
+measured by comparing the derivation over `git archive HEAD` with the working tree. They are a
+scenario, two test modules, the command module, this record, and the CLI reference, whose sample
+output alone holds five. Each states the current release while describing the thing that finds
+it. The surface grows with the work, which is the property that makes a written list of it wrong
+and a derivation right.
 
 ## Waves
 
