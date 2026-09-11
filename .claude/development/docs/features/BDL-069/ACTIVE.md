@@ -30,7 +30,7 @@ has been launched.
 | `beadloom-yn6i` | ext | three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | — | ready |
 | `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ✓ done |
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
-| `beadloom-rqma.4` | ext | reindex attributes a prefix-sharing sibling's routes to a node, and `docs polish` hands them on | P2 | — | ready |
+| `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -431,6 +431,52 @@ Left for the tech-writer, because the files belong to `cli` and `yn6i` reaches `
 `docs/services/cli.md` still lists the `--json` fields without `unread_ownership`, and
 `beadloom axes --json` does not print the parsed column. `bd close --suggest-next` named
 `beadloom-956f`. `bd ready --limit 0` does not list it, because `yn6i` and `rqma.4` are open.
+
+**2026-09-11 — extension dev (`beadloom-rqma.4`) landed at `9f435a18`.** The rule "a file lies
+under a node's source" had three bodies in three domains, and all three now call
+`infrastructure.node_source.NodeSource`: `doc_generator._symbols_for_node`, the route
+attribution in `reindex/enrichment.py` and `git_activity._map_file_to_node`. A file lies under
+a source when its path is the source or continues it past a `/`. The declared source is
+normalised once, and a source that declares nothing holds nothing.
+
+Reproduced red first on a foreign repository with the tree's own `beadloom`. After `init --yes
+--mode bootstrap`, with a FastAPI handler for `/replay` in `src/ledger_archive/api.py`, `docs
+polish` gave `GET /replay` to `ledger` and to the root node, whose source is `''`. After the
+change the same steps give it to `ledger_archive` alone. One table of eleven source shapes runs
+against all three sites. Before wiring, it found the two copies called correct disagreeing too:
+`git_activity` held nothing for a whitespace-padded source, and `doc_generator` held nothing for
+a source written with `./`.
+
+The placement was measured rather than chosen by layer name. `git_activity` is infrastructure
+and may import nothing above it, so the body lives there. `onboarding-no-direct-infra` refuses
+that import to `doc_generator` at error severity, so `rules.yml` carries a stated exemption,
+and `lint` reports 8 suppressed crossings where it reported 7. A domain placement passed `lint
+--strict` as well, and it was rejected for that reason. `architecture-layers` skips every edge
+with an untagged end, so a probe import that made the edge `git-activity -> doc-sync` drew no
+finding. That gap
+is filed as `beadloom-t6zq`, with one live reverse edge the rule does not report.
+
+The measurement found one more defect in the same function. The route store only ever wrote a
+node that had routes, so an incremental reindex after a code change left the misattributed
+route in place on the rig, and a route deleted from the code survived too. The store now
+withdraws the key from a node that holds no route. An incremental reindex that finds no changed
+file still returns before that step, so an index built under the old rule keeps its routes
+until a file changes or `reindex --full` runs. The SPEC states that limit.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 17 carried files, built
+from `621258f8` with its own interpreter: pytest 10237 passed, 61 skipped, 17 xfailed; ruff
+clean; `mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. The room's first
+full run was rc 1 on one test, whose copied acceptance run failed in an unrelated scenario when
+`uv pip install` exited 1. That test passed alone and in the second full run, and the cause was
+not reproduced. The room has no `.git`, so its sync-check verified none of 465 pairs. Green on
+the tree at `9f435a18`, with `HEAD` unchanged across the run and the tree differing from it
+only in `.beads/` and this file: pytest 10285 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0
+over 465 fresh pairs. Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs
+and both locale legs are unmeasured, and the target sweep does not vary the interpreter mypy
+runs under.
+
+`bd close --suggest-next` named `beadloom-956f`. `bd ready --limit 0` does not list it, because
+`yn6i` is open.
 
 ## Waves
 
