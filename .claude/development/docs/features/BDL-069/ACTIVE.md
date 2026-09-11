@@ -102,6 +102,27 @@ xfailed; `mypy --strict` green against all four declared targets, which varies t
 checker is asked about and not the interpreter it runs under. Of 21 declared rooms this run
 entered none.
 
+**2026-09-11 — wave 1 landed.** `beadloom-19m6` at `9c814e02`, `beadloom-4ad3` at `11485a31`.
+The gate owner reported both measurements in the words that name them: green in a clean room
+over 13 carried files, and green on the tree after both had landed.
+
+Two corrections came out of the wave, and neither was made by the coordinator:
+
+- **The red case in `19m6`'s brief was wrong.** The coordinator named `0404280f` as the commit
+  where the README pair diverged. Measured: they agreed there (86 blocks each) and at `aa21caff`
+  (109 each); the divergence lived only between `31f8c9cb` and `97fafca5`, because `0404280f` is
+  the squash that already contains the fix. The fixtures carry `31f8c9cb`, where the comparison
+  reports `ru 109, en 108, one unpaired-block`. Had the brief been believed, the test would have
+  been green from birth — the empty population this epic exists to remove.
+- **Two axis rows were ruled wrong at planning.** `reindex` and `graph-diff` were marked out of
+  scope as blast radius; BEAD-05 measured that both parse nodes, which made touching them its
+  assignment. `scope-check` reported the disagreement between the approved axes and what landed.
+  The RFC is corrected in place, thirteen nodes to fifteen.
+
+A follow-up was opened rather than absorbed: `beadloom-4axf` — the graph-file skip policy lives
+in a domain the graph domain may not import, so three readers restate it. The duplication is
+forced by a boundary this project declared, not by carelessness.
+
 ## Waves
 
 None launched. The first wave can hold `qylh`, `cgco`, `4ad3`, `w4cd` and `19m6` — the five

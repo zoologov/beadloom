@@ -60,15 +60,71 @@ not cover; one adds a check that does not exist.
 
 The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`, `sync-check`,
 `agent-prime`, `graph-loader`, `graph-files`, `docs-audit`, `doc-sync`, `doctor`, `rule-engine`,
-`markdown-tables`, `issue-numbers`, and `cli-commands` — thirteen after Q1.
+`markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled after wave 1 — `reindex`
+and `graph-diff`. Fifteen.
 
 ## Axes
 
-Derived, never authored. Four Explore runs produced eighteen sections across the four defects;
-what follows is the **node-level rows** of those sections with the scope decision applied. The
-per-function `branches` rows are omitted here for length and are reproducible verbatim by
-re-running the commands each block names — that omission is a decision, and it is stated rather
-than silent.
+> **Derived by:** `beadloom impact` over eighteen targets in four Explore runs, one run per
+> defect; every target is named in the per-run blocks below
+> **Seed:** multiple, and they differ per run — `write_yaml_atomic`, `each_graph_file`,
+> `read_declared_docs`, `flow_signature`, `persist_flow_config`, `update_node_in_yaml` under
+> rule `reaches-an-effect-sink`, and `none` for nine of the eighteen targets, whose axes are
+> therefore unresolved rather than empty. One line cannot carry four runs; the per-run blocks
+> below carry them and this line says so rather than averaging them.
+> **Unresolved:** per run, in the blocks below. Across all four: no module failed to parse, and
+> five surfaces came back `unreadable-target` because `beadloom impact` reads Python —
+> `.beadloom/_graph/beadloom.yml`, `docs/services/cli.md`, `CHANGELOG.md`,
+> `.claude/development/ROADMAP.md`, and `README.ru.md`.
+
+| Axis | Node | Sites | In scope | Why |
+|------|------|-------|----------|-----|
+| co-writers | doc-generator | 2 — `src/beadloom/onboarding/doc_generator.py:28` | yes | writes the skeleton that fails the rule, and reaches the graph directory |
+| co-writers | doc-sync | 1 — `src/beadloom/doc_sync/surface.py:199` | yes | holds the freshness surface and the version subjects |
+| co-writers | agent-prime | 4 — `src/beadloom/onboarding/scanner/bootstrap.py:36` | yes | one of the two bodies that emit node dicts |
+| co-writers | graph-loader | 1 — `src/beadloom/graph/loader.py:171` | yes | the reduction happens here and is not reported |
+| callers | ci-gate | 1 — `src/beadloom/application/gate.py:349` | yes | builds the remediation at `gate.py:1211`; hosts the new leg |
+| callers | sync-check | 3 — `src/beadloom/doc_sync/engine.py:1491` | yes | `missing_modules` is decided here |
+| callers | cli-commands | 6 — `src/beadloom/services/commands/docsync.py:67` | yes | `sync-update` must report what it did not clear (Q1) |
+| callers | graph-files | 1 — `src/beadloom/onboarding/graph_files.py:72` | yes | the declared policy, and it reaches one reader of seven |
+| callers | docs-audit | 1 — `src/beadloom/doc_sync/audit.py:606` | yes | one of the three checkers of the version |
+| callers | doctor | 2 — `src/beadloom/application/doctor.py:188` | yes | the second checker, over `CLAUDE.md` |
+| callers | rule-engine | 5 — `src/beadloom/graph/rules/__init__.py:171` | yes | the third, `summary_facts` over the graph node |
+| callers | markdown-tables | 4 — `src/beadloom/doc_sync/tables.py` | yes | already reads a document as blocks; the comparison reuses it |
+| callers | issue-numbers | 2 — `src/beadloom/doc_sync/issue_numbers.py:100` | yes | the precedent for an opt-in pair declared in config |
+| callers | mcp-server | 1–4 | no | caller of the surfaces; blast radius, not a defect site |
+| callers | reindex | 1–4 | **yes** | **re-ruled after wave 1.** `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment. Ruled `no` at planning as blast radius; that was wrong, and `scope-check` is what said so |
+| callers | graph-diff | 1–2 | **yes** | **re-ruled after wave 1**, for the same reason as `reindex`. It reads at a git ref AND parses what it reads, so it is inside the policy's real population |
+| callers | tui | 1 | no | display only |
+| callers | application | 1 | no | consumes the subject vocabulary for another question |
+| callers | bd-seam | 5 | no | consumes the subject vocabulary for another question |
+| callers | doc-spaces | 1 | no | consumes the subject vocabulary for another question |
+| callers | flow-suppression | 2 | no | consumes the subject vocabulary for another question |
+| callers | onboarding | 2 | no | reads the manifest for other facts |
+| callers | declared-scope | 1 | no | consumes `summary_facts` for another question |
+| callers | scope-check | 1 | no | consumes `summary_facts` for another question |
+| callers | axes-section | 1 | no | caller of the block reader; constrains its signature |
+| callers | planning-report | 1 | no | caller of the block reader |
+| callers | doc-quality | 2 | no | caller of the block reader |
+| callers | work-item-routing | 1 | no | caller of the block reader |
+| callers | flow-guards | 4 | no | gate blast radius |
+| callers | wave-plan | 1–2 | no | gate blast radius |
+| co-writers | graph-layout | 1 | no | writes the directory but emits no nodes |
+| co-writers | agentic-flow-setup | 1 | no | writes the directory but emits no nodes |
+| callers | doc-shape | 3 | no | reads sections, not blocks — a different granularity |
+| callers | graph | 1 | no | reader downstream of the loss |
+
+**Two rows were re-ruled on 2026-09-11, after wave 1 landed.** `reindex` and `graph-diff`
+were ruled out of scope at planning as blast radius — readers downstream of the defect that
+would inherit the fix. BEAD-05's measurement showed both parse nodes, which put them inside
+the policy's real population and made touching them the assignment rather than an overrun.
+`beadloom ci`'s `scope-check` leg reported the disagreement between the approved axes and
+what landed, which is the leg working. The ruling is corrected here rather than quietly,
+and the count of nodes in scope moves from thirteen to fifteen.
+
+The rows above are the **node level**. The per-function `branches` rows of the eighteen
+sections are omitted for length and are reproducible verbatim by re-running the commands each
+block below names — that omission is a decision, and it is stated rather than silent.
 
 ### BDL-UX #282 — the skeletons and the remediation
 
