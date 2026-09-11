@@ -16,7 +16,7 @@ has been launched.
 | Bead | Slice | What | Pri | Blocked by | Status |
 |---|---|---|---|---|---|
 | `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ✓ done |
-| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | in progress |
+| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | ✓ done |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
@@ -240,7 +240,7 @@ pairs. The pre-commit scope check reported the three template files outside the 
 because the RFC rules `onboarding` out as a caller. The template is where a skeleton's shape
 lives, so the RFC row is what needs correcting.
 
-**2026-09-11 — S1 dev (`beadloom-h7b3`).** A stale verdict now names its pair, and the remediation
+**2026-09-11 — S1 dev (`beadloom-h7b3`) landed at `44034c81`.** A stale verdict now names its pair, and the remediation
 it prints can clear the reason it was printed for. Reproduced first on a foreign repository with
 the tree's own `beadloom`: after `init`, one module name taken out of the `ledger` README gave
 `ci` rc 1 over `3 stale doc(s)` and one document, three identical findings telling the reader to
@@ -262,6 +262,15 @@ it. Its exit code and its scope are unchanged, as Q1 decided. The gate's line co
 `--json` shape is untouched and a test pins it. Three more surfaces print `stale doc(s)` over a
 count of pairs — the TUI, the site dashboard and `prime`. They are outside this bead's scope and
 are filed as `beadloom-yn6i`.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 19 carried files, built from
+`d09c24ae` with its own interpreter: pytest 10082 passed, `mypy --strict` and ruff clean, and
+`beadloom ci` rc 0. That room has no `.git`, so its sync-check verified no pair. Green on the tree
+at `1e63bf14`, which includes a coordinator commit landed while this bead ran: pytest 10129
+passed, `mypy --strict` against targets 3.10 to 3.13, and `beadloom ci` rc 0 over 460 fresh pairs.
+A tree run taken while that commit was landing failed one issue-log test, and the same test
+passed at `44034c81` alone and at `1e63bf14`. Neither verdict entered any of the 21 declared
+rooms, so the Ubuntu and locale legs are unmeasured.
 
 ## Waves
 
