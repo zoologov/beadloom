@@ -508,6 +508,29 @@ legs are unmeasured, and the target sweep does not vary the interpreter mypy run
 `bd close --suggest-next` named `beadloom-956f`, and `bd ready --limit 0` lists it: every dev
 bead it depends on is closed.
 
+**2026-09-11 — PAUSED at the owner's request, after the last dev bead landed.**
+
+Every dev bead is closed: the nine planned, and the five taken in the scope extension
+(`8lmj`, `yn6i`, `rqma.1` #283, `rqma.2` #284, `6rgr`, `rqma.4`), with `rqma.3` (#285) withdrawn
+as not-a-defect. No agent is running, no merge slot is held, and nothing is half-landed. Tree at
+`8ba896e1` plus this record, pushed.
+
+**Next on resume: the test wave, `beadloom-956f`.** Then `qae9` (review, under withholding) and
+`egvd` (tech-writer), then the PR. `egvd` already carries three documentation obligations in its
+comments — the stale-index upgrade note from `rqma.4`, `parallel-waves.md:86` from `rqma.1`, and
+`cli.md` for the `Owns unread` column from `rqma.2`.
+
+**One decision is waiting for the owner, not taken:** `beadloom-rqma.5`, filed by `yn6i` as a
+child of this epic and NOT wired into the test bead. Four more surfaces label a count of stale
+PAIRS "stale docs" — `beadloom why`, the TUI dependency path, `status`, and MCP `get_status` — plus
+a TUI widget no module imports. It is READ, not run. The pattern is worth naming before deciding:
+`h7b3` fixed one surface and found three, `yn6i` fixed those and found four more. Surface-by-
+surface does not converge; the class may want a single fix, the way `rqma.4` replaced three
+copies of one rule with one helper.
+
+**Two out-of-epic items recorded elsewhere:** `beadloom-t6zq` (P0, its own next epic, in the
+ROADMAP — `architecture-layers` evaluates 16 of 353 edges) and `beadloom-4axf` (P2).
+
 ## Waves
 
 None launched. The first wave can hold `qylh`, `cgco`, `4ad3`, `w4cd` and `19m6` — the five

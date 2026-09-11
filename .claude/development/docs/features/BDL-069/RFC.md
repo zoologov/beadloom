@@ -132,7 +132,7 @@ twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wa
 | callers | config-check | 4 | no | extension; compares the composed `task-init.md` and goes quiet once `setup-agentic-flow` recomposes it |
 | callers | role-adapters | 1 | no | extension; a caller |
 | callers | gate-ownership | 1 | no | extension; a caller of the impact boundary |
-| callers | vitepress-site | — | no, **with a check** | extension; outside `scan_paths`. `site/.vitepress/theme/components/AlertBanner.vue:38` DISPLAYS the alert text. If the wording arrives from Python it needs no change; if the component hard-codes `doc(s)`, it does. `yn6i` checks on the file before this row is final |
+| callers | vitepress-site | — | no | extension; outside `scan_paths`. `site/.vitepress/theme/components/AlertBanner.vue:38` displays the alert text. **Checked by `beadloom-yn6i` on 2026-09-11: it needs no change**, so the row that was held "with a check" is final |
 
 **Two rows were re-ruled on 2026-09-11, after wave 1 landed.** `reindex` and `graph-diff`
 were ruled out of scope at planning as blast radius — readers downstream of the defect that
