@@ -318,13 +318,30 @@ def _symbols_for_node(
     node: dict[str, Any],
     symbols_by_source: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
-    """Return code symbols whose file path starts with *node*'s source."""
-    source = node.get("source", "").rstrip("/")
+    """Index rows of every file under *node*'s source, matched by PATH COMPONENT.
+
+    The polish payload's reader. Until BDL-069 `beadloom-6rgr` it matched by string
+    prefix, so `src/ledger/` also took `src/ledger_archive/` and `src/ledger_tools.py`,
+    and `docs polish` told an agent to describe the node from a sibling's functions.
+
+    A file is under the source when its path IS the source — a single-file source,
+    which a match on ``source + "/"`` alone would leave empty — or continues it past
+    a ``/``. The source is normalised as `_symbols_on_disk` normalises it, and a test
+    holds the two readers to one population for every shape of source.
+
+    It stays on the index rather than walking the directory as the skeleton does,
+    because the rest of the polish payload — drift, edges, routes, activity, tests —
+    is read from the index too, and because a walk is not bounded by the scan paths.
+    Measured on this repository over its 104 nodes: the walk took 12.45 s and gave
+    the site node 68 382 symbols from `node_modules`; the index took 0.006 s.
+    """
+    source = str(node.get("source") or "").strip().rstrip("/")
     if not source:
         return []
+    below = f"{source}/"
     result: list[dict[str, Any]] = []
     for fp, syms in symbols_by_source.items():
-        if fp.startswith(source):
+        if fp == source or fp.startswith(below):
             result.extend(syms)
     return result
 
@@ -346,11 +363,10 @@ def _symbols_on_disk(
 
     The parser is `extract_symbols`, the function the reindex calls per file, and
     it returns nothing for an extension it has no grammar for without reading the
-    file — so the population is the index's. Two differences are deliberate: a
-    directory source is WALKED, where the index reader matches by string prefix
-    and so gives `src/ledger/` the symbols of `src/ledger_archive/` too; and the
-    node's source is read wherever it is, where the index holds only the
-    configured scan paths.
+    file — so the population is the index's. A directory source is WALKED, which
+    takes the same files `_symbols_for_node` takes from the index by path component.
+    One difference is deliberate: the node's source is read wherever it is, where
+    the index holds only the configured scan paths.
 
     *parsed* memoises one run's parses by path, so a feature nested inside a
     domain does not parse the files they share twice.

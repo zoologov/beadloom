@@ -180,8 +180,9 @@ def test_a_sibling_directory_that_shares_the_prefix_is_not_part_of_the_node(
 ) -> None:
     """`src/ledger/` is a directory, and `src/ledger_archive/` is not inside it.
 
-    The index reader matches by string prefix and takes both. The disk reader
-    walks the directory, so the table names what the node's source holds.
+    The disk reader walks the directory, so the table names what the node's source
+    holds. The index reader took both until `beadloom-6rgr` made it match by path
+    component; `test_polish_symbols_match_the_source_by_path_component` holds the two.
     """
     source = _files(tmp_path, "ledger", {"core.py": "def record() -> None:\n    pass\n"})
     _files(tmp_path, "ledger_archive", {"old.py": "def replay() -> None:\n    pass\n"})

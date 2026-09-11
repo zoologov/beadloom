@@ -67,6 +67,29 @@ This ensures `_build_doc_ref_map()` in reindex links docs to nodes correctly, so
 - Merges into node data, deduplicating with YAML edges
 - Graceful fallback when DB or `edges` table is missing
 
+## Polish Symbols
+
+`generate_polish_data()` gives each node the `code_symbols` rows of every file under
+its source, through `_symbols_for_node`, and the instructions tell the agent to
+describe the node from them.
+
+- **Matched by path component.** A file is under the source when its path is the
+  source, or continues it past a `/`. Until BDL-069 `beadloom-6rgr` the match was a
+  string prefix. Measured on a foreign repository after `init --yes` and `reindex`:
+  `docs polish --ref-id ledger` named `export, record, replay`, taking
+  `src/ledger_archive/` and `src/ledger_tools.py`, where the package holds `record`.
+  The equality half is what a single-file source needs, because no path starts with
+  `src/ledger/core.py/`.
+- **Read from the index, not the disk.** Every other field of the payload is read
+  from the index too — drift, `depends_on` edges, routes, activity and tests — so a
+  walk would describe a different tree from the rest of the payload after an edit
+  that was not re-indexed. A walk is also not bounded by the scan paths. Measured on
+  this repository over 104 nodes: the directory walk took 12.45 s and gave the site
+  node 68 382 symbols from `node_modules`, while the index took 0.006 s.
+- **The routes are not yet matched this way.** They come from `nodes.extra`, which
+  the reindex fills by string prefix, so a node still receives a prefix-sharing
+  sibling's routes. That is filed as `beadloom-rqma.4`, outside this node.
+
 ## Skeleton Enrichment
 
 Every node document whose `source` is a directory carries a **Modules** list: the
@@ -114,14 +137,15 @@ by name, with `_`-prefixed names excluded. `_symbols_on_disk` parses them with
   wizard `docs/` trees differed in exactly the two tables, and `beadloom ci` was rc 0
   on both, because no rule reads the table. The order `init` runs its steps in was
   not changed: skeletons still precede the reindex that loads their `docs:` patch.
-- **The population is the index's, with two stated differences.** `extract_symbols`
+- **The population is the index's, with one stated difference.** `extract_symbols`
   returns nothing for an extension it has no grammar for, before it reads the file,
-  so the same files yield rows. A directory source is walked, where the index reader
-  `_symbols_for_node` matches by string prefix and gives `src/ledger/` the symbols of
-  `src/ledger_archive/` as well (measured). The node's source is read wherever it
-  is, where the index holds only the configured scan paths.
+  so the same files yield rows. A directory source is walked, which takes the files
+  the index reader `_symbols_for_node` takes by path component. The node's source is
+  read wherever it is, where the index holds only the configured scan paths.
   `tests/test_the_init_skeleton_carries_its_public_api.py` builds an index with the
-  real reindex and compares the two readers over one tree.
+  real reindex and compares the two readers over one tree, and
+  `tests/test_polish_symbols_match_the_source_by_path_component.py` compares them
+  over a tree holding prefix-sharing siblings, for every shape of source.
 - **Parsed only for a document that will be written, and each file once.** A node
   whose document already exists is skipped before rendering, and one run memoises
   its parses by path, so a feature nested in a domain costs no second parse.
@@ -141,6 +165,7 @@ Every node document also carries a **Dependencies** section: the `depends_on` an
 | `_find_root_node` | Identify root service (no `part_of` as src) |
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
 | `_load_symbols_by_source` | Best-effort SQLite symbol loading, for `generate_polish_data`, which runs after a reindex |
+| `_symbols_for_node` | The index rows of every file under a node's source, matched by path component, for the polish payload |
 | `_symbols_on_disk` | The symbols of every file under a node's source, parsed off the disk and memoised per run, for the skeleton's Public API table |
 | `_parse_symbols` | One file's symbols through `code_indexer.extract_symbols`, or none when the file does not decode |
 | `_modules_for_node` | File names of the Python files directly inside a directory `source`, read off the disk, sorted |
