@@ -15,8 +15,8 @@ has been launched.
 
 | Bead | Slice | What | Pri | Blocked by | Status |
 |---|---|---|---|---|---|
-| `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ready |
-| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | blocked |
+| `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ✓ done |
+| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | ready |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
@@ -215,6 +215,30 @@ scenario, two test modules, the command module, this record, and the CLI referen
 output alone holds five. Each states the current release while describing the thing that finds
 it. The surface grows with the work, which is the property that makes a written list of it wrong
 and a derivation right.
+
+**2026-09-11 — S1 dev (`beadloom-qylh`) landed at `26dfbbb3`.** The node templates gain a
+`modules_section` placeholder, and a skeleton written for a directory source names each Python
+file directly inside it. The pair is named and never attested at write time. The placeholder
+heading is not a required section, so no document written earlier is found to lack it.
+
+The PLAN's premise did not survive measurement. It said the modules "are already in the index
+the same `init` run built". On `init --yes` they are not, because `non_interactive_init` writes
+the skeletons before its reindex, and on a virgin project no database exists at that moment. A
+list read from the index would have been empty on exactly the run BDL-UX #282 measured, so the
+list is read off the disk. The same ordering leaves every such skeleton without its Public API
+table, which is filed as `beadloom-8lmj` rather than absorbed.
+
+The first attempt imported the scanner's code-extension set and `lint --strict` refused it as a
+cycle, because `agent-prime` owns that set and already depends on `doc-generator`. The list is
+therefore Python files, which is the population `missing_modules` reads, and a unit test runs
+that rule over a generated skeleton to hold the two populations together.
+
+Measured on repositories that are not this one. On the published 4.0.0 wheel the two-package
+layout ended `ci` rc 1 over 4 stale pairs, and the single-package layout ended rc 0 over 0 pairs
+with `Nodes: 1`. On a wheel built from this tree the two layouts end rc 0 over 4 and over 2 fresh
+pairs. The pre-commit scope check reported the three template files outside the declared axes,
+because the RFC rules `onboarding` out as a caller. The template is where a skeleton's shape
+lives, so the RFC row is what needs correcting.
 
 ## Waves
 
