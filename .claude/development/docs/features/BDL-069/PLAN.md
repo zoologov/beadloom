@@ -26,6 +26,7 @@ graph TD
     B04 --> B10
     B07 --> B10
     B09 --> B10
+    B13[BEAD-13 P1 dev: init --yes carries Public API] --> B10
     B10 --> B11[BEAD-11 P0 review]
     B11 --> B12[BEAD-12 P1 tech-writer]
 ```
@@ -45,7 +46,8 @@ graph TD
 | BEAD-07 | S3 dev: the `version-surface` command | P1 | 06 | Pending |
 | BEAD-08 | S4 dev: the declared document pair and the block comparison | P2 | - | Pending |
 | BEAD-09 | S4 dev: the `readme-pair` gate leg | P2 | 08 | Pending |
-| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09 | Pending |
+| BEAD-13 | S1 dev: `init --yes` skeletons carry the Public API table (`beadloom-8lmj`) | P1 | - | Pending |
+| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13 | Pending |
 | BEAD-11 | review | P0 | 10 | Pending |
 | BEAD-12 | tech-writer | P1 | 11 | Pending |
 
@@ -182,6 +184,34 @@ document as blocks, rather than becoming a fifth reader of markdown.
 - [ ] the leg skips with a reason when no pair is declared, as `issue-log` does
 - [ ] no adopter's Gate changes verdict on upgrade
 - [ ] the leg's summary names the pairs it holds and the blocks it compared
+
+### BEAD-13: S1 dev — `init --yes` skeletons carry the Public API table
+
+**Added to the epic on 2026-09-11 at the owner's request**, so that everything found about `init`
+closes here. Bead `beadloom-8lmj`, found by `beadloom-qylh` and measured but not fixed there.
+
+**Priority:** P1 · **Depends on:** — · **Blocks:** BEAD-10
+
+**What to do:** `non_interactive_init` calls `generate_skeletons` BEFORE the reindex, and on a
+virgin project the index does not exist yet, so `_load_symbols_by_source` returns nothing and
+every skeleton lacks its `## Public API` table. The order is load-bearing — skeletons patch
+`docs:` into the graph YAML, so they must precede the reindex that loads it. The bead that found
+this names two fixes: reindex before AND after (the wizard's shape), or read symbols without the
+index.
+
+**Not a red, and that is why it survived:** no rule requires the table, so the Gate is unaffected
+and nothing reads the missing section.
+
+**One claim in the bead is READ, not measured, and must be measured first:** that the wizard
+reindexes before the skeleton prompt and therefore writes a DIFFERENT skeleton from `--yes` for
+the same project — the BDL-UX #216 shape (two entry points, two trees) on documents rather than
+the graph. The bead's own author corrected the description to say so.
+
+**Done when:**
+- [ ] the wizard half is measured on a foreign project before any fix relies on it
+- [ ] `init --yes` on a virgin two-package project writes skeletons carrying the Public API table
+- [ ] `init --yes` and the wizard write the same skeleton for the same project, measured
+- [ ] the load-bearing order — skeletons before the reindex that loads their `docs:` patch — still holds
 
 ### BEAD-10: test — the acceptance scenarios
 

@@ -35,6 +35,53 @@
 
 ## Open Issues
 
+284. [2026-09-11] [MEDIUM] an axis row is ruled by the axis a node first surfaced under, and three nodes ruled out as blast radius turned out to be the sites the fix had to reach
+
+    **Severity:** medium (nothing wrong shipped — `scope-check` caught all three; the cost is that the approved RFC disagreed with the code three times in one epic)
+    **Command:** `/task-init` step 0.5 and the axes decision; `beadloom impact --section`
+    **Context:** BDL-069, planning on 2026-09-10, re-ruled three times on 2026-09-11 as the work landed.
+    **Measured.** The RFC ruled 13 nodes in scope. Three of the nodes ruled OUT were edited by the beads that closed:
+
+    | Node | Surfaced under | Ruled | What the fix actually had to reach |
+    |---|---|---|---|
+    | `reindex` | callers | no — "reads the graph downstream of the loss" | `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment |
+    | `graph-diff` | callers | no — "reads at a git ref" | it reads at a git ref AND parses what it reads — and was reducing duplicates the opposite way to the loader |
+    | `onboarding` | callers | no — "reads the manifest for other facts" | it owns `templates/docs/core/*.md.txt`, the skeleton text the fix had to change |
+
+    **The pattern is one direction, and that is the finding.** Every re-ruling moved a node from "blast radius" to "work site". None moved the other way. The ruling read each node by the AXIS it first appeared under — a `callers` row read as "calls into the change, is not changed" — and a node that surfaces as a caller can also own what the fix must reach.
+
+    **Two different causes sit under the three, and they want different answers:**
+    - **`onboarding` was invisible to the derivation, not misread.** The thing the fix reached is `.md.txt` template text, and `beadloom impact` reads Python. The derivation could not have shown that node owning those files; the person ruling had no row that said so.
+    - **`reindex` and `graph-diff` were visible and misread.** Both are Python and both appeared. What the axes do not carry is a node's ROLE in the fix, only its relation to the seed — and the ruling substituted the second for the first.
+
+    **Expected:**
+    - `/task-init`'s axes guidance should say, where the person rules, that the axis a node surfaced under is not its role in the change — a `callers` row can be a work site;
+    - and a derivation that cannot read a surface the change may reach should say so ON the row, not only in the section's `Unresolved` line. `onboarding`'s templates were in the unreadable population and nothing pointed from that population to the node that owns it.
+    **Related:** #283 (a second instrument reporting over a narrower population than the planning question, found the same day), #239 (a population of zero reading as coverage), #281 (`impact` cannot read YAML or Markdown).
+
+283. [2026-09-11] [MEDIUM] `beadloom waves --parent` compares only READY beads, so it reports a clean wave for a bead that conflicts with one already running
+
+    **Severity:** medium (the conflict was caught because the coordinator asked a second time; a coordinator that trusted the first answer launches two agents into one serialised pair)
+    **Command:** `beadloom waves --parent <epic>`
+    **Context:** BDL-069, 2026-09-11. `beadloom-8lmj` was pulled into the epic while `beadloom-h7b3` was in progress.
+    **Measured:**
+
+    ```
+    beadloom waves --parent beadloom-rqma
+      1 wave(s) for 1 bead(s), 0 serialisation(s)
+      Wave 1: beadloom-8lmj
+
+    beadloom waves beadloom-h7b3 beadloom-8lmj
+      2 wave(s) for 2 bead(s), 1 serialisation(s)
+      beadloom-8lmj | beadloom-h7b3 — dependency_edge: cli-commands -> agent-prime
+    ```
+
+    The first answer is correct about its population and wrong about the question. `--parent` takes the plan from `bd ready`, and a bead that is `in_progress` is not ready, so it is not in the plan and nothing is compared against it. The answer reads "0 serialisations" — which, for a coordinator deciding whether to launch, is the claim "nothing conflicts".
+    **Why it is this project's own class.** A check reported over a population narrower than the question it was asked, and the narrower population was not named. The output does not say "in-progress beads under this parent were not compared"; it says nothing about them at all.
+    **Expected:** `waves --parent` compares the planned beads against the beads under the same parent that are already `in_progress`, and names any serialisation against running work separately from serialisation within the plan. At minimum it states how many in-progress beads under the parent it did NOT compare against, so "0 serialisations" cannot be read as "nothing conflicts".
+    **Workaround, measured:** pass the running bead explicitly — `beadloom waves <running-id> <new-id>` — which compares the pair.
+    **Related:** #284 (the same day, the same shape in the planning ruling), #257 (`waves` derived two beads' scopes as disjoint while one document belonged to both), #274 (hand-listed ids losing beads).
+
 282. [2026-09-10] [CRITICAL] a virgin `init` leaves the Gate RED on the documents it just wrote, and the remediation the error names does not clear it
 
     **Severity:** critical (it is the adopter's FIRST two commands, and following the instruction printed by the failure reports success while changing nothing about the verdict)
