@@ -19,9 +19,9 @@ has been launched.
 | `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | blocked |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
-| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | in progress |
-| `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | in progress |
-| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | blocked |
+| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
+| `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ✓ done |
+| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | ready |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
@@ -162,6 +162,24 @@ single allocator (`scanner/ref_ids.py`) now hands them out and the others read.
 Ten unit cases and all three scenarios were measured red against HEAD before the fix, on a
 project built for the purpose. On a repository where the defect does not reproduce, a test that
 was never red is a population of zero wearing a green tick.
+
+**2026-09-11 — wave 3 landed.** `beadloom-w4cd` at `e41e7a10`, `beadloom-39ap` at `5cdf1422`.
+Gate owner: green in a clean room over 5 carried files, and separately green on the tree after
+both landed — `beadloom ci` rc 0, pytest 10034 passed. Neither verdict covers the Ubuntu legs
+or either locale leg, and the target-version sweep does not vary the interpreter the checker
+runs under; the report says so.
+
+Both beads found the ground wider than the plan:
+
+- **`39ap`: `graph/diff.py` had been reducing duplicates the OPPOSITE way to the loader**, so one
+  graph file was two different graphs depending on which reader met it, and `diff` reported
+  against a state the loader never saw. The plan asked only that the reduction be reported; the
+  attempt found two reducers that disagreed. They share one rule now. This was reachable only
+  because wave 1's `4ad3` had counted the readers by name.
+- **`w4cd`: the version is stated in 41 places across 20 files.** The coordinator derived seven
+  by hand, the instruments found nine, and the derivation finds forty-one — including all nine
+  of 2026-09-10 with their checkers. No place is written down in the source and a test enforces
+  that, which is the criterion that keeps the module from becoming the checklist it replaced.
 
 ## Waves
 
