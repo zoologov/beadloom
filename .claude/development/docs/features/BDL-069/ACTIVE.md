@@ -26,7 +26,7 @@ has been launched.
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | ✓ done |
-| `beadloom-rqma.2` | ext | the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row (BDL-UX #284) | P1 | — | ready |
+| `beadloom-rqma.2` | ext | the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row (BDL-UX #284) | P1 | — | ✓ done |
 | `beadloom-yn6i` | ext | three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | — | ready |
 | `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ✓ done |
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
@@ -390,6 +390,47 @@ are unmeasured, and the target sweep does not vary the interpreter mypy runs und
 
 `bd close --suggest-next` named `beadloom-956f` as unblocked. `bd ready --limit 0` does not
 list it, because `rqma.2` and `yn6i` are still open.
+
+**2026-09-11 — extension dev (`beadloom-rqma.2`, BDL-UX #284) landed at `3e1bd77c`.** Two
+halves, for the two causes the entry names. Where a person rules axis rows, the shipped sources
+now say the axis a node surfaced under is not its role and that a `callers` row can be a work
+site: `/task-init` Step 0.5, its BRIEF step and both checklists, both `## Axes` skeletons in
+`/templates`, and the Explore role. They were recomposed with `beadloom setup-agentic-flow`.
+And `impact` names, on each row, the files the row's node owns and the derivation did not read.
+It does this through `ImpactAnswer.unread_ownership`, a `node-owns-unread-files` entry in the
+unresolved population, and a new `Owns unread` column in the rendered section.
+
+Reproduced red first on a foreign rig with the tree's `beadloom` at `7eadb4b4`. A node `skel`
+owned `templates/domain.md.txt`, which its generator reads after calling the target.
+`impact --section` wrote `callers | skel | 1 — src/app/skel/generator.py:8 | ? |` and
+`Unresolved: 1 no-seed`, and nothing named the template. After the change both `skel` rows
+carry `1 — src/app/skel/templates/domain.md.txt`. On this repository,
+`impact src/beadloom/onboarding/presets.py --section` writes
+`49 — src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` on both `onboarding` rows,
+which is the node this epic ruled out and re-ruled.
+
+The column is the decision the reader constraint made. A mark inside `Sites` could not tell a
+table written before the change from a row whose node owns nothing unread. A column read by
+header can: an old table reads `None`, meaning not stated, and a rendered `none` reads `0`.
+No hand-written `Sites` cell, such as `1–4`, is parsed for a mark. `beadloom axes` printed
+byte-identical `--json`, text and `--refs` output over all 202 planning documents before and
+after the change, and BDL-069's `--refs` named the same 23 nodes. It was measured again after
+`9b49b4a0` added `git-activity`: the reader at that commit and the changed reader agree on every
+document, and on 24 nodes for this RFC.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 26 carried files, built from
+`9b49b4a0` with its own interpreter: pytest 10173 passed, 61 skipped, 17 xfailed; ruff clean;
+`mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. That room has no `.git`,
+so its sync-check verified none of 463 pairs and its scope-check skipped. Green on the tree at
+`3e1bd77c`, with `HEAD` unchanged across the run and the tree differing from it only in `.beads/`
+and this file: pytest 10221 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0 over 463 fresh
+pairs. Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs and both locale
+legs are unmeasured, and the target sweep does not vary the interpreter mypy runs under.
+
+Left for the tech-writer, because the files belong to `cli` and `yn6i` reaches `cli.md`:
+`docs/services/cli.md` still lists the `--json` fields without `unread_ownership`, and
+`beadloom axes --json` does not print the parsed column. `bd close --suggest-next` named
+`beadloom-956f`. `bd ready --limit 0` does not list it, because `yn6i` and `rqma.4` are open.
 
 ## Waves
 
