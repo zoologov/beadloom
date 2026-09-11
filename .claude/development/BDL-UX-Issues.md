@@ -35,6 +35,25 @@
 
 ## Open Issues
 
+285. [2026-09-11] [MEDIUM] a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line
+
+    **Severity:** medium (measured failing SAFE — an unreadable description scope serialises against everything; the unsafe case is inferred and not measured, see below)
+    **Command:** `bd update <bead-id> --append-notes "refs: ..."`, then `beadloom waves`
+    **Context:** BDL-069, 2026-09-11. `beadloom-yn6i` was pulled into the epic; its description, written by the agent that filed it, ends with `refs: tui, site-dashboard, agent-prime`.
+    **Measured.** `site-dashboard` is not a graph node (`beadloom ctx site-dashboard` exits 1). The coordinator appended a correct declaration the way `/coordinator` and `CLAUDE.md` document it:
+
+    ```
+    bd update beadloom-yn6i --append-notes "refs: tui, application, agent-prime, mcp-server, cli"
+    beadloom waves beadloom-8lmj beadloom-yn6i ...
+      beadloom-8lmj | beadloom-yn6i — unresolved_scope: beadloom-yn6i: ref_not_in_graph
+    ```
+
+    The appended line was not read. After the SAME list was written into the description's own `refs:` line instead, the same command resolved the scope — `shared_node: agent-prime`. So the description's line wins and the notes line is ignored, with nothing in the output saying a second declaration exists.
+    **Why the documented method is the trap.** The instruction is to declare scope with `--append-notes`. A bead filed by an agent often already carries a `refs:` line in its description, because the filing template asks for one. From then on the documented command writes a declaration nobody reads, and `waves` keeps judging the old one.
+    **The unsafe case, stated as inferred.** Here the stale line named a node that does not exist, which reads as an unknown scope and serialises against everything — conservative. A stale line naming a valid but NARROWER set would read as a known scope, and two beads the appended line says conflict could be reported independent and launched together. That case was not constructed or run.
+    **Expected:** when a bead carries more than one `refs:` declaration, `waves` either merges them or reports the disagreement and which one it judged — never silently picks one. The documentation that says `--append-notes` should say what happens to a description that already declares scope.
+    **Related:** #283 and #284 (the same day; a declaration or a population the instrument did not read, and nothing saying so), #257.
+
 284. [2026-09-11] [MEDIUM] an axis row is ruled by the axis a node first surfaced under, and three nodes ruled out as blast radius turned out to be the sites the fix had to reach
 
     **Severity:** medium (nothing wrong shipped — `scope-check` caught all three; the cost is that the approved RFC disagreed with the code three times in one epic)

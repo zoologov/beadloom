@@ -61,7 +61,9 @@ not cover; one adds a check that does not exist.
 The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`, `sync-check`,
 `agent-prime`, `graph-loader`, `graph-files`, `docs-audit`, `doc-sync`, `doctor`, `rule-engine`,
 `markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled as the work landed — `reindex`,
-`graph-diff` and `onboarding`. Sixteen.
+`graph-diff` and `onboarding`. Sixteen at that point; the 2026-09-11 extension brought it to
+twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wave-plan` and
+`axes-section` re-ruled from out to in.
 
 ## Axes
 
@@ -92,27 +94,44 @@ The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`
 | callers | rule-engine | 5 — `src/beadloom/graph/rules/__init__.py:171` | yes | the third, `summary_facts` over the graph node |
 | callers | markdown-tables | 4 — `src/beadloom/doc_sync/tables.py` | yes | already reads a document as blocks; the comparison reuses it |
 | callers | issue-numbers | 2 — `src/beadloom/doc_sync/issue_numbers.py:100` | yes | the precedent for an opt-in pair declared in config |
-| callers | mcp-server | 1–4 | no | caller of the surfaces; blast radius, not a defect site |
+| callers | mcp-server | 1–4 | **yes** | **extension, `yn6i`, text only.** Owns `docs/services/mcp.md:237`, which says `stale docs` over the same count |
 | callers | reindex | 1–4 | **yes** | **re-ruled after wave 1.** `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment. Ruled `no` at planning as blast radius; that was wrong, and `scope-check` is what said so |
 | callers | graph-diff | 1–2 | **yes** | **re-ruled after wave 1**, for the same reason as `reindex`. It reads at a git ref AND parses what it reads, so it is inside the policy's real population |
-| callers | tui | 1 | no | display only |
-| callers | application | 1 | no | consumes the subject vocabulary for another question |
+| callers | tui | 19 | **yes** | **extension, `yn6i`.** `tui/app.py` `action_sync_check` prints `stale doc(s)` over a count of pairs; owns `docs/services/tui.md:91` |
+| callers | application | 1 | **yes** | **extension, `yn6i`.** `site_dashboard/alerts.py` prints `stale doc(s)` over one row per pair; owns `docs/domains/application/README.md:40` |
 | callers | bd-seam | 5 | no | consumes the subject vocabulary for another question |
 | callers | doc-spaces | 1 | no | consumes the subject vocabulary for another question |
 | callers | flow-suppression | 2 | no | consumes the subject vocabulary for another question |
 | callers | onboarding | 2 | **yes** | **re-ruled after `qylh` landed.** The skeleton text lives in `onboarding/templates/docs/core/{domain,service,feature}.md.txt`, not only in `doc_generator.py`; naming the modules meant editing the templates. Ruled `no` at planning because the node surfaced as a reader of the manifest; it is also the owner of the templates the fix had to reach |
 | callers | declared-scope | 1 | no | consumes `summary_facts` for another question |
 | callers | scope-check | 1 | no | consumes `summary_facts` for another question |
-| callers | axes-section | 1 | no | caller of the block reader; constrains its signature |
+| callers | axes-section | 1 | **yes** | **extension, `rqma.2` (#284).** It surfaced as a caller and it is the READER of the axes section `impact` renders — if a row gains an unreadable-ownership mark, `beadloom axes` must parse it. Owns `axes-section/SPEC.md:41`. The exact shape #284 describes, caught this time rather than after landing |
 | callers | planning-report | 1 | no | caller of the block reader |
 | callers | doc-quality | 2 | no | caller of the block reader |
 | callers | work-item-routing | 1 | no | caller of the block reader |
 | callers | flow-guards | 4 | no | gate blast radius |
-| callers | wave-plan | 1–2 | no | gate blast radius |
+| callers | wave-plan | 1–2 | **yes** | **extension, `rqma.1` (#283).** Membership is limited to ready beads at `waves/population.py:268`, and `TrackerCensus` carries only `beads` and `ready`; owns its SPEC `:262-264` and `wave_plan.feature:444-451` |
 | co-writers | graph-layout | 1 | no | writes the directory but emits no nodes |
 | co-writers | agentic-flow-setup | 1 | no | writes the directory but emits no nodes |
 | callers | doc-shape | 3 | no | reads sections, not blocks — a different granularity |
 | callers | graph | 1 | no | reader downstream of the loss |
+| callers | cli | — | **yes** | **extension, NEW, `yn6i` and `rqma.1`.** Surfaced in no run: it owns `docs/services/cli.md`, whose `prime` section (`:1224`) and `waves --parent` section (`:1371-1386`) both carry wording the two fixes change |
+| branches | impact | `render_axes_section`, `open_boundary` | **yes** | **extension, NEW, `rqma.2` (#284).** Renders the row that must name unreadable ownership; owns `impact/SPEC.md:107,145-151,230` and `impact.feature:17` |
+| callers | doc-shape-requirements | 1 | no | extension; a caller of the freshness surface |
+| callers | doc-templates | 2 | no | extension; a caller, and `qylh` already changed the templates it serves |
+| callers | review-brief | 1 | no | extension; a caller |
+| callers | role-composer | 2 | no | extension; composes role text and owns none of the wording changed |
+| callers | role-duties | 1 | no | extension; a caller |
+| callers | role-map | 1 | no | extension; a caller |
+| callers | site-generation | 1 | no | extension; a caller |
+| callers | doc-roots | 1 | no | extension; a caller of the bead-id reader |
+| callers | document-pairs | 1 | no | extension; shipped by `19m6`, a caller of the bead-id reader |
+| callers | ignore-block | 1 | no | extension; a caller |
+| callers | ai-techwriter-setup | 6 | no | extension; composes templates it does not own |
+| callers | config-check | 4 | no | extension; compares the composed `task-init.md` and goes quiet once `setup-agentic-flow` recomposes it |
+| callers | role-adapters | 1 | no | extension; a caller |
+| callers | gate-ownership | 1 | no | extension; a caller of the impact boundary |
+| callers | vitepress-site | — | no, **with a check** | extension; outside `scan_paths`. `site/.vitepress/theme/components/AlertBanner.vue:38` DISPLAYS the alert text. If the wording arrives from Python it needs no change; if the component hard-codes `doc(s)`, it does. `yn6i` checks on the file before this row is final |
 
 **Two rows were re-ruled on 2026-09-11, after wave 1 landed.** `reindex` and `graph-diff`
 were ruled out of scope at planning as blast radius — readers downstream of the defect that
@@ -128,6 +147,12 @@ in that node's templates. Three re-rulings in one epic, all in the same directio
 blast radius that turned out to be work sites — is itself worth recording: the planning ruling
 read each node by the axis it FIRST appeared under, and a node that appears as a caller can also
 own the thing the fix must reach.
+
+**The extension of 2026-09-11 was ruled with the lesson of #284 applied.** The Explore run for
+the three added beads was told to mark, on every row, whether a node owns a non-Python artifact
+the change may reach. That is how `cli` was found — it surfaced in no run at all and owns the
+reference text two of the fixes change — and how `axes-section` was ruled in before landing
+rather than after: it surfaced as a caller and is the reader of the very format `#284` alters.
 
 The rows above are the **node level**. The per-function `branches` rows of the eighteen
 sections are omitted for length and are reproducible verbatim by re-running the commands each
