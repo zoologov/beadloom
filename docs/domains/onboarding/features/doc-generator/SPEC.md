@@ -86,9 +86,15 @@ describe the node from them.
   that was not re-indexed. A walk is also not bounded by the scan paths. Measured on
   this repository over 104 nodes: the directory walk took 12.45 s and gave the site
   node 68 382 symbols from `node_modules`, while the index took 0.006 s.
-- **The routes are not yet matched this way.** They come from `nodes.extra`, which
-  the reindex fills by string prefix, so a node still receives a prefix-sharing
-  sibling's routes. That is filed as `beadloom-rqma.4`, outside this node.
+- **The routes are matched by the same rule.** They come from `nodes.extra`, which
+  the reindex fills. Until BDL-069 `beadloom-rqma.4` it filled them by string prefix,
+  and on the same foreign repository `docs polish --ref-id ledger` named `GET /replay`
+  from `src/ledger_archive/api.py`. `_symbols_for_node`, the route attribution and git
+  activity now call one rule, `infrastructure.node_source.NodeSource`, reached from
+  this domain through a stated `onboarding-no-direct-infra` exemption. A root node
+  whose source is `''` is given no route, as it was already given no symbol. An index
+  built before the change keeps its misattributed routes until a reindex that runs
+  the route step: any changed file, or `reindex --full`.
 
 ## Skeleton Enrichment
 

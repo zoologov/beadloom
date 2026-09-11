@@ -298,10 +298,22 @@ def _update_node_extra(conn: sqlite3.Connection, ref_id: str, key: str, value: o
 Merge a key/value into a node's `extra` JSON column. Does nothing if `ref_id` does not exist.
 
 ```python
+def _drop_node_extra_key(conn: sqlite3.Connection, ref_id: str, key: str) -> None
+```
+
+Remove a key from a node's `extra` JSON column. Writes nothing if the node does not exist or does not carry the key.
+
+```python
+def _scan_routes(project_root: Path) -> list[dict[str, object]]
+```
+
+Every API route under the scan directories, each with `method`, `path`, `handler`, the project-relative `file`, `line` and `framework`.
+
+```python
 def _extract_and_store_routes(project_root: Path, conn: sqlite3.Connection) -> None
 ```
 
-Scan source files for API routes using `_EXT_TO_LANG` for language detection and store aggregated results in `nodes.extra["routes"]`.
+Scan source files for API routes using `_EXT_TO_LANG` for language detection and store aggregated results in `nodes.extra["routes"]`. A route is stored on every node whose source its file lies under, by path component, as `infrastructure.node_source.NodeSource.holds` answers: the file is the source, or continues it past a `/`. A node whose source is `''` or absent is given no route. Until BDL-069 `beadloom-rqma.4` the match was a string prefix, so `src/ledger/` took the routes of `src/ledger_archive/` and a root with `source: ''` took every route. The store is the whole answer, not a merge: a node that holds no route now loses its `routes` key, so a route deleted from the code, or attributed under the old rule, is withdrawn by the next reindex that runs. Before, a node was only ever written when it had routes, and measured on a foreign repository an incremental reindex after a code change left the prefix-attributed route in place. An incremental reindex that finds no changed file returns before this step, so an index built under the old rule keeps those routes until a file changes or `reindex --full` runs.
 
 ```python
 def _store_git_activity(conn: sqlite3.Connection, project_root: Path) -> None
@@ -406,6 +418,7 @@ class ReindexResult:
 - Incremental reindex always rebuilds `sync_state` from scratch (full delete + rebuild) even though only some files changed, using preserved `symbols_hash` values.
 - Incremental reindex always clears `bundle_cache` (conservative invalidation).
 - Incremental reindex re-extracts API routes after code changes.
+- A route, a symbol handed to `docs polish` and a commit counted as activity are attributed to a node by one rule, `NodeSource.holds`. None of those three readers compares a file path with a source by itself, and a test asserts it of each. Ownership, which node a file BELONGS to, is a different rule and lives in `repository.source_covers`.
 - Incremental reindex re-extracts imports for changed/added code files and deletes those of removed files, then rebuilds the derived `depends_on` edges, so the incremental import graph is identical to the one a full rebuild produces. Measured on Beadloom's own tree (67 nodes, 1255 symbols, 1322 imports): +29 ms for one changed file, +42 ms for five, against 755 ms for a full rebuild.
 - Only `depends_on` edges carrying `extra.derived = "imports"` are deleted by that refresh; an edge declared in the graph YAML is never touched.
 - Incremental reindex backfills `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), ensuring accurate reporting even when the incremental path does not touch the graph or code symbols.
@@ -444,3 +457,4 @@ Tests should cover the following scenarios:
 - **Test mapping**: Verify `_store_test_mappings()` populates `nodes.extra["tests"]`.
 - **Git activity**: Verify `_store_git_activity()` populates `nodes.extra["activity"]`.
 - **Route extraction**: Verify `_extract_and_store_routes()` populates `nodes.extra["routes"]`.
+- **Route attribution**: `tests/test_a_file_lies_under_a_source_by_one_rule.py` runs one table of source shapes against the route store, `docs polish` and git activity, and withdraws a stale route through a real incremental reindex. `tests/acceptance/features/routes_under_source.feature` runs `init`, `reindex` and `docs polish` end to end.

@@ -9,6 +9,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.node_source import NodeSource
 from beadloom.onboarding.doc_templates import (
     DEFAULT_DOC_CONFIG,
     doc_flow_config,
@@ -326,8 +327,10 @@ def _symbols_for_node(
 
     A file is under the source when its path IS the source — a single-file source,
     which a match on ``source + "/"`` alone would leave empty — or continues it past
-    a ``/``. The source is normalised as `_symbols_on_disk` normalises it, and a test
-    holds the two readers to one population for every shape of source.
+    a ``/``. That rule is :class:`~beadloom.infrastructure.node_source.NodeSource`,
+    which the route attribution and the git activity of a reindex call too, since
+    BDL-069 `beadloom-rqma.4`. A test holds this reader and `_symbols_on_disk` to one
+    population for every shape of source.
 
     It stays on the index rather than walking the directory as the skeleton does,
     because the rest of the polish payload — drift, edges, routes, activity, tests —
@@ -335,13 +338,10 @@ def _symbols_for_node(
     Measured on this repository over its 104 nodes: the walk took 12.45 s and gave
     the site node 68 382 symbols from `node_modules`; the index took 0.006 s.
     """
-    source = str(node.get("source") or "").strip().rstrip("/")
-    if not source:
-        return []
-    below = f"{source}/"
+    under = NodeSource(str(node.get("source") or ""))
     result: list[dict[str, Any]] = []
     for fp, syms in symbols_by_source.items():
-        if fp == source or fp.startswith(below):
+        if under.holds(fp):
             result.extend(syms)
     return result
 

@@ -187,6 +187,19 @@ rules:
           until: >-
             prime_context() reads through the repository seam and this entry
             goes dead — BDL-UX #150 follow-up
+        - to: "beadloom/infrastructure/node_source"
+          reason: >-
+            'A file lies under a node's source' was written three times, in three
+            domains, and one copy took a sibling's routes (BDL-069
+            beadloom-rqma.4). Its one body must be importable by all three, and
+            git_activity is infrastructure, which imports nothing above it, so
+            the body is here and doc_generator is the one caller that crosses.
+            A path predicate opens no index and runs no git. Rejected: a copy in
+            onboarding, which is the defect, and a re-export through a domain,
+            which satisfies the glob without changing a dependency.
+          until: >-
+            the rule is re-scoped to what it actually means (open no index, run
+            no git) — BDL-UX #150 follow-up
 
   # ai_agents is a leaf consumer (BDL-051 / S2): it MAY consume application /
   # context_oracle / graph / doc_sync read APIs + the bd/beadloom shells, but it
