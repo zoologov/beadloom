@@ -53,7 +53,8 @@ graph TD
 | BEAD-17 | `6rgr`: `docs polish` matches a node's source by path component, not string prefix | P1 | - | Pending |
 | ~~BEAD-18~~ | ~~`rqma.3` (#285)~~ — **withdrawn, not a defect** | — | — | Closed |
 | BEAD-19 | `rqma.4`: one helper for 'a file lies under a node's source', called by all three sites | P1 | - | Pending |
-| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13, 14, 15, 16, 17, 19 | Pending |
+| BEAD-20 | `rqma.5`: one computation of the stale-pair count, populations named, in the existing seam | P1 | - | Pending |
+| BEAD-10 | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | 03, 04, 07, 09, 13, 14, 15, 16, 17, 19, 20 | Pending |
 | BEAD-11 | review | P0 | 10 | Pending |
 | BEAD-12 | tech-writer | P1 | 11 | Pending |
 

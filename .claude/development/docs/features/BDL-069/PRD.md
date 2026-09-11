@@ -85,12 +85,22 @@ reason it qualifies:
   source" is implemented three times independently — two right, one wrong — so the fix is one
   shared helper all three call, which is what stops a fourth site being born with the defect.
 
+- **`beadloom-rqma.5`** — taken as a class fix and then **narrowed on 2026-09-12 when its axes were
+  derived.** The bead named four surfaces; the derivation found nineteen reading `sync_state`, and —
+  the finding that changed its shape — **four different populations** under one name: pairs
+  `status='stale'`, pairs `IN ('stale','missing')`, distinct `ref_id` (nodes), and documents after
+  grouping. This bead keeps the mechanical half: one shared computation with the populations named,
+  placed in the seam that already exists, and the sites whose population is right and whose noun is
+  wrong. The half that is a decision per surface is split out as **`beadloom-r9t5`**, outside this
+  epic — what a screen should count is a product judgement, and making it for nineteen screens
+  inside a closing epic is what this epic exists to prevent.
+
 **One bead was added and withdrawn the same day.** `beadloom-rqma.3` (BDL-UX #285) was opened on
 the coordinator's diagnosis that `waves` ignores a `refs:` line appended to notes. An Explore run
 showed `waves` unions every line and had named the bad ref in its own output, which the
 coordinator had truncated. It is closed as not-a-defect and is not part of this epic's scope.
 
-The goals below are unchanged; these six add to them rather than replacing any.
+The goals below are unchanged; these seven add to them rather than replacing any.
 
 ## Impact
 

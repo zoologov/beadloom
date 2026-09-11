@@ -63,7 +63,8 @@ The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`
 `markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled as the work landed — `reindex`,
 `graph-diff` and `onboarding`. Sixteen at that point; the 2026-09-11 extension brought it to
 twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wave-plan` and
-`axes-section` re-ruled from out to in. `rqma.4` then added `git-activity`: twenty-four.
+`axes-section` re-ruled from out to in. `rqma.4` then added `git-activity`: twenty-four. `rqma.5` added `repository`, `graph-reads`,
+`why`, `status` and `health`: twenty-nine.
 
 ## Axes
 
@@ -118,6 +119,11 @@ twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wa
 | callers | cli | — | **yes** | **extension, NEW, `yn6i` and `rqma.1`.** Surfaced in no run: it owns `docs/services/cli.md`, whose `prime` section (`:1224`) and `waves --parent` section (`:1371-1386`) both carry wording the two fixes change |
 | branches | impact | `render_axes_section`, `open_boundary` | **yes** | **extension, NEW, `rqma.2` (#284).** Renders the row that must name unreadable ownership; owns `impact/SPEC.md:107,145-151,230` and `impact.feature:17` |
 | callers | git-activity | 1 — `src/beadloom/infrastructure/git_activity.py` | **yes** | **extension, NEW, `rqma.4`.** `_map_file_to_node` is one of three independent implementations of 'a file lies under a node's source' — the correct one. Owned per `GraphBoundary.owner_of`; in scope because the fix is one helper all three call |
+| callers | repository | 1 — `src/beadloom/infrastructure/repository.py:217` | **yes** | **extension, NEW, `rqma.5`.** Holds `get_stale_pairs_for_ref`, the only shared pair reader today; the shared count goes beside it |
+| callers | graph-reads | 1 — `src/beadloom/application/graph_reads.py:45` | **yes** | **extension, NEW, `rqma.5`.** The seam that exists because of `tui-no-direct-infra`; `tui` reaches the pair reader through it, so no new exemption is needed |
+| callers | why | 1 — `src/beadloom/context_oracle/why.py:245` | **yes** | **extension, NEW, `rqma.5`.** `_count_stale_docs` counts pairs and prints `Stale docs:` |
+| callers | status | 1 — `src/beadloom/application/status.py:101` | **yes** | **extension, NEW, `rqma.5`.** Counts pairs; the population question on its trend row goes to `beadloom-r9t5`, not here |
+| callers | health | 1 — `src/beadloom/infrastructure/health.py:41` | **yes** | **extension, NEW, `rqma.5`.** Counts pairs behind the trend arrow; infrastructure, which is why placement had to be measured |
 | callers | doc-shape-requirements | 1 | no | extension; a caller of the freshness surface |
 | callers | doc-templates | 2 | no | extension; a caller, and `qylh` already changed the templates it serves |
 | callers | review-brief | 1 | no | extension; a caller |
