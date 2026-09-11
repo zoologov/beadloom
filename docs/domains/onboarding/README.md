@@ -217,7 +217,7 @@ Module `src/beadloom/onboarding/presets.py`:
 - `detect_preset(root)` -- auto-detect architecture (mobile-aware: checks React Native/Expo/Flutter first)
 
 Module `src/beadloom/onboarding/doc_generator.py`:
-- `generate_skeletons(project_root)` -- create docs/ tree from the graph on disk, write `docs:` back to the graph file each node came from, generate `.beadloom/README.md`. Every node document whose `source` is a directory names the Python files directly inside it, read off the disk, because `missing_modules` requires it and `init --yes` writes the skeletons before any index exists. The pair is NOT attested at write time (BDL-069 S1, BDL-UX #282)
+- `generate_skeletons(project_root)` -- create docs/ tree from the graph on disk, write `docs:` back to the graph file each node came from, generate `.beadloom/README.md`. Every node document whose `source` is a directory names the Python files directly inside it, read off the disk, because `missing_modules` requires it and `init --yes` writes the skeletons before any index exists. The pair is NOT attested at write time (BDL-069 S1, BDL-UX #282). The Public API table is parsed off the disk as well, for every file under the node's source and only for a document that does not exist yet, because the index it used to come from is absent on `init --yes`, `init --bootstrap` and a clone — only the wizard had one, so one project got two different skeletons (BDL-069 `beadloom-8lmj`)
 - `generate_polish_data(project_root, ref_id?)` -- return structured JSON with SQLite dependency edges, symbol change detection, routes/activity/tests
 - `format_polish_text(data)` -- render polish data as multi-line human-readable text with symbol drift, routes, activity, tests
 

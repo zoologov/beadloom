@@ -17,7 +17,7 @@ structured data for AI agents to enrich those skeletons. Part of the
 
 | Function | Description |
 |----------|-------------|
-| `generate_skeletons(project_root)` | Create `docs/` tree from the graph on disk: architecture.md, domain READMEs, service pages, feature SPECs. Loads symbols from SQLite for Public API sections. Writes `docs:` field back to the graph file each node came from, via `_patch_docs_field()`. Takes the project root and nothing else since BDL-067 `.21`: it also accepted a node list, and `docs/architecture.md` is a document about the WHOLE graph, so a caller that passed one got a whole-tree document describing part of the tree. Three of four callers read the tree and one passed a list, which left `init --bootstrap` and the wizard leaving different documents on a project that already carried a graph file (BDL-UX #216, the review of BDL-067 `.20`, major 1). Removing the parameter closes it for callers written later as well; it is an API change for anyone importing `beadloom.onboarding.generate_skeletons`. |
+| `generate_skeletons(project_root)` | Create `docs/` tree from the graph on disk: architecture.md, domain READMEs, service pages, feature SPECs. Parses the code under each node it writes a document for, off the disk, for the Public API table; it reads no index. Writes `docs:` field back to the graph file each node came from, via `_patch_docs_field()`. Takes the project root and nothing else since BDL-067 `.21`: it also accepted a node list, and `docs/architecture.md` is a document about the WHOLE graph, so a caller that passed one got a whole-tree document describing part of the tree. Three of four callers read the tree and one passed a list, which left `init --bootstrap` and the wizard leaving different documents on a project that already carried a graph file (BDL-UX #216, the review of BDL-067 `.20`, major 1). Removing the parameter closes it for callers written later as well; it is an API change for anyone importing `beadloom.onboarding.generate_skeletons`. |
 | `generate_polish_data(project_root, ref_id?)` | Return structured JSON (nodes with symbols/deps/existing docs, Mermaid diagram, AI enrichment prompt). Enriches with SQLite dependency edges via `_enrich_edges_from_sqlite()`. |
 | `format_polish_text(data)` | Render polish data as multi-line human-readable text with node details, symbols, deps, doc status. |
 
@@ -98,11 +98,40 @@ exited 0 and the next `beadloom ci` exited 1 on `sync-check FAIL: 4 stale doc(s)
 - **A pair is still a document and a code file.** Two files in a package give two
   pairs over one README, and the list changes nothing about how pairs are counted.
 
-When the SQLite database exists at the moment the skeleton is written, skeletons
-also include:
+Every node document whose source holds a public symbol also carries a **Public API**
+table: the public classes and functions of every file under the node's source, sorted
+by name, with `_`-prefixed names excluded. `_symbols_on_disk` parses them with
+`code_indexer.extract_symbols`, the function the reindex calls per file, and
+`_render_symbols_section` renders them.
 
-- **Public API** table — public symbols (classes, functions) extracted from `code_symbols`, filtered by source path prefix, private symbols (`_`-prefixed) excluded. On `init --yes` the database does not exist yet, so a virgin project's skeletons carry no Public API table (measured on BDL-069 S1's two-package fixture, filed as `beadloom-8lmj`)
-- **Dependencies** section — `depends_on` and `used_by` edges (excluding structural `part_of`)
+- **Read off the disk, not the index.** The table came from `code_symbols` until
+  BDL-069 `beadloom-8lmj`, and the index is the one input whose presence depends on
+  the caller. Measured on a wheel built from the tree, against a repository holding
+  `src/ledger/` and `src/billing/`: `init --yes` and `init --bootstrap` write their
+  skeletons before their reindex and wrote no table, the wizard re-indexes first and
+  wrote it, and `docs generate` on a clone — which has no index, because `init`
+  lists it in `.gitignore` — wrote none either. `diff -r` between the `--yes` and
+  wizard `docs/` trees differed in exactly the two tables, and `beadloom ci` was rc 0
+  on both, because no rule reads the table. The order `init` runs its steps in was
+  not changed: skeletons still precede the reindex that loads their `docs:` patch.
+- **The population is the index's, with two stated differences.** `extract_symbols`
+  returns nothing for an extension it has no grammar for, before it reads the file,
+  so the same files yield rows. A directory source is walked, where the index reader
+  `_symbols_for_node` matches by string prefix and gives `src/ledger/` the symbols of
+  `src/ledger_archive/` as well (measured). The node's source is read wherever it
+  is, where the index holds only the configured scan paths.
+  `tests/test_the_init_skeleton_carries_its_public_api.py` builds an index with the
+  real reindex and compares the two readers over one tree.
+- **Parsed only for a document that will be written, and each file once.** A node
+  whose document already exists is skipped before rendering, and one run memoises
+  its parses by path, so a feature nested in a domain costs no second parse.
+  Measured on this repository: parsing every node source unconditionally walked
+  17 294 files in about 13 s, 16 433 of them under the site node's `node_modules`.
+- **Best effort.** A file that does not decode costs the table its rows, logged at
+  debug level, and not the skeleton its existence.
+
+Every node document also carries a **Dependencies** section: the `depends_on` and
+`used_by` edges of the graph files, excluding structural `part_of`.
 
 ## Internal Functions
 
@@ -111,7 +140,9 @@ also include:
 | `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml`, through `graph_files.each_graph_file`. `.21` made this the reader `init --bootstrap` reaches, and it had no unreadable-YAML guard: the adopter got a `yaml.parser.ParserError` traceback (the review of `.23`, major 3) |
 | `_find_root_node` | Identify root service (no `part_of` as src) |
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
-| `_load_symbols_by_source` | Best-effort SQLite symbol loading |
+| `_load_symbols_by_source` | Best-effort SQLite symbol loading, for `generate_polish_data`, which runs after a reindex |
+| `_symbols_on_disk` | The symbols of every file under a node's source, parsed off the disk and memoised per run, for the skeleton's Public API table |
+| `_parse_symbols` | One file's symbols through `code_indexer.extract_symbols`, or none when the file does not decode |
 | `_modules_for_node` | File names of the Python files directly inside a directory `source`, read off the disk, sorted |
 | `_render_modules_section` | The `## Modules` list, or an empty string when there is nothing to name |
 | `_render_symbols_section` | Markdown table from public symbols |

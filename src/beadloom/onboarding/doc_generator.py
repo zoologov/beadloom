@@ -329,6 +329,65 @@ def _symbols_for_node(
     return result
 
 
+def _symbols_on_disk(
+    node: dict[str, Any],
+    project_root: Path,
+    parsed: dict[Path, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Code symbols of every file under *node*'s source, parsed off the DISK.
+
+    The skeleton's Public API table used to come from the index, and three of
+    the four ways a skeleton is written have none at that moment: `init --yes`
+    and `init --bootstrap` write skeletons before their reindex, and a clone has
+    no index because `init` lists it in `.gitignore`. Only the wizard, which
+    re-indexes first, wrote the table (measured, BDL-069 `beadloom-8lmj`). Reading
+    the code makes the table a function of the tree, so no caller has to
+    remember an order to get the same document as another.
+
+    The parser is `extract_symbols`, the function the reindex calls per file, and
+    it returns nothing for an extension it has no grammar for without reading the
+    file — so the population is the index's. Two differences are deliberate: a
+    directory source is WALKED, where the index reader matches by string prefix
+    and so gives `src/ledger/` the symbols of `src/ledger_archive/` too; and the
+    node's source is read wherever it is, where the index holds only the
+    configured scan paths.
+
+    *parsed* memoises one run's parses by path, so a feature nested inside a
+    domain does not parse the files they share twice.
+    """
+    source = str(node.get("source") or "").strip()
+    if not source:
+        return []
+    target = project_root / source
+    if target.is_file():
+        files = [target]
+    elif target.is_dir():
+        files = sorted(path for path in target.rglob("*") if path.is_file())
+    else:
+        return []
+    symbols: list[dict[str, Any]] = []
+    for path in files:
+        if path not in parsed:
+            parsed[path] = _parse_symbols(path)
+        symbols.extend(parsed[path])
+    return symbols
+
+
+def _parse_symbols(path: Path) -> list[dict[str, Any]]:
+    """One file's symbols, or none when it cannot be read as text.
+
+    Best effort, as the index read was: a file that does not decode costs the
+    table its rows and not the skeleton its existence.
+    """
+    from beadloom.context_oracle import code_indexer
+
+    try:
+        return code_indexer.extract_symbols(path)
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.debug("Skipping the symbols of %s: %s", path, exc)
+        return []
+
+
 #: What a skeleton names as a module: a Python file. It is the population
 #: `missing_modules` reads, and that rule is the only reason the list exists.
 _MODULE_SUFFIX = ".py"
@@ -1002,6 +1061,12 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
     first — which every caller does, since the graph file is the thing being
     documented.
 
+    THE CODE IS READ FROM THE DISK, ALWAYS, for the same reason one step further
+    on. The Public API table came from the index until BDL-069 `beadloom-8lmj`,
+    and the index is the one input whose presence depends on the caller: `init
+    --yes`, `init --bootstrap` and `docs generate` on a clone wrote the table-less
+    document, and only the wizard, which re-indexes first, wrote the table.
+
     Returns ``{"files_created": N, "files_skipped": M}``.
     """
     nodes, edges = _load_graph_from_yaml(project_root)
@@ -1011,8 +1076,10 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
     project_name: str = root_node["ref_id"] if root_node else project_root.name
     root_ref_id: str | None = root_node["ref_id"] if root_node else None
 
-    # Best-effort symbol loading.
-    symbols_by_source = _load_symbols_by_source(project_root)
+    # Symbols are parsed off the disk per node, lazily, and each file at most once
+    # in this run — never read from the index, which three of the four callers do
+    # not have yet (see `_symbols_on_disk`).
+    parsed: dict[Path, list[dict[str, Any]]] = {}
 
     docs_dir = project_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -1047,8 +1114,16 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
         doc_path = _doc_path_for_node(node, edges, project_root)
         if doc_path is None:
             continue
+        # Asked BEFORE rendering, and not only by `_write_if_missing`, because a
+        # render parses the node's code. Measured on this repository: parsing every
+        # node source walked 17 294 files in about 13 s, for a run that wrote
+        # nothing because every document already existed.
+        if doc_path.exists():
+            logger.debug("Skipping existing file: %s", doc_path)
+            skipped += 1
+            continue
 
-        node_symbols = _symbols_for_node(node, symbols_by_source)
+        node_symbols = _symbols_on_disk(node, project_root, parsed)
         render = {
             "domain": _render_domain_readme,
             "service": _render_service,
