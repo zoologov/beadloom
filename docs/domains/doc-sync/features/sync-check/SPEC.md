@@ -260,6 +260,51 @@ would have recorded a reading of a change the operator had not seen.
 operator who really did read all of a ref's documents must be able to say so in
 one command; taking that away would be its own cost.
 
+### What re-attesting can clear, and what it cannot
+
+An attestation rewrites a recorded baseline. A stale reason that compares against
+a recorded baseline is cleared by it, and a reason that reads what a file says is
+not. Before BDL-069 every stale reason printed "run `sync-update`", so
+`missing_modules` inherited an instruction that could not clear it: on a
+repository whose package document did not name one of its modules,
+`sync-update --yes --all` exited 0, reported the pairs re-attested, and left the
+verdict where it was (BDL-UX #282).
+
+Which reasons move was measured through the real reindex, `attest_ref` and
+`check_sync` pipeline, one reason at a time, rather than read off the code:
+
+| Stale reason | Re-attesting clears it | What clears it otherwise |
+|---|---|---|
+| `hash_changed` | yes | — |
+| `hash_changed_since_head` | yes | — |
+| `symbols_changed` | yes | — |
+| `untracked_files` | no — no pair exists for the file | an annotation on the file, or a `beadloom:track` marker in the document |
+| `missing_modules` | no — the check reads the document's text | naming each module in the document |
+
+`REASONS_ATTESTATION_CLEARS` holds the first three and is an ALLOW-LIST: a reason
+added later is not clearable until it has been measured to be, so it cannot inherit
+a re-attest instruction by default. `content_remedy(row)` is the one wording of
+what clears every other reason, and the gate's remediation, the `sync-check
+--report` footer and `sync-update`'s account of what it left all print it. An
+unmeasured reason gets "revise the document", which is true of every reason, and
+says that nothing has measured whether re-attesting clears it.
+
+Clearing a reason can reveal the next one. A pair stale on `hash_changed` whose
+document also lacks a module reads `missing_modules` once it is attested, because
+the coverage phases only overwrite an `ok` or `unverified` verdict. The printed instruction still
+cleared the reason it was printed for, and `sync-update` names the new one.
+
+The token alone does not decide it. `check_sync_since` spells its verdict
+`hash_changed` and compares against the code at a git ref, which an attestation does
+not write: measured, attesting every pair left `sync-check --since HEAD` exactly as
+stale. The flag answers for the stored-baseline check, and the `--report` footer
+under `--since` tells no pair to re-attest.
+
+A pair that is `unverified` with `no_baseline` is not cleared by the bare
+`sync-update <ref> --yes` either: that form claims the stale and missing pairs
+only, so it attests nothing here. `--pair <doc_path>` does clear it, and that is
+the form the gate names.
+
 ### Where the baseline lives
 
 **Not in the database.** `.beadloom/beadloom.db` is a derived cache: git-ignored,
@@ -448,8 +493,9 @@ rather than left to be discovered:
   `--since <ref>` (which the CI harness passes on a fresh checkout) and by the
   carried index baseline on a machine that has one.
 - A project that is not a git repository and has just been indexed has no
-  baseline at all. It reports `unverified` and says so; `sync-update` is the way
-  back to a checkable state.
+  baseline at all. It reports `unverified` and says so, and the way back to a
+  checkable state is `sync-update <ref> --yes --pair <doc_path>`, because the
+  bare form claims no unverified pair.
 
 ## API
 
@@ -474,6 +520,14 @@ Module `src/beadloom/doc_sync/engine.py`:
   `BLOCKING_STATUSES`, `BASELINE_INDEX` / `BASELINE_GIT` / `BASELINE_NONE`,
   `BASELINE_SOURCE_INDEX_BUILD` / `_CARRIED` / `_ATTESTED` — the verdict and
   baseline vocabulary, owned by the domain that interprets it.
+- `REASON_HASH_CHANGED` / `REASON_HASH_CHANGED_SINCE_HEAD` /
+  `REASON_UNTRACKED_FILES` / `REASON_MISSING_MODULES`, beside the existing
+  `REASON_SYMBOLS_CHANGED` / `REASON_SIBLING_SYMBOLS_CHANGED` — the stale-reason
+  tokens `check_sync` emits.
+- `REASONS_ATTESTATION_CLEARS` / `attestation_clears(reason) -> bool` — whether
+  re-attesting can clear a stale reason; `False` for any reason not measured.
+- `content_remedy(row) -> str` — what clears a stale row whose reason
+  re-attesting cannot clear. See *What re-attesting can clear, and what it cannot*.
 - `mark_synced(...)` / `mark_synced_by_ref(...)` / `attest_ref(..., scope=...)`
   / `pairs_of_ref(...)` — re-baseline a symbol pair, a scope of pairs, or a
   whole ref. See *The scope of an attestation* below.
@@ -544,4 +598,6 @@ Tests: `tests/test_sync_engine.py`, `tests/test_sync_since.py`,
 `tests/test_surface.py`, `tests/test_reference_drift.py`,
 `tests/test_cli_reference_drift.py`,
 `tests/test_integration_reference_freshness.py`,
-`tests/test_e2e_sync_honest.py`, `tests/test_s2_lying_checks.py`
+`tests/test_e2e_sync_honest.py`, `tests/test_s2_lying_checks.py`,
+`tests/test_a_remediation_can_be_followed.py` (the allow-list measured reason by
+reason, over `tests/stale_pair_project.py`)

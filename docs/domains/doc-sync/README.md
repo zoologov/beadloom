@@ -80,6 +80,14 @@ green result says what it was green against.
 | `section_not_in_use` | A required section no majority of a kind's documents carries — reported once against the KIND, with its ratio, because the fix is in the template and not in every document |
 | `surface_drift` | **Advisory warning** (severity `warning`, never a hard failure / exit 2). A reference / overview doc that declared `<!-- beadloom:watches=... -->` has had a watched surface (`cli` / `graph` / `flow.yml`) change since its baseline. Stored in the separate `reference_state` table; cleared with `beadloom sync-update <doc> --yes`. |
 
+Re-attesting clears `hash_changed`, `hash_changed_since_head` and `symbols_changed`, and nothing
+else: `untracked_files` needs a pair that does not exist yet, and `missing_modules` reads what the
+document says. That was measured one reason at a time through the real pipeline (BDL-069), and
+`REASONS_ATTESTATION_CLEARS` holds the result as an allow-list, so a reason added later is not
+told to re-attest until somebody measures that it can be. Every surface that prints an
+instruction for a stale pair chooses it from that flag — see
+[Sync Check](features/sync-check/SPEC.md#what-re-attesting-can-clear-and-what-it-cannot).
+
 ### Modules
 
 - **engine.py** -- Core sync engine: sync state building, multi-phase sync checking, hash computation, coverage analysis, and reference-doc surface-drift state (build/check/clear)
@@ -177,6 +185,8 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `check_sync_since(conn: sqlite3.Connection, *, project_root: Path, since: str) -> list[dict[str, Any]]` -- Report doc-code pairs that drifted **relative to a git ref baseline** (instead of the stored `sync_state`). A pair is stale-since-ref iff its code file changed between `since` and the working tree **and** its linked doc was *not* correspondingly updated since `since` (if the doc also changed, the dev already touched it → `ok`). Reads git (`git show <ref>:<path>`) + disk only; mutates neither `sync_state` nor the working tree; result shape mirrors `check_sync` so the JSON/porcelain renderers are shared. This is what makes drift detection survive a fresh CI checkout (a clean clone re-baselines `sync_state` to the just-pushed code, masking per-push drift).
 - `_validate_git_ref(project_root: Path, ref: str) -> bool` -- `git rev-parse --verify <ref>`; an all-zero SHA (force-push / first-push sentinel) never resolves so it is rejected. Mirrors `graph.diff._validate_git_ref`.
 - `check_source_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if all source files in a node's directory are tracked. Returns list of dicts with `ref_id`, `doc_path`, `untracked_files`.
+- `attestation_clears(reason: str) -> bool` -- (BDL-069) Whether re-attesting a stale pair can clear *reason*; reads `REASONS_ATTESTATION_CLEARS`, and is `False` for a reason nothing has measured.
+- `content_remedy(row: Mapping[str, Any]) -> str` -- (BDL-069) What clears a stale row whose reason re-attesting cannot clear, in the one wording the gate, the `--report` footer and `sync-update` all print.
 - `check_doc_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if documentation mentions module names from the source directory. Returns list of dicts with `ref_id`, `doc_path`, `missing_modules`.
 - `build_reference_state(conn: sqlite3.Connection, project_root: Path) -> int` -- (BDL-057 Layer 2) Discover `watches`-annotated reference docs and baseline each one's aggregate surface hash into the `reference_state` table. The baseline is **preserved across reindex** for docs already tracked with the same `watches` set (so accrued surface drift survives a routine reindex, mirroring the symbol-pair fixpoint concern); a fresh baseline is taken only for newly-discovered docs or when the declared `watches` set changes. Docs whose annotation was removed are dropped. Idempotent. Returns the number of reference docs recorded.
 - `check_reference_drift(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- (BDL-057 Layer 2) Recompute each reference doc's aggregate hash and report drift. Returns one dict per reference doc with `doc_path`, `watches`, `status` (`ok`/`surface_drift`), `reason`, and `severity` (always `warning`). Persists the new status; never affects the `sync-check` exit code.
@@ -305,6 +315,8 @@ beadloom sync-update [REF_ID] [--check] [--yes|-y] [--all]
 Show sync status and update docs for a ref_id. In interactive mode (default), displays stale pairs and opens each stale doc in `$EDITOR` for manual correction, then marks them synced via `mark_synced` -- already per pair. In non-interactive mode (`--yes`), delegates to `_mark_synced_noninteractive`, which resolves a SCOPE and calls `attest_ref`.
 
 **The scope is the fix for BDL-UX #163 (bead `.85`).** `sync-update <ref> --yes` used to re-baseline every pair the ref owned, so a run that revised one document recorded a claim about its siblings; measured over one epic, 1 pair revised against 27 re-attested, then 13/20, 26/56 and 15/10. The default scope is now the pairs the check reports as **stale** -- the ones it demands action on. A pair reported `unverified` because a sibling moved is exactly the pair bead `.78` said nobody can revise, and it is left unclaimed with its baseline standing, which is not cosmetic: `check_sync` corroborates an `index_build` baseline against git instead of trusting it, so a bulk re-attestation used to switch the harder check off for documents nobody had opened.
+
+**`--yes` names what it did not clear (BDL-069, the RFC's Q1).** After attesting, `_report_left_stale` re-runs `check_sync` over the ref, or over every ref under `--all`, and prints each pair still stale with why: a reason re-attesting cannot clear prints `content_remedy`, a pair outside the run's scope prints `not claimed by this run`, and a pair attested and still stale says so. A run that cleared everything prints `Re-checked after attesting: no pair … is still stale.` The evidence is first-hand: during BDL-069's scoping `sync-update --yes --all` exited 0 with `Marked 2 ref(s) synced (4 pair(s) total)` over a `missing_modules` staleness, and the operator believed the defect fixed. Output only: the exit code and the scope are unchanged.
 
 | Argument/Flag | Description |
 |---------------|----------|

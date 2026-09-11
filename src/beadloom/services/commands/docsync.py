@@ -17,6 +17,7 @@ import click
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Collection
     from types import ModuleType
     from typing import Any
 
@@ -24,7 +25,16 @@ if TYPE_CHECKING:
     from beadloom.doc_sync.engine import Attestation
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
-from beadloom.doc_sync.engine import REASON_SIBLING_SYMBOLS_CHANGED, STATUS_EXEMPT
+from beadloom.doc_sync.engine import (
+    REASON_MISSING_MODULES,
+    REASON_SIBLING_SYMBOLS_CHANGED,
+    REASON_UNTRACKED_FILES,
+    REASONS_ATTESTATION_CLEARS,
+    STATUS_EXEMPT,
+    STATUS_STALE,
+    attestation_clears,
+    content_remedy,
+)
 from beadloom.services.commands._root import main
 
 
@@ -264,7 +274,7 @@ def sync_check(
             ]
         click.echo(json.dumps(data, ensure_ascii=False, indent=2))
     elif output_report:
-        click.echo(_build_sync_report(results))
+        click.echo(_build_sync_report(results, since_ref=since_ref))
     elif porcelain:
         # A record in the same five-column shape rather than a stray human line:
         # porcelain is what a hook parses, and a check that narrowed itself has
@@ -294,7 +304,7 @@ def sync_check(
 
                 if r["status"] == "missing":
                     click.echo(
-                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"  {marker} {r['ref_id']}: {_pair_label(r)} "
                         f"({_MISSING_WHY[str(reason)]})"
                     )
                 elif r["status"] == STATUS_EXEMPT:
@@ -307,11 +317,13 @@ def sync_check(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']} "
                         f"(not checked: {_unverified_why(str(reason), str(details))})"
                     )
-                elif reason == "untracked_files" and details:
-                    click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} (untracked: {details})")
-                elif reason == "missing_modules" and details:
+                elif reason == REASON_UNTRACKED_FILES and details:
                     click.echo(
-                        f"  {marker} {r['ref_id']}: {r['doc_path']} (missing modules: {details})"
+                        f"  {marker} {r['ref_id']}: {_pair_label(r)} (untracked: {details})"
+                    )
+                elif reason == REASON_MISSING_MODULES and details:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {_pair_label(r)} (missing modules: {details})"
                     )
                 elif reason == REASON_SECTION_NOT_IN_USE:
                     click.echo(
@@ -326,8 +338,8 @@ def sync_check(
                     )
                 elif r["status"] == "stale" and reason not in (
                     "ok",
-                    "untracked_files",
-                    "missing_modules",
+                    REASON_UNTRACKED_FILES,
+                    REASON_MISSING_MODULES,
                 ):
                     click.echo(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} "
@@ -357,6 +369,18 @@ def sync_check(
 
     if has_blocking:
         sys.exit(2)
+
+
+def _pair_label(row: dict[str, Any]) -> str:
+    """The pair a line is about: the document AND the code file, when there is one.
+
+    Two code files of one package give two pairs over one document. The lines for
+    ``missing_modules``, ``untracked_files`` and ``missing`` printed the document
+    alone, so two different pairs rendered as two identical lines (BDL-069 Q3). A
+    row with no code file is about the document only, and prints no arrow.
+    """
+    code_path = row.get("code_path")
+    return f"{row['doc_path']} <-> {code_path}" if code_path else str(row["doc_path"])
 
 
 # The four verdicts, in the reader's terms. ``[missing]`` and ``[not verified]``
@@ -419,8 +443,45 @@ _UNCHECKED_WHY = {
 }
 
 
-def _build_sync_report(results: list[dict[str, str]]) -> str:
-    """Build a Markdown report from sync-check results."""
+#: What clears a pair ``--since`` reports stale. That mode spells its verdict
+#: ``hash_changed`` and compares against the code AT A GIT REF, which an
+#: attestation does not write: measured, attesting every pair left
+#: ``sync-check --since HEAD`` exactly as stale as before. The token alone cannot
+#: choose the instruction, so the mode does.
+_SINCE_REF_REMEDY = (
+    "revise {doc_path} against the change to {code_path} since {since_ref}; a verdict "
+    "against a git ref reads history, which re-attesting does not write"
+)
+
+
+def _stale_remedies(stale_pairs: list[dict[str, str]], since_ref: str | None) -> list[str]:
+    """The report's closing instructions, one per kind of cause."""
+    if since_ref is not None:
+        return [
+            f"- `{r['ref_id']}` `{_pair_label(r)}`: "
+            + _SINCE_REF_REMEDY.format(since_ref=since_ref, **r)
+            for r in stale_pairs
+        ]
+    lines: list[str] = []
+    # Chosen per reason, as the gate chooses it: a pair stale on a reason
+    # re-attesting cannot clear is told what does, and the re-attest line is
+    # printed only when some pair can be cleared by it.
+    if any(attestation_clears(str(r.get("reason", ""))) for r in stale_pairs):
+        lines.extend([f"> {_REATTEST_INSTRUCTION.format(ref_id='<ref_id>')}", ""])
+    lines.extend(
+        f"- `{r['ref_id']}` `{_pair_label(r)}`: {content_remedy(r)}"
+        for r in stale_pairs
+        if not attestation_clears(str(r.get("reason", "")))
+    )
+    return lines
+
+
+def _build_sync_report(results: list[dict[str, str]], *, since_ref: str | None = None) -> str:
+    """Build a Markdown report from sync-check results.
+
+    *since_ref* is the ``--since`` ref when the results came from that mode, whose
+    staleness no attestation clears.
+    """
     ok_count = sum(1 for r in results if r["status"] == "ok")
     stale_count = sum(1 for r in results if r["status"] == "stale")
     stale_pairs = [r for r in results if r["status"] == "stale"]
@@ -446,12 +507,8 @@ def _build_sync_report(results: list[dict[str, str]]) -> str:
         )
         for r in stale_pairs:
             lines.append(f"| {r['ref_id']} | `{r['doc_path']}` | `{r['code_path']}` |")
-        lines.extend(
-            [
-                "",
-                "> Run `beadloom sync-update <ref_id>` to review and update.",
-            ]
-        )
+        lines.append("")
+        lines.extend(_stale_remedies(stale_pairs, since_ref))
     else:
         lines.extend(["", "All documentation is up to date."])
 
@@ -701,6 +758,26 @@ fi
 """
 
 
+#: The re-attest instruction, scoped to the reasons re-attesting clears. One
+#: wording for the hook and the markdown report, and the scope is read from the
+#: engine's allow-list rather than from a list typed here.
+_REATTEST_INSTRUCTION = (
+    "Run `beadloom sync-update {ref_id}` to review and re-attest a pair stale on "
+    + ", ".join(sorted(REASONS_ATTESTATION_CLEARS))
+)
+
+#: The hook's closing instruction. It prints the porcelain rows and cannot choose
+#: per row, so it states which reasons re-attesting clears and that the rest are
+#: cleared by revising the document. It said "Run: beadloom sync-update <ref_id>
+#: to update docs" for every reason until BDL-069, including the two it cannot
+#: clear (BDL-UX #282). Backticks become quotes because the line is echoed inside
+#: double quotes, where a backtick is command substitution.
+_HOOK_REMEDIATION = (
+    _REATTEST_INSTRUCTION.format(ref_id="<ref_id>").replace("`", "'")
+    + "; any other reason is cleared by revising the document, which re-attesting cannot do"
+)
+
+
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
@@ -722,7 +799,7 @@ if [ $exit_code -eq 2 ]; then
   echo "Warning: stale documentation in this commit"
   echo "$stale"
   echo ""
-  echo "Run: beadloom sync-update <ref_id> to update docs"
+  echo \"""" + _HOOK_REMEDIATION + """\"
 fi
 
 if [ $exit_code -eq 1 ]; then
@@ -760,7 +837,7 @@ if [ $exit_code -eq 2 ]; then
   echo "Error: stale documentation in this commit — commit blocked"
   echo "$stale"
   echo ""
-  echo "Run: beadloom sync-update <ref_id> to update docs"
+  echo \"""" + _HOOK_REMEDIATION + """\"
   failed=1
 fi
 
@@ -1559,11 +1636,13 @@ def _mark_synced_noninteractive(
         results = check_sync(conn, project_root=project_root)
         stale_refs = sorted({r["ref_id"] for r in results if r["status"] == "stale"})
         total = 0
+        attested: set[tuple[str, str]] = set()
         for ref in stale_refs:
             attestation = attest_ref(
                 conn, ref, project_root, scope=_grounded_pairs(results, ref)
             )
             total += len(attestation.attested)
+            attested.update(attestation.attested)
             _report_attestation(ref, attestation)
         # Also clear any reference-doc surface drift (BDL-057 Layer 2; advisory).
         ref_docs = mark_reference_synced(conn, None, project_root, all_docs=True)
@@ -1574,6 +1653,8 @@ def _mark_synced_noninteractive(
             click.echo(f"Marked {len(stale_refs)} ref(s) synced ({total} pair(s) total).")
         if ref_docs:
             click.echo(f"Re-baselined {ref_docs} reference doc(s).")
+        if attested:
+            _report_left_stale(conn, project_root, ref_id=None, attested=attested)
         return
 
     assert ref_id is not None  # guaranteed by the command-level validation
@@ -1597,6 +1678,62 @@ def _mark_synced_noninteractive(
         click.echo(f"No sync pairs found for {ref_id}; nothing to re-baseline.")
         return
     _report_attestation(ref_id, attestation)
+    if attestation.attested:
+        _report_left_stale(
+            conn, project_root, ref_id=ref_id, attested=set(attestation.attested)
+        )
+
+
+def _report_left_stale(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str | None,
+    attested: Collection[tuple[str, str]],
+) -> None:
+    """Re-check after attesting, and name every pair whose verdict did not move.
+
+    BDL-069 Q1. ``sync-update --yes --all`` returned rc 0 and "Marked 2 ref(s)
+    synced (4 pair(s) total)" over a staleness re-attesting cannot clear, and the
+    operator believed the defect fixed: the command reported the population it
+    attested and nothing about the one it left. Output only — what the command
+    attests (BDL-UX #279) and its exit code are unchanged.
+
+    *ref_id* ``None`` is the ``--all`` run, whose population is every ref.
+    """
+    from beadloom.doc_sync.engine import check_sync
+
+    left = [
+        r
+        for r in check_sync(conn, project_root=project_root)
+        if r["status"] == STATUS_STALE and (ref_id is None or r["ref_id"] == ref_id)
+    ]
+    if not left:
+        scope = "" if ref_id is None else f"of {ref_id} "
+        click.echo(f"Re-checked after attesting: no pair {scope}is still stale.")
+        return
+    click.echo(
+        f"Still stale after this run: {len(left)} pair(s) — the verdict on these did not move:"
+    )
+    for r in left:
+        details = r.get("details")
+        found = f"{r['reason']}: {details}" if details else str(r["reason"])
+        click.echo(f"  {r['ref_id']}: {_pair_label(r)} ({found}) — {_why_left(r, attested)}")
+
+
+def _why_left(row: dict[str, Any], attested: Collection[tuple[str, str]]) -> str:
+    """Why an attestation left *row* stale, in the words that say what clears it.
+
+    Three causes read three ways: the reason is one re-attesting cannot clear,
+    the pair was outside what this run claimed, or it was attested and the
+    re-check still found the reason.
+    """
+    reason = str(row.get("reason", ""))
+    if not attestation_clears(reason):
+        return content_remedy(row)
+    if (row["doc_path"], row["code_path"]) not in attested:
+        return f"not claimed by this run; attest it with `--pair {row['doc_path']}`"
+    return f"attested by this run, and the re-check still found {reason}"
 
 
 def _resolve_scope(

@@ -218,6 +218,20 @@ split and giving it a second meaning is how two protocols stop being checkable t
 hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
 the text that is actually installed rather than over a copy of it (BDL-UX #207).
 
+The instructions `docsync.py` prints come from the doc-sync engine's vocabulary, not from a
+list kept here (BDL-069, BDL-UX #282). `_REATTEST_INSTRUCTION` names the reasons in
+`REASONS_ATTESTATION_CLEARS`, and both the hook's closing line (`_HOOK_REMEDIATION`, with
+backticks turned into quotes because the hook echoes it inside double quotes) and the
+`sync-check --report` footer print it only as far as it is true; every other stale pair gets
+`content_remedy`, and under `--since` every stale pair gets `_SINCE_REF_REMEDY`, because that
+mode reads git history and no attestation writes it. `sync-update --yes` re-runs the check after attesting and `_report_left_stale`
+names each pair the verdict did not move for, choosing between three causes in `_why_left`: the
+reason is one re-attesting cannot clear, the pair was outside what the run claimed, or it was
+attested and the re-check still found the reason. The exit code does not change. `_pair_label`
+is the one rendering of a pair — `doc_path <-> code_path`, or the document alone for a row with
+no code file — and every `sync-check` line that names a pair goes through it, so two pairs over
+one document never print one line.
+
 The command's own report prints one echo per population and never one echo for two. `_echo_unresolved`
 names the rows it could not map onto a bead, `_echo_named_by_an_unresolved_row` the beads whose row it
 read and could not resolve, and `_echo_unlisted` the beads no row names at all. The middle one was

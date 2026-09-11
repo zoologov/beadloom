@@ -42,11 +42,14 @@ from beadloom.doc_sync.doc_shape import (
 )
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
+    REASON_SIBLING_SYMBOLS_CHANGED,
     STATUS_EXEMPT,
     STATUS_MISSING,
     STATUS_OK,
     STATUS_STALE,
     STATUS_UNVERIFIED,
+    attestation_clears,
+    content_remedy,
 )
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
 from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
@@ -472,7 +475,10 @@ def _sync_summary(
         if missing:
             parts.append(f"{len(missing)} missing doc(s)/code file(s)")
         if stale:
-            parts.append(f"{len(stale)} stale doc(s)")
+            # Pairs, not documents: two code files of one package give two stale
+            # pairs over ONE document, and "2 stale doc(s)" named a population
+            # that did not exist (BDL-069 Q3).
+            parts.append(f"{len(stale)} stale pair(s)")
         # The surface headline rides along HERE too: a run that deleted a doc is
         # precisely the run whose count fell, and suppressing the number in
         # favour of the failure would discard the signal again.
@@ -1385,34 +1391,58 @@ def _sync_finding(row: dict[str, object]) -> Finding:
     *Missing* and *stale* are different facts and read differently: a stale doc
     is behind the code, a missing one is not there to be behind it, and telling
     an agent to re-attest a file that does not exist is not a remediation.
+
+    A stale pair's remediation is chosen by whether re-attesting can clear its
+    reason, and never assumed. Every stale reason used to print "run
+    ``sync-update``", including ``missing_modules``, where following it exited 0
+    and left the verdict where it was (BDL-UX #282).
     """
     doc_path = str(row.get("doc_path", ""))
+    code_path = str(row.get("code_path", ""))
     reason = str(row.get("reason", "stale"))
     ref_id = str(row.get("ref_id", ""))
     locations: list[Finding] = [{"file": doc_path}] if doc_path else []
     if str(row.get("status")) == STATUS_MISSING:
+        gone = code_path if reason == "code_missing" else doc_path
         return {
             "kind": "sync-check",
             "rule": "doc-missing",
             "severity": "error",
             "node": ref_id,
             "locations": locations,
-            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{doc_path}' does not exist"),
+            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{gone}' does not exist"),
             "remediation": (
                 "restore the file, or remove the declaration from the graph "
                 "if the doc is genuinely gone — the gate is not satisfied by "
                 "having less to check"
             ),
         }
+    details = str(row.get("details") or "")
+    found = f"{reason}: {details}" if details else reason
+    remediation = (
+        f"run `beadloom sync-update {ref_id}` to review and re-attest"
+        if attestation_clears(reason)
+        else content_remedy(row)
+    )
     return {
         "kind": "sync-check",
         "rule": "doc-stale",
         "severity": "error",
         "node": ref_id,
         "locations": locations,
-        "why": f"{ref_id}: doc out of sync with code ({reason})",
-        "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",
+        "why": f"{ref_id}: doc out of sync with code ({found}){_pair_clause(doc_path, code_path)}",
+        "remediation": remediation,
     }
+
+
+def _pair_clause(doc_path: str, code_path: str) -> str:
+    """Which pair a finding is about, or nothing for a row with no code file.
+
+    A pair is a document AND a code file, so two files of one package give two
+    pairs over one document. Without the code file two different pairs printed as
+    two identical findings (BDL-069 Q3).
+    """
+    return f" — pair {doc_path} <-> {code_path}" if code_path else ""
 
 
 #: What each ``missing`` reason means to a reader, in the reader's terms.
@@ -1424,10 +1454,36 @@ _MISSING_WHY = {
 
 
 def _sync_unverified_finding(row: dict[str, object]) -> Finding:
-    """A pair that could not be checked at all — a warning, and never silent."""
+    """A pair that could not be checked at all — a warning, and never silent.
+
+    The two reasons read differently because different things clear them. A pair
+    with no baseline is attested by NAMING it: the bare ``sync-update <ref>
+    --yes`` claims only stale pairs and attests nothing here, which is what the
+    earlier "attest the pair with ``sync-update``" left the reader to discover. A
+    pair whose SIBLING moved is not told to re-attest at all (bead ``.78``):
+    nothing about its own file changed, so the document is revised against the
+    file that did.
+    """
     doc_path = str(row.get("doc_path", ""))
+    code_path = str(row.get("code_path", ""))
     ref_id = str(row.get("ref_id", ""))
+    pair = _pair_clause(doc_path, code_path)
     locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    if str(row.get("reason")) == REASON_SIBLING_SYMBOLS_CHANGED:
+        mover = str(row.get("details") or "") or "another file of this node"
+        return {
+            "kind": "sync-check",
+            "rule": "doc-not-verified",
+            "severity": "warning",
+            "locations": locations,
+            "why": (
+                f"{ref_id}: NOT verified — this file's symbols did not move; {mover} did{pair}"
+            ),
+            "remediation": (
+                f"revise {doc_path} against {mover}; this pair clears when that "
+                f"file's stale pair is attested"
+            ),
+        }
     return {
         "kind": "sync-check",
         "rule": "doc-not-verified",
@@ -1435,11 +1491,12 @@ def _sync_unverified_finding(row: dict[str, object]) -> Finding:
         "locations": locations,
         "why": (
             f"{ref_id}: NOT checked — the index was rebuilt, so its baseline is "
-            f"the current tree, and git could not supply one either"
+            f"the current tree, and git could not supply one either{pair}"
         ),
         "remediation": (
             "reindex incrementally on the existing index, run inside a git "
-            "work tree, or attest the pair with `beadloom sync-update`"
+            f"work tree, or attest the pair with "
+            f"`beadloom sync-update {ref_id} --yes --pair {doc_path}`"
         ),
     }
 

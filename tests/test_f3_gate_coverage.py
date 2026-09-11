@@ -189,8 +189,11 @@ class TestFindingProjections:
 
     def test_sync_finding_carries_doc_location_and_ref(self) -> None:
         # Act
+        # `hash_changed`, a reason the engine emits and re-attesting clears. This
+        # case used the token `hash`, which no check emits; since BDL-069 an
+        # unmeasured reason is not told to re-attest (`attestation_clears`).
         finding = _sync_finding(
-            {"doc_path": "docs/x.md", "reason": "hash", "ref_id": "graph.x"}
+            {"doc_path": "docs/x.md", "reason": "hash_changed", "ref_id": "graph.x"}
         )
         # Assert: shared shape with a file location and a sync-update hint.
         assert set(finding) >= self._SHAPE

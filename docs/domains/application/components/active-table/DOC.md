@@ -274,7 +274,9 @@ headings, the Progress Log, and non-Status columns are always left untouched.
   own the verdict vocabulary a reader sees: `_STATUS_MARKER` carries one word
   per verdict (`[exempt]` among them since `beadloom-mr2l.76`, where an excused
   pair printed `[ok]`), and the `--json` summary counts every verdict so they
-  sum to the total.
+  sum to the total. Every human line that names a pair goes through
+  `_pair_label`, so two code files of one document print two different lines
+  (BDL-069).
   The `--stage` flag (via `_restage_within_this_commit`) re-stages the corrected
   content of the paths the commit already carries and names the rest under a
   fixed `  withheld: ` line. It adds no path to a commit. Under `--stage`,

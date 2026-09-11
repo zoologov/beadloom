@@ -16,7 +16,7 @@ has been launched.
 | Bead | Slice | What | Pri | Blocked by | Status |
 |---|---|---|---|---|---|
 | `beadloom-qylh` | S1 | the init skeleton names the modules it already knows | P0 | — | ✓ done |
-| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | ready |
+| `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | in progress |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
@@ -239,6 +239,29 @@ with `Nodes: 1`. On a wheel built from this tree the two layouts end rc 0 over 4
 pairs. The pre-commit scope check reported the three template files outside the declared axes,
 because the RFC rules `onboarding` out as a caller. The template is where a skeleton's shape
 lives, so the RFC row is what needs correcting.
+
+**2026-09-11 — S1 dev (`beadloom-h7b3`).** A stale verdict now names its pair, and the remediation
+it prints can clear the reason it was printed for. Reproduced first on a foreign repository with
+the tree's own `beadloom`: after `init`, one module name taken out of the `ledger` README gave
+`ci` rc 1 over `3 stale doc(s)` and one document, three identical findings telling the reader to
+run `sync-update ledger`, and `sync-update --yes --all` rc 0 with the verdict unmoved.
+
+Which reasons an attestation clears was measured, not read. Through the real reindex,
+`attest_ref` and `check_sync` pipeline, `hash_changed`, `hash_changed_since_head` and
+`symbols_changed` cleared, while `untracked_files` and `missing_modules` did not.
+`REASONS_ATTESTATION_CLEARS` in `doc_sync/engine.py` holds the three as an allow-list, so a
+reason added later is not told to re-attest until it is measured. The measurement found two more
+instructions that could not be followed. The gate told a `no_baseline` pair to "attest the pair
+with `sync-update`", and the bare form claims no unverified pair, so it attests nothing.
+`sync-check --since --report` recommended `sync-update` for a verdict that reads git history,
+and attesting every pair left that verdict exactly as stale. Both now name what does clear them.
+
+`sync-update --yes` re-checks after attesting and names every pair still stale with what clears
+it. Its exit code and its scope are unchanged, as Q1 decided. The gate's line counts
+`stale pair(s)`, and every `sync-check` line that names a pair prints its code file. The
+`--json` shape is untouched and a test pins it. Three more surfaces print `stale doc(s)` over a
+count of pairs — the TUI, the site dashboard and `prime`. They are outside this bead's scope and
+are filed as `beadloom-yn6i`.
 
 ## Waves
 

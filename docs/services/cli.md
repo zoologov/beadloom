@@ -298,7 +298,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 
 - `--porcelain` -- TAB-separated output for scripts. Format: `status\tref_id\tdoc_path\tcode_path\treason`.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, `baseline`, and optional `details`.
-- `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
+- `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab). Its closing instruction is chosen per reason: the `sync-update` line appears only when some stale pair is on a reason re-attesting clears, and every other stale pair is listed with what does clear it. Under `--since` no pair is told to re-attest, because that mode compares against the code at a git ref, which an attestation does not write — measured, attesting every pair left `sync-check --since HEAD` exactly as stale.
 - `--ref` -- filter results by ref_id.
 - `--staged` -- judge only the pairs this commit stages either side of, and state how many were left to the push gate. For a pre-commit hook in a **shared working tree**, where a whole-tree check fails one agent's commit on a neighbour's in-progress file (BDL-UX #118). The narrowing is counted, never silent: `summary.not_checked_outside_commit` and `summary.commit_scope` in `--json` (present in this mode only), a `scope` record in `--porcelain`, and a leading line in the human shape. When git cannot say what is staged, nothing is narrowed and `commit_scope` reads `not_narrowed` -- an absent answer is not "nothing staged". The content compared is the WORKING-TREE content of the staged paths, not the staged blobs.
 - `--record-surface` -- record the declared documentation surface (pair + declared-doc counts) to the committed `.beadloom/sync-surface.json`. A later run compares against it and says so when the surface SHRANK; no ordinary run rewrites it, because a check that silently re-records the number it checks against re-attests without evidence.
@@ -316,7 +316,14 @@ Measured on this repository, 2026-08-24: 330 declared pairs, all of them checked
 
 **The count is part of the contract.** `--record-surface` writes `.beadloom/sync-surface.json` (committed, so a rebuild cannot lose it). A later run whose declared surface FELL says so by name — `declared surface SHRANK since it was recorded: 275 → 269 pair(s)` — instead of quietly printing the smaller number. It is a warning, not a verdict: the cause that matters (a declared doc that is gone) fails on its own.
 
-Human-readable output includes reason-aware formatting:
+Human-readable output includes reason-aware formatting. **Every line names its pair** — `doc_path <-> code_path` — whenever the row has a code file. A pair is a document AND a code file, so three files of one package give three pairs over one README; the `missing`, `untracked_files` and `missing_modules` lines printed the document alone until BDL-069, and three different pairs rendered as three identical lines:
+
+```
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/__init__.py (missing modules: journal)
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/core.py (missing modules: journal)
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/journal.py (missing modules: journal)
+```
+
 - `missing` status: `[missing]` with which side is gone (`the linked doc file is gone`, `the paired code file is gone`, `declared in the graph, not on disk`).
 - `unverified` status: `[not verified]` with the reason it was not verified — either there was no baseline, or this pair's own file did not move while a named sibling of the same node did (`sibling_symbols_changed`).
 - `incomplete` status: `[warn]` naming either the document and its missing sections, or the node KIND and the ratio behind a section its documents do not use (`Source (5/39)`).
@@ -367,6 +374,29 @@ uses to re-baseline freshness after a doc is rewritten; it is the same operation
 the interactive path performs after an edit. `--all` re-baselines every ref
 `sync-check` currently flags stale (deterministic; requires `--yes`).
 
+**It names what it did not clear.** An attestation rewrites recorded hashes, so
+it clears `hash_changed`, `hash_changed_since_head` and `symbols_changed` and
+cannot clear `missing_modules` or `untracked_files`, which read what the files
+say. After attesting, `--yes` re-runs the check — over the one ref, or over every
+ref with `--all` — and names every pair still stale, with what clears it. Measured on a repository whose
+`ledger` document does not name its `journal` module (BDL-069):
+
+```
+$ beadloom sync-update --yes --all
+Re-baselined ledger: attested 3 pair(s).
+Marked 1 ref(s) synced (3 pair(s) total).
+Still stale after this run: 3 pair(s) — the verdict on these did not move:
+  ledger: domains/ledger/README.md <-> src/ledger/__init__.py (missing_modules: journal) — name journal in domains/ledger/README.md; re-attesting cannot clear missing_modules, because the check reads what the document says, not a recorded hash
+  …
+```
+
+Before BDL-069 the run stopped after the second line, and an operator read it as
+the defect fixed. A pair the run left unclaimed — a second document outside
+`--pair` — says `not claimed by this run` instead, and a run that cleared
+everything says `Re-checked after attesting: no pair … is still stale.` The exit
+code is unchanged: `--yes` exits 0 in every case, and what it attests is
+untouched.
+
 `REF_ID` also accepts the **path of a reference doc** (one carrying a
 `watches:` annotation). In that case `sync-update` recomputes and stores the
 doc's aggregate surface hash, clearing a `surface_drift` warning — the same
@@ -413,7 +443,9 @@ beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 mypy over those staged files **inside the surface the project declares typed** (derived per run by
 [`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
 `NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
-(`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
+(`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs;
+either way it closes with an instruction scoped to the reasons re-attesting
+clears, because the hook prints porcelain rows and cannot choose per row),
 and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
 auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
 `beadloom active-sync` to reconcile each epic's ACTIVE.md bead-status table from

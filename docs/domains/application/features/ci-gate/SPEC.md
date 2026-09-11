@@ -26,6 +26,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    many pairs a WORKING declaration EXCUSED, with the reason it was declared
    with (`… 326 pair(s) fresh, 4 exempt — <reason>`). The clause is absent when
    nothing was excused, so a project that declares no exemption keeps its line.
+   A failing line counts stale PAIRS (`3 stale pair(s)`), the number of stale
+   entries `sync-check --json` holds, and not documents.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
 5. **docs-quality** — every check that reads the project's planning documents,
@@ -323,6 +325,43 @@ as the code's health (BDL-UX #174/#175):
   summary is now `N check(s): 0 error(s), W warning(s), I info`, and the word
   *clean* appears only when every check is OK.
 
+### A remediation the gate prints can be followed
+
+The sync-check findings are where an adopter meets the gate first, and until
+BDL-069 one of their remediations could not be followed. Every stale pair printed
+"run `beadloom sync-update <ref>` to review and re-attest". Measured on a
+repository whose package document did not name one of its modules: following it
+exited 0, reported the pairs re-attested, and left `ci` red, because
+`missing_modules` reads what the document says and an attestation rewrites a
+recorded hash (BDL-UX #282).
+
+- **`doc-stale`** chooses its remediation from `attestation_clears(reason)`
+  (see the sync-check SPEC). A reason re-attesting clears keeps the `sync-update`
+  instruction; `missing_modules`, `untracked_files` and any reason nobody has
+  measured print `content_remedy(row)` instead. For the measured case it reads:
+
+  ```
+  name journal in domains/ledger/README.md; re-attesting cannot clear missing_modules, …
+  ```
+
+- **The `why` names the pair**, as in this finding from the same measurement:
+
+  ```
+  ledger: doc out of sync with code (missing_modules: journal) — pair domains/ledger/README.md <-> src/ledger/core.py
+  ```
+
+  A pair is a document AND a code file, so three files of one package give three
+  pairs over one README, and without the code file those were three identical
+  findings. A row that has no code file prints no pair clause.
+- **`doc-missing`** names the file that is gone: the code file for `code_missing`,
+  where it used to name the document that was still there.
+- **`doc-not-verified`** is chosen by reason too. `no_baseline` names the form
+  that attests an unverified pair, `sync-update <ref> --yes --pair <doc_path>`,
+  because the bare `sync-update <ref> --yes` claims no unverified pair and attests
+  nothing. `sibling_symbols_changed` names the file that moved and is not told to
+  re-attest, which is bead `.78`'s decision reaching the gate: its `why` used to say
+  the index was rebuilt, a fact about a different pair.
+
 ### The verdict names the room it was taken in
 
 A verdict is true of the room it was taken in, and this project read one as a claim about the
@@ -397,6 +436,10 @@ same exit code, same findings; a green run attributes nothing and shells out to 
   declared-surface-shrink findings are advisory and never fail the gate.
 - No step prints a count of something it did not check, and no step prints
   *clean* over a warning.
+- No sync-check finding prints a remediation that cannot clear the reason it was
+  printed for: a stale reason outside `REASONS_ATTESTATION_CLEARS` is never told to
+  re-attest, and `tests/test_a_remediation_can_be_followed.py` follows the printed
+  instruction and fails if the verdict does not move.
 - `WARN` never changes the exit code: an adopter whose project is green today
   does not go red on upgrade, it only stops reading green where nothing was
   verified.
@@ -453,4 +496,6 @@ Module `src/beadloom/application/gate_ownership.py`:
 
 Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
 `tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
-`tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`
+`tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`,
+`tests/test_a_remediation_can_be_followed.py`, `tests/test_a_stale_line_names_its_pair.py`;
+scenarios in `tests/acceptance/features/remediation_that_can_be_followed.feature`
