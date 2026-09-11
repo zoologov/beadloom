@@ -28,8 +28,9 @@ has been launched.
 | `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | ✓ done |
 | `beadloom-rqma.2` | ext | the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row (BDL-UX #284) | P1 | — | ready |
 | `beadloom-yn6i` | ext | three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | — | ready |
-| `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ready |
+| `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ✓ done |
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
+| `beadloom-rqma.4` | ext | reindex attributes a prefix-sharing sibling's routes to a node, and `docs polish` hands them on | P2 | — | ready |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -343,6 +344,52 @@ Measured on this epic after landing, while this bead was still in progress:
 `beadloom waves --parent beadloom-rqma` answered `3 against 1 running bead(s)`. All three ready
 beads wait for `beadloom-rqma.1`: `6rgr` over `doc-generator`, and `rqma.2` and `yn6i` over
 `agent-prime`. Both nodes are reached through the `onboarding` ref this bead declares.
+
+**2026-09-11 — extension dev (`beadloom-6rgr`) landed at `855f6dff`.** `docs polish`, and the
+MCP `generate_docs` tool that returns the same data, give each node the index rows of the files
+under its source by path component. A file is under the source when its path is the source or
+continues it past a `/`. The instructions in that payload tell an agent to describe the node from
+those symbols, and until now `src/ledger/` also took `src/ledger_archive/` and
+`src/ledger_tools.py`.
+
+Reproduced red first on a foreign repository with the tree's own `beadloom`, after `init --yes
+--mode bootstrap` and `reindex`: `docs polish --ref-id ledger` named `export, record, replay`,
+where the package holds `record`. The bead named a sibling directory; a sibling module is taken
+as well, measured. After the fix the same command names `record`.
+
+The brief named two fixes, and the measurement chose between them. Routing polish through the
+directory walk `beadloom-8lmj` gave the skeleton would have removed a second reader of one fact.
+It was rejected for two reasons. Over this repository's 104 nodes the walk took 12.45 s and gave
+the site node 68 382 symbols from `node_modules`, while the index took 0.006 s. And every other
+field of the polish payload — drift, edges, routes, activity and tests — is read from the index,
+so disk symbols would describe a different tree from the rest of one payload after an edit that
+was not re-indexed. `infrastructure.repository.source_covers` was rejected too, because it
+answers ownership: a package façade covers its package there, which would set the two readers
+against each other on that shape. What the two-reader shape costs is held by a test instead:
+both readers over one tree holding prefix-sharing siblings, the index built by the real reindex,
+for five shapes of source.
+
+Nineteen tests were added, and each was measured red against at least one of three bodies: HEAD,
+the naive `startswith(source + "/")` that leaves a single-file source empty, and a string prefix
+without its empty-source guard. On this repository the reader returns the same 6 842 symbols
+before and after, so no node here had a prefix-sharing sibling, which is why it survived.
+
+The measurement found the defect one field wider. The routes in the same payload come from
+`nodes.extra`, which `application/reindex/enrichment.py` fills by string prefix, and on the rig a
+FastAPI handler in `src/ledger_archive/api.py` was reported as a route of `ledger`. That is
+outside the declared scope `doc-generator` and is filed as `beadloom-rqma.4`.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 7 carried files, built from
+`63e38e65` with its own interpreter: pytest 10145 passed, 61 skipped, 17 xfailed; ruff clean;
+`mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. That room has no `.git`,
+so its sync-check verified none of 461 pairs and its scope-check skipped. Green on the tree:
+pytest over `63e38e65` plus exactly those 7 files, `HEAD` unchanged across the run, 10193
+passed, 13 skipped, 17 xfailed; and `beadloom ci` rc 0 at `855f6dff` over 461 fresh pairs.
+Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs and both locale legs
+are unmeasured, and the target sweep does not vary the interpreter mypy runs under.
+
+`bd close --suggest-next` named `beadloom-956f` as unblocked. `bd ready --limit 0` does not
+list it, because `rqma.2` and `yn6i` are still open.
 
 ## Waves
 
