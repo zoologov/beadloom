@@ -31,6 +31,7 @@ has been launched.
 | `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ✓ done |
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
 | `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
+| `beadloom-rqma.5` | ext | one computation of the stale-pair count, populations named, in the existing seam | P1 | — | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ready |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -508,25 +509,75 @@ legs are unmeasured, and the target sweep does not vary the interpreter mypy run
 `bd close --suggest-next` named `beadloom-956f`, and `bd ready --limit 0` lists it: every dev
 bead it depends on is closed.
 
+**2026-09-12 — extension dev (`beadloom-rqma.5`) landed at `4bb56219`.** "How many stale pairs
+are there" was computed afresh at every call site, so each site was free to name its own number:
+nineteen surfaces read `sync_state` and report a figure, under FOUR populations, all called "stale
+docs". One computation now answers it. `infrastructure/repository.py` holds `StaleCount`, built
+through `StaleCount.of_pairs(n)` and never directly, so the number and the word for it cannot be
+separated at a call site; `count_stale_pairs(conn, ref_ids=None)` returns it and
+`stale_node_refs(conn)` is the differently named reader of the different population.
+`application/graph_reads.py` re-exports all three, which is how the TUI reaches them.
+
+The placement was measured rather than trusted: `lint --strict` reports 0 errors and the same 8
+suppressed crossings `rqma.4` left, so NO new `rules.yml` exemption was needed — the derivation's
+paragraph was right, and the measurement is what says so. `onboarding/scanner/prime.py` is the one
+surface the computation cannot reach: `onboarding-no-direct-infra` exempts `infrastructure/db` and
+not `infrastructure/repository`, and that entry's own exit condition is `prime_context()` moving to
+the seam whole (BDL-UX #150). It keeps its copy of the sentence, and a test names it as the one
+permitted site.
+
+Twelve surfaces take the sentence from there. Four said the wrong noun over a correct population —
+`beadloom why` and the TUI dependency path now say `Stale pairs:` over the same number, `beadloom
+ctx` says `## Stale Pairs` and `sync-check --report` says `### Stale Pairs`. The TUI status bar
+printed `2 stale`, a number with no noun at all, and now prints `2 stale pair(s)` beside the
+dashboard card's `2 stale of 5 tracked pair(s)`; the MCP `get_status` description says stale pair
+count. The four `h7b3` and `yn6i` had already fixed keep their output byte-for-byte and now build
+it from the shared class, which is what makes a fifth site unable to be born mislabelled: a test
+walks every module under `src/` and asserts the literal `stale pair(s)` is spelled in exactly two.
+
+`tui/widgets/node_detail.py` is removed, measured first: no module under `src/` imported
+`NodeDetail`, `docs/services/tui.md`'s module map never listed it, and its only readers were seven
+tests that asserted nothing but "no exception".
+
+The populations still in question were NOT decided — that half is `beadloom-r9t5`, outside this
+epic. Five sites are recorded there with line numbers: the `status` trend row (`status.py:104`
+counts stale+missing, `health.py:42` counts stale only, `commands/status.py:257` renders both on
+one row), `debt_report` counting nodes under a pair-shaped SPEC, the `doc_status` screen counting
+nodes beside per-pair numbers, `site.py:211` printing a fourth population with no noun, and
+`site-generation/SPEC.md:58-60`, which states a population its own dashboard code does not use.
+One derivation error was corrected by reading the site: `recommendations.py:82` is per NODE, as
+its description said and its summary denied.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 23 carried files, built from
+`c1e5dac7` with its own interpreter: pytest 10259 passed, 62 skipped, 17 xfailed; ruff clean;
+`mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. `--carry` can only add, so
+the room reproduced the deletion by removing that one file after it was built. The room has no
+`.git`, so its sync-check verified none of 465 pairs and its scope-check skipped. Green on the
+tree at `4bb56219`, with `HEAD` unchanged across the run and the tree differing from it only in
+`.beads/`: pytest 10308 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0 over 465 fresh pairs,
+after 21 pairs were re-attested to the fixpoint. Neither verdict entered any of the 21 declared
+rooms, so the Ubuntu legs and both locale legs are unmeasured, and the target sweep does not vary
+the interpreter mypy runs under.
+
+`bd close --suggest-next` named `beadloom-956f` and `beadloom-r9t5`, and `bd ready --limit 0`
+lists both.
+
 **2026-09-11 — PAUSED at the owner's request, after the last dev bead landed.**
 
-Every dev bead is closed: the nine planned, and the five taken in the scope extension
-(`8lmj`, `yn6i`, `rqma.1` #283, `rqma.2` #284, `6rgr`, `rqma.4`), with `rqma.3` (#285) withdrawn
-as not-a-defect. No agent is running, no merge slot is held, and nothing is half-landed. Tree at
-`8ba896e1` plus this record, pushed.
+Every dev bead is closed: the nine planned, and the six taken in the scope extension
+(`8lmj`, `yn6i`, `rqma.1` #283, `rqma.2` #284, `6rgr`, `rqma.4`, `rqma.5`), with `rqma.3` (#285)
+withdrawn as not-a-defect. No agent is running, no merge slot is held, and nothing is
+half-landed. Tree at `8ba896e1` plus this record, pushed.
 
 **Next on resume: the test wave, `beadloom-956f`.** Then `qae9` (review, under withholding) and
 `egvd` (tech-writer), then the PR. `egvd` already carries three documentation obligations in its
 comments — the stale-index upgrade note from `rqma.4`, `parallel-waves.md:86` from `rqma.1`, and
 `cli.md` for the `Owns unread` column from `rqma.2`.
 
-**One decision is waiting for the owner, not taken:** `beadloom-rqma.5`, filed by `yn6i` as a
-child of this epic and NOT wired into the test bead. Four more surfaces label a count of stale
-PAIRS "stale docs" — `beadloom why`, the TUI dependency path, `status`, and MCP `get_status` — plus
-a TUI widget no module imports. It is READ, not run. The pattern is worth naming before deciding:
-`h7b3` fixed one surface and found three, `yn6i` fixed those and found four more. Surface-by-
-surface does not converge; the class may want a single fix, the way `rqma.4` replaced three
-copies of one rule with one helper.
+**The decision that was waiting has been split and half of it taken.** `beadloom-rqma.5` was
+narrowed by the owner to the MECHANICAL half and is closed (above). The DECISION half is
+`beadloom-r9t5`, a new open bug outside this epic: four populations are called "stale docs", and
+what each surface SHOULD count is a decision, not a rename. It is NOT wired into the test bead.
 
 **Two out-of-epic items recorded elsewhere:** `beadloom-t6zq` (P0, its own next epic, in the
 ROADMAP — `architecture-layers` evaluates 16 of 353 edges) and `beadloom-4axf` (P2).
