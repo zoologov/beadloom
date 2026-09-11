@@ -52,6 +52,29 @@ the class invisible to reading.
 unnamed — the class this project spent BDL-068 removing, still reachable through the commands
 an adopter runs first.
 
+## Scope extension — 2026-09-11
+
+**Widened at the owner's request after the epic was approved and running.** The owner's framing:
+everything found about `init` is fixed here, and so are other critical or important defects that
+directly affect the development process. Four beads were added under that rule, each with the
+reason it qualifies:
+
+- **`beadloom-8lmj`** — `init --yes` writes skeletons before the index exists, so a virgin
+  project's documents carry no Public API table. An `init` defect.
+- **`beadloom-yn6i`** — three more surfaces count stale PAIRS and print `stale doc(s)`, and
+  `prime` lists a pair without its code file. The Q3 rendering defect this epic already fixed
+  in `sync-check`, still present beside it; leaving it would make one report say `pair(s)` and its
+  neighbours `doc(s)` over the same count.
+- **`beadloom-rqma.1` (BDL-UX #283)** — `beadloom waves --parent` compares only READY beads, so it
+  reported a clean wave for a bead that conflicted with one already running. It directly affects
+  the process: a coordinator that trusted the first answer launches two agents into a serialised
+  pair. Found while running this epic.
+- **`beadloom-rqma.2` (BDL-UX #284)** — the axes decision rules a node by the axis it first
+  surfaced under. Three nodes in this epic were ruled out as blast radius and turned out to be
+  work sites. Found while running this epic.
+
+The goals below are unchanged; these four add to them rather than replacing any.
+
 ## Impact
 
 **Who is affected.** Anyone installing Beadloom for the first time. Defects 1 and 2 are hit by
