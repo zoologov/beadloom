@@ -1,0 +1,21 @@
+# Feature: every place this project states its own version, and the instrument
+# whose population holds each one (BDL-069 S3, `beadloom-w4cd`). Cutting the
+# release that preceded this epic found nine such places, four instruments over
+# disjoint populations, and three places nothing checks -- and the list was
+# derived by hand first and was wrong by two (BDL-UX #281). So the places are
+# DERIVED here and no place is named in the module; the instruments are named,
+# and each one's population is read from the project's own declarations.
+nodes:
+  - ref_id: version-surface
+    kind: feature
+    summary: "Every place a project states its own version, each attributed to the instrument whose population holds it, and the places no instrument holds"
+    source: src/beadloom/doc_sync/version_surface.py
+    docs:
+      - docs/domains/doc-sync/features/version-surface/SPEC.md
+edges:
+  - src: version-surface
+    dst: doc-sync
+    kind: part_of
+  - src: version-surface
+    dst: docs-audit
+    kind: depends_on

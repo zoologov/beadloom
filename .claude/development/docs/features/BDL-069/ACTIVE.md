@@ -2,7 +2,7 @@
 
 > **Epic:** `beadloom-rqma`
 > **Created:** 2026-09-10
-> **Last updated:** 2026-09-10
+> **Last updated:** 2026-09-11
 
 ---
 
@@ -19,8 +19,8 @@ has been launched.
 | `beadloom-h7b3` | S1 | a remediation that can be followed, and a stale line that names its pair | P0 | `qylh` | blocked |
 | `beadloom-cgco` | S2 | a root node and the sole package cannot share one `ref_id` | P0 | — | ✓ done |
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
-| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ready |
-| `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ready |
+| `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | in progress |
+| `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | in progress |
 | `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | blocked |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
@@ -53,6 +53,28 @@ Two things the derivation reported about itself, and both shape the plan: `beadl
 reads Python, so four of the nine version-stating surfaces are `unreadable-target` and S3 needs
 its own reader; and the seven-reader split in `.beadloom/_graph/` is a grep result, not a
 derivation — `impact` produced no axis naming it.
+
+**2026-09-11 — S3 dev (`beadloom-w4cd`) landed.** `doc_sync/version_surface.py` derives every
+place this project states its own version and attributes each to the instrument whose population
+holds it. The instruments are named — `packaging-manifest`, `docs-audit`, `graph-summary-facts`,
+`doctor`, `test-suite` — and every population is read from the project's own declarations: the
+manifest for the packaging version and the test paths, the rules file for the lint rule, the
+scanner's own surface resolution for the audit, and the flow manifest for the agent-instruction
+adapters. No place is named in the module, and a test parses the source with its docstrings
+stripped and fails if one appears.
+
+Measured on this repository: 41 places across 20 files, read out of 1 375 files; 8 judged and 33
+by nothing. All nine of 2026-09-10 are among them with the checkers that measurement recorded.
+The count is a floor rather than a ceiling — waves 1 and 2 of this epic added documents that
+state the current release, which is the thing the hand-written list of nine kept getting wrong.
+
+Two limits are stated rather than worked around. The sweep is by the CURRENT literal, so a place
+that has already gone stale is invisible to it and the command is run BEFORE the bump; the
+alternative was measured, not assumed — reading every version token this project's prose
+attributes to itself returns 674 claims across 137 files, because the planning archive holds
+every version it ever had. And a statement is not told from a record of a measurement by any
+structure the module can read, so inside an instrument's population the instrument decides and
+outside it the reader does.
 
 **2026-09-10 — S4 dev (`beadloom-19m6`) landed.** `doc_sync/document_pairs.py` compares a
 declared pair by SHAPE: the block sequence, the heading levels and the row counts of the lists

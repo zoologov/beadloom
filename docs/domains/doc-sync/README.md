@@ -108,6 +108,7 @@ green result says what it was green against.
 - **[Sync Check](features/sync-check/SPEC.md)** -- The doc-code synchronization engine (`beadloom sync-check` / `sync-update`).
 - **[Docs Audit](features/docs-audit/SPEC.md)** -- Zero-config meta-doc staleness detection via keyword-proximity matching. CLI: `beadloom docs audit`.
 - **[Document Pairs](features/document-pairs/SPEC.md)** -- A declared pair of documents compared by shape: the block sequence, the heading levels and the row counts of the lists and the tables. Declared under `document_pairs:`; a project that declares none is not judged.
+- **[Version Surface](features/version-surface/SPEC.md)** -- Every place a project states its own version, attributed to the instrument whose population holds it. The instruments are named and every place is DERIVED: the list of nine this project cut a release against was written by hand and was wrong by two (BDL-UX #281).
 
 ### Components
 
@@ -197,6 +198,13 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `resolve_document_pairs(project_root: Path) -> tuple[DocumentPair, ...]` -- the pairs declared in `.beadloom/config.yml`, or an empty tuple. A half-written entry or a path resolving outside the project is refused rather than guessed.
 - `check_document_pairs(project_root: Path) -> PairReport` -- every declared pair compared, with the blocks each file held, the pairs aligned, and every path it could not read.
 - `UNPAIRED_BLOCK`, `BLOCK_KIND`, `ROW_COUNT` (`CHECK_NAMES`) -- the three checks; `HEADING`, `PARAGRAPH`, `CODE`, `LIST`, `TABLE` (`BLOCK_KINDS`) -- the five block kinds.
+
+### Module `src/beadloom/doc_sync/version_surface.py`
+
+- `read_version_surface(project_root: Path) -> VersionSurface` -- every place *project_root* states its own version, each attributed to the instrument whose population holds it, with the places no instrument holds named as such. A project declaring no version this reader can follow gets an empty `places` and a stated `unresolved` reason.
+- `VersionSurface` -- `source_of_truth`, `unresolved`, `places`, `instruments`, `population`, and the `unchecked` projection. `Instrument` carries the population it was DERIVED to hold, so a report names what each check covers rather than that it ran.
+- `SKIPPED_DIRECTORIES`, `READ_SUFFIXES` -- the sweep's declared bounds, reported on every run beside the suffixes it did not read and every file it could not decode.
+- The sweep is by the CURRENT literal, so a place that already states an old version is invisible to it: run it BEFORE the bump. Reading every version token this project's prose attributes to itself instead returns 674 claims across 137 files, because the planning archive holds every version it ever had.
 
 ### Module `src/beadloom/doc_sync/doc_shape.py`
 
