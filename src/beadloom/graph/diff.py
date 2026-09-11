@@ -9,11 +9,11 @@ import json
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from beadloom.graph.loader import NOT_A_GRAPH_FILE
+from beadloom.graph.loader import NOT_A_GRAPH_FILE, DuplicateRefId, unique_by_ref_id
 
 if TYPE_CHECKING:
     import sqlite3
@@ -50,11 +50,17 @@ class EdgeChange:
 
 @dataclass(frozen=True)
 class GraphDiff:
-    """Complete diff result."""
+    """Complete diff result.
+
+    ``duplicates`` is a REPORT and not a change: a ref_id carried twice on
+    either side is named, and :attr:`has_changes` — which decides this command's
+    exit code — does not move because of it.
+    """
 
     since_ref: str
     nodes: tuple[NodeChange, ...]
     edges: tuple[EdgeChange, ...]
+    duplicates: tuple[DuplicateRefId, ...] = ()
 
     @property
     def has_changes(self) -> bool:
@@ -132,14 +138,30 @@ def _read_yaml_at_ref(project_root: Path, rel_path: str, ref: str) -> str | None
     return _decode_graph_yaml(result.stdout, f"{ref}:{rel_path}")
 
 
+def _node_view(node: dict[str, Any]) -> dict[str, object]:
+    """The four fields this diff compares, read off one node."""
+    raw_tags = node.get("tags", [])
+    return {
+        "kind": node.get("kind", ""),
+        "summary": node.get("summary", ""),
+        "source": node.get("source", ""),
+        "tags": tuple(sorted(raw_tags)) if isinstance(raw_tags, list) else (),
+    }
+
+
 def _parse_yaml_content(
     content: str,
-) -> tuple[dict[str, dict[str, object]], set[tuple[str, str, str]]]:
-    """Parse YAML content into nodes dict and edges set.
+) -> tuple[list[dict[str, Any]], set[tuple[str, str, str]]]:
+    """Parse YAML content into a node list and an edges set.
 
     Returns:
-        A tuple of (nodes_dict, edges_set) where:
-        - nodes_dict maps ref_id -> {"kind": ..., "summary": ..., "source": ..., "tags": ...}
+        A tuple of (nodes, edges_set) where:
+        - nodes is the node mappings in the order the file declares them, so the
+          reduction to one node per ``ref_id`` is taken once, over a whole SIDE
+          of the comparison, by the body that also reports what it dropped
+          (:func:`~beadloom.graph.loader.unique_by_ref_id`). Keying a dict here
+          performed that reduction per file, kept the LAST node, and said
+          nothing (BDL-UX #214).
         - edges_set contains (src, dst, kind) tuples
 
     The parse and mapping guards of
@@ -153,22 +175,15 @@ def _parse_yaml_content(
     try:
         data = yaml.safe_load(content)
     except yaml.YAMLError:
-        return {}, set()
+        return [], set()
     if not isinstance(data, dict):
-        return {}, set()
+        return [], set()
 
-    nodes_dict: dict[str, dict[str, object]] = {}
-    for node in data.get("nodes") or []:
-        ref_id = node.get("ref_id", "")
-        if ref_id:
-            raw_tags = node.get("tags", [])
-            tags = tuple(sorted(raw_tags)) if isinstance(raw_tags, list) else ()
-            nodes_dict[ref_id] = {
-                "kind": node.get("kind", ""),
-                "summary": node.get("summary", ""),
-                "source": node.get("source", ""),
-                "tags": tags,
-            }
+    nodes: list[dict[str, Any]] = [
+        node
+        for node in (data.get("nodes") or [])
+        if isinstance(node, dict) and node.get("ref_id", "")
+    ]
 
     edges_set: set[tuple[str, str, str]] = set()
     for edge in data.get("edges") or []:
@@ -178,7 +193,7 @@ def _parse_yaml_content(
         if src and dst:
             edges_set.add((src, dst, kind))
 
-    return nodes_dict, edges_set
+    return nodes, edges_set
 
 
 def _list_graph_files_at_ref(project_root: Path, ref: str) -> list[str]:
@@ -234,7 +249,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
     graph_dir = project_root / ".beadloom" / "_graph"
 
     # --- Current state: read from disk ---
-    current_nodes: dict[str, dict[str, object]] = {}
+    current_read: list[tuple[str, dict[str, Any]]] = []
     current_edges: set[tuple[str, str, str]] = set()
 
     current_files: set[str] = set()
@@ -246,11 +261,11 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
             current_files.add(rel_path)
             content = _decode_graph_yaml(yml_path.read_bytes(), rel_path)
             nodes, edges = _parse_yaml_content(content)
-            current_nodes.update(nodes)
+            current_read.extend((yml_path.name, node) for node in nodes)
             current_edges.update(edges)
 
     # --- Previous state: read from git ref ---
-    prev_nodes: dict[str, dict[str, object]] = {}
+    prev_read: list[tuple[str, dict[str, Any]]] = []
     prev_edges: set[tuple[str, str, str]] = set()
 
     prev_files = _list_graph_files_at_ref(project_root, since)
@@ -260,8 +275,19 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
         prev_content = _read_yaml_at_ref(project_root, rel_path, since)
         if prev_content is not None:
             nodes, edges = _parse_yaml_content(prev_content)
-            prev_nodes.update(nodes)
+            prev_read.extend((f"{since}:{rel_path}", node) for node in nodes)
             prev_edges.update(edges)
+
+    # A ref_id carried twice is reported on BOTH sides, each finding naming the
+    # place it was read from, and reduced by the rule the loader follows — the
+    # first node wins. A guard on one side of a comparison and not the other
+    # invents changes, and a reduction that disagrees with the loader's
+    # describes a node the graph does not hold (BDL-UX #214).
+    current_kept, current_duplicates = unique_by_ref_id(current_read)
+    prev_kept, prev_duplicates = unique_by_ref_id(prev_read)
+    current_nodes = {str(node["ref_id"]): _node_view(node) for node in current_kept}
+    prev_nodes = {str(node["ref_id"]): _node_view(node) for node in prev_kept}
+    duplicates = tuple(current_duplicates + prev_duplicates)
 
     # --- Compare nodes ---
     node_changes: list[NodeChange] = []
@@ -348,6 +374,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
         since_ref=since,
         nodes=tuple(node_changes),
         edges=tuple(edge_changes),
+        duplicates=duplicates,
     )
 
 
@@ -480,15 +507,31 @@ def compute_diff_from_snapshot(
     )
 
 
+def _render_duplicates(diff: GraphDiff, console: Console) -> None:
+    """Print each ref_id carried twice, before any verdict about changes.
+
+    It is printed FIRST and on both the changed and the unchanged path: a graph
+    that reduces to one node per ref_id without saying so reads as a graph with
+    nothing wrong with it, and `No graph changes` is exactly the sentence that
+    reading would end on.
+    """
+    for duplicate in diff.duplicates:
+        console.print(f"[yellow]{duplicate.describe()}[/yellow]")
+    if diff.duplicates:
+        console.print()
+
+
 def render_diff(diff: GraphDiff, console: Console) -> None:
     """Render a GraphDiff using Rich console output.
 
     Displays:
+    - Every duplicate ``ref_id`` read on either side
     - Header with ref
     - Nodes section with ``+`` (green), ``~`` (yellow), ``-`` (red) markers
     - Edges section with ``+`` (green), ``-`` (red) markers
     - Summary line with counts
     """
+    _render_duplicates(diff, console)
     if not diff.has_changes:
         console.print(f"No graph changes since {diff.since_ref}.")
         return
@@ -544,10 +587,15 @@ def render_diff(diff: GraphDiff, console: Console) -> None:
 
 
 def diff_to_dict(diff: GraphDiff) -> dict[str, object]:
-    """Serialize a GraphDiff to a JSON-compatible dict."""
+    """Serialize a GraphDiff to a JSON-compatible dict.
+
+    ``duplicates`` carries what the text form prints, so a consumer reading the
+    JSON is not the one consumer that cannot see a ref_id carried twice.
+    """
     return {
         "since_ref": diff.since_ref,
         "has_changes": diff.has_changes,
         "nodes": [asdict(n) for n in diff.nodes],
         "edges": [asdict(e) for e in diff.edges],
+        "duplicates": [asdict(d) for d in diff.duplicates],
     }

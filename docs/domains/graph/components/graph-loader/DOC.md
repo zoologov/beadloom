@@ -50,12 +50,55 @@ A node's `source` is STAT'ed as it is loaded (BDL-061.50):
   `onboarding.graph_files` for the readers that go through the skip policy. The
   direction is what makes one constant possible: `onboarding` may import `graph`
   and the reverse is a cycle.
+- `unique_by_ref_id(nodes)` — the one body that decides which node survives a
+  `ref_id` carried twice, and reports every node the reduction drops. It takes
+  `(where, node)` pairs, keeps the FIRST node under a `ref_id`, and returns
+  `(kept, duplicates)`. `graph/diff.py` calls it too, so the two readers cannot
+  answer differently.
+- `DuplicateRefId` / `NodeOrigin` — the report: the `ref_id`, and where each of
+  the two nodes was read from with the `kind` and `source` it declared.
+  `DuplicateRefId.describe()` is the line a reader prints.
 - `get_node_tags(conn, ref_id)` — the node's tag set (used by tag-matched rules).
 - `GraphLoadResult` / `ParsedFile` / `ForeignEdge` / `GraphParseError` — the
   result + value types.
 - `VALID_LIFECYCLES` — `{active, planned, deprecated, dead, external}`; an
   absent value defaults to `active`, an invalid one is recorded in
   `result.errors` and falls back to `active`.
+
+### A ref_id carried twice is reported, not reduced in silence
+
+Two nodes under one `ref_id` were reduced to one and the report named neither of
+them: `Duplicate ref_id 'myapp', skipped`. On the ordinary single-package
+src-layout — a project called `myapp` holding `src/myapp/` — the surviving node
+is the empty `service` root and the node dropped is the `domain` carrying the
+source, so every rule over that package then runs on an empty population and
+reports nothing wrong (BDL-UX #214, measured on the published 4.0.0 wheel).
+
+Since BDL-069 the finding names both nodes and what the drop costs:
+
+```
+Duplicate ref_id 'myapp': kept services.yml (kind=service, no source),
+dropped services.yml (kind=domain, source 'src/myapp/') — the node that carries
+the source is the one dropped, so nothing under 'src/myapp/' is owned, checked
+or counted
+```
+
+Three properties of the placement, each load-bearing:
+
+- **It is in the parse, not in the skip policy.** BDL-069 measured that six of
+  the seven readers of `.beadloom/_graph/` never reach
+  `onboarding.graph_files.each_graph_file`, so a report there would cover one
+  reader and read as covering the directory. `load_graph` and `graph/diff.py`
+  both reach `unique_by_ref_id`, and neither reaches the policy.
+- **It is a report and not a refusal.** The graph loads, the nodes kept are the
+  ones the loader always kept, and the finding stays in `GraphLoadResult.errors`,
+  where a duplicate was already recorded — the `beadloom ci` reindex leg failed
+  on it before this change too (measured at 390850ae: rc 1, `reindex FAIL: 1
+  reindex error(s)`). The verdict this report feeds is the verdict the graph had
+  already earned, so no graph anyone ships changes verdict on upgrade.
+- **The writer no longer produces the collision** (`beadloom-cgco`, the other
+  half of #214). This half is for the graphs that already exist: bootstrapped by
+  an earlier release, or written by hand.
 
 ## The skip policy, and why this module restates it
 

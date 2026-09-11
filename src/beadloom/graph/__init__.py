@@ -27,11 +27,14 @@ from beadloom.graph.linter import (
     lint,
 )
 from beadloom.graph.loader import (
+    DuplicateRefId,
     GraphLoadResult,
+    NodeOrigin,
     ParsedFile,
     get_node_tags,
     load_graph,
     parse_graph_file,
+    unique_by_ref_id,
     update_node_in_yaml,
 )
 from beadloom.graph.rule_engine import (
@@ -60,6 +63,7 @@ from beadloom.graph.snapshot import (
 __all__ = [
     "CardinalityRule",
     "DenyRule",
+    "DuplicateRefId",
     "EdgeChange",
     "GraphDiff",
     "GraphLoadResult",
@@ -68,6 +72,7 @@ __all__ = [
     "LintResult",
     "NodeChange",
     "NodeMatcher",
+    "NodeOrigin",
     "ParsedFile",
     "RequireRule",
     "Rule",
@@ -98,6 +103,7 @@ __all__ = [
     "render_diff",
     "resolve_import_to_node",
     "save_snapshot",
+    "unique_by_ref_id",
     "update_node_in_yaml",
     "validate_rules",
 ]

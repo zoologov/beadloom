@@ -12,6 +12,7 @@ import pytest
 from beadloom.graph.diff import (
     GraphDiff,
     NodeChange,
+    _node_view,
     _parse_yaml_content,
     compute_diff_from_snapshot,
     diff_to_dict,
@@ -19,6 +20,19 @@ from beadloom.graph.diff import (
 )
 from beadloom.graph.snapshot import save_snapshot
 from beadloom.infrastructure.db import create_schema
+
+
+def _views(content: str) -> dict[str, dict[str, object]]:
+    """The parse output as this diff compares it: one view per ref_id.
+
+    Since BDL-069 `_parse_yaml_content` returns the node mappings in file order,
+    so the reduction to one node per ref_id is taken once per SIDE of the
+    comparison by `unique_by_ref_id`, which reports the node it drops instead of
+    keying a dict and losing it. The cases below are about the four fields the
+    view carries, so they read the view.
+    """
+    nodes, _ = _parse_yaml_content(content)
+    return {str(node["ref_id"]): _node_view(node) for node in nodes}
 
 
 @pytest.fixture()
@@ -100,7 +114,7 @@ class TestParseYamlContentEnhanced:
                 summary: Auth module
                 source: src/auth/
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["source"] == "src/auth/"
 
     def test_extracts_tags(self) -> None:
@@ -111,7 +125,7 @@ class TestParseYamlContentEnhanced:
                 summary: Auth module
                 tags: [core, security]
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["tags"] == ("core", "security")
 
     def test_missing_source_defaults_empty(self) -> None:
@@ -121,7 +135,7 @@ class TestParseYamlContentEnhanced:
                 kind: domain
                 summary: Auth module
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["source"] == ""
 
     def test_missing_tags_defaults_empty_tuple(self) -> None:
@@ -131,7 +145,7 @@ class TestParseYamlContentEnhanced:
                 kind: domain
                 summary: Auth module
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["tags"] == ()
 
     def test_tags_sorted(self) -> None:
@@ -142,7 +156,7 @@ class TestParseYamlContentEnhanced:
                 summary: Auth module
                 tags: [zebra, alpha]
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["tags"] == ("alpha", "zebra")
 
 
@@ -151,7 +165,7 @@ class TestComputeDiffSourceChanges:
 
     def test_source_change_detected(self, tmp_path: pytest.TempPathFactory) -> None:
         """Source path change is detected as a 'changed' node."""
-        # We test via _parse_yaml_content comparison logic directly
+        # We test via the parse's own node view directly
         # since compute_diff needs a git repo. Test node comparison inline.
         old_yaml = textwrap.dedent("""\
             nodes:
@@ -167,8 +181,8 @@ class TestComputeDiffSourceChanges:
                 summary: Auth
                 source: src/auth-v2/
         """)
-        old_nodes, _ = _parse_yaml_content(old_yaml)
-        new_nodes, _ = _parse_yaml_content(new_yaml)
+        old_nodes = _views(old_yaml)
+        new_nodes = _views(new_yaml)
 
         # source differs -> should be "changed"
         assert old_nodes["auth"]["source"] != new_nodes["auth"]["source"]
@@ -188,8 +202,8 @@ class TestComputeDiffSourceChanges:
                 summary: Auth
                 tags: [core, v2]
         """)
-        old_nodes, _ = _parse_yaml_content(old_yaml)
-        new_nodes, _ = _parse_yaml_content(new_yaml)
+        old_nodes = _views(old_yaml)
+        new_nodes = _views(new_yaml)
 
         assert old_nodes["auth"]["tags"] != new_nodes["auth"]["tags"]
 
@@ -416,7 +430,7 @@ class TestBackwardCompatibility:
                 kind: domain
                 summary: Auth module
         """)
-        nodes, _ = _parse_yaml_content(yaml_content)
+        nodes = _views(yaml_content)
         assert nodes["auth"]["source"] == ""
         assert nodes["auth"]["tags"] == ()
         assert nodes["auth"]["kind"] == "domain"
