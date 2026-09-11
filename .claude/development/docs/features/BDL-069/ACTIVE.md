@@ -27,11 +27,11 @@ has been launched.
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | ✓ done |
 | `beadloom-rqma.2` | ext | the axes decision warns an axis is not a role; `impact` names unreadable ownership on the row (BDL-UX #284) | P1 | — | ✓ done |
-| `beadloom-yn6i` | ext | three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | — | ready |
+| `beadloom-yn6i` | ext | three more surfaces count stale pairs as docs; `prime` drops the code file | P1 | — | ✓ done |
 | `beadloom-6rgr` | ext | `docs polish` matches a node's source by path component, not string prefix | P1 | — | ✓ done |
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
 | `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
-| `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
+| `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ready |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
@@ -477,6 +477,36 @@ runs under.
 
 `bd close --suggest-next` named `beadloom-956f`. `bd ready --limit 0` does not list it, because
 `yn6i` is open.
+
+**2026-09-11 — extension dev (`beadloom-yn6i`) landed at `57ece490`.** Three surfaces printed a
+count of stale pairs as documents. All three keep counting pairs and now say `pair(s)`. The
+terminal dashboard's `s` key says `Sync: N stale pair(s)`. The site dashboard's stale alert says
+`N stale pair(s)`, next to the docs card that counts the same rows as `N stale of M tracked`.
+`prime` says `Health: N stale pair(s)` under a `## Stale Pairs` heading, and each of its lines
+reads `- <doc> <-> <code> (<ref_id>)`, the way `sync-check` renders a pair. Its `--json`
+output already carried `code_path` and is unchanged. The alert keeps the kind `stale_doc`,
+because that value is a key.
+
+Reproduced red first on a foreign repository, one README over three stale pairs:
+`Sync: 3 stale doc(s)`, `3 stale doc(s)`, and `Health: 3 stale docs` above three identical
+`- domains/ledger/README.md (ledger)` lines. A distinct-document count was rejected on every
+surface, because each shows a number that a neighbouring surface already shows as pairs.
+`AlertBanner.vue` needs no change. It renders `a.message` from Python, and its hard-coded
+sentence is the all-clear, which states no count. The grep found the same label over a pair count
+in `why`, the TUI dependency path, `status` and MCP `get_status`, outside this bead's scope.
+Those are filed as `beadloom-rqma.5`, a new open child of this epic.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 14 carried files, built from
+`c274e5c0` with its own interpreter: pytest 10250 passed, 61 skipped, 17 xfailed; ruff clean;
+`mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. The room has no `.git`,
+so its sync-check verified none of 465 pairs and its scope-check skipped. Green on the tree at
+`57ece490`, with `HEAD` unchanged across the run and the tree differing from it only in `.beads/`
+and this file: pytest 10298 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0 over 465 fresh
+pairs. Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs and both locale
+legs are unmeasured, and the target sweep does not vary the interpreter mypy runs under.
+
+`bd close --suggest-next` named `beadloom-956f`, and `bd ready --limit 0` lists it: every dev
+bead it depends on is closed.
 
 ## Waves
 
