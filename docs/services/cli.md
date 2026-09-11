@@ -1380,7 +1380,8 @@ Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
 shape was decided and carries findings (a bead whose declared scope could not be
 read, an override past its exit condition, an override that changed nothing, a
 shared medium that failed its check or that nobody measured, a ready list the
-tracker capped) -- visible, never blocking; `2` = no shape could be decided (no
+tracker capped, an in-progress bead under the work item the tracker could not
+show) -- visible, never blocking; `2` = no shape could be decided (no
 index, no answer from the tracker, a bead the tracker does not have, a `--parent`
 whose beads could not be derived, neither a bead nor a `--parent`, a `waves:`
 block that would not parse).
@@ -1394,6 +1395,34 @@ have been present. `--parent WORK-ITEM` is the other half: it derives the list
 from the tracker -- every bead ready under that work item -- so the caller states
 the work item instead of the list. Passing a subset stays legitimate; what the
 notice adds is that the narrowing is visible.
+
+**Every plan is compared against the beads already in progress under its work
+item**, whether or not `--parent` was given. A bead in progress is not ready, so
+before BDL-UX #283 a running bead was compared against nothing and the plan
+printed `0 serialisation(s)` beside it. A conflict with running work is printed
+apart from the plan's own serialisations, because it does not order the plan's
+waves -- it holds a planned bead back until the running one lands:
+
+```
+1 wave(s) for 1 bead(s), 0 serialisation(s), 1 against 1 running bead(s), 0 finding(s).
+
+Wave 1: epic.2
+  combined-tree gate: epic.2
+  clean room: epic.2 -> room-epic.2
+  waits for running work: epic.2 behind epic.1
+
+In progress under this plan's work item, and compared against it:
+  1 in-progress bead(s) under epic and not in this plan: epic.1
+  Serialised against running work:
+    epic.2 waits for epic.1 — shared_node: billing
+```
+
+A serialisation against running work is not a finding. An in-progress bead the
+tracker could not show is: the first line counts it as `(N not compared)` and the
+plan exits `1` with `running_not_compared`. A plan with no derived work item says
+`running work not compared` instead of a count. `--json` carries the same facts
+under `running` -- `work_item`, `in_progress`, `compared`, `not_compared`,
+`conflicts` (each with `planned`, `running`, `reason`, `detail`) and `reason`.
 
 A work item's population is its parent-child closure plus every bead any member
 of that closure depends on. The parent link alone is not enough: two of the three
@@ -1534,7 +1563,7 @@ switched off without anybody saying so.
 
 ```
 $ beadloom waves proj-1 proj-2
-2 wave(s) for 2 bead(s), 1 serialisation(s), 0 finding(s).
+2 wave(s) for 2 bead(s), 1 serialisation(s), 0 against 0 running bead(s), 0 finding(s).
 
 Wave 1: proj-1
   combined-tree gate: proj-1

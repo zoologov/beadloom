@@ -25,6 +25,7 @@ has been launched.
 | `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | ✓ done |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
+| `beadloom-rqma.1` | ext | `waves` compares a plan against beads already in progress (BDL-UX #283) | P1 | — | in progress |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
@@ -296,6 +297,38 @@ gives `src/ledger/` the symbols of `src/ledger_archive/`. That reader still serv
 The init order is untouched. After the fix, the `--yes` `docs/` tree is byte-identical to the
 one the wizard wrote before it. Parsing is lazy because unconditional parsing was measured: on
 this repository it walked 17 294 files in about 13 s, for a run that wrote nothing.
+
+**2026-09-11 — extension dev (`beadloom-rqma.1`, BDL-UX #283).** A wave plan is compared
+against the beads already in progress under its work item, and a conflict with one is printed
+apart from the plan's own serialisations. The first line now reads
+`0 serialisation(s), 1 against 1 running bead(s)`, a wave names the running beads a bead of it
+waits for, and `--json` carries the same facts under `running`.
+
+Reproduced red first on a bd 1.0.4 rig that is not this repository, with the tree's own
+`beadloom` at `e3a0ab1d`: an epic holding one bead in progress and one ready, both declaring
+`billing`. `--parent` answered `1 wave(s) for 1 bead(s), 0 serialisation(s)` and a population
+notice about the ready bead only, while naming the pair gave `shared_node: billing`. After the
+change the same rig answers `1 against 1 running bead(s)` and
+`rig283-1mw.2 waits for rig283-1mw.1 — shared_node: billing`.
+
+Three decisions, each with its reason. A conflict with running work is not a finding, because
+a serialisation is a decision the shape makes rather than a defect of it. A bead known to be in
+progress whose record `bd show` could not return IS a finding, `running_not_compared`, because
+the count beside it is then a claim about part of the running work. A running bead with no
+declared scope serialises every planned bead behind it and is not exempted, because an unknown
+scope is not an empty one. That case is rare: 3 of 51 beads with children here were ever
+started. The rig found one wording defect before it shipped. The pair form said
+`no bead under <epic> is in progress` while the running bead sat in the plan, and it now says
+`outside this plan`.
+
+Gate owner of a wave of one, two claims. Green in a clean room over 18 carried files, built
+from `e3a0ab1d` with its own interpreter: pytest 10126 passed, 61 skipped, 17 xfailed; ruff
+clean; `mypy --strict` clean against targets 3.10 to 3.13; `beadloom ci` rc 0. That room has no
+`.git`, so its sync-check verified none of 461 pairs and its scope-check skipped. Green on the
+tree at `e3a0ab1d` plus this bead's files, the only other difference being the tracker's own
+`.beads/` files: pytest 10174 passed, 13 skipped, 17 xfailed; `beadloom ci` rc 0 over 461 fresh
+pairs. Neither verdict entered any of the 21 declared rooms, so the Ubuntu legs and both locale
+legs are unmeasured, and the target sweep does not vary the interpreter mypy runs under.
 
 ## Waves
 

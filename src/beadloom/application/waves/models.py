@@ -24,6 +24,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from beadloom.application.waves.population import Population
+from beadloom.application.waves.running import RunningWork
 from beadloom.graph.rules import exit_condition_deadline
 
 if TYPE_CHECKING:
@@ -630,6 +631,11 @@ class WavePlan:
     #: absent: a plan whose list was held against no population says so, and the
     #: count it carries is a notice rather than a finding (BDL-UX #274).
     population: Population = field(default_factory=Population)
+
+    #: The beads already in progress under the same work item, and every planned
+    #: bead that waits for one of them. Kept apart from :attr:`conflicts`, which
+    #: orders this plan's own waves (BDL-UX #283).
+    running: RunningWork = field(default_factory=RunningWork)
 
     @property
     def exit_code(self) -> int:

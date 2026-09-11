@@ -128,6 +128,16 @@ instrument spoke where a coordinator was already thinking about concurrency and 
 where it was not (BDL-UX #228); the room is named after the bead because two agents once each
 built one at a shared scratchpad path and one measured over the other's files (BDL-UX #235).
 
+It also reads the records of the beads the tracker lists as in progress (`_running_records`,
+through the same `bd show` call form `_read_bead` makes for a planned bead) and hands them to
+the planner, which compares the plan against those under its work item (BDL-UX #283). The
+reader is tolerant where the planned-bead reader is strict: a running bead the tracker cannot
+show is left out, and the plan reports it as `running_not_compared` rather than refusing to
+decide a shape over beads it was not asked to plan. The first line carries the comparison
+beside the plan's own count — `0 serialisation(s), 1 against 1 running bead(s)` — each wave
+names the running beads a bead of it waits for, and `--json` carries the same facts under
+`running`.
+
 It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
 media and for the same reason — the application layer keeps taking its input as data — and
 prints what every bead's declared `refs:` was held against: the work item, the document, how

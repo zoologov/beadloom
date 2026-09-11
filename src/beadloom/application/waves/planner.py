@@ -18,6 +18,7 @@ anything is how a check gets switched off without anybody saying so.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from beadloom.application.waves.derivation import (
@@ -25,7 +26,10 @@ from beadloom.application.waves.derivation import (
     derivation_findings,
     unguarded_axes,
 )
-from beadloom.application.waves.independence import conflicts_among
+from beadloom.application.waves.independence import (
+    conflicts_among,
+    conflicts_with_running,
+)
 from beadloom.application.waves.media import SHARED_MEDIA
 from beadloom.application.waves.media_checks import check_media, finding_for
 from beadloom.application.waves.models import (
@@ -46,6 +50,7 @@ from beadloom.application.waves.population import (
     derive_population,
     population_findings,
 )
+from beadloom.application.waves.running import running_findings, running_population
 from beadloom.application.waves.scope import resolve_scopes
 
 if TYPE_CHECKING:
@@ -59,7 +64,8 @@ if TYPE_CHECKING:
         WaveEnvironment,
         WaveOverride,
     )
-    from beadloom.application.waves.population import TrackerCensus
+    from beadloom.application.waves.population import Population, TrackerCensus
+    from beadloom.application.waves.running import RunningWork
 
 
 def _conflict_set(
@@ -260,6 +266,27 @@ def _outcomes(
     return tuple(outcomes)
 
 
+def _running_work(
+    conn: sqlite3.Connection,
+    population: Population,
+    census: TrackerCensus | None,
+    scopes: Sequence[BeadScope],
+    records: Sequence[BeadRecord],
+    running: Sequence[BeadRecord],
+) -> RunningWork:
+    """The beads in progress beside this plan, compared against its beads."""
+    work = running_population(population, census)
+    wanted = {r.bead_id: r for r in running if r.bead_id in work.in_progress}
+    running_scopes = resolve_scopes(conn, tuple(wanted.values()))
+    return replace(
+        work,
+        compared=tuple(sorted(wanted)),
+        conflicts=conflicts_with_running(
+            conn, scopes, running_scopes, (*records, *wanted.values())
+        ),
+    )
+
+
 def plan_waves(
     records: Sequence[BeadRecord],
     *,
@@ -270,6 +297,7 @@ def plan_waves(
     axes: WorkItemAxes | None = None,
     census: TrackerCensus | None = None,
     work_item: str = "",
+    running: Sequence[BeadRecord] = (),
 ) -> WavePlan:
     """Decide the wave shape for *records* against the indexed graph in *conn*.
 
@@ -289,6 +317,12 @@ def plan_waves(
     the census can make a finding is its own completeness. *work_item* names the
     item a caller stated, and is empty when the caller stated a bead list and the
     item has to be derived from it.
+
+    *running* carries the records of beads the tracker lists as in progress, so
+    the plan can be compared against work already running under the same work
+    item (BDL-UX #283). A record for a bead outside that item is ignored, and a
+    bead in progress under it with no record here is a finding: the plan was not
+    compared against it.
     """
     scopes = resolve_scopes(conn, records)
     computed = conflicts_among(conn, scopes, records)
@@ -311,6 +345,7 @@ def plan_waves(
     )
     recorded = axes if axes is not None else WorkItemAxes(reason=AXES_NOT_GATHERED)
     population = derive_population(tuple(present), census, work_item=work_item)
+    beside = _running_work(conn, population, census, scopes, records, running)
     agreements = compare_declarations(scopes, recorded)
     gaps = unguarded_axes(waves, scopes, recorded)
     return WavePlan(
@@ -321,10 +356,12 @@ def plan_waves(
         shared_media=SHARED_MEDIA,
         findings=_findings(scopes, outcomes, checks, recorded)
         + derivation_findings(waves, agreements, gaps, recorded)
-        + population_findings(population),
+        + population_findings(population)
+        + running_findings(beside),
         media_checks=checks,
         axes=recorded,
         agreements=agreements,
         unguarded_axes=gaps,
         population=population,
+        running=beside,
     )

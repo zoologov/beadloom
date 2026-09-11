@@ -29,6 +29,7 @@ from beadloom.application.waves.models import (
     Conflict,
     sorted_pair,
 )
+from beadloom.application.waves.running import RunningConflict
 from beadloom.infrastructure.repository import get_outgoing_edges
 
 if TYPE_CHECKING:
@@ -119,4 +120,35 @@ def conflicts_among(
             conflict = conflict_between(conn, left, right, blockers=blockers)
             if conflict is not None:
                 found.append(conflict)
+    return tuple(found)
+
+
+def conflicts_with_running(
+    conn: sqlite3.Connection,
+    planned: Sequence[BeadScope],
+    running: Sequence[BeadScope],
+    records: Sequence[BeadRecord],
+) -> tuple[RunningConflict, ...]:
+    """Every conflict between a planned bead and a bead already running (BDL-UX #283).
+
+    The same four questions :func:`conflict_between` asks of any pair, asked
+    across the two sets and never within one: the plan's own pairs are
+    :func:`conflicts_among`'s, and two running beads are not this plan's to order.
+    The pair is kept oriented, because which side is running is what a reader
+    acts on. *records* supplies the tracker's blocker edges for both sides.
+    """
+    blockers = {record.bead_id: frozenset(record.blocked_by) for record in records}
+    found: list[RunningConflict] = []
+    for left in sorted(planned, key=lambda s: s.bead_id):
+        for right in sorted(running, key=lambda s: s.bead_id):
+            conflict = conflict_between(conn, left, right, blockers=blockers)
+            if conflict is not None:
+                found.append(
+                    RunningConflict(
+                        planned=left.bead_id,
+                        running=right.bead_id,
+                        reason=conflict.reason,
+                        detail=conflict.detail,
+                    )
+                )
     return tuple(found)

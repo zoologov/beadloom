@@ -303,6 +303,53 @@ single work item is reported as such rather than attributed to the widest item
 holding some of it. Neither stops a shape being decided: the population is a
 notice beside the plan, never an input to it.
 
+### The work already running beside the plan
+
+The beads a plan decides over are **ready** ones, and a bead in progress is not
+ready. So until BDL-UX #283 a bead already running under the same work item was
+compared against nothing, and the plan printed `0 serialisation(s)` beside it —
+which a coordinator deciding whether to launch reads as "nothing conflicts".
+Measured in BDL-069 on 2026-09-11: `beadloom waves --parent beadloom-rqma` answered
+one clean wave for `beadloom-8lmj` while `beadloom-h7b3` was running, and the pair
+named explicitly serialised over `cli-commands -> agent-prime`.
+
+**Every plan whose work item was derived is compared against the beads in
+progress under it** — the same membership rule as the ready beads, cut by the
+tracker's `status` instead of by `bd ready`, and minus any bead the plan itself
+holds. Each pair is asked the same four questions as a pair within the plan
+(`application/waves/running.py`, `independence.conflicts_with_running`), so a
+running bead with no declared scope serialises every planned bead behind it: an
+unknown scope is not an empty one.
+
+**A conflict with running work is reported apart from a serialisation within the
+plan**, because the two are acted on differently. A serialisation orders the
+plan's own waves; a conflict with running work holds a bead back until work
+nobody is launching lands, and folding it in would put a bead the plan does not
+contain into its waves. The first line carries both counts, and the block names
+each pair with the planned bead first:
+
+```
+1 wave(s) for 1 bead(s), 0 serialisation(s), 1 against 1 running bead(s), 0 finding(s).
+
+Wave 1: epic.2
+  combined-tree gate: epic.2
+  clean room: epic.2 -> room-epic.2
+  waits for running work: epic.2 behind epic.1
+
+In progress under this plan's work item, and compared against it:
+  1 in-progress bead(s) under epic and not in this plan: epic.1
+  Serialised against running work:
+    epic.2 waits for epic.1 — shared_node: billing
+```
+
+**Neither count is a finding; what can fail is the comparison's own population.**
+A bead in progress under the work item whose record the tracker could not show is
+counted as `(N not compared)` on the first line and reported as the finding
+`running_not_compared`, because the count beside it is then a claim about part of
+the running work. A plan with no derived work item, or a census whose rows carry
+no status, prints `running work not compared` with the reason — never a count of
+zero.
+
 ### What a wave shares regardless of the shape
 
 Printed by every plan, whatever the width of its widest wave, each with the
@@ -795,13 +842,16 @@ not tell them apart.
 - A ready bead under the same work item that the plan was not asked about is
   reported and never blocks: the narrowing is made visible, not refused.
 - A count of unasked beads taken from a capped tracker answer says so.
+- A plan is compared against the beads already in progress under its work item,
+  a conflict with one is reported apart from the plan's own serialisations, and a
+  running bead that could not be compared is a finding rather than a silence.
 - The plan is read-only with respect to the index and the tracker.
 
 ## API
 
 | Entry point | Answers |
 |---|---|
-| `plan_waves(records, *, conn, overrides, today, environment, axes, census, work_item)` | the whole shape, as a `WavePlan` |
+| `plan_waves(records, *, conn, overrides, today, environment, axes, census, work_item, running)` | the whole shape, as a `WavePlan` |
 | `compare_declarations(scopes, axes)` | one verdict per declared ref, plus one per axis row naming no node |
 | `unguarded_axes(waves, scopes, axes)` | per concurrent wave, the approved nodes none of its beads declares |
 | `remedy_for(reason, *, axes)` | what to do about an unresolved scope, given what else is known |
@@ -809,6 +859,7 @@ not tell them apart.
 | `parse_declaration(text)` | the refs a declaration names, the words it dropped, and whether it was anchored |
 | `compose_declaration(record)` | the tracker's four fields as the one string the parser reads |
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
+| `conflicts_with_running(conn, planned, running, records)` | every conflict between a planned bead and a bead already in progress, oriented |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `room_for(bead_id)` | the clean room that bead owes, `room-<bead-id>` |
 | `room_path(parent, bead_id)` | that room's directory under a parent |
@@ -829,6 +880,10 @@ not tell them apart.
 | `ready_under(work_item, census)` | the ready beads under one work item, for a caller that states the item |
 | `population_lines(population)` | the notice block both output shapes quote |
 | `population_findings(population)` | what a reader must be told about the answer that count was taken from |
+| `running_population(population, census)` | the beads in progress under the plan's work item that the plan does not hold, or why none could be derived |
+| `running_summary(work)` | the clause the first line carries beside the plan's own serialisation count |
+| `running_lines(work)` | the block naming the running work and every planned bead that waits for it |
+| `running_findings(work)` | a running bead the plan could not be compared against |
 | `lock_sites(invocations)` | what each landing-lock invocation's call form grants |
 | `LockInvocation` | one parsed lock invocation, handed in by the seam's grammar |
 | `defect_detail(defect)` | what one defective call form costs and the flag that fixes it |
@@ -853,6 +908,7 @@ every scenario runs without a `bd` binary on the machine.
 | `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `population.py` | the beads a plan could have been about, and which of them it was not asked about |
+| `running.py` | the work already running under a plan's work item, and which planned beads wait for it |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
 | `config.py` | read and validate the declared `waves:` overrides |
 
@@ -870,6 +926,10 @@ declined, each with the condition that reopens it;
 this repository's own instructions to it; `tests/test_cli_waves.py` covers
 the command's two output shapes, its three exit codes, and the population it
 reports having not been asked about;
+`tests/acceptance/features/wave_running_work.feature` and
+`tests/test_a_plan_is_compared_against_running_work.py` cover the comparison
+against beads already in progress, through a tracker double that answers in
+bd's own spelling, and read the real tracker where one is installed;
 `tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
 and owns the five findings BDL-061.22 measured;
 `tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6
