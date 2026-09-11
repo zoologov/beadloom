@@ -329,6 +329,54 @@ def _symbols_for_node(
     return result
 
 
+#: What a skeleton names as a module: a Python file. It is the population
+#: `missing_modules` reads, and that rule is the only reason the list exists.
+_MODULE_SUFFIX = ".py"
+
+
+def _modules_for_node(node: dict[str, Any], project_root: Path) -> list[str]:
+    """File names of the Python modules directly inside *node*'s source directory.
+
+    Read off the DISK, never the index, because `init --yes` writes the skeletons
+    before its reindex: on a virgin project there is no index to read at that
+    point, and the list would be empty on exactly the run BDL-UX #282 measured.
+
+    The population is the one `missing_modules` reads, which is the rule the list
+    exists to satisfy: Python files, top level only, since a subdirectory is a
+    node of its own. The scanner's wider code-extension set is not reachable from
+    here — `agent-prime` owns it and already depends on this node, so importing
+    it is a cycle `no-dependency-cycles` refuses. What holds this list to the
+    rule is a test that runs the rule over a skeleton, not a copied constant.
+
+    `__init__.py` is named too, so the list does not depend on which boilerplate
+    the rule chooses to exempt. A node whose source is a single file gets
+    nothing: its `## Source` line already names it.
+    """
+    source = str(node.get("source") or "").strip()
+    if not source:
+        return []
+    directory = project_root / source
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in directory.glob(f"*{_MODULE_SUFFIX}")
+        if path.is_file()
+    )
+
+
+def _render_modules_section(modules: list[str]) -> str:
+    """Render a ``## Modules`` list naming each of *modules* as inline code.
+
+    Returns an empty string for no modules, so the section is conditional the
+    way ``## Public API`` is and never becomes a section the template requires.
+    """
+    if not modules:
+        return ""
+    lines = ["## Modules\n", *(f"- `{name}`" for name in modules)]
+    return "\n".join(lines) + "\n"
+
+
 def _render_symbols_section(symbols: list[dict[str, Any]]) -> str:
     """Render a ``## Public API`` markdown table from *symbols*.
 
@@ -416,21 +464,24 @@ def _node_values(
     node: dict[str, Any],
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None,
+    modules: list[str] | None = None,
 ) -> dict[str, str]:
     """The placeholder values every node document shares.
 
-    ``symbols_section`` carries its own trailing blank line so an absent
-    ``## Public API`` leaves no gap: the template writes it immediately before
-    the next heading, which is the one shape that renders identically whether
-    the node has public symbols or not.
+    ``modules_section`` and ``symbols_section`` each carry their own trailing
+    blank line so an absent ``## Modules`` or ``## Public API`` leaves no gap:
+    the template writes them immediately before the next heading, which is the
+    one shape that renders identically whether the node has them or not.
     """
     ref_id: str = node["ref_id"]
     depends_on, used_by = _edges_for(ref_id, edges)
+    modules_section = _render_modules_section(modules or [])
     symbols_section = _render_symbols_section(symbols or [])
     return {
         "ref_id": ref_id,
         "summary": node.get("summary", ""),
         "source": node.get("source", ""),
+        "modules_section": f"{modules_section}\n" if modules_section else "",
         "symbols_section": f"{symbols_section}\n" if symbols_section else "",
         "depends_on": ", ".join(depends_on) if depends_on else "(none)",
         "used_by": ", ".join(used_by) if used_by else "(none)",
@@ -442,12 +493,13 @@ def _render_domain_readme(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render domain README content from the ``domain`` template."""
     children = _children_of(node["ref_id"], edges)
-    values = _node_values(node, edges, symbols)
+    values = _node_values(node, edges, symbols, modules)
     values["features"] = (
         "\n".join(f"- {c}" for c in children) if children else "(none)"
     )
@@ -469,13 +521,14 @@ def _render_service(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render service page content from the ``service`` template."""
     return render_doc(
         "service",
-        _node_values(node, edges, symbols),
+        _node_values(node, edges, symbols, modules),
         config=config or _resolved_config(project_root),
         project_root=project_root,
     )
@@ -491,11 +544,12 @@ def _render_feature_spec(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render feature SPEC content from the ``feature`` template."""
-    values = _node_values(node, edges, symbols)
+    values = _node_values(node, edges, symbols, modules)
     values["parent"] = _parent_of(node["ref_id"], edges) or "(unknown)"
     return render_doc(
         "feature",
@@ -995,19 +1049,21 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
             continue
 
         node_symbols = _symbols_for_node(node, symbols_by_source)
-
-        if kind == "domain":
-            content = _render_domain_readme(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
-        elif kind == "service":
-            content = _render_service(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
-        else:
-            content = _render_feature_spec(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
+        render = {
+            "domain": _render_domain_readme,
+            "service": _render_service,
+        }.get(kind, _render_feature_spec)
+        # The modules are NAMED rather than the pair attested at write time:
+        # `missing_modules` requires them, and a skeleton recorded as fresh would
+        # assert a freshness nobody checked (BDL-069 S1, BDL-UX #282).
+        content = render(
+            node,
+            edges,
+            node_symbols,
+            modules=_modules_for_node(node, project_root),
+            config=config,
+            project_root=project_root,
+        )
 
         if _write_if_missing(doc_path, content):
             created += 1

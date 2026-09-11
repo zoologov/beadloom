@@ -61,7 +61,9 @@ placeholders erased first. Two consequences follow from that one rule:
   required sections", met with one source of truth rather than two.
 - A heading that reaches the document **through** a placeholder — `## Public API`, rendered only
   for a node with public symbols — is conditional by construction and cannot be required of a
-  node that has none.
+  node that has none. `## Modules` (the `modules_section` placeholder, BDL-069 S1) arrives the
+  same way, and that is what lets the skeleton gain it without a single existing document being
+  found to lack it on upgrade.
 
 ### The same derivation, over the PLANNING documents
 
