@@ -131,7 +131,7 @@ Documentation health overview with per-node status tracking.
 | `/` | Search overlay (FTS5 search) |
 | `r` | Trigger reindex (runs `incremental_reindex`, refreshes providers -- debt and activity on a background thread) |
 | `l` | Run lint check (shows violation count notification) |
-| `s` | Run sync-check (shows stale count notification) |
+| `s` | Run sync-check (notification `Sync: N stale pair(s)` — a count of doc-code pairs, as `sync-check` counts them) |
 | `S` | Save snapshot (placeholder) |
 
 ### Dashboard

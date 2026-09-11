@@ -159,7 +159,7 @@ Cross-IDE context injection via a three-layer architecture.
    bootstrap that wrote the rule and met the nodes. Every branch of `init` that writes a file
    under `.beadloom/_graph/` now takes the verdict.
 
-5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale doc-code pairs, lint violations, domain list.
 
 6. **One order for all three entry points** (BDL-067 `.18` and `.21`, BDL-UX #216) — `init`
    bootstraps, then imports, then generates the doc skeletons, whether the mode arrived
@@ -215,11 +215,19 @@ Returns compact project context. Static layer (config, rules, AGENTS.md) always 
 
 - `fmt="markdown"` — human-readable output (~1000-1500 tokens)
 - **The finding lists are bounded** (`MAX_LISTED_FINDINGS = 10`, BDL-061 S4). `prime` used to
-  print one line per stale doc and per lint violation with no limit, which kept its size promise
+  print one line per stale pair and per lint violation with no limit, which kept its size promise
   only while the lists were empty: opting this repository into `scenario-coverage` (68 findings)
   grew the output from 2.6 KB to 13.1 KB — five times the budget, in the artifact whose whole
   job is to fit in one. The **count is never truncated**, only the list, and the cut says how
   many are hidden and which command shows them (`beadloom lint` / `beadloom sync-check`)
+- **The stale list counts and names PAIRS** (BDL-069 `beadloom-yn6i`). A pair is a document
+  AND a code file, so three code files of one package give three stale pairs over one
+  document. The health line reads `N stale pair(s)`, the section is `## Stale Pairs`, and each
+  line is `- <doc> <-> <code> (<ref_id>)`, the pair as `sync-check`'s text renders it. Measured
+  before the change on a repository with one README over three stale pairs: `Health: 3 stale
+  docs` above three identical lines naming the README alone. The cut note says `stale pair(s)`
+  for the same reason. `fmt="json"` is unchanged: `health.stale_docs` already carried
+  `doc_path`, `code_path` and `ref_id` per pair
 - `fmt="json"` — structured dict for programmatic use
 
 ### `setup_rules_auto(project_root)`

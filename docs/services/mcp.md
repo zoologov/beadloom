@@ -234,7 +234,7 @@ Get compact project context for session start. Call this at the beginning of eve
 }
 ```
 
-Returns JSON with: project name, version, architecture summary (domain/service/feature counts, symbols), health (stale docs, lint violations, last reindex), architecture rules, domain list, and agent instructions.
+Returns JSON with: project name, version, architecture summary (domain/service/feature counts, symbols), health (lint violations, last reindex, and `stale_docs`, one entry per stale doc-code pair carrying `doc_path`, `code_path` and `ref_id`), architecture rules, domain list, and agent instructions.
 
 #### why
 

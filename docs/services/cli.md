@@ -1221,7 +1221,7 @@ beadloom prime [--json] [--update] [--project DIR]
 - `--json` -- structured JSON output
 - `--update` -- regenerate `.beadloom/AGENTS.md` before outputting context
 
-Returns architecture summary, health status (stale docs, lint violations), architecture rules, domain list, and agent instructions.
+Returns architecture summary, health status (stale doc-code pairs and lint violations), architecture rules, domain list, and agent instructions. The health line counts stale PAIRS (`N stale pair(s)`), because three code files of one package give three pairs over one document, and the `## Stale Pairs` section lists each as `- <doc> <-> <code> (<ref_id>)`, the pair as `sync-check` renders it. Both lists stop at ten entries and say how many they did not show.
 
 ### beadloom setup-rules
 

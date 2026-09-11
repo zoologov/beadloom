@@ -355,7 +355,9 @@ class BeadloomApp(App[None]):
         if self.sync_provider is not None:
             self.sync_provider.refresh()
             stale = self.sync_provider.get_stale_count()
-            message = f"Sync: {stale} stale doc(s)"
+            # A count of PAIRS: three code files of one package give three stale
+            # pairs over one document, and `sync-check` counts them the same way.
+            message = f"Sync: {stale} stale pair(s)"
             self.notify(message)
             self._for_each_status_bar(
                 lambda bar, msg=message: bar.show_notification(msg)  # type: ignore[misc]

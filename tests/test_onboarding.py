@@ -2117,7 +2117,7 @@ class TestPrimeContext:
         rules_idx = result.index("## Architecture Rules")
         cmds_idx = result.index("## Key Commands")
         instr_idx = result.index("## Agent Instructions")
-        stale_idx = result.index("## Stale Docs")
+        stale_idx = result.index("## Stale Pairs")
         lint_idx = result.index("## Lint Violations")
         assert arch_idx < rules_idx < cmds_idx < instr_idx < stale_idx < lint_idx
 
@@ -2360,7 +2360,7 @@ class TestPrimeContextStaleAndViolations:
 
         result = prime_context(tmp_path)
         assert isinstance(result, str)
-        assert "## Stale Docs" in result
+        assert "## Stale Pairs" in result
         assert "docs/stale.md" in result
 
     def test_prime_stale_docs_in_json(self, tmp_path: Path) -> None:

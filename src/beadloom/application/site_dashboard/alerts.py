@@ -94,13 +94,16 @@ def _build_alerts(
             )
         )
 
+    # A count of PAIRS (one `sync_state` row per document AND code file), which the
+    # docs card beside it shows as "N stale of M tracked" pairs and `sync-check`
+    # reports the same way. The `kind` keeps its name: it is a key, not a count.
     stale = _as_int(docs_data.get("stale", 0))
     if stale:
         alerts.append(
             _alert(
                 "stale_doc",
                 "warn",
-                f"{stale} stale doc(s) — refresh and re-run `beadloom sync-check`",
+                f"{stale} stale pair(s) — refresh and re-run `beadloom sync-check`",
             )
         )
 
