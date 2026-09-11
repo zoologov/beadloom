@@ -21,7 +21,7 @@ has been launched.
 | `beadloom-4ad3` | S2 | measure what each of the six direct readers reads for | P1 | — | ✓ done |
 | `beadloom-39ap` | S2 | the loader reports the reduction instead of performing it | P0 | `cgco`, `4ad3` | ✓ done |
 | `beadloom-w4cd` | S3 | the reader behind `version-surface` | P1 | — | ✓ done |
-| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | in progress |
+| `beadloom-jtcx` | S3 | the `version-surface` command | P1 | `w4cd` | ✓ done |
 | `beadloom-19m6` | S4 | the declared document pair and the block comparison | P2 | — | ✓ done |
 | `beadloom-dibq` | S4 | the `readme-pair` gate leg | P2 | `19m6` | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | blocked |
