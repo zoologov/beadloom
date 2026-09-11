@@ -60,8 +60,8 @@ not cover; one adds a check that does not exist.
 
 The twelve nodes ruled in scope, from the axes below: `doc-generator`, `ci-gate`, `sync-check`,
 `agent-prime`, `graph-loader`, `graph-files`, `docs-audit`, `doc-sync`, `doctor`, `rule-engine`,
-`markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled after wave 1 — `reindex`
-and `graph-diff`. Fifteen.
+`markdown-tables`, `issue-numbers`, `cli-commands`, and — re-ruled as the work landed — `reindex`,
+`graph-diff` and `onboarding`. Sixteen.
 
 ## Axes
 
@@ -100,7 +100,7 @@ and `graph-diff`. Fifteen.
 | callers | bd-seam | 5 | no | consumes the subject vocabulary for another question |
 | callers | doc-spaces | 1 | no | consumes the subject vocabulary for another question |
 | callers | flow-suppression | 2 | no | consumes the subject vocabulary for another question |
-| callers | onboarding | 2 | no | reads the manifest for other facts |
+| callers | onboarding | 2 | **yes** | **re-ruled after `qylh` landed.** The skeleton text lives in `onboarding/templates/docs/core/{domain,service,feature}.md.txt`, not only in `doc_generator.py`; naming the modules meant editing the templates. Ruled `no` at planning because the node surfaced as a reader of the manifest; it is also the owner of the templates the fix had to reach |
 | callers | declared-scope | 1 | no | consumes `summary_facts` for another question |
 | callers | scope-check | 1 | no | consumes `summary_facts` for another question |
 | callers | axes-section | 1 | no | caller of the block reader; constrains its signature |
@@ -121,6 +121,13 @@ the policy's real population and made touching them the assignment rather than a
 `beadloom ci`'s `scope-check` leg reported the disagreement between the approved axes and
 what landed, which is the leg working. The ruling is corrected here rather than quietly,
 and the count of nodes in scope moves from thirteen to fifteen.
+
+**A third row was re-ruled on 2026-09-11, when `qylh` landed.** `onboarding` had surfaced in the
+axes as a reader of the manifest and was ruled out; the skeleton text `qylh` had to change lives
+in that node's templates. Three re-rulings in one epic, all in the same direction — nodes marked
+blast radius that turned out to be work sites — is itself worth recording: the planning ruling
+read each node by the axis it FIRST appeared under, and a node that appears as a caller can also
+own the thing the fix must reach.
 
 The rows above are the **node level**. The per-function `branches` rows of the eighteen
 sections are omitted for length and are reproducible verbatim by re-running the commands each
