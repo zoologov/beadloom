@@ -43,7 +43,7 @@ Aggregated impact metrics computed from the downstream tree.
 | `downstream_direct` | `int` | Number of direct dependents (depth 0 in `_count_tree_nodes`) |
 | `downstream_transitive` | `int` | Number of transitive dependents (depth > 0) |
 | `doc_coverage` | `float` | Percentage (0--100) of downstream nodes with at least one document |
-| `stale_count` | `int` | Number of stale `sync_state` entries for downstream nodes |
+| `stale` | `StaleCount` | Stale doc-code PAIRS among the downstream nodes, with the noun for that number (`stale.count`, `stale.noun`); serialised under the JSON key `stale_count` |
 
 #### WhyResult (frozen dataclass)
 
@@ -75,7 +75,7 @@ Steps:
 4. **Count direct vs. transitive.** Apply `_count_tree_nodes(downstream)` to partition dependents by tree depth.
 5. **Collect downstream refs.** Apply `_collect_all_refs(downstream)` to get all `ref_id` values in the downstream tree.
 6. **Compute doc coverage.** `_compute_doc_coverage(conn, downstream_refs)` returns the percentage of downstream nodes with at least one row in the `docs` table. Returns `100.0` if the set is empty.
-7. **Count stale docs.** `_count_stale_docs(conn, downstream_refs)` counts rows in `sync_state` where `status = 'stale'` for any downstream `ref_id`.
+7. **Count stale pairs.** `count_stale_pairs(conn, downstream_refs)` (the shared reader in `infrastructure/repository.py`) counts rows in `sync_state` where `status = 'stale'` for any downstream `ref_id`. A row is a doc-code PAIR, so one document over three code files is three of them, and the returned `StaleCount` carries that noun.
 8. **Assemble and return** `WhyResult`.
 
 ### Tree Construction: `_build_tree`
@@ -122,13 +122,13 @@ def _compute_doc_coverage(conn: sqlite3.Connection, downstream_refs: set[str]) -
 
 Queries `COUNT(DISTINCT ref_id) FROM docs WHERE ref_id IN (...)`. Returns `covered / total * 100`. Returns `100.0` for an empty set (vacuous truth -- a node with no dependents has no undocumented dependents).
 
-### Stale Doc Count: `_count_stale_docs`
+### Stale Pair Count: `count_stale_pairs`
 
 ```python
-def _count_stale_docs(conn: sqlite3.Connection, downstream_refs: set[str]) -> int
+def count_stale_pairs(conn: sqlite3.Connection, ref_ids: Collection[str] | None = None) -> StaleCount
 ```
 
-Queries `COUNT(*) FROM sync_state WHERE ref_id IN (...) AND status = 'stale'`. Returns `0` for an empty set.
+Queries `COUNT(*) FROM sync_state WHERE ref_id IN (...) AND status = 'stale'`. An empty set counts `0` rather than everything -- a node with no dependents is not a question about the whole project. `why` holds the result as `ImpactSummary.stale`, so the number cannot reach a renderer without the word for what it counted; the JSON key `stale_count` is unchanged. Before BDL-069 `beadloom-rqma.5` this was a private `_count_stale_docs` here, and both renderers labelled its pairs `Stale docs`.
 
 ### Rendering: `render_why`
 
@@ -141,7 +141,7 @@ Rich terminal output consisting of:
 1. **Header Panel** (`border_style="blue"`): `ref_id (kind)` and summary.
 2. **Upstream Tree** (`Tree` with cyan label `"Upstream (dependencies)"`): Each node rendered as `[bold]ref_id[/] (kind) [dim]--[edge_kind]--[/] summary`. If empty, prints `"No upstream dependencies."`.
 3. **Downstream Tree** (`Tree` with green label `"Downstream (dependents)"`): Same format. If empty, prints `"No downstream dependents."`.
-4. **Impact Summary Panel** (`border_style="yellow"`): Direct dependents, transitive dependents, doc coverage percentage, stale docs count.
+4. **Impact Summary Panel** (`border_style="yellow"`): Direct dependents, transitive dependents, doc coverage percentage, and a `Stale pairs:` row whose label is built from the noun the count carries.
 
 ### JSON Serialization: `result_to_dict`
 
@@ -234,7 +234,7 @@ class ImpactSummary:
     downstream_direct: int
     downstream_transitive: int
     doc_coverage: float
-    stale_count: int
+    stale: StaleCount
 
 @dataclass(frozen=True)
 class WhyResult:
@@ -253,7 +253,6 @@ def _cache_node(conn, ref_id, cache) -> None
 def _count_tree_nodes(trees, depth=0) -> tuple[int, int]
 def _collect_all_refs(trees) -> set[str]
 def _compute_doc_coverage(conn, downstream_refs) -> float
-def _count_stale_docs(conn, downstream_refs) -> int
 def _render_tree(tree_nodes, parent) -> None
 def _tree_node_to_dict(tnode) -> dict[str, object]
 ```
@@ -273,7 +272,7 @@ def _tree_node_to_dict(tnode) -> dict[str, object]
 - Default depth is 3 and default `max_nodes` is 50 per direction. These are independent limits -- BFS stops when either is reached.
 - The upstream and downstream traversals are fully independent: they do not share `visited` sets or node counts.
 - `_get_neighbors` issues one SQL query per node per BFS step. For large graphs, this results in O(nodes_visited) queries per direction.
-- `_compute_doc_coverage` and `_count_stale_docs` use dynamic SQL with `IN (...)` placeholders. The number of placeholders equals the size of the downstream ref set (up to `max_nodes`).
+- `_compute_doc_coverage` and the shared `count_stale_pairs` use dynamic SQL with `IN (...)` placeholders. The number of placeholders equals the size of the downstream ref set (up to `max_nodes`).
 - Levenshtein suggestions on `LookupError` rely on `suggest_ref_id` from `beadloom.context_oracle.builder`, which loads all ref_ids into memory.
 
 ## Testing
@@ -287,6 +286,6 @@ Tests are located in `tests/test_why.py`. Key scenarios:
 - **No dependents**: Verify that a leaf node returns empty downstream tree and `doc_coverage = 100.0`.
 - **Cycle handling**: Create a graph with cycles, verify BFS completes without infinite loop.
 - **Doc coverage calculation**: Set up nodes with and without docs, verify percentage.
-- **Stale count**: Insert stale sync_state rows, verify count in impact summary.
+- **Stale count**: Insert stale sync_state rows, verify the count AND its noun in the impact summary.
 - **`result_to_dict` round-trip**: Verify JSON-serializable output matches expected structure.
 - **`render_why` smoke test**: Call with a mock console, verify no exceptions.

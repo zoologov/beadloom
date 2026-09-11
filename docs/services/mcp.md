@@ -161,6 +161,8 @@ Get index statistics.
 
 Returns: `nodes_count`, `edges_count`, `docs_count`, `chunks_count`, `symbols_count`, `stale_count`, `doc_coverage`, `last_reindex`, `beadloom_version`.
 
+`stale_count` counts doc-code PAIRS — one `sync_state` row per document AND code file, so one README over three code files contributes three. The key is unchanged; the tool's own description said "stale doc count" over that number until BDL-069 `beadloom-rqma.5` and now says pair.
+
 #### update_node
 
 Update a graph node's summary or source path in YAML and SQLite.

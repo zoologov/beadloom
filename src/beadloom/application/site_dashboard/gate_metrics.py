@@ -24,6 +24,7 @@ from beadloom.application.debt_report import (
 from beadloom.application.doctor import Severity, run_checks
 from beadloom.application.site_dashboard._common import _UNHEALTHY_VERDICTS
 from beadloom.application.site_metrics_history import MetricsPoint, read_history
+from beadloom.infrastructure.repository import count_stale_pairs
 
 if TYPE_CHECKING:
     import sqlite3
@@ -82,11 +83,9 @@ def _docs_metrics(conn: sqlite3.Connection) -> dict[str, object]:
         ).fetchone()[0]
     )
     total_pairs = int(conn.execute("SELECT count(*) FROM sync_state").fetchone()[0])
-    stale = int(
-        conn.execute(
-            "SELECT count(*) FROM sync_state WHERE status = 'stale'"
-        ).fetchone()[0]
-    )
+    # PAIRS, named as such by the one reader of that population: the `stale` key
+    # below feeds the alert and the docs card, which both say pair(s).
+    stale = count_stale_pairs(conn).count
     fresh = total_pairs - stale
     coverage_pct = round(covered / nodes * 100.0, 1) if nodes else 0.0
     freshness_pct = round(fresh / total_pairs * 100.0, 1) if total_pairs else 100.0

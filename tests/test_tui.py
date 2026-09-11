@@ -4864,84 +4864,6 @@ class TestLegacyDomainList:
         assert widget.option_count == 2
 
 
-class TestLegacyNodeDetail:
-    """Tests for the legacy NodeDetail widget (node_detail.py)."""
-
-    def test_show_domain_existing(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_domain() displays domain overview."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        widget.show_domain(conn, "auth")
-
-        # show_domain calls self.update() — just verify no exception was raised
-        conn.close()
-
-    def test_show_domain_missing(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_domain() shows 'not found' for missing ref_id."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        widget.show_domain(conn, "nonexistent")
-        conn.close()
-
-    def test_show_node_existing(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_node() displays node details."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        widget.show_node(conn, "auth")
-        # show_node calls self.update() — just verify no exception was raised
-        conn.close()
-
-    def test_show_node_missing(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_node() shows 'not found' for missing ref_id."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        widget.show_node(conn, "nonexistent")
-        conn.close()
-
-    def test_show_node_with_edges(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_node() displays edges for nodes with connections."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        widget.show_node(conn, "auth-login")
-        # show_node calls self.update() — just verify no exception was raised
-        conn.close()
-
-
 # ---------------------------------------------------------------------------
 # BEAD-08: StatusBarWidget Additional Tests
 # ---------------------------------------------------------------------------
@@ -5368,45 +5290,6 @@ class TestDocStatusScreenErrorBranches:
 
             # Should not crash
             await pilot.press("q")
-
-
-# ---------------------------------------------------------------------------
-# BEAD-08: NodeDetail Legacy — Nodes with No Children, No Stale Docs
-# ---------------------------------------------------------------------------
-
-
-class TestLegacyNodeDetailEdgeCases:
-    """Edge case tests for legacy NodeDetail widget."""
-
-    def test_show_domain_no_children(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_domain() for node with no children shows '(no child nodes)'."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        # payments has no children
-        widget.show_domain(conn, "payments")
-        conn.close()
-
-    def test_show_node_with_docs(
-        self, populated_db: tuple[Path, Path]
-    ) -> None:
-        """NodeDetail.show_node() displays docs for nodes with documentation."""
-        from beadloom.tui.widgets.node_detail import NodeDetail
-
-        db_path, _ = populated_db
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-
-        widget = NodeDetail()
-        # auth-login has docs in the populated DB
-        widget.show_node(conn, "auth-login")
-        conn.close()
 
 
 # ---------------------------------------------------------------------------

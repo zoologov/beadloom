@@ -35,6 +35,7 @@ from beadloom.doc_sync.engine import (
     attestation_clears,
     content_remedy,
 )
+from beadloom.infrastructure.repository import StaleCount
 from beadloom.services.commands._root import main
 
 
@@ -496,10 +497,14 @@ def _build_sync_report(results: list[dict[str, str]], *, since_ref: str | None =
     ]
 
     if stale_pairs:
+        # One row per PAIR — the table's own columns are node, doc and the code
+        # file that moved, and this is the report every other surface restates
+        # (BDL-069 `beadloom-rqma.5`).
+        noun = StaleCount.of_pairs(stale_count).noun
         lines.extend(
             [
                 "",
-                "### Stale Documents",
+                f"### Stale {noun.capitalize()}s",
                 "",
                 "| Node | Doc | Changed Code |",
                 "|------|-----|-------------|",

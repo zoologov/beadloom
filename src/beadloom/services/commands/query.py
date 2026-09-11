@@ -13,6 +13,7 @@ import click
 if TYPE_CHECKING:
     from typing import Any
 
+from beadloom.infrastructure.repository import StaleCount
 from beadloom.services.commands._root import main
 
 
@@ -143,9 +144,14 @@ def _format_markdown(bundle: dict[str, object]) -> str:
         lines.extend(_intent_lines(intent_section))
 
     # Sync status.
+    # One entry per PAIR (`_check_sync_status` builds them that way, and
+    # `docs/services/mcp.md` already said pairs while this heading said docs).
+    # The word comes from the shared count (BDL-069 `beadloom-rqma.5`); the key
+    # `stale_docs` is a key and is untouched.
     stale = sync_status.get("stale_docs", [])
     if stale:
-        lines.append("## Stale Docs")
+        noun = StaleCount.of_pairs(len(stale)).noun
+        lines.append(f"## Stale {noun.capitalize()}s")
         lines.append("")
         for doc in stale:
             lines.append(f"- {doc['doc_path']} ↔ {doc['code_path']}")

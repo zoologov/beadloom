@@ -12,6 +12,9 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Header
 
+# Through the application facade, never `infrastructure` directly
+# (`tui-no-direct-infra`).
+from beadloom.application.graph_reads import StaleCount
 from beadloom.tui.data_providers import (
     ActivityDataProvider,
     ContextDataProvider,
@@ -357,7 +360,7 @@ class BeadloomApp(App[None]):
             stale = self.sync_provider.get_stale_count()
             # A count of PAIRS: three code files of one package give three stale
             # pairs over one document, and `sync-check` counts them the same way.
-            message = f"Sync: {stale} stale pair(s)"
+            message = f"Sync: {StaleCount.of_pairs(stale).phrase}"
             self.notify(message)
             self._for_each_status_bar(
                 lambda bar, msg=message: bar.show_notification(msg)  # type: ignore[misc]

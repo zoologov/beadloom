@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.context_oracle.builder import suggest_ref_id
+from beadloom.infrastructure.repository import StaleCount, count_stale_pairs
 
 if TYPE_CHECKING:
     import sqlite3
@@ -45,7 +46,11 @@ class ImpactSummary:
     downstream_direct: int
     downstream_transitive: int
     doc_coverage: float  # percentage 0-100
-    stale_count: int
+    #: Stale doc-code PAIRS among the dependents, carrying the noun for that
+    #: number: one document over three code files is three of them, and this
+    #: figure travelled to two renderers as "Stale docs" before BDL-069
+    #: `beadloom-rqma.5` (its JSON key ``stale_count`` is unchanged).
+    stale: StaleCount
 
 
 @dataclass(frozen=True)
@@ -234,23 +239,6 @@ def _compute_doc_coverage(
     return covered / len(downstream_refs) * 100
 
 
-def _count_stale_docs(
-    conn: sqlite3.Connection,
-    downstream_refs: set[str],
-) -> int:
-    """Count stale sync_state entries for downstream nodes."""
-    if not downstream_refs:
-        return 0
-
-    placeholders = ",".join("?" for _ in downstream_refs)
-    row = conn.execute(
-        f"SELECT COUNT(*) FROM sync_state "  # noqa: S608
-        f"WHERE ref_id IN ({placeholders}) AND status = 'stale'",
-        tuple(downstream_refs),
-    ).fetchone()
-    return int(row[0])
-
-
 def analyze_node(
     conn: sqlite3.Connection,
     ref_id: str,
@@ -315,13 +303,13 @@ def analyze_node(
     direct, transitive = _count_tree_nodes(downstream)
     downstream_refs = _collect_all_refs(downstream)
     doc_coverage = _compute_doc_coverage(conn, downstream_refs)
-    stale_count = _count_stale_docs(conn, downstream_refs)
+    stale = count_stale_pairs(conn, downstream_refs)
 
     impact = ImpactSummary(
         downstream_direct=direct,
         downstream_transitive=transitive,
         doc_coverage=doc_coverage,
-        stale_count=stale_count,
+        stale=stale,
     )
 
     return WhyResult(
@@ -382,12 +370,15 @@ def render_why(result: WhyResult, console: Console) -> None:
 
     console.print()
 
-    # Impact summary panel
+    # Impact summary panel. The stale row's label is built from the noun the
+    # count carries, so the number and the word for it cannot drift apart; the
+    # column is padded rather than spaced by hand for the same reason.
+    stale_label = f"Stale {result.impact.stale.noun}s:"
     impact_lines = [
         f"Direct dependents:     {result.impact.downstream_direct}",
         f"Transitive dependents: {result.impact.downstream_transitive}",
         f"Doc coverage:          {result.impact.doc_coverage:.0f}%",
-        f"Stale docs:            {result.impact.stale_count}",
+        f"{stale_label:<23}{result.impact.stale.count}",
     ]
     console.print(
         Panel(
@@ -460,7 +451,8 @@ def render_why_tree(result: WhyResult) -> str:
     lines.append(f"  Direct dependents:     {result.impact.downstream_direct}")
     lines.append(f"  Transitive dependents: {result.impact.downstream_transitive}")
     lines.append(f"  Doc coverage:          {result.impact.doc_coverage:.0f}%")
-    lines.append(f"  Stale docs:            {result.impact.stale_count}")
+    stale_label = f"Stale {result.impact.stale.noun}s:"
+    lines.append(f"  {stale_label:<23}{result.impact.stale.count}")
 
     return "\n".join(lines)
 
@@ -501,6 +493,6 @@ def result_to_dict(result: WhyResult) -> dict[str, object]:
             "downstream_direct": result.impact.downstream_direct,
             "downstream_transitive": result.impact.downstream_transitive,
             "doc_coverage": result.impact.doc_coverage,
-            "stale_count": result.impact.stale_count,
+            "stale_count": result.impact.stale.count,
         },
     }

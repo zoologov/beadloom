@@ -61,7 +61,7 @@ Main overview showing architecture health at a glance.
 - **GraphTreeWidget** -- Interactive tree built from `part_of` edges showing the architecture hierarchy. Each node label includes a doc status indicator (green circle = fresh, yellow triangle = stale, red X = missing) and an edge count badge. Nodes are sorted by kind (service > domain > feature) then alphabetically. Selecting a node emits a `NodeSelected` message that updates the summary bar.
 - **ActivityWidget** -- Per-domain git activity displayed as colored progress bars (green >=70%, yellow >=30%, dim <30%). Shows `Analyzing git history…` until the background worker reports results.
 - **LintPanelWidget** -- Violation counts with severity icons (error, warning, info) and individual violation details (rule name, affected node, description).
-- **StatusBarWidget** -- Node count, edge count, doc count, stale count, watcher status indicator, and last action message. Supports auto-dismissing notifications.
+- **StatusBarWidget** -- Node count, edge count, doc count, a count of stale doc-code PAIRS rendered as `N stale pair(s)`, watcher status indicator, and last action message. Supports auto-dismissing notifications. It printed a bare `N stale` until BDL-069 `beadloom-rqma.5`; the sentence now comes from the shared `StaleCount`, the same one the `s` key's notification uses.
 - **Action bar** -- Keybinding hints at the bottom of the screen showing available actions: `[Enter]explore`, `[r]eindex`, `[l]int`, `[s]ync-check`, `[S]napshot`, `[?]help`.
 
 ### Explorer (key: 2)
@@ -88,7 +88,7 @@ The Explorer screen loads the node selected on the Dashboard (tracked via `NodeS
 
 - **Screen description** -- A label describing the screen purpose ("Node deep-dive: detail, dependencies, context bundle").
 - **NodeDetailPanel** -- Shows ref_id, kind, summary, source path, a Connections summary (outgoing/incoming edge counts grouped by edge kind), a Symbols list (top-level functions and classes from the code indexer with kind glyphs and line numbers), and documentation status (documented or missing).
-- **DependencyPathWidget** -- Renders upstream or downstream dependency trees with connectors, edge types, and an impact summary (direct/transitive counts, stale doc count). Toggle between `u`pstream and `d`ownstream views.
+- **DependencyPathWidget** -- Renders upstream or downstream dependency trees with connectors, edge types, and an impact summary (direct/transitive counts, and a `Stale pairs:` row rendering the same count `beadloom why` prints, labelled from the noun that count carries). Toggle between `u`pstream and `d`ownstream views.
 - **ContextPreviewWidget** -- Shows the context bundle for a node with estimated token count, character length, bundle keys, and the full bundle content. The widget supports vertical scrolling via `overflow-y: auto` for large context bundles.
 
 ### Doc Status (key: 3)

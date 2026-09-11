@@ -52,6 +52,7 @@ from beadloom.doc_sync.engine import (
     content_remedy,
 )
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
+from beadloom.infrastructure.repository import StaleCount
 from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
@@ -477,8 +478,9 @@ def _sync_summary(
         if stale:
             # Pairs, not documents: two code files of one package give two stale
             # pairs over ONE document, and "2 stale doc(s)" named a population
-            # that did not exist (BDL-069 Q3).
-            parts.append(f"{len(stale)} stale pair(s)")
+            # that did not exist (BDL-069 Q3). The sentence is built by the count
+            # itself, so this surface cannot drift from the others.
+            parts.append(StaleCount.of_pairs(len(stale)).phrase)
         # The surface headline rides along HERE too: a run that deleted a doc is
         # precisely the run whose count fell, and suppressing the number in
         # favour of the failure would discard the signal again.

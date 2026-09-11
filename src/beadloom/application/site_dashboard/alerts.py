@@ -14,6 +14,7 @@ from beadloom.application.site_dashboard._common import (
     _DEBT_ALERT_SEVERITY,
     _as_int,
 )
+from beadloom.infrastructure.repository import StaleCount
 
 # Alert severity ordering (lower = surfaced first). BREAKING contracts lead the
 # attention banner, then errors (lint/doctor/drift), then warnings (stale/debt).
@@ -103,7 +104,8 @@ def _build_alerts(
             _alert(
                 "stale_doc",
                 "warn",
-                f"{stale} stale pair(s) — refresh and re-run `beadloom sync-check`",
+                f"{StaleCount.of_pairs(stale).phrase} — refresh and re-run "
+                f"`beadloom sync-check`",
             )
         )
 
