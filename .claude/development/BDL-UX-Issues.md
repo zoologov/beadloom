@@ -35,6 +35,20 @@
 
 ## Open Issues
 
+290. [2026-09-12] [MEDIUM] `beadloom reindex` is not idempotent across a fresh and a carried-forward index, and the layer rule's new population statement inherits the difference
+
+    **Severity:** medium (no wrong verdict was produced; what moves is a DENOMINATOR the project had just started printing, and a number that changes with how you arrived at it is the class three consecutive epics exist to remove)
+    **Command:** `beadloom reindex`, then `beadloom lint --strict`
+    **Context:** BDL-070, `beadloom-punn` (A6), 2026-09-12. Found by the bead while re-taking a neutrality measurement, and explicitly reported as **not that bead's own change**.
+    **What happened.** An import into a node whose `source` is a single FILE inside a parent node's directory resolves differently depending on how the index was BUILT rather than on what the tree contains. At commit `4172c331`, `beadloom.application.graph_reads` resolves to the node `graph-reads` in an index carried forward, and to `application` in one built from scratch.
+    **How it was proved**, by the bead: this tree's `.beadloom/beadloom.db` was carried into a worktree at `4172c331` and reindexed. The active `depends_on` count went **362 → 363 with no source file changing**. The extra edge is `tui -> graph-reads`.
+    **Why it reaches further than a count.** BDL-070's A2 (`beadloom-1ylk`) shipped the sentence `this rule evaluated 16 of 363 live depends_on edge(s) and skipped 347 for an end carrying no layer tag of its own`. That denominator is now lineage-dependent. The population statement was added so a green line would stop being a silence; a denominator that depends on index history puts a smaller version of the same defect inside the sentence that fixes it.
+    **What the coordinator measured separately, and what it does NOT show.** An incremental `reindex` run immediately after a `--full` one, with nothing changed in between, is stable: 363 both times, `tui -> graph-reads` present both times. That is idempotency-after-full, a different property from the lineage difference above. It is recorded here so the entry is not read as having two confirmations when it has one.
+    **Expected:** a fresh index and a carried-forward index over one tree resolve every import to the same node. Where that cannot hold, `reindex` reports that the answer depends on the index it started from, rather than returning a different graph in silence.
+    **What is NOT established:** how many other imports have this shape — one was found, by its effect on a count somebody happened to be watching, and the class was not swept. Nor whether the fresh answer or the carried-forward answer is the correct one; the entry claims only that they differ.
+    **Tracker:** `beadloom-xzvp`.
+    **Related:** #269 and BDL-069's `beadloom-rqma.4` — `reindex` attributing a prefix-sharing sibling's API routes to a node. Same family: a node whose source is a path inside another node's reach.
+
 289. [2026-09-12] [HIGH] a self-scanning guard test reads mutmut's own mutated copy of the package, so the nightly mutation run reaches a verdict on 0 of 6544 mutants
 
     **Severity:** high (the mutation duty has produced no score since 2026-09-10 — the instrument that measures whether the tests can tell a defect from a correct program is itself dead, and the only thing that said so is a nightly nobody is watching)
