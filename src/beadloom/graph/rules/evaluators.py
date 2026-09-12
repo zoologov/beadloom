@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
+from beadloom.graph.rules.layer_declaration import declaration_statement
 from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,
     part_of_parents,
@@ -563,6 +564,13 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     ``tests/test_the_layer_rule_states_the_population_it_judged.py`` holds
     against a verbatim copy of this function as it stood before.
 
+    A layer the DECLARATION names and no node is in is reported too
+    (:func:`~beadloom.graph.rules.layer_declaration.declaration_statement`), at
+    ``warn`` for the same reason: a declaration that mentions a tag the graph
+    does not carry describes a check one step shorter than it reads, and
+    ``validate_rules`` — which asks the same function — is reached for no layer
+    rule in production.
+
     Which layer a node is in is answered by
     :func:`~beadloom.graph.rules.layers.own_layer_of` rather than by iterating
     the node's tag ``set``: the declaration decides, so a node carrying two
@@ -583,6 +591,7 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         violations.extend(
             population_statement(rule, reach_of(rule, all_edges, parents, tags.as_mapping()))
         )
+        violations.extend(declaration_statement(rule, tags.as_mapping()))
 
         for src_ref_id, dst_ref_id in all_edges:
             src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags.as_mapping())

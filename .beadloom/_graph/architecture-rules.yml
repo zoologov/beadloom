@@ -1,0 +1,30 @@
+  # Component: the rule declaration this project lints itself against
+  # (BDL-070, `beadloom-punn`). `.beadloom/_graph/rules.yml` decides whether
+  # `main` is mergeable -- `architecture-layers` alone ships at `severity:
+  # error` -- and until this node existed the file belonged to no node at all:
+  # `beadloom impact` could name every Python module a change touched and say
+  # nothing about the file that declares what those modules are allowed to do.
+  # Four sites load it (graph/linter.py:151, tui/data_providers.py:168,
+  # services/mcp_server.py, application/debt_report/collect.py:247) and a fifth
+  # loads it into the index (application/reindex/rules_loader.py:208).
+nodes:
+  - ref_id: architecture-rules
+    kind: component
+    summary: "The architecture rules this project is linted against: the layer declaration, the boundary rules and their exemptions, read from `.beadloom/_graph/rules.yml`"
+    source: .beadloom/_graph/rules.yml
+    docs_absent: >-
+      `.beadloom/_graph/` is outside `scan_paths` (`src`), so nothing here is
+      indexed as a symbol and a document attached to this node could be held to
+      the declaration by no sync pair -- it would be prose no check can reach,
+      which is the reason `vitepress-site` carries none either (BDL-UX #163).
+      The file documents itself instead: every rule carries a `description:`
+      that `lint` prints beside its findings, and every exemption carries the
+      reason it exists and the condition that retires it. What this node adds is
+      OWNERSHIP, not prose -- `beadloom impact` now names this file under
+      `Owns unread` for the one node that owns it. Revisit when `scan_paths`
+      covers `.beadloom/`, or when a doc about this file would be checkable
+      against it.
+edges:
+  - src: architecture-rules
+    dst: graph
+    kind: part_of

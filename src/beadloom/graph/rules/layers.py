@@ -58,6 +58,15 @@ if TYPE_CHECKING:
     from beadloom.graph.rules.types import LayerDef
 
 
+#: A layered rule needs two populated layers before "above" and "below" mean
+#: anything: with one, there is no direction for an edge to violate. Declared
+#: here rather than in :mod:`.liveness`, because :mod:`.layer_declaration` stays
+#: silent under exactly the condition liveness reports — and a threshold written
+#: twice is a pair of reports that can drift into saying the same thing twice or
+#: neither of them saying it.
+MIN_POPULATED_LAYERS = 2
+
+
 def part_of_generations(
     ref_id: str, parents: Mapping[str, Collection[str]]
 ) -> list[tuple[str, ...]]:

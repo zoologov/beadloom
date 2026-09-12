@@ -1,10 +1,14 @@
 version: 3
 
-tags:
-  layer-service: [cli, mcp-server, tui]
-  layer-application: [application]
-  layer-domain: [context-oracle, doc-sync, graph, onboarding, ai_agents]
-  layer-infra: [infrastructure]
+# A node's layer is declared ON THE NODE, in its own graph file, and nowhere
+# else. A top-level `tags:` catalog used to stand here and assign layer tags to
+# nodes by name; it was removed in BDL-070 (`beadloom-punn`, RFC Q5). This file
+# declares CONSTRAINTS on the graph, while a node's tags are a property OF the
+# graph -- letting the constraints file assign node properties made this a
+# second graph source with no rule saying which one wins. It had already drifted:
+# it named 10 nodes where the graph tags 12, missing `cli-commands` and
+# `guard-probes`, and nothing reported it because no production code read it.
+# `architecture-layers` below names the four tags; the nodes carry them.
 
 rules:
   - name: domain-needs-parent

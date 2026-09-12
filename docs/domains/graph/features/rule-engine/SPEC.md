@@ -7,12 +7,13 @@ Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, 
 The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`, and `exit_condition_deadline` (the `until:` grammar).
-- `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
+- `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated, because `liveness` already names them for exactly that graph (BDL-070 A6).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
@@ -489,15 +490,10 @@ graph, so there is no house preference to respect.
 
 ### rules.yml Schema
 
-Schema supports versions 1, 2, and 3. Version 3 adds the optional top-level `tags:` block for bulk tag assignments.
+Schema supports versions 1, 2, and 3. Version 3 ADDED an optional top-level `tags:` block described as bulk tag assignments; nothing ever applied it, and BDL-070 A6 withdrew `load_rules_with_tags`, the only function that read it. A node's tags are declared on the node, and a `rules.yml` still carrying such a block loads unchanged while the block assigns nothing.
 
 ```yaml
 version: 3
-
-# Optional (v3): bulk tag assignments — tag_name: [ref_id, ...]
-tags:
-  layer-service: [cli, mcp-server, tui]
-  layer-domain: [context-oracle, doc-sync, graph, onboarding]
 
 rules:
   # --- deny: forbid imports between matched nodes ---
@@ -581,8 +577,7 @@ def load_rules(rules_path: Path) -> list[Rule]
 
 1. Read and parse `rules_path` with `yaml.safe_load`.
 2. Validate top-level `version` field is in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Raise `ValueError` on mismatch or absence.
-3. If version 3, parse optional top-level `tags:` block for bulk tag assignments.
-4. Iterate `rules` list. For each entry:
+3. Iterate `rules` list. For each entry:
    a. Require a non-empty string `name` field.
    b. Enforce unique names (tracked via `seen_names` set). Raise `ValueError` on duplicate.
    c. Require exactly one of `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`. Raise `ValueError` if none or multiple are present.
@@ -596,6 +591,8 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]
 ```
 
 Collects all `ref_id` values from all matchers across all rules (deny, require, forbid_edge, cardinality and unregistered-feature-candidate). Queries the `nodes` table for each. Returns a list of warning strings for any `ref_id` not found in the database. This is advisory (warnings, not errors).
+
+**A `LayerRule` is checked too, since BDL-070 A6.** It names no ref_id, so it was outside the chain above and the same class of mistake went unreported: a layer whose tag no node carries. One warning per rule names every empty layer, through `layer_declaration.declaration_warnings` — the function the evaluator's finding is also derived from, so the two surfaces cannot state different tags. The tag map is read only when the rule set holds a layer rule.
 
 **Its return value is consumed, not dropped.** Until BDL-061.48 `linter.py` called this function as a bare statement and discarded the list, so a rule naming `no-such-node-at-all` produced the exact right diagnosis and threw it away while `lint --strict` printed `13 rules evaluated, 0 violations` at exit 0. The unknown-`ref_id` question is now answered per rule by `liveness.py` (which names the ref_id in the finding, attributed to the rule that references it) and by this function for any rule kind the liveness pass does not model — one finding per rule, never two.
 
@@ -807,7 +804,6 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 
 ```python
 def load_rules(rules_path: Path) -> list[Rule]: ...
-def load_rules_with_tags(rules_path: Path) -> tuple[list[Rule], dict[str, list[str]]]: ...
 def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]: ...
 def evaluate_rule_liveness(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 def inert_rule_names(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> set[str]: ...
@@ -1001,6 +997,8 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 - **Unknown ref_id warning.** Create rules referencing a `ref_id` not in `nodes`. Assert `validate_rules` returns a warning string.
 - **All ref_ids exist.** Assert empty warning list.
+- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity (`tests/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
+- **Every layer populated.** Assert both surfaces are silent.
 
 ### Liveness Tests (`tests/test_rule_liveness_all_types.py`)
 

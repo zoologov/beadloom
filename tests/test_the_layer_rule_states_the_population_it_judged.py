@@ -45,6 +45,7 @@ from beadloom.graph.rules.evaluators import (
     evaluate_layer_rules,
     evaluate_require_rules,
 )
+from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import (
     LAYER_POPULATION_RULE_TYPE,
     layer_rule_reach,
@@ -253,9 +254,19 @@ def _comparable(violations: list[Violation]) -> set[tuple[str | None, ...]]:
     }
 
 
+#: The advisories Release A adds beside the rule's decisions. Each is `warn`,
+#: neither judges an edge, and the differential below is about what the rule
+#: DECIDES — so both are subtracted before the comparison rather than one.
+#: `layer_declaration` (BDL-070 A6) joined the set when `validate_rules` gained
+#: its `LayerRule` case: two of the fixtures here declare four layers over a
+#: graph that populates two, which is exactly the finding that check exists to
+#: make, and it fires on them by design.
+_THE_ADVISORY_TYPES = frozenset({LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE})
+
+
 def _decisions(violations: list[Violation]) -> set[tuple[str | None, ...]]:
-    """The findings that are not the new population statement."""
-    return _comparable([v for v in violations if v.rule_type != LAYER_POPULATION_RULE_TYPE])
+    """The findings that are not one of Release A's advisories."""
+    return _comparable([v for v in violations if v.rule_type not in _THE_ADVISORY_TYPES])
 
 
 # ---------------------------------------------------------------------------

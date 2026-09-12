@@ -6,7 +6,7 @@ This package decomposes the former ``graph/rule_engine.py`` monolith by
 responsibility (BDL-059 S3, cohesion-driven):
 
 - :mod:`.types` — constants, rule dataclasses, ``NodeMatcher``, ``Violation`` (the model).
-- :mod:`.loader` — ``load_rules`` / ``load_rules_with_tags`` / ``validate_rules``
+- :mod:`.loader` — ``load_rules`` / ``validate_rules``
   (YAML -> typed rules + DB validation).
 - :mod:`.evaluators` — per-rule-type evaluation
   (deny/require/import/forbid/layer/cardinality/coverage).
@@ -65,7 +65,6 @@ from beadloom.graph.rules.liveness import (
 )
 from beadloom.graph.rules.loader import (
     load_rules,
-    load_rules_with_tags,
     validate_rules,
 )
 from beadloom.graph.rules.node_tags import NodeTags, node_tags
@@ -331,7 +330,6 @@ __all__ = [
     "layer_of",
     "layer_rule_reach",
     "load_rules",
-    "load_rules_with_tags",
     "node_tags",
     "own_layer_of",
     "part_of_ancestors",

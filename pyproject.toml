@@ -349,6 +349,7 @@ pytest_add_cli_args_test_selection = [
     "tests/acceptance/steps/test_verdict_room_steps.py",
     "tests/acceptance/steps/test_wave_plan_steps.py",
     "tests/test_a_commit_is_judged_against_the_declared_axes.py",
+    "tests/test_a_layer_the_declaration_names_and_no_node_is_in.py",
     "tests/test_active_reconcile.py",
     "tests/test_active_row_named_beads.py",
     "tests/test_active_table.py",

@@ -91,7 +91,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.evaluators import _disk_modules
-from beadloom.graph.rules.layers import own_layer_of
+from beadloom.graph.rules.layers import MIN_POPULATED_LAYERS, own_layer_of
 from beadloom.graph.rules.loader import validate_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
@@ -285,11 +285,6 @@ def _forbid_edge_reasons(rule: ForbidEdgeRule, facts: _GraphFacts) -> list[str]:
     return reasons
 
 
-#: A layered rule needs two populated layers before "above" and "below" mean
-#: anything: with one, there is no direction for an edge to violate.
-_MIN_POPULATED_LAYERS = 2
-
-
 def _layer_reasons(rule: LayerRule, facts: _GraphFacts) -> list[str]:
     """Why *rule* cannot fire — decided on the layer each node DECLARES.
 
@@ -308,7 +303,7 @@ def _layer_reasons(rule: LayerRule, facts: _GraphFacts) -> list[str]:
     tags = facts.all_tags()
     layer_at = {ref_id: own_layer_of(ref_id, rule.layers, tags) for ref_id, _, _ in facts.nodes}
     carried = {index for index in layer_at.values() if index is not None}
-    if len(carried) < _MIN_POPULATED_LAYERS:
+    if len(carried) < MIN_POPULATED_LAYERS:
         empty = sorted(
             layer.tag for index, layer in enumerate(rule.layers) if index not in carried
         )
