@@ -187,7 +187,8 @@ rules:
           until: >-
             prime_context() reads through the repository seam and this entry
             goes dead — BDL-UX #150 follow-up
-        - to: "beadloom/infrastructure/node_source"
+        - from: "src/beadloom/onboarding/doc_generator.py"
+          to: "beadloom/infrastructure/node_source"
           reason: >-
             'A file lies under a node's source' was written three times, in three
             domains, and one copy took a sibling's routes (BDL-069
