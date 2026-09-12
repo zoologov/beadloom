@@ -121,7 +121,7 @@ over a given edge set.
 five `_cached_tags` closures onto one lookup.
 
 **Done when:**
-- [ ] `lint --strict` on this repository produces a findings list identical to the pre-change one, compared as a set, and the test asserts that identity
+- [ ] `lint --strict` on this repository REMOVES no finding and changes no decision, and adds exactly the population advisory — and the test asserts that. **Corrected 2026-09-12:** this first read "produces a findings list identical to the pre-change one", which cannot hold beside the line below it — a population emitted as a finding adds one. Measured across `a8c306d8 -> ff4fb866` with each commit's own sources: 0 removed, 1 added (`architecture-layers:layer_population:warn`).
 - [ ] The population names both numbers: edges evaluated, edges skipped for an untagged end
 - [ ] The four other rule kinds' verdicts are unchanged, asserted rather than assumed
 - [ ] A graph declaring layers no node carries reports its zero denominator once, not per edge
@@ -195,7 +195,8 @@ sites load the file; they load it once or each states why it does not.
 - [ ] `Scenario: the rule engine and the architecture view agree on every node's layer`
 - [ ] `Scenario: a layer declared only in rules.yml is honoured without being hardcoded`
 - [ ] `Scenario: a layer tag matching no node is reported by validate_rules`
-- [ ] Neutrality is proved on this repository AND on a fixture that is not it
+- [ ] Neutrality is proved on this repository AND on a fixture that is not it, in the corrected sense recorded under A2 — nothing removed, no decision changed
+- [ ] The neutrality measurement is taken BEFORE the Gherkin is added and again after, and both numbers are stated: adding any `.feature` file rewrites ~40 `scenario-coverage` messages, which is why A2 wrote no scenario and left the Gherkin to this bead
 - [ ] Coverage >= 80%; `layers.py` is added to the mutation targets, or the bead says why not
 
 ### A8: review of release A
