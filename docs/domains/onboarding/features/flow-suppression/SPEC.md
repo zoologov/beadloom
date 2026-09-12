@@ -32,8 +32,11 @@ overlays:
   `guards.<name>.exclusions` holds (BDL-061 S1), for the same reason: an
   unnamed, undated suppression is permanent by accident.
 - `until` may name a date or an event. Which it is, is decided by
-  `beadloom.graph.rules.exit_condition_deadline` — the one function both
-  surfaces use, because restating it would let the two drift apart.
+  `beadloom.infrastructure.exit_condition.exit_condition_deadline` — the one
+  function every surface that requires an exit condition uses, because restating
+  it would let them drift apart. It sits in `infrastructure` since BDL-070 B2,
+  below every layer that declares one; reading it from `graph` was a peer-domain
+  import.
 - An unknown key under `overlays` or under a suppress entry is a config error;
   project *additions* are files under `.beadloom/flow/`, never keys here.
 

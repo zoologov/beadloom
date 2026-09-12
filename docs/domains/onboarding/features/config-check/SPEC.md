@@ -264,7 +264,10 @@ composer's input.
 An `overlays.suppress` entry that names a rule appearing nowhere in the composed
 flow, or whose `until:` date has passed, is reported at `warn`. See the
 flow-suppression SPEC; the deadline logic is `exit_condition_deadline`, shared
-with the `rules.yml` import exemptions rather than restated.
+with both exemption lists in `rules.yml` rather than restated. It is read from
+`beadloom.infrastructure.exit_condition` since BDL-070 B2 — below both domains
+that declare an exit condition, rather than inside the one that wrote it
+first.
 
 ### Duty delivery
 

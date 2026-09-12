@@ -151,6 +151,82 @@ def layer_of(
     return None
 
 
+def tagged_containers(
+    ref_id: str,
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> frozenset[str]:
+    """Every node that gives *ref_id* a layer: itself when it declares one, plus ancestors.
+
+    Reflexive on purpose. A node that declares a layer is the container of its
+    own layer membership, and without that a part would "cross" with the very
+    container it is inside — ``ledger-api -> ledger`` is an edge into the thing
+    it is part of, which is the most internal edge a graph has.
+    """
+    found = {
+        ancestor
+        for generation in part_of_generations(ref_id, parents)
+        for ancestor in generation
+        if own_layer_of(ancestor, layers, tags) is not None
+    }
+    if own_layer_of(ref_id, layers, tags) is not None:
+        found.add(ref_id)
+    return frozenset(found)
+
+
+def shares_tagged_ancestor(
+    src_ref_id: str,
+    dst_ref_id: str,
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> bool:
+    """True when one container the declaration gives a layer holds BOTH ends.
+
+    This is the predicate BDL-070 RFC Q1 decided, on a measurement: of this
+    repository's 132 same-layer ``depends_on`` edges, 116 run between two parts
+    of one domain and 16 between peers. The two predicates that existed before
+    it split that population 0/132 and 132/0 — one passed every same-layer edge
+    and the other flagged every one — so neither could tell an internal edge
+    from a peer crossing.
+
+    A container that carries no declared layer tag shares nothing here, which is
+    what makes the predicate say anything at all: this project's root service
+    holds every domain and every service and is untagged, so peers under it
+    cross. Tagging that root would make every same-layer edge legal by
+    construction.
+    """
+    return bool(
+        tagged_containers(src_ref_id, layers, parents, tags)
+        & tagged_containers(dst_ref_id, layers, parents, tags)
+    )
+
+
+def same_layer_crossings(
+    edges: Iterable[tuple[str, str]],
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> list[tuple[str, str]]:
+    """The edges of *edges* that run inside one layer between ends sharing no container.
+
+    An edge whose ends are in DIFFERENT layers is not here: direction is the
+    rest of the layer rule's business, and an edge with an unlayered end is not
+    judged at all. Order is the caller's, so a report over the result reads in
+    the order the edge set was handed over rather than in a set's.
+    """
+    crossings: list[tuple[str, str]] = []
+    for src_ref_id, dst_ref_id in edges:
+        src_layer = layer_of(src_ref_id, layers, parents, tags)
+        dst_layer = layer_of(dst_ref_id, layers, parents, tags)
+        if src_layer is None or dst_layer is None or src_layer != dst_layer:
+            continue
+        if not shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
+            crossings.append((src_ref_id, dst_ref_id))
+    return crossings
+
+
 @dataclass(frozen=True)
 class LayerPopulation:
     """How much of an edge set a layer rule actually judged.

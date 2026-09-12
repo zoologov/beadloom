@@ -19,13 +19,17 @@ from typing import TYPE_CHECKING
 from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.layer_declaration import declaration_statement
+from beadloom.graph.rules.layer_exemptions import (
+    excused_crossings,
+    stale_layer_exemption_findings,
+)
 from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,
     part_of_parents,
     population_statement,
     reach_of,
 )
-from beadloom.graph.rules.layers import own_layer_of
+from beadloom.graph.rules.layers import own_layer_of, same_layer_crossings
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     MATCHING_FORM_HINT,
@@ -49,7 +53,7 @@ from beadloom.infrastructure.repository import (
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable
+    from collections.abc import Callable, Collection, Mapping
 
 
 # ---------------------------------------------------------------------------
@@ -542,6 +546,33 @@ def evaluate_forbid_edge_rules(
 # ---------------------------------------------------------------------------
 
 
+def _layer_exemption_statements(
+    rule: LayerRule,
+    all_edges: list[tuple[str, str]],
+    parents: dict[str, set[str]],
+    tags: Mapping[str, Collection[str]],
+) -> list[Violation]:
+    """Report every ``exempt:`` entry that has stopped earning its place.
+
+    The crossings themselves are NOT decided here. BDL-070 ships the layer work
+    in two releases and this one changes no verdict: what an adopter sees on
+    upgrade is a report about the entries their own rules file declares, and
+    only bead B3 turns an un-excused crossing into a finding. Until then the
+    predicate is computed anyway, because an exemption that nothing consults is
+    an exemption nobody can tell is dead — which is precisely the failure
+    :mod:`.layer_exemptions` exists to prevent, shipped in the same release that
+    creates the hole.
+
+    A rule declaring no exemption computes nothing: the early return keeps every
+    project that has not written one off this path entirely.
+    """
+    if not rule.exempt:
+        return []
+    crossings = same_layer_crossings(all_edges, rule.layers, parents, tags)
+    _, excused = excused_crossings(rule, crossings)
+    return stale_layer_exemption_findings(rule, excused)
+
+
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]:
     """Evaluate layer rules against the edges table, and state what they reached.
 
@@ -593,6 +624,7 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         all_edges = live_edges_of_kind(conn, rule.edge_kind)
         violations.extend(population_statement(rule, reach_of(rule, all_edges, parents, tags)))
         violations.extend(declaration_statement(rule, tags))
+        violations.extend(_layer_exemption_statements(rule, all_edges, parents, tags))
 
         for src_ref_id, dst_ref_id in all_edges:
             src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags)

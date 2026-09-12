@@ -60,6 +60,153 @@ rules:
     enforce: top-down
     allow_skip: true
     edge_kind: depends_on
+    # THE FOURTEEN SAME-LAYER CROSSINGS THIS PROJECT HAS DECIDED ABOUT
+    # (BDL-070 B2, `beadloom-xmfs`). An edge inside one layer is legal when both
+    # ends share a container the declaration gives a layer, and a finding when
+    # they do not (RFC Q1). Measured on this tree on 2026-09-13, over a warm
+    # full rebuild of the index: 365 live `depends_on` edges, 357 with a layer
+    # at both ends by ancestry, 130 inside one layer, of which 116 run between
+    # two parts of one container and 14 between peers. Every one of the 14 is
+    # below, with what it is and what would retire it; two more were FIXED
+    # rather than excused, by moving the exit-condition vocabulary to
+    # `infrastructure/exit_condition.py` where both declarers can reach it
+    # without crossing.
+    #
+    # ONE MEASURED NON-ANSWER, recorded so nobody re-derives it. Nine of the
+    # sixteen ran `onboarding -> graph` / `onboarding -> context-oracle`, which
+    # reads like a mis-declared layer: onboarding orchestrates bootstrap and
+    # that is the application layer's work. Re-tagging `onboarding` as
+    # `layer-application` was measured on 2026-09-13 and makes it worse — the
+    # nine go away and twenty-two appear, 16 -> 29, because the application
+    # layer depends on onboarding in twenty-two places. The declaration is not
+    # the defect here.
+    exempt:
+      # --- The services layer: two services share two seams, and the container
+      # that holds both services carries no layer tag. -----------------------
+      - from: cli-commands
+        to: bd-seam
+        reason: >-
+          The bd seam is shared by both services on purpose -- funnelling every
+          `bd` invocation through one mockable function is the point of it -- and
+          its declared container contradicts its use: of the 22 import rows that
+          reach it, 18 are the CLI's and 3 the MCP server's. Re-parenting it to
+          `cli` does not remove this crossing, it flips which service crosses.
+          No available container is right, because the root service `beadloom`
+          holds every service and carries no layer tag.
+        until: "a services-layer container holds both `cli` and `mcp-server`, or the shared seams become part of neither"
+      - from: guard-probes
+        to: bd-seam
+        reason: >-
+          The flow guards read claimed beads through the same one seam
+          (`guard_probes.py:80`). Same shared-seam fact as the entry above, and
+          it retires with it.
+        until: "a services-layer container holds both `cli` and `mcp-server`, or the shared seams become part of neither"
+      - from: mcp-server
+        to: guard-probes
+        reason: >-
+          The MCP server exposes the same guard probes the CLI does
+          (`mcp_server.py:53`), so the probes are a shared seam too. They are
+          declared `part_of cli` and the same re-parenting argument applies:
+          moving them flips the direction of the crossing rather than removing
+          it.
+        until: "a services-layer container holds both `cli` and `mcp-server`, or the shared seams become part of neither"
+      # --- The services layer: the entry point starts the other entry points. -
+      - from: cli-commands
+        to: mcp-server
+        reason: >-
+          `beadloom mcp serve` starts the MCP server, so the command that starts
+          it names it (`commands/setup.py:884`, function-local in the command
+          body). Wiring one runnable thing to another is the composition root's
+          job and the CLI is this package's composition root.
+        until: "both servers are started through a shared entry point rather than one importing the other"
+      - from: cli-commands
+        to: tui
+        reason: >-
+          `beadloom dashboard` launches the TUI (`commands/dashboard.py:18`),
+          function-local and inside `except ImportError` because `textual` is an
+          optional extra. Same composition-root fact as the entry above.
+        until: "both servers are started through a shared entry point rather than one importing the other"
+      # --- The domain layer: three bounded contexts parse source, and the
+      # tree-sitter facilities live inside one of them. -----------------------
+      - from: import-resolver
+        to: code-indexer
+        reason: >-
+          The import resolver parses source files with `extract_symbols` and
+          `supported_extensions` (`import_resolver.py:15`, `:861`, `:1089`).
+          Four of the fourteen crossings are this one dependency: tree-sitter
+          parsing is a facility, not `context-oracle`'s domain knowledge, and
+          the honest fix is to move it below the domains that parse -- what this
+          bead did for the exit-condition vocabulary. `code-indexer` is a feature
+          node with its own document and callers, so that is a restructuring
+          rather than an import move.
+        until: "the tree-sitter symbol facilities move below the domains that parse source, the way `exit-condition` did"
+      - from: agent-prime
+        to: code-indexer
+        reason: >-
+          The project scanner counts classes and functions with the same
+          `extract_symbols` (`scanner/summary.py:225`). Same facility, same fix,
+          and it retires with the entry above.
+        until: "the tree-sitter symbol facilities move below the domains that parse source, the way `exit-condition` did"
+      - from: doc-generator
+        to: context-oracle
+        reason: >-
+          The doc skeleton writer lists a module's symbols with the same
+          `extract_symbols` (`doc_generator.py:398`). Same facility, same fix.
+        until: "the tree-sitter symbol facilities move below the domains that parse source, the way `exit-condition` did"
+      # --- The domain layer: onboarding drives the domains it is a peer of. ---
+      - from: agent-prime
+        to: graph
+        reason: >-
+          `beadloom prime` reports the project's lint health, so it runs the
+          linter (`scanner/prime.py:38`). The fix is the shape `beadloom-46am`
+          built for the re-index: a port under `onboarding/scanner/` that a
+          service above both layers supplies. That is a restructuring with its
+          own tests, not an import move, and it is the same port as the entry
+          below.
+        until: "a lint port under `onboarding/scanner/`, the shape `reindex_port.py` established"
+      - from: agent-prime
+        to: rule-engine
+        reason: >-
+          The same `prime` call reads the populations the rules state
+          (`scanner/prime.py:39`), from the same lint snapshot. One port
+          retires this entry and the one above together.
+        until: "a lint port under `onboarding/scanner/`, the shape `reindex_port.py` established"
+      - from: agent-prime
+        to: import-resolver
+        reason: >-
+          The scanner derives a scanned project's `depends_on` edges with the
+          graph's own resolver (`scanner/import_scan.py:43`). Re-deriving them
+          inside onboarding would be a second answer to what an import edge is,
+          which is a worse defect than this crossing.
+        until: "a lint port under `onboarding/scanner/`, the shape `reindex_port.py` established"
+      - from: graph-files
+        to: graph-loader
+        reason: >-
+          Onboarding writes and reads the project's `_graph/*.yml`, so it reads
+          the loader's own answer to what a graph file is (`NOT_A_GRAPH_FILE`,
+          `graph_files.py:40`). Restating that sentinel in onboarding would be a
+          second definition of the graph format, which is what the loader exists
+          to be the only one of.
+        until: "the graph file format is stated somewhere both the loader and its writers sit above"
+      - from: doc-generator
+        to: route-extraction
+        reason: >-
+          The doc skeleton renders a node's routes with the formatter that owns
+          the route vocabulary (`doc_generator.py:1019`). Spelling the table a
+          second time in onboarding would give one fact two renderings.
+        until: "the doc skeleton's route section is rendered from a renderer both domains sit above"
+      # --- The domain layer: a rule about summaries checks them against facts
+      # another domain models. ------------------------------------------------
+      - from: rule-engine
+        to: doc-sync
+        reason: >-
+          `graph-summary-facts` checks the numbers in a node summary against the
+          project's facts, and the fact registry -- `DocScanner`, `FactRegistry`,
+          `FactSet`, `compare_facts` -- is `doc-sync`'s model
+          (`rules/summary_facts.py:57`). The fix is for the rule to be handed its
+          facts by a caller above both domains, which changes the rule engine's
+          own evaluation signature.
+        until: "the rule engine takes a project's facts as an input rather than reading them"
 
   # Recalibrated 200 -> 280 (BDL-059 S3). Cohesion-driven decomposition split the
   # monster FILES (rule_engine.py 2249, federation.py 1000) into cohesive
@@ -202,6 +349,25 @@ rules:
             A path predicate opens no index and runs no git. Rejected: a copy in
             onboarding, which is the defect, and a re-export through a domain,
             which satisfies the glob without changing a dependency.
+          until: >-
+            the rule is re-scoped to what it actually means (open no index, run
+            no git) — BDL-UX #150 follow-up
+        - to: "beadloom/infrastructure/exit_condition"
+          reason: >-
+            The same shape as node_source above, and the fifth time this project
+            has met it: what retires a declared exclusion is stated once, and
+            three surfaces require an `until:` — the two exemption lists in
+            rules.yml, read by `graph`, and `guards.<name>.exclusions[]` in
+            flow.yml, read by onboarding. The body was written inside `graph`,
+            so `config_sync` and `flow_suppression` imported a PEER DOMAIN to
+            read it, which was two of the sixteen same-layer crossings BDL-070
+            B2 triaged. `architecture-layers` permits domain -> infrastructure
+            and forbids the peer crossing, so this trade removes the finding
+            that rule makes for a baselined entry under this one — stated
+            plainly rather than counted as a clean fix. A date parser opens no
+            index and runs no git. Rejected: a copy in onboarding, which gives
+            one `until:` two meanings, and a re-export through `graph`, which
+            satisfies the glob without changing a dependency.
           until: >-
             the rule is re-scoped to what it actually means (open no index, run
             no git) — BDL-UX #150 follow-up

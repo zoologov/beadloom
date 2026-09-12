@@ -99,6 +99,7 @@ from beadloom.graph.rules.types import (
     ImportBoundaryRule,
     ImportExemption,
     LayerDef,
+    LayerExemption,
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
@@ -109,8 +110,14 @@ from beadloom.graph.rules.types import (
     SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
     Violation,
-    exit_condition_deadline,
 )
+
+# The exit-condition vocabulary is re-exported from here so the public path
+# `beadloom.graph.rules.exit_condition_deadline` goes on answering; the
+# definition lives below this domain (BDL-070 B2), because `onboarding`
+# declares an exit condition too and was importing a peer domain to read
+# what one is.
+from beadloom.infrastructure.exit_condition import exit_condition_deadline
 
 if TYPE_CHECKING:
     import sqlite3
@@ -301,6 +308,7 @@ __all__ = [
     "ImportBoundaryRule",
     "ImportExemption",
     "LayerDef",
+    "LayerExemption",
     "LayerPopulation",
     "LayerReach",
     "LayerRule",

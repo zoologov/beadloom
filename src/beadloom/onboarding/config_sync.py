@@ -25,7 +25,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.graph.rules import exit_condition_deadline
+from beadloom.infrastructure.exit_condition import exit_condition_deadline
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,

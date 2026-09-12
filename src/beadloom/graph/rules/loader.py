@@ -30,6 +30,7 @@ from beadloom.graph.rules.types import (
     ImportBoundaryRule,
     ImportExemption,
     LayerDef,
+    LayerExemption,
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
@@ -364,6 +365,45 @@ AUTHORING_KEYS: frozenset[str] = frozenset(
 _VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
 
 
+def _parse_layer_exemption(
+    name: str,
+    index: int,
+    entry: object,
+) -> LayerExemption:
+    """Parse one entry of a layer rule's ``exempt`` list.
+
+    An entry must name BOTH ends, why the crossing stands, and what retires it.
+    Both ends, because a same-layer crossing is an edge and an entry naming one
+    end would excuse every crossing that touches it. A reason and an exit
+    condition, because a bare allow tells the next reader that somebody decided
+    something and nothing about what (BDL-070 B2).
+    """
+    where = f"Rule '{name}': layers.exempt[{index}]"
+    if not isinstance(entry, dict):
+        msg = f"{where} must be a mapping"
+        raise ValueError(msg)
+
+    from_glob = str(entry.get("from", "") or "").strip()
+    to_glob = str(entry.get("to", "") or "").strip()
+    if not from_glob or not to_glob:
+        msg = f"{where} must name both ends — set 'from' and 'to'"
+        raise ValueError(msg)
+    if from_glob == "*" and to_glob == "*":
+        msg = f"{where} matches every edge, which would exempt the rule"
+        raise ValueError(msg)
+
+    reason = str(entry.get("reason", "") or "").strip()
+    if not reason:
+        msg = f"{where} must carry a non-empty 'reason'"
+        raise ValueError(msg)
+    until = str(entry.get("until", "") or "").strip()
+    if not until:
+        msg = f"{where} must carry a non-empty 'until' (its exit condition)"
+        raise ValueError(msg)
+
+    return LayerExemption(from_glob=from_glob, to_glob=to_glob, reason=reason, until=until)
+
+
 def _parse_layer_rule(
     name: str,
     description: str,
@@ -428,6 +468,14 @@ def _parse_layer_rule(
         )
         raise ValueError(msg)
 
+    exempt_raw = rule_data.get("exempt", [])
+    if not isinstance(exempt_raw, list):
+        msg = f"Rule '{name}': layers.exempt must be a list"
+        raise ValueError(msg)
+    exempt = tuple(
+        _parse_layer_exemption(name, i, entry) for i, entry in enumerate(exempt_raw)
+    )
+
     return LayerRule(
         name=name,
         description=description,
@@ -436,6 +484,7 @@ def _parse_layer_rule(
         allow_skip=allow_skip,
         edge_kind=edge_kind,
         severity=severity,
+        exempt=exempt,
     )
 
 

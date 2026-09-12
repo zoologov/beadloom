@@ -6,17 +6,18 @@ Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, 
 
 The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
-- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`, and `exit_condition_deadline` (the `until:` grammar).
+- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`. The `until:` grammar is no longer here: `exit_condition_deadline` moved to `infrastructure/exit_condition.py` in BDL-070 B2, because `onboarding` declares an exit condition too and was importing this peer domain to read what one is. `beadloom.graph.rules.exit_condition_deadline` still answers — `rules/__init__.py` re-exports it.
 - `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
-- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated, because `liveness` already names them for exactly that graph (BDL-070 A6).
 - `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
+- `rules/layer_exemptions.py` — what a SAME-LAYER exemption is doing: which peer crossings it excuses, how many, and whether its exit condition has passed (BDL-070 B2). `layers.same_layer_crossings` decides what crosses; this decides what an entry does about it, the same split `exemptions.py` draws for the import boundary rules.
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
 - `rules/summary_facts.py` — `summary_facts`: the numeric and version claims a node `summary` states, checked against the same fact the project computes. The extraction and the comparison are the documentation audit's, so there is no second notion of "a version" here (BDL-062 `.1`).
@@ -166,7 +167,7 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 - a **deadline**: the value LEADS with an ISO `YYYY-MM-DD` date, optionally followed by the prose that explains it (`2026-09-01 — when the repository read seam lands`). It is parsed, and once that day has passed while the entry is still suppressing something, the run reports it;
 - an **event**: anything else (`the rule is re-scoped — BDL-UX #150 follow-up`). Not parseable, and deliberately still legal: what retires a real baseline is usually a landed change, not a day. An event is reported as prose, never treated as satisfied.
 
-The spelling is pinned to a leading `YYYY-MM-DD` by a pattern rather than delegated to `date.fromisoformat`, because that parser widened in Python 3.11 (`20260101` and week dates parse there and raise on 3.10) — the same `until:` must not be enforceable on one supported interpreter and prose on another. A date in the MIDDLE of a sentence is an event: a deadline is the first thing an exit condition says, or it is not one. `exit_condition_deadline` is the single definition, shared with the `guards.<name>.exclusions[].until` of `flow.yml`, so the two surfaces cannot promise different things.
+The spelling is pinned to a leading `YYYY-MM-DD` by a pattern rather than delegated to `date.fromisoformat`, because that parser widened in Python 3.11 (`20260101` and week dates parse there and raise on 3.10) — the same `until:` must not be enforceable on one supported interpreter and prose on another. A date in the MIDDLE of a sentence is an event: a deadline is the first thing an exit condition says, or it is not one. `exit_condition_deadline` is the single definition, shared with the `guards.<name>.exclusions[].until` of `flow.yml` and with `layers.exempt[].until`, so the three surfaces cannot promise different things. It lives in `infrastructure/exit_condition.py` since BDL-070 B2, below every layer that declares one.
 
 **Every exemption is visible, whatever it does.** The three channels are exhaustive over what an entry can be doing, and this is the guarantee the `rules.yml` comment used to overstate:
 
@@ -329,6 +330,26 @@ Enforces dependency direction between ordered architecture layers.
 | `allow_skip` | `bool`                | If `False`, forbids skipping intermediate layers (default `True`). |
 | `edge_kind`  | `str`                 | Edge kind to check (default `"uses"`).                  |
 | `severity`   | `str`                 | `"error"` or `"warn"`.                                  |
+| `exempt`     | `tuple[LayerExemption, ...]` | Same-layer crossings the rule excuses (default empty). |
+
+#### `LayerExemption`
+
+One same-layer crossing a layer rule excuses, why, and what retires it (BDL-070 B2).
+
+| Field       | Type  | Description                                                     |
+|-------------|-------|-----------------------------------------------------------------|
+| `from_glob` | `str` | `fnmatch` pattern over the source node's `ref_id`.               |
+| `to_glob`   | `str` | `fnmatch` pattern over the target node's `ref_id`.               |
+| `reason`    | `str` | Why the crossing stands. Mandatory.                              |
+| `until`     | `str` | Its exit condition — a leading `YYYY-MM-DD`, or an event. Mandatory. |
+
+`covers(src, dst)` matches BOTH ends and matches direction: `a -> b` and `b -> a` are two crossings,
+and a project that excused one did not excuse the other. `load_rules` raises `ValueError` when an
+entry omits `from`, `to`, `reason` or `until`, or when both globs are `*` — an entry matching every
+edge would exempt the rule rather than a crossing in it. The shape mirrors `ImportExemption` and for
+the same reason: an exclusion with no reason and no exit condition is how a gate is switched off
+without saying so. It differs in what it names, because a same-layer crossing is an EDGE and an
+entry naming one end would excuse everything that touches it.
 
 #### `CardinalityRule`
 
@@ -556,6 +577,11 @@ rules:
     enforce: top-down                          # higher layers may depend on lower
     allow_skip: true                           # optional, default: true
     edge_kind: depends_on                      # optional, default: uses
+    exempt:                                    # optional, excuses same-layer crossings
+      - from: <src-ref-id-or-glob>             # mandatory
+        to: <dst-ref-id-or-glob>               # mandatory
+        reason: "<why this crossing stands>"   # mandatory
+        until: "<a YYYY-MM-DD deadline, or the event that retires it>"  # mandatory
 
   # --- check (cardinality): enforce complexity limits ---
   - name: <unique-rule-name>
@@ -684,6 +710,9 @@ def own_layer_of(ref_id, layers, tags) -> int | None
 def part_of_generations(ref_id, parents) -> list[tuple[str, ...]]
 def part_of_ancestors(ref_id, parents) -> frozenset[str]
 def layer_population(edges, layer_at) -> LayerPopulation
+def tagged_containers(ref_id, layers, parents, tags) -> frozenset[str]
+def shares_tagged_ancestor(src, dst, layers, parents, tags) -> bool
+def same_layer_crossings(edges, layers, parents, tags) -> list[tuple[str, str]]
 ```
 
 One answer to "what layer is this node in", for every caller that asks. Three bodies asked it
@@ -697,6 +726,25 @@ The functions are pure — the declaration, the parent map and the tag map are a
 is no connection and no filesystem — so the rule's hardest property is testable without a graph.
 A layer is returned as its INDEX in the declared order (`0` is topmost), because the index is what
 the rule compares to decide direction.
+
+**What containment makes of an edge INSIDE one layer** (BDL-070 B2). `shares_tagged_ancestor` is the
+predicate RFC Q1 decided: an edge between two ends in the same layer is legal when one container the
+declaration gives a layer holds BOTH ends, and a crossing when none does. It is reflexive — a node
+that declares a layer is the container of its own membership — or a part would cross with the very
+container it is inside. A container carrying no declared layer tag shares nothing, which is what
+makes the predicate say anything: this repository's root service holds every domain and every
+service and is untagged, so peers under it cross, and tagging that root would make every same-layer
+edge legal by construction.
+
+Measured on this repository on 2026-09-13 over a warm full rebuild of the index: 365 live
+`depends_on` edges, 357 with a layer at both ends by ancestry, 130 inside one layer, of which 116
+run between two parts of one container and 14 between peers. The two predicates that existed before
+split that population 0/130 and 130/0 — one passed every same-layer edge and the other flagged
+every one — so neither could tell an internal edge from a peer crossing.
+
+`same_layer_crossings` applies it to an edge set and returns only the crossings. An edge whose ends
+are in DIFFERENT layers is not among them: direction is the rest of the layer rule's business. An
+edge with an unlayered end is not judged at all.
 
 Two properties hold, and both are settled by the declaration rather than by a dictionary's
 iteration order:
@@ -719,6 +767,35 @@ fails on a second walk reachable from `graph/rules/`.
 `layer_population` counts an edge set into `evaluated` (a layer at both ends) and
 `skipped_untagged` (the rest). The resolver is a parameter because the same edge set has two
 populations worth stating — what own tags reach and what ancestry reaches.
+
+#### What a same-layer exemption is doing (`rules/layer_exemptions.py`, BDL-070 B2)
+
+```python
+def layer_exemption_index_for(rule, src_ref_id, dst_ref_id) -> int | None
+def excused_crossings(rule, crossings) -> tuple[list[tuple[str, str]], dict[int, int]]
+def stale_layer_exemption_findings(rule, excused_per_exemption, *, today=None) -> list[Violation]
+```
+
+A layer rule that reports peer crossings needs a way to say "this one is known and decided", or the
+only way to a green result is to narrow the rule until it catches nothing. An exemption is honest
+only while it stays visible, and the two ways an entry can stop being visible are the ones
+`exemptions.py` names for `forbid_import`: it excuses a crossing and nobody says so, or its exit
+condition passes and nobody notices.
+
+Both are reported. An entry that excuses nothing is DEAD — the edge it named is gone, so the entry
+only hides the next one that looks like it. An entry still excusing crossings past its own deadline
+is EXPIRED, reported with the count it is still excusing. Both are `warn` and neither enforces: a
+crossing does not become a finding because a calendar day passed. An entry naming an event never
+expires on its own, because nothing in a date can observe whether the event happened, so the COUNT
+is the mechanism an event-dated entry relies on to be remembered.
+
+`layers.same_layer_crossings` decides what crosses; this decides what an entry does about it. The
+population a layer rule judged is counted BEFORE any exemption is consulted, so excusing a crossing
+does not shrink the denominator a reader checks the verdict against.
+
+`excused_crossings` returns both halves — the crossings no entry excuses and a count per entry —
+because both are needed, and deriving one from the other twice is how a reported count and an
+excused count come to disagree.
 
 #### The population a layer rule judged (`rules/layer_reach.py`, BDL-070 A2)
 
@@ -969,6 +1046,13 @@ class LayerDef:
     tag: str
 
 @dataclass(frozen=True)
+class LayerExemption:
+    from_glob: str
+    to_glob: str
+    reason: str
+    until: str
+
+@dataclass(frozen=True)
 class LayerRule:
     name: str
     description: str
@@ -977,6 +1061,7 @@ class LayerRule:
     allow_skip: bool = True
     edge_kind: str = "uses"
     severity: str = "error"
+    exempt: tuple[LayerExemption, ...] = ()
 
 @dataclass(frozen=True)
 class CardinalityRule:
@@ -1104,7 +1189,7 @@ One **pair** per rule type — an inert rule that must be reported, and a live r
 
 ### Exit-condition Tests (`tests/test_exit_condition_expiry.py`)
 
-Both surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how the two would drift into promising different things.
+All three surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until`, `layers.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how they would drift into promising different things.
 
 - **The grammar.** A bare ISO date is a deadline; a date LEADING a sentence is a deadline; a date mid-sentence, `2026-1-1`, `20260101`, `2026-W01-1` and prose are all events. The rejected spellings include the two `date.fromisoformat` accepts on Python 3.11+ and rejects on 3.10 — the assertion that keeps the grammar interpreter-independent.
 - **Expiry, with its non-vacuity twin.** Same fixture, same exemption, only the date differs: a past deadline is reported, a future one is not. `until` equal to *today* is not expired (a deadline names the last day it covers); yesterday is.

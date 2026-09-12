@@ -47,6 +47,7 @@ def rules_yaml(
     tiers: tuple[str, ...] = TIERS,
     with_layer_rule: bool = True,
     severity: str = "error",
+    exempt: str = "",
 ) -> str:
     """The project's `rules.yml`: one layer rule over *tiers*, or no rule at all.
 
@@ -70,7 +71,7 @@ def rules_yaml(
         f"{declared}\n"
         "    enforce: top-down\n"
         "    allow_skip: true\n"
-        "    edge_kind: depends_on\n"
+        "    edge_kind: depends_on\n" + exempt
     )
 
 
@@ -100,6 +101,7 @@ def write_tiered_project(
     tiers: tuple[str, ...] = TIERS,
     with_layer_rule: bool = True,
     severity: str = "error",
+    exempt: str = "",
 ) -> Path:
     """Write the project at *root* and index it ONCE, returning *root*.
 
@@ -114,7 +116,12 @@ def write_tiered_project(
     graph_dir.mkdir(parents=True)
     (root / ".beadloom" / "config.yml").write_text(_CONFIG, encoding="utf-8")
     (graph_dir / "rules.yml").write_text(
-        rules_yaml(tiers=tiers, with_layer_rule=with_layer_rule, severity=severity),
+        rules_yaml(
+            tiers=tiers,
+            with_layer_rule=with_layer_rule,
+            severity=severity,
+            exempt=exempt,
+        ),
         encoding="utf-8",
     )
     (graph_dir / "nodes.yml").write_text(nodes_yaml(nodes, edges), encoding="utf-8")
@@ -145,4 +152,36 @@ def graph_with(*, tiered_edges: int, untiered_edges: int) -> tuple[list[Node], l
     for index in range(untiered_edges):
         nodes += [(f"u{index}", "component", []), (f"v{index}", "component", [])]
         edges.append((f"u{index}", f"v{index}", "depends_on"))
+    return nodes, edges
+
+
+def graph_with_peer_containers() -> tuple[list[Node], list[Edge]]:
+    """Two containers in ONE tier, each holding a part, and three edges between parts.
+
+    ``ledger`` and ``postings`` both carry the middle tier and are ``part_of``
+    ``root``, which carries none — the shape this repository has, where every
+    domain sits under an untagged root service. So ``ledger-api -> ledger-store``
+    is internal to one container and ``ledger-api -> postings-api`` crosses
+    between peers, which is the pair BDL-070 RFC Q1's predicate exists to tell
+    apart. ``postings-api -> ledger-api`` is the same crossing in the other
+    direction, so a scenario can show that excusing one does not excuse both.
+    """
+    nodes: list[Node] = [
+        ("root", "service", []),
+        ("ledger", "domain", [TIERS[1]]),
+        ("postings", "domain", [TIERS[1]]),
+        ("ledger-api", "component", []),
+        ("ledger-store", "component", []),
+        ("postings-api", "component", []),
+    ]
+    edges: list[Edge] = [
+        ("ledger", "root", "part_of"),
+        ("postings", "root", "part_of"),
+        ("ledger-api", "ledger", "part_of"),
+        ("ledger-store", "ledger", "part_of"),
+        ("postings-api", "postings", "part_of"),
+        ("ledger-api", "ledger-store", "depends_on"),
+        ("ledger-api", "postings-api", "depends_on"),
+        ("postings-api", "ledger-api", "depends_on"),
+    ]
     return nodes, edges
