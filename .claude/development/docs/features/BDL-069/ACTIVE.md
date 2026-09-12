@@ -2,14 +2,15 @@
 
 > **Epic:** `beadloom-rqma`
 > **Created:** 2026-09-10
-> **Last updated:** 2026-09-11
+> **Last updated:** 2026-09-12
 
 ---
 
 ## Current focus
 
-Planning is done. PRD, RFC, CONTEXT and PLAN are all Approved, twelve beads exist, and no wave
-has been launched.
+Every dev bead and the test bead are closed. What is left is `beadloom-qae9` (review, under
+withholding, in a clean room) and then `beadloom-egvd` (tech-writer), which carries two of the
+PRD's non-behavioural criteria as well as the three documentation obligations recorded below.
 
 ## Beads
 
@@ -32,8 +33,8 @@ has been launched.
 | `beadloom-rqma.3` | ext | ~~waves ignores an appended `refs:` line (BDL-UX #285)~~ — withdrawn, not a defect | — | — | ✓ done |
 | `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
 | `beadloom-rqma.5` | ext | one computation of the stale-pair count, populations named, in the existing seam | P1 | — | ✓ done |
-| `beadloom-956f` | — | test: the acceptance scenarios | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ready |
-| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | blocked |
+| `beadloom-956f` | — | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ✓ done |
+| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | ready |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
@@ -581,6 +582,93 @@ what each surface SHOULD count is a decision, not a rename. It is NOT wired into
 
 **Two out-of-epic items recorded elsewhere:** `beadloom-t6zq` (P0, its own next epic, in the
 ROADMAP — `architecture-layers` evaluates 16 of 353 edges) and `beadloom-4axf` (P2).
+
+**2026-09-12 — the test wave (`beadloom-956f`) landed.** The epic's acceptance, measured where
+the PRD says it has to be measured rather than where it is convenient.
+
+**Three of the six named scenarios did not exist.** `beadloom lint` reported them at PRD lines
+155, 156, 170 and again at 192, 193, 195 — `A virgin init on a multi-package layout is followed
+by a green gate`, `A virgin init on a single-package layout keeps every node it reported
+writing`, and `A graph file carrying one ref_id twice is reported by every reader of the
+directory`. Two of the three existed under DIFFERENT names, which is the same defect in a
+different shape: `init_skeleton_names_modules.feature` says "a repository with two packages
+under src passes the gate straight after init" and runs `beadloom.services.cli:main`
+IN-PROCESS, which is a claim about the working tree. The third's file pinned the loader and
+`graph-diff` — two of seven readers — under a name that reads as covering all of them. The PRD
+was not renamed to fit; the suite now holds all six under the names the PRD references.
+
+**The two adopter claims, measured on a wheel built from this tree and installed into an
+interpreter of its own, against the published 4.0.0 for contrast.** Both projects built for the
+purpose; neither exists in this repository.
+
+| project | artifact | `init --yes --mode bootstrap` | then |
+|---|---|---|---|
+| `myapp`, `src/ledger/` + `src/billing/` | published 4.0.0 | rc 0, `Graph: 3 nodes` | `ci` rc **1**, `6 stale doc(s)`, `missing modules` |
+| `myapp`, `src/ledger/` + `src/billing/` | this tree | rc 0, `Graph: 3 nodes` | `ci` rc **0**, `6 pair(s) fresh` |
+| `myapp`, `src/myapp/` | published 4.0.0 | rc 0, `Graph: 2 nodes` | `status` **`Nodes: 1`**, `ci` rc 0 |
+| `myapp`, `src/myapp/` | this tree | rc 0, `Graph: 2 nodes` | `status` **`Nodes: 2`**, `ci` rc 0 |
+
+The published row of the second pair is the false green the epic was opened for: the node that
+was lost is the `domain` carrying `src/myapp/`, and the gate exits 0 over the graph without it.
+
+US-2 was followed end to end on the built wheel rather than asserted: a module name taken back
+out of `docs/domains/ledger/README.md` gave `ci` rc 1 with `missing_modules: journal — pair
+domains/ledger/README.md <-> src/ledger/core.py — name journal in domains/ledger/README.md;
+re-attesting cannot clear missing_modules, because the check reads what the document says, not a
+recorded hash`. Naming the module put the gate back to rc 0. The failure no longer prints
+`sync-update`, each line names its own pair, and the noun is `pair(s)`.
+
+**The scenarios found two things about their own room before they found anything about the
+product.** `beadloom clean-room` runs the suite with `PYTHONPATH=<room>/src`, and a child
+process that inherits it imports the room's SOURCE in preference to whatever is installed in its
+own interpreter — the first room run reported the wheel's `beadloom.__file__` under `<room>/src`.
+The scenario caught it because "the beadloom that ran is the installed wheel and not this working
+tree" is one of its assertions rather than an assumption. And the first draft guarded the wheel
+build with `pytest.skip`: `tests/test_bead14_s4_binding.py` fails on a step that steps aside
+anywhere under `tests/acceptance/steps/`, in every room, and it is right — the build is RED when
+it cannot happen, because `uv` is set up by every installing leg of `ci.yml` and a run without it
+is a broken room rather than a room this criterion is silent about.
+
+**The reader population is asked whole and bound to the derivation.** All seven are asked for
+their whole answer over one file carrying `ledger` twice. Two reduce and both name the file, both
+kinds and the dropped node's source; three keep everything they were given
+(`read_declared_docs` returns both documents, `update_node_in_yaml` and `link` answer about one
+`ref_id` rather than about a set); two read bytes, where the policy is inapplicable by nature.
+The list travels with the scenario because the acceptance suite is copied out and run standalone,
+and `tests/test_the_acceptance_asks_every_graph_reader.py` is what keeps it equal to
+`beadloom-4ad3`'s derivation — an eighth reader fails there, by name.
+
+**Two of the PRD's non-behavioural criteria are still open, and both are `beadloom-egvd`'s.**
+The temporary sentence is still in both READMEs at line 177 — "The documents it writes are not
+checked the same way yet, so read the first `beadloom ci` rather than assuming it" / "Документы,
+которые он пишет, так пока не проверяются…" — and US-1 now holds, so it should go. BDL-UX #282
+(line 112) and #214 (line 844) are both still under `Open Issues`; the re-run against current
+behaviour that section's standard requires is the table above, so what remains is the move
+itself. Neither is a red criterion of this bead: both are documentation, and the bead that owns
+them is open.
+
+**A hazard for any future concurrent wave, measured here by accident.** Two full pytest sessions
+run at once against this working tree redden each other: several tests open the repository's own
+`.beadloom/beadloom.db`, and the second opener gets `sqlite3.OperationalError: disk I/O error`
+out of `PRAGMA journal_mode=WAL`. The first tree run of this bead reported three failures, two of
+them exactly that, and a serial re-run was green. A clean room isolates the FILES and not that
+database, because the room's tests read it by absolute path out of the tree they were copied
+from. Two agents measuring at the same time is the ordinary case in a wave, so the finding is
+recorded rather than remembered.
+
+Gate owner of a wave of one, two claims. **Green in a clean room over 5 carried files,**
+`room-beadloom-956f` built from `76c87d64` with its own interpreter and extras
+`dev+graphql+languages+mutation+tui+watch`: pytest 10263 passed, 63 skipped, 17 xfailed; ruff
+clean; `mypy --strict` clean over 292 files against each of 3.10, 3.11, 3.12 and 3.13 as a
+target; `beadloom ci` rc 0. That room carries no `.git`, so its freshness leg verified 0 of 465
+pairs and its scope-check skipped for want of a branch. **Green on the tree,** Darwin arm64
+CPython 3.13.7: pytest 10313 passed, 13 skipped, 17 xfailed, coverage 94.55% against a floor of
+80; ruff clean; `mypy --strict` 0 issues over 292 files; `beadloom ci` rc 0 over 465 fresh pairs,
+with `readme-pair` holding 1 pair over 109 blocks. Neither verdict entered any of the 21 declared
+rooms, so the Ubuntu legs and both locale legs are unmeasured, and the target sweep does not vary
+the interpreter mypy itself runs under. The gate names its own gap in the same words: `not run by
+this gate: the test suite, the style linter, the type checker` — all three were run beside it,
+in both rooms.
 
 ## Waves
 
