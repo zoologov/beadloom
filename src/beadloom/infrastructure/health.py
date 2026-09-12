@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.infrastructure.repository import count_stale_pairs
+
 if TYPE_CHECKING:
     import sqlite3
 
@@ -38,9 +40,9 @@ def take_snapshot(conn: sqlite3.Connection) -> HealthSnapshot:
     ).fetchone()[0]
     coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0.0
 
-    stale_count: int = conn.execute(
-        "SELECT count(*) FROM sync_state WHERE status = 'stale'"
-    ).fetchone()[0]
+    # The pair count is `repository.count_stale_pairs` — same layer, one query,
+    # and the noun travels with it (BDL-069 `beadloom-rqma.5`).
+    stale_count = count_stale_pairs(conn).count
 
     isolated_count: int = conn.execute(
         "SELECT count(*) FROM nodes n "

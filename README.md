@@ -174,7 +174,7 @@ beadloom reindex                   # build the index
 beadloom ci                        # run every check at once
 ```
 
-`beadloom init` checks the graph it has just written against the rules it wrote beside it. When the scaffold breaks one of them, `init` names the rule and the node and exits 1, instead of exiting 0 and leaving you to find it at the first `beadloom ci`. The scaffold stays on disk either way. The documents it writes are not checked the same way yet, so read the first `beadloom ci` rather than assuming it.
+`beadloom init` checks the graph it has just written against the rules it wrote beside it. When the scaffold breaks one of them, `init` names the rule and the node and exits 1, instead of exiting 0 and leaving you to find it at the first `beadloom ci`. The scaffold stays on disk either way.
 
 Three things are worth looking at next: `beadloom ctx <node>` — what the tool knows about a piece of the system, `beadloom prime` — exactly what an agent will see, `beadloom docs site` — how it looks on the portal.
 

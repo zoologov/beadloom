@@ -35,43 +35,106 @@
 
 ## Open Issues
 
-282. [2026-09-10] [CRITICAL] a virgin `init` leaves the Gate RED on the documents it just wrote, and the remediation the error names does not clear it
+287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that cannot be read crashes `beadloom ci` with a traceback instead of a verdict — three shapes reach the same raise
 
-    **Severity:** critical (it is the adopter's FIRST two commands, and following the instruction printed by the failure reports success while changing nothing about the verdict)
-    **Command:** `beadloom init --yes --mode bootstrap`, then `beadloom ci`, then `beadloom sync-update <ref>`
-    **Context:** measured on the PUBLISHED 4.0.0 wheel, before handing Beadloom to a team for outside validation. The project is not this one: a fresh git repository, `pyproject.toml` naming `myapp`, two packages `src/ledger/` and `src/billing/`, one function each. `uv run --isolated --no-project --with beadloom==4.0.0`.
-    **Measured on 2026-09-10:**
+    **Severity:** medium (an adopter's first-run experience, and the shapes of broken config no gate leg can report on, because the run ends before any leg runs)
+    **Command:** `beadloom ci`
+    **Context:** BDL-069, `beadloom-rqma.7`, 2026-09-12. Found while measuring the fix for #270 on a foreign two-package project.
+    **What happened.** With `issue_log:\n  path: [unclosed` in `.beadloom/config.yml`, `beadloom ci` exits 1 with a `yaml.parser.ParserError` traceback from `infrastructure/scan_paths.py:33`, raised inside the reindex step. No gate line is printed, no step reports, and the user is shown a stack trace rather than a verdict. That is the shape this entry was FILED on; two more reach the same raise and are named below.
+    **Why it is filed rather than fixed here.** `beadloom-rqma.7`'s declared scope is `ci-gate, doc-sync`, and the raise is in `infrastructure`. The bead made the two opt-in legs report an UNREADABLE config as "whether this project declares a document pair is unknown" — a skip that WARNs and names the file — and that branch is reachable from `_step_readme_pair` and `_step_issue_numbers` and is covered by tests. It is NOT reachable through `beadloom ci` today, because the run ends in `resolve_scan_paths` first. The claim in the SPECs is written against the step, and says so.
+    **Expected:** every reader of `.beadloom/config.yml` reports a failure to READ it — not to parse it only — as a finding against the file, with the line and column YAML already gives where YAML has them, rather than propagating the exception. `resolve_scan_paths` is the first reader on the `ci` path and the place a verdict would have to start.
+    **THREE SHAPES, and this entry covers all three since 2026-09-12.** It was filed naming one — YAML that does not parse — and `beadloom-qae9`'s fourth pass reproduced three, each reaching a traceback out of `resolve_scan_paths` through `beadloom ci`, each at rc 1: `yaml.parser.ParserError` for an unclosed list; `AttributeError: 'list' object has no attribute 'get'` at `scan_paths.py:34`, where `yaml.safe_load` SUCCEEDS and returns a document whose top level is a list rather than a mapping; and `UnicodeDecodeError` for a file that is not UTF-8. The three share one line — `yaml.safe_load(config_path.read_text(encoding="utf-8"))` and the `.get` on its result — which is why a fix measured against the filed shape alone would leave two live. **None of the three is a false green:** all print a traceback at rc 1, so the run is loud and useless rather than quiet and wrong.
+    **What this entry does NOT cover**, stated so that a fix measured against it knows its own edges:
+    - **A config that cannot be opened at all** — no read permission. `read_text` raises `PermissionError` from the same line, so the shape is the same by reading; it was NOT reproduced through `beadloom ci`, and the entry claims nothing about it. What WAS measured is one surface over: `chmod 000 .beadloom/config.yml`, then `beadloom issue-number check`, gives rc 0 and `it could not be read (PermissionError) — repair .beadloom/config.yml so it parses as a YAML mapping` — a remediation that is the wrong repair for this shape and hands a person an exception class name. That is `beadloom-ovam`, not this entry.
+    - **A `.beadloom/config.yml` that is a DIRECTORY**, which is not a read failure anywhere: `read_declaration` tests `is_file()`, so it reads as absence and `issue-number check` says `No issue log is declared`. Defensible — a directory is not a config file anyone wrote — and recorded as the one input shape in this area that still answers a question it did not establish.
+    - **Any reader of `.beadloom/config.yml` other than `resolve_scan_paths`.** That is the first reader on the `ci` path and therefore the one that decides the verdict; the others were not measured here.
+    **Related:** #270 (the same file, read by the two opt-in legs, closed by this bead). `beadloom-ovam` (the remediation that misnames the repair for two of the shapes above).
+
+286. [2026-09-12] [MEDIUM] a review launch prompt can defeat the withholding it is meant to preserve, and nothing counts it
+
+    **Severity:** medium (the findings were reproduced from the code and stand; what was lost is the independence of the SEARCH, and the loss is invisible to every party but the reviewer)
+    **Command:** `/coordinator`'s review launch, `beadloom review-brief <bead-id>`
+    **Context:** BDL-069's review, `beadloom-qae9`, 2026-09-12. Filed by the coordinator against itself, after the reviewer reported it.
+    **What happened.** `/coordinator` says the review prompt carries "the bead id and nothing else about the change", and that if a measurement must reach the reviewer anyway, the prompt must SAY so, "so the reviewer can record that the withholding was defeated. An undeclared paste is invisible to everyone including the reviewer." The coordinator's prompt carried three directed observations it had not derived: that `rules.yml` gained an exemption and one exit condition is a condition rather than a date; that `NodeSource`, the stale-pair count and the `ref_id` allocator are three duplicated rules replaced by one body; and that several beads added reports, a new gate leg and a new column in `impact`. None was declared as a defeat.
+    **What the reviewer wrote, unprompted:** "Each is a directed pointer at a specific site. Nothing in this process counts them, and they converged me on where to look before I had looked. The findings below were all reproduced from the code, but the search order was not mine."
+    **Why the rule as written cannot hold.** It asks the launcher to notice that it is about to defeat the withholding and to declare it. The launcher is the party least able to see it: a pointer feels like context, not like a leak, and the difference is only visible from the reader's seat. `beadloom review-brief` counts and reports the comments IT withholds — a number the reviewer reads — and has no way to see what arrived through the prompt beside it.
+    **Measured about the neighbouring mechanism, in the same run:** `beadloom review-brief beadloom-qae9 --release` exited 1 and named its reason — every role in this repository writes under one tracker identity, so the gate cannot tell an independent verdict from the author's own. That check knows its own limit and says it. The prompt channel has no such check.
+    **Expected:** the brief should state the channel it does NOT cover, the way every other instrument in this project names the boundary of its knowledge — "N author comment(s) withheld; anything the launch prompt carried is not counted here". A reviewer would then know the number it is reading is partial. A stronger form: the launch prompt itself becomes an artifact the brief can read, so pointers are counted rather than remembered.
+    **Related:** #212 and #219 (the withholding defeated by the epic document and by commit messages), #284 (a rule held by attention rather than by a check).
+
+285. [2026-09-11] [WITHDRAWN] ~~a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line~~
+
+    > **WITHDRAWN 2026-09-11, the same day, by the coordinator who filed it. The entry is wrong and the instrument was right.**
+    > An Explore run over the code found `waves/scope.py:175` `DECLARATION_FIELDS = (title, description, design, notes)` and `scope.py:138` unioning every anchored `refs:` line; `scope.py:225,239` mark the whole bead `ref_not_in_graph` when ANY one ref is unknown. The SPEC says so (`wave-plan/SPEC.md:51`, "every occurrence is read").
+    > So the appended line WAS read. It was unioned with the description's line, the union still carried `site-dashboard`, and one unknown ref poisons the bead. Removing `site-dashboard` resolved it — which is what a union predicts, and the entry misread as "the description wins".
+    > **And `waves` named the cause.** The same run's output carries, at line 52: `FINDING: unresolved_scope: beadloom-yn6i — ref_not_in_graph (site-dashboard)`. The filer read the output with `sed -n '1,22p'` and cut that line off. The diagnosis was drawn from a truncated answer — the pipe-masking shape, this time on content rather than an exit code.
+    > **The inferred unsafe case cannot happen.** A union can only widen a scope; a stale narrower line cannot narrow it.
+    > Bead `beadloom-rqma.3`, opened for this entry, is closed as not-a-defect. Kept rather than deleted, as this log keeps its withdrawals.
+    > **Not withdrawn, and not measured:** the same Explore run read that `mcp_server.py:759-763` takes the alphabetically FIRST declared ref and that `mcp.md:333` describes the fields as "design/description" — a second reader of the declaration that may disagree with `waves`. That is READ, not run, and is not this entry.
+
+    **Severity:** medium (measured failing SAFE — an unreadable description scope serialises against everything; the unsafe case is inferred and not measured, see below)
+    **Command:** `bd update <bead-id> --append-notes "refs: ..."`, then `beadloom waves`
+    **Context:** BDL-069, 2026-09-11. `beadloom-yn6i` was pulled into the epic; its description, written by the agent that filed it, ends with `refs: tui, site-dashboard, agent-prime`.
+    **Measured.** `site-dashboard` is not a graph node (`beadloom ctx site-dashboard` exits 1). The coordinator appended a correct declaration the way `/coordinator` and `CLAUDE.md` document it:
 
     ```
-    beadloom init --yes --mode bootstrap   rc 0   Graph: 3 nodes, 2 edges
-    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)
-        doc-stale: ledger:  domains/ledger/README.md  (missing modules: core)
-        doc-stale: billing: domains/billing/README.md (missing modules: core)
+    bd update beadloom-yn6i --append-notes "refs: tui, application, agent-prime, mcp-server, cli"
+    beadloom waves beadloom-8lmj beadloom-yn6i ...
+      beadloom-8lmj | beadloom-yn6i — unresolved_scope: beadloom-yn6i: ref_not_in_graph
     ```
 
-    **Issue (a): `init` writes documents that fail `init`'s own freshness rule.** The skeleton it emits carries `# ledger`, a `## Source` section naming `src/ledger/`, `## Dependencies` and an empty `## Features`. It never names the module `core`, and `missing_modules` is exactly the check that requires it. Nothing the adopter did produced this: it is the output of one command failing the next command in the same quickstart.
+    The appended line was not read. After the SAME list was written into the description's own `refs:` line instead, the same command resolved the scope — `shared_node: agent-prime`. So the description's line wins and the notes line is ignored, with nothing in the output saying a second declaration exists.
+    **Why the documented method is the trap.** The instruction is to declare scope with `--append-notes`. A bead filed by an agent often already carries a `refs:` line in its description, because the filing template asks for one. From then on the documented command writes a declaration nobody reads, and `waves` keeps judging the old one.
+    **The unsafe case, stated as inferred.** Here the stale line named a node that does not exist, which reads as an unknown scope and serialises against everything — conservative. A stale line naming a valid but NARROWER set would read as a known scope, and two beads the appended line says conflict could be reported independent and launched together. That case was not constructed or run.
+    **Expected:** when a bead carries more than one `refs:` declaration, `waves` either merges them or reports the disagreement and which one it judged — never silently picks one. The documentation that says `--append-notes` should say what happens to a description that already declares scope.
+    **Related:** #283 and #284 (the same day; a declaration or a population the instrument did not read, and nothing saying so), #257.
 
-    **Issue (b), and the worse half: the remediation named in the failure does not work.** The error says *"run `beadloom sync-update ledger` to review and re-attest"*. Measured:
+284. [2026-09-11] [MEDIUM] an axis row is ruled by the axis a node first surfaced under, and three nodes ruled out as blast radius turned out to be the sites the fix had to reach
 
-    ```
-    beadloom sync-update --yes --all       rc 0
-        Re-baselined billing: attested 2 pair(s).
-        Re-baselined ledger:  attested 2 pair(s).
-        Marked 2 ref(s) synced (4 pair(s) total).
-    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)   <- unchanged
-    ```
+    **Severity:** medium (nothing wrong shipped — `scope-check` caught all three; the cost is that the approved RFC disagreed with the code three times in one epic)
+    **Command:** `/task-init` step 0.5 and the axes decision; `beadloom impact --section`
+    **Context:** BDL-069, planning on 2026-09-10, re-ruled three times on 2026-09-11 as the work landed.
+    **Measured.** The RFC ruled 13 nodes in scope. Three of the nodes ruled OUT were edited by the beads that closed:
 
-    `sync-update` re-baselines HASHES. `missing_modules` is a claim about the document's CONTENT — the module has to be named in the prose — so no amount of re-attesting can satisfy it. The command reports success on its own terms and the adopter is told, twice, that four documents are stale, with an instruction that will never move them. That is a loop with no exit inside the tool's own output.
+    | Node | Surfaced under | Ruled | What the fix actually had to reach |
+    |---|---|---|---|
+    | `reindex` | callers | no — "reads the graph downstream of the loss" | `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment |
+    | `graph-diff` | callers | no — "reads at a git ref" | it reads at a git ref AND parses what it reads — and was reducing duplicates the opposite way to the loader |
+    | `onboarding` | callers | no — "reads the manifest for other facts" | it owns `templates/docs/core/*.md.txt`, the skeleton text the fix had to change |
 
-    **What actually clears it,** measured: add a section naming the module to each README by hand. `beadloom ci` then exits 0, `sync-check PASS: 4 pair(s) fresh`. Thirty seconds once you know; undiscoverable from the message.
+    **The pattern is one direction, and that is the finding.** Every re-ruling moved a node from "blast radius" to "work site". None moved the other way. The ruling read each node by the AXIS it first appeared under — a `callers` row read as "calls into the change, is not changed" — and a node that surfaces as a caller can also own what the fix must reach.
 
-    **Why this is CRITICAL rather than MEDIUM.** BDL-UX #192 was filed as *"A virgin `beadloom init --yes` leaves `beadloom ci` RED"* and ranked in the ROADMAP as **the adopter-facing blocker**. It was fixed for the `domain-needs-parent` leg and shipped in 4.0.0 — verified. The red did not go away; it MOVED to `sync-check`. An entry that names one leg closes when that leg is fixed, and the property it was really about — *the first two commands disagree* — survives it. This entry is written about the property.
+    **Two different causes sit under the three, and they want different answers:**
+    - **`onboarding` was invisible to the derivation, not misread.** The thing the fix reached is `.md.txt` template text, and `beadloom impact` reads Python. The derivation could not have shown that node owning those files; the person ruling had no row that said so.
+    - **`reindex` and `graph-diff` were visible and misread.** Both are Python and both appeared. What the axes do not carry is a node's ROLE in the fix, only its relation to the seed — and the ruling substituted the second for the first.
 
     **Expected:**
-    - the skeleton `init` writes should pass the freshness rule `init` also installs, on the day it is written — either by naming the modules it already knows (they are in the index it just built) or by the pair starting attested;
-    - and separately, `missing_modules` must not print a remediation that cannot fix it. Either name the right action (edit the document; `beadloom docs polish` is the generator) or say plainly that re-attesting will not clear this reason.
-    **Also seen, minor:** every stale pair is reported TWICE — `4 stale doc(s)` for two documents.
-    **Related:** #192 (the same property, one leg earlier), #214 (the other first-run defect, on the single-package layout), #279 (`sync-update --all` re-baselines more than its help names).
+    - `/task-init`'s axes guidance should say, where the person rules, that the axis a node surfaced under is not its role in the change — a `callers` row can be a work site;
+    - and a derivation that cannot read a surface the change may reach should say so ON the row, not only in the section's `Unresolved` line. `onboarding`'s templates were in the unreadable population and nothing pointed from that population to the node that owns it.
+    **Related:** #283 (a second instrument reporting over a narrower population than the planning question, found the same day), #239 (a population of zero reading as coverage), #281 (`impact` cannot read YAML or Markdown).
+
+283. [2026-09-11] [MEDIUM] `beadloom waves --parent` compares only READY beads, so it reports a clean wave for a bead that conflicts with one already running
+
+    **Severity:** medium (the conflict was caught because the coordinator asked a second time; a coordinator that trusted the first answer launches two agents into one serialised pair)
+    **Command:** `beadloom waves --parent <epic>`
+    **Context:** BDL-069, 2026-09-11. `beadloom-8lmj` was pulled into the epic while `beadloom-h7b3` was in progress.
+    **Measured:**
+
+    ```
+    beadloom waves --parent beadloom-rqma
+      1 wave(s) for 1 bead(s), 0 serialisation(s)
+      Wave 1: beadloom-8lmj
+
+    beadloom waves beadloom-h7b3 beadloom-8lmj
+      2 wave(s) for 2 bead(s), 1 serialisation(s)
+      beadloom-8lmj | beadloom-h7b3 — dependency_edge: cli-commands -> agent-prime
+    ```
+
+    The first answer is correct about its population and wrong about the question. `--parent` takes the plan from `bd ready`, and a bead that is `in_progress` is not ready, so it is not in the plan and nothing is compared against it. The answer reads "0 serialisations" — which, for a coordinator deciding whether to launch, is the claim "nothing conflicts".
+    **Why it is this project's own class.** A check reported over a population narrower than the question it was asked, and the narrower population was not named. The output does not say "in-progress beads under this parent were not compared"; it says nothing about them at all.
+    **Expected:** `waves --parent` compares the planned beads against the beads under the same parent that are already `in_progress`, and names any serialisation against running work separately from serialisation within the plan. At minimum it states how many in-progress beads under the parent it did NOT compare against, so "0 serialisations" cannot be read as "nothing conflicts".
+    **Workaround, measured:** pass the running bead explicitly — `beadloom waves <running-id> <new-id>` — which compares the pair.
+    **Related:** #284 (the same day, the same shape in the planning ruling), #257 (`waves` derived two beads' scopes as disjoint while one document belonged to both), #274 (hand-listed ids losing beads).
 
 281. [2026-09-10] [MEDIUM] the release version is stated in NINE places, and no command names that population — three instruments each check a disjoint part of it and none knows the others exist
 
@@ -194,17 +257,6 @@
     **Expected:** `^:?-+:?$`. The predicate answers what the format defines rather than what this repository happens to write.
     **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-2`, two `xfail(strict=True)` — one on the predicate and one on the section it reaches. Verified by mutation: widening the regex turns both red as XPASS.
     **Related:** #244 (the same class, first instance), #268 (the second reader that gets this right).
-
-270. [2026-09-09] [MEDIUM] four ways of misdeclaring `issue_log:` reach the same gate verdict as declaring none
-
-    **Severity:** medium (a project that opted in and mistyped one key is told it opted out, and the Gate is green)
-    **Command:** the `issue-log` step of `beadloom ci`, and `beadloom issue-number check`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. The step blocks on a duplicate number, and it earns that by never reddening a project that has not opted in: "The log is DECLARED in `.beadloom/config.yml`; an adopter who declares none gets a named skip."
-    **Measured:** with `path:` misspelled as `paths:`, with `ledger:` misspelled, with a block that will not parse, and with `issue_log:` given a scalar instead of a mapping, `_step_issue_numbers` returns the same `(skipped=True, "skipped — no issue log is declared; add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml")` a project with no block at all gets. `resolve_issue_log` emits `logger.warning("%s needs both %r and %r", ...)`, and the Gate renders no logging channel.
-    **Why it matters:** this is the epic's own two-reasons-one-verdict class inside a check S6 shipped, and the direction is the unsafe one — the reason a project opted in is that its numbers had collided five times, and the misdeclaration silently returns it to the state the collisions happened in. `log_missing` already proves the shape is available: a declared log that is absent is a finding rather than a skip.
-    **Expected:** a declaration this reader could not use is its own outcome, named as such, with the key it could not read. A skip stays a skip only for a project that declared nothing.
-    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-3`, `xfail(strict=True)` over four parameterised misdeclarations, each compared against the opt-out's own verdict so that rewording one side cannot pass it.
-    **Related:** #173 (a leg that read nothing must say so), #267 (the population the same check states correctly).
 
 271. [2026-09-09] [HIGH] a ledger file the claim reader drops is a free number, so the allocator hands out a number two writers then hold
 
@@ -767,50 +819,6 @@
     **Why it is recorded as a class and not a typo:** BDL-067 found three instances of *a user-facing message asserting a fact the code knows to be false* — a comment counting monkeypatch bindings and calling them branches (#192 fix cycle 1), a message blaming Beadloom for the adopter's own rules (cycle 2), a withdrawal claiming a rule failed where none was evaluated (cycle 3). Each arrived the same way: careful reasoning about one shape, not carried across to the neighbouring shape. This is the fourth, one layer up, in the Gate every adopter runs. Three reviews found three of them and each was found only after the previous was fixed, which says the sweep is the deliverable and the individual fix is not.
     **Tracker:** `beadloom-uz8x`. Filed separately from BDL-067 by the same reasoning the owner applied to #214: a different defect on a different surface, deserving its own measurement.
 
-214. [2026-08-31] [CRITICAL] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
-
-    **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)
-    **Command:** `beadloom init --yes --mode bootstrap`
-    **Context:** measured during the BDL-067 review by the review subagent, on a fresh `ledger` project laid out as `src/ledger/`.
-    **Measured:**
-
-    ```
-    beadloom init --yes --mode bootstrap  ->  rc 0   Graph: 2 nodes, 0 edges
-    services.yml                              TWO nodes with ref_id `ledger` — one service (root), one domain
-    the loader                                keeps ONE
-    beadloom lint --strict                ->  domain-needs-parent:rule_liveness:warn
-    beadloom ci                           ->  rc 0
-    ```
-
-    **Issue:** the root `ref_id` comes from `_detect_project_name` (the `pyproject`/`package.json` name) and the domain `ref_id` comes from the source directory; on `src/<project>/` those are the same string. The graph loses a node, and because the surviving node is the root, `domain-needs-parent` goes **inert** rather than failing — so the gate reports a warning about rule liveness and exits 0. The adopter is told nothing.
-    **Not a regression, and not caused by BDL-067:** pre-fix behaviour is identical. BDL-067 deliberately carves out a domain whose `ref_id` equals the root's (`onboarding/scanner/bootstrap.py:69`), because a self-edge is not a parent — that carve-out is right, and the defect is upstream of it.
-    **Expected:** unique `ref_id`s, not an edge. Disambiguate the colliding node, and make a duplicate `ref_id` in a *generated* graph something the writer refuses rather than something the loader silently resolves.
-    **Numbering:** first filed as #211, which is already taken by the closed 1.x-description issue of 2026-08-27 further down this file. Caught by the `beadloom-e8s4.6` subagent, which noticed `CHANGELOG.md:17` and `docs/domains/onboarding/README.md:31` citing #211, before the duplicate shipped. The coordinator's own check had missed it: `grep -nE '^21[0-9]\. \['` does not match a closed entry, which is written `211. ~~[`. That is the `mr2l.91` shape — two issues numbered 187 — one allocation away from happening a second time.
-    **Tracker:** `beadloom-7c6k`. Filed separately from BDL-067 by owner decision — a different defect with a different fix, deserving its own measurement rather than a line at the end of another PR.
-
-
-    > **RE-MEASURED 2026-09-10 on the PUBLISHED 4.0.0 wheel, and RAISED to critical.** It still
-    > reproduces, and what the re-measurement added is the CONSEQUENCE, which this entry did not
-    > have. On a fresh repository whose package is named after the project (`myapp` /
-    > `src/myapp/`) — the ordinary single-package src-layout — `beadloom init --yes --mode
-    > bootstrap` reports `Graph: 2 nodes` and `beadloom status` then reports `Nodes: 1`. The node
-    > that survives is the empty `service` root; **the one that is dropped is the `domain` node
-    > carrying the source**. No command says so: not `status`, not `doctor` (which reports two
-    > unrelated warnings), not `beadloom ci`, which exits 0.
-    >
-    > **And the green is a population of zero.** With the domain node gone, `domain-needs-parent`
-    > reports `cannot fire: its 'for' kind 'domain' matches none of the 1 nodes in the graph …
-    > counted as evaluated but checks nothing`. Rename the root's `ref_id` by hand so both nodes
-    > survive, and the same Gate turns RED: `Node 'demoapp' (kind=domain) violates require rule
-    > 'domain-needs-parent'`. So on this layout the adopter's green Gate is green BECAUSE a node
-    > was silently discarded — the phantom-population class BDL-068 exists to remove, reached
-    > through the adopter's first command.
-    >
-    > This also narrows a claim made about #192 on 2026-09-10: that entry was verified fixed on a
-    > single-package tree where `beadloom ci` exited 0, and that particular zero was produced by
-    > THIS defect rather than by the fix. The fix itself is real and was confirmed separately —
-    > a two-package project emits both `part_of` edges — but "a virgin init leaves a green Gate"
-    > is false, and #282 records where the red actually is.
 213. [2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions
 
     **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
@@ -2234,6 +2242,195 @@
 
 ## Closed Issues
 
+### Verified against current behaviour on 2026-09-12 (the BDL-069 adopter runs)
+
+Three entries whose defects BDL-069 fixed. None was moved on the strength of the fix: each was
+re-run first, on a project that is NOT this repository, because this repository's own arrangement
+hides all three — the standard the 2026-09-10 sweep below sets for itself, and which the
+2026-08-31 sweep proved necessary by checking four entries and finding three of them still live.
+
+The re-runs were taken twice, by two parties, on the same day. `beadloom-956f` ran them on a WHEEL
+built from `features/BDL-069`, installed into an interpreter of its own and set beside the
+published 4.0.0 on the same fixtures. `beadloom-rqma.6` ran them against the working tree, on
+projects built for the run. Both are recorded under each entry, and both rooms are macOS on
+CPython 3.13 — no leg of this project's Linux, 3.10-3.12 or locale matrix was entered by either.
+
+#270 was added on the same day by `beadloom-rqma.8` and is the one that says why a re-run is the
+standard. It was called closed by a tracker comment and by two SPECs while two of the three
+surfaces it names were still live, and the entry's own **Held by:** line pointed at a test that
+had been deleted. An entry moved on the strength of the fix would have recorded all of that as
+done — so this one records, per surface, which bead closed it and what the re-run printed.
+
+270. ~~[2026-09-09] [MEDIUM] four ways of misdeclaring `issue_log:` reach the same gate verdict as declaring none~~ **CLOSED (verified 2026-09-12)**
+
+    **Verified fixed 2026-09-12 on all THREE surfaces this entry names**, on a foreign
+    two-package `src/core` + `src/web` project built for the run and never on this repository,
+    whose own config declares the block correctly and hides the defect. Exit codes read without
+    a pipe. The entry was closed in two acts and the first did not cover what the second found:
+    `beadloom-rqma.7` moved the Gate leg onto `read_log_declaration`, and `beadloom-rqma.8`
+    moved the two COMMAND surfaces onto it after `beadloom-qae9` measured them still live.
+
+    | Surface | Declaring nothing | `ledger:` written `ledgr:` | A config that could not be read | Closed by |
+    |---------|-------------------|----------------------------|---------------------------------|-----------|
+    | `beadloom ci`, step `issue-log` | rc 0, `SKIP: skipped — no issue log is declared; add an `issue_log:` block …` | rc 1, `FAIL: 0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)` | the STEP skips and WARNs, `whether this project declares an issue log is unknown` — **not reached through `beadloom ci`**, which ends in `resolve_scan_paths` first (#287) | `beadloom-rqma.7` |
+    | `beadloom issue-number allocate` | rc 2, `Refused: no issue log is declared; add an `issue_log:` block …` | rc 2, `Refused: issue_log: it has no `ledger:` key; it has `path:`, `ledgr:` — give the entry `path:`, `ledger:`, …` | rc 2 with the parse failure — unchanged by `beadloom-rqma.9`, and correct: a caller that is about to ALLOCATE a number must refuse | `beadloom-rqma.8` |
+    | `beadloom issue-number check` | rc 0, `No issue log is declared — no leg ran.` | rc 1, `1 entr(ies) declared, 1 unusable — no leg ran.`, and the refusal on the line beneath | rc 0, `Whether this project declares an issue log is unknown — no leg ran.` with `.beadloom/config.yml could not be read: <why>` beneath; `--json` `"declared": null`, `"undetermined": true` | `beadloom-rqma.8`, and `beadloom-rqma.9` for this column |
+
+    **The fourth column is the shape this closure cycle added last**, and it is recorded here on
+    the same standard as the other two: per surface, with the sentence and the exit code. Before
+    `beadloom-rqma.9`, `check` printed `No issue log is declared — no leg ran.` at rc 0 over a
+    config it had never opened — the opt-out's sentence, byte for byte, for a project that may
+    have declared a log perfectly well. The state has a machine spelling now, because
+    `"declared": false` is a false statement when the truth is unknown: the field widened from
+    `bool` to `bool | null`. Two shapes were measured for this column, a config that does not
+    parse and one whose top level is a list; both give the same sentence with their own `why`.
+    `beadloom-qae9`'s fourth pass is what found the table a surface short.
+
+    **The allocator was the surface the feature's own Surfaces table lists first**, and the one
+    still printing the opt-out's sentence byte for byte while the Gate beside it named the key.
+    `allocate_number` called a resolver documented as "the USABLE log and ledger, for a caller
+    with nothing to say about a refusal", and a person at a terminal has everything to say about
+    it. It calls `declared_log` now, which raises with the refusal's own `why` and
+    `remediation`; the resolver was deleted rather than left for the next caller to pick up.
+
+    **The third surface was not the shape this entry measured and was the same false green.**
+    `issue-number check` never printed the opt-out's sentence, so it escaped the byte-identical
+    comparison above: it printed `No duplicate, unwritten or unclaimed number.` and exited 0
+    over a log it had never opened. A clean verdict over a population of zero is the defect this
+    epic is named for, so it was closed with the other two rather than filed as a fourth.
+
+    **The four misdeclaration shapes, re-run on the allocator** — `path:` written `paths:`,
+    `ledger:` written `ledgr:`, `issue_log:` given a scalar, and a config that will not parse —
+    give four distinct sentences, each naming the entry and the keys it does carry, while the
+    project that declares nothing keeps the sentence it had. One remediation named a command and
+    now names the repair: a config that could not be parsed told a person running `issue-number
+    allocate` to "run the gate again", because that refusal is shared with the Gate and nothing
+    else had ever rendered it.
+
+    **Held by:** `tests/test_issue_number_command.py`, which holds the misdeclared output
+    against the opt-out's own output rather than against a literal, so rewording either side
+    cannot pass it; the scenario `A misdeclared log refuses the allocator with the key it could
+    not read` in `tests/acceptance/features/issue_numbers.feature`; and, for the Gate leg,
+    `tests/test_a_declaration_that_cannot_be_used_is_not_no_declaration.py`. The
+    `xfail(strict=True)` named in the original **Held by:** line below was retired by
+    `beadloom-rqma.7` and no longer exists. That stale line is what `beadloom-qae9` found still
+    pointing at a test that was gone while three documents already called the entry closed,
+    which is why this note names tests that exist rather than saying the entry is held.
+
+    **Tracker:** `beadloom-rqma.7` (the Gate leg) and `beadloom-rqma.8` (both commands).
+
+    **The record below is the entry as filed, unedited.**
+
+    **Severity:** medium (a project that opted in and mistyped one key is told it opted out, and the Gate is green)
+    **Command:** the `issue-log` step of `beadloom ci`, and `beadloom issue-number check`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. The step blocks on a duplicate number, and it earns that by never reddening a project that has not opted in: "The log is DECLARED in `.beadloom/config.yml`; an adopter who declares none gets a named skip."
+    **Measured:** with `path:` misspelled as `paths:`, with `ledger:` misspelled, with a block that will not parse, and with `issue_log:` given a scalar instead of a mapping, `_step_issue_numbers` returns the same `(skipped=True, "skipped — no issue log is declared; add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml")` a project with no block at all gets. `resolve_issue_log` emits `logger.warning("%s needs both %r and %r", ...)`, and the Gate renders no logging channel.
+    **Why it matters:** this is the epic's own two-reasons-one-verdict class inside a check S6 shipped, and the direction is the unsafe one — the reason a project opted in is that its numbers had collided five times, and the misdeclaration silently returns it to the state the collisions happened in. `log_missing` already proves the shape is available: a declared log that is absent is a finding rather than a skip.
+    **Expected:** a declaration this reader could not use is its own outcome, named as such, with the key it could not read. A skip stays a skip only for a project that declared nothing.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-3`, `xfail(strict=True)` over four parameterised misdeclarations, each compared against the opt-out's own verdict so that rewording one side cannot pass it.
+    **Related:** #173 (a leg that read nothing must say so), #267 (the population the same check states correctly).
+
+282. ~~[2026-09-10] [CRITICAL] a virgin `init` leaves the Gate RED on the documents it just wrote, and the remediation the error names does not clear it~~ **CLOSED (verified 2026-09-12)**
+
+    **Verified fixed 2026-09-12** on a project that is not this repository, built for the run: `pyproject.toml` naming `adopter2pkg`, two packages `src/core/` and `src/web/`, one function each. Against the working tree of `features/BDL-069`, every exit code read without a pipe: `beadloom init --yes --mode bootstrap` **rc 0** (`Graph: 3 nodes, 3 edges`), then `beadloom ci` **rc 0** with `sync-check PASS: 4 pair(s) fresh`. Nothing was edited by hand between the two commands, which is the whole of issue (a) — the skeleton names the modules `missing_modules` reads, because `init` takes them from the index it has just built (`beadloom-qylh`).
+
+    **Issue (b), the remediation, measured on the same project.** A module added with no annotation makes its pairs stale, and the Gate prints what will clear it and why re-attesting will not: `doc-stale: core: doc out of sync with code (untracked_files: audit.py) — … re-attesting cannot clear untracked_files, because no pair exists for such a file to attest`. `missing_modules` carries the same shape of remedy from the same table (`doc_sync/engine._CONTENT_REMEDIES`), and only the three hash reasons still name `sync-update` (`REASONS_ATTESTATION_CLEARS`, an allow-list, so a reason added later is not clearable until it has been measured to be — `beadloom-h7b3`).
+
+    **The "also seen, minor" is fixed with it:** that run reports `2 stale pair(s)`, not `4 stale doc(s)` for two documents. A pair is a document AND a code file, one body computes the number and carries the noun with it (`beadloom-rqma.5`, `beadloom-yn6i`).
+
+    **Also measured on a WHEEL** built from this branch by `beadloom-956f` on 2026-09-12, beside the published 4.0.0 on the same fixtures: published `init` rc 0 then `ci` rc 1 `6 stale doc(s)`; this tree `init` rc 0 then `ci` rc 0 `6 pair(s) fresh`. Two parties, two rooms, one verdict — and neither room was Linux, CPython 3.10-3.12 or either locale leg.
+
+    **Tracker:** `beadloom-4fdn`, which said it would stay open until this move was made.
+
+    **Severity:** critical (it is the adopter's FIRST two commands, and following the instruction printed by the failure reports success while changing nothing about the verdict)
+    **Command:** `beadloom init --yes --mode bootstrap`, then `beadloom ci`, then `beadloom sync-update <ref>`
+    **Context:** measured on the PUBLISHED 4.0.0 wheel, before handing Beadloom to a team for outside validation. The project is not this one: a fresh git repository, `pyproject.toml` naming `myapp`, two packages `src/ledger/` and `src/billing/`, one function each. `uv run --isolated --no-project --with beadloom==4.0.0`.
+    **Measured on 2026-09-10:**
+
+    ```
+    beadloom init --yes --mode bootstrap   rc 0   Graph: 3 nodes, 2 edges
+    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)
+        doc-stale: ledger:  domains/ledger/README.md  (missing modules: core)
+        doc-stale: billing: domains/billing/README.md (missing modules: core)
+    ```
+
+    **Issue (a): `init` writes documents that fail `init`'s own freshness rule.** The skeleton it emits carries `# ledger`, a `## Source` section naming `src/ledger/`, `## Dependencies` and an empty `## Features`. It never names the module `core`, and `missing_modules` is exactly the check that requires it. Nothing the adopter did produced this: it is the output of one command failing the next command in the same quickstart.
+
+    **Issue (b), and the worse half: the remediation named in the failure does not work.** The error says *"run `beadloom sync-update ledger` to review and re-attest"*. Measured:
+
+    ```
+    beadloom sync-update --yes --all       rc 0
+        Re-baselined billing: attested 2 pair(s).
+        Re-baselined ledger:  attested 2 pair(s).
+        Marked 2 ref(s) synced (4 pair(s) total).
+    beadloom ci                            rc 1   sync-check FAIL: 4 stale doc(s)   <- unchanged
+    ```
+
+    `sync-update` re-baselines HASHES. `missing_modules` is a claim about the document's CONTENT — the module has to be named in the prose — so no amount of re-attesting can satisfy it. The command reports success on its own terms and the adopter is told, twice, that four documents are stale, with an instruction that will never move them. That is a loop with no exit inside the tool's own output.
+
+    **What actually clears it,** measured: add a section naming the module to each README by hand. `beadloom ci` then exits 0, `sync-check PASS: 4 pair(s) fresh`. Thirty seconds once you know; undiscoverable from the message.
+
+    **Why this is CRITICAL rather than MEDIUM.** BDL-UX #192 was filed as *"A virgin `beadloom init --yes` leaves `beadloom ci` RED"* and ranked in the ROADMAP as **the adopter-facing blocker**. It was fixed for the `domain-needs-parent` leg and shipped in 4.0.0 — verified. The red did not go away; it MOVED to `sync-check`. An entry that names one leg closes when that leg is fixed, and the property it was really about — *the first two commands disagree* — survives it. This entry is written about the property.
+
+    **Expected:**
+    - the skeleton `init` writes should pass the freshness rule `init` also installs, on the day it is written — either by naming the modules it already knows (they are in the index it just built) or by the pair starting attested;
+    - and separately, `missing_modules` must not print a remediation that cannot fix it. Either name the right action (edit the document; `beadloom docs polish` is the generator) or say plainly that re-attesting will not clear this reason.
+    **Also seen, minor:** every stale pair is reported TWICE — `4 stale doc(s)` for two documents.
+    **Related:** #192 (the same property, one leg earlier), #214 (the other first-run defect, on the single-package layout), #279 (`sync-update --all` re-baselines more than its help names).
+
+214. ~~[2026-08-31] [CRITICAL] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one~~ **CLOSED (verified 2026-09-12)**
+
+    **Verified fixed 2026-09-12** on the layout the entry is about, built for the run and not this repository: one package `src/ledgerkit/` in a project named `ledgerkit`. Against the working tree of `features/BDL-069`, exit codes read without a pipe: `beadloom init --yes --mode bootstrap` **rc 0** reporting `Graph: 2 nodes, 1 edges`, `beadloom status` then reporting **`Nodes: 2`** — the number `init` said it wrote — and `beadloom ci` **rc 0**. On the published 4.0.0 the same two commands reported 2 and then 1.
+
+    **The consequence the 2026-09-10 re-measurement added goes with it.** Both nodes survive, so `domain-needs-parent` is evaluated over a population that contains a domain instead of going inert, and the green is no longer produced by the loss. The writer disambiguates rather than leaving the loader to resolve a collision silently (`beadloom-cgco`), and a duplicate `ref_id` in a graph file is now REPORTED with both nodes and the consequence named — `beadloom ci` rc 1 with `Duplicate ref_id 'core': kept services.yml (kind=service, source 'src/core/'), dropped services.yml (kind=domain, source 'src/web/') — nothing under 'src/web/' is owned, checked or counted` (`beadloom-39ap`, reproduced by the review `beadloom-qae9` on a planted duplicate).
+
+    **Also measured on a WHEEL** built from this branch by `beadloom-956f` on 2026-09-12, beside the published 4.0.0 on the same fixture: published `status` `Nodes: 1`, this tree `Nodes: 2`, no hand editing. Two parties, two rooms, one verdict — and neither room was Linux, CPython 3.10-3.12 or either locale leg.
+
+    **Tracker, two beads for one number:** `beadloom-5cpe` and `beadloom-7c6k` were both filed against #214 and both close with this move.
+
+    **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)
+    **Command:** `beadloom init --yes --mode bootstrap`
+    **Context:** measured during the BDL-067 review by the review subagent, on a fresh `ledger` project laid out as `src/ledger/`.
+    **Measured:**
+
+    ```
+    beadloom init --yes --mode bootstrap  ->  rc 0   Graph: 2 nodes, 0 edges
+    services.yml                              TWO nodes with ref_id `ledger` — one service (root), one domain
+    the loader                                keeps ONE
+    beadloom lint --strict                ->  domain-needs-parent:rule_liveness:warn
+    beadloom ci                           ->  rc 0
+    ```
+
+    **Issue:** the root `ref_id` comes from `_detect_project_name` (the `pyproject`/`package.json` name) and the domain `ref_id` comes from the source directory; on `src/<project>/` those are the same string. The graph loses a node, and because the surviving node is the root, `domain-needs-parent` goes **inert** rather than failing — so the gate reports a warning about rule liveness and exits 0. The adopter is told nothing.
+    **Not a regression, and not caused by BDL-067:** pre-fix behaviour is identical. BDL-067 deliberately carves out a domain whose `ref_id` equals the root's (`onboarding/scanner/bootstrap.py:69`), because a self-edge is not a parent — that carve-out is right, and the defect is upstream of it.
+    **Expected:** unique `ref_id`s, not an edge. Disambiguate the colliding node, and make a duplicate `ref_id` in a *generated* graph something the writer refuses rather than something the loader silently resolves.
+    **Numbering:** first filed as #211, which is already taken by the closed 1.x-description issue of 2026-08-27 further down this file. Caught by the `beadloom-e8s4.6` subagent, which noticed `CHANGELOG.md:17` and `docs/domains/onboarding/README.md:31` citing #211, before the duplicate shipped. The coordinator's own check had missed it: `grep -nE '^21[0-9]\. \['` does not match a closed entry, which is written `211. ~~[`. That is the `mr2l.91` shape — two issues numbered 187 — one allocation away from happening a second time.
+    **Tracker:** `beadloom-7c6k`. Filed separately from BDL-067 by owner decision — a different defect with a different fix, deserving its own measurement rather than a line at the end of another PR.
+
+
+    > **RE-MEASURED 2026-09-10 on the PUBLISHED 4.0.0 wheel, and RAISED to critical.** It still
+    > reproduces, and what the re-measurement added is the CONSEQUENCE, which this entry did not
+    > have. On a fresh repository whose package is named after the project (`myapp` /
+    > `src/myapp/`) — the ordinary single-package src-layout — `beadloom init --yes --mode
+    > bootstrap` reports `Graph: 2 nodes` and `beadloom status` then reports `Nodes: 1`. The node
+    > that survives is the empty `service` root; **the one that is dropped is the `domain` node
+    > carrying the source**. No command says so: not `status`, not `doctor` (which reports two
+    > unrelated warnings), not `beadloom ci`, which exits 0.
+    >
+    > **And the green is a population of zero.** With the domain node gone, `domain-needs-parent`
+    > reports `cannot fire: its 'for' kind 'domain' matches none of the 1 nodes in the graph …
+    > counted as evaluated but checks nothing`. Rename the root's `ref_id` by hand so both nodes
+    > survive, and the same Gate turns RED: `Node 'demoapp' (kind=domain) violates require rule
+    > 'domain-needs-parent'`. So on this layout the adopter's green Gate is green BECAUSE a node
+    > was silently discarded — the phantom-population class BDL-068 exists to remove, reached
+    > through the adopter's first command.
+    >
+    > This also narrows a claim made about #192 on 2026-09-10: that entry was verified fixed on a
+    > single-package tree where `beadloom ci` exited 0, and that particular zero was produced by
+    > THIS defect rather than by the fix. The fix itself is real and was confirmed separately —
+    > a two-package project emits both `part_of` edges — but "a virgin init leaves a green Gate"
+    > is false, and #282 records where the red actually is.
+
 ### Verified against current behaviour on 2026-09-10 (the 4.0.0 records sweep)
 
 Twelve entries whose own bodies already recorded a fix or a withdrawal, and which were
@@ -2539,7 +2736,7 @@ which is the room an adopter is in.
     >
     > **Measured over four entry points and three modes**, not over the one this report used: eight (entry point x mode) cells, derived from `init`'s own source by `tests/test_init_one_table_over_every_axis.py` rather than listed by hand, on fixtures that are not this repository. The entry points are `--yes`, `--bootstrap`, `--import` and the default interactive wizard; the wizard was the branch a human adopter meets first and it carried this exact shape through four green waves, because the tests covering the other two were parametrised over two BINDINGS of `bootstrap_project` and the wizard shares one of them. Two paths take no verdict and both are stated rather than implied: a run that changed nothing under `.beadloom/_graph/`, and the wizard's `edit` review answer, which hands the graph over to be edited by hand.
     >
-    > **What is NOT closed, stated because the epic's own accounting requires it.** `init` still ends in a Python traceback on a graph file it cannot handle — 24 runs over the same eight cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml`, of which the 15 that reach the file traceback, in `application/reindex/indexing.read_declared_docs` and `graph/loader.load_graph`. That is #220, open, pinned by a test that fails the day somebody closes it. And `init` still writes two nodes under one `ref_id` on the classic Python `src/<project>/` layout, where `domain-needs-parent` goes inert rather than red, so the verdict above does not see it — #214, open.
+    > **What is NOT closed, stated because the epic's own accounting requires it.** `init` still ends in a Python traceback on a graph file it cannot handle — 24 runs over the same eight cells crossed with three shapes of a hand-edited `.beadloom/_graph/legacy.yml`, of which the 15 that reach the file traceback, in `application/reindex/indexing.read_declared_docs` and `graph/loader.load_graph`. That is #220, open, pinned by a test that fails the day somebody closes it. And `init` still writes two nodes under one `ref_id` on the classic Python `src/<project>/` layout, where `domain-needs-parent` goes inert rather than red, so the verdict above does not see it — #214, open when this account was written and CLOSED on 2026-09-12 after a re-run; its entry is under Closed Issues.
 
 169. ~~[2026-08-22] [MEDIUM] `docs-audit` reads a bead reference as a numeric claim — `BDL-061.29` failed the Gate as a CLI count~~ **CLOSED (verified 2026-09-10)**
 

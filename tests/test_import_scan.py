@@ -1,4 +1,13 @@
-"""Tests for _quick_import_scan() — import-based depends_on edge inference."""
+"""Tests for _quick_import_scan() — import-based depends_on edge inference.
+
+The third parameter is the ref_id each cluster was WRITTEN under, keyed by
+cluster name. It was a set of ref_ids until BDL-069, when a cluster stopped
+always being written under its own sanitized name: on the `src/<project>/`
+layout the root service takes the project name and the package is written as
+`<project>-<kind>`. A function that recomputed the name from the directory
+then built an edge naming no node at all, so the mapping is passed in and
+`TestTheEdgeNamesTheRefIdTheClusterWasWrittenUnder` is the case that holds it.
+"""
 
 from __future__ import annotations
 
@@ -62,7 +71,7 @@ class TestQuickImportScanEmpty:
     def test_empty_clusters_returns_empty(self, tmp_path: Path) -> None:
         from beadloom.onboarding.scanner import _quick_import_scan
 
-        result = _quick_import_scan(tmp_path, {}, set())
+        result = _quick_import_scan(tmp_path, {}, {})
         assert result == []
 
     def test_single_cluster_no_self_edges(self, tmp_path: Path) -> None:
@@ -73,14 +82,14 @@ class TestQuickImportScanEmpty:
             tmp_path,
             {"models": ["src/models/user.py"]},
         )
-        seen = {"models"}
+        refs = {"models": "models"}
 
         # Patch extract_imports at its source module (lazy import target).
         with patch(
             "beadloom.graph.import_resolver.extract_imports",
             return_value=[_fake_import("models.base")],
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         assert result == []
 
@@ -98,7 +107,7 @@ class TestQuickImportScanCrossCluster:
                 "models": ["src/models/user.py"],
             },
         )
-        seen = {"api", "models"}
+        refs = {"api": "api", "models": "models"}
 
         # api/views.py imports from models.
         def fake_extract(file_path: Path) -> list[MagicMock]:
@@ -110,7 +119,7 @@ class TestQuickImportScanCrossCluster:
             "beadloom.graph.import_resolver.extract_imports",
             side_effect=fake_extract,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         assert len(result) == 1
         assert result[0] == {"src": "api", "dst": "models", "kind": "depends_on"}
@@ -126,14 +135,14 @@ class TestQuickImportScanCrossCluster:
                 "models": ["src/models/user.py"],
             },
         )
-        seen = {"api", "models"}
+        refs = {"api": "api", "models": "models"}
 
         # Both api files import models.
         with patch(
             "beadloom.graph.import_resolver.extract_imports",
             return_value=[_fake_import("models.user")],
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         # Exactly one edge, not two.
         assert len(result) == 1
@@ -151,7 +160,7 @@ class TestQuickImportScanCrossCluster:
                 "models": ["src/models/user.py"],
             },
         )
-        seen = {"api", "models"}
+        refs = {"api": "api", "models": "models"}
 
         def fake_extract(file_path: Path) -> list[MagicMock]:
             if "api" in str(file_path):
@@ -164,7 +173,7 @@ class TestQuickImportScanCrossCluster:
             "beadloom.graph.import_resolver.extract_imports",
             side_effect=fake_extract,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         srcs_dsts = {(e["src"], e["dst"]) for e in result}
         assert ("api", "models") in srcs_dsts
@@ -185,7 +194,7 @@ class TestQuickImportScanCap:
             cluster_map[name] = [f"src/{name}/main.py"]
 
         clusters = _make_clusters(tmp_path, cluster_map)
-        seen = {f"pkg{i}" for i in range(60)}
+        refs = {f"pkg{i}": f"pkg{i}" for i in range(60)}
 
         # Each cluster's file imports the next cluster.
         def fake_extract(file_path: Path) -> list[MagicMock]:
@@ -202,7 +211,7 @@ class TestQuickImportScanCap:
             "beadloom.graph.import_resolver.extract_imports",
             side_effect=fake_extract,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         assert len(result) == _MAX_IMPORT_EDGES
         assert len(result) == 50
@@ -218,7 +227,7 @@ class TestQuickImportScanGraceful:
             tmp_path,
             {"api": ["src/api/views.py"]},
         )
-        seen = {"api"}
+        refs = {"api": "api"}
 
         def _raise_for_import_resolver(name: str, *args: Any, **kwargs: Any) -> Any:
             if name == "beadloom.graph.import_resolver":
@@ -230,7 +239,7 @@ class TestQuickImportScanGraceful:
             "builtins.__import__",
             side_effect=_raise_for_import_resolver,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         assert result == []
 
@@ -245,7 +254,7 @@ class TestQuickImportScanGraceful:
                 "models": ["src/models/user.py"],
             },
         )
-        seen = {"api", "models"}
+        refs = {"api": "api", "models": "models"}
 
         def failing_extract(file_path: Path) -> list[MagicMock]:
             raise RuntimeError("tree-sitter crash")
@@ -254,34 +263,75 @@ class TestQuickImportScanGraceful:
             "beadloom.graph.import_resolver.extract_imports",
             side_effect=failing_extract,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
         assert result == []
 
 
-class TestQuickImportScanSeenRefIds:
-    """Only create edges to ref_ids that are in seen_ref_ids."""
+class TestQuickImportScanUnknownImports:
+    """An import that names no cluster is not an edge."""
 
-    def test_ignores_clusters_not_in_seen(self, tmp_path: Path) -> None:
+    def test_an_import_naming_no_cluster_creates_no_edge(self, tmp_path: Path) -> None:
+        """Every third-party import reaches this, and the graph holds no node for it.
+
+        Until BDL-069 the same case was stated as "a cluster the caller did not
+        list in `seen_ref_ids`", which the caller could not produce: the bootstrap
+        writes a node for every cluster it passes in. What the guard genuinely
+        covers is an import whose path matches nothing the graph holds.
+        """
+        from beadloom.onboarding.scanner import _quick_import_scan
+
+        clusters = _make_clusters(tmp_path, {"api": ["src/api/views.py"]})
+        refs = {"api": "api"}
+
+        with patch(
+            "beadloom.graph.import_resolver.extract_imports",
+            return_value=[_fake_import("requests.sessions")],
+        ):
+            result = _quick_import_scan(tmp_path, clusters, refs)
+
+        assert result == []
+
+
+class TestTheEdgeNamesTheRefIdTheClusterWasWrittenUnder:
+    """BDL-069, BDL-UX #214 — the half of the fix that is not the node itself."""
+
+    def test_a_cluster_written_under_a_qualified_ref_id_is_named_by_that_ref_id(
+        self, tmp_path: Path
+    ) -> None:
+        """`src/ledger/` in a project called `ledger` is written as `ledger-domain`.
+
+        Both ends of the edge are affected, and for different reasons: the source
+        was recomputed from the directory name unconditionally, so it named no
+        node, and the destination was looked up in a set of ref_ids that no longer
+        holds the name an import spells.
+        """
         from beadloom.onboarding.scanner import _quick_import_scan
 
         clusters = _make_clusters(
             tmp_path,
             {
-                "api": ["src/api/views.py"],
-                "models": ["src/models/user.py"],
+                "ledger": ["src/ledger/book.py"],
+                "shared": ["src/shared/money.py"],
             },
         )
-        # Only "api" is in seen_ref_ids, "models" is not.
-        seen = {"api"}
+        refs = {"ledger": "ledger-domain", "shared": "shared"}
+
+        def fake_extract(file_path: Path) -> list[MagicMock]:
+            if "ledger" in str(file_path):
+                return [_fake_import("shared.money")]
+            return [_fake_import("ledger.book")]
 
         with patch(
             "beadloom.graph.import_resolver.extract_imports",
-            return_value=[_fake_import("models.user")],
+            side_effect=fake_extract,
         ):
-            result = _quick_import_scan(tmp_path, clusters, seen)
+            result = _quick_import_scan(tmp_path, clusters, refs)
 
-        assert result == []
+        assert {(e["src"], e["dst"]) for e in result} == {
+            ("ledger-domain", "shared"),
+            ("shared", "ledger-domain"),
+        }, result
 
 
 class TestQuickImportScanSampleLimit:
@@ -293,7 +343,7 @@ class TestQuickImportScanSampleLimit:
         # Create a cluster with 15 files.
         files = [f"src/api/file{i}.py" for i in range(15)]
         clusters = _make_clusters(tmp_path, {"api": files})
-        seen = {"api", "models"}
+        refs = {"api": "api", "models": "models"}
 
         call_count = 0
 
@@ -306,7 +356,7 @@ class TestQuickImportScanSampleLimit:
             "beadloom.graph.import_resolver.extract_imports",
             side_effect=counting_extract,
         ):
-            _quick_import_scan(tmp_path, clusters, seen)
+            _quick_import_scan(tmp_path, clusters, refs)
 
         # Should have been called at most 10 times (sample limit).
         assert call_count <= 10

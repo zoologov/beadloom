@@ -31,7 +31,13 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
+from beadloom.application.gate_declarations import (
+    undetermined_declaration_step,
+    unusable_declaration_step,
+)
+from beadloom.application.gate_document_pairs import step_readme_pair
 from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
+from beadloom.application.gate_step import Finding, GateStep, gate_step_line
 from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
@@ -42,13 +48,17 @@ from beadloom.doc_sync.doc_shape import (
 )
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
+    REASON_SIBLING_SYMBOLS_CHANGED,
     STATUS_EXEMPT,
     STATUS_MISSING,
     STATUS_OK,
     STATUS_STALE,
     STATUS_UNVERIFIED,
+    attestation_clears,
+    content_remedy,
 )
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
+from beadloom.infrastructure.repository import StaleCount
 from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
@@ -62,8 +72,12 @@ if TYPE_CHECKING:
     from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
-# A single finding in the shared, agent-actionable shape (see linter._finding).
-Finding = dict[str, object]
+#: Re-exported so the move that lifted the step shape into
+#: :mod:`beadloom.application.gate_step` changed no import path. Forty-five
+#: modules and test modules name ``beadloom.application.gate`` for these three,
+#: and a decomposition that also rewrites its callers is two changes reviewed as
+#: one (BDL-069, ``beadloom-rqma.8``).
+__all__ = ["Finding", "GateResult", "GateStep", "gate_step_line", "run_ci_gate"]
 
 #: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
 #: Named rather than spelled twice because that step is the one case where the
@@ -98,64 +112,6 @@ def _run_audit(project_root: Path, conn: sqlite3.Connection) -> AuditResult:
     from beadloom.doc_sync.audit import run_audit
 
     return run_audit(project_root, conn)
-
-
-@dataclass
-class GateStep:
-    """One step of the gate and its honest outcome.
-
-    - ``name``     — the step identity (``reindex`` / ``lint`` / ``sync-check`` /
-      ``config-check`` / ``federate``).
-    - ``passed``   — True when the step did not fail the gate. A *skipped* step
-      counts as passed (it cannot block the build).
-    - ``skipped``  — True when the step did not run (e.g. ``--no-reindex``).
-    - ``not_verified`` — True when the step ran, found nothing wrong, and could
-      not actually check part of what it reports on. It stays ``passed`` (a
-      project that cannot supply a baseline is not thereby broken) but it prints
-      ``WARN``, because *unverifiable is not clean*: a green that describes the
-      checker's own ignorance is the defect BDL-UX #174/#175/#178 are all made
-      of, and the honest word costs nothing.
-    - ``findings`` — the step's findings in the shared shape (empty on PASS/SKIP).
-    - ``summary``  — a short human line for the ``rich`` report.
-    """
-
-    name: str
-    passed: bool = True
-    skipped: bool = False
-    findings: list[Finding] = field(default_factory=list)
-    summary: str = ""
-    not_verified: bool = False
-    pairs_excused: int | None = None
-    """Sync pairs a declaration excused, for the step that MEASURED it.
-
-    Carried on the step rather than recomputed by the later step that also
-    prints it: one run said ``exempt: 0`` and ``55 WORKING document(s) exempt``
-    about one tree, and a second implementation of "how many were excused" is
-    exactly how two adjacent lines came to contradict. ``None`` means no step in
-    this run measured it, and a surface that was not told makes no pair claim.
-    """
-
-    @property
-    def status(self) -> str:
-        """``PASS`` / ``WARN`` / ``FAIL`` / ``SKIP`` — never an ambiguous green."""
-        if self.skipped:
-            return "SKIP"
-        if not self.passed:
-            return "FAIL"
-        return "WARN" if self.not_verified else "PASS"
-
-
-def gate_step_line(step: GateStep) -> str:
-    """The one line the Gate prints about a step: ``[STATUS] name: summary``.
-
-    Lives here rather than in the renderer because two commands quote it and one
-    of them is not the Gate: ``init`` tells the adopter what ``beadloom ci`` will
-    say about the graph it just judged, and it said ``lint - <summary>``, which
-    nothing prints (BDL-067 `.14`, the review of `.13`'s minor 3). A line that
-    pre-empts another command's output has to be produced by that command's own
-    formatter, or it drifts the first time either is reworded.
-    """
-    return f"[{step.status}] {step.name}: {step.summary}"
 
 
 @dataclass
@@ -261,6 +217,7 @@ def run_ci_gate(
     steps.append(_step_docs_audit(project_root))
     steps.append(_step_docs_quality(project_root))
     steps.append(_step_issue_numbers(project_root))
+    steps.append(step_readme_pair(project_root))
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
@@ -465,7 +422,11 @@ def _sync_summary(
         if missing:
             parts.append(f"{len(missing)} missing doc(s)/code file(s)")
         if stale:
-            parts.append(f"{len(stale)} stale doc(s)")
+            # Pairs, not documents: two code files of one package give two stale
+            # pairs over ONE document, and "2 stale doc(s)" named a population
+            # that did not exist (BDL-069 Q3). The sentence is built by the count
+            # itself, so this surface cannot drift from the others.
+            parts.append(StaleCount.of_pairs(len(stale)).phrase)
         # The surface headline rides along HERE too: a run that deleted a doc is
         # precisely the run whose count fell, and suppressing the number in
         # favour of the failure would discard the signal again.
@@ -674,6 +635,7 @@ def _convention_finding(convention: SectionConvention) -> Finding:
     }
 
 
+
 def _step_issue_numbers(project_root: Path) -> GateStep:
     """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
 
@@ -690,6 +652,15 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
     ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
     the upgrade that ships this step turns nobody's green tree red.
 
+    **A project that opted in BADLY is a different project.** Writing
+    ``issue_log:`` and misspelling ``ledger:`` is opting in, and the verdict it
+    gets says how many entries were declared and how many could not be used —
+    not the sentence a project that wrote nothing gets (BDL-UX #270, closed
+    HERE by ``beadloom-rqma.7`` together with its twin in ``readme-pair``, and on
+    the two ``issue-number`` commands by ``beadloom-rqma.8``). Only the third
+    case skips: a config file that will not parse says nothing about whether the
+    key is there at all.
+
     ``not_verified`` carries the honest half: before a project's first
     allocation the ledger has no floor, so ``unwritten-claim`` and
     ``unclaimed-number`` enter no number at all and a clean result would
@@ -698,6 +669,8 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
     from beadloom.doc_sync.issue_numbers import check_issue_numbers
 
     report = check_issue_numbers(project_root)
+    if report.undetermined:
+        return undetermined_declaration_step("issue-log", "an issue log", report.refusals)
     if not report.declared:
         return GateStep(
             "issue-log",
@@ -706,6 +679,10 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
                 "skipped — no issue log is declared; add an `issue_log:` block with "
                 "`path:` and `ledger:` to .beadloom/config.yml"
             ),
+        )
+    if report.refusals:
+        return unusable_declaration_step(
+            "issue-log", report.entries_declared, report.refusals
         )
     if report.log_missing:
         return GateStep(
@@ -769,6 +746,7 @@ def _issue_number_finding(finding: NumberFinding) -> Finding:
         "why": finding.why,
         "remediation": finding.remediation,
     }
+
 
 
 def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:
@@ -1182,34 +1160,58 @@ def _sync_finding(row: dict[str, object]) -> Finding:
     *Missing* and *stale* are different facts and read differently: a stale doc
     is behind the code, a missing one is not there to be behind it, and telling
     an agent to re-attest a file that does not exist is not a remediation.
+
+    A stale pair's remediation is chosen by whether re-attesting can clear its
+    reason, and never assumed. Every stale reason used to print "run
+    ``sync-update``", including ``missing_modules``, where following it exited 0
+    and left the verdict where it was (BDL-UX #282).
     """
     doc_path = str(row.get("doc_path", ""))
+    code_path = str(row.get("code_path", ""))
     reason = str(row.get("reason", "stale"))
     ref_id = str(row.get("ref_id", ""))
     locations: list[Finding] = [{"file": doc_path}] if doc_path else []
     if str(row.get("status")) == STATUS_MISSING:
+        gone = code_path if reason == "code_missing" else doc_path
         return {
             "kind": "sync-check",
             "rule": "doc-missing",
             "severity": "error",
             "node": ref_id,
             "locations": locations,
-            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{doc_path}' does not exist"),
+            "why": (f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — '{gone}' does not exist"),
             "remediation": (
                 "restore the file, or remove the declaration from the graph "
                 "if the doc is genuinely gone — the gate is not satisfied by "
                 "having less to check"
             ),
         }
+    details = str(row.get("details") or "")
+    found = f"{reason}: {details}" if details else reason
+    remediation = (
+        f"run `beadloom sync-update {ref_id}` to review and re-attest"
+        if attestation_clears(reason)
+        else content_remedy(row)
+    )
     return {
         "kind": "sync-check",
         "rule": "doc-stale",
         "severity": "error",
         "node": ref_id,
         "locations": locations,
-        "why": f"{ref_id}: doc out of sync with code ({reason})",
-        "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",
+        "why": f"{ref_id}: doc out of sync with code ({found}){_pair_clause(doc_path, code_path)}",
+        "remediation": remediation,
     }
+
+
+def _pair_clause(doc_path: str, code_path: str) -> str:
+    """Which pair a finding is about, or nothing for a row with no code file.
+
+    A pair is a document AND a code file, so two files of one package give two
+    pairs over one document. Without the code file two different pairs printed as
+    two identical findings (BDL-069 Q3).
+    """
+    return f" — pair {doc_path} <-> {code_path}" if code_path else ""
 
 
 #: What each ``missing`` reason means to a reader, in the reader's terms.
@@ -1221,10 +1223,36 @@ _MISSING_WHY = {
 
 
 def _sync_unverified_finding(row: dict[str, object]) -> Finding:
-    """A pair that could not be checked at all — a warning, and never silent."""
+    """A pair that could not be checked at all — a warning, and never silent.
+
+    The two reasons read differently because different things clear them. A pair
+    with no baseline is attested by NAMING it: the bare ``sync-update <ref>
+    --yes`` claims only stale pairs and attests nothing here, which is what the
+    earlier "attest the pair with ``sync-update``" left the reader to discover. A
+    pair whose SIBLING moved is not told to re-attest at all (bead ``.78``):
+    nothing about its own file changed, so the document is revised against the
+    file that did.
+    """
     doc_path = str(row.get("doc_path", ""))
+    code_path = str(row.get("code_path", ""))
     ref_id = str(row.get("ref_id", ""))
+    pair = _pair_clause(doc_path, code_path)
     locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    if str(row.get("reason")) == REASON_SIBLING_SYMBOLS_CHANGED:
+        mover = str(row.get("details") or "") or "another file of this node"
+        return {
+            "kind": "sync-check",
+            "rule": "doc-not-verified",
+            "severity": "warning",
+            "locations": locations,
+            "why": (
+                f"{ref_id}: NOT verified — this file's symbols did not move; {mover} did{pair}"
+            ),
+            "remediation": (
+                f"revise {doc_path} against {mover}; this pair clears when that "
+                f"file's stale pair is attested"
+            ),
+        }
     return {
         "kind": "sync-check",
         "rule": "doc-not-verified",
@@ -1232,11 +1260,12 @@ def _sync_unverified_finding(row: dict[str, object]) -> Finding:
         "locations": locations,
         "why": (
             f"{ref_id}: NOT checked — the index was rebuilt, so its baseline is "
-            f"the current tree, and git could not supply one either"
+            f"the current tree, and git could not supply one either{pair}"
         ),
         "remediation": (
             "reindex incrementally on the existing index, run inside a git "
-            "work tree, or attest the pair with `beadloom sync-update`"
+            f"work tree, or attest the pair with "
+            f"`beadloom sync-update {ref_id} --yes --pair {doc_path}`"
         ),
     }
 

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Collection
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,77 @@ def get_docs_for_ref(conn: sqlite3.Connection, ref_id: str) -> list[tuple[str, s
 
 
 # --- Sync-state reads -------------------------------------------------------
+#
+# A ``sync_state`` row is a PAIR: one document AND one code file, so three code
+# files of one package give three stale pairs over one README. Nineteen surfaces
+# read this table and report a number, under four different populations, and all
+# four were called "stale docs" (BDL-069 `beadloom-rqma.5`). The count and the
+# word for it are therefore produced HERE, together, and a population that is not
+# pairs is a differently named function — never an argument to the same one.
+
+
+@dataclass(frozen=True)
+class StaleCount:
+    """A count of stale things together with the noun for what was counted.
+
+    Built through :meth:`of_pairs` rather than directly, so the number and the
+    word for it cannot be separated at a call site: a surface that has the count
+    already (the gate's result list, the TUI's sync provider) asks the same class
+    for the sentence as a surface that queried for it.
+    """
+
+    count: int
+    noun: str
+
+    @classmethod
+    def of_pairs(cls, count: int) -> StaleCount:
+        """*count* doc-code PAIRS — one ``sync_state`` row each."""
+        return cls(count=count, noun="pair")
+
+    @property
+    def phrase(self) -> str:
+        """``3 stale pair(s)`` — the one spelling every surface prints."""
+        return f"{self.count} stale {self.noun}(s)"
+
+
+def count_stale_pairs(
+    conn: sqlite3.Connection, ref_ids: Collection[str] | None = None
+) -> StaleCount:
+    """Count ``sync_state`` rows marked ``stale`` — one row per doc-code pair.
+
+    *ref_ids* narrows the count to those nodes. ``None`` means every node; an
+    EMPTY collection counts nothing, because a caller asking about no node
+    (``beadloom why`` on a node with no dependents) is not asking about all of
+    them.
+    """
+    if ref_ids is None:
+        row = conn.execute(
+            "SELECT count(*) FROM sync_state WHERE status = 'stale'"
+        ).fetchone()
+    elif not ref_ids:
+        return StaleCount.of_pairs(0)
+    else:
+        placeholders = ",".join("?" for _ in ref_ids)
+        row = conn.execute(
+            f"SELECT count(*) FROM sync_state "  # noqa: S608 — placeholders only
+            f"WHERE ref_id IN ({placeholders}) AND status = 'stale'",
+            tuple(ref_ids),
+        ).fetchone()
+    return StaleCount.of_pairs(int(row[0]) if row is not None else 0)
+
+
+def stale_node_refs(conn: sqlite3.Connection) -> list[str]:
+    """The NODES that own at least one stale pair, by ``ref_id``.
+
+    A different population from :func:`count_stale_pairs` and therefore a
+    different function: one node with three stale pairs is one entry here and
+    three there. A caller that wants one item per node reaches for this name and
+    cannot arrive at a pair count by accident.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT ref_id FROM sync_state WHERE status = 'stale' ORDER BY ref_id"
+    ).fetchall()
+    return [str(r["ref_id"]) for r in rows]
 
 
 def get_stale_pairs_for_ref(

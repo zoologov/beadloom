@@ -26,6 +26,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    many pairs a WORKING declaration EXCUSED, with the reason it was declared
    with (`… 326 pair(s) fresh, 4 exempt — <reason>`). The clause is absent when
    nothing was excused, so a project that declares no exemption keeps its line.
+   A failing line counts stale PAIRS (`3 stale pair(s)`), the number of stale
+   entries `sync-check --json` holds, and not documents.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
 5. **docs-quality** — every check that reads the project's planning documents,
@@ -89,7 +91,14 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    records (BDL-UX #187). Every leg's repair fits in the commit that trips it,
    which is what makes blocking fair. It cannot redden a project that has not
    opted in: the log is DECLARED under `issue_log:` in `.beadloom/config.yml`,
-   and a project declaring none is a NAMED skip that states the key to add.
+   and a project declaring none is a NAMED skip that states the key to add. A
+   project that declared the block and mistyped a key reached that same skip
+   until `beadloom-rqma.7` (BDL-UX #270); it now fails with `0 leg(s) run; 1
+   entr(ies) declared, 1 unusable: issue_log (...)`, on the same rule as
+   `readme-pair` below and through the same reader. That fix covered THIS leg
+   and not the two `issue-number` commands, which kept the old answer until
+   `beadloom-rqma.8` — so the entry was closed on the Gate and live on the
+   command a person types, for one bead.
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
@@ -112,7 +121,101 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
                     highest are stated nowhere and are unaccounted for, not free
    ```
 
-7. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
+7. **readme-pair** — the project's DECLARED document pairs, compared by shape
+   (BDL-069 S4). This repository ships `README.md` and `README.ru.md` and
+   nothing held them against each other; on 2026-09-10 the Russian file carried
+   a paragraph the English one had folded away, and the only number that
+   differed between them was a line count — 362 against 360 — which nothing
+   reads and which a translator wrapping two sentences differently moves by the
+   same amount. The drift was found by a person reading the two files side by
+   side. The comparison is `doc_sync.document_pairs`, and it compares the
+   sequence of blocks each document is built from rather than its text: the
+   files are in two languages, so a text comparison is a check somebody has to
+   switch off.
+
+   Like `issue-log` beside it this step **BLOCKS**, and for the same kind of
+   reason: a block one document has and the other does not is not an opinion
+   about prose, it is a statement one language makes and the other does not, and
+   the repair fits in the commit that trips it. A declared file that could not be
+   read fails too — a declaration pointing at nothing would otherwise report
+   `0 finding(s)` having compared no document at all, which is the false green
+   this leg exists to remove.
+
+   **It cannot redden a project that has not opted in.** The pair is DECLARED
+   under `document_pairs:` in `.beadloom/config.yml`; an adopter's translated
+   README is their business and a check that guessed `README.<lang>.md` would
+   turn somebody's green tree red on the upgrade that ships it. A project
+   declaring none is a NAMED skip that states the key to add.
+
+   **A project that opted in BADLY is reddened, and this is the leg's own
+   thesis.** Four ways of mistyping the block — an absent `follower:`, a
+   misspelled one, a path resolving outside the project root, and a scalar where
+   the list belongs — reached the skip above word for word, because the refusal
+   went to `logging`, which the Gate renders none of. Measured at HEAD on a
+   foreign two-package project, `beadloom ci` exited 0 on all four while the two
+   READMEs of a project that had opted in were never compared. Each is a finding
+   now, and the line carries the count:
+
+   ```
+   readme-pair FAIL | 0 pair(s) held, 0 block(s) compared, 1 finding(s);
+                      1 entr(ies) declared, 1 unusable: document_pairs[0]
+                      (it has no `follower:` key; it has `source:`, `followr:`)
+   ```
+
+   The count is what tells "declared none" from "declared badly". A skip
+   reworded to "possibly nothing was declared" would be the same defect in
+   softer words, which is why the number of unusable entries is in the line and
+   not the phrasing (`beadloom-rqma.7`). `issue-log` was fixed in the same act —
+   one rule about what a misdeclaration costs, in one place, reading the
+   declaration through `doc-sync/components/config-declarations`.
+
+   **That block above is what the leg prints since `beadloom-rqma.8` and not
+   before it.** `N finding(s)` was taken from the comparison, which folds over
+   the pairs HELD, so a refused declaration and a document nothing could read
+   were findings the step returned and the line did not count. The leg printed
+   `0 finding(s)` in the same run in which the Gate printed a finding about that
+   leg, and this SPEC documented the `1 finding(s)` the code did not produce —
+   the two disagreed for a fix cycle. The step builds one list, carries it and
+   counts it, so the number in the line and the findings beside it are now the
+   same expression.
+
+   One case does not redden: a `.beadloom/config.yml` that could not be read at
+   all says nothing about whether the key is there, so the STEP skips, WARNs and
+   names the file rather than reddening a project that may never have written
+   it. That is a statement about `step_readme_pair` and `_step_issue_numbers`,
+   which is where it is tested, and not about `beadloom ci`: a config file with
+   a YAML syntax error ends the run in `infrastructure/scan_paths.py` during the
+   reindex step, with a traceback and no gate line at all, before either leg is
+   reached. Measured on a foreign project, 2026-09-12, and filed as BDL-UX #287.
+
+   The line names the population and not only the verdict, because `0
+   finding(s)` alone cannot be told apart from a declaration that left nothing
+   to compare. Two clauses qualify it and are absent when there is nothing to
+   qualify: `UNREADABLE:` names each declared path nothing could read, and
+   `NOT COMPARED:` counts the pairs whose two files were read and hold no block
+   between them — that second case sets `not_verified`, so the step reports
+   **WARN** rather than PASS. The naming of pairs stops at three while the counts
+   in front of it cover all of them, so a project with a dozen translations gets
+   a line a reader can finish. Measured on this repository, 2026-09-11:
+
+   ```
+   readme-pair PASS | 1 pair(s) held, 109 block(s) compared, 0 finding(s);
+                      README.ru.md <-> README.md (109 block(s))
+   ```
+
+   The Russian file is the SOURCE in this repository's own declaration and the
+   English one follows it, which is the direction the drift ran on 2026-09-10.
+   Nothing in the check prefers one language; the pair states which document the
+   other is held against.
+
+   **A known limit, stated rather than silent.** A half-written `document_pairs:`
+   entry — one with a `source:` and no `follower:`, or a path resolving outside
+   the project — is refused by the resolver with a logged warning and reaches
+   this step as the same skip a project declaring nothing gets. The step cannot
+   tell the two apart, because what it receives is the resolved pair list. Making
+   the refusal visible belongs to `doc_sync.document_pairs`, not here.
+
+8. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
    with at least one closed bead that declared a graph node with no AS-IS
    document, plus a WORKING exemption that excuses nothing and a WORKING
    declaration the graph contradicts. Every finding is a `warn` and the step is
@@ -175,7 +278,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
-8. **scope-check** — did this branch leave the axes its work item declared?
+9. **scope-check** — did this branch leave the axes its work item declared?
    (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
    push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
@@ -191,7 +294,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
-9. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+10. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -201,8 +304,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-10. **doctor** — graph integrity.
-11. **federate** — `federate --fail-on` when hub exports are supplied.
+11. **doctor** — graph integrity.
+12. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —
@@ -269,6 +372,43 @@ as the code's health (BDL-UX #174/#175):
   clean` where it had read 20 — a count that ROSE while the tree shrank. The
   summary is now `N check(s): 0 error(s), W warning(s), I info`, and the word
   *clean* appears only when every check is OK.
+
+### A remediation the gate prints can be followed
+
+The sync-check findings are where an adopter meets the gate first, and until
+BDL-069 one of their remediations could not be followed. Every stale pair printed
+"run `beadloom sync-update <ref>` to review and re-attest". Measured on a
+repository whose package document did not name one of its modules: following it
+exited 0, reported the pairs re-attested, and left `ci` red, because
+`missing_modules` reads what the document says and an attestation rewrites a
+recorded hash (BDL-UX #282).
+
+- **`doc-stale`** chooses its remediation from `attestation_clears(reason)`
+  (see the sync-check SPEC). A reason re-attesting clears keeps the `sync-update`
+  instruction; `missing_modules`, `untracked_files` and any reason nobody has
+  measured print `content_remedy(row)` instead. For the measured case it reads:
+
+  ```
+  name journal in domains/ledger/README.md; re-attesting cannot clear missing_modules, …
+  ```
+
+- **The `why` names the pair**, as in this finding from the same measurement:
+
+  ```
+  ledger: doc out of sync with code (missing_modules: journal) — pair domains/ledger/README.md <-> src/ledger/core.py
+  ```
+
+  A pair is a document AND a code file, so three files of one package give three
+  pairs over one README, and without the code file those were three identical
+  findings. A row that has no code file prints no pair clause.
+- **`doc-missing`** names the file that is gone: the code file for `code_missing`,
+  where it used to name the document that was still there.
+- **`doc-not-verified`** is chosen by reason too. `no_baseline` names the form
+  that attests an unverified pair, `sync-update <ref> --yes --pair <doc_path>`,
+  because the bare `sync-update <ref> --yes` claims no unverified pair and attests
+  nothing. `sibling_symbols_changed` names the file that moved and is not told to
+  re-attest, which is bead `.78`'s decision reaching the gate: its `why` used to say
+  the index was rebuilt, a fact about a different pair.
 
 ### The verdict names the room it was taken in
 
@@ -344,6 +484,10 @@ same exit code, same findings; a green run attributes nothing and shells out to 
   declared-surface-shrink findings are advisory and never fail the gate.
 - No step prints a count of something it did not check, and no step prints
   *clean* over a warning.
+- No sync-check finding prints a remediation that cannot clear the reason it was
+  printed for: a stale reason outside `REASONS_ATTESTATION_CLEARS` is never told to
+  re-attest, and `tests/test_a_remediation_can_be_followed.py` follows the printed
+  instruction and fails if the verdict does not move.
 - `WARN` never changes the exit code: an adopter whose project is green today
   does not go red on upgrade, it only stops reading green where nothing was
   verified.
@@ -362,13 +506,33 @@ same exit code, same findings; a green run attributes nothing and shells out to 
 
 ## API
 
-Module `src/beadloom/application/gate.py`:
+Module `src/beadloom/application/gate_step.py` — the shape a step reports in,
+re-exported from `gate.py` so no caller's import path changed:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
   `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
 - `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
+- `Finding` — the shared agent-actionable finding shape.
+
+Module `src/beadloom/application/gate_declarations.py` — what an unusable opt-in
+declaration costs a leg, for the two legs that are opt-in:
+
+- `unusable_phrase(entries_declared, refusals) -> str` — the `; N entr(ies)
+  declared, M unusable: …` clause, or nothing.
+- `unusable_declaration_step(name, entries_declared, refusals) -> GateStep` and
+  `undetermined_declaration_step(name, subject, refusals) -> GateStep`.
+- `refusal_finding(name, refusal) -> Finding`.
+
+Module `src/beadloom/application/gate_document_pairs.py` — the `readme-pair` leg:
+
+- `step_readme_pair(project_root) -> GateStep` — the step, its line and the
+  projection of what it found. The orchestrator composes it and renders none of
+  it, which is the first slice of the per-leg extraction (`beadloom-oew7`).
+
+Module `src/beadloom/application/gate.py`:
+
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
   `RoomCensus | None`), the coverage statement (`coverage`, a
   `GateCoverage | None`), the ownership report (`ownership`, a
@@ -400,4 +564,6 @@ Module `src/beadloom/application/gate_ownership.py`:
 
 Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
 `tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
-`tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`
+`tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`,
+`tests/test_a_remediation_can_be_followed.py`, `tests/test_a_stale_line_names_its_pair.py`;
+scenarios in `tests/acceptance/features/remediation_that_can_be_followed.feature`

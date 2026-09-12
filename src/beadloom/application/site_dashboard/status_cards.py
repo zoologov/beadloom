@@ -14,6 +14,7 @@ from beadloom.application.site_dashboard._common import (
     _as_float,
     _as_int,
 )
+from beadloom.infrastructure.repository import StaleCount
 
 
 def _card(
@@ -65,7 +66,10 @@ def _docs_card(d: dict[str, object]) -> dict[str, object]:
         "Docs",
         status,
         f"{coverage}% covered",
-        f"{stale} stale of {d.get('tracked_pairs', 0)} tracked",
+        # The noun the alert beside it and `sync-check` both use: these are
+        # doc-code pairs, and the card printed the number with none.
+        f"{stale} stale of {d.get('tracked_pairs', 0)} tracked "
+        f"{StaleCount.of_pairs(stale).noun}(s)",
     )
 
 

@@ -66,10 +66,14 @@ def missing_parent_edges(
     Two nodes are deliberately left alone. One that is already parented keeps the
     parent its classifier chose — the root is the fallback, never an override.
     One whose ref_id is the root's own gets nothing, because an edge from a node
-    to itself is not a parent; that collision is reachable, since the classic
-    `src/<project>/` layout hands the root service and the single domain the same
-    ref_id (tracked on its own as `beadloom-7c6k`, since its fix is a unique
-    ref_id and not an edge).
+    to itself is not a parent. Until BDL-069 that collision was reachable from
+    both writers — the classic `src/<project>/` layout handed the root service
+    and the single domain the same ref_id, and a document named after the project
+    asked the importer for the root's. Both writers now hand out ref_ids through
+    `ref_ids.RefIdAllocator`, so neither produces it (`beadloom-cgco`, BDL-UX
+    #214). The guard stays: this function also runs over a graph a hand edit can
+    reach, and it is the one place that would fire if an allocator ever handed
+    back a name the graph already holds.
 
     The pass ranges over every KIND, not over the kinds today's generated rules
     require a parent for. A post-condition that tracked the current rule set

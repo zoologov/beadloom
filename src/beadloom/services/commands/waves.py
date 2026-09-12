@@ -16,9 +16,11 @@ Codes (the contract a caller may rely on):
   medium whose precondition failed (including a bead the document every route
   writes carries no row for), a shared medium nobody measured, a bead declaring a
   node its work item rules out of scope, a concurrent wave whose beads leave
-  part of that work item's approved scope undeclared, and a ready list the
+  part of that work item's approved scope undeclared, a ready list the
   tracker capped, which makes the population this plan was held against a part
-  of one. Visible, never blocking — the shape is still usable.
+  of one, and a bead in progress under the same work item that the tracker could
+  not show, so the plan was not compared against it. Visible, never blocking —
+  the shape is still usable.
 * ``2`` — no shape could be decided: no index, no answer from the tracker, a
   bead the tracker does not have, a ``--parent`` whose beads could not be
   derived, neither a bead nor a ``--parent``, or a ``waves:`` block that would
@@ -30,6 +32,14 @@ this project's own coordinator lost three beads of a slice that way. Narrowing a
 wave deliberately stays legitimate — measured over BDL-068's S6, 15 of 15
 launches were subsets — so the count is a notice, and ``--parent`` is the half
 that removes the typing instead of reporting on it.
+
+**Every plan is compared against the beads already in progress under its work
+item** (BDL-UX #283). The plan's beads are ready ones and a bead in progress is
+not ready, so a running bead used to be compared against nothing and the plan
+printed ``0 serialisation(s)`` beside it. A conflict with running work is printed
+apart from the plan's own serialisations, on the first line and in a block of its
+own, because it is acted on differently: it does not order the plan's waves, it
+holds a bead back until work nobody is launching lands.
 
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
 the same counts and the same verdict, and neither depends on whether stdout is a
@@ -90,8 +100,8 @@ def _blocked_by(record: dict[str, Any]) -> frozenset[str]:
     )
 
 
-def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecord]:
-    """One :class:`BeadRecord` per id, read through the ``bd`` seam.
+def _read_bead(bead_id: str, project_root: Path) -> BeadRecord:
+    """One :class:`BeadRecord`, read through the ``bd`` seam.
 
     A bead the tracker cannot answer for is an error rather than a bead with an
     empty declaration: an absent answer that reads as "declares nothing" would be
@@ -101,25 +111,57 @@ def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecor
     from beadloom.application.waves import BeadRecord, compose_declaration
     from beadloom.services.bd_seam import run_bd
 
+    result = run_bd(["show", bead_id, "--json"], cwd=str(project_root))
+    if not result.ok or not result.stdout.strip():
+        msg = f"the tracker has no bead {bead_id!r} ({result.stderr.strip()})"
+        raise LookupError(msg)
+    parsed = json.loads(result.stdout)
+    record = parsed[0] if isinstance(parsed, list) and parsed else parsed
+    if not isinstance(record, dict):
+        msg = f"the tracker's answer for {bead_id!r} was not a bead record"
+        raise LookupError(msg)
+    return BeadRecord(
+        bead_id=bead_id,
+        declaration=compose_declaration(record),
+        blocked_by=_blocked_by(record),
+        title=str(record.get("title", "")),
+    )
+
+
+def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecord]:
+    """One :class:`BeadRecord` per id; the first bead the tracker cannot show raises."""
+    return [_read_bead(bead_id, project_root) for bead_id in bead_ids]
+
+
+def _running_records(
+    census: TrackerCensus, asked: tuple[str, ...], project_root: Path
+) -> list[BeadRecord]:
+    """The records of the beads in progress that this plan does not hold (BDL-UX #283).
+
+    Every bead the census lists as in progress, not only those under the plan's
+    work item: which item that is gets derived by the planner, and a bead in
+    progress is claimed work, so the population stays small — 2 of 897 beads on
+    this repository on 2026-09-11. The planner ignores a record outside the item.
+
+    Tolerant where :func:`_read_beads` is strict, because these beads are not the
+    plan. A bead the tracker cannot show is left out, and the planner reports an
+    in-progress bead with no record as not compared, which is a finding rather
+    than a refusal to decide the shape.
+    """
+    from beadloom.application.waves import TRACKER_IN_PROGRESS
+    from beadloom.services.bd_seam import BdUnavailableError
+
+    planned = frozenset(asked)
     records: list[BeadRecord] = []
-    for bead_id in bead_ids:
-        result = run_bd(["show", bead_id, "--json"], cwd=str(project_root))
-        if not result.ok or not result.stdout.strip():
-            msg = f"the tracker has no bead {bead_id!r} ({result.stderr.strip()})"
-            raise LookupError(msg)
-        parsed = json.loads(result.stdout)
-        record = parsed[0] if isinstance(parsed, list) and parsed else parsed
-        if not isinstance(record, dict):
-            msg = f"the tracker's answer for {bead_id!r} was not a bead record"
-            raise LookupError(msg)
-        records.append(
-            BeadRecord(
-                bead_id=bead_id,
-                declaration=compose_declaration(record),
-                blocked_by=_blocked_by(record),
-                title=str(record.get("title", "")),
-            )
-        )
+    for bead in census.beads or ():
+        if bead.status != TRACKER_IN_PROGRESS or bead.bead_id in planned:
+            continue
+        try:
+            records.append(_read_bead(bead.bead_id, project_root))
+        except (LookupError, json.JSONDecodeError):
+            continue
+        except BdUnavailableError:
+            break
     return records
 
 
@@ -214,10 +256,12 @@ def _census_beads(stdout: str) -> tuple[TrackerBead, ...] | None:
         if not isinstance(row, dict) or not isinstance(row.get("id"), str):
             return None
         deps = row.get("dependencies")
+        status = row.get("status")
         found.append(
             TrackerBead(
                 bead_id=row["id"],
                 parent=str(row.get("parent") or ""),
+                status=status if isinstance(status, str) else None,
                 depends_on=frozenset(
                     str(dep["depends_on_id"])
                     for dep in (deps if isinstance(deps, list) else [])
@@ -458,6 +502,22 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             "ready_whole": plan.population.ready_whole,
             "ready_note": plan.population.ready_note,
         },
+        "running": {
+            "work_item": plan.running.work_item,
+            "in_progress": list(plan.running.in_progress),
+            "compared": list(plan.running.compared),
+            "not_compared": list(plan.running.not_compared),
+            "conflicts": [
+                {
+                    "planned": c.planned,
+                    "running": c.running,
+                    "reason": c.reason,
+                    "detail": c.detail,
+                }
+                for c in plan.running.conflicts
+            ],
+            "reason": plan.running.reason,
+        },
         "unguarded_axes": [
             {"wave": g.wave, "beads": list(g.beads), "nodes": list(g.nodes)}
             for g in plan.unguarded_axes
@@ -512,11 +572,17 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
 
 def _render(plan: WavePlan) -> None:
     """Print the decided shape, its reasons, and what it did not decide."""
-    from beadloom.application.waves import population_lines, room_for
+    from beadloom.application.waves import (
+        population_lines,
+        room_for,
+        running_lines,
+        running_summary,
+    )
 
     click.echo(
         f"{len(plan.waves)} wave(s) for {len(plan.scopes)} bead(s), "
-        f"{len(plan.conflicts)} serialisation(s), {len(plan.findings)} finding(s)."
+        f"{len(plan.conflicts)} serialisation(s), {running_summary(plan.running)}, "
+        f"{len(plan.findings)} finding(s)."
     )
     click.echo("")
     for wave in plan.waves:
@@ -524,6 +590,13 @@ def _render(plan: WavePlan) -> None:
         click.echo(f"  combined-tree gate: {wave.gate_owner}")
         rooms = "; ".join(f"{bead} -> {room_for(bead)}" for bead in wave.beads)
         click.echo(f"  clean room: {rooms}")
+        waiting = "; ".join(
+            f"{bead} behind {', '.join(plan.running.waits_for(bead))}"
+            for bead in wave.beads
+            if plan.running.waits_for(bead)
+        )
+        if waiting:
+            click.echo(f"  waits for running work: {waiting}")
     if plan.conflicts:
         click.echo("")
         click.echo("Serialised because:")
@@ -545,6 +618,9 @@ def _render(plan: WavePlan) -> None:
     _render_axes(plan)
     click.echo("")
     for line in population_lines(plan.population):
+        click.echo(line)
+    click.echo("")
+    for line in running_lines(plan.running):
         click.echo(line)
     click.echo("")
     click.echo("Shared by every wave, and NOT decided by code independence:")
@@ -608,7 +684,8 @@ def _render_axes(plan: WavePlan) -> None:
     default=None,
     help=(
         "Plan every bead the tracker lists as ready under this work item, "
-        "instead of a list typed on the command line."
+        "instead of a list typed on the command line. The plan is compared "
+        "against the beads already in progress under it either way."
     ),
 )
 @click.option("--json", "output_json", is_flag=True, help="Structured JSON output.")
@@ -634,7 +711,10 @@ def waves(
 
     ``--parent`` derives the bead list from the tracker instead of taking it from
     the command line, and without it every plan still reports how many ready
-    beads under the same work item it was not asked about (BDL-UX #274).
+    beads under the same work item it was not asked about (BDL-UX #274). Either
+    way the plan is compared against the beads already in progress under that
+    work item, and a conflict with one is printed apart from the plan's own
+    serialisations (BDL-UX #283).
     """
     from beadloom.application.declared_scope import work_item_axes
     from beadloom.application.waves import WaveConfigError, load_overrides, plan_waves
@@ -662,6 +742,7 @@ def waves(
     except (WaveConfigError, LookupError, BdUnavailableError, json.JSONDecodeError) as exc:
         click.echo(f"Error: no wave shape could be decided — {exc}", err=True)
         sys.exit(_EXIT_UNDECIDABLE)
+    running = _running_records(census, asked, project_root)
 
     axes = work_item_axes(project_root)
     environment = _environment(project_root, db_path, axes)
@@ -675,6 +756,7 @@ def waves(
             axes=axes,
             census=census,
             work_item=parent or "",
+            running=running,
         )
     finally:
         conn.close()

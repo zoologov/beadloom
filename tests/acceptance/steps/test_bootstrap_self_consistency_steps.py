@@ -43,6 +43,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
+from beadloom.infrastructure.db import readonly_connection
 from beadloom.onboarding.scanner import bootstrap_project
 from beadloom.onboarding.scanner.doc_classify import import_docs
 from beadloom.services.cli import main
@@ -216,9 +217,22 @@ def _then_dst_is_the_written_root(world: dict[str, Any]) -> None:
 
 @then("every edge the bootstrap wrote points at a node the bootstrap wrote")
 def _then_edges_resolve(world: dict[str, Any]) -> None:
+    """Both ends. The `src` end was added by BDL-069 and is not decoration.
+
+    Three passes build edges by recomputing a cluster's ref_id from its directory
+    name, and a cluster is no longer always written under that name: where the
+    project and its only package want one ref_id, the package is written as
+    `<project>-<kind>`. A rename that reached the node and not those passes would
+    trade the lost node for an edge leaving nothing, which the loader drops just
+    as quietly.
+    """
     ref_ids = {n["ref_id"] for n in world["result"]["nodes"]}
-    dangling = [e for e in world["result"]["edges"] if e["dst"] not in ref_ids]
-    assert not dangling, f"edges pointing at no node: {dangling}"
+    dangling = [
+        e
+        for e in world["result"]["edges"]
+        if e["dst"] not in ref_ids or e["src"] not in ref_ids
+    ]
+    assert not dangling, f"edges naming no node: {dangling}"
 
 
 @then("no domain is attached to the root when its classifier already gave it a parent")
@@ -1338,3 +1352,114 @@ def _then_the_annotation_missed_the_failing_node(world: dict[str, Any]) -> None:
     }
     assert by_ref[THE_UNDOCUMENTED_SIBLING].get("docs"), by_ref
     assert by_ref[THE_INHERITED_ORPHAN]["docs"] == ["docs/payments.md"], by_ref
+
+
+# --------------------------------------------------------------------------
+# BDL-069 S2 (`beadloom-cgco`), the writer half of BDL-UX #214.
+# --------------------------------------------------------------------------
+
+#: The ordinary single-package Python src-layout: a project called `myapp`
+#: holding `src/myapp/`. Neither name exists in this repository, which holds
+#: `src/beadloom/` with seven packages under it and therefore cannot produce the
+#: collision at all.
+A_PROJECT_NAMED_AFTER_ITS_ONLY_PACKAGE = "myapp"
+
+#: What the package is written as once the root has taken the plain name. Stated
+#: as a constant because two steps assert it and because it is the answer to
+#: "which of the two is renamed" — the root keeps the project's name, since that
+#: ref_id titles the architecture document and is what `generate_rules` names as
+#: the parent every domain must have.
+THE_QUALIFIED_PACKAGE = "myapp-domain"
+
+
+def _single_package_project(root: Path) -> Path:
+    name = A_PROJECT_NAMED_AFTER_ITS_ONLY_PACKAGE
+    project = root / name
+    (project / "src" / name).mkdir(parents=True)
+    (project / "src" / name / "__init__.py").write_text("X = 1\n", encoding="utf-8")
+    (project / "src" / name / "core.py").write_text(
+        "def go() -> int:\n    return 1\n", encoding="utf-8"
+    )
+    (project / "pyproject.toml").write_text(
+        f'[project]\nname = "{name}"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    return project
+
+
+@given("a project whose only package is named after the project itself")
+def _given_a_single_package_project(world: dict[str, Any], tmp_path: Path) -> None:
+    world["project"] = _single_package_project(tmp_path)
+
+
+@given("a docs directory holding a document named after the project")
+def _given_a_document_named_after_the_project(world: dict[str, Any]) -> None:
+    """`docs/myapp.md` — the collision through the second writer.
+
+    `import_docs` takes a node's ref_id from the document's file name, so a
+    document named after anything already in the graph asked for a ref_id the
+    graph holds.
+    """
+    docs = world["project"] / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / f"{A_PROJECT_NAMED_AFTER_ITS_ONLY_PACKAGE}.md").write_text(
+        "# myapp\n\nHow the parts fit together.\n", encoding="utf-8"
+    )
+
+
+@then("no two nodes in the graph on disk carry one ref_id")
+def _then_no_ref_id_is_written_twice(world: dict[str, Any]) -> None:
+    nodes, _edges = _graph_on_disk(world["project"])
+    refs = [str(n["ref_id"]) for n in nodes]
+    duplicates = sorted({ref for ref in refs if refs.count(ref) > 1})
+    assert not duplicates, f"ref_ids written more than once: {duplicates}"
+    # Anti-vacuity: an empty directory holds no duplicate either.
+    assert len(refs) > 1, f"fixture produced no graph to check: {refs}"
+
+
+def _ref_ids_the_index_holds(project: Path) -> set[str]:
+    """The nodes as the INDEX holds them — what `status` counts and `lint` judges.
+
+    Read out of the database rather than from a reindex's return value: a reindex
+    that finds nothing changed reports zero nodes loaded, which is true of the run
+    and says nothing about the graph. The two differ only when a step has already
+    reindexed, and one of these scenarios lints before it asks.
+    """
+    incremental_reindex(project)
+    with readonly_connection(project / ".beadloom" / "beadloom.db") as conn:
+        return {str(row[0]) for row in conn.execute("SELECT ref_id FROM nodes")}
+
+
+@then("the graph holds every node the bootstrap reported writing")
+def _then_the_report_and_the_graph_agree(world: dict[str, Any]) -> None:
+    """`Graph: 2 nodes` over a file the loader reads as one is the defect itself.
+
+    Counted over the graph the LOADER builds rather than over the file, because
+    the file did hold two entries: it is the reduction by ref_id that lost one.
+    """
+    indexed = _ref_ids_the_index_holds(world["project"])
+    assert len(indexed) == world["result"]["nodes_generated"], (
+        sorted(indexed),
+        world["result"]["nodes_generated"],
+    )
+
+
+@then("the root keeps the project's name and the package is qualified by its kind")
+def _then_the_root_keeps_the_project_name(world: dict[str, Any]) -> None:
+    nodes = {n["ref_id"]: n for n in world["result"]["nodes"]}
+    assert nodes[A_PROJECT_NAMED_AFTER_ITS_ONLY_PACKAGE]["kind"] == "service", nodes
+    assert nodes[A_PROJECT_NAMED_AFTER_ITS_ONLY_PACKAGE]["source"] == "", nodes
+    assert nodes[THE_QUALIFIED_PACKAGE]["source"] == "src/myapp/", nodes
+
+
+@then("the lint ran over a population holding the package")
+def _then_the_rule_saw_the_package(world: dict[str, Any]) -> None:
+    """Anti-vacuity, and the reason this defect survived two major releases.
+
+    `domain-needs-parent` was green on this layout because the domain was not in
+    the graph it ran over. A green lint means something here only if the node the
+    rule is about is one the loader kept.
+    """
+    nodes, _edges = _graph_on_disk(world["project"])
+    domains = [str(n["ref_id"]) for n in nodes if n.get("kind") == "domain"]
+    assert domains == [THE_QUALIFIED_PACKAGE], domains
+    assert THE_QUALIFIED_PACKAGE in _ref_ids_the_index_holds(world["project"])

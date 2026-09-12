@@ -429,3 +429,92 @@ def _second_row_reads_against_its_own_header(world: dict[str, Any]) -> None:
     assert section is not None
     second = section.axes[1]
     assert (second.node, second.axis, second.in_scope) == ("reader", "co-writers", False)
+
+
+# ---------------------------------------------------------------------------
+# BDL-UX #284 — a row names what its node owns and the derivation did not read
+# ---------------------------------------------------------------------------
+
+
+_UNREAD_TEMPLATE = "src/pkg/skel/templates/domain.md.txt"
+
+
+@given("an impact answer whose caller's node owns a file the derivation could not read")
+def _an_answer_with_unread_ownership(world: dict[str, Any]) -> None:
+    from dataclasses import replace
+
+    from beadloom.application.impact.seeds import Seed
+    from beadloom.application.impact.unread_ownership import UnreadOwnership
+
+    answer = _answer(
+        seeds=(
+            Seed(
+                name="write_yaml",
+                path=Path("src/pkg/writer.py"),
+                lineno=10,
+                effect="serialises-yaml",
+            ),
+        ),
+        co_writers=Population(
+            resolved=True,
+            sites=(Site("save", "src/pkg/save.py", 3, "writer", "pkg"),),
+        ),
+    )
+    world["answer"] = replace(
+        answer,
+        callers=Population(
+            resolved=True,
+            sites=(Site("render", "src/pkg/skel/generator.py", 8, "skel", "pkg"),),
+        ),
+        unread_ownership=(UnreadOwnership(node="skel", files=(_UNREAD_TEMPLATE,)),),
+    )
+
+
+@when("the Axes section is rendered from it and read back")
+def _render_and_read_back(world: dict[str, Any]) -> None:
+    world["section"] = read_axes_section(render_axes_section(world["answer"]))
+
+
+@then("the caller's row reads back with that file counted")
+def _caller_row_counts_the_file(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    caller = next(axis for axis in section.axes if axis.node == "skel")
+    assert caller.unread_count == 1
+    assert caller.owns_unread is not None
+    assert _UNREAD_TEMPLATE in caller.owns_unread
+
+
+@then("the rows whose nodes own nothing unread read back as none")
+def _other_rows_read_none(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    writer = next(axis for axis in section.axes if axis.node == "writer")
+    assert writer.unread_count == 0
+
+
+@given(parsers.parse('a brief whose "Axes" table carries no column for unread ownership'))
+def _axes_without_the_column(world: dict[str, Any]) -> None:
+    world["text"] = (
+        "# BRIEF: KEY-1 — a brief\n\n"
+        + _AXES_WITH_A_SEED
+        + "| callers | reader | 2 — `src/pkg/read.py:8` | no | reads the result only |\n"
+    )
+
+
+@then("every row reads with the node, sites and scope decision it states")
+def _rows_read_as_stated(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    assert [(a.axis, a.node, a.sites, a.in_scope, a.why) for a in section.axes] == [
+        ("co-writers", "writer", "1 — `src/pkg/save.py:3`", True, "the invariant is written here"),
+        ("callers", "reader", "2 — `src/pkg/read.py:8`", False, "reads the result only"),
+    ]
+
+
+@then("no row claims a count of unread files")
+def _no_row_claims_a_count(world: dict[str, Any]) -> None:
+    section = world["section"]
+    assert section is not None
+    assert all(axis.owns_unread is None for axis in section.axes)
+    assert all(axis.unread_count is None for axis in section.axes)

@@ -117,6 +117,7 @@ class TestRenderDoc:
                 "ref_id": "billing",
                 "summary": "Invoices and dunning",
                 "source": "src/billing/",
+                "modules_section": "",
                 "symbols_section": "",
                 "depends_on": "(none)",
                 "used_by": "(none)",

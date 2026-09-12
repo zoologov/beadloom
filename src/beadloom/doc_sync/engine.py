@@ -268,6 +268,77 @@ REASON_SYMBOLS_CHANGED = "symbols_changed"
 #: pairs stale and 10 of them named a modified file.
 REASON_SIBLING_SYMBOLS_CHANGED = "sibling_symbols_changed"
 
+#: The pair's own bytes differ from the baseline recorded for it.
+REASON_HASH_CHANGED = "hash_changed"
+#: The baseline is the tree the index was built from, and git sees the code move.
+REASON_HASH_CHANGED_SINCE_HEAD = "hash_changed_since_head"
+#: A code file under the node's source is owned by no pair, annotation or marker.
+REASON_UNTRACKED_FILES = "untracked_files"
+#: The document does not name every module of the node's source directory.
+REASON_MISSING_MODULES = "missing_modules"
+
+#: The stale reasons a re-attestation CLEARS, and nothing else. Each is a
+#: comparison against a recorded baseline, and attesting rewrites that baseline.
+#: Measured through the real reindex + ``attest_ref`` + ``check_sync`` pipeline
+#: rather than reasoned from the code (``tests/test_a_remediation_can_be_followed``):
+#: these three moved, while ``untracked_files`` and ``missing_modules`` did not,
+#: because one needs a pair that does not exist yet and the other reads what the
+#: document says.
+#:
+#: An ALLOW-LIST, deliberately. Before BDL-069 every stale reason printed "run
+#: ``sync-update``", and ``missing_modules`` inherited an instruction that could
+#: not clear it (BDL-UX #282). A reason added later is not clearable until it has
+#: been measured to be.
+REASONS_ATTESTATION_CLEARS = frozenset(
+    {REASON_HASH_CHANGED, REASON_HASH_CHANGED_SINCE_HEAD, REASON_SYMBOLS_CHANGED}
+)
+
+#: What clears a reason that re-attesting cannot clear, and why re-attesting
+#: cannot. ``{details}`` is the row's own detail, ``{doc_path}`` its document.
+_CONTENT_REMEDIES: Mapping[str, str] = {
+    REASON_MISSING_MODULES: (
+        "name {details} in {doc_path}; re-attesting cannot clear missing_modules, "
+        "because the check reads what the document says, not a recorded hash"
+    ),
+    REASON_UNTRACKED_FILES: (
+        "pair {details} with {doc_path}: annotate each file with "
+        "`# beadloom:<kind>={ref_id}`, or add `<!-- beadloom:track=<path> -->` to the "
+        "document for each; re-attesting cannot clear untracked_files, because no "
+        "pair exists for such a file to attest"
+    ),
+}
+
+_UNMEASURED_REMEDY = (
+    "revise {doc_path} against the code and re-run `beadloom sync-check`; "
+    "re-attesting is not known to clear {reason}, because nothing has measured it"
+)
+
+
+def attestation_clears(reason: str) -> bool:
+    """Whether re-attesting a stale pair can clear *reason*.
+
+    ``False`` for a reason this module has not measured, so a new reason cannot
+    inherit an instruction to re-attest (see :data:`REASONS_ATTESTATION_CLEARS`).
+    """
+    return reason in REASONS_ATTESTATION_CLEARS
+
+
+def content_remedy(row: Mapping[str, Any]) -> str:
+    """What clears a stale *row* whose reason re-attesting cannot clear.
+
+    The one wording every surface prints — the gate's remediation, the report
+    footer, and ``sync-update``'s account of what it left — so the instruction
+    and the reason it answers cannot drift apart between them.
+    """
+    reason = str(row.get("reason", ""))
+    template = _CONTENT_REMEDIES.get(reason, _UNMEASURED_REMEDY)
+    return template.format(
+        details=row.get("details") or "the files the check named",
+        doc_path=row.get("doc_path") or "the document",
+        ref_id=row.get("ref_id", ""),
+        reason=reason,
+    )
+
 
 def _exempt_reason(doc_path: str, spaces: DocSpaces) -> str | None:
     """The declared reason *doc_path* is exempt from freshness, or ``None``.
@@ -409,7 +480,7 @@ def _corroborate_with_git(
         return STATUS_UNVERIFIED, "no_baseline", BASELINE_NONE
     doc_changed = str(Path(docs_dir) / doc_path) in changed
     if code_path in changed and not doc_changed:
-        return STATUS_STALE, "hash_changed_since_head", BASELINE_GIT
+        return STATUS_STALE, REASON_HASH_CHANGED_SINCE_HEAD, BASELINE_GIT
     return STATUS_OK, "ok", BASELINE_GIT
 
 
@@ -538,10 +609,10 @@ def check_sync(
 
         if current_code_hash and current_code_hash != stored_code_hash:
             status = "stale"
-            reason = "hash_changed"
+            reason = REASON_HASH_CHANGED
         if current_doc_hash and current_doc_hash != stored_doc_hash:
             status = "stale"
-            reason = "hash_changed"
+            reason = REASON_HASH_CHANGED
 
         # Update doc_hash_at_last_edit when doc changes.
         if doc_edited and current_doc_hash:
@@ -646,7 +717,7 @@ def check_sync(
                 # does not need a baseline.
                 if results[idx]["status"] in (STATUS_OK, STATUS_UNVERIFIED):
                     results[idx]["status"] = "stale"
-                    results[idx]["reason"] = "untracked_files"
+                    results[idx]["reason"] = REASON_UNTRACKED_FILES
                     results[idx]["details"] = details
                     # Update DB status
                     conn.execute(
@@ -662,7 +733,7 @@ def check_sync(
                     "code_path": "",
                     "ref_id": gap_ref_id,
                     "status": "stale",
-                    "reason": "untracked_files",
+                    "reason": REASON_UNTRACKED_FILES,
                     "details": details,
                     "baseline": BASELINE_INDEX,
                 }
@@ -688,7 +759,7 @@ def check_sync(
                 # does not need a baseline.
                 if results[idx]["status"] in (STATUS_OK, STATUS_UNVERIFIED):
                     results[idx]["status"] = "stale"
-                    results[idx]["reason"] = "missing_modules"
+                    results[idx]["reason"] = REASON_MISSING_MODULES
                     results[idx]["details"] = details
                     conn.execute(
                         "UPDATE sync_state SET status = 'stale' "
@@ -702,7 +773,7 @@ def check_sync(
                     "code_path": "",
                     "ref_id": gap_ref_id,
                     "status": "stale",
-                    "reason": "missing_modules",
+                    "reason": REASON_MISSING_MODULES,
                     "details": details,
                     "baseline": BASELINE_INDEX,
                 }
@@ -858,7 +929,7 @@ def check_sync_since(
                 "code_path": code_path,
                 "ref_id": ref_id,
                 "status": "stale" if stale else "ok",
-                "reason": "hash_changed" if stale else "ok",
+                "reason": REASON_HASH_CHANGED if stale else "ok",
             }
         )
 

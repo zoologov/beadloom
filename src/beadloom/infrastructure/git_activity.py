@@ -13,7 +13,12 @@ import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
+
+from beadloom.infrastructure.node_source import NodeSource
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -55,21 +60,19 @@ def _map_file_to_node(
 ) -> str | None:
     """Map a file path to the closest matching node ref_id.
 
-    Checks whether the file path starts with any of the source directory
-    prefixes. Returns the ref_id of the longest matching prefix (most specific).
+    Among the nodes whose source *file_path* lies under — by the one rule
+    :class:`~beadloom.infrastructure.node_source.NodeSource` holds, which this
+    function wrote for itself until BDL-069 `beadloom-rqma.4` — returns the one with
+    the longest source (most specific). The ranking is this function's own.
     """
     best_match: str | None = None
     best_len = 0
 
-    normalized = str(PurePosixPath(file_path))
-
     for ref_id, src_dir in source_dirs.items():
-        prefix = str(PurePosixPath(src_dir))
-        # Ensure prefix match is at a directory boundary
-        is_match = normalized == prefix or normalized.startswith(prefix + "/")
-        if is_match and len(prefix) > best_len:
+        under = NodeSource(src_dir)
+        if under.holds(file_path) and len(under.path) > best_len:
             best_match = ref_id
-            best_len = len(prefix)
+            best_len = len(under.path)
 
     return best_match
 

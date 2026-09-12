@@ -41,6 +41,7 @@ from beadloom.graph.diff import compute_diff
 from beadloom.graph.linter import LintResult, lint
 from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
+from beadloom.infrastructure.repository import count_stale_pairs
 from beadloom.services.bd_seam import BdUnavailableError, run_bd
 from beadloom.services.bd_seam.answers import confirmed_suggestion, ready_ids
 from beadloom.services.bd_seam.creation import (
@@ -194,9 +195,9 @@ def handle_get_status(
     docs_count = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
     chunks_count = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
     symbols_count = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
-    stale_count = conn.execute(
-        "SELECT count(*) FROM sync_state WHERE status = 'stale'"
-    ).fetchone()[0]
+    # PAIRS, one `sync_state` row per document AND code file — the population
+    # the tool description names (BDL-069 `beadloom-rqma.5`).
+    stale = count_stale_pairs(conn)
 
     covered = conn.execute(
         "SELECT count(DISTINCT n.ref_id) FROM nodes n JOIN docs d ON d.ref_id = n.ref_id"
@@ -208,7 +209,7 @@ def handle_get_status(
         "docs_count": docs_count,
         "chunks_count": chunks_count,
         "symbols_count": symbols_count,
-        "stale_count": stale_count,
+        "stale_count": stale.count,
         "doc_coverage": covered,
         "last_reindex": get_meta(conn, "last_reindex_at"),
         "beadloom_version": get_meta(conn, "beadloom_version"),
@@ -1150,7 +1151,7 @@ _TOOLS = [
         name="get_status",
         description=(
             "Get project documentation coverage and index status. "
-            "Returns coverage percentages and stale doc count."
+            "Returns coverage percentages and stale pair count."
         ),
         input_schema={"type": "object", "properties": {}},
     ),

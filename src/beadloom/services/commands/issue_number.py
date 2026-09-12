@@ -13,9 +13,12 @@ a command can make indivisible and a paragraph cannot.
 
 Codes (the contract a caller may rely on):
 
-* ``0`` — the number was allocated, or the check found nothing.
-* ``1`` — ``check`` found at least one finding.
-* ``2`` — nothing was allocated: the project declares no ``issue_log:`` block.
+* ``0`` — the number was allocated, or the check found nothing, or the check
+  could not establish whether the project declares a log at all.
+* ``1`` — ``check`` found at least one finding, or the project declared a block
+  this reader could not use.
+* ``2`` — nothing was allocated: the project declares no ``issue_log:`` block,
+  or the declaration could not be read.
 """
 
 # beadloom:component=cli-commands
@@ -32,6 +35,7 @@ from beadloom.doc_sync.issue_numbers import (
     IssueNumberReport,
     allocate_number,
     check_issue_numbers,
+    refusal_sentence,
 )
 from beadloom.services.commands._root import main
 
@@ -103,12 +107,42 @@ def check(project: Path, *, as_json: bool) -> None:
     else:
         for line in _lines(report):
             click.echo(line)
-    raise SystemExit(_EXIT_FINDINGS if report.findings else _EXIT_CLEAN)
+    raise SystemExit(_exit_code(report))
+
+
+def _exit_code(report: IssueNumberReport) -> int:
+    """Which code this verdict earns, and why an unread config is not a finding.
+
+    The code answers "did a leg find something?", so it is about the log. When
+    the config could not be read no leg ran and no log was opened, and any
+    non-zero code would be a claim about a log nobody saw — the shape of the
+    sentence this branch exists to stop printing. ``2`` is worse still: its
+    documented meaning is "the project declares no ``issue_log:`` block", which
+    is the assertion that is not available here.
+
+    So the state is reported at ``0``, matching the Gate — the surface that
+    decides what an unknown COSTS, and whose answer to this one is a
+    non-blocking WARN. What distinguishes it from a clean run is the verdict's
+    own words and, for a machine, ``undetermined`` in the payload.
+
+    A declaration that WAS read and could not be used is the opposite case and
+    keeps its ``1``: the project opted in and the legs it asked for did not run.
+    """
+    if report.undetermined:
+        return _EXIT_CLEAN
+    unusable = report.declared and report.refusals
+    return _EXIT_FINDINGS if report.findings or unusable else _EXIT_CLEAN
 
 
 def _payload(report: IssueNumberReport) -> dict[str, object]:
     return {
-        "declared": report.declared,
+        # ``None`` and not ``False`` when the config could not be read: the wire
+        # format carries three states and a boolean holds two, so ``false``
+        # beside ``"undetermined": true`` is a statement a consumer reading one
+        # key acts on. A machine asking "did this project opt out?" gets no
+        # answer here, which is the true one.
+        "declared": None if report.undetermined else report.declared,
+        "undetermined": report.undetermined,
         "entries": report.entries,
         "claims": report.claims,
         "floor": report.floor,
@@ -116,6 +150,11 @@ def _payload(report: IssueNumberReport) -> dict[str, object]:
         "not_verified": report.not_verified,
         "unaccounted": list(report.unaccounted),
         "entries_below_floor": report.entries_below_floor,
+        "entries_declared": report.entries_declared,
+        "refusals": [
+            {"where": refusal.where, "why": refusal.why, "remediation": refusal.remediation}
+            for refusal in report.refusals
+        ],
         "findings": [
             {
                 "check": finding.check,
@@ -143,13 +182,55 @@ def _named(numbers: tuple[int, ...]) -> str:
     return f"{shown} and {rest} more" if rest > 0 else shown
 
 
+def _refused_lines(report: IssueNumberReport) -> list[str]:
+    """A declaration this reader could not use, said so rather than counted as zero.
+
+    The project opted in, so the opt-out's sentence is the wrong answer; and no
+    leg opened a log, so "No duplicate, unwritten or unclaimed number." is a
+    clean verdict over a population of zero. This surface printed the second and
+    exited 0 — the third surface of BDL-UX #270, closed with the other two by
+    ``beadloom-rqma.8``. The refusals are the ones the Gate's own leg renders,
+    read off the same report through the same declaration reader.
+    """
+    lines = [
+        f"{report.entries_declared} entr(ies) declared, {len(report.refusals)} unusable "
+        "— no leg ran."
+    ]
+    return lines + _refusal_lines(report)
+
+
+def _refusal_lines(report: IssueNumberReport) -> list[str]:
+    """The refusals as ``allocate`` prints them, through the one renderer both use."""
+    return [f"  {refusal_sentence(refusal)}" for refusal in report.refusals]
+
+
+def _undetermined_lines(report: IssueNumberReport) -> list[str]:
+    """The config itself could not be read, so the opt-out's sentence is not available.
+
+    Absence and unreadability are different answers and this surface gave one
+    of them for both: over a config it never parsed it printed, byte for byte,
+    what a project that wrote no ``issue_log:`` block is told, and exited 0. A
+    positive assertion about a declaration nobody read is the false green this
+    epic exists to remove, and the two sibling surfaces already answered it —
+    ``allocate`` refuses with the parse failure, the Gate step skips and WARNs.
+    """
+    return [
+        "Whether this project declares an issue log is unknown — no leg ran.",
+        *_refusal_lines(report),
+    ]
+
+
 def _lines(report: IssueNumberReport) -> list[str]:
     """The report as a reader sees it, stating what each leg could not read."""
+    if report.undetermined:
+        return _undetermined_lines(report)
     if not report.declared:
         return [
             "No issue log is declared — no leg ran.",
             "  add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml",
         ]
+    if report.refusals:
+        return _refused_lines(report)
     if report.log_missing:
         return ["The declared issue log is missing or unreadable — no leg ran."]
     lines = [

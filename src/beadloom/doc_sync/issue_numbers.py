@@ -81,17 +81,23 @@ holds is reported as :attr:`LogNumbers.unaccounted` rather than as free.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING
 
+from beadloom.doc_sync.declarations import (
+    Refusal,
+    fold,
+    mapping_of,
+    read_declaration,
+    string_field,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
 #: The ``.beadloom/config.yml`` block that declares the log. A project that
 #: declares none is not judged: the shipped flow tells an adopter to keep a UX
@@ -100,6 +106,9 @@ logger = logging.getLogger(__name__)
 CONFIG_KEY = "issue_log"
 LOG_PATH_KEY = "path"
 LEDGER_PATH_KEY = "ledger"
+
+#: How the block is described back to a project that wrote it in the wrong shape.
+_BLOCK_FIELDS = f"`{LOG_PATH_KEY}:` and `{LEDGER_PATH_KEY}:`"
 
 DUPLICATE_NUMBER = "duplicate-number"
 UNWRITTEN_CLAIM = "unwritten-claim"
@@ -204,6 +213,21 @@ class IssueLog:
 
 
 @dataclass(frozen=True)
+class LogDeclaration:
+    """What the project wrote under ``issue_log:``, usable or not.
+
+    The block is ONE declaration, so ``refusals`` holds at most one entry: an
+    ``issue_log:`` that is missing both keys is one unusable declaration with
+    two reasons, not two unusable declarations.
+    """
+
+    log: IssueLog | None = None
+    declared: bool = False
+    undetermined: bool = False
+    refusals: tuple[Refusal, ...] = ()
+
+
+@dataclass(frozen=True)
 class NumberFinding:
     """One number this check has something to say about."""
 
@@ -220,6 +244,16 @@ class IssueNumberReport:
 
     declared: bool
     findings: tuple[NumberFinding, ...] = ()
+    #: The declarations LOOKED AT under ``issue_log:`` — one when the key is
+    #: there, whether or not what follows it could be used. A verdict that says
+    #: "1 entr(ies) declared, 1 unusable" is a different sentence from the one a
+    #: project that declared nothing gets, which is the whole point of carrying
+    #: it (BDL-UX #270).
+    entries_declared: int = 0
+    refusals: tuple[Refusal, ...] = ()
+    #: The config file could not be read, so whether the project opted in is
+    #: unknown: neither a declaration nor its absence.
+    undetermined: bool = False
     entries: int = 0
     claims: int = 0
     floor: int | None = None
@@ -279,29 +313,98 @@ def read_log_numbers(text: str) -> LogNumbers:
 # ---------------------------------------------------------------------------
 
 
-def resolve_issue_log(project_root: Path) -> IssueLog | None:
-    """The declared log and ledger, or ``None`` when the project declares none."""
-    config_path = project_root / ".beadloom" / "config.yml"
-    if not config_path.is_file():
-        return None
-    import yaml
+def read_log_declaration(project_root: Path) -> LogDeclaration:
+    """The declared log and ledger, or the reason the declaration could not be used.
 
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        logger.warning("Failed to read .beadloom/config.yml for %s", CONFIG_KEY)
-        return None
-    if not isinstance(data, dict):
-        return None
-    block = data.get(CONFIG_KEY)
-    if not isinstance(block, dict):
-        return None
-    log = block.get(LOG_PATH_KEY)
-    ledger = block.get(LEDGER_PATH_KEY)
-    if not isinstance(log, str) or not isinstance(ledger, str):
-        logger.warning("%s needs both %r and %r", CONFIG_KEY, LOG_PATH_KEY, LEDGER_PATH_KEY)
-        return None
-    return IssueLog(log=project_root / log, ledger=project_root / ledger)
+    The refusal used to go to ``logging``, which the Gate does not render, so a
+    project that had written ``issue_log:`` and misspelled ``ledger:`` got the
+    verdict of a project that had written nothing (BDL-UX #270, closed by
+    ``beadloom-rqma.7`` on the Gate leg together with its twin in
+    ``document_pairs:``, and by ``beadloom-rqma.8`` on the two ``issue-number``
+    commands, which reached ``issue_log:`` through their own resolver and kept
+    the old answer for one bead longer).
+    """
+    declaration = read_declaration(project_root, CONFIG_KEY)
+    if declaration.undetermined:
+        return LogDeclaration(undetermined=True, refusals=declaration.refusals)
+    if not declaration.present:
+        return LogDeclaration()
+    block, shape_refusals = mapping_of(declaration, _BLOCK_FIELDS)
+    if block is None:
+        return LogDeclaration(declared=True, refusals=shape_refusals)
+    problems: list[Refusal] = []
+    paths: dict[str, str] = {}
+    for key in (LOG_PATH_KEY, LEDGER_PATH_KEY):
+        value, refusal = string_field(
+            block, key, where=CONFIG_KEY, needs=(LOG_PATH_KEY, LEDGER_PATH_KEY)
+        )
+        if value is None and refusal is not None:
+            problems.append(refusal)
+            continue
+        if value is not None:
+            paths[key] = value
+    folded = fold(CONFIG_KEY, problems)
+    if folded is not None:
+        return LogDeclaration(declared=True, refusals=(folded,))
+    return LogDeclaration(
+        log=IssueLog(
+            log=project_root / paths[LOG_PATH_KEY],
+            ledger=project_root / paths[LEDGER_PATH_KEY],
+        ),
+        declared=True,
+    )
+
+
+#: What a project that wrote no ``issue_log:`` block at all is told. Held apart
+#: from every refusal below because it is the one case where nothing is wrong:
+#: the project opted out, and the sentence is an instruction rather than a
+#: complaint.
+NO_LOG_DECLARED = (
+    "no issue log is declared; add an `issue_log:` block with `path:` and "
+    "`ledger:` to .beadloom/config.yml"
+)
+
+
+def declared_log(project_root: Path) -> IssueLog:
+    """The declared log, or a refusal in the declaration's OWN words.
+
+    This replaces a resolver that returned the usable log and dropped the reason
+    there was none. Its caller is a person at a terminal, who has everything to
+    say about a refusal: a project that wrote ``issue_log:`` and misspelled one
+    key was told, byte for byte, the sentence a project that wrote nothing gets,
+    while the Gate over the same config named the key (BDL-UX #270, closed on
+    the Gate leg by ``beadloom-rqma.7`` and on this surface by
+    ``beadloom-rqma.8``).
+
+    Three states, three answers. No refusal and no log is the opt-out. A refusal
+    is rendered whether it came from a declaration this reader could not use or
+    from a config file it could not read at all — in both cases the project did
+    something the allocator cannot silently call "nothing".
+    """
+    declaration = read_log_declaration(project_root)
+    if declaration.log is not None:
+        return declaration.log
+    if not declaration.refusals:
+        raise ValueError(NO_LOG_DECLARED)
+    raise ValueError("; ".join(refusal_sentence(refusal) for refusal in declaration.refusals))
+
+
+def refusal_sentence(refusal: Refusal) -> str:
+    """One refusal as a line for a person at a terminal.
+
+    ``where`` leads, because "it has no `ledger:` key" is about an entry and a
+    reader needs to know which. It is dropped when ``why`` already opens with
+    it: the Gate can afford the repetition because its finding carries the file
+    in a ``locations`` field beside the sentence, and a one-line refusal cannot.
+
+    Public because ``issue-number check`` renders the same refusals this
+    module's own :func:`declared_log` renders for ``allocate``. Two copies of
+    the rule about dropping ``where`` are two things that can disagree, and the
+    two commands disagreeing about one declaration is what BDL-UX #270 was.
+    """
+    if refusal.why.startswith(refusal.where):
+        return f"{refusal.why} — {refusal.remediation}"
+    return f"{refusal.where}: {refusal.why} — {refusal.remediation}"
 
 
 def _read_log(declared: IssueLog) -> LogNumbers | None:
@@ -382,13 +485,7 @@ def allocate_number(
     against their own ledger, and only the merge shows it. That population is
     :func:`check_issue_numbers`'s.
     """
-    declared = resolve_issue_log(project_root)
-    if declared is None:
-        message = (
-            "no issue log is declared; add an `issue_log:` block with `path:` and "
-            "`ledger:` to .beadloom/config.yml"
-        )
-        raise ValueError(message)
+    declared = declared_log(project_root)
     numbers = _read_log(declared)
     highest_in_log = numbers.highest if numbers is not None else 0
     claims = read_claims(declared.ledger)
@@ -420,12 +517,18 @@ def allocate_number(
 
 def check_issue_numbers(project_root: Path) -> IssueNumberReport:
     """Run the three legs over the declared log and its ledger."""
-    declared = resolve_issue_log(project_root)
-    if declared is None:
-        return IssueNumberReport(declared=False)
+    declaration = read_log_declaration(project_root)
+    if declaration.log is None:
+        return IssueNumberReport(
+            declared=declaration.declared,
+            entries_declared=1 if declaration.declared else 0,
+            refusals=declaration.refusals,
+            undetermined=declaration.undetermined,
+        )
+    declared = declaration.log
     numbers = _read_log(declared)
     if numbers is None:
-        return IssueNumberReport(declared=True, log_missing=True)
+        return IssueNumberReport(declared=True, entries_declared=1, log_missing=True)
     claims = read_claims(declared.ledger)
     log_where = declared.log.name
     findings = list(_duplicate_findings(numbers, log_where))
@@ -436,6 +539,7 @@ def check_issue_numbers(project_root: Path) -> IssueNumberReport:
     return IssueNumberReport(
         declared=True,
         findings=tuple(findings),
+        entries_declared=1,
         entries=len(numbers.entries),
         claims=len(claims),
         floor=floor,

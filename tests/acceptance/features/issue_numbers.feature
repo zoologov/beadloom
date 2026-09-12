@@ -72,3 +72,42 @@ Feature: an issue number is allocated from the log, never read off the end of it
     Given a ledger whose floor is the log's own first entry
     When the issue numbers are checked
     Then the verdict names no entry as below the floor
+
+  # BDL-069, beadloom-rqma.8. BDL-UX #270 was closed on the Gate leg and stayed
+  # live on the command a person actually types: `allocate` read the log through
+  # a resolver that returns the USABLE log and drops the reason, so a project
+  # that had written `issue_log:` and misspelled one key was told, byte for
+  # byte, the sentence a project that had written nothing gets -- while the
+  # Gate over the same config named the key. Two surfaces of one feature
+  # answering "did this project declare a log?" two ways, and the wrong one is
+  # the one the SPEC's Surfaces table lists first.
+  @bead:beadloom-rqma.8
+  Scenario: A misdeclared log refuses the allocator with the key it could not read
+    Given a project that declares an issue log and misspells the ledger key
+    When a number is allocated
+    Then the allocation is refused with the key that could not be read
+    And the refusal is not the sentence a project declaring no log gets
+
+  # BDL-069, beadloom-rqma.9. `check` reached the same false green one surface
+  # along: over a `.beadloom/config.yml` it could not read at all it printed
+  # `No issue log is declared — no leg ran.` and exited 0 — a positive assertion
+  # about a declaration nobody read. Its two siblings already answer this state
+  # correctly: `allocate` refuses with the parse failure, and the Gate step
+  # skips, WARNs and says the declaration is unknown. Two shapes reach it, a
+  # config that does not parse and a config whose top level is a list, so a fix
+  # that widens only the parse case leaves the sentence live.
+  @bead:beadloom-rqma.9
+  Scenario: A config that does not parse is not reported as an opt-out
+    Given a project whose config file does not parse as YAML
+    When the issue numbers are checked at the command line
+    Then the check says whether an issue log is declared is unknown
+    And the check does not print the sentence a project declaring no log gets
+    And the machine-readable verdict states that the declaration is undetermined
+
+  @bead:beadloom-rqma.9
+  Scenario: A config whose top level is a list is not reported as an opt-out
+    Given a project whose config file is a list at its top level
+    When the issue numbers are checked at the command line
+    Then the check says whether an issue log is declared is unknown
+    And the check does not print the sentence a project declaring no log gets
+    And the machine-readable verdict states that the declaration is undetermined

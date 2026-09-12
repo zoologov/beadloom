@@ -259,6 +259,59 @@ this item, not a separate observation.
 
 ## What is being worked on now
 
+### P1 — four populations are called "stale docs", and one indicator shows two of them
+
+**`beadloom-r9t5` · its own work item · not started — the next step is `/task-init`.**
+
+Split out of BDL-069's `beadloom-rqma.5` when that bead's axes were derived. Nineteen surfaces read
+`sync_state` and report a number or a list, using **four different populations** under one name:
+pairs `status='stale'` (8 sites), pairs `IN ('stale','missing')` (4), distinct `ref_id` — nodes (3),
+and documents after grouping (1).
+
+**Three cases show why this is a decision and not a rename.** `application/status.py:101` counts
+stale+missing while `infrastructure/health.py:41` counts stale only, and
+`services/commands/status.py:256-257` renders both on one table row — one indicator, two
+populations. `debt_report/collect.py` counts nodes under a docstring that says "entries" and a SPEC
+that says "per stale doc-code **pair**", and the debt weight depends on which is right. The
+`doc_status` screen counts nodes beside per-pair numbers.
+
+**Why it is not inside BDL-069.** What a screen should count is a product judgement per surface.
+BDL-069 keeps the mechanical half — one shared computation with the populations named — and this
+work item keeps the nineteen decisions. Making them inside a closing epic, by one agent, is the
+thing that epic exists to prevent.
+
+### P0 — `architecture-layers` evaluates 16 of 353 edges, and a green `lint --strict` claims all of them
+
+**`beadloom-t6zq` · its own epic, next after BDL-069 · not started — the next step is `/task-init`.**
+
+Found by BDL-069's `beadloom-rqma.4` while choosing where a helper called from three domains may
+live. The rule that enforces the direction of dependencies between layers is severity `error`, and
+it evaluates an edge only when both ends carry a layer tag. A tag is not inherited through
+`part_of`, so a component or a feature is in no layer however deep inside one it sits — and the
+rule's own docstring says such nodes are "silently skipped".
+
+**Measured on this repository:** 12 nodes carry a layer tag; there are 353 active `depends_on`
+edges; **16 are evaluated**. By `part_of` ancestry, 345 of the 353 have a layer at both ends. One
+of those 345 is a reverse edge nothing reports — `agent-prime` (onboarding) → `reindex`
+(application). And a probe on a copy of HEAD, importing a domain module from
+`infrastructure/git_activity.py`, produced the edge and `lint --strict` reported no layer finding.
+
+**Why it ranks P0.** This is the check a team trusts to say the architecture's boundaries hold.
+Today "`lint --strict` is green" does not mean "no infrastructure module imports a domain", which is
+what the layering declares. It is the population-of-zero class BDL-068 and BDL-069 exist to remove,
+in the instrument with the widest reach — and it sits right before outside validation, where a
+team will read that green as a guarantee.
+
+**Why it is not inside BDL-069.** It is not a tail. Fixing it changes how the main architecture
+check decides, and the obvious fix — inherit a layer through `part_of` — turns a green Gate red on
+the upgrade that ships it, here and for an adopter. BDL-069's CONTEXT holds that no adopter's Gate
+may change verdict on upgrade.
+
+**What the planning has to settle before any bead is cut:**
+- report the rule's population first — how many edges it evaluated and how many it skipped for an
+  untagged end, the way `scenario-coverage` states its own — and only then change the verdict;
+- fix or explicitly account for `agent-prime` → `reindex` before inheritance ships.
+
 ### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel
 
 **`beadloom-4fdn` (BDL-UX #282) · `beadloom-5cpe` (BDL-UX #214) · both critical, both blocking

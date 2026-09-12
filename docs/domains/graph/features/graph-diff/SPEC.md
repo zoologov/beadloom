@@ -82,14 +82,18 @@ All dataclasses are frozen (immutable).
 | `since_ref` | `str`                   | The git ref compared against (or `"snapshot:<id>"` for snapshot diffs). |
 | `nodes`     | `tuple[NodeChange, ...]`| All detected node changes.            |
 | `edges`     | `tuple[EdgeChange, ...]`| All detected edge changes.            |
+| `duplicates`| `tuple[DuplicateRefId, ...]` | Every `ref_id` carried by more than one node, on either side. Defaults to `()`. |
 
 **Property:** `has_changes -> bool` -- `True` when `nodes` or `edges` is non-empty.
+`duplicates` is deliberately not part of it: a duplicate is a REPORT about the
+graph, and this command's exit code says whether the graph CHANGED (BDL-069).
 
 ### Algorithm
 
 1. **Validate git ref.** Call `_validate_git_ref` which runs `git rev-parse --verify <ref>`. Raise `ValueError` on failure.
-2. **Read current state from disk.** Glob `*.yml` files in `<project_root>/.beadloom/_graph/`. For each file, parse YAML content via `_parse_yaml_content` to extract a `nodes_dict` (keyed by `ref_id`) and an `edges_set` of `(src, dst, kind)` tuples. Merge all files into combined `current_nodes` and `current_edges`.
-3. **Read previous state from git ref.** Call `_list_graph_files_at_ref` (runs `git ls-tree -r --name-only <ref> .beadloom/_graph/`) to enumerate files. For each, call `_read_yaml_at_ref` (runs `git show <ref>:<path>`) and parse the content. Merge into `prev_nodes` and `prev_edges`.
+2. **Read current state from disk.** Glob `*.yml` files in `<project_root>/.beadloom/_graph/`. For each file, parse YAML content via `_parse_yaml_content` to get the node mappings in file order and an `edges_set` of `(src, dst, kind)` tuples. Each node is paired with the file it was read from.
+3. **Read previous state from git ref.** Call `_list_graph_files_at_ref` (runs `git ls-tree -r --name-only <ref> .beadloom/_graph/`) to enumerate files. For each, call `_read_yaml_at_ref` (runs `git show <ref>:<path>`) and parse the content. Each node is paired with `<ref>:<path>`.
+3b. **Reduce each side to one node per `ref_id`, and report what the reduction dropped.** `loader.unique_by_ref_id` takes each side's `(where, node)` pairs and returns the nodes kept — the FIRST under a `ref_id`, the rule the loader follows — plus one `DuplicateRefId` per node dropped. The two sides' findings are concatenated, current side first. Until BDL-069 this side keyed a dict per file and kept the LAST, so a diff could describe a node the loaded graph does not hold, and said nothing about it.
 4. **Compare nodes.** Union all `ref_id` keys from both maps. Classify each:
    - Present in current only: `"added"`.
    - Present in previous only: `"removed"`.
@@ -106,7 +110,9 @@ All dataclasses are frozen (immutable).
 | `_validate_git_ref`        | `git rev-parse --verify <ref>`                   | Verify the ref exists. Returns `bool`.          |
 | `_read_yaml_at_ref`        | `git show <ref>:<path>`                          | Read file content at ref; returns `None` if absent. |
 | `_list_graph_files_at_ref` | `git ls-tree -r --name-only <ref> .beadloom/_graph/` | List `.yml` files at the ref. Returns `list[str]` of relative paths. |
-| `_parse_yaml_content`      | (none)                                           | Parse YAML string into `(nodes_dict, edges_set)` where `nodes_dict: dict[str, dict[str, object]]` (keys: `kind`, `summary`, `source`, `tags`) and `edges_set: set[tuple[str, str, str]]`. |
+| `_parse_yaml_content`      | (none)                                           | Parse YAML string into `(nodes, edges_set)` where `nodes: list[dict[str, Any]]` is the node mappings carrying a `ref_id`, in file order, and `edges_set: set[tuple[str, str, str]]`. |
+| `_node_view`               | (none)                                           | The four fields this diff compares, read off one node: `kind`, `summary`, `source`, `tags`. |
+| `_render_duplicates`       | (none)                                           | Print each `DuplicateRefId`, before any verdict about changes. |
 
 ### Rendering and Serialization
 
@@ -115,6 +121,11 @@ def render_diff(diff: GraphDiff, console: Console) -> None
 ```
 
 Renders a Rich-formatted diff to the console:
+- Duplicate report first, on both the changed and the unchanged path: one yellow
+  line per `ref_id` carried twice, naming the node kept, the node dropped and
+  what the drop costs. It precedes the header because the unchanged path ends on
+  `No graph changes since <ref>`, which is exactly the sentence a silent
+  reduction would otherwise be read under.
 - Header: `"Graph diff (since {ref}):"` (bold).
 - No-change case: prints `"No graph changes since {ref}."`.
 - Nodes section: `+` (green) for added, `~` (yellow) for changed, `-` (red) for removed. Each entry shows `ref_id (kind)`. Changed nodes additionally display:
@@ -129,7 +140,7 @@ Renders a Rich-formatted diff to the console:
 def diff_to_dict(diff: GraphDiff) -> dict[str, object]
 ```
 
-Serializes a `GraphDiff` to a JSON-compatible dictionary. Produces a dict with keys: `since_ref`, `has_changes`, `nodes` (list of `asdict(NodeChange)`), `edges` (list of `asdict(EdgeChange)`).
+Serializes a `GraphDiff` to a JSON-compatible dictionary. Produces a dict with keys: `since_ref`, `has_changes`, `nodes` (list of `asdict(NodeChange)`), `edges` (list of `asdict(EdgeChange)`), `duplicates` (list of `asdict(DuplicateRefId)`, each carrying `ref_id`, `kept` and `dropped`). The JSON form carries what the text form prints, so a machine consumer is not the one consumer that cannot see a `ref_id` carried twice.
 
 ---
 
@@ -212,7 +223,8 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - `GraphDiff.nodes` and `GraphDiff.edges` are immutable tuples.
 - Node changes are sorted lexicographically by `ref_id`.
 - Edge changes are sorted lexicographically by `(src, dst, kind)`.
-- `has_changes` returns `True` if and only if at least one `NodeChange` or `EdgeChange` exists.
+- `has_changes` returns `True` if and only if at least one `NodeChange` or `EdgeChange` exists. A `DuplicateRefId` never moves it, so no project's `beadloom diff` changes exit code because the report was added.
+- **Both sides reduce a duplicate `ref_id` by the loader's own rule** (`unique_by_ref_id`, first node wins) and both report what they dropped, each finding naming where it read the node — a file name for the working tree, `<ref>:<path>` for the git ref. A reduction that disagreed with the loader's described a node the graph does not hold; a guard on one side of a comparison and not the other invents changes.
 - `diff_to_dict` output is deterministic for a given `GraphDiff` input.
 - `NodeChange.old_tags` and `NodeChange.new_tags` are always sorted tuples.
 - **Both sides of the diff are decoded by the same call** (`_decode_graph_yaml`,
@@ -228,6 +240,14 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - Paths listed by `git ls-tree` are decoded with `errors="surrogateescape"`, the
   rule `os.fsdecode` itself uses, so a name that is not UTF-8 round-trips back
   through `git show`'s argv instead of raising.
+- **Both sides pass through one parse** (`_parse_yaml_content`), and that is where
+  the parse and mapping guards live rather than in a directory walk: a graph file
+  that will not parse, or whose top level is not a mapping, contributes no nodes
+  and no edges on either side. A guard applied to one side of a comparison and not
+  the other invents changes, which is why this reader restates the guards instead
+  of going through `onboarding.graph_files.each_graph_file` — a policy over a
+  DIRECTORY, and half of this input is content at a git ref, where there is no
+  directory to walk (BDL-069).
 
 ---
 
@@ -236,7 +256,8 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - Requires a git repository at `project_root` (all git commands run with `cwd=project_root`).
 - Default comparison is against `HEAD`.
 - Raises `ValueError` on an invalid git ref (determined by `git rev-parse --verify`).
-- Only considers `.yml` files inside `.beadloom/_graph/`.
+- Only considers `.yml` files inside `.beadloom/_graph/`, and not `rules.yml`,
+  which holds rules and no nodes. The name is skipped on both sides.
 - Files that do not exist at the given ref are treated as absent (contributing zero nodes and edges for that ref).
 - YAML files are parsed with `yaml.safe_load`; `None` content is treated as empty.
 - `compute_diff_from_snapshot` requires a database with `nodes`, `edges`, and `graph_snapshots` tables.

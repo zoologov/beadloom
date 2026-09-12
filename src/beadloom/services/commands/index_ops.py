@@ -215,10 +215,15 @@ def link(
     List links: beadloom link AUTH-001
 
     Remove a link: beadloom link AUTH-001 --remove https://github.com/org/repo/issues/42
-    """
-    import yaml
 
+    The graph is read through
+    :func:`~beadloom.onboarding.graph_files.each_graph_file`, which is where the
+    skip policy is stated: BDL-069 measured that this body reads the directory
+    for NODES, so a file it cannot parse must leave the answer "that node is not
+    in the graph" rather than a traceback at whoever ran `beadloom link`.
+    """
     from beadloom.infrastructure.atomic_io import write_yaml_atomic
+    from beadloom.onboarding.graph_files import each_graph_file
 
     project_root = project or Path.cwd()
     graph_dir = project_root / ".beadloom" / "_graph"
@@ -232,11 +237,7 @@ def link(
     target_data: dict[str, object] | None = None
     node_index: int | None = None
 
-    for yml_path in sorted(graph_dir.glob("*.yml")):
-        text = yml_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-        if data is None:
-            continue
+    for yml_path, data in each_graph_file(graph_dir):
         for i, node in enumerate(data.get("nodes") or []):
             if node.get("ref_id") == ref_id:
                 target_file = yml_path
@@ -277,9 +278,7 @@ def link(
         node["links"] = links if links else None
         if not links and "links" in node:
             del node["links"]
-        write_yaml_atomic(
-            target_file, target_data, default_flow_style=False, sort_keys=False
-        )
+        write_yaml_atomic(target_file, target_data, default_flow_style=False, sort_keys=False)
         click.echo(f"Removed link from {ref_id}.")
         return
 
@@ -293,7 +292,5 @@ def link(
 
     links.append({"url": url, "label": detected_label})
     node["links"] = links
-    write_yaml_atomic(
-        target_file, target_data, default_flow_style=False, sort_keys=False
-    )
+    write_yaml_atomic(target_file, target_data, default_flow_style=False, sort_keys=False)
     click.echo(f"Added [{detected_label}] {url} to {ref_id}.")

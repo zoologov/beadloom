@@ -53,6 +53,12 @@ derivation is known to be blind:
 ``no-node-for-path``
     A found site the graph does not own, so its boundary is unknown rather than
     inside.
+``node-owns-unread-files``
+    A node this answer names owns files this derivation does not read — a
+    template, a document, a configuration file under its source. A change that
+    has to reach them is on no axis here, and the node's row in the ``## Axes``
+    section carries the same fact, because BDL-UX #284 is a ``callers`` row read
+    as "not changed" while the fix lived in that node's templates.
 """
 
 from __future__ import annotations
@@ -77,9 +83,10 @@ if TYPE_CHECKING:
 #: The dispatch this derivation cannot follow, by the name the source spells it.
 _DYNAMIC_DISPATCH = "getattr"
 
-#: The suffix this derivation reads. A target carrying any other one exists, is
-#: a file and holds nothing an AST derivation can answer about.
-_PYTHON_SUFFIX = ".py"
+#: The suffix this derivation reads. A file carrying any other one exists, is a
+#: file and holds nothing an AST derivation can answer about — whether it is the
+#: target itself or a template a node the answer names owns.
+PYTHON_SUFFIX = ".py"
 
 
 @dataclass(frozen=True)
@@ -130,9 +137,9 @@ def _why_it_is_not_python(path: Path) -> str | None:
     ``SyntaxError`` at some line of prose would name a symptom of the wrong
     thing.
     """
-    if path.suffix != _PYTHON_SUFFIX:
+    if path.suffix != PYTHON_SUFFIX:
         spelt = path.suffix or "(none)"
-        return f"its suffix is {spelt} and this derivation reads {_PYTHON_SUFFIX} source"
+        return f"its suffix is {spelt} and this derivation reads {PYTHON_SUFFIX} source"
     try:
         module_tree(path)
     except UNPARSEABLE as failure:

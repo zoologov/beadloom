@@ -128,15 +128,20 @@ then take the scope decision in the last two columns — the derivation says wha
 over, a person says how much of it this work item takes. The `refs:` of every bead below is
 generated from the rows kept in scope, so a bead naming a node this table does not is a finding.
 
+Rule each row by the node's role in the change: the axis a node surfaced under is not its role.
+The axis is the node's relation to the seed, so a `callers` row can be a work site — a node that
+calls into the change can also own what the change must edit. `Owns unread` names the files the
+node owns that the derivation could not read; a count there is a question to answer before `no`.
+
 > **Derived by:** `beadloom impact` over [the target the derivation was run on]
 > **Seed:** [the seed the answer names, and the rule that derived it — `none` when the rule
 > found no seed, in which case every axis below is unresolved and not empty]
 > **Unresolved:** [what the derivation could not read, by kind and count — `none` is a claim
 > about a run, so say which run]
 
-| Axis | Node | Sites | In scope | Why |
-|------|------|-------|----------|-----|
-| co-writers | [ref-id] | [how many, and the first one] | yes / no | [why it is in or out] |
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|------|------|-------|-------------|----------|-----|
+| co-writers | [ref-id] | [how many, and the first one] | [files the node owns the derivation could not read, or none] | yes / no | [why it is in or out] |
 
 ## Proposed Solution
 
@@ -359,15 +364,20 @@ then take the scope decision in the last two columns — the derivation says wha
 over, a person says how much of it this work item takes. The `refs:` of every bead below is
 generated from the rows kept in scope, so a bead naming a node this table does not is a finding.
 
+Rule each row by the node's role in the change: the axis a node surfaced under is not its role.
+The axis is the node's relation to the seed, so a `callers` row can be a work site — a node that
+calls into the change can also own what the change must edit. `Owns unread` names the files the
+node owns that the derivation could not read; a count there is a question to answer before `no`.
+
 > **Derived by:** `beadloom impact` over [the target the derivation was run on]
 > **Seed:** [the seed the answer names, and the rule that derived it — `none` when the rule
 > found no seed, in which case every axis below is unresolved and not empty]
 > **Unresolved:** [what the derivation could not read, by kind and count — `none` is a claim
 > about a run, so say which run]
 
-| Axis | Node | Sites | In scope | Why |
-|------|------|-------|----------|-----|
-| co-writers | [ref-id] | [how many, and the first one] | yes / no | [why it is in or out] |
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|------|------|-------|-------------|----------|-----|
+| co-writers | [ref-id] | [how many, and the first one] | [files the node owns the derivation could not read, or none] | yes / no | [why it is in or out] |
 
 ## Beads
 

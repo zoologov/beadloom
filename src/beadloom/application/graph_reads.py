@@ -27,10 +27,12 @@ from beadloom.infrastructure.git_activity import GitActivity, analyze_git_activi
 from beadloom.infrastructure.repository import (
     EdgeRow,
     NodeRow,
+    StaleCount,
     SymbolRow,
     count_docs,
     count_docs_for_ref,
     count_edges_touching,
+    count_stale_pairs,
     get_all_edges,
     get_all_nodes,
     get_doc_ref_ids,
@@ -46,17 +48,20 @@ from beadloom.infrastructure.repository import (
     get_stale_pairs_for_ref,
     get_symbols_for_source,
     search_nodes_like,
+    stale_node_refs,
 )
 
 __all__ = [
     "EdgeRow",
     "GitActivity",
     "NodeRow",
+    "StaleCount",
     "SymbolRow",
     "analyze_git_activity",
     "count_docs",
     "count_docs_for_ref",
     "count_edges_touching",
+    "count_stale_pairs",
     "get_all_edges",
     "get_all_nodes",
     "get_doc_ref_ids",
@@ -72,4 +77,5 @@ __all__ = [
     "get_stale_pairs_for_ref",
     "get_symbols_for_source",
     "search_nodes_like",
+    "stale_node_refs",
 ]

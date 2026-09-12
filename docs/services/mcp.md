@@ -161,6 +161,8 @@ Get index statistics.
 
 Returns: `nodes_count`, `edges_count`, `docs_count`, `chunks_count`, `symbols_count`, `stale_count`, `doc_coverage`, `last_reindex`, `beadloom_version`.
 
+`stale_count` counts doc-code PAIRS — one `sync_state` row per document AND code file, so one README over three code files contributes three. The key is unchanged; the tool's own description said "stale doc count" over that number until BDL-069 `beadloom-rqma.5` and now says pair.
+
 #### update_node
 
 Update a graph node's summary or source path in YAML and SQLite.
@@ -234,7 +236,7 @@ Get compact project context for session start. Call this at the beginning of eve
 }
 ```
 
-Returns JSON with: project name, version, architecture summary (domain/service/feature counts, symbols), health (stale docs, lint violations, last reindex), architecture rules, domain list, and agent instructions.
+Returns JSON with: project name, version, architecture summary (domain/service/feature counts, symbols), health (lint violations, last reindex, and `stale_docs`, one entry per stale doc-code pair carrying `doc_path`, `code_path` and `ref_id`), architecture rules, domain list, and agent instructions.
 
 #### why
 

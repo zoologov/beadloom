@@ -59,3 +59,23 @@ Feature: the Axes section records the derivation it came from and the scope deci
     Given a work item whose second derivation block orders its columns differently
     When the Axes section is read back
     Then the second table's row is read with its own node and its own scope decision
+
+  # BDL-UX #284. `impact` now writes, on each row, the files the row's node owns
+  # that the derivation could not read. This section is READ by `beadloom axes`,
+  # and what it returns feeds `beadloom waves` and `scope-check`, so the reader
+  # takes the new column and every table written before it existed reads exactly
+  # as it did -- with the unstated column read as not stated, never as "none".
+
+  @bead:beadloom-rqma.2
+  Scenario: A row's unread ownership is read back from the section
+    Given an impact answer whose caller's node owns a file the derivation could not read
+    When the Axes section is rendered from it and read back
+    Then the caller's row reads back with that file counted
+    And the rows whose nodes own nothing unread read back as none
+
+  @bead:beadloom-rqma.2
+  Scenario: A table written before the column existed reads as it did
+    Given a brief whose "Axes" table carries no column for unread ownership
+    When the Axes section is read back
+    Then every row reads with the node, sites and scope decision it states
+    And no row claims a count of unread files

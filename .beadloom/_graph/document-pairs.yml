@@ -1,0 +1,24 @@
+  # Feature: a declared pair of documents, compared by SHAPE (BDL-069 S4,
+  # `beadloom-19m6`). This repository ships two READMEs and nothing held them
+  # against each other; on 2026-09-10 the English one was missing a paragraph
+  # the Russian one had, and the only number that differed between the files was
+  # a line count. The files are in two languages, so only the block sequence is
+  # comparable -- a text comparison over a translation is a check somebody has
+  # to switch off.
+nodes:
+  - ref_id: document-pairs
+    kind: feature
+    summary: "A declared pair of documents compared by shape: the sequence of blocks each is built from, the heading levels, and the row counts of the lists and the tables"
+    source: src/beadloom/doc_sync/document_pairs.py
+    docs:
+      - docs/domains/doc-sync/features/document-pairs/SPEC.md
+edges:
+  - src: document-pairs
+    dst: doc-sync
+    kind: part_of
+  - src: document-pairs
+    dst: markdown-tables
+    kind: depends_on
+  - src: document-pairs
+    dst: config-declarations
+    kind: depends_on

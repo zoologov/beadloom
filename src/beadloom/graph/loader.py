@@ -26,6 +26,7 @@ from beadloom.graph.sdl import extract_surface
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
 
 
@@ -43,6 +44,19 @@ def get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]:
         return set()
     extra: dict[str, Any] = json.loads(str(raw))
     return set(extra.get("tags", []))
+
+
+#: The file in ``.beadloom/_graph/`` that is not a graph file. ``rules.yml``
+#: holds rules and no nodes, so a reader that walked it would either find
+#: nothing or mistake a rule for a node.
+#:
+#: It is declared HERE, in the domain that owns the graph file format and that
+#: also reads ``rules.yml`` (``graph/linter.py``), and re-exported by
+#: ``onboarding.graph_files`` for the readers that go through the skip policy.
+#: The direction is what makes one constant possible: ``onboarding`` may import
+#: ``graph`` and the reverse is a cycle, so a constant needed on both sides can
+#: only live on this one (BDL-069).
+NOT_A_GRAPH_FILE = frozenset({"rules.yml"})
 
 # Fields mapped directly to SQLite columns (not stored in ``extra``).
 _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source", "lifecycle"})
@@ -77,6 +91,102 @@ def _normalize_lifecycle(raw: object, context: str, result: GraphLoadResult) -> 
         )
         return _DEFAULT_LIFECYCLE
     return value
+
+
+@dataclass(frozen=True)
+class NodeOrigin:
+    """One node's place in a duplicate report: where it was read, what it declared.
+
+    *where* is the reader's own word for the place — a file name for the working
+    tree, ``<ref>:<path>`` for content read at a git ref — because a report that
+    names two nodes has to let the reader tell them apart.
+    """
+
+    where: str
+    kind: str
+    source: str
+
+    def describe(self) -> str:
+        """``services.yml (kind=domain, source 'src/app/')``."""
+        source = f"source '{self.source}'" if self.source else "no source"
+        return f"{self.where} (kind={self.kind or '<none>'}, {source})"
+
+
+@dataclass(frozen=True)
+class DuplicateRefId:
+    """One ``ref_id`` carried by two nodes: the one a reader keeps, and one it drops.
+
+    A graph file carrying a ``ref_id`` twice was reduced to one node and the
+    report named neither of them (BDL-UX #214). On the ordinary single-package
+    src-layout the node that is dropped is the one carrying the ``source``, so
+    the graph keeps an empty root and every rule over the package runs on an
+    empty population — which is why the report states the CONSEQUENCE and not
+    only the collision.
+    """
+
+    ref_id: str
+    kept: NodeOrigin
+    dropped: NodeOrigin
+
+    def describe(self) -> str:
+        """The one line a reader prints, naming both nodes and what the drop costs."""
+        return (
+            f"Duplicate ref_id '{self.ref_id}': kept {self.kept.describe()}, "
+            f"dropped {self.dropped.describe()} — {self._what_the_drop_costs()}"
+        )
+
+    def _what_the_drop_costs(self) -> str:
+        if not self.dropped.source:
+            return "only the kept node is in the graph"
+        lost = f"nothing under '{self.dropped.source}' is owned, checked or counted"
+        if self.kept.source:
+            return lost
+        return f"the node that carries the source is the one dropped, so {lost}"
+
+
+def _origin_of(where: str, node: Any) -> NodeOrigin:
+    return NodeOrigin(
+        where=where,
+        kind=str(node.get("kind", "")),
+        source=str(node.get("source") or ""),
+    )
+
+
+def unique_by_ref_id(
+    nodes: Iterable[tuple[str, dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[DuplicateRefId]]:
+    """Reduce nodes to one per ``ref_id`` and report every node that reduction drops.
+
+    Each item pairs a node with the ORIGIN it was read from, so a finding can
+    name the file — or the git ref — each of the two nodes came from. The first
+    node under a ``ref_id`` is the one kept, which is the rule ``load_graph``
+    has always followed; it is stated here so that no second reader of
+    ``.beadloom/_graph/`` derives it again and gets a different answer.
+    ``graph/diff.py`` did: it keyed a dict by ``ref_id`` and kept the LAST,
+    silently, so a diff could describe a node the graph does not hold.
+
+    A node that carries no ``ref_id``, or that is not a mapping at all, is kept
+    and reported by nobody here: the reader that inserts it is the one that can
+    say what is wrong with it, and swallowing it on the way past would replace
+    one silence with another.
+    """
+    kept: list[dict[str, Any]] = []
+    duplicates: list[DuplicateRefId] = []
+    first_seen: dict[str, NodeOrigin] = {}
+    for where, node in nodes:
+        ref_id = str(node.get("ref_id", "")) if isinstance(node, dict) else ""
+        if not ref_id:
+            kept.append(node)
+            continue
+        origin = _origin_of(where, node)
+        if ref_id in first_seen:
+            duplicates.append(
+                DuplicateRefId(ref_id=ref_id, kept=first_seen[ref_id], dropped=origin)
+            )
+            continue
+        first_seen[ref_id] = origin
+        kept.append(node)
+    return kept, duplicates
 
 
 class GraphParseError(Exception):
@@ -140,8 +250,24 @@ def parse_graph_file(path: Path) -> ParsedFile:
     valid YAML and parse identically. Any YAML syntax error is raised as a
     :class:`GraphParseError` naming the file and line -- never swallowed into
     a silent empty result (see BDL-UX-Issues #86).
+
+    A file that will not DECODE is the same finding as one that will not parse,
+    and was not one until BDL-069: ``read_text`` sat outside the ``try``, so a
+    graph file that is not UTF-8 left `load_graph` as a raw ``UnicodeDecodeError``
+    rather than as an entry in ``result.errors``. That is the one shape
+    ``each_graph_file`` guards which this reader's own guards did not cover, and
+    the loader's contract is to report it, not to skip it.
+
+    A ``ref_id`` carried twice is NOT reported here, and the reason is the
+    population rather than the layer: two nodes sharing a ``ref_id`` may sit in
+    two different files, so the question is about the DIRECTORY and this body
+    reads one file. :func:`load_graph` takes it, over every node of every file,
+    through :func:`unique_by_ref_id`.
     """
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise GraphParseError(f"Failed to read graph file '{path.name}': {exc}.") from exc
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -182,11 +308,27 @@ def update_node_in_yaml(
     writes the YAML back to disk, and updates the ``nodes`` table.
 
     Returns ``True`` if the node was found and updated.
+
+    NOT ROUTED THROUGH ``each_graph_file``, and the reason is structural rather
+    than a judgement about this body: BDL-069 measured that it reads the
+    directory for NODES, so it belongs in that policy's population, and the
+    policy lives in ``onboarding``, which already imports ``graph``. Importing it
+    here would be a ``graph`` -> ``onboarding`` edge and a dependency cycle,
+    which ``no-dependency-cycles`` refuses at error severity. So the policy's
+    three guards are restated here — a file that will not read, one that will not
+    parse, and one that parses to something other than a mapping are each
+    skipped rather than raised on — and the duplication is what
+    ``beadloom-4axf`` exists to remove by moving the policy into a layer every
+    reader may import.
     """
     for yml_path in sorted(graph_dir.glob("*.yml")):
-        text = yml_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-        if data is None:
+        if yml_path.name in NOT_A_GRAPH_FILE:
+            continue
+        try:
+            data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, UnicodeDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
             continue
         nodes_list: list[dict[str, Any]] = data.get("nodes") or []
         for node in nodes_list:
@@ -200,9 +342,7 @@ def update_node_in_yaml(
                 node["source"] = source
 
             # Write YAML back to disk (atomic — crash-safe; same bytes).
-            write_yaml_atomic(
-                yml_path, data, default_flow_style=False, allow_unicode=True
-            )
+            write_yaml_atomic(yml_path, data, default_flow_style=False, allow_unicode=True)
 
             # Update SQLite.
             if summary is not None:
@@ -272,34 +412,55 @@ def load_graph(
     grandparent (``<root>/.beadloom/_graph`` -> ``<root>``).
 
     Returns a :class:`GraphLoadResult` with counts and diagnostics.
+
+    NOT ROUTED THROUGH ``each_graph_file``, for two reasons that are both
+    independent of each other. The structural one is the cycle
+    :func:`update_node_in_yaml` states. The behavioural one is that this reader
+    must REPORT the file it could not parse rather than pass over it: a graph
+    file that will not parse is recorded in ``result.errors`` naming the file and
+    the line, which is what stops a broken graph from loading as a silently
+    smaller one (BDL-UX #86). ``each_graph_file`` skips such a file, which is the
+    right answer for a reader whose caller is `init` and the wrong one here. The
+    guards themselves are in :func:`parse_graph_file`, so the two shapes
+    ``each_graph_file`` also guards — a file that will not read, and one that
+    parses to something other than a mapping — reach the caller as findings
+    rather than as tracebacks.
     """
     if project_root is None:
         project_root = graph_dir.parent.parent
     result = GraphLoadResult()
 
-    # Collect parsed data from all YAML files.
-    all_nodes: list[dict[str, Any]] = []
+    # Collect parsed data from all YAML files, each node paired with the file it
+    # was read from — a duplicate report that cannot name the two files is a
+    # report an adopter cannot act on.
+    read_nodes: list[tuple[str, dict[str, Any]]] = []
     all_edges: list[dict[str, Any]] = []
     for yml_path in sorted(graph_dir.glob("*.yml")):
+        if yml_path.name in NOT_A_GRAPH_FILE:
+            continue
         try:
             parsed = parse_graph_file(yml_path)
         except GraphParseError as exc:
             # Record the error loudly; do NOT silently yield an empty graph.
             result.errors.append(str(exc))
             continue
-        all_nodes.extend(parsed.nodes)
+        read_nodes.extend((yml_path.name, node) for node in parsed.nodes)
         all_edges.extend(parsed.edges)
 
     # --- Pass 1: insert nodes ---
+    # The reduction to one node per ref_id is REPORTED rather than performed in
+    # silence (BDL-UX #214). It stays a report: the graph loads, the kept nodes
+    # are the ones it always kept, and the finding goes to ``errors``, where a
+    # duplicate has always been recorded — so no graph changes verdict because
+    # this report was added.
+    all_nodes, duplicates = unique_by_ref_id(read_nodes)
+    result.errors.extend(duplicate.describe() for duplicate in duplicates)
+
     seen_ref_ids: set[str] = set()
     for node in all_nodes:
         ref_id: str = node.get("ref_id", "")
         if not ref_id:
             result.errors.append("Node missing ref_id, skipped")
-            continue
-
-        if ref_id in seen_ref_ids:
-            result.errors.append(f"Duplicate ref_id '{ref_id}', skipped")
             continue
         seen_ref_ids.add(ref_id)
 
@@ -376,9 +537,7 @@ def _process_edge(
     if src_foreign is None or dst_foreign is None:
         return  # malformed @... — already recorded as an error
 
-    lifecycle = _normalize_lifecycle(
-        edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
-    )
+    lifecycle = _normalize_lifecycle(edge.get("lifecycle"), f"Edge '{src}→{dst}'", result)
     edge_extra = _edge_extra(edge)
     _fold_graphql_surface(edge_extra, edge_kind, project_root, src, dst, result)
     contract_key = _contract_key(edge_extra)

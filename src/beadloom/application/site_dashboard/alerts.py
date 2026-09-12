@@ -14,6 +14,7 @@ from beadloom.application.site_dashboard._common import (
     _DEBT_ALERT_SEVERITY,
     _as_int,
 )
+from beadloom.infrastructure.repository import StaleCount
 
 # Alert severity ordering (lower = surfaced first). BREAKING contracts lead the
 # attention banner, then errors (lint/doctor/drift), then warnings (stale/debt).
@@ -94,13 +95,17 @@ def _build_alerts(
             )
         )
 
+    # A count of PAIRS (one `sync_state` row per document AND code file), which the
+    # docs card beside it shows as "N stale of M tracked" pairs and `sync-check`
+    # reports the same way. The `kind` keeps its name: it is a key, not a count.
     stale = _as_int(docs_data.get("stale", 0))
     if stale:
         alerts.append(
             _alert(
                 "stale_doc",
                 "warn",
-                f"{stale} stale doc(s) — refresh and re-run `beadloom sync-check`",
+                f"{StaleCount.of_pairs(stale).phrase} — refresh and re-run "
+                f"`beadloom sync-check`",
             )
         )
 

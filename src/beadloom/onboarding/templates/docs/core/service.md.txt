@@ -6,7 +6,7 @@
 
 `{{source}}`
 
-{{symbols_section}}## Dependencies
+{{modules_section}}{{symbols_section}}## Dependencies
 
 - Depends on: {{depends_on}}
 - Used by: {{used_by}}

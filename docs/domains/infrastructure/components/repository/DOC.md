@@ -38,7 +38,37 @@ Edge reads: `get_all_edges`, `get_part_of_children`, `get_outgoing_edges`,
 Doc reads: `get_doc_ref_ids`, `count_docs`, `count_docs_for_ref`,
 `get_docs_for_ref`.
 
-Sync-state reads: `get_stale_pairs_for_ref`.
+Sync-state reads: `get_stale_pairs_for_ref`, `count_stale_pairs`,
+`stale_node_refs`, and the `StaleCount` value they return.
+
+**How many stale things there are, and the word for them** — one computation,
+because there is more than one population and they were all called "stale docs".
+A `sync_state` row is a PAIR: one document AND one code file, so three code files
+of one package are three stale pairs over one README. Nineteen surfaces read this
+table and reported a number, under four different populations, and three beads
+fixed the label one surface at a time -- `beadloom-h7b3` changed one place and
+found three, `beadloom-yn6i` changed those and found four more (BDL-069
+`beadloom-rqma.5`).
+
+- `StaleCount(count, noun)` — built through `StaleCount.of_pairs(n)`, never
+  directly, so the number and the word for it cannot be separated at a call site.
+  `.phrase` is the one spelling of `N stale pair(s)`; `.noun` is the word alone,
+  for a column label or a heading.
+- `count_stale_pairs(conn, ref_ids=None)` -> `StaleCount` — rows with
+  `status = 'stale'`. `None` means every node; an EMPTY collection counts nothing
+  rather than everything, because a caller asking about no node (`beadloom why`
+  on a node with no dependents) is not asking about all of them.
+- `stale_node_refs(conn)` -> `list[str]` — the NODES that own at least one stale
+  pair. A different population, and therefore a different name: one node with
+  three stale pairs is one entry here and three there.
+
+Callers: the Gate summary, the site dashboard's alert, docs card and per-node
+recommendations, `beadloom ctx`, `beadloom why` and the TUI dependency path,
+`sync-check`'s own report, the TUI status bar and sync notification, and the MCP
+`get_status` tool. `onboarding/scanner/prime.py` is the one surface that keeps
+its own copy of the sentence: `onboarding-no-direct-infra` forbids the import and
+exempts `infrastructure/db` only, and that entry's own exit condition is
+`prime_context()` moving to this seam whole (BDL-UX #150).
 
 Code-symbol reads: `get_symbols_for_source` (raw LIKE prefix for directory
 sources — kept for callers that genuinely want the whole subtree).

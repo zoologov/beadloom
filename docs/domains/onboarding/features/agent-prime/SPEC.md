@@ -25,8 +25,9 @@ Cross-IDE context injection via a three-layer architecture.
    disagreeing about its population (the review of `.16`, minor 2). One node is carved out
    and the sentence says so since BDL-067 `.6`: a node whose `ref_id` is the root's own gets
    no edge, because an edge from a node to itself is not a parent.
-   That `ref_id` collision (reachable on `src/<project>/`) is tracked as its own defect,
-   `beadloom-7c6k`, since its fix is a unique `ref_id` rather than an edge. The
+   That `ref_id` collision was reachable on `src/<project>/` until BDL-069 and is not
+   produced by either writer now — see *Two nodes never share a ref_id* below; the carve-out
+   stays because this function also runs over a graph a hand edit can reach. The
    same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
    domain, so a domain without that edge makes `init` exit 0 over a graph the very next
    `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
@@ -47,6 +48,41 @@ Cross-IDE context injection via a three-layer architecture.
    set would go stale the next time `generate_rules` gains a rule. With no single root — an
    import-only run on a virgin project, or a graph with two unparented services — no parent
    is named rather than one guessed.
+
+   **Two nodes never share a `ref_id`, and that is a writer's duty rather than the loader's.**
+   The graph identifies a node BY its `ref_id`, so a writer that emits one name twice does not
+   write two nodes: it writes one, and the report it prints counts two. On the ordinary
+   single-package src-layout — a project called `myapp` holding `src/myapp/` — the root
+   service takes its name from the manifest and the package takes its from the directory, and
+   those are one string. Measured on the published 4.0.0 wheel: `init --yes --mode bootstrap`
+   reported `Graph: 2 nodes` and `beadloom status` then reported `Nodes: 1`. The node dropped
+   was the one carrying `source: src/myapp/`, so the package the project is named after was
+   absent from every answer the graph gave, and `domain-needs-parent` went inert rather than
+   red — a rule cannot fail over a node the graph does not hold (BDL-UX #214). The same shape
+   reached `import_docs` through the document's file name: two documents called `setup.md` in
+   two directories, or one named after the project, asked for a `ref_id` the graph already
+   held.
+
+   `scanner/ref_ids.RefIdAllocator` hands out every `ref_id` both writers use. `take(preferred,
+   qualifier=...)` returns *preferred* when it is free — which is every node on every project
+   the collision does not touch — then `preferred-qualifier`, then `preferred-qualifier-2` and
+   upwards. Callers pass the node's kind as the qualifier, so the second `myapp` is written as
+   `myapp-domain` and reads as what it is. WHICH asker keeps the plain name is the caller's
+   judgement and not the allocator's: `bootstrap_project` gives the root the project's name
+   first, before any cluster asks, because that `ref_id` titles the architecture document and
+   is what `generate_rules` names as the parent every domain must have. `import_docs` seeds
+   the allocator with the `ref_ids` already on disk (`_existing_graph(...).ref_ids`), because
+   it adds to a graph another writer produced; `imported.yml` is not among the files read, so
+   a re-import hands out the `ref_ids` it handed out last time.
+
+   A rename reaches the EDGES as well as the node. Three passes used to recompute a cluster's
+   `ref_id` from its directory name — the manifest dependency loop, `_quick_import_scan` and
+   the top-level attachment loop — and a rename that reached only the node would have traded a
+   lost node for an edge naming nothing, which the loader drops just as quietly. All three
+   read the `ref_id` the cluster was written under, and `_quick_import_scan` takes that
+   mapping as a parameter rather than recomputing it. The attachment loop's old carve-out —
+   skip the cluster whose sanitized name equals the project's — is gone with the collision it
+   worked around.
 
    One post-condition, one implementation, since BDL-067 `.21`. Until then the two writers
    carried the same private name in two modules with the same loop body, differing in a
@@ -123,7 +159,7 @@ Cross-IDE context injection via a three-layer architecture.
    bootstrap that wrote the rule and met the nodes. Every branch of `init` that writes a file
    under `.beadloom/_graph/` now takes the verdict.
 
-5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale doc-code pairs, lint violations, domain list.
 
 6. **One order for all three entry points** (BDL-067 `.18` and `.21`, BDL-UX #216) — `init`
    bootstraps, then imports, then generates the doc skeletons, whether the mode arrived
@@ -179,11 +215,19 @@ Returns compact project context. Static layer (config, rules, AGENTS.md) always 
 
 - `fmt="markdown"` — human-readable output (~1000-1500 tokens)
 - **The finding lists are bounded** (`MAX_LISTED_FINDINGS = 10`, BDL-061 S4). `prime` used to
-  print one line per stale doc and per lint violation with no limit, which kept its size promise
+  print one line per stale pair and per lint violation with no limit, which kept its size promise
   only while the lists were empty: opting this repository into `scenario-coverage` (68 findings)
   grew the output from 2.6 KB to 13.1 KB — five times the budget, in the artifact whose whole
   job is to fit in one. The **count is never truncated**, only the list, and the cut says how
   many are hidden and which command shows them (`beadloom lint` / `beadloom sync-check`)
+- **The stale list counts and names PAIRS** (BDL-069 `beadloom-yn6i`). A pair is a document
+  AND a code file, so three code files of one package give three stale pairs over one
+  document. The health line reads `N stale pair(s)`, the section is `## Stale Pairs`, and each
+  line is `- <doc> <-> <code> (<ref_id>)`, the pair as `sync-check`'s text renders it. Measured
+  before the change on a repository with one README over three stale pairs: `Health: 3 stale
+  docs` above three identical lines naming the README alone. The cut note says `stale pair(s)`
+  for the same reason. `fmt="json"` is unchanged: `health.stale_docs` already carried
+  `doc_path`, `code_path` and `ref_id` per pair
 - `fmt="json"` — structured dict for programmatic use
 
 ### `setup_rules_auto(project_root)`

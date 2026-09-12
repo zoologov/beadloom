@@ -29,7 +29,11 @@ behavior identical.
   `get_incoming_edges`, `count_edges_touching`.
 - Docs: `get_doc_ref_ids`, `count_docs`, `count_docs_for_ref`,
   `get_docs_for_ref`.
-- Sync: `get_stale_pairs_for_ref`.
+- Sync: `get_stale_pairs_for_ref`, `count_stale_pairs`, `stale_node_refs`, and
+  the `StaleCount` value the last two return. The TUI status bar and the
+  sync-check notification build their sentence from `StaleCount.of_pairs(n)`
+  through this facade, so the word they print is the word the Gate and the site
+  dashboard print (BDL-069 `beadloom-rqma.5`).
 - Symbols: `get_symbols_for_source`.
 - Search fallback: `search_nodes_like`.
 

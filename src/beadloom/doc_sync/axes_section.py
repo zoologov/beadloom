@@ -52,10 +52,25 @@ UNRESOLVED_FIELD = "Unresolved"
 #: when the seed rule finds no sink. Stating it IS naming the seed.
 NO_SEED = "none"
 
-#: The table's columns, in order. The first three are the derivation's output;
+#: The column naming the files a row's node owns that the derivation could not
+#: read (BDL-UX #284). A node surfaces under an axis by its relation to the seed,
+#: and that relation says nothing about whether the change must reach files the
+#: node owns: one epic ruled a ``callers`` row out as blast radius while the fix
+#: lived in that node's ``.md.txt`` templates, which no Python derivation reads.
+#: The fact is written on the row, where the person rules it.
+OWNS_UNREAD_COLUMN = "Owns unread"
+
+#: What the ``Owns unread`` cell says when the node was measured and owns no file
+#: the derivation could not read. A measured absence is written, so it cannot
+#: read as a cell nobody filled in.
+OWNS_NOTHING_UNREAD = "none"
+
+#: The table's columns, in order. The first four are the derivation's output;
 #: the last two are the person's scope decision, and the split is deliberate —
-#: a section carrying only the first three records a run nobody has ruled on.
-COLUMNS: tuple[str, ...] = ("Axis", "Node", "Sites", "In scope", "Why")
+#: a section carrying only the first four records a run nobody has ruled on.
+#: Every column is read BY NAME, so a table written before ``Owns unread``
+#: existed reads exactly as it did, with that one fact read as not stated.
+COLUMNS: tuple[str, ...] = ("Axis", "Node", "Sites", OWNS_UNREAD_COLUMN, "In scope", "Why")
 
 #: The section states axes and does not name the seed they were derived from.
 AXES_WITHOUT_A_SEED = "axes-without-a-seed"
@@ -75,6 +90,8 @@ _FIELD_RE = re.compile(r"^>\s*\*\*(?P<name>[A-Za-z ]+):\*\*\s*(?P<value>.*)$")
 #: span is a sentence rather than a path.
 _CODE_SPAN_RE = re.compile(r"`([^`]+)`")
 _QUOTE_RE = re.compile(r"^>\s?(.*)$")
+#: The count an ``Owns unread`` cell leads with: ``3 — `path` `` reads as 3.
+_LEADING_COUNT_RE = re.compile(r"^(\d+)\b")
 
 #: Cells that decide the scope, exactly. Matched whole so the shipped skeleton's
 #: ``yes / no`` — which offers both and chooses neither — is undecided rather
@@ -101,6 +118,26 @@ class Axis:
     in_scope: bool | None
     why: str
     line: int
+    #: The ``Owns unread`` cell as written, or ``None`` when the row's table has
+    #: no such column. ``None`` is "not stated" — every table written before the
+    #: column existed — and never "owns nothing unread", which is a stated ``none``.
+    owns_unread: str | None = None
+
+    @property
+    def unread_count(self) -> int | None:
+        """How many files the row's node owns that the derivation could not read.
+
+        ``0`` for a stated ``none``; ``None`` when the cell states no count — the
+        column is absent, the row names no node, or a person wrote words there.
+        A cell that is not a count is kept as written and not guessed at.
+        """
+        if self.owns_unread is None:
+            return None
+        cell = self.owns_unread.strip().strip("*_` ")
+        if cell.lower() == OWNS_NOTHING_UNREAD:
+            return 0
+        count = _LEADING_COUNT_RE.match(cell)
+        return int(count.group(1)) if count is not None else None
 
 
 @dataclass(frozen=True)
@@ -213,6 +250,7 @@ def _row(cells: Sequence[str], header: Sequence[str], line: int) -> Axis:
         index = header.index(wanted) if wanted in header else -1
         return cells[index] if 0 <= index < len(cells) else ""
 
+    stated = OWNS_UNREAD_COLUMN.lower() in header
     return Axis(
         axis=column("axis"),
         node=_named(column("node")),
@@ -220,6 +258,7 @@ def _row(cells: Sequence[str], header: Sequence[str], line: int) -> Axis:
         in_scope=_scope_of(column("in scope")),
         why=column("why"),
         line=line,
+        owns_unread=column(OWNS_UNREAD_COLUMN).strip() if stated else None,
     )
 
 

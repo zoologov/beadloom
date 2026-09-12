@@ -298,7 +298,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 
 - `--porcelain` -- TAB-separated output for scripts. Format: `status\tref_id\tdoc_path\tcode_path\treason`.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, `baseline`, and optional `details`.
-- `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
+- `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab). Its closing instruction is chosen per reason: the `sync-update` line appears only when some stale pair is on a reason re-attesting clears, and every other stale pair is listed with what does clear it. Under `--since` no pair is told to re-attest, because that mode compares against the code at a git ref, which an attestation does not write — measured, attesting every pair left `sync-check --since HEAD` exactly as stale.
 - `--ref` -- filter results by ref_id.
 - `--staged` -- judge only the pairs this commit stages either side of, and state how many were left to the push gate. For a pre-commit hook in a **shared working tree**, where a whole-tree check fails one agent's commit on a neighbour's in-progress file (BDL-UX #118). The narrowing is counted, never silent: `summary.not_checked_outside_commit` and `summary.commit_scope` in `--json` (present in this mode only), a `scope` record in `--porcelain`, and a leading line in the human shape. When git cannot say what is staged, nothing is narrowed and `commit_scope` reads `not_narrowed` -- an absent answer is not "nothing staged". The content compared is the WORKING-TREE content of the staged paths, not the staged blobs.
 - `--record-surface` -- record the declared documentation surface (pair + declared-doc counts) to the committed `.beadloom/sync-surface.json`. A later run compares against it and says so when the surface SHRANK; no ordinary run rewrites it, because a check that silently re-records the number it checks against re-attests without evidence.
@@ -316,7 +316,14 @@ Measured on this repository, 2026-08-24: 330 declared pairs, all of them checked
 
 **The count is part of the contract.** `--record-surface` writes `.beadloom/sync-surface.json` (committed, so a rebuild cannot lose it). A later run whose declared surface FELL says so by name — `declared surface SHRANK since it was recorded: 275 → 269 pair(s)` — instead of quietly printing the smaller number. It is a warning, not a verdict: the cause that matters (a declared doc that is gone) fails on its own.
 
-Human-readable output includes reason-aware formatting:
+Human-readable output includes reason-aware formatting. **Every line names its pair** — `doc_path <-> code_path` — whenever the row has a code file. A pair is a document AND a code file, so three files of one package give three pairs over one README; the `missing`, `untracked_files` and `missing_modules` lines printed the document alone until BDL-069, and three different pairs rendered as three identical lines:
+
+```
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/__init__.py (missing modules: journal)
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/core.py (missing modules: journal)
+  [stale] ledger: domains/ledger/README.md <-> src/ledger/journal.py (missing modules: journal)
+```
+
 - `missing` status: `[missing]` with which side is gone (`the linked doc file is gone`, `the paired code file is gone`, `declared in the graph, not on disk`).
 - `unverified` status: `[not verified]` with the reason it was not verified — either there was no baseline, or this pair's own file did not move while a named sibling of the same node did (`sibling_symbols_changed`).
 - `incomplete` status: `[warn]` naming either the document and its missing sections, or the node KIND and the ratio behind a section its documents do not use (`Source (5/39)`).
@@ -367,6 +374,29 @@ uses to re-baseline freshness after a doc is rewritten; it is the same operation
 the interactive path performs after an edit. `--all` re-baselines every ref
 `sync-check` currently flags stale (deterministic; requires `--yes`).
 
+**It names what it did not clear.** An attestation rewrites recorded hashes, so
+it clears `hash_changed`, `hash_changed_since_head` and `symbols_changed` and
+cannot clear `missing_modules` or `untracked_files`, which read what the files
+say. After attesting, `--yes` re-runs the check — over the one ref, or over every
+ref with `--all` — and names every pair still stale, with what clears it. Measured on a repository whose
+`ledger` document does not name its `journal` module (BDL-069):
+
+```
+$ beadloom sync-update --yes --all
+Re-baselined ledger: attested 3 pair(s).
+Marked 1 ref(s) synced (3 pair(s) total).
+Still stale after this run: 3 pair(s) — the verdict on these did not move:
+  ledger: domains/ledger/README.md <-> src/ledger/__init__.py (missing_modules: journal) — name journal in domains/ledger/README.md; re-attesting cannot clear missing_modules, because the check reads what the document says, not a recorded hash
+  …
+```
+
+Before BDL-069 the run stopped after the second line, and an operator read it as
+the defect fixed. A pair the run left unclaimed — a second document outside
+`--pair` — says `not claimed by this run` instead, and a run that cleared
+everything says `Re-checked after attesting: no pair … is still stale.` The exit
+code is unchanged: `--yes` exits 0 in every case, and what it attests is
+untouched.
+
 `REF_ID` also accepts the **path of a reference doc** (one carrying a
 `watches:` annotation). In that case `sync-update` recomputes and stores the
 doc's aggregate surface hash, clearing a `surface_drift` warning — the same
@@ -413,7 +443,9 @@ beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 mypy over those staged files **inside the surface the project declares typed** (derived per run by
 [`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
 `NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
-(`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
+(`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs;
+either way it closes with an instruction scoped to the reasons re-attesting
+clears, because the hook prints porcelain rows and cannot choose per row),
 and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
 auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
 `beadloom active-sync` to reconcile each epic's ACTIVE.md bead-status table from
@@ -966,7 +998,36 @@ over an empty set. Exits 1 when no file and no symbol matches TARGET.
 - `--section` — render the answer as the `## Axes` section a work item's document
   carries, with the `In scope` column left undecided.
 - `--json` — the whole answer as data: `seeds`, `co_writers`, `callers`,
-  `commands`, `boundary` and `unresolved`.
+  `commands`, `boundary`, `unresolved` and `unread_ownership`.
+
+**A row says what its node owns that this derivation did not read.** `impact`
+reads Python, and an axis row that names a node says nothing about the rest of
+what that node owns. Three nodes of BDL-069 were ruled out of scope as blast
+radius and all three were work sites; `onboarding` was invisible, because the
+change it needed lived in the `.md.txt` templates that node owns (BDL-UX #284).
+So `--section` writes a sixth column, `Owns unread`, between `Sites` and
+`In scope` — the number of files the node owns whose suffix is not `.py`, with
+the first of them named, or `none`, or `unknown — no index` when there is no
+index to own anything, or `—` on a row that names no node. Run on this
+repository:
+
+```
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|---|---|---|---|---|---|
+| callers | agent-prime | 1 — `src/beadloom/onboarding/scanner/bootstrap.py:37` | none | ? |  |
+| branches | onboarding | `detect_preset`: 2 branch(es), 3 exit form(s), over every call | 49 — `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` | ? |  |
+```
+
+Each owning node is also a `node-owns-unread-files` entry in `unresolved`, and
+`--json` carries the whole population under `unread_ownership` as
+`[{node, files}]`. **The column does not say the change reaches those files** —
+whether a function reads a template is a runtime fact, and inferring it from
+string literals would be a confident guess. It says the node owns surface this
+answer is blind to, which is what a person needs before reading a quiet row as
+"not changed". A node's linked documents are not counted: every node has one, and
+`sync-check` owns the question of whether a change left it stale. What a
+generated directory costs the count, and the measured cost of the walk, are in
+the [Impact SPEC](../domains/application/features/impact/SPEC.md).
 
 **A branch count names the seat it was taken from.** Run on this repository:
 
@@ -1189,7 +1250,7 @@ beadloom prime [--json] [--update] [--project DIR]
 - `--json` -- structured JSON output
 - `--update` -- regenerate `.beadloom/AGENTS.md` before outputting context
 
-Returns architecture summary, health status (stale docs, lint violations), architecture rules, domain list, and agent instructions.
+Returns architecture summary, health status (stale doc-code pairs and lint violations), architecture rules, domain list, and agent instructions. The health line counts stale PAIRS (`N stale pair(s)`), because three code files of one package give three pairs over one document, and the `## Stale Pairs` section lists each as `- <doc> <-> <code> (<ref_id>)`, the pair as `sync-check` renders it. Both lists stop at ten entries and say how many they did not show.
 
 ### beadloom setup-rules
 
@@ -1348,7 +1409,8 @@ Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
 shape was decided and carries findings (a bead whose declared scope could not be
 read, an override past its exit condition, an override that changed nothing, a
 shared medium that failed its check or that nobody measured, a ready list the
-tracker capped) -- visible, never blocking; `2` = no shape could be decided (no
+tracker capped, an in-progress bead under the work item the tracker could not
+show) -- visible, never blocking; `2` = no shape could be decided (no
 index, no answer from the tracker, a bead the tracker does not have, a `--parent`
 whose beads could not be derived, neither a bead nor a `--parent`, a `waves:`
 block that would not parse).
@@ -1362,6 +1424,34 @@ have been present. `--parent WORK-ITEM` is the other half: it derives the list
 from the tracker -- every bead ready under that work item -- so the caller states
 the work item instead of the list. Passing a subset stays legitimate; what the
 notice adds is that the narrowing is visible.
+
+**Every plan is compared against the beads already in progress under its work
+item**, whether or not `--parent` was given. A bead in progress is not ready, so
+before BDL-UX #283 a running bead was compared against nothing and the plan
+printed `0 serialisation(s)` beside it. A conflict with running work is printed
+apart from the plan's own serialisations, because it does not order the plan's
+waves -- it holds a planned bead back until the running one lands:
+
+```
+1 wave(s) for 1 bead(s), 0 serialisation(s), 1 against 1 running bead(s), 0 finding(s).
+
+Wave 1: epic.2
+  combined-tree gate: epic.2
+  clean room: epic.2 -> room-epic.2
+  waits for running work: epic.2 behind epic.1
+
+In progress under this plan's work item, and compared against it:
+  1 in-progress bead(s) under epic and not in this plan: epic.1
+  Serialised against running work:
+    epic.2 waits for epic.1 — shared_node: billing
+```
+
+A serialisation against running work is not a finding. An in-progress bead the
+tracker could not show is: the first line counts it as `(N not compared)` and the
+plan exits `1` with `running_not_compared`. A plan with no derived work item says
+`running work not compared` instead of a count. `--json` carries the same facts
+under `running` -- `work_item`, `in_progress`, `compared`, `not_compared`,
+`conflicts` (each with `planned`, `running`, `reason`, `detail`) and `reason`.
 
 A work item's population is its parent-child closure plus every bead any member
 of that closure depends on. The parent link alone is not enough: two of the three
@@ -1502,7 +1592,7 @@ switched off without anybody saying so.
 
 ```
 $ beadloom waves proj-1 proj-2
-2 wave(s) for 2 bead(s), 1 serialisation(s), 0 finding(s).
+2 wave(s) for 2 bead(s), 1 serialisation(s), 0 against 0 running bead(s), 0 finding(s).
 
 Wave 1: proj-1
   combined-tree gate: proj-1
@@ -2193,6 +2283,76 @@ The reading rule, why the declaration is parsed without a TOML parser, and the 2
 measurement behind the hook's scope are in the
 [Typed Surface DOC](../domains/application/components/typed-surface/DOC.md).
 
+### beadloom version-surface
+
+Every place this project states its own version, what checks each one, and the places checked by
+nothing (BDL-069 S3, BDL-UX #281).
+
+```bash
+beadloom version-surface [--project DIR] [--json]
+```
+
+**The places are derived; the instruments are named.** An instrument's name is a fact about the
+codebase and changes when an instrument is added. A place is a fact about the tree and changes on
+every release, so no place is written down anywhere in the derivation, and a test parses that
+module with its docstrings stripped and fails if one appears. Five instruments are named, and what
+each holds is read from the project's own declarations: `packaging-manifest` (the manifest chain
+a build back end follows), `docs-audit` (the documents `DocScanner` resolves as the audit's
+surface), `graph-summary-facts` (the `summary:` lines under `.beadloom/_graph/`, where the rules
+file declares the rule), `doctor` (the `beadloom:auto-start project-info` region of the adapters
+the flow manifest records), and `test-suite` (the `assert` statements under the manifest's
+`testpaths`).
+
+Measured on this repository on 2026-09-11, against `4.0.0`:
+
+```
+$ beadloom version-surface
+Version surface — every place this project states its version, derived, never listed
+
+  Source of truth: 4.0.0
+    src/beadloom/__init__.py:6    pyproject.toml dynamic version through [tool.hatch.version] path
+
+  Checked (10 place(s) in 8 file(s)):
+    .beadloom/_graph/beadloom.yml (1)    graph-summary-facts
+      5    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc S…
+    ...
+
+  Checked by nothing (44 place(s) in 22 file(s)):
+    .beadloom/flow/claude/CLAUDE.md (2)    — outside docs audit's scan globs
+      12    ### `setup-branch-protection` — the gap is closed as of 4.0.0, and will reopen
+      46    is the normal state, not an incident — and closing it, as 4.0.0 did, is a moment
+    .claude/CLAUDE.md (2)    — outside docs audit's scan globs; outside the project-info
+          auto-region: doctor reads the claim in that region and no other line of the file
+      427    ### `setup-branch-protection` — the gap is closed as of 4.0.0, and will reopen
+      461    is the normal state, not an incident — and closing it, as 4.0.0 did, is a moment
+    ...
+```
+
+Rows are grouped by file **and reason together**, so a file whose lines fall outside for two
+different reasons reads as two facts rather than one averaged sentence. The excerpt is cut at 80
+characters and every other line is wrapped at 100: a reason is the actionable half of an unjudged
+row, so it is wrapped rather than cut. A wrapped header continues deeper than the rows under it,
+because at a row's indent its second line reads as a place with no line number.
+
+**The sweep is by the current literal, which is the limit to read first.** A place that ALREADY
+states an older version is invisible to it, so run this BEFORE the bump and not after. The
+alternative was measured rather than assumed: reading every version token this project's prose
+attributes to itself returns 674 claims across 137 files, because the planning archive records
+every version the project ever had. Catching a place that has gone stale is what the instruments
+are for, and which places have one is what this report names.
+
+The report carries its own population — the files read, the directories pruned, the suffixes read,
+the suffixes NOT read with a count each, and every file that could not be decoded with its reason.
+
+Exit `0` when the surface was derived. Places checked by nothing do **not** make it non-zero: the
+gap is what the report exists to state, and a release that has to read it is not a release that
+failed. Exit `2` when no version could be derived, with the reason on standard output, because an
+empty answer and an empty answer with a reason are different answers.
+
+The instruments' populations, what the derivation cannot distinguish, and why two paths are
+restated rather than imported are in the
+[Version Surface SPEC](../domains/doc-sync/features/version-surface/SPEC.md).
+
 ### beadloom bd-calls
 
 Every place this project reaches `bd`, and what each call form assumes about the answer
@@ -2309,12 +2469,33 @@ $ beadloom issue-number check
 No duplicate, unwritten or unclaimed number.
 ```
 
-Exit codes are the contract a caller may rely on: `0` the number was allocated or the check found
-nothing, `1` the check found at least one finding, `2` nothing was allocated because the project
-declares no `issue_log:` block. Two states report that a leg ran over nothing rather than passing:
-a project that declares no log is told so and no leg runs, and a ledger holding no claim leaves
-`unwritten-claim` and `unclaimed-number` with no number to enter. An absent log is not an empty
-one.
+Exit codes are the contract a caller may rely on: `0` the number was allocated, or the check found
+nothing, or the check could not establish whether a log is declared at all; `1` the check found at
+least one finding, or the project declared an `issue_log:` block this reader could not use; `2`
+nothing was allocated, because the project declares no block or wrote a config that could not be
+read.
+
+**Three states about the declaration, and the check tells them apart** (BDL-069,
+`beadloom-rqma.9`). A project that declared no log is told so. A project that declared one and
+mistyped a key gets `1 entr(ies) declared, 1 unusable — no leg ran.` and the refusal naming the
+key. A project whose `.beadloom/config.yml` could not be read at all is told that whether it
+declares a log is **unknown** — the check never saw the key, so reporting an opt-out would be an
+assertion about a declaration nobody read:
+
+```
+$ beadloom issue-number check
+Whether this project declares an issue log is unknown — no leg ran.
+  .beadloom/config.yml could not be read: it could not be parsed as YAML — repair .beadloom/config.yml so it parses as a YAML mapping
+```
+
+That is exit `0`, matching the Gate's own answer to the same state, which is a non-blocking WARN.
+The `--json` payload separates it from a clean run for a machine: `"undetermined": true`, and
+`"declared"` is `null` rather than `false`, because the wire format carries three states and a
+boolean holds two.
+
+Two further states report that a leg ran over nothing rather than passing: a project that declares
+no log is told so and no leg runs, and a ledger holding no claim leaves `unwritten-claim` and
+`unclaimed-number` with no number to enter. An absent log is not an empty one.
 
 The grammar, the two populations a numbered log states and the regions the legs cannot reach are
 in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
@@ -2334,11 +2515,13 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
 5. `docs-quality` — the eleven planning-document checks (the five writing-standard ones, the four shape ones and the two route ones) over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-09-03: `WARN | 259 document(s) read; measurable-goal 4, pending-in-approved 7, missing-section 102, routed-without-axes 12; NO CHECK READS: BRIEF, PLAN, SUMMARY`. The line prints the finding count and not the 27 accepted-without-witness statements the re-scope stopped deciding about; that limit is stated in the doc-quality SPEC.
-6. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
-7. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
-8. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
-9. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
-10. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+6. `issue-log` — the issue log's numbers (BDL-068 S6): `duplicate-number`, `unwritten-claim` and `unclaimed-number` over a log declared under `issue_log:` in `.beadloom/config.yml`. Unlike its two document neighbours it BLOCKS, because a duplicate number is a reference that resolves to two entries and to neither rather than an opinion about prose. A project declaring no log is a NAMED skip. This step was missing from this list until BDL-069 S4 renumbered it.
+7. `readme-pair` — the document pairs declared under `document_pairs:` in `.beadloom/config.yml`, compared by SHAPE (BDL-069 S4). What is compared is the sequence of blocks each document is built from — heading, paragraph, code, list, table — with the heading levels and the row counts, never the text: the pair this repository declares is `README.ru.md` and `README.md`, and a text comparison over a translation is a check somebody has to switch off. It BLOCKS, on the `issue-log` terms rather than the `docs-quality` ones, and a declared path nothing could read fails too, because a declaration pointing at nothing would otherwise report `0 finding(s)` having compared no document at all. A project that declares no pair is a NAMED skip stating the key to add, so the upgrade shipping the step reddens nobody. The line states the population it held: `1 pair(s) held, 109 block(s) compared, 0 finding(s); README.ru.md <-> README.md (109 block(s))`, measured on this repository 2026-09-11, with `UNREADABLE:` naming each declared path nothing read and `NOT COMPARED:` counting the pairs read that hold no block between them — the second sets `not_verified`, so the step reports `WARN`.
+8. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
+9. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
+10. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
+11. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
+12. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
@@ -2694,7 +2877,7 @@ Commands (re-exported from the package via the registration shell):
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
 - `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments, and state what is REACHABLE per channel: bead comments (counted on that bead and on no other), the documents of the work item the branch names, the commit bodies of the reviewed range, and the launch prompt, which is named as a channel nothing here can inspect; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mutation` -- the score a run produced over the declared `mutation.targets`, from the counters the project's own runner wrote (`--stats`/`--target`/`--only`/`--tool`/`--min-score`/`--json`); reads counters by NAME and reports one it did not find rather than as zero; folds the scope check in, so an empty population is a finding and not a 100%; exit 0 clean or nothing declared / 1 findings or under the floor / 2 counters named without the scope they cover; delegates to `application/mutation_scope/score.py:report_mutation_score()`

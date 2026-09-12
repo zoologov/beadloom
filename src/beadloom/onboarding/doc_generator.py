@@ -9,6 +9,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.node_source import NodeSource
 from beadloom.onboarding.doc_templates import (
     DEFAULT_DOC_CONFIG,
     doc_flow_config,
@@ -318,15 +319,137 @@ def _symbols_for_node(
     node: dict[str, Any],
     symbols_by_source: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
-    """Return code symbols whose file path starts with *node*'s source."""
-    source = node.get("source", "").rstrip("/")
-    if not source:
-        return []
+    """Index rows of every file under *node*'s source, matched by PATH COMPONENT.
+
+    The polish payload's reader. Until BDL-069 `beadloom-6rgr` it matched by string
+    prefix, so `src/ledger/` also took `src/ledger_archive/` and `src/ledger_tools.py`,
+    and `docs polish` told an agent to describe the node from a sibling's functions.
+
+    A file is under the source when its path IS the source — a single-file source,
+    which a match on ``source + "/"`` alone would leave empty — or continues it past
+    a ``/``. That rule is :class:`~beadloom.infrastructure.node_source.NodeSource`,
+    which the route attribution and the git activity of a reindex call too, since
+    BDL-069 `beadloom-rqma.4`. A test holds this reader and `_symbols_on_disk` to one
+    population for every shape of source.
+
+    It stays on the index rather than walking the directory as the skeleton does,
+    because the rest of the polish payload — drift, edges, routes, activity, tests —
+    is read from the index too, and because a walk is not bounded by the scan paths.
+    Measured on this repository over its 104 nodes: the walk took 12.45 s and gave
+    the site node 68 382 symbols from `node_modules`; the index took 0.006 s.
+    """
+    under = NodeSource(str(node.get("source") or ""))
     result: list[dict[str, Any]] = []
     for fp, syms in symbols_by_source.items():
-        if fp.startswith(source):
+        if under.holds(fp):
             result.extend(syms)
     return result
+
+
+def _symbols_on_disk(
+    node: dict[str, Any],
+    project_root: Path,
+    parsed: dict[Path, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Code symbols of every file under *node*'s source, parsed off the DISK.
+
+    The skeleton's Public API table used to come from the index, and three of
+    the four ways a skeleton is written have none at that moment: `init --yes`
+    and `init --bootstrap` write skeletons before their reindex, and a clone has
+    no index because `init` lists it in `.gitignore`. Only the wizard, which
+    re-indexes first, wrote the table (measured, BDL-069 `beadloom-8lmj`). Reading
+    the code makes the table a function of the tree, so no caller has to
+    remember an order to get the same document as another.
+
+    The parser is `extract_symbols`, the function the reindex calls per file, and
+    it returns nothing for an extension it has no grammar for without reading the
+    file — so the population is the index's. A directory source is WALKED, which
+    takes the same files `_symbols_for_node` takes from the index by path component.
+    One difference is deliberate: the node's source is read wherever it is, where
+    the index holds only the configured scan paths.
+
+    *parsed* memoises one run's parses by path, so a feature nested inside a
+    domain does not parse the files they share twice.
+    """
+    source = str(node.get("source") or "").strip()
+    if not source:
+        return []
+    target = project_root / source
+    if target.is_file():
+        files = [target]
+    elif target.is_dir():
+        files = sorted(path for path in target.rglob("*") if path.is_file())
+    else:
+        return []
+    symbols: list[dict[str, Any]] = []
+    for path in files:
+        if path not in parsed:
+            parsed[path] = _parse_symbols(path)
+        symbols.extend(parsed[path])
+    return symbols
+
+
+def _parse_symbols(path: Path) -> list[dict[str, Any]]:
+    """One file's symbols, or none when it cannot be read as text.
+
+    Best effort, as the index read was: a file that does not decode costs the
+    table its rows and not the skeleton its existence.
+    """
+    from beadloom.context_oracle import code_indexer
+
+    try:
+        return code_indexer.extract_symbols(path)
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.debug("Skipping the symbols of %s: %s", path, exc)
+        return []
+
+
+#: What a skeleton names as a module: a Python file. It is the population
+#: `missing_modules` reads, and that rule is the only reason the list exists.
+_MODULE_SUFFIX = ".py"
+
+
+def _modules_for_node(node: dict[str, Any], project_root: Path) -> list[str]:
+    """File names of the Python modules directly inside *node*'s source directory.
+
+    Read off the DISK, never the index, because `init --yes` writes the skeletons
+    before its reindex: on a virgin project there is no index to read at that
+    point, and the list would be empty on exactly the run BDL-UX #282 measured.
+
+    The population is the one `missing_modules` reads, which is the rule the list
+    exists to satisfy: Python files, top level only, since a subdirectory is a
+    node of its own. The scanner's wider code-extension set is not reachable from
+    here — `agent-prime` owns it and already depends on this node, so importing
+    it is a cycle `no-dependency-cycles` refuses. What holds this list to the
+    rule is a test that runs the rule over a skeleton, not a copied constant.
+
+    `__init__.py` is named too, so the list does not depend on which boilerplate
+    the rule chooses to exempt. A node whose source is a single file gets
+    nothing: its `## Source` line already names it.
+    """
+    source = str(node.get("source") or "").strip()
+    if not source:
+        return []
+    directory = project_root / source
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in directory.glob(f"*{_MODULE_SUFFIX}")
+        if path.is_file()
+    )
+
+
+def _render_modules_section(modules: list[str]) -> str:
+    """Render a ``## Modules`` list naming each of *modules* as inline code.
+
+    Returns an empty string for no modules, so the section is conditional the
+    way ``## Public API`` is and never becomes a section the template requires.
+    """
+    if not modules:
+        return ""
+    lines = ["## Modules\n", *(f"- `{name}`" for name in modules)]
+    return "\n".join(lines) + "\n"
 
 
 def _render_symbols_section(symbols: list[dict[str, Any]]) -> str:
@@ -416,21 +539,24 @@ def _node_values(
     node: dict[str, Any],
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None,
+    modules: list[str] | None = None,
 ) -> dict[str, str]:
     """The placeholder values every node document shares.
 
-    ``symbols_section`` carries its own trailing blank line so an absent
-    ``## Public API`` leaves no gap: the template writes it immediately before
-    the next heading, which is the one shape that renders identically whether
-    the node has public symbols or not.
+    ``modules_section`` and ``symbols_section`` each carry their own trailing
+    blank line so an absent ``## Modules`` or ``## Public API`` leaves no gap:
+    the template writes them immediately before the next heading, which is the
+    one shape that renders identically whether the node has them or not.
     """
     ref_id: str = node["ref_id"]
     depends_on, used_by = _edges_for(ref_id, edges)
+    modules_section = _render_modules_section(modules or [])
     symbols_section = _render_symbols_section(symbols or [])
     return {
         "ref_id": ref_id,
         "summary": node.get("summary", ""),
         "source": node.get("source", ""),
+        "modules_section": f"{modules_section}\n" if modules_section else "",
         "symbols_section": f"{symbols_section}\n" if symbols_section else "",
         "depends_on": ", ".join(depends_on) if depends_on else "(none)",
         "used_by": ", ".join(used_by) if used_by else "(none)",
@@ -442,12 +568,13 @@ def _render_domain_readme(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render domain README content from the ``domain`` template."""
     children = _children_of(node["ref_id"], edges)
-    values = _node_values(node, edges, symbols)
+    values = _node_values(node, edges, symbols, modules)
     values["features"] = (
         "\n".join(f"- {c}" for c in children) if children else "(none)"
     )
@@ -469,13 +596,14 @@ def _render_service(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render service page content from the ``service`` template."""
     return render_doc(
         "service",
-        _node_values(node, edges, symbols),
+        _node_values(node, edges, symbols, modules),
         config=config or _resolved_config(project_root),
         project_root=project_root,
     )
@@ -491,11 +619,12 @@ def _render_feature_spec(
     edges: list[dict[str, Any]],
     symbols: list[dict[str, Any]] | None = None,
     *,
+    modules: list[str] | None = None,
     config: FlowConfig | None = None,
     project_root: Path | None = None,
 ) -> str:
     """Render feature SPEC content from the ``feature`` template."""
-    values = _node_values(node, edges, symbols)
+    values = _node_values(node, edges, symbols, modules)
     values["parent"] = _parent_of(node["ref_id"], edges) or "(unknown)"
     return render_doc(
         "feature",
@@ -948,6 +1077,12 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
     first — which every caller does, since the graph file is the thing being
     documented.
 
+    THE CODE IS READ FROM THE DISK, ALWAYS, for the same reason one step further
+    on. The Public API table came from the index until BDL-069 `beadloom-8lmj`,
+    and the index is the one input whose presence depends on the caller: `init
+    --yes`, `init --bootstrap` and `docs generate` on a clone wrote the table-less
+    document, and only the wizard, which re-indexes first, wrote the table.
+
     Returns ``{"files_created": N, "files_skipped": M}``.
     """
     nodes, edges = _load_graph_from_yaml(project_root)
@@ -957,8 +1092,10 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
     project_name: str = root_node["ref_id"] if root_node else project_root.name
     root_ref_id: str | None = root_node["ref_id"] if root_node else None
 
-    # Best-effort symbol loading.
-    symbols_by_source = _load_symbols_by_source(project_root)
+    # Symbols are parsed off the disk per node, lazily, and each file at most once
+    # in this run — never read from the index, which three of the four callers do
+    # not have yet (see `_symbols_on_disk`).
+    parsed: dict[Path, list[dict[str, Any]]] = {}
 
     docs_dir = project_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -993,21 +1130,31 @@ def generate_skeletons(project_root: Path) -> dict[str, int]:
         doc_path = _doc_path_for_node(node, edges, project_root)
         if doc_path is None:
             continue
+        # Asked BEFORE rendering, and not only by `_write_if_missing`, because a
+        # render parses the node's code. Measured on this repository: parsing every
+        # node source walked 17 294 files in about 13 s, for a run that wrote
+        # nothing because every document already existed.
+        if doc_path.exists():
+            logger.debug("Skipping existing file: %s", doc_path)
+            skipped += 1
+            continue
 
-        node_symbols = _symbols_for_node(node, symbols_by_source)
-
-        if kind == "domain":
-            content = _render_domain_readme(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
-        elif kind == "service":
-            content = _render_service(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
-        else:
-            content = _render_feature_spec(
-                node, edges, node_symbols, config=config, project_root=project_root
-            )
+        node_symbols = _symbols_on_disk(node, project_root, parsed)
+        render = {
+            "domain": _render_domain_readme,
+            "service": _render_service,
+        }.get(kind, _render_feature_spec)
+        # The modules are NAMED rather than the pair attested at write time:
+        # `missing_modules` requires them, and a skeleton recorded as fresh would
+        # assert a freshness nobody checked (BDL-069 S1, BDL-UX #282).
+        content = render(
+            node,
+            edges,
+            node_symbols,
+            modules=_modules_for_node(node, project_root),
+            config=config,
+            project_root=project_root,
+        )
 
         if _write_if_missing(doc_path, content):
             created += 1

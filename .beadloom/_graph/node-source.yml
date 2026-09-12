@@ -1,0 +1,11 @@
+nodes:
+  - ref_id: node-source
+    kind: component
+    summary: "Node source paths — whether a file lies under a node's declared source, by path component, the one rule the polish, route and git-activity readers call"
+    source: src/beadloom/infrastructure/node_source.py
+    docs:
+      - docs/domains/infrastructure/components/node-source/DOC.md
+edges:
+  - src: node-source
+    dst: infrastructure
+    kind: part_of

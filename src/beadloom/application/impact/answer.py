@@ -34,6 +34,7 @@ from beadloom.application.impact.seeds import (
     names_the_target_calls,
     seeds_for,
 )
+from beadloom.application.impact.unread_ownership import UnreadOwnership, unread_ownership
 from beadloom.application.impact.unresolved import (
     Unresolved,
     ambiguous_names,
@@ -131,6 +132,10 @@ class ImpactAnswer:
     commands: tuple[Command, ...]
     boundary: Boundary
     unresolved: tuple[Unresolved, ...] = field(default_factory=tuple)
+    #: The nodes this answer names that own files the derivation did not read.
+    #: A node absent from it owns none, when the boundary was readable; with no
+    #: index nothing was measured, and ``boundary.resolved`` says so.
+    unread_ownership: tuple[UnreadOwnership, ...] = field(default_factory=tuple)
 
 
 def package_root_of(path: Path, *, project_root: Path | None = None) -> Path:
@@ -291,6 +296,8 @@ def impact_of(
         for path in sorted(targets)
         if not _is_under(path, swept)
     )
+    touched = _boundary_of(boundary, targets, project_root, (*written, *calling))
+    owned_unread = unread_ownership(boundary, touched.nodes_touched, project_root)
     gaps = _gaps(
         sweep=sweep,
         swept=swept,
@@ -303,6 +310,7 @@ def impact_of(
         boundary_readable=boundary.readable,
         named=seed_names | {found.name for found in written} | defined_in_target,
         sites=(*written, *calling),
+        owned_unread=owned_unread,
     )
     return ImpactAnswer(
         target=shown,
@@ -319,8 +327,9 @@ def impact_of(
             _caller_caveat(_relative(swept, project_root), outside, unread),
         ),
         commands=commands,
-        boundary=_boundary_of(boundary, targets, project_root, (*written, *calling)),
+        boundary=touched,
         unresolved=gaps,
+        unread_ownership=owned_unread,
     )
 
 
@@ -448,6 +457,7 @@ def _gaps(
     boundary_readable: bool,
     named: frozenset[str],
     sites: tuple[Site, ...],
+    owned_unread: tuple[UnreadOwnership, ...],
 ) -> tuple[Unresolved, ...]:
     """Everything this answer could not resolve, in one population.
 
@@ -485,6 +495,17 @@ def _gaps(
         )
         for found in sites
         if boundary_readable and found.node is None
+    )
+    gaps.extend(
+        Unresolved(
+            kind="node-owns-unread-files",
+            detail=(
+                f"{owned.node} owns {len(owned.files)} file(s) this derivation does not "
+                f"read, so a change that has to reach them is on no axis of this answer"
+            ),
+            where=owned.files[0],
+        )
+        for owned in owned_unread
     )
     return tuple(gaps)
 

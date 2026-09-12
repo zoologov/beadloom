@@ -16,8 +16,11 @@ landscape with an honest "where is the work happening" signal.
 ## Public surface
 
 - `analyze_git_activity(project_root, source_dirs)` — run `git log` over ~90
-  days, parse it, map each changed file to its owning node by longest
-  source-prefix match, and return `{ref_id: GitActivity}`.
+  days, parse it, map each changed file to the most specific node whose source
+  it lies under, and return `{ref_id: GitActivity}`. "Lies under" is
+  [`NodeSource.holds`](../node-source/DOC.md), by path component: a commit to
+  `src/ledger_archive/` does not count toward a node sourced at `src/ledger/`.
+  The ranking by source length stays in this component.
 - `GitActivity` — frozen dataclass: `commits_30d`, `commits_90d`,
   `last_commit_date`, `top_contributors`, `activity_level`
   (`hot` >20/30d, `warm` 5–20, `cold` 1–4, `dormant` 0/90d).

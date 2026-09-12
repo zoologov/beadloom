@@ -460,6 +460,27 @@ class TestBeadloomsOwnRules:
 
         assert findings == [], "\n".join(f.message for f in findings)
 
+    def test_the_node_source_exemption_names_the_one_caller_its_reason_names(self) -> None:
+        """An exemption's `from:` covers what its reason argues for, and nothing else.
+
+        The entry for `beadloom/infrastructure/node_source` argues one caller —
+        "doc_generator is the one caller that crosses". Left at the default `*`
+        it also excuses a second onboarding caller nobody argued for, and the
+        crossing would be suppressed with no finding to read (BDL-069 review,
+        Minor 1).
+        """
+        exemptions = [
+            exemption
+            for rule in self._project_rules()
+            if rule.name == "onboarding-no-direct-infra"
+            for exemption in rule.exempt
+            if exemption.to_glob == "beadloom/infrastructure/node_source"
+        ]
+
+        assert [e.from_glob for e in exemptions] == [
+            "src/beadloom/onboarding/doc_generator.py"
+        ]
+
     def test_the_import_boundaries_are_genuinely_clean(self, tmp_path: Path) -> None:
         """Green because no boundary is crossed — not because nothing was checked."""
         conn = self._index(tmp_path)

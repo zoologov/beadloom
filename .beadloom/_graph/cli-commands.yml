@@ -21,3 +21,6 @@ edges:
   - src: cli-commands
     dst: typed-surface
     kind: depends_on
+  - src: cli-commands
+    dst: version-surface
+    kind: depends_on

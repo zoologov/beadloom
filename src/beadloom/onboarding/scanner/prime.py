@@ -53,6 +53,20 @@ def _listed(
     return lines
 
 
+def _pair_line(row: dict[str, str]) -> str:
+    """One stale pair as a list line: the document AND the code file.
+
+    Three code files of one package give three stale pairs over one document, and
+    this line used to print the document alone — three different pairs as three
+    identical lines (BDL-069 `beadloom-yn6i`). It renders the pair the way
+    ``sync-check``'s text does, so a line here maps to one line of the full list
+    the cut note points to. A row with no code file prints no arrow.
+    """
+    code_path = row.get("code_path")
+    pair = f"{row['doc_path']} <-> {code_path}" if code_path else row["doc_path"]
+    return f"- {pair} ({row['ref_id']})"
+
+
 def _format_prime_markdown(
     project_name: str,
     rules: list[dict[str, str]],
@@ -75,11 +89,12 @@ def _format_prime_markdown(
         arch_str = ", ".join(parts) if parts else "no nodes"
         lines.append(f"Architecture: {arch_str} | {dynamic['symbols']} symbols")
 
+        # A count of PAIRS: one ``sync_state`` row per document AND code file.
         stale_count = len(dynamic.get("stale_docs", []))
         violations_count = len(dynamic.get("violations", []))
         last_reindex = dynamic.get("last_reindex", "never")
         lines.append(
-            f"Health: {stale_count} stale docs,"
+            f"Health: {stale_count} stale pair(s),"
             f" {violations_count} lint violations"
             f" | Last reindex: {last_reindex}"
         )
@@ -121,16 +136,16 @@ def _format_prime_markdown(
             lines.append(f"- {d['ref_id']}: {d['summary']}")
         lines.append("")
 
-    # Stale docs
+    # Stale pairs
     if dynamic:
         stale: list[dict[str, str]] = dynamic.get("stale_docs", [])
-        lines.append("## Stale Docs")
+        lines.append("## Stale Pairs")
         if stale:
             lines.extend(
                 _listed(
-                    [f"- {s['doc_path']} ({s['ref_id']})" for s in stale],
+                    [_pair_line(row) for row in stale],
                     total=len(stale),
-                    noun="stale doc(s)",
+                    noun="stale pair(s)",
                     command="beadloom sync-check",
                 )
             )

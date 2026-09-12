@@ -92,7 +92,7 @@ class TestTheGateLineCountsWhatItExcused:
         """The count that fell is exactly what a failing run must not hide."""
         line = _sync_summary(_rows(ok=5, exempt=6, stale=2), [], _clean())
 
-        assert "2 stale doc(s)" in line
+        assert "2 stale pair(s)" in line
         assert "6 exempt" in line
 
     def test_a_run_that_excused_nothing_keeps_its_line(self) -> None:

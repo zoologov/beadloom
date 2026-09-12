@@ -131,9 +131,12 @@ def _render_dependency_tree(
     text.append(str(impact.downstream_direct), style="bold")
     text.append("  Transitive: ", style="dim")
     text.append(str(impact.downstream_transitive), style="bold")
-    text.append("  Stale docs: ", style="dim")
-    stale_style = "red bold" if impact.stale_count > 0 else "green"
-    text.append(str(impact.stale_count), style=stale_style)
+    # The word comes from the count `why` computed, not from this widget: it is
+    # the SAME number `beadloom why` prints, and one number cannot carry two
+    # nouns across two surfaces (BDL-069 `beadloom-rqma.5`).
+    text.append(f"  Stale {impact.stale.noun}s: ", style="dim")
+    stale_style = "red bold" if impact.stale.count > 0 else "green"
+    text.append(str(impact.stale.count), style=stale_style)
 
     return text
 

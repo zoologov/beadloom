@@ -170,3 +170,19 @@ docs_audit:
 issue_log:
   path: .claude/development/BDL-UX-Issues.md
   ledger: .claude/development/BDL-UX-Issues
+
+# BDL-069 S4 (`beadloom-19m6`). The two READMEs are compared by SHAPE: the
+# sequence of blocks each is built from, with the row counts of the lists and
+# the tables. Never by text -- the files are in two languages, and a text
+# comparison over a translation is a check somebody has to switch off.
+#
+# The Russian file is the source and the English one follows it. On 2026-09-10
+# the English file was missing a paragraph the Russian one had for the length of
+# two commits, and the only number that differed between them was a line count,
+# 362 against 360, which nothing reads.
+#
+# A project that declares no `document_pairs:` block is not judged, exactly as
+# with `issue_log:` above. Nothing here guesses a filename.
+document_pairs:
+  - source: README.ru.md
+    follower: README.md

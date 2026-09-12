@@ -119,9 +119,22 @@ Before launching a wave, ask the graph which of the ready beads may run at the
 same time:
 
 ```bash
+beadloom waves --parent <parent-id>         # every bead ready under the work item; no list to type
 beadloom waves <bead-id> <bead-id> ...      # exit 0 = clean, 1 = findings, 2 = undecidable
 beadloom waves <bead-id> ... --json         # the same facts, for a script
 ```
+
+**A plan is compared against the beads already running under its work item, and
+you read that count separately.** The beads a plan decides over are ready ones,
+and a bead in progress is not ready. The first line therefore carries two counts
+— `0 serialisation(s), 1 against 1 running bead(s)` — and the second one is a
+bead the plan places in a wave that cannot start until a running bead lands.
+`0 serialisation(s)` alone is a claim about the plan's own pairs, never "nothing
+conflicts": before BDL-UX #283 it was printed while a bead of the same epic was
+running and conflicted with the one being launched. If the line reads
+`running work not compared`, or counts beads `not compared`, nothing checked the
+running work, and naming the running bead beside the new one
+(`beadloom waves <running-id> <new-id>`) is the comparison that remains.
 
 A tracker knows which beads block which; only the architecture graph knows which
 **code** they occupy, and that is what decides whether parallel agents pay off or

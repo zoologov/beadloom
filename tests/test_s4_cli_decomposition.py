@@ -99,6 +99,10 @@ EXPECTED_COMMANDS = {
     # rather than to everything staged.
     "typed-surface",
     "ui",
+    # BDL-069 S3 (BDL-UX #281): every place this project states its own version,
+    # what checks each, and the places checked by nothing -- the union four
+    # individually correct instruments left unnamed while cutting 4.0.0.
+    "version-surface",
     "watch",
     "waves",
     "why",

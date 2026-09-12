@@ -6,6 +6,10 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+# Through the application facade, never `infrastructure` directly: the
+# `tui-no-direct-infra` boundary is why `graph_reads` exists.
+from beadloom.application.graph_reads import StaleCount
+
 # Watcher status indicators
 _WATCHER_ACTIVE = "\u25cf"  # filled circle
 _WATCHER_INACTIVE = "\u25cb"  # empty circle
@@ -63,11 +67,13 @@ class StatusBarWidget(Static):
         text.append(f"  {self._edge_count} edges", style="bold")
         text.append(f"  {self._doc_count} docs", style="bold")
 
-        # Stale count with color
-        if self._stale_count > 0:
-            text.append(f"  {self._stale_count} stale", style="bold red")
-        else:
-            text.append("  0 stale", style="green")
+        # Stale count with color. It printed a bare "N stale" — a number with
+        # nothing saying what it counted — while the notification beside it said
+        # pairs (BDL-069 `beadloom-rqma.5`). Both now ask the same class for the
+        # sentence.
+        tally = StaleCount.of_pairs(self._stale_count)
+        style = "bold red" if tally.count > 0 else "green"
+        text.append(f"  {tally.phrase}", style=style)
 
         # Separator
         text.append("  |  ")

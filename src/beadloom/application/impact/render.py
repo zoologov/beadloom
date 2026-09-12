@@ -65,6 +65,10 @@ def answer_to_dict(answer: ImpactAnswer) -> dict[str, Any]:
             {"kind": gap.kind, "detail": gap.detail, "where": gap.where}
             for gap in answer.unresolved
         ],
+        "unread_ownership": [
+            {"node": owned.node, "files": list(owned.files)}
+            for owned in answer.unread_ownership
+        ],
     }
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from beadloom.application.site_dashboard._common import _UNHEALTHY_VERDICTS
+from beadloom.infrastructure.repository import stale_node_refs
 
 if TYPE_CHECKING:
     import sqlite3
@@ -80,19 +81,22 @@ def _debt_recommendations(offenders: list[NodeDebt]) -> list[dict[str, object]]:
 
 
 def _stale_doc_recommendations(conn: sqlite3.Connection) -> list[dict[str, object]]:
-    """Stale docs to refresh (the persisted ``sync-check`` result, read-only)."""
-    rows = conn.execute(
-        "SELECT DISTINCT ref_id FROM sync_state WHERE status = 'stale' ORDER BY ref_id"
-    ).fetchall()
+    """One recommendation per stale NODE (the persisted ``sync-check`` result).
+
+    A node, not a pair: a node with three stale pairs is one thing to go and fix,
+    and the reader is a differently named function for exactly that reason
+    (BDL-069 `beadloom-rqma.5`). The alert beside it counts pairs, and the two
+    numbers differ on purpose.
+    """
     return [
         _rec(
             "stale_doc",
             "warn",
-            str(row["ref_id"]),
+            ref_id,
             "doc is stale vs its code — refresh and re-run sync-check",
-            _node_link(str(row["ref_id"])),
+            _node_link(ref_id),
         )
-        for row in rows
+        for ref_id in stale_node_refs(conn)
     ]
 
 

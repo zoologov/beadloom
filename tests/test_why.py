@@ -293,7 +293,7 @@ class TestImpactSummary:
         assert result.impact.doc_coverage == pytest.approx(100.0)
 
     def test_impact_stale_count(self, conn: sqlite3.Connection) -> None:
-        """Counts stale docs in downstream."""
+        """Counts stale PAIRS in downstream, and says which population that is."""
         _insert_node(conn, "A", "feature", "Node A")
         _insert_node(conn, "B", "domain", "Node B")
         _insert_edge(conn, "B", "A", "depends_on")
@@ -302,16 +302,16 @@ class TestImpactSummary:
         _insert_sync_state(conn, "b2.md", "b2.py", "B", status="ok")
 
         result = analyze_node(conn, "A", depth=3)
-        assert result.impact.stale_count == 1
+        assert (result.impact.stale.count, result.impact.stale.noun) == (1, "pair")
 
     def test_impact_stale_count_zero(self, conn: sqlite3.Connection) -> None:
-        """No stale docs -> stale_count == 0."""
+        """No stale pair -> a count of zero pairs."""
         _insert_node(conn, "A", "feature", "Node A")
         _insert_node(conn, "B", "domain", "Node B")
         _insert_edge(conn, "B", "A", "depends_on")
 
         result = analyze_node(conn, "A", depth=3)
-        assert result.impact.stale_count == 0
+        assert result.impact.stale.count == 0
 
 
 # --- max_nodes limit ---

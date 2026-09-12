@@ -102,6 +102,11 @@ class TrackerBead:
     parent: str = ""
     depends_on: frozenset[str] = frozenset()
 
+    #: The tracker's status word, or ``None`` when the answer carried none. A bead
+    #: in progress is absent from the ready list, so this is the only field that
+    #: finds the work already running under a work item (BDL-UX #283).
+    status: str | None = None
+
 
 @dataclass(frozen=True)
 class TrackerCensus:

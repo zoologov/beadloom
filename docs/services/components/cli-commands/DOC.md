@@ -41,6 +41,8 @@ is what holds that line.
 | `_root.py` | the shared `main` group and the missing-parser warning helper — no command of its own. The summary `beadloom --help` prints is `help=_HELP`, derived from the package docstring rather than written as the group's own docstring: it was a third hand-written copy of the product description and shipped the 1.x sentence through both 3.0 patch releases (BDL-UX #211) |
 | `query.py` | `ctx`, `graph`, `why`, `search`, `prime` |
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
+
+`link` reads `.beadloom/_graph/` through `onboarding.graph_files.each_graph_file`, which is where the skip policy is stated: BDL-069 measured that it reads the directory for NODES, so a graph file it cannot parse must leave the answer "that node is not in the graph" rather than a traceback at whoever ran the command.
 | `status.py` | `status` |
 | `docsync.py` | `sync-check`, `sync-update`, `install-hooks`, `active-sync` |
 | `federation.py` | `export`, `federate`, `lint`, `ci` |
@@ -56,6 +58,7 @@ is what holds that line.
 | `mutation.py` | `mutation` |
 | `rooms.py` | `rooms` |
 | `typed_surface.py` | `typed-surface` |
+| `version_surface.py` | `version-surface` |
 | `bd_calls.py` | `bd-calls` |
 | `issue_number.py` | `issue-number allocate`, `issue-number check` |
 
@@ -125,6 +128,16 @@ instrument spoke where a coordinator was already thinking about concurrency and 
 where it was not (BDL-UX #228); the room is named after the bead because two agents once each
 built one at a shared scratchpad path and one measured over the other's files (BDL-UX #235).
 
+It also reads the records of the beads the tracker lists as in progress (`_running_records`,
+through the same `bd show` call form `_read_bead` makes for a planned bead) and hands them to
+the planner, which compares the plan against those under its work item (BDL-UX #283). The
+reader is tolerant where the planned-bead reader is strict: a running bead the tracker cannot
+show is left out, and the plan reports it as `running_not_compared` rather than refusing to
+decide a shape over beads it was not asked to plan. The first line carries the comparison
+beside the plan's own count — `0 serialisation(s), 1 against 1 running bead(s)` — each wave
+names the running beads a bead of it waits for, and `--json` carries the same facts under
+`running`.
+
 It also gathers the work item's `## Axes` at this edge, beside the three machine-observed
 media and for the same reason — the application layer keeps taking its input as data — and
 prints what every bead's declared `refs:` was held against: the work item, the document, how
@@ -193,6 +206,19 @@ sits at the repository root, the filter admitted no package file and the leg's t
 were unreachable. `staged_py` now selects by suffix, and each leg narrows that population by its
 own declaration.
 
+`version_surface.py` renders what `doc_sync.version_surface` derived: every place this project
+states its own version, each attributed to the instrument whose population holds it, and the ones
+no instrument holds (BDL-069 S3, BDL-UX #281). The rendering decision is the grouping. The
+derivation returned 54 places across 27 files on this repository on 2026-09-11,
+44 of them judged by nothing and nine of those in one issue log, so a flat per-line
+list is a report nobody finishes — which fails in the same way as not printing it. A group is one
+file AND one reason together, so a file whose lines fall outside for two different reasons reads
+as two facts rather than one averaged sentence. A header whose reason wraps continues deeper than
+the rows under it, because at a row's indent the second line reads as a place with no line number.
+Places nothing checks do not make the exit code non-zero: the gap is what the report exists to
+state. Exit `2` is for a version that could not be derived at all, and carries the reason on
+standard output.
+
 `docsync.py` also holds the two hook TEMPLATES, and since BDL-068 S5 the coherence block in
 them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
 content of the paths a commit already carries and prints the ones it withheld; the block runs no
@@ -201,6 +227,20 @@ content of the paths a commit already carries and prints the ones it withheld; t
 split and giving it a second meaning is how two protocols stop being checkable together. The
 hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
 the text that is actually installed rather than over a copy of it (BDL-UX #207).
+
+The instructions `docsync.py` prints come from the doc-sync engine's vocabulary, not from a
+list kept here (BDL-069, BDL-UX #282). `_REATTEST_INSTRUCTION` names the reasons in
+`REASONS_ATTESTATION_CLEARS`, and both the hook's closing line (`_HOOK_REMEDIATION`, with
+backticks turned into quotes because the hook echoes it inside double quotes) and the
+`sync-check --report` footer print it only as far as it is true; every other stale pair gets
+`content_remedy`, and under `--since` every stale pair gets `_SINCE_REF_REMEDY`, because that
+mode reads git history and no attestation writes it. `sync-update --yes` re-runs the check after attesting and `_report_left_stale`
+names each pair the verdict did not move for, choosing between three causes in `_why_left`: the
+reason is one re-attesting cannot clear, the pair was outside what the run claimed, or it was
+attested and the re-check still found the reason. The exit code does not change. `_pair_label`
+is the one rendering of a pair — `doc_path <-> code_path`, or the document alone for a row with
+no code file — and every `sync-check` line that names a pair goes through it, so two pairs over
+one document never print one line.
 
 The command's own report prints one echo per population and never one echo for two. `_echo_unresolved`
 names the rows it could not map onto a bead, `_echo_named_by_an_unresolved_row` the beads whose row it
@@ -407,7 +447,7 @@ constant, so a second string added later is judged by the same claim.
   ([docs/services/cli.md](../../cli.md))
 - `guard-probes`, `bd-seam` — the other two `services`-layer components
 
-`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187). `check`'s verdict names the population it did NOT reach: the entries below the ledger's floor, which `unclaimed-number` skips by design, and the numbers it cannot account for, spelled out rather than counted and bounded so an adopter with a hundred gaps gets a line they can read (BDL-UX #267).
+`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187). Since `beadloom-rqma.8` both also tell a project that declared the block BADLY from one that declared nothing: a misspelled `ledger:` makes `allocate` exit 2 with the entry, the key it lacks and the keys it has, and makes `check` exit 1 with `1 entr(ies) declared, 1 unusable — no leg ran.` rather than the `No duplicate, unwritten or unclaimed number.` it used to print, at exit 0, over a log it had never opened (BDL-UX #270, closed on the Gate leg one bead earlier and on these two here). `beadloom-rqma.9` added the third state to `check`: over a `.beadloom/config.yml` it could not read at all it said `Whether this project declares an issue log is unknown — no leg ran.` instead of the opt-out's own sentence, at exit 0 and with `"undetermined": true` in the payload, because a check that never saw the key cannot assert an opt-out. `check`'s verdict names the population it did NOT reach: the entries below the ledger's floor, which `unclaimed-number` skips by design, and the numbers it cannot account for, spelled out rather than counted and bounded so an adopter with a hundred gaps gets a line they can read (BDL-UX #267).
 
 `bd_calls.py` renders the derived `bd` call-site population that `bd_seam` computes. BDL-068's
 CONTEXT Q4 decided the shape: an External `bd` finding is answered by deriving our own call

@@ -50,11 +50,11 @@ class GraphBoundary:
         self._connection = connection
         self._parents: dict[str, str] = {}
         self._kinds: dict[str, str] = {}
+        self._sources: dict[str, str] = {}
         if connection is not None:
-            self._kinds = {
-                str(row[0]): str(row[1])
-                for row in connection.execute("SELECT ref_id, kind FROM nodes").fetchall()
-            }
+            rows = connection.execute("SELECT ref_id, kind, source FROM nodes").fetchall()
+            self._kinds = {str(row[0]): str(row[1]) for row in rows}
+            self._sources = {str(row[0]): str(row[2]) for row in rows if row[2]}
             self._parents = {
                 str(row[0]): str(row[1])
                 for row in connection.execute(
@@ -73,6 +73,15 @@ class GraphBoundary:
             return Ownership(None, None)
         node = get_owning_ref_id(self._connection, relative_path)
         return Ownership(node, self._bounding_context(node))
+
+    def source_of(self, node: str) -> str | None:
+        """The source path *node* declares, or ``None`` when it declares none.
+
+        The inverse of :meth:`owner_of` starts here: a caller asking which files
+        a node owns walks from the node's source and asks :meth:`owner_of` about
+        each file, so "who owns this" stays one rule rather than two.
+        """
+        return self._sources.get(node)
 
     def context_of(self, node: str | None) -> str | None:
         """The bounded context *node* sits in, by name rather than by path.

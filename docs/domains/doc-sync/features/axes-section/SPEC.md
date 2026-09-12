@@ -38,18 +38,40 @@ missing `Seed` field does not.
 
 > **Derived by:** `beadloom impact src/pkg/writer.py` over `src/pkg`
 > **Seed:** `write_yaml` (effect `serialises-yaml`), under rule `reaches-an-effect-sink`
-> **Unresolved:** 2 unnameable-callee
+> **Unresolved:** 2 unnameable-callee, 1 node-owns-unread-files
 
-| Axis | Node | Sites | In scope | Why |
-|------|------|-------|----------|-----|
-| co-writers | graph-files | 6 — `src/…/bootstrap.py:216` | yes | the invariant is written here |
-| callers | flow-composer | 2 — `src/…/setup.py:88` | no | reads the result only |
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|------|------|-------|-------------|----------|-----|
+| co-writers | graph-files | 6 — `src/…/bootstrap.py:216` | none | yes | the invariant is written here |
+| branches | onboarding | `detect_preset`: 2 branch(es), 3 exit form(s) | 49 — `src/…/templates/agentic_flow/CLAUDE.md.txt` | yes | owns the templates the fix edits |
 ```
 
-The first three columns are the derivation's output. The last two are the person's scope
+The first four columns are the derivation's output. The last two are the person's scope
 decision, and the split is what lets a check tell "a run nobody has ruled on" from "a decision
 somebody took". A blockquote field wrapped over several lines is one value, because these
 documents wrap at 95 columns like every other.
+
+### The `Owns unread` column, and the tables written before it
+
+BDL-UX #284. A node surfaces under an axis by its relation to the seed, and that relation says
+nothing about the node's role in the change. BDL-069 ruled `onboarding` out as blast radius
+because it surfaced as a caller, and the fix lived in that node's `.md.txt` templates, which
+`beadloom impact` does not read. The column puts the files a row's node owns and the derivation
+could not read on the row a person rules, rather than only in the `Unresolved` count above the
+table.
+
+`Axis.owns_unread` holds the cell as written, and `Axis.unread_count` reads it: `N — path` is
+`N`, `none` is `0`, and anything else — `—`, `unknown — no index`, or words a person wrote — is
+`None` and kept as written rather than guessed at.
+
+Every column is read by its header name, so a table written before the column existed reads
+exactly as it did. The one fact that table never stated reads as `None`, meaning not stated,
+and never as `0`. Measured on 2026-09-11 over the 202 planning documents under
+`.claude/development/docs/features/`, two of which carry an `## Axes` section: `beadloom axes`
+printed byte-identical `--json`, text and `--refs` output from the reader before and after the
+change. BDL-069's `--refs` named the same 23 nodes with the RFC as it stood at `7eadb4b4`, and
+the same 24 once `9b49b4a0` added `git-activity` to it. `beadloom axes --json` does not print the
+new field, because that output belongs to `cli-commands`, which this change did not reach.
 
 ### The two checks
 
@@ -117,6 +139,7 @@ in two places, hours apart, in one slice.
 |--------|------|
 | `AXES_HEADING` / `SEED_FIELD` / `DERIVED_BY_FIELD` / `UNRESOLVED_FIELD` / `NO_SEED` / `COLUMNS` | constant |
 | `AXES_WITHOUT_A_SEED` / `AXIS_WITHOUT_A_SCOPE_DECISION` / `CHECK_NAMES` | constant |
+| `OWNS_UNREAD_COLUMN` / `OWNS_NOTHING_UNREAD` | constant |
 | `Axis` / `AxesSection` | dataclass |
 | `read_axes_section` | function |
 | `refs_line` | function |

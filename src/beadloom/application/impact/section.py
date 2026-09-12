@@ -24,11 +24,14 @@ from beadloom.doc_sync.axes_section import (
     COLUMNS,
     DERIVED_BY_FIELD,
     NO_SEED,
+    OWNS_NOTHING_UNREAD,
     SEED_FIELD,
     UNRESOLVED_FIELD,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from beadloom.application.impact.answer import ImpactAnswer, Population
     from beadloom.application.impact.axes import Command
 
@@ -42,6 +45,11 @@ _NO_NODE = "—"
 
 #: How a branch row taken over a caller of the target is spelled.
 _FROM_A_CALLERS_SEAT = ", from a caller's seat"
+
+#: What the ``Owns unread`` cell says for a named node when the answer had no
+#: index to read ownership from. Not ``none``: nothing was measured, and a
+#: stated absence would be a claim this run cannot make.
+_OWNERSHIP_UNKNOWN = "unknown — no index"
 
 
 def render_axes_section(answer: ImpactAnswer) -> str:
@@ -94,15 +102,39 @@ def _unresolved(answer: ImpactAnswer) -> str:
 
 
 def _rows(answer: ImpactAnswer) -> list[str]:
+    owns = _ownership_cells(answer)
     rows = [
-        *_population_rows("co-writers", answer.co_writers),
-        *_population_rows("callers", answer.callers),
-        *(_command_row(command) for command in answer.commands),
+        *_population_rows("co-writers", answer.co_writers, owns),
+        *_population_rows("callers", answer.callers, owns),
+        *(_command_row(command, owns) for command in answer.commands),
     ]
-    return rows or [_row("co-writers", _NO_NODE, "no site found")]
+    return rows or [_row("co-writers", _NO_NODE, "no site found", owns)]
 
 
-def _population_rows(axis: str, population: Population) -> list[str]:
+def _ownership_cells(answer: ImpactAnswer) -> Callable[[str], str]:
+    """The ``Owns unread`` cell for a row, from the node it names (BDL-UX #284).
+
+    Written on the row because the row is where a person rules. The unresolved
+    field counts the same population, and a count in a blockquote above a table
+    of forty rows is what one epic's ruling read past: a ``callers`` row was
+    ruled "not changed" while the fix lived in that node's templates.
+    """
+    owned = {entry.node: entry.files for entry in answer.unread_ownership}
+
+    def cell(node: str) -> str:
+        if node == _NO_NODE:
+            return _NO_NODE
+        if not answer.boundary.resolved:
+            return _OWNERSHIP_UNKNOWN
+        files = owned.get(node)
+        return f"{len(files)} — `{files[0]}`" if files else OWNS_NOTHING_UNREAD
+
+    return cell
+
+
+def _population_rows(
+    axis: str, population: Population, owns: Callable[[str], str]
+) -> list[str]:
     """The rows for one axis: the caveat, if there is one, and then the sites.
 
     An unresolved axis keeps the sites it did find. A section that dropped them
@@ -115,15 +147,15 @@ def _population_rows(axis: str, population: Population) -> list[str]:
             f"{site.path}:{site.lineno}"
         )
     found = [
-        _row(axis, node, f"{len(sites)} — `{sites[0]}`")
+        _row(axis, node, f"{len(sites)} — `{sites[0]}`", owns)
         for node, sites in sorted(by_node.items())
     ]
     if not population.resolved:
-        return [_row(axis, _NO_NODE, f"unresolved — {population.reason}"), *found]
-    return found or [_row(axis, _NO_NODE, "no site found")]
+        return [_row(axis, _NO_NODE, f"unresolved — {population.reason}", owns), *found]
+    return found or [_row(axis, _NO_NODE, "no site found", owns)]
 
 
-def _command_row(command: Command) -> str:
+def _command_row(command: Command, owns: Callable[[str], str]) -> str:
     narrowing = "" if command.narrowed_to_the_seeds else ", over every call"
     seat = "" if command.seat == THE_TARGET_SEAT else _FROM_A_CALLERS_SEAT
     return _row(
@@ -131,8 +163,9 @@ def _command_row(command: Command) -> str:
         command.node or _NO_NODE,
         f"`{command.name}`: {len(command.branches)} branch(es), "
         f"{len(command.exits)} exit form(s){narrowing}{seat}",
+        owns,
     )
 
 
-def _row(axis: str, node: str, sites: str) -> str:
-    return f"| {axis} | {node} | {sites} | {UNDECIDED} |  |"
+def _row(axis: str, node: str, sites: str, owns: Callable[[str], str]) -> str:
+    return f"| {axis} | {node} | {sites} | {owns(node)} | {UNDECIDED} |  |"
