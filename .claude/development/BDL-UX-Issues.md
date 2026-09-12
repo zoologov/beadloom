@@ -35,6 +35,32 @@
 
 ## Open Issues
 
+292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
+
+    **Severity:** low (the panel is a dashboard and decides nothing, but it is one of the surfaces an owner looks at to ask how much is wrong, and it answers `0 warnings` over 71 of them)
+    **Command:** `beadloom tui`, the Lint panel
+    **Context:** BDL-070, `beadloom-q6jh` (A4), 2026-09-12. Found while measuring what the panel renders before and after the bead's own change, and explicitly **not that bead's change**.
+    **What happened.** `tui/widgets/lint_panel.py:19` and `:27` branch on `severity == "warning"`. The vocabulary is `VALID_RULE_SEVERITIES = frozenset({"error", "warn"})` (`graph/rules/types.py:29`), and every `Violation` carries one of those two. The branch is therefore dead: no finding ever takes it.
+    **How it was proved.** Measured over this repository's own index in `room-beadloom-q6jh`, where `lint --strict` reports 0 errors and 71 warnings: the panel header renders `Lint ℹ 71 info`. The warning count and the warning icon are unreachable, and every `warn` finding renders in the `dim` info style.
+    **Expected:** the panel reads the severity vocabulary the rule engine defines rather than a spelling of its own, so a finding the linter calls a warning is a warning on the screen.
+    **What is NOT established:** whether any other reader of `Violation.severity` outside `graph/` carries the same spelling. One was found, by reading the two functions this bead had to touch; the class was not swept.
+    **Tracker:** `beadloom-vu0a`.
+    **Related:** #272 — the same shape at a different grain, a reader keyed on a form its producer does not emit.
+
+291. [2026-09-12] [MEDIUM] the debt report reads `rules.yml` from two paths, and the product writes it to a third — so its rule-violation category is silently zero on every standard-layout project
+
+    **Severity:** medium (no verdict is wrong: `beadloom debt` is not a Gate step. What is wrong is a health number that reads as measured and was never taken, which is the class this project's last three epics exist to remove)
+    **Command:** `beadloom status`, the TUI debt gauge, the site dashboard, the MCP `get_debt_report` tool — every caller of `collect_debt_data`
+    **Context:** BDL-070, `beadloom-q6jh` (A4), 2026-09-12. Found while wiring the layer population into the debt surface, and explicitly **not that bead's change**: the paths predate it.
+    **What happened.** `application/debt_report/collect.py:239-243` resolves `<root>/rules.yml`, then `<root>/.beadloom/rules.yml`, and returns `(0, 0, {})` when neither is a file. The canonical location — the one `graph/linter.py`, `application/reindex/full.py`, `tui/data_providers.py`, `services/mcp_server.py` and `onboarding/scanner/rules_gen.py` all resolve — is `<root>/.beadloom/_graph/rules.yml`. A project laid out the way `beadloom init` lays it out therefore loads no rules here at all.
+    **How it was proved.** Measured on this repository, over its own index: `_count_violations(conn, root)` returns 0 errors and 0 warnings, while `beadloom lint --strict` over the same index reports 0 errors and 71 warnings. `collect_debt_data` returns `error_count=0, warning_count=0`, so the `rule_violations` category scores 0 points out of the 71 it would score at the default `rule_warning` weight of 1.0.
+    **Why it is filed rather than fixed.** The repair is one line — try the canonical location too — and it moves this repository's raw rule-violations score from 0 to 71 points. BDL-070 Release A ships no number that moves on upgrade, and a debt score is a number an adopter watches over time; a silent jump would be indistinguishable from a real regression.
+    **Expected:** the debt collector resolves the rules file the way every other reader does, or one function resolves it for all of them.
+    **What is NOT established:** what the score's trend history means across the repair. `metrics_history.json` holds points taken under the current behaviour, so the delta on the first run after a fix is an artefact of the fix rather than of the code, and nothing here says how that should be presented.
+    **Guarded meanwhile:** `tests/test_every_surface_past_lint_states_the_population.py::TestTheDebtReportReadsRulesFromAPlaceNobodyWritesThem` holds the current behaviour, so the repair fails there first and the test that fails names this entry.
+    **Tracker:** `beadloom-is2z`.
+    **Related:** #287 — a declaration resolved from a path nothing writes to, reported as an absence rather than as a misdeclaration.
+
 290. [2026-09-12] [MEDIUM] `beadloom reindex` is not idempotent across a fresh and a carried-forward index, and the layer rule's new population statement inherits the difference
 
     **Severity:** medium (no wrong verdict was produced; what moves is a DENOMINATOR the project had just started printing, and a number that changes with how you arrived at it is the class three consecutive epics exist to remove)

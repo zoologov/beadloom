@@ -6,10 +6,16 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
+
 # Icons for severity levels
 _ICON_ERROR = "\u2716"  # heavy X
 _ICON_WARNING = "\u26a0"  # warning sign
 _ICON_INFO = "\u2139"  # info
+
+#: What marks a line stating how much of its edge set a rule judged, rather
+#: than a finding against the graph.
+_ICON_POPULATION = "\u2211"  # n-ary summation
 
 
 def _severity_icon(severity: str | None) -> str:
@@ -55,8 +61,28 @@ class LintPanelWidget(Static):
         super().__init__(id=widget_id)
         self._violations: list[dict[str, str | None]] = violations or []
 
+    def _populations(self) -> list[dict[str, str | None]]:
+        """The rows that state a population rather than report a finding."""
+        return [
+            v
+            for v in self._violations
+            if v.get("rule_type") == LAYER_POPULATION_RULE_TYPE
+        ]
+
     def render(self) -> Text:
-        """Render the lint panel as Rich Text."""
+        """Render the lint panel as Rich Text.
+
+        A population leads the list, for the reason ``lint --format github``
+        puts its ``::notice::`` first: the reach of a check is what the findings
+        under it are true of. It renders its MESSAGE, where the numbers are —
+        a population row carries no ``from_ref_id``, and the rule description
+        beside it describes the boundary, not how much of it was looked at.
+
+        Nothing here re-counts. A population is counted in the header exactly as
+        every other finding is, because whether an advisory counts as a
+        violation is one question with one answer and it is not answered at this
+        leaf (BDL-070 A4).
+        """
         text = Text()
 
         # Header with counts
@@ -88,8 +114,17 @@ class LintPanelWidget(Static):
         if info_count > 0:
             text.append(f"{_ICON_INFO} {info_count} info", style="dim")
 
+        # Populations first, then the findings they are true of.
+        for population in self._populations():
+            text.append("\n")
+            text.append(f"  {_ICON_POPULATION} ", style="dim")
+            text.append(f"{population.get('rule_name', 'unknown')}", style="bold")
+            text.append(f" - {population.get('message', '')}", style="dim")
+
         # Individual violations
         for violation in self._violations:
+            if violation.get("rule_type") == LAYER_POPULATION_RULE_TYPE:
+                continue
             text.append("\n")
             sev = violation.get("severity")
             icon = _severity_icon(sev)

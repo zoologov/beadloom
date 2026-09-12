@@ -1231,8 +1231,17 @@ class TestFormatDebtJson:
 
         report = self._make_report()
         result = format_debt_json(report)
+        # `layer_populations` joined the five in BDL-070 A4: the rule-violation
+        # counts are counts over a population, and this report is one of the two
+        # surfaces that never see a `LintResult`. Equality, not containment, so
+        # a sixth key is a decision somebody makes rather than one that arrives.
         assert set(result.keys()) == {
-            "debt_score", "severity", "categories", "top_offenders", "trend",
+            "debt_score",
+            "severity",
+            "categories",
+            "top_offenders",
+            "trend",
+            "layer_populations",
         }
 
     def test_debt_score_and_severity(self) -> None:

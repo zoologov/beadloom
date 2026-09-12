@@ -89,6 +89,8 @@ from beadloom.graph.rules import (
     own_layer_of,
     part_of_ancestors,
     part_of_parents,
+    population_phrase,
+    stated_populations,
     suppressed_crossings,
     validate_rules,
 )
@@ -159,6 +161,8 @@ __all__ = [
     "own_layer_of",
     "part_of_ancestors",
     "part_of_parents",
+    "population_phrase",
+    "stated_populations",
     "suppressed_crossings",
     "validate_rules",
 ]

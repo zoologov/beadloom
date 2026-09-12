@@ -385,6 +385,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_docs_audit_coverage.py",
     "tests/test_e2e_wave3.py",
     "tests/test_every_lint_rendering_states_the_population.py",
+    "tests/test_every_surface_past_lint_states_the_population.py",
     "tests/test_every_wizard_answer_is_judged.py",
     "tests/test_exit_condition_expiry.py",
     "tests/test_f3_gate_coverage.py",

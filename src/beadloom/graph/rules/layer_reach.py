@@ -236,3 +236,34 @@ def population_statement(rule: LayerRule, reach: LayerReach) -> list[Violation]:
             ),
         )
     ]
+
+
+def stated_populations(reaches: Sequence[LayerReach]) -> list[LayerReach]:
+    """The reaches there is anything to say about.
+
+    A rule handed no edge of its kind has no denominator: liveness already
+    reports that it could not fire, and a second way of saying it is the
+    affirm-it-twice shape this project has filed before. Every surface filters
+    the same way through this one function, so "nothing to state" cannot mean
+    one thing on the Gate line and another in `prime`.
+    """
+    return [reach for reach in reaches if reach.own_tags.total]
+
+
+def population_phrase(reach: LayerReach) -> str:
+    """One reach as a clause, for a surface that states it in passing.
+
+    The short form, as distinct from the finding's message: a clause that sits
+    on a line somebody is already reading names the rule, the fraction and the
+    edge kind and stops, while the finding has room to say what the unjudged
+    edges mean and what to do about them.
+
+    Written ONCE because six surfaces state it — the rich summary line, the
+    GitHub notice, the Gate's lint step, `prime`'s health line, the debt report
+    and the MCP tool's JSON. Six wordings of one fact is the shape this epic
+    exists to remove, at the scale of a sentence.
+    """
+    return (
+        f"{reach.rule_name} judged {reach.own_tags.evaluated} of "
+        f"{reach.own_tags.total} live {reach.edge_kind} edge(s)"
+    )

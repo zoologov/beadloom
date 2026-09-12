@@ -86,6 +86,10 @@ def format_debt_json(
         "categories": categories_json,
         "top_offenders": format_top_offenders_json(report.top_offenders),
         "trend": trend_json,
+        # What the rule-violation count was counted over. Additive: every key
+        # above keeps its name and its meaning. Empty for a project that
+        # declares no layer rule (BDL-070 A4).
+        "layer_populations": list(report.layer_populations),
     }
 
 
@@ -183,6 +187,14 @@ def format_debt_report(report: DebtReport) -> str:
             value = cat.details.get(key, 0)
             prefix = "└──" if i == len(detail_items) - 1 else "├──"
             console.print(f"  {prefix} {label}: {value}")
+
+        # What the counts above were counted over. Printed under the category
+        # they qualify and nowhere else, because a denominator belongs beside
+        # its numerator: `36 errors` reads the same whether the rule judged 16
+        # edges or all 363 (BDL-070 A4).
+        if cat.name == "rule_violations":
+            for phrase in report.layer_populations:
+                console.print(f"  [dim]counted over: {phrase}[/dim]")
         console.print()
 
     # -- Top Offenders --

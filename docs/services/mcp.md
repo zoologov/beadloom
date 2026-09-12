@@ -401,7 +401,7 @@ Handler functions (sync, testable without MCP transport):
 - `handle_search(conn, *, query, kind=None, limit=10)` -- FTS5 search
 - `handle_why(conn, *, ref_id, depth=3)` -- impact analysis with flattened upstream/downstream
 - `handle_diff(project_root, *, since="HEAD~1")` -- graph diff
-- `handle_lint(project_root, *, severity="all")` -- architecture lint
+- `handle_lint(project_root, *, severity="all")` -- architecture lint. Its `summary` carries `layer_populations[]` — the same eight keys `lint --format json` states per declared layer rule — so an agent reading the counts reads the population they were taken over: `16 of 363 live depends_on edge(s)` and `363 of 363` produce the same `errors`/`warnings` pair. Additive to the three keys that were there, and deliberately OUTSIDE the `severity` filter, because a population is not a finding and a finding filter must not be able to hide it (BDL-070 A4)
 - `handle_get_debt_report(conn, project_root, *, trend=False, category=None)` -- architecture debt report
 
 Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the `services/bd_seam/client.py:run_bd` seam):

@@ -733,7 +733,9 @@ class LayerReach:
 
 def layer_rule_reach(conn, rule) -> LayerReach
 def layer_rule_reaches(conn, rules) -> list[LayerReach]   # one read of the graph for the whole list
-def population_statement(rule, reach) -> list[Violation]
+def population_statement(rule, reach) -> list[Violation]  # the finding, with its remediation
+def stated_populations(reaches) -> list[LayerReach]       # the ones there is anything to say about
+def population_phrase(reach) -> str                       # the clause, for a line already being read
 ```
 
 `architecture-layers` ships at `severity: error`, so what it evaluates decides whether `main` is
@@ -795,6 +797,36 @@ were no violations would have vanished from exactly the two formats it exists fo
 `suppressed_crossings` rather than returned by `evaluate_all`, which returns findings. Both counts
 come from `reach_of` over one connection, so they cannot differ in logic, and a test holds the
 numbers on the result against the numbers in the finding.
+
+##### The surfaces outside `beadloom lint` (BDL-070 A4)
+
+Five surfaces report a lint result without being `beadloom lint`, and two of them never see a
+`LintResult` at all — which is why the population is emitted as a finding in the first place.
+
+| Surface | How the population appears |
+|---|---|
+| `application/gate.py` `lint_step` | the clause, appended to the step summary beside `_suppressed_note`, from the linter's own formatter so the Gate line cannot drift from the command it summarises |
+| `services/mcp_server.py` `handle_lint` | `summary.layer_populations[]`, the same eight keys `lint --format json` carries. Additive, and outside the severity filter: a finding filter must not be able to hide something that is not a finding |
+| `tui/data_providers.py` + `widgets/lint_panel.py` | past `lint()`. The provider carries the finding's `rule_type` and `message`, which it dropped before, and the panel leads its list with the population rows, rendering the MESSAGE — a population row carries no `from_ref_id`, and the rule description beside it describes the boundary rather than how much of it was looked at |
+| `application/debt_report/collect.py` | past `lint()`. Counts the reaches over the same rules it evaluated and carries `population_phrase` on `DebtData` → `DebtReport`; the Rich report prints `counted over: ...` under Rule Violations, and `format_debt_json` carries `layer_populations` |
+| `onboarding/scanner/prime.py` | the clause on the `Health:` line, and `health.layer_populations` in `--format json`. One clause per DECLARED layer rule rather than per finding, so the list `prime` caps at ten findings can grow without this growing with it |
+
+**One wording, not five.** `population_phrase` is the single clause and `stated_populations` the
+single "is there anything to say" filter. `linter._population_note` and `format_github` were
+rewritten to call them, so the six places that state the fraction cannot drift into six wordings —
+the defect this epic is about, at the scale of a sentence.
+
+**A4 states; it does not re-count.** Every number these five surfaces printed before it, they
+print after it — the population advisory is still counted among the warnings, exactly as A2 left
+it. Whether an advisory counts as a violation is one question with one answer, and it belongs in
+`LintResult`'s counting properties rather than in five leaves.
+
+**A test names the callers of `evaluate_all` and fails when a new one appears.** The set is derived
+by an AST scan over the installed package, following `import` and `from ... import` by name
+(including `as`), and compared for equality: `linter._evaluate`,
+`tui.data_providers.LintDataProvider.refresh` and `debt_report.collect._count_violations`. Its
+ceiling is that a caller reaching the evaluator through an attribute chain or `importlib` binds no
+name the scan reads, which is held by a case of its own rather than left to be rediscovered.
 
 `node_tags.NodeTags` is the tag lookup the five evaluators share. It reads
 `nodes.extra["tags"]` once, on the first question, and answers from memory afterwards — the

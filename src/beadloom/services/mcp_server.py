@@ -414,6 +414,13 @@ def handle_lint(
     -------
     dict
         ``{"violations": [...], "summary": {...}}``
+
+    The summary carries ``layer_populations`` — how much of its edge set each
+    declared layer rule judged, one entry per rule, mirroring
+    ``lint --format json``. It sits beside the counts rather than among the
+    violations, and the severity filter above does not touch it: a population
+    is not a finding, so a finding filter must not be able to hide it
+    (BDL-070 A4).
     """
     result: LintResult = lint(project_root)
 
@@ -446,6 +453,9 @@ def handle_lint(
             "errors": error_count,
             "warnings": warning_count,
             "rules_evaluated": result.rules_evaluated,
+            "layer_populations": [
+                reach.to_dict() for reach in result.layer_populations
+            ],
         },
     }
 

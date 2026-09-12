@@ -274,7 +274,12 @@ def lint_step(project_root: Path) -> GateStep:
     whether a tree is green. Sharing the function makes that disagreement
     unrepresentable rather than merely unlikely.
     """
-    from beadloom.graph.linter import LintError, _finding, _suppressed_note
+    from beadloom.graph.linter import (
+        LintError,
+        _finding,
+        _population_note,
+        _suppressed_note,
+    )
     from beadloom.graph.linter import lint as run_lint
 
     try:
@@ -289,17 +294,24 @@ def lint_step(project_root: Path) -> GateStep:
         )
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors
-    # The suppressed-crossing clause comes from the linter's own formatter rather
-    # than being restated here, so the Gate line cannot drift from the command it
-    # summarises. It is absent when nothing was excused, so the everyday green
-    # line keeps its shape. The OTHER counter needs no clause: an inert rule
+    # The suppressed-crossing and population clauses come from the linter's own
+    # formatter rather than being restated here, so the Gate line cannot drift
+    # from the command it summarises. The first is absent when nothing was
+    # excused, so the everyday green line keeps its shape; the second is present
+    # at full reach as well, because a population is the denominator of the
+    # counts beside it and `16 of 362` and `362 of 362` read alike when neither
+    # is printed (BDL-070 A4). The OTHER counter needs no clause: an inert rule
     # always emits a finding, so `rules_inert > 0` already flips this summary to
     # the "0 error(s), N warning(s)" branch (BDL-061.48/.49).
     summary = (
-        f"{result.error_count} error(s), {result.warning_count} warning(s)"
-        if result.violations
-        else f"{result.rules_evaluated} rules, 0 violations"
-    ) + _suppressed_note(result)
+        (
+            f"{result.error_count} error(s), {result.warning_count} warning(s)"
+            if result.violations
+            else f"{result.rules_evaluated} rules, 0 violations"
+        )
+        + _suppressed_note(result)
+        + _population_note(result)
+    )
     return GateStep("lint", passed=passed, findings=findings, summary=summary)
 
 

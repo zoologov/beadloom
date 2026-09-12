@@ -228,6 +228,18 @@ Returns compact project context. Static layer (config, rules, AGENTS.md) always 
   docs` above three identical lines naming the README alone. The cut note says `stale pair(s)`
   for the same reason. `fmt="json"` is unchanged: `health.stale_docs` already carried
   `doc_path`, `code_path` and `ref_id` per pair
+- **The health line states what the violation count was taken over** (BDL-070 A4). `N lint
+  violations` says the same words whether the layer rule judged 16 of 363 live `depends_on`
+  edges or all 363, so the line carries a clause per declared layer rule:
+  `Health: 0 stale pair(s), 71 lint violations, architecture-layers judged 16 of 363 live
+  depends_on edge(s) | Last reindex: …`. The wording is
+  `graph/rules/layer_reach.py::population_phrase`, shared with the Gate line and the four
+  `lint` renderings, so one fact has one form. It is one clause per RULE and not per finding,
+  so the bounded list above can grow without it growing; a project that declares no layer rule
+  gets no clause. `fmt="json"` carries the same list under `health.layer_populations`. Both
+  facts come from ONE `lint` run, held together on `prime.LintSnapshot`: reading them
+  separately would lint twice, and a count and a denominator taken over two different indexes
+  are worse than neither
 - `fmt="json"` — structured dict for programmatic use
 
 ### `setup_rules_auto(project_root)`

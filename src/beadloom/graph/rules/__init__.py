@@ -52,6 +52,8 @@ from beadloom.graph.rules.layer_reach import (
     layer_rule_reach,
     layer_rule_reaches,
     part_of_parents,
+    population_phrase,
+    stated_populations,
 )
 from beadloom.graph.rules.layers import (
     LayerPopulation,
@@ -336,6 +338,8 @@ __all__ = [
     "own_layer_of",
     "part_of_ancestors",
     "part_of_parents",
+    "population_phrase",
+    "stated_populations",
     "suppressed_crossings",
     "validate_rules",
 ]

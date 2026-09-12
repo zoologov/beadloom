@@ -20,6 +20,8 @@ from beadloom.graph.rule_engine import (
     inert_rule_names,
     layer_rule_reaches,
     load_rules,
+    population_phrase,
+    stated_populations,
     suppressed_crossings,
 )
 from beadloom.infrastructure.db import connection, create_schema, readonly_connection
@@ -323,9 +325,12 @@ def _stated_populations(result: LintResult) -> list[LayerReach]:
 
     A rule handed no edge of its kind has no denominator: liveness already
     reports that it could not fire, and saying it a second way is the
-    affirm-it-twice shape this project has filed before.
+    affirm-it-twice shape this project has filed before. The filter itself is
+    :func:`~beadloom.graph.rules.layer_reach.stated_populations`, shared with
+    the five surfaces that never see a :class:`LintResult` (BDL-070 A4), so
+    "nothing to state" cannot mean one thing here and another on the Gate line.
     """
-    return [reach for reach in result.layer_populations if reach.own_tags.total]
+    return stated_populations(result.layer_populations)
 
 
 def _population_note(result: LintResult) -> str:
@@ -341,9 +346,7 @@ def _population_note(result: LintResult) -> str:
     triage, in every project, on every run — and that split is deliberate.
     """
     return "".join(
-        f", {reach.rule_name} judged {reach.own_tags.evaluated} of "
-        f"{reach.own_tags.total} live {reach.edge_kind} edge(s)"
-        for reach in _stated_populations(result)
+        f", {population_phrase(reach)}" for reach in _stated_populations(result)
     )
 
 
@@ -519,9 +522,7 @@ def format_github(result: LintResult) -> str:
     is neither a violation nor a population to state.
     """
     lines: list[str] = [
-        f"::notice::{reach.rule_name} judged {reach.own_tags.evaluated} of "
-        f"{reach.own_tags.total} live {reach.edge_kind} edge(s)"
-        for reach in _stated_populations(result)
+        f"::notice::{population_phrase(reach)}" for reach in _stated_populations(result)
     ]
     for v in result.violations:
         level = "error" if v.severity == "error" else "warning"
