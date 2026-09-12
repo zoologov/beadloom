@@ -35,7 +35,7 @@ literal in `src/` outside a test fixture.
 
 | Tracker | Bead | Status | Details |
 |---|---|---|---|
-| `beadloom-e64o` | A1 | Ready | the shared layer lookup |
+| `beadloom-e64o` | A1 | Done | `graph/rules/layers.py`: `layer_of` reads the declared `layers`, `part_of_generations` is now the ONE ancestry walk (`import_resolver` calls it), `layer_population` counts evaluated / skipped-untagged. 31 + 5 tests. No verdict moved: lint 0 error(s), 70 warning(s), as before |
 | `beadloom-1ylk` | A2 | Blocked | the evaluator counts its population |
 | `beadloom-2dgz` | A3 | Blocked | LintResult carries a per-rule population |
 | `beadloom-q6jh` | A4 | Blocked | the readers that bypass lint() |

@@ -11,6 +11,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
@@ -674,6 +675,51 @@ Algorithm:
    b. For each edge, optionally filter by `edge_kind`. Look up the target node via `_get_node`.
    c. If any target matches `has_edge_to`, the node satisfies the rule.
    d. If no matching edge is found, emit a `Violation`.
+
+#### The layer a node is in (`rules/layers.py`, BDL-070 A1)
+
+```python
+def layer_of(ref_id, layers, parents, tags) -> int | None
+def own_layer_of(ref_id, layers, tags) -> int | None
+def part_of_generations(ref_id, parents) -> list[tuple[str, ...]]
+def part_of_ancestors(ref_id, parents) -> frozenset[str]
+def layer_population(edges, layer_at) -> LayerPopulation
+```
+
+One answer to "what layer is this node in", for every caller that asks. Three bodies asked it
+before and disagreed: `evaluate_layer_rules` read a node's OWN tags and skipped every edge whose
+ends carried none, `application/architecture_view.py` climbed `part_of` with the four tags and
+their ranks written into it, and `liveness.py` did neither. Measured on this repository at
+`aa4bfad4`: 362 live `depends_on` edges, 16 with a layer at both ends by own tags, 354 by `part_of`
+ancestry.
+
+The functions are pure — the declaration, the parent map and the tag map are arguments, and there
+is no connection and no filesystem — so the rule's hardest property is testable without a graph.
+A layer is returned as its INDEX in the declared order (`0` is topmost), because the index is what
+the rule compares to decide direction.
+
+Two properties hold, and both are settled by the declaration rather than by a dictionary's
+iteration order:
+
+- A node that declares a layer keeps it and does not climb. A node that declares none takes the
+  layer of the nearest `part_of` generation that does, and `None` when no generation does.
+- A tie is decided top-down. A node carrying two declared layer tags is in the topmost of them —
+  `evaluate_layer_rules` iterated the node's tag `set` and took the first match, so its answer
+  depended on hash order — and two tagged ancestors at the same distance resolve the same way.
+  There is no uniformly conservative choice here, so the tie is settled for determinism and said
+  so out loud. Measured on this repository's graph on 2026-09-12: no node has more than one
+  `part_of` parent, so the ancestor tie is unreachable here and exists for the graphs Beadloom
+  ships to.
+
+`part_of_generations` is the ONE `part_of` ancestry walk in the codebase.
+`import_resolver._part_of_ancestors` reads the direct edges out of SQLite and calls
+`part_of_ancestors` rather than climbing a second time; a test derives that from the source and
+fails on a second walk reachable from `graph/rules/`.
+
+`layer_population` counts an edge set into `evaluated` (a layer at both ends) and
+`skipped_untagged` (the rest). The resolver is a parameter because the same edge set has two
+populations worth stating — what own tags reach and what ancestry reaches. The rule does not yet
+report either: that is BDL-070 A2, and it changes no verdict.
 
 #### Combined Evaluation
 
