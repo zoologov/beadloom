@@ -253,17 +253,6 @@
     **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-2`, two `xfail(strict=True)` — one on the predicate and one on the section it reaches. Verified by mutation: widening the regex turns both red as XPASS.
     **Related:** #244 (the same class, first instance), #268 (the second reader that gets this right).
 
-270. [2026-09-09] [MEDIUM] four ways of misdeclaring `issue_log:` reach the same gate verdict as declaring none
-
-    **Severity:** medium (a project that opted in and mistyped one key is told it opted out, and the Gate is green)
-    **Command:** the `issue-log` step of `beadloom ci`, and `beadloom issue-number check`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. The step blocks on a duplicate number, and it earns that by never reddening a project that has not opted in: "The log is DECLARED in `.beadloom/config.yml`; an adopter who declares none gets a named skip."
-    **Measured:** with `path:` misspelled as `paths:`, with `ledger:` misspelled, with a block that will not parse, and with `issue_log:` given a scalar instead of a mapping, `_step_issue_numbers` returns the same `(skipped=True, "skipped — no issue log is declared; add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml")` a project with no block at all gets. `resolve_issue_log` emits `logger.warning("%s needs both %r and %r", ...)`, and the Gate renders no logging channel.
-    **Why it matters:** this is the epic's own two-reasons-one-verdict class inside a check S6 shipped, and the direction is the unsafe one — the reason a project opted in is that its numbers had collided five times, and the misdeclaration silently returns it to the state the collisions happened in. `log_missing` already proves the shape is available: a declared log that is absent is a finding rather than a skip.
-    **Expected:** a declaration this reader could not use is its own outcome, named as such, with the key it could not read. A skip stays a skip only for a project that declared nothing.
-    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-3`, `xfail(strict=True)` over four parameterised misdeclarations, each compared against the opt-out's own verdict so that rewording one side cannot pass it.
-    **Related:** #173 (a leg that read nothing must say so), #267 (the population the same check states correctly).
-
 271. [2026-09-09] [HIGH] a ledger file the claim reader drops is a free number, so the allocator hands out a number two writers then hold
 
     **Severity:** high (the collision the allocator exists to make impossible, produced by the allocator, silently)
@@ -2250,16 +2239,81 @@
 
 ### Verified against current behaviour on 2026-09-12 (the BDL-069 adopter runs)
 
-Two entries whose defects BDL-069 fixed. Neither was moved on the strength of the fix: each was
+Three entries whose defects BDL-069 fixed. None was moved on the strength of the fix: each was
 re-run first, on a project that is NOT this repository, because this repository's own arrangement
-hides both — the standard the 2026-09-10 sweep below sets for itself, and which the 2026-08-31
-sweep proved necessary by checking four entries and finding three of them still live.
+hides all three — the standard the 2026-09-10 sweep below sets for itself, and which the
+2026-08-31 sweep proved necessary by checking four entries and finding three of them still live.
 
 The re-runs were taken twice, by two parties, on the same day. `beadloom-956f` ran them on a WHEEL
 built from `features/BDL-069`, installed into an interpreter of its own and set beside the
 published 4.0.0 on the same fixtures. `beadloom-rqma.6` ran them against the working tree, on
 projects built for the run. Both are recorded under each entry, and both rooms are macOS on
 CPython 3.13 — no leg of this project's Linux, 3.10-3.12 or locale matrix was entered by either.
+
+#270 was added on the same day by `beadloom-rqma.8` and is the one that says why a re-run is the
+standard. It was called closed by a tracker comment and by two SPECs while two of the three
+surfaces it names were still live, and the entry's own **Held by:** line pointed at a test that
+had been deleted. An entry moved on the strength of the fix would have recorded all of that as
+done — so this one records, per surface, which bead closed it and what the re-run printed.
+
+270. ~~[2026-09-09] [MEDIUM] four ways of misdeclaring `issue_log:` reach the same gate verdict as declaring none~~ **CLOSED (verified 2026-09-12)**
+
+    **Verified fixed 2026-09-12 on all THREE surfaces this entry names**, on a foreign
+    two-package `src/core` + `src/web` project built for the run and never on this repository,
+    whose own config declares the block correctly and hides the defect. Exit codes read without
+    a pipe. The entry was closed in two acts and the first did not cover what the second found:
+    `beadloom-rqma.7` moved the Gate leg onto `read_log_declaration`, and `beadloom-rqma.8`
+    moved the two COMMAND surfaces onto it after `beadloom-qae9` measured them still live.
+
+    | Surface | Declaring nothing | `ledger:` written `ledgr:` | Closed by |
+    |---------|-------------------|----------------------------|-----------|
+    | `beadloom ci`, step `issue-log` | rc 0, `SKIP: skipped — no issue log is declared; add an `issue_log:` block …` | rc 1, `FAIL: 0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)` | `beadloom-rqma.7` |
+    | `beadloom issue-number allocate` | rc 2, `Refused: no issue log is declared; add an `issue_log:` block …` | rc 2, `Refused: issue_log: it has no `ledger:` key; it has `path:`, `ledgr:` — give the entry `path:`, `ledger:`, …` | `beadloom-rqma.8` |
+    | `beadloom issue-number check` | rc 0, `No issue log is declared — no leg ran.` | rc 1, `1 entr(ies) declared, 1 unusable — no leg ran.`, and the refusal on the line beneath | `beadloom-rqma.8` |
+
+    **The allocator was the surface the feature's own Surfaces table lists first**, and the one
+    still printing the opt-out's sentence byte for byte while the Gate beside it named the key.
+    `allocate_number` called a resolver documented as "the USABLE log and ledger, for a caller
+    with nothing to say about a refusal", and a person at a terminal has everything to say about
+    it. It calls `declared_log` now, which raises with the refusal's own `why` and
+    `remediation`; the resolver was deleted rather than left for the next caller to pick up.
+
+    **The third surface was not the shape this entry measured and was the same false green.**
+    `issue-number check` never printed the opt-out's sentence, so it escaped the byte-identical
+    comparison above: it printed `No duplicate, unwritten or unclaimed number.` and exited 0
+    over a log it had never opened. A clean verdict over a population of zero is the defect this
+    epic is named for, so it was closed with the other two rather than filed as a fourth.
+
+    **The four misdeclaration shapes, re-run on the allocator** — `path:` written `paths:`,
+    `ledger:` written `ledgr:`, `issue_log:` given a scalar, and a config that will not parse —
+    give four distinct sentences, each naming the entry and the keys it does carry, while the
+    project that declares nothing keeps the sentence it had. One remediation named a command and
+    now names the repair: a config that could not be parsed told a person running `issue-number
+    allocate` to "run the gate again", because that refusal is shared with the Gate and nothing
+    else had ever rendered it.
+
+    **Held by:** `tests/test_issue_number_command.py`, which holds the misdeclared output
+    against the opt-out's own output rather than against a literal, so rewording either side
+    cannot pass it; the scenario `A misdeclared log refuses the allocator with the key it could
+    not read` in `tests/acceptance/features/issue_numbers.feature`; and, for the Gate leg,
+    `tests/test_a_declaration_that_cannot_be_used_is_not_no_declaration.py`. The
+    `xfail(strict=True)` named in the original **Held by:** line below was retired by
+    `beadloom-rqma.7` and no longer exists. That stale line is what `beadloom-qae9` found still
+    pointing at a test that was gone while three documents already called the entry closed,
+    which is why this note names tests that exist rather than saying the entry is held.
+
+    **Tracker:** `beadloom-rqma.7` (the Gate leg) and `beadloom-rqma.8` (both commands).
+
+    **The record below is the entry as filed, unedited.**
+
+    **Severity:** medium (a project that opted in and mistyped one key is told it opted out, and the Gate is green)
+    **Command:** the `issue-log` step of `beadloom ci`, and `beadloom issue-number check`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. The step blocks on a duplicate number, and it earns that by never reddening a project that has not opted in: "The log is DECLARED in `.beadloom/config.yml`; an adopter who declares none gets a named skip."
+    **Measured:** with `path:` misspelled as `paths:`, with `ledger:` misspelled, with a block that will not parse, and with `issue_log:` given a scalar instead of a mapping, `_step_issue_numbers` returns the same `(skipped=True, "skipped — no issue log is declared; add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml")` a project with no block at all gets. `resolve_issue_log` emits `logger.warning("%s needs both %r and %r", ...)`, and the Gate renders no logging channel.
+    **Why it matters:** this is the epic's own two-reasons-one-verdict class inside a check S6 shipped, and the direction is the unsafe one — the reason a project opted in is that its numbers had collided five times, and the misdeclaration silently returns it to the state the collisions happened in. `log_missing` already proves the shape is available: a declared log that is absent is a finding rather than a skip.
+    **Expected:** a declaration this reader could not use is its own outcome, named as such, with the key it could not read. A skip stays a skip only for a project that declared nothing.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-3`, `xfail(strict=True)` over four parameterised misdeclarations, each compared against the opt-out's own verdict so that rewording one side cannot pass it.
+    **Related:** #173 (a leg that read nothing must say so), #267 (the population the same check states correctly).
 
 282. ~~[2026-09-10] [CRITICAL] a virgin `init` leaves the Gate RED on the documents it just wrote, and the remediation the error names does not clear it~~ **CLOSED (verified 2026-09-12)**
 
