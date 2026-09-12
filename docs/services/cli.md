@@ -998,7 +998,36 @@ over an empty set. Exits 1 when no file and no symbol matches TARGET.
 - `--section` — render the answer as the `## Axes` section a work item's document
   carries, with the `In scope` column left undecided.
 - `--json` — the whole answer as data: `seeds`, `co_writers`, `callers`,
-  `commands`, `boundary` and `unresolved`.
+  `commands`, `boundary`, `unresolved` and `unread_ownership`.
+
+**A row says what its node owns that this derivation did not read.** `impact`
+reads Python, and an axis row that names a node says nothing about the rest of
+what that node owns. Three nodes of BDL-069 were ruled out of scope as blast
+radius and all three were work sites; `onboarding` was invisible, because the
+change it needed lived in the `.md.txt` templates that node owns (BDL-UX #284).
+So `--section` writes a sixth column, `Owns unread`, between `Sites` and
+`In scope` — the number of files the node owns whose suffix is not `.py`, with
+the first of them named, or `none`, or `unknown — no index` when there is no
+index to own anything, or `—` on a row that names no node. Run on this
+repository:
+
+```
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|---|---|---|---|---|---|
+| callers | agent-prime | 1 — `src/beadloom/onboarding/scanner/bootstrap.py:37` | none | ? |  |
+| branches | onboarding | `detect_preset`: 2 branch(es), 3 exit form(s), over every call | 49 — `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` | ? |  |
+```
+
+Each owning node is also a `node-owns-unread-files` entry in `unresolved`, and
+`--json` carries the whole population under `unread_ownership` as
+`[{node, files}]`. **The column does not say the change reaches those files** —
+whether a function reads a template is a runtime fact, and inferring it from
+string literals would be a confident guess. It says the node owns surface this
+answer is blind to, which is what a person needs before reading a quiet row as
+"not changed". A node's linked documents are not counted: every node has one, and
+`sync-check` owns the question of whether a change left it stale. What a
+generated directory costs the count, and the measured cost of the walk, are in
+the [Impact SPEC](../domains/application/features/impact/SPEC.md).
 
 **A branch count names the seat it was taken from.** Run on this repository:
 

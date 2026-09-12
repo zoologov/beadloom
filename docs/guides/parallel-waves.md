@@ -79,11 +79,24 @@ were subsets, and a line that goes red on every real run is a line its reader di
 can fail is the answer the count was taken from — a `bd ready` the tracker capped makes the
 count a claim about part of the tracker, and that is reported as a finding.
 
-A real run on this epic's own S6 beads, all three of which turned out to be dependent:
+**A bead already in progress is compared too, and its conflicts are printed apart from the
+plan's own.** A bead in progress is not ready, so before BDL-UX #283 a running bead was compared
+against nothing and the plan printed `0 serialisation(s)` beside it — which is how this
+project's own coordinator launched two agents into a pair that had to be serialised. The first
+line carries that comparison as its fourth field, `N against N running bead(s)`, and a conflict
+with running work is separate from a serialisation because it does not order the plan's waves:
+it holds a planned bead back until the running one lands. A running bead the tracker could not
+show is a finding, `running_not_compared`; a serialisation against running work is not.
+
+A run over three beads of this project's own BDL-068 S6, all three of which turned out to be
+dependent. Re-recorded on 2026-09-12 against the same three bead ids, now closed, so the shape
+below is the one the command prints today. Three things were done to it and nothing else: the
+axes ruling and the seven shared-media descriptions are elided, the precondition reasons and the
+findings are trimmed at `…`, and four lines too long for this page are wrapped.
 
 ```
 $ beadloom waves beadloom-mr2l.21 beadloom-mr2l.78 beadloom-mr2l.79
-3 wave(s) for 3 bead(s), 3 serialisation(s), 0 finding(s).
+3 wave(s) for 3 bead(s), 3 serialisation(s), 0 against 0 running bead(s), 3 finding(s).
 
 Wave 1: beadloom-mr2l.21
   combined-tree gate: beadloom-mr2l.21
@@ -98,21 +111,43 @@ Wave 3: beadloom-mr2l.79
 Serialised because:
   beadloom-mr2l.21 | beadloom-mr2l.78 — shared_node: sync-check
   beadloom-mr2l.21 | beadloom-mr2l.79 — shared_node: cli-commands
-  beadloom-mr2l.78 | beadloom-mr2l.79 — dependency_edge: cli-commands -> doc-quality
+  beadloom-mr2l.78 | beadloom-mr2l.79 — dependency_edge: cli-commands -> axes-section
 
 0 declared override(s).
 
+Ready under this plan's work item and not in it:
+  every ready bead under beadloom-mr2l.22 is in this plan (0 of 3 bead(s) under
+  beadloom-mr2l.22 are ready)
+
+In progress under this plan's work item, and compared against it:
+  no bead under beadloom-mr2l.22 is in progress outside this plan
+
 Plan-time precondition of each shared medium:
-  working-tree: passed — no path differs from HEAD that no bead in this plan owns
+  graph-files: passed — 106 node(s) declared across 106 graph file(s), the set the index
+               resolved these scopes from
+  working-tree: failed — 3 path(s) differ from HEAD and are owned by no bead in this plan
   commit-gate: passed — the installed pre-commit hook judges the paths a commit stages
   landing-order: passed — all 18 instruction(s) of `bd merge-slot` name the holder
-  doc-baseline: passed — no doc pair is stale
+  focus-document: failed — 3 of 3 bead(s) of this plan write into a focus document no row
+                  of it names
+  doc-baseline: passed — no doc pair is stale before the wave starts
   tracker-ids: passed — every bead's title agrees with the number the tracker allocated
+
+FINDING: medium_failed: working-tree — …
+FINDING: medium_failed: focus-document — …
+FINDING: declared_outside_the_axes: beadloom-mr2l.79 declares `review-brief` and BDL-069
+         rules `review-brief` OUT of scope — …
 ```
 
 The third serialisation is the one no tracker could have produced. `beadloom-mr2l.79` edited the
 CLI, which depends on the doc-sync domain that `beadloom-mr2l.78` rewrote, and no bead blocked
 the other.
+
+**The three findings are the re-recording's own, and they are what findings look like.** This
+run was taken on a tree carrying another work item's changes, against beads whose focus document
+is that other work item's: two shared media failed their precondition, and the third finding is
+an axes declaration ruled out of scope by the work item checked out at the time. The command
+exited `1` and decided the shape anyway, which is the exit code's whole meaning.
 
 ---
 
