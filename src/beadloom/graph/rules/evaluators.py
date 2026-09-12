@@ -17,8 +17,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.attribution import FileAttribution
-from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
+from beadloom.graph.rules.layer_reach import (
+    live_edges_of_kind,
+    part_of_parents,
+    population_statement,
+    reach_of,
+)
+from beadloom.graph.rules.layers import own_layer_of
+from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     MATCHING_FORM_HINT,
     CardinalityRule,
@@ -101,17 +108,8 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
     if not rules:
         return []
 
-    from beadloom.graph.loader import get_node_tags
-
     violations: list[Violation] = []
-
-    # Cache for node tags to avoid repeated DB lookups
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
+    tags = node_tags(conn)
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
@@ -138,7 +136,7 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
             continue
         target_id, target_kind = target_node
 
-        target_tags: set[str] | None = _cached_tags(target_id) if any_tag_rule else None
+        target_tags: set[str] | None = tags.of(target_id) if any_tag_rule else None
 
         for rule in rules:
             match = _first_matching_source(
@@ -149,7 +147,7 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
                 target_id=target_id,
                 target_kind=target_kind,
                 target_tags=target_tags,
-                tags_of=_cached_tags if any_tag_rule else None,
+                tags_of=tags.of if any_tag_rule else None,
             )
             if match is None:
                 continue
@@ -221,17 +219,8 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
     if not rules:
         return []
 
-    from beadloom.graph.loader import get_node_tags
-
     violations: list[Violation] = []
-
-    # Cache for node tags to avoid repeated DB lookups
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
+    tags = node_tags(conn)
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
@@ -247,11 +236,11 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
             node_kind = str(node_row[1])
 
             # Load tags for for_matcher if needed
-            node_tags: set[str] | None = None
+            own_tags: set[str] | None = None
             if any_tag_rule:
-                node_tags = _cached_tags(node_ref_id)
+                own_tags = tags.of(node_ref_id)
 
-            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=node_tags):
+            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=own_tags):
                 continue
 
             # Check outgoing edges from this node
@@ -278,7 +267,7 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
                 # Load tags for has_edge_to if needed
                 target_tags: set[str] | None = None
                 if any_tag_rule:
-                    target_tags = _cached_tags(target_id)
+                    target_tags = tags.of(target_id)
 
                 if rule.has_edge_to.matches(target_id, target_kind, tags=target_tags):
                     has_match = True
@@ -484,17 +473,8 @@ def evaluate_forbid_edge_rules(
     if not rules:
         return []
 
-    from beadloom.graph.loader import get_node_tags
-
     violations: list[Violation] = []
-
-    # Cache for node tags to avoid repeated DB lookups
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
+    tags = node_tags(conn)
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
@@ -523,8 +503,8 @@ def evaluate_forbid_edge_rules(
         src_tags: set[str] | None = None
         dst_tags: set[str] | None = None
         if any_tag_rule:
-            src_tags = _cached_tags(src_id)
-            dst_tags = _cached_tags(dst_id)
+            src_tags = tags.of(src_id)
+            dst_tags = tags.of(dst_id)
 
         for rule in rules:
             # Check edge_kind filter first (cheapest check)
@@ -562,7 +542,7 @@ def evaluate_forbid_edge_rules(
 
 
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]:
-    """Evaluate layer rules against the edges table.
+    """Evaluate layer rules against the edges table, and state what they reached.
 
     For ``enforce: top-down``, layers are ordered from top (index 0) to
     bottom (index N).  Dependencies flow downward: if a node in layer[i]
@@ -573,57 +553,40 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     lower layer (``j == i + 1``) are permitted; skipping layers produces a
     violation.
 
-    Nodes that do not belong to any layer are silently skipped.
+    An edge whose source or target carries no declared layer tag of its OWN is
+    not judged — and is no longer passed over in silence. Each rule additionally
+    reports how much of its edge set it judged and how much it skipped
+    (:func:`~beadloom.graph.rules.layer_reach.population_statement`), because
+    "16 of 362 edges, none of them wrong" and "362 of 362 edges, none of them
+    wrong" were the same green line. The statement is ``warn`` and changes no
+    verdict; what the rule DECIDES here is unchanged, which is the property
+    ``tests/test_the_layer_rule_states_the_population_it_judged.py`` holds
+    against a verbatim copy of this function as it stood before.
+
+    Which layer a node is in is answered by
+    :func:`~beadloom.graph.rules.layers.own_layer_of` rather than by iterating
+    the node's tag ``set``: the declaration decides, so a node carrying two
+    declared tags lands in the topmost of them instead of in whichever one a
+    hash happened to yield first.
     """
     if not rules:
         return []
 
-    from beadloom.graph.loader import get_node_tags
-
     violations: list[Violation] = []
-
-    # Cache for node tags to avoid repeated DB lookups
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
+    tags = node_tags(conn)
+    parents = part_of_parents(conn)
 
     for rule in rules:
-        # Build tag-to-layer-index mapping
-        tag_to_index: dict[str, int] = {}
-        for idx, layer_def in enumerate(rule.layers):
-            tag_to_index[layer_def.tag] = idx
+        # Live edges only (planned/deprecated/dead edges are intent or history,
+        # not live layering violations).
+        all_edges = live_edges_of_kind(conn, rule.edge_kind)
+        violations.extend(
+            population_statement(rule, reach_of(rule, all_edges, parents, tags.as_mapping()))
+        )
 
-        # Fetch live edges of the specified kind (planned/deprecated/dead
-        # edges are intent or history, not live layering violations).
-        life_clause, life_params = _live_lifecycle_clause(conn)
-        all_edges = conn.execute(
-            f"SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = ?{life_clause}",  # noqa: S608
-            (rule.edge_kind, *life_params),
-        ).fetchall()
-
-        for edge_row in all_edges:
-            src_ref_id = str(edge_row[0])
-            dst_ref_id = str(edge_row[1])
-
-            # Determine which layer each node belongs to
-            src_tags = _cached_tags(src_ref_id)
-            dst_tags = _cached_tags(dst_ref_id)
-
-            src_layer_idx: int | None = None
-            dst_layer_idx: int | None = None
-
-            for tag in src_tags:
-                if tag in tag_to_index:
-                    src_layer_idx = tag_to_index[tag]
-                    break
-
-            for tag in dst_tags:
-                if tag in tag_to_index:
-                    dst_layer_idx = tag_to_index[tag]
-                    break
+        for src_ref_id, dst_ref_id in all_edges:
+            src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags.as_mapping())
+            dst_layer_idx = own_layer_of(dst_ref_id, rule.layers, tags.as_mapping())
 
             # Skip if either node is not in any layer
             if src_layer_idx is None or dst_layer_idx is None:
@@ -710,17 +673,8 @@ def evaluate_cardinality_rules(
     if not rules:
         return []
 
-    from beadloom.graph.loader import get_node_tags
-
     violations: list[Violation] = []
-
-    # Cache for node tags
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
+    tags = node_tags(conn)
 
     # Check whether any rule uses tag-based matching
     any_tag_rule = any(r.for_matcher.tag is not None for r in rules)
@@ -735,11 +689,11 @@ def evaluate_cardinality_rules(
             node_source: str | None = str(node_row[2]) if node_row[2] is not None else None
 
             # Load tags if needed
-            node_tags: set[str] | None = None
+            own_tags: set[str] | None = None
             if any_tag_rule:
-                node_tags = _cached_tags(node_ref_id)
+                own_tags = tags.of(node_ref_id)
 
-            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=node_tags):
+            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=own_tags):
                 continue
 
             # --- max_symbols check ---

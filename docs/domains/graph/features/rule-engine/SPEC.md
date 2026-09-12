@@ -12,6 +12,8 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
+- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
+- `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
@@ -718,8 +720,60 @@ fails on a second walk reachable from `graph/rules/`.
 
 `layer_population` counts an edge set into `evaluated` (a layer at both ends) and
 `skipped_untagged` (the rest). The resolver is a parameter because the same edge set has two
-populations worth stating — what own tags reach and what ancestry reaches. The rule does not yet
-report either: that is BDL-070 A2, and it changes no verdict.
+populations worth stating — what own tags reach and what ancestry reaches.
+
+#### The population a layer rule judged (`rules/layer_reach.py`, BDL-070 A2)
+
+```python
+LAYER_POPULATION_RULE_TYPE = "layer_population"
+
+@dataclass(frozen=True)
+class LayerReach:
+    rule_name: str
+    edge_kind: str
+    own_tags: LayerPopulation     # what the rule decides on
+    inherited: LayerPopulation    # what `part_of` inheritance would reach
+
+def layer_rule_reach(conn, rule) -> LayerReach
+def population_statement(rule, reach) -> list[Violation]
+```
+
+`architecture-layers` ships at `severity: error`, so what it evaluates decides whether `main` is
+mergeable — and it judged 16 of 363 live `depends_on` edges on this repository on 2026-09-12,
+because it reads a node's OWN tags. The green line said `0 violations, 16 rules evaluated`, which
+is what it would say for 363 of 363. `evaluate_layer_rules` now emits one finding per rule naming
+both numbers and what inheritance would reach, so the two are readable apart.
+
+The statement is a FINDING rather than a clause in the summary line, following
+`scenario_coverage._population_statement`: `tui/data_providers.py` and
+`application/debt_report/collect.py` call `evaluate_all` directly and never see a `LintResult`, so
+a clause in the summary cannot reach them.
+
+It is always `warn` and never the rule's declared severity. A statement about a rule's reach is not
+a boundary breach, and emitting it at `error` would turn a green Gate red on upgrade for a graph
+nobody changed.
+
+It is silent in two cases and loud in a third:
+
+- **No edge of the rule's kind** — there is no population to report, and a rule that can look at
+  nothing is already the subject of a liveness finding. Saying it twice is noise.
+- **Every edge reached** — there is nothing the rule could not see. A line saying so on every run
+  of every project trains a reader to skip the one that matters.
+- **Zero of N reached** — reported, once for the rule rather than once per unjudged edge. This is
+  the case where "the rule found nothing wrong" and "the rule never looked" are the same output.
+
+`node_tags.NodeTags` is the tag lookup the five evaluators share. It reads
+`nodes.extra["tags"]` once, on the first question, and answers from memory afterwards — the
+closures it replaces read one node per call, and four of the five call sites still skip tags
+entirely when no rule in their set matches on one.
+
+**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS
+are compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and
+the other four rule kinds against the closure they each kept, both run against this repository's
+own index in the same process
+(`tests/test_the_layer_rule_states_the_population_it_judged.py`). Measured on this repository:
+`lint --strict` exits 0 before and after, no finding was removed, and the one finding added is the
+population statement.
 
 #### Combined Evaluation
 

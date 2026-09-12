@@ -46,6 +46,11 @@ from beadloom.graph.rules.exemptions import (
     SuppressedCrossing,
     suppressed_crossings,
 )
+from beadloom.graph.rules.layer_reach import (
+    LAYER_POPULATION_RULE_TYPE,
+    LayerReach,
+    layer_rule_reach,
+)
 from beadloom.graph.rules.liveness import (
     INERT_RULE_HINT,
     evaluate_rule_liveness,
@@ -265,6 +270,7 @@ __all__ = [
     "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
+    "LAYER_POPULATION_RULE_TYPE",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
@@ -283,6 +289,7 @@ __all__ = [
     "ImportBoundaryRule",
     "ImportExemption",
     "LayerDef",
+    "LayerReach",
     "LayerRule",
     "ModuleCoverageRule",
     "NodeMatcher",
@@ -311,6 +318,7 @@ __all__ = [
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",
+    "layer_rule_reach",
     "load_rules",
     "load_rules_with_tags",
     "suppressed_crossings",

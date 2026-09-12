@@ -36,7 +36,7 @@ literal in `src/` outside a test fixture.
 | Tracker | Bead | Status | Details |
 |---|---|---|---|
 | `beadloom-e64o` | A1 | Done | `graph/rules/layers.py`: `layer_of` reads the declared `layers`, `part_of_generations` is now the ONE ancestry walk (`import_resolver` calls it), `layer_population` counts evaluated / skipped-untagged. 31 + 5 tests. No verdict moved: lint 0 error(s), 70 warning(s), as before |
-| `beadloom-1ylk` | A2 | Blocked | the evaluator counts its population |
+| `beadloom-1ylk` | A2 | Done | `evaluate_layer_rules` states its reach: `layer_reach.py` emits one `layer_population` finding per rule (`warn`, never the declared `error`), `node_tags.py` replaces the five identical tag closures. Measured here: 16 of 363 by own tags, 355 of 363 by `part_of`. 30 + 3 tests. No verdict moved — `lint --strict` exit 0 before and after, 0 findings removed, 1 added, and the identity is asserted against the pre-change code path run in the same process |
 | `beadloom-2dgz` | A3 | Blocked | LintResult carries a per-rule population |
 | `beadloom-q6jh` | A4 | Blocked | the readers that bypass lint() |
 | `beadloom-06dz` | A5 | Blocked | liveness and architecture_view |

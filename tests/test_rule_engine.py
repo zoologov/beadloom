@@ -12,6 +12,7 @@ import pytest
 
 from beadloom.graph.loader import get_node_tags
 from beadloom.graph.rule_engine import (
+    LAYER_POPULATION_RULE_TYPE,
     SUPPORTED_SCHEMA_VERSIONS,
     CardinalityRule,
     DenyRule,
@@ -1717,10 +1718,16 @@ class TestEvaluateLayerRules:
         violations = evaluate_layer_rules(db_with_layers, [rule])
         assert len(violations) == 0
 
-    def test_node_not_in_any_layer_skipped(
+    def test_node_not_in_any_layer_is_skipped_and_counted(
         self, db_with_layers: sqlite3.Connection
     ) -> None:
-        """Nodes not belonging to any layer are ignored."""
+        """A node in no layer is not judged — and no longer passed over in silence.
+
+        The edge produces no layer finding, which is unchanged. What changed in
+        BDL-070 A2 is that the rule states how many edges it did not look at, so
+        "no violation" and "no edge examined" stop reading the same (the finding
+        is `warn` and moves no verdict).
+        """
         # Add a node with no layer tag
         db_with_layers.execute(
             "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
@@ -1742,7 +1749,11 @@ class TestEvaluateLayerRules:
 
         rule = self._make_4_layer_rule()
         violations = evaluate_layer_rules(db_with_layers, [rule])
-        assert len(violations) == 0
+        assert [v for v in violations if v.rule_type == "layer"] == []
+        population = [v for v in violations if v.rule_type == LAYER_POPULATION_RULE_TYPE]
+        assert len(population) == 1
+        assert population[0].severity == "warn"
+        assert "evaluated 3 of 4" in population[0].message
 
     def test_empty_rules_no_violations(self, db_with_layers: sqlite3.Connection) -> None:
         """Empty rules list produces no violations."""

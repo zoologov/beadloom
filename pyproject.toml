@@ -452,6 +452,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_the_derivations_hold_as_shapes.py",
     "tests/test_the_explore_role_is_composed_like_the_others.py",
     "tests/test_the_layer_a_node_is_in_is_answered_once.py",
+    "tests/test_the_layer_rule_states_the_population_it_judged.py",
     "tests/test_tui.py",
     "tests/test_two_readers_of_one_markdown_table.py",
     "tests/test_verdict_downgrade.py",
