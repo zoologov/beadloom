@@ -199,12 +199,20 @@ them by name. `beadloom lint` reports a referenced scenario the suite does not c
 **Non-behavioural criteria** stay checkboxes and are labelled, so the absence of a scenario is
 a stated decision rather than a gap:
 
-- [ ] The temporary sentence in both READMEs — "the first `beadloom ci` is worth reading rather
+- [x] The temporary sentence in both READMEs — "the first `beadloom ci` is worth reading rather
       than assuming green" — is removed once US-1 holds — non-behavioural: it is prose about a
-      defect, and its removal is observable only by reading the file.
-- [ ] BDL-UX #282 and #214 are moved to `Closed Issues` **after** being re-run against current
+      defect, and its removal is observable only by reading the file. **Done by
+      `beadloom-rqma.6` on 2026-09-12**, from both files in one commit, after US-1 was
+      re-measured on a two-package `src/` project built for the run: `init --yes --mode
+      bootstrap` rc 0 then `beadloom ci` rc 0, exit codes read without a pipe. The
+      `readme-pair` leg held the removal to both files — `PASS: 1 pair(s) held, 109 block(s)
+      compared, 0 finding(s)`.
+- [x] BDL-UX #282 and #214 are moved to `Closed Issues` **after** being re-run against current
       behaviour, per that section's own standard — non-behavioural: the log is a record, and no
-      check reads it.
+      check reads it. **Done by `beadloom-rqma.6` on 2026-09-12**, under a dated sweep heading
+      that carries both re-runs: this bead's, against the working tree, and `beadloom-956f`'s,
+      against a wheel built from this branch. `beadloom-4fdn`, `beadloom-5cpe` and
+      `beadloom-7c6k` closed on the same measurement.
 - [ ] A stale line names the pair it is about — **measured after this document was approved,
       and the criterion above it was wrong.** The line is not printed twice: a pair is a
       document AND a code file, so two files in a package give two pairs over one README.
