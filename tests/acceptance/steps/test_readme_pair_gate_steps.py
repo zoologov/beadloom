@@ -7,6 +7,7 @@ a double was not wired up.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -128,3 +129,17 @@ def _names_the_key(world: dict[str, Any]) -> None:
     summary = _step(world).summary
     assert "document_pairs[0]" in summary
     assert "followr" in summary
+
+
+@then("the readme-pair line's count equals the findings the step reports")
+def _count_matches_the_findings(world: dict[str, Any]) -> None:
+    """Read the number back out of the line and hold it against the step's own list.
+
+    Held against the LIST rather than against a literal, so the assertion cannot
+    be satisfied by a leg that happens to report one finding today.
+    """
+    step = _step(world)
+    match = re.search(r"(\d+) finding\(s\)", step.summary)
+    assert match is not None, step.summary
+    assert int(match.group(1)) == len(step.findings), step.summary
+    assert step.findings, "the scenario's declaration is refused, so there is one to count"

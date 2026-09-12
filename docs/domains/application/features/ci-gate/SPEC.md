@@ -95,7 +95,10 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    project that declared the block and mistyped a key reached that same skip
    until `beadloom-rqma.7` (BDL-UX #270); it now fails with `0 leg(s) run; 1
    entr(ies) declared, 1 unusable: issue_log (...)`, on the same rule as
-   `readme-pair` below and through the same reader.
+   `readme-pair` below and through the same reader. That fix covered THIS leg
+   and not the two `issue-number` commands, which kept the old answer until
+   `beadloom-rqma.8` — so the entry was closed on the Gate and live on the
+   command a person types, for one bead.
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
@@ -166,10 +169,20 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    one rule about what a misdeclaration costs, in one place, reading the
    declaration through `doc-sync/components/config-declarations`.
 
+   **That block above is what the leg prints since `beadloom-rqma.8` and not
+   before it.** `N finding(s)` was taken from the comparison, which folds over
+   the pairs HELD, so a refused declaration and a document nothing could read
+   were findings the step returned and the line did not count. The leg printed
+   `0 finding(s)` in the same run in which the Gate printed a finding about that
+   leg, and this SPEC documented the `1 finding(s)` the code did not produce —
+   the two disagreed for a fix cycle. The step builds one list, carries it and
+   counts it, so the number in the line and the findings beside it are now the
+   same expression.
+
    One case does not redden: a `.beadloom/config.yml` that could not be read at
    all says nothing about whether the key is there, so the STEP skips, WARNs and
    names the file rather than reddening a project that may never have written
-   it. That is a statement about `_step_readme_pair` and `_step_issue_numbers`,
+   it. That is a statement about `step_readme_pair` and `_step_issue_numbers`,
    which is where it is tested, and not about `beadloom ci`: a config file with
    a YAML syntax error ends the run in `infrastructure/scan_paths.py` during the
    reindex step, with a traceback and no gate line at all, before either leg is
@@ -493,13 +506,33 @@ same exit code, same findings; a green run attributes nothing and shells out to 
 
 ## API
 
-Module `src/beadloom/application/gate.py`:
+Module `src/beadloom/application/gate_step.py` — the shape a step reports in,
+re-exported from `gate.py` so no caller's import path changed:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
   `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
 - `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
+- `Finding` — the shared agent-actionable finding shape.
+
+Module `src/beadloom/application/gate_declarations.py` — what an unusable opt-in
+declaration costs a leg, for the two legs that are opt-in:
+
+- `unusable_phrase(entries_declared, refusals) -> str` — the `; N entr(ies)
+  declared, M unusable: …` clause, or nothing.
+- `unusable_declaration_step(name, entries_declared, refusals) -> GateStep` and
+  `undetermined_declaration_step(name, subject, refusals) -> GateStep`.
+- `refusal_finding(name, refusal) -> Finding`.
+
+Module `src/beadloom/application/gate_document_pairs.py` — the `readme-pair` leg:
+
+- `step_readme_pair(project_root) -> GateStep` — the step, its line and the
+  projection of what it found. The orchestrator composes it and renders none of
+  it, which is the first slice of the per-leg extraction (`beadloom-oew7`).
+
+Module `src/beadloom/application/gate.py`:
+
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
   `RoomCensus | None`), the coverage statement (`coverage`, a
   `GateCoverage | None`), the ownership report (`ownership`, a

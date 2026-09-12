@@ -31,7 +31,13 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
+from beadloom.application.gate_declarations import (
+    undetermined_declaration_step,
+    unusable_declaration_step,
+)
+from beadloom.application.gate_document_pairs import step_readme_pair
 from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
+from beadloom.application.gate_step import Finding, GateStep, gate_step_line
 from beadloom.application.rooms import RoomCensus, take_census
 from beadloom.doc_sync.declared_docs import count_declared_docs
 from beadloom.doc_sync.doc_shape import (
@@ -57,25 +63,21 @@ from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Sequence
     from pathlib import Path
 
     from beadloom.application.doctor import Check
     from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
-    from beadloom.doc_sync.declarations import Refusal
     from beadloom.doc_sync.doc_quality import QualityFinding
-    from beadloom.doc_sync.document_pairs import (
-        DocumentPair,
-        PairComparison,
-        PairReport,
-    )
-    from beadloom.doc_sync.document_pairs import Finding as PairFinding
     from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
-# A single finding in the shared, agent-actionable shape (see linter._finding).
-Finding = dict[str, object]
+#: Re-exported so the move that lifted the step shape into
+#: :mod:`beadloom.application.gate_step` changed no import path. Forty-five
+#: modules and test modules name ``beadloom.application.gate`` for these three,
+#: and a decomposition that also rewrites its callers is two changes reviewed as
+#: one (BDL-069, ``beadloom-rqma.8``).
+__all__ = ["Finding", "GateResult", "GateStep", "gate_step_line", "run_ci_gate"]
 
 #: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
 #: Named rather than spelled twice because that step is the one case where the
@@ -110,64 +112,6 @@ def _run_audit(project_root: Path, conn: sqlite3.Connection) -> AuditResult:
     from beadloom.doc_sync.audit import run_audit
 
     return run_audit(project_root, conn)
-
-
-@dataclass
-class GateStep:
-    """One step of the gate and its honest outcome.
-
-    - ``name``     — the step identity (``reindex`` / ``lint`` / ``sync-check`` /
-      ``config-check`` / ``federate``).
-    - ``passed``   — True when the step did not fail the gate. A *skipped* step
-      counts as passed (it cannot block the build).
-    - ``skipped``  — True when the step did not run (e.g. ``--no-reindex``).
-    - ``not_verified`` — True when the step ran, found nothing wrong, and could
-      not actually check part of what it reports on. It stays ``passed`` (a
-      project that cannot supply a baseline is not thereby broken) but it prints
-      ``WARN``, because *unverifiable is not clean*: a green that describes the
-      checker's own ignorance is the defect BDL-UX #174/#175/#178 are all made
-      of, and the honest word costs nothing.
-    - ``findings`` — the step's findings in the shared shape (empty on PASS/SKIP).
-    - ``summary``  — a short human line for the ``rich`` report.
-    """
-
-    name: str
-    passed: bool = True
-    skipped: bool = False
-    findings: list[Finding] = field(default_factory=list)
-    summary: str = ""
-    not_verified: bool = False
-    pairs_excused: int | None = None
-    """Sync pairs a declaration excused, for the step that MEASURED it.
-
-    Carried on the step rather than recomputed by the later step that also
-    prints it: one run said ``exempt: 0`` and ``55 WORKING document(s) exempt``
-    about one tree, and a second implementation of "how many were excused" is
-    exactly how two adjacent lines came to contradict. ``None`` means no step in
-    this run measured it, and a surface that was not told makes no pair claim.
-    """
-
-    @property
-    def status(self) -> str:
-        """``PASS`` / ``WARN`` / ``FAIL`` / ``SKIP`` — never an ambiguous green."""
-        if self.skipped:
-            return "SKIP"
-        if not self.passed:
-            return "FAIL"
-        return "WARN" if self.not_verified else "PASS"
-
-
-def gate_step_line(step: GateStep) -> str:
-    """The one line the Gate prints about a step: ``[STATUS] name: summary``.
-
-    Lives here rather than in the renderer because two commands quote it and one
-    of them is not the Gate: ``init`` tells the adopter what ``beadloom ci`` will
-    say about the graph it just judged, and it said ``lint - <summary>``, which
-    nothing prints (BDL-067 `.14`, the review of `.13`'s minor 3). A line that
-    pre-empts another command's output has to be produced by that command's own
-    formatter, or it drifts the first time either is reworded.
-    """
-    return f"[{step.status}] {step.name}: {step.summary}"
 
 
 @dataclass
@@ -273,7 +217,7 @@ def run_ci_gate(
     steps.append(_step_docs_audit(project_root))
     steps.append(_step_docs_quality(project_root))
     steps.append(_step_issue_numbers(project_root))
-    steps.append(_step_readme_pair(project_root))
+    steps.append(step_readme_pair(project_root))
     # The excused-pair count travels from the step that produced it, so the two
     # lines of one run cannot say different numbers about one word.
     steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
@@ -691,85 +635,6 @@ def _convention_finding(convention: SectionConvention) -> Finding:
     }
 
 
-#: How many refusals a verdict names before it stops listing. The counts in
-#: front of the list are over ALL of them, as with ``_NAMED_PAIRS``.
-_NAMED_REFUSALS = 3
-
-
-def _unusable_phrase(entries_declared: int, refusals: Sequence[Refusal]) -> str:
-    """``; N entr(ies) declared, M unusable: <where> (<why>)`` — or nothing.
-
-    The two numbers are the whole point of this clause. "Declared none" and
-    "declared badly" were one sentence in both opt-in legs until
-    ``beadloom-rqma.7``, and a skip reworded to "possibly nothing was declared"
-    would have been the same defect in softer words: what tells the two apart is
-    a count, not an adverb.
-    """
-    if not refusals:
-        return ""
-    named = ", ".join(
-        f"{refusal.where} ({refusal.why})" for refusal in refusals[:_NAMED_REFUSALS]
-    )
-    line = (
-        f"; {entries_declared} entr(ies) declared, {len(refusals)} unusable: {named}"
-    )
-    remaining = len(refusals) - _NAMED_REFUSALS
-    if remaining > 0:
-        line += f", and {remaining} more not named here"
-    return line
-
-
-def _unusable_declaration_step(
-    name: str, entries_declared: int, refusals: Sequence[Refusal]
-) -> GateStep:
-    """A leg whose whole declaration could not be used: nothing ran, and it says so.
-
-    It BLOCKS, for the reason a declaration pointing at a missing file already
-    blocked: the project opted in, the leg it asked for did not run, and a green
-    tree that silently skipped a check somebody switched on is the defect class
-    this epic exists for. A project that opted OUT never reaches here.
-    """
-    return GateStep(
-        name,
-        passed=False,
-        findings=[_refusal_finding(name, refusal) for refusal in refusals],
-        summary="0 leg(s) run" + _unusable_phrase(entries_declared, refusals),
-    )
-
-
-def _undetermined_declaration_step(
-    name: str, subject: str, refusals: Sequence[Refusal]
-) -> GateStep:
-    """The config itself could not be read, so whether the project opted in is unknown.
-
-    Neither of the other two answers is honest here. Reporting absence tells an
-    adopter they opted out; reporting a broken declaration reddens a project
-    that may never have written the key. So it skips, and it WARNs: the leg
-    could not read the population it reports on.
-    """
-    return GateStep(
-        name,
-        skipped=True,
-        not_verified=True,
-        summary=(
-            "skipped — "
-            + "; ".join(refusal.why for refusal in refusals)
-            + f", so whether this project declares {subject} is unknown"
-        ),
-    )
-
-
-def _refusal_finding(name: str, refusal: Refusal) -> Finding:
-    """One unusable declaration, located at the config file that holds it."""
-    return {
-        "kind": name,
-        "rule": "unusable-declaration",
-        "severity": "error",
-        "locations": [{"file": ".beadloom/config.yml"}],
-        "why": f"{refusal.where}: {refusal.why}",
-        "remediation": refusal.remediation,
-    }
-
 
 def _step_issue_numbers(project_root: Path) -> GateStep:
     """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
@@ -790,10 +655,11 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
     **A project that opted in BADLY is a different project.** Writing
     ``issue_log:`` and misspelling ``ledger:`` is opting in, and the verdict it
     gets says how many entries were declared and how many could not be used —
-    not the sentence a project that wrote nothing gets (BDL-UX #270, closed by
-    ``beadloom-rqma.7`` together with its twin in ``readme-pair``). Only the
-    third case skips: a config file that will not parse says nothing about
-    whether the key is there at all.
+    not the sentence a project that wrote nothing gets (BDL-UX #270, closed
+    HERE by ``beadloom-rqma.7`` together with its twin in ``readme-pair``, and on
+    the two ``issue-number`` commands by ``beadloom-rqma.8``). Only the third
+    case skips: a config file that will not parse says nothing about whether the
+    key is there at all.
 
     ``not_verified`` carries the honest half: before a project's first
     allocation the ledger has no floor, so ``unwritten-claim`` and
@@ -804,7 +670,7 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
 
     report = check_issue_numbers(project_root)
     if report.undetermined:
-        return _undetermined_declaration_step("issue-log", "an issue log", report.refusals)
+        return undetermined_declaration_step("issue-log", "an issue log", report.refusals)
     if not report.declared:
         return GateStep(
             "issue-log",
@@ -815,7 +681,7 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
             ),
         )
     if report.refusals:
-        return _unusable_declaration_step(
+        return unusable_declaration_step(
             "issue-log", report.entries_declared, report.refusals
         )
     if report.log_missing:
@@ -881,214 +747,6 @@ def _issue_number_finding(finding: NumberFinding) -> Finding:
         "remediation": finding.remediation,
     }
 
-
-#: How many pairs the ``readme-pair`` line names before it stops listing. The
-#: counts in front of the list are over ALL of them; only the naming is bounded,
-#: so a project with a dozen translations gets a line a reader can finish
-#: without the numbers becoming a claim about three of twelve.
-_NAMED_PAIRS = 3
-
-
-def _step_readme_pair(project_root: Path) -> GateStep:
-    """``readme-pair`` — the declared document pairs, compared by SHAPE; BLOCKS.
-
-    This repository ships ``README.md`` and ``README.ru.md``, and on 2026-09-10
-    the Russian file carried a paragraph the English one had folded away. The
-    only number that differed was a line count, which nothing reads; the drift
-    was found by a person reading the two files side by side (BDL-069 S4). This
-    step is what reads them on every run.
-
-    **It cannot redden a project that has not opted in**, which is the epic's
-    binding constraint. The pair is DECLARED under ``document_pairs:`` in
-    ``.beadloom/config.yml`` — an adopter's translated README is their business
-    and a check that guessed ``README.<lang>.md`` would turn somebody's green
-    tree red on the upgrade that ships it. A project declaring none gets a named
-    skip that states the key to add, exactly as ``issue-log`` does.
-
-    **Declaring none and declaring badly are two verdicts, not one.** Four ways
-    of mistyping the block reached the skip above word for word, and the two
-    READMEs of a project that had opted in were never compared
-    (``beadloom-rqma.7``). A refused entry is a finding now, and the line says
-    how many entries were declared and how many were unusable: what tells the
-    two apart has to be a count, because a skip reworded to "possibly nothing
-    was declared" is the same defect in softer words.
-
-    Where it BLOCKS it blocks for the ``issue-log`` reason rather than the
-    ``docs-quality`` one: a block one document has and the other does not is not
-    an opinion about prose, it is a statement one language makes and the other
-    does not, and the repair fits in the commit that trips it. A declared file
-    nothing could read fails for the same reason its ``issue-log`` twin does —
-    a declaration pointing at nothing would otherwise report ``0 finding(s)``
-    having compared no document at all.
-
-    ``not_verified`` carries the honest half. Two readable files that hold no
-    block between them produce no finding and compare nothing, and a clean
-    result there describes the checker's own silence rather than the pair.
-    """
-    from beadloom.doc_sync.document_pairs import check_document_pairs
-
-    report = check_document_pairs(project_root)
-    if report.undetermined:
-        return _undetermined_declaration_step(
-            "readme-pair", "a document pair", report.refusals
-        )
-    if not report.declared:
-        return GateStep(
-            "readme-pair",
-            skipped=True,
-            summary=(
-                "skipped — no document pair is declared; add a `document_pairs:` block "
-                "of `source:`/`follower:` entries to .beadloom/config.yml"
-            ),
-        )
-    findings = [_refusal_finding("readme-pair", refusal) for refusal in report.refusals]
-    findings += [_unreadable_document_finding(path) for path in report.unreadable]
-    findings += [
-        _document_pair_finding(project_root, comparison, finding)
-        for comparison in report.comparisons
-        for finding in comparison.findings
-    ]
-    return GateStep(
-        "readme-pair",
-        passed=not findings,
-        not_verified=bool(_pairs_holding_nothing(report)),
-        findings=findings,
-        summary=_document_pair_summary(project_root, report),
-    )
-
-
-def _pairs_holding_nothing(report: PairReport) -> tuple[PairComparison, ...]:
-    """Pairs both of whose files were read and which hold no block at all.
-
-    Separate from ``unreadable``: a file that could not be opened is a defect in
-    the declaration, while two readable empty documents are a pair the check
-    genuinely had nothing to say about. Reporting the second as a pass is the
-    vacuity this project names rather than rounds off.
-    """
-    return tuple(
-        comparison
-        for comparison in report.comparisons
-        if not comparison.unreadable and comparison.compared == 0
-    )
-
-
-def _document_pair_summary(project_root: Path, report: PairReport) -> str:
-    """The readme-pair line, which states what it HELD and not only what it found.
-
-    The three numbers lead because the finding count alone cannot distinguish a
-    pair that agreed from a declaration that left nothing to compare — the shape
-    every other line in this module was rewritten against.
-    """
-    line = (
-        f"{len(report.comparisons)} pair(s) held, "
-        f"{report.compared} block(s) compared, "
-        f"{len(report.findings)} finding(s)"
-    )
-    named = [
-        f"{_pair_label(project_root, comparison.pair)} "
-        f"({comparison.compared} block(s))"
-        for comparison in report.comparisons[:_NAMED_PAIRS]
-    ]
-    if named:
-        line += "; " + ", ".join(named)
-    remaining = len(report.comparisons) - _NAMED_PAIRS
-    if remaining > 0:
-        line += f", and {remaining} more pair(s) not named here"
-    if report.unreadable:
-        line += "; UNREADABLE: " + ", ".join(report.unreadable)
-    nothing_held = _pairs_holding_nothing(report)
-    if nothing_held:
-        line += (
-            f"; NOT COMPARED: {len(nothing_held)} pair(s) were read and hold no "
-            "block at all, so nothing was held against anything"
-        )
-    return line + _unusable_phrase(report.entries_declared, report.refusals)
-
-
-def _pair_label(project_root: Path, pair: DocumentPair) -> str:
-    """``source <-> follower``, both relative to the project."""
-    source = _project_relative(project_root, pair.source)
-    follower = _project_relative(project_root, pair.follower)
-    return f"{source} <-> {follower}"
-
-
-def _project_relative(project_root: Path, path: Path) -> str:
-    """*path* as a project-relative string, or unchanged when it lies outside."""
-    try:
-        return str(path.relative_to(project_root))
-    except ValueError:
-        return str(path)
-
-
-def _unreadable_document_finding(path: str) -> Finding:
-    """A declared document that could not be read, named against itself."""
-    return {
-        "kind": "readme-pair",
-        "rule": "readme-pair",
-        "severity": "error",
-        "locations": [{"file": path}],
-        "why": (
-            f"{path} is declared in a `document_pairs:` entry and could not be read, "
-            "so its pair was compared against nothing"
-        ),
-        "remediation": (
-            "point the `document_pairs:` entry at the document, or remove the "
-            "declaration if the pair no longer exists"
-        ),
-    }
-
-
-#: What to do about each check the comparison runs. Keyed by the check name it
-#: reports, so a check added there without a remediation here is a KeyError in
-#: this project's own suite rather than a finding an agent cannot act on.
-_PAIR_REMEDIATIONS = {
-    "unpaired-block": (
-        "add the missing block to the other document, or remove it from this one — "
-        "the two are held to the same shape, never to the same words"
-    ),
-    "block-kind": (
-        "give the two facing blocks the same kind, or the two headings the same level"
-    ),
-    "row-count": "give the list or table the same number of rows in both documents",
-}
-
-
-def _document_pair_finding(
-    project_root: Path, comparison: PairComparison, finding: PairFinding
-) -> Finding:
-    """Project one shape divergence onto the shared finding shape.
-
-    Both documents are located where both have a line, because the check says
-    where the two sequences diverge rather than which side is wrong: an unpaired
-    block is missing from one document or spurious in the other, and the
-    comparison cannot tell those apart. The heading travels in ``why`` for the
-    same reason — several paragraphs of one shape are indistinguishable, which
-    is exactly why the comparison works across two languages.
-    """
-    locations: list[dict[str, object]] = []
-    if finding.source_line is not None:
-        locations.append(
-            {
-                "file": _project_relative(project_root, comparison.pair.source),
-                "line": finding.source_line,
-            }
-        )
-    if finding.follower_line is not None:
-        locations.append(
-            {
-                "file": _project_relative(project_root, comparison.pair.follower),
-                "line": finding.follower_line,
-            }
-        )
-    where = f"under {finding.section!r}" if finding.section else "above the first heading"
-    return {
-        "kind": "readme-pair",
-        "rule": finding.check,
-        "severity": "error",
-        "locations": locations,
-        "why": f"{finding.detail} ({where})",
-        "remediation": _PAIR_REMEDIATIONS[finding.check],
-    }
 
 
 def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:

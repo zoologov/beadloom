@@ -37,3 +37,15 @@ Feature: the Gate holds a project's declared document pairs against each other
     Then the readme-pair step fails and the gate verdict is red
     And the readme-pair line says how many entries were declared and how many were unusable
     And the readme-pair line names the key that could not be used
+
+  # BDL-069, beadloom-rqma.8. The fourth scenario is the same thesis failing one
+  # level in: the line's count folded over the pairs HELD, so a refused
+  # declaration was a finding the step returned and the line did not count. The
+  # leg printed `0 finding(s)` in the same run in which the Gate printed a
+  # finding about that leg -- a check misstating its own population, inside the
+  # epic about checks stating their populations.
+  @bead:beadloom-rqma.8
+  Scenario: The line counts every finding the step reports, not only the compared ones
+    Given a project that declares a document pair and misspells the follower key
+    When the gate runs
+    Then the readme-pair line's count equals the findings the step reports

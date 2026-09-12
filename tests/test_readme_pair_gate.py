@@ -16,6 +16,7 @@ the verdict alone.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -217,9 +218,78 @@ def test_this_repository_holds_its_own_readme_pair() -> None:
     root = _Path(__file__).resolve().parents[1]
     if not (root / ".beadloom" / "config.yml").is_file():
         pytest.skip("not running from a checkout of this repository")
-    from beadloom.application.gate import _step_readme_pair
+    from beadloom.application.gate_document_pairs import step_readme_pair
 
-    step = _step_readme_pair(root)
+    step = step_readme_pair(root)
     assert step.skipped is False, "this repository declares its README pair"
     assert step.passed is True
     assert "pair(s) held" in step.summary
+
+
+# ---------------------------------------------------------------------------
+# The line's own count — BDL-069, `beadloom-rqma.8`
+# ---------------------------------------------------------------------------
+
+
+def _stated_findings(summary: str) -> int:
+    """The number the readme-pair line states, read back out of the line."""
+    match = re.search(r"(\d+) finding\(s\)", summary)
+    assert match is not None, summary
+    return int(match.group(1))
+
+
+@pytest.mark.parametrize(
+    ("label", "arrange"),
+    [
+        ("a pair that agrees", lambda root: _pair(root, SOURCE, FOLLOWER)),
+        ("a pair that diverges", lambda root: _pair(root, SOURCE, FOLLOWER_SHORT)),
+        (
+            "a declared document nothing can read",
+            lambda root: (root / "README.md").write_text(SOURCE, encoding="utf-8"),
+        ),
+        ("two readable documents holding no block", lambda root: _pair(root, "", "")),
+    ],
+)
+def test_the_line_counts_the_findings_the_step_reports(
+    tmp_path: Path, label: str, arrange: object
+) -> None:
+    """The number in the line is the number of findings the step hands the gate.
+
+    It counted the COMPARISON's findings, which fold over the pairs held, so a
+    refused declaration and a document nothing could read were findings the step
+    returned and the line did not count. The leg printed `0 finding(s)` in the
+    same run in which the gate printed a finding about the leg — a check
+    misstating its own population, inside the epic about checks stating theirs
+    (`beadloom-qae9`, re-review MAJOR 3).
+    """
+    arrange(tmp_path)  # type: ignore[operator]  # parametrised arrangement callable
+    _project(tmp_path, declaration=_declare(("README.md", "README.ru.md")))
+    step, _ = _step(tmp_path)
+    assert _stated_findings(step.summary) == len(step.findings), f"{label}: {step.summary}"
+
+
+@pytest.mark.parametrize(
+    ("label", "declaration"),
+    [
+        ("an entry with no follower", "\ndocument_pairs:\n  - source: README.md\n"),
+        (
+            "an entry whose follower key is misspelled",
+            "\ndocument_pairs:\n  - source: README.md\n    followr: README.ru.md\n",
+        ),
+        ("a scalar where the list belongs", "\ndocument_pairs: README.md\n"),
+        (
+            "a source resolving outside the project",
+            "\ndocument_pairs:\n  - source: ../README.md\n    follower: README.ru.md\n",
+        ),
+    ],
+)
+def test_a_refused_declaration_is_counted_by_the_line_that_reports_it(
+    tmp_path: Path, label: str, declaration: str
+) -> None:
+    """Four ways of opting in badly, each one finding, each counted in the line."""
+    _pair(tmp_path, SOURCE, FOLLOWER)
+    _project(tmp_path, declaration=declaration)
+    step, result = _step(tmp_path)
+    assert result.ok is False, label
+    assert len(step.findings) == 1, label
+    assert _stated_findings(step.summary) == 1, f"{label}: {step.summary}"

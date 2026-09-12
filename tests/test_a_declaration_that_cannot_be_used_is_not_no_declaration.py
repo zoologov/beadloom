@@ -33,7 +33,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.gate import _step_issue_numbers, _step_readme_pair
+from beadloom.application.gate import _step_issue_numbers
+from beadloom.application.gate_document_pairs import step_readme_pair
 from beadloom.doc_sync.document_pairs import check_document_pairs
 from beadloom.doc_sync.issue_numbers import check_issue_numbers
 
@@ -104,8 +105,8 @@ class TestAMisdeclaredDocumentPair:
         self, tmp_path: Path, label: str, config: str, token: str
     ) -> None:
         """Against the opt-out's own verdict, so rewording the skip cannot pass it."""
-        opted_out = _step_readme_pair(_project(tmp_path / "none", ""))
-        broken = _step_readme_pair(_project(tmp_path / "broken", config))
+        opted_out = step_readme_pair(_project(tmp_path / "none", ""))
+        broken = step_readme_pair(_project(tmp_path / "broken", config))
         assert _verdict(broken) != _verdict(opted_out), (
             f"{label}: a project that opted in is told it opted out"
         )
@@ -117,7 +118,7 @@ class TestAMisdeclaredDocumentPair:
         self, tmp_path: Path, label: str, config: str, token: str
     ) -> None:
         """The key or the path that could not be used is in the verdict, not in a log."""
-        step = _step_readme_pair(_project(tmp_path, config))
+        step = step_readme_pair(_project(tmp_path, config))
         spoken = step.summary + " ".join(str(f["why"]) for f in step.findings)
         assert token in spoken, f"{label}: the verdict does not name {token!r}"
 
@@ -128,7 +129,7 @@ class TestAMisdeclaredDocumentPair:
         self, tmp_path: Path, label: str, config: str, token: str
     ) -> None:
         """One declaration was written and one was unusable, and the line says both."""
-        step = _step_readme_pair(_project(tmp_path, config))
+        step = step_readme_pair(_project(tmp_path, config))
         assert "1 entr(ies) declared, 1 unusable" in step.summary, label
 
     @pytest.mark.parametrize(
@@ -154,14 +155,14 @@ class TestAMisdeclaredDocumentPair:
             "    follower: README.md\n"
             "  - source: README.ru.md\n",
         )
-        step = _step_readme_pair(root)
+        step = step_readme_pair(root)
         assert step.passed is False
         assert "2 entr(ies) declared, 1 unusable" in step.summary
         assert "1 pair(s) held" in step.summary
 
     def test_a_project_that_declares_nothing_keeps_its_skip(self, tmp_path: Path) -> None:
         """The epic's binding constraint: an adopter who opted out is not judged."""
-        step = _step_readme_pair(_project(tmp_path, ""))
+        step = step_readme_pair(_project(tmp_path, ""))
         assert step.skipped is True
         assert "no document pair is declared" in step.summary
 
@@ -170,7 +171,7 @@ class TestAMisdeclaredDocumentPair:
         root = _project(
             tmp_path, "document_pairs:\n  - source: README.ru.md\n    follower: README.md\n"
         )
-        step = _step_readme_pair(root)
+        step = step_readme_pair(root)
         assert (step.passed, step.skipped) == (True, False)
         assert "1 pair(s) held" in step.summary
 
@@ -179,7 +180,7 @@ class TestAMisdeclaredDocumentPair:
         root = _project(
             tmp_path, "document_pairs:\n  - source: NOPE.ru.md\n    follower: README.md\n"
         )
-        step = _step_readme_pair(root)
+        step = step_readme_pair(root)
         assert step.passed is False
         assert "UNREADABLE: NOPE.ru.md" in step.summary
 
@@ -203,7 +204,7 @@ class TestAMisdeclaredDocumentPair:
         (root / ".beadloom" / "config.yml").write_text(
             "document_pairs: [\n", encoding="utf-8"
         )
-        step = _step_readme_pair(root)
+        step = step_readme_pair(root)
         assert step.passed is True
         assert step.not_verified is True
         assert "no document pair is declared" not in step.summary
