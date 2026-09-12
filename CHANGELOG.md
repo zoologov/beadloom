@@ -7,7 +7,229 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+BDL-069. Four defects with one shape — a check reporting over a population that is empty,
+partial or unnamed — two of them in the first two commands an outside user runs. Every figure
+below was measured, and where the measurement was taken somewhere other than this repository it
+says so.
+
+### Upgrade note — one action, and only if you already have an index
+
+Run `beadloom reindex --full` once after upgrading.
+
+An index built before this release keeps **API routes attributed to the wrong node**. A node
+whose declared source is a string prefix of a sibling's — `src/ledger/` against
+`src/ledger_archive/` — collected the sibling's routes, and a node whose source was empty or
+null collected every route in the project. The rule is fixed, and the route store is
+authoritative now, so a node that holds no route loses the key on the next reindex that runs the
+route step. That step runs on a full reindex, and on an incremental one only when some file
+changed: an incremental `reindex` with nothing changed returns before it. So an adopter who
+upgrades and changes nothing reads correct code and a stale index — `beadloom ctx`,
+`beadloom docs polish` and the MCP `generate_docs` tool keep handing an agent routes from a
+different package until a file of that node changes or the full reindex runs.
+
+Nothing else here asks an adopter to do anything. The new Gate leg skips unless it is declared,
+and the new report the graph loader emits is a report and not a refusal.
+
+### Added
+
+- **`beadloom version-surface` — every place this project states its own version, derived, with
+  the instrument that checks each.** Cutting 4.0.0 met the defect this command answers
+  (BDL-UX #281): the list of nine places was written by hand and was wrong by two, and two of
+  the nine were checked by nothing. The report names the source of truth and how it was derived,
+  each place with its checking instrument, the places **no** instrument reaches with the reason
+  each is outside every population, the instruments with the population each holds, and the
+  files the sweep read. Exit 0 when a version was derived, including when places are checked by
+  nothing; exit 2 when no version could be derived, with the reason on standard output and under
+  `unresolved` in `--json`.
+
+  Measured on this repository, 2026-09-12, against `4.0.0`: source of truth
+  `src/beadloom/__init__.py:6`, through `pyproject.toml`'s `[tool.hatch.version]` path;
+  **10 places in 8 files checked** by five instruments; **58 places in 25 files checked by
+  nothing**, each carrying why — outside the docs audit's scan globs, inside a fenced block its
+  false-positive filter removed, under `testpaths` but not inside an assert; 1 432 files read,
+  and what it did not read counted by suffix.
+
+  **The sweep is by the current literal.** A place that already states an older version is
+  invisible to it, so it answers "where will the next bump have to reach" and not "what has gone
+  stale" — run it before the bump. Which places have a checker is the other half of that answer,
+  and is what the report is for.
+
+- **A `readme-pair` leg in `beadloom ci`, and a `document_pairs:` key that switches it on.** Two
+  documents saying the same thing in two languages had nothing holding them together: on
+  2026-09-10 this repository's `README.ru.md` carried a paragraph the English file had folded
+  into its neighbour, and both files read correctly on their own, which is what makes the class
+  invisible to reading. The leg compares a pair by **shape** and never by text — the sequence of
+  blocks each document is built from (`heading`, `paragraph`, `code`, `list`, `table`), the
+  heading levels, and the row counts of the lists and the tables — because a text comparison over
+  a translation reports every line and is therefore a check somebody switches off.
+
+  ```yaml
+  # .beadloom/config.yml
+  document_pairs:
+    - source: README.ru.md
+      follower: README.md
+  ```
+
+  **A project that declares nothing is not judged**, so no adopter's Gate changes verdict on
+  upgrade: the leg skips and prints the reason. Findings are `unpaired-block`, `block-kind` and
+  `row-count`. Measured on this repository: `readme-pair PASS: 1 pair(s) held, 109 block(s)
+  compared, 0 finding(s)`.
+
+- **A duplicate `ref_id` under `.beadloom/_graph/` is reported instead of being silently
+  reduced.** Two nodes sharing one `ref_id` were collapsed into one by whichever reader keyed a
+  dictionary first, and the loss was reported by nothing — not `status`, not `doctor`, not
+  `beadloom ci`, which exited 0 over the smaller graph (BDL-UX #214). The reduction has one body
+  now, `graph.unique_by_ref_id(nodes) -> (kept, duplicates)`, with `DuplicateRefId` and
+  `NodeOrigin` beside it; all three are exported from `beadloom.graph`, so a reader that reduces
+  by `ref_id` goes through it rather than keying a dictionary of its own. `GraphDiff` gains
+  `duplicates` and `diff_to_dict` a `duplicates` key, and `beadloom diff` prints the findings
+  before its header on the changed and the unchanged path. **`has_changes` is deliberately
+  unaffected**, so no exit code moves because a report was added.
+
+- **`beadloom impact --section` writes a sixth column, `Owns unread`, and `--json` an
+  `unread_ownership` field.** An axis row named a node and said nothing about what that node owns
+  beyond the Python this derivation reads. Three nodes of this epic were ruled out of scope as
+  blast radius and all three turned out to be work sites; one of them, `onboarding`, was
+  invisible, because the change it needed lived in the `.md.txt` templates it owns (BDL-UX #284).
+  A row now carries the number of files the node owns and the derivation did not read, with the
+  first of them named — `49 — src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` on
+  this repository — or `none`, or `unknown — no index`. The same fact is a
+  `node-owns-unread-files` entry in `unresolved`.
+
+  **It does not say the change reaches those files.** Whether a function reads a template is a
+  runtime fact, and inferring it from string literals would be a confident guess. The row says
+  the node owns surface the answer is blind to, which is what a person needs before reading a
+  quiet row as "not changed".
+
+### Fixed
+
+- **A virgin `init` no longer leaves the Gate red** (BDL-UX #282). On a two-package `src/`
+  project, `beadloom init --yes --mode bootstrap` exited 0 and the next `beadloom ci` exited 1
+  with `sync-check FAIL: 4 stale doc(s)`, `missing modules`: the skeleton `init` writes named no
+  module, while the modules were already in the index the same command had just built. A skeleton
+  for a node whose source is a directory now carries a `## Modules` section listing the Python
+  files directly inside it, and a `## Public API` table whenever the node's source holds a public
+  symbol — read from the code on disk, so `init --yes` and `beadloom docs generate` write the
+  table the wizard already wrote. The table's population for a directory source is the files
+  under it, walked, rather than every indexed path that starts with the source string, so a node
+  outside the configured `scan_paths` gets a table where the index gave it none.
+
+  Measured on a `myapp` project holding `src/ledger/` and `src/billing/`, built for the run and
+  existing in no repository, with a wheel built from this branch installed into an interpreter of
+  its own: `init --yes --mode bootstrap` exit 0 with `Graph: 3 nodes`, then `beadloom ci` exit 0
+  over `6 pair(s) fresh`. The published 4.0.0 wheel on the same project: `init` exit 0, `ci`
+  exit 1, `6 stale doc(s)`, `missing modules`. **A document that already exists is never
+  rewritten**, and no rule requires the new sections, so no existing Gate verdict moves on
+  upgrade.
+
+- **A remediation that is printed can be followed** (BDL-UX #282's other half). The Gate answered
+  every stale pair with "run `beadloom sync-update <ref>`". For `missing_modules` that command
+  exits 0, reports the pairs it re-attested and leaves the verdict where it was, because
+  attesting re-baselines hashes while `missing_modules` is a claim about content — an adopter
+  following the printed instruction was told it had succeeded and stayed red. The remediation is
+  now chosen by `doc_sync.engine.attestation_clears`: a reason inside the allow-list
+  (`hash_changed`, `hash_changed_since_head`, `symbols_changed`) still says re-attest, and a
+  reason outside it is told what does clear it. `beadloom sync-update --yes` reports what it did
+  NOT clear — `Still stale after this run: N pair(s)`, one line per pair with its reason — rather
+  than reporting only what it attested. The `install-hooks` templates derive the same line, which
+  reaches an adopter on the next `beadloom install-hooks`.
+
+- **The node holding an adopter's source is no longer dropped, and the Gate was green because of
+  the loss** (BDL-UX #214). On the ordinary single-package layout, where the package is named
+  after the project, the root node and the package node were both written under `<project>` and
+  the second replaced the first: `init` reported `Graph: 2 nodes` and `beadloom status` counted
+  `Nodes: 1`. The green was produced by the loss — `domain-needs-parent` reported that its
+  pattern `matches none of the 1 nodes in the graph … counted as evaluated but checks nothing`.
+  Both node writers allocate through one `RefIdAllocator` now, and the package node is written
+  under `<project>-<kind>`. Measured on a `myapp` project holding `src/myapp/`, with a wheel
+  built from this branch: `init` reports `Graph: 2 nodes` and `beadloom status` counts
+  `Nodes: 2`; the published 4.0.0 wheel reports the same 2 and counts 1. This changes what
+  `init` WRITES; a graph bootstrapped by an earlier version is not rewritten.
+
+- **Four ways of misdeclaring `issue_log:` reached the same verdict as declaring none**
+  (BDL-UX #270). `issue_log:` and `document_pairs:` are read through one component now,
+  `doc_sync.declarations`, with four states: absent, empty, present, unreadable. What tells
+  "declared nothing" from "declared badly" is a count and not an adverb — a leg that could not
+  use a declaration says `N entr(ies) declared, M unusable`, names the entry and the key it is
+  missing, and **blocks**, because a project that opted in and whose check silently did not run
+  is the false green this work is named for. A config that could not be *read* is neither case:
+  the leg skips, warns, and says that whether the project declares the block is unknown.
+  `beadloom issue-number allocate` refuses at exit 2 with the same refusal; `beadloom
+  issue-number check` reports the unknown at exit 0 instead of printing `No duplicate, unwritten
+  or unclaimed number.` over a log it never opened.
+
+  **Known limit, filed as BDL-UX #287:** on the `beadloom ci` path that answer is not reached. A
+  `.beadloom/config.yml` that cannot be read raises out of `resolve_scan_paths` during the
+  reindex step, before any leg runs, and the user sees a traceback at exit 1 rather than a
+  verdict. Three shapes were reproduced: YAML that does not parse, a document whose top level is
+  a list, and a file that is not UTF-8.
+
+- **`docs polish` and the git-activity map match a node's source by path component.** The rule
+  "a file lies under a node's source" was implemented three times independently, two of them
+  right and one wrong, so `src/ledger/` took `src/ledger_archive/`'s symbols — and `docs polish`
+  is what an AI agent is told to describe a node from, so the agent writing `ledger`'s
+  documentation was handed a function from a different package. There is one body now,
+  `infrastructure.node_source.NodeSource`, called by all three sites. A source written with
+  surrounding whitespace or with a leading `./` matches; a null source yields nothing rather than
+  raising. The API-route half of the same defect is what the upgrade note above is about.
+
+- **`beadloom waves` compares a plan against the beads already in progress under its work item**
+  (BDL-UX #283). A bead in progress is not ready, so a running bead was compared against nothing
+  and the plan printed `0 serialisation(s)` beside it — a coordinator that trusted that answer
+  launched two agents into a pair that had to be serialised. The first line carries the
+  comparison now, `N against N running bead(s)`, and a conflict with running work is printed
+  apart from the plan's own serialisations, because it does not order the plan's waves: it holds
+  a planned bead back until the running one lands. An in-progress bead the tracker could not show
+  is a finding, `running_not_compared`, rather than a silence; `--json` carries the same facts
+  under `running`.
+
+### Changed
+
+- **A stale count says `pair(s)`, because a pair is a document AND a code file.** One
+  `sync_state` row is one pair, so three code files in a package give three stale pairs over one
+  README — and `4 stale doc(s)` over two documents was a wrong noun on a right number. Nineteen
+  surfaces read that table under four different populations, and all four were called "stale
+  docs". The count and the word for it are produced together now, by
+  `infrastructure.repository.StaleCount`, and a population that is not pairs is a differently
+  named function rather than an argument to the same one. Nine surfaces print the new spelling:
+
+  1. `beadloom ci` — the `sync-check` step's summary, `N stale pair(s)`.
+  2. `beadloom sync-check` — every stale, missing and untracked line names its pair,
+     `<doc> <-> <code>`. `--json` always distinguished two pairs over one document by
+     `code_path`; the text line dropped that field, so two different pairs rendered identically.
+  3. `beadloom sync-check --report` — the heading `### Stale Documents` is `### Stale Pairs`.
+  4. `beadloom ctx` — the heading `## Stale Docs` is `## Stale Pairs`.
+  5. `beadloom why` — the impact row `Stale docs:` is `Stale pairs:`, in text and in rich.
+  6. `beadloom prime` — the health line, the `## Stale Pairs` heading, the cut note, and each
+     line now naming the pair's code file: `- <doc> <-> <code> (<ref>)`.
+  7. The MCP `get_status` tool description — "stale pair count".
+  8. The TUI — the status bar, and the `s` key's notification and last action.
+  9. The site dashboard — the stale alert message, and the docs status card
+     (`N stale of M tracked pair(s)`).
+
+  **No machine-readable contract moved.** `sync-check --json` and `--porcelain`, `prime --json`,
+  the MCP `prime` tool and `why`'s JSON key `stale_count` are unchanged, each pinned by a test.
+  One Python caller has to move: `context_oracle.why.ImpactSummary.stale_count: int` is now
+  `ImpactSummary.stale: StaleCount`, read as `.stale.count`.
+
+- **`beadloom issue-number check --json` widens `declared` from `bool` to `bool | null`.** `null`
+  is the state where the config could not be read, and `undetermined` is carried beside it. A
+  consumer testing `payload["declared"] is False` takes neither branch now instead of the wrong
+  one: `false` there was a false statement in a machine payload, and a sibling key contradicting
+  it would not have removed it. `entries_declared` and `refusals` are carried on both the pair
+  report and the issue-number report.
+
+### Removed
+
+- **`resolve_document_pairs` and `resolve_issue_log`.** Each returned only the USABLE part of a
+  declaration, which is the shape that tells a project which mistyped one key that it declared
+  nothing. Callers read `read_pair_declaration(...)` and `read_log_declaration(...)`, which carry
+  the refusals beside the entries. There is deliberately no replacement that returns the usable
+  entries alone.
+
+- **The TUI's `NodeDetail` widget** (`src/beadloom/tui/widgets/node_detail.py`). Measured: no
+  module under `src/` imported it; the live widget is `NodeDetailPanel`, which the explorer
+  screen mounts and which this change does not touch.
 
 ## [4.0.0] - 2026-09-10
 
