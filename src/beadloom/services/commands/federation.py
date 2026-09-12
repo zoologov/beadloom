@@ -226,6 +226,13 @@ def _load_export_artifacts(
     return artifacts
 
 
+#: The `lint` formats whose clean output states no verdict of its own. `rich`
+#: prints "No violations found" and `json` carries a `summary` object; these two
+#: are line-per-violation streams, so a clean run leaves a reader nothing to
+#: read unless the command says so itself.
+_FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
+
+
 # beadloom:domain=context-oracle
 @main.command()
 @click.option(
@@ -284,7 +291,12 @@ def lint(
     2 = configuration error or missing index.
     """
     from beadloom.application.reindex import incremental_reindex
-    from beadloom.graph.linter import LintError, _suppressed_note, _unattributed_note
+    from beadloom.graph.linter import (
+        LintError,
+        _population_note,
+        _suppressed_note,
+        _unattributed_note,
+    )
     from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
     from beadloom.graph.linter import format_porcelain as _format_porcelain
@@ -316,14 +328,22 @@ def lint(
     output = formatters[fmt](result)
     if output:
         click.echo(output)
-    elif not result.violations:
+    if not result.violations and fmt in _FORMATS_SILENT_WHEN_CLEAN:
         # The line the reviewer measured as a false green: it read
         # "0 violations, 12 rules evaluated" while six crossings sat behind
         # exemptions. What was excused is now part of the same sentence
-        # (BDL-061.49).
+        # (BDL-061.49), and so is the population the rules judged (BDL-070 A3).
+        #
+        # The condition is the FORMAT rather than "the formatter printed
+        # nothing", which is what it used to be. Those were the same test until
+        # a clean porcelain or github run started carrying a population line:
+        # keyed on emptiness, this sentence would have vanished from exactly the
+        # two formats it exists for, and the population would have read as the
+        # verdict it only qualifies.
         click.echo(
             f"0 violations, {result.rules_evaluated} rules evaluated"
             f"{_suppressed_note(result)}{_unattributed_note(result)}"
+            f"{_population_note(result)}"
         )
 
     if fail_on_warn and result.violations:

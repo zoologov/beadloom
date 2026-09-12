@@ -50,6 +50,7 @@ from beadloom.graph.rules.layer_reach import (
     LAYER_POPULATION_RULE_TYPE,
     LayerReach,
     layer_rule_reach,
+    layer_rule_reaches,
     part_of_parents,
 )
 from beadloom.graph.rules.layers import (
@@ -329,6 +330,7 @@ __all__ = [
     "inert_rule_names",
     "layer_of",
     "layer_rule_reach",
+    "layer_rule_reaches",
     "load_rules",
     "node_tags",
     "own_layer_of",

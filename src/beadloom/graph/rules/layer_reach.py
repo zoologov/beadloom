@@ -73,6 +73,27 @@ class LayerReach:
         """Edges inheritance would reach that own tags do not."""
         return self.inherited.evaluated - self.own_tags.evaluated
 
+    def to_dict(self) -> dict[str, object]:
+        """JSON-ready mapping for ``lint --format json``.
+
+        Both pairs of numbers, flattened: a machine reader that wants to watch
+        the rule's reach change across Release B needs ``inherited_evaluated``
+        beside ``evaluated``, and a nested object would make the common read —
+        "how much did it judge" — two lookups instead of one. ``unjudged`` is
+        derived and carried anyway, because a consumer that recomputes a
+        subtraction is a second place the arithmetic can be wrong.
+        """
+        return {
+            "rule": self.rule_name,
+            "edge_kind": self.edge_kind,
+            "evaluated": self.own_tags.evaluated,
+            "total": self.own_tags.total,
+            "skipped_untagged": self.own_tags.skipped_untagged,
+            "inherited_evaluated": self.inherited.evaluated,
+            "inherited_total": self.inherited.total,
+            "unjudged": self.unjudged,
+        }
+
 
 def part_of_parents(conn: sqlite3.Connection) -> dict[str, set[str]]:
     """Each node's DIRECT ``part_of`` containers.
@@ -143,6 +164,28 @@ def layer_rule_reach(conn: sqlite3.Connection, rule: LayerRule) -> LayerReach:
         part_of_parents(conn),
         node_tags(conn).as_mapping(),
     )
+
+
+def layer_rule_reaches(
+    conn: sqlite3.Connection, rules: Sequence[LayerRule]
+) -> list[LayerReach]:
+    """The reach of every rule in *rules*, in declaration order.
+
+    The containment map and the tag map are read ONCE for the whole list rather
+    than once per rule, which is what :func:`layer_rule_reach` would do called
+    in a loop. The two agree rule by rule — they hand the same three inputs to
+    :func:`reach_of` — and a test holds that, because "the fast one" and "the
+    correct one" being different functions is how a population comes to depend
+    on which caller asked.
+    """
+    if not rules:
+        return []
+    parents = part_of_parents(conn)
+    tags = node_tags(conn).as_mapping()
+    return [
+        reach_of(rule, live_edges_of_kind(conn, rule.edge_kind), parents, tags)
+        for rule in rules
+    ]
 
 
 def population_statement(rule: LayerRule, reach: LayerReach) -> list[Violation]:

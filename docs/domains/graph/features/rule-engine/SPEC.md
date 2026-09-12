@@ -179,7 +179,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 **Severity is `warn`, and expiry never changes what is suppressed.** A finding here is a statement about the CONFIGURATION, not about the code — the distinction BDL-061.48 drew for inert rules — and it is honoured harder in this case: a crossing does **not** reappear at `error` severity because a calendar day passed, because a build that reddens with no commit behind it is worse than the silence being fixed. A project that wants a hard deadline has `lint --fail-on-warn`.
 
-**Named limit.** The suppressed count appears wherever a run could read as clean — `rich`, `--format json`, and the `0 violations, N rules evaluated` line the CLI prints when a piped run has nothing to report. It does **not** appear in `porcelain` output that already carries violations (one line per violation is the format's contract), nor in the Gate's own `N rules, 0 violations` step summary, which belongs to `application/gate.py`.
+**Named limit.** The suppressed count appears wherever a run could read as clean — `rich`, `--format json`, and the `0 violations, N rules evaluated` line the CLI prints for a format whose clean output states no verdict of its own (`porcelain`, `github`). It does **not** appear in `porcelain` output that already carries violations (one line per violation is the format's contract), nor in the Gate's own `N rules, 0 violations` step summary, which belongs to `application/gate.py`.
 
 #### Rule liveness (a rule that cannot fire)
 
@@ -732,6 +732,7 @@ class LayerReach:
     inherited: LayerPopulation    # what `part_of` inheritance would reach
 
 def layer_rule_reach(conn, rule) -> LayerReach
+def layer_rule_reaches(conn, rules) -> list[LayerReach]   # one read of the graph for the whole list
 def population_statement(rule, reach) -> list[Violation]
 ```
 
@@ -758,6 +759,42 @@ It is silent in two cases and loud in a third:
   of every project trains a reader to skip the one that matters.
 - **Zero of N reached** — reported, once for the rule rather than once per unjudged edge. This is
   the case where "the rule found nothing wrong" and "the rule never looked" are the same output.
+
+##### Where the population is reported (BDL-070 A3)
+
+The finding reaches a reader who reads findings. The line most readers read is the summary, so
+`LintResult` carries the same fact as DATA — `layer_populations: list[LayerReach]`, one entry per
+declared layer rule, empty for a project that declares none — and every rendering states it in its
+own idiom rather than parsing another's prose:
+
+| Rendering | How the population appears |
+|---|---|
+| `format_rich` | a clause on the summary line, on the GREEN line and the RED one alike: `, architecture-layers judged 16 of 362 live depends_on edge(s)` |
+| `format_json` | `summary.layer_populations[]` — `rule`, `edge_kind`, `evaluated`, `total`, `skipped_untagged`, `inherited_evaluated`, `inherited_total`, `unjudged`. Additive: every key that was there keeps its name and its meaning |
+| `format_github` | one leading `::notice::` per rule — `notice`, not `warning`, because the fraction is not a finding against anyone's code and must not colour a pull request |
+| `format_porcelain` | one leading marked line, `# layer_population:rule:edge_kind:evaluated:total:skipped:inherited`. The `# ` marker is the same one `scope-check --porcelain` leads its verdict with, and a rule name cannot begin with it, so a consumer drops the marked lines and reads exactly the seven-field records it read before |
+| `beadloom lint`'s clean line | `0 violations, N rules evaluated` gains the same clause |
+
+The number the clause prints has a lineage: an index carried forward and an index built fresh over
+one tree resolve `beadloom.application.graph_reads` differently, so this repository reads `16 of
+363` on a carried-forward index and `16 of 362` on a fresh one (BDL-UX #290). Hold the lineage
+constant across a before/after comparison.
+
+**The clause is present at FULL reach too, and the finding is not.** They differ deliberately. A
+finding is an item somebody triages, in every project, on every run, so `16 of 16` would be noise;
+a clause on a line already being read costs nothing, and `16 of 16` versus `16 of 362` is the
+distinction this rule exists to make readable. A rule handed no edge of its kind states nothing in
+either channel — liveness already says it could not fire.
+
+**The CLI's clean line is keyed on the FORMAT, not on an empty rendering.** It used to print when
+the formatter returned nothing at all, which was the same test until a clean `porcelain` or
+`github` run started carrying a population line. Keyed on emptiness, the one sentence saying there
+were no violations would have vanished from exactly the two formats it exists for.
+
+`LintResult.layer_populations` is counted in `linter._evaluate` beside `inert_rule_names` and
+`suppressed_crossings` rather than returned by `evaluate_all`, which returns findings. Both counts
+come from `reach_of` over one connection, so they cannot differ in logic, and a test holds the
+numbers on the result against the numbers in the finding.
 
 `node_tags.NodeTags` is the tag lookup the five evaluators share. It reads
 `nodes.extra["tags"]` once, on the first question, and answers from memory afterwards — the
