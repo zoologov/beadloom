@@ -35,6 +35,27 @@
 
 ## Open Issues
 
+294. [2026-09-12] [LOW] `loader.get_node_tags` raises a bare `AttributeError` on a malformed `nodes.extra`, and disagrees with the batch reader beside it on four measured inputs
+
+    **Severity:** low (pre-existing, and no wrong verdict follows from it; what follows is a traceback naming `json` or an attribute instead of the node, and two readers of one fact answering differently)
+    **Command:** any command that reads node tags — `beadloom lint`, `ctx`, the TUI
+    **Context:** BDL-070, the re-review `beadloom-5tcc.2`, 2026-09-12. Found while checking whether the fix for the first pass's Major 2 was redundant. **Not introduced by this epic** and deliberately not repaired inside a verdict-neutral release.
+    **Measured** over a four-row `nodes` table, `graph/rules/node_tags.NodeTags.of(ref)` against `graph/loader.get_node_tags(conn, ref)`:
+
+    | `extra` | batch reader | one-at-a-time reader |
+    |---|---|---|
+    | `null` | `set()` | raises `AttributeError` |
+    | `3` | `set()` | raises `AttributeError` |
+    | `"x"` | `set()` | raises `AttributeError` |
+    | `{not json` | `set()` | raises `json.JSONDecodeError` |
+
+    **Two things are wrong, and they are separable.** The exception is not derived from this project's base error, so a caller cannot tell "this row is unreadable" from a programming mistake. And the two readers of one fact disagree on all four shapes — the batch reader answers empty by design, because one unreadable row must not fail an evaluation that never asked about that node.
+    **Why the disagreement is defensible and still worth recording:** the batch reader's tolerance is the whole reason it can read the table in one pass. The defect is not that they differ but that nothing says so where either is declared, which is the shape #268 and #269 record for two other reader pairs in this codebase.
+    **Expected:** a malformed `nodes.extra` reaches the caller as an error this project defines, naming the node and the shape; and the two readers' difference is either removed or stated where both are declared.
+    **What is NOT established:** how many callers of `get_node_tags` would see the raise. The reviewer measured the function, not its call sites.
+    **Tracker:** `beadloom-ui47`.
+    **Related:** #268, #269 (two readers of one fact, answering differently). The batch reader's own guard was added by BDL-070's first fix cycle, against the first review pass's Major 2.
+
 293. [2026-09-12] [MEDIUM] running the suite with `--cov` corrupts the project's own index, and 18 tests then fail with `database disk image is malformed`
 
     **Severity:** medium (no shipped behaviour is wrong. What is wrong is that the one command the role protocol names for proving coverage — `uv run pytest --cov=src` — produces a RED suite over a green tree, so a run taken to measure coverage cannot also be read as a verdict)
