@@ -312,10 +312,23 @@ may change verdict on upgrade.
   untagged end, the way `scenario-coverage` states its own — and only then change the verdict;
 - fix or explicitly account for `agent-prime` → `reindex` before inheritance ships.
 
-### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel
+### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel — SHIPPED by BDL-069
 
-**`beadloom-4fdn` (BDL-UX #282) · `beadloom-5cpe` (BDL-UX #214) · both critical, both blocking
-outside validation.**
+**`beadloom-4fdn` (BDL-UX #282) · `beadloom-5cpe` (BDL-UX #214) · both closed 2026-09-12 after a
+re-run. Epic `beadloom-rqma`, PR #69, merged to `main` as `351f40f6`.**
+
+**State, as a contrast against what is on PyPI rather than as a claim.** Both layouts were built
+from scratch on projects that are not this repository, once against the published 4.0.0 wheel and
+once against this branch:
+
+| | published 4.0.0 | shipped here |
+|---|---|---|
+| two-package `src/`: `init`, then `beadloom ci` | rc 1, `6 stale doc(s)` | rc 0, `6 pair(s) fresh` |
+| single-package `src/`: `beadloom status` | `Nodes: 1` | `Nodes: 2` |
+
+The remediation that could not clear its own reason now clears it, and a graph file carrying a
+duplicate `ref_id` is reported instead of silently reduced — which was the third clause of the
+done-when below. The text that follows is kept as the record of why the item was ranked first.
 
 Ranked above everything below because of what happens next: the owner is about to run Beadloom
 on another project and then hand it to a team for their own services. Everything in this list
@@ -343,6 +356,36 @@ disagree* — survives. #282 is written about the property.
 **Done when** a virgin `init` on either layout is followed by `beadloom ci` rc 0 with no hand
 editing, no check prints a remediation that cannot clear the reason it printed, and a graph file
 carrying a duplicate `ref_id` is reported rather than silently reduced.
+
+
+### P1 — the mutation duty shipped, and its nightly has been scoring nothing since it shipped
+
+**`beadloom-ey4m` (BDL-UX #289) · found 2026-09-12 while verifying `main` after BDL-069 landed.**
+
+The section above records BDL-068 building the thing that can check the mutation duty: a runner, a
+declared scope of fifteen targets, and `beadloom mutation` with a floor. It works. What it is asked
+to judge does not.
+
+`tests/test_two_readers_of_one_markdown_table.py` scans the package by deriving its root from its
+own file. Inside a mutmut run the tests are copied beside the mutated sources, so the guard reads
+mutmut's own generated variants, calls each one an undeclared reader, and fails — which aborts the
+baseline stats phase. Both scoring steps then report over 6544 mutants and zero verdicts.
+
+**The instrument did not lie, and that is the part worth keeping.** `beadloom mutation` printed
+`Score: none`, raised `mutation-run-zero-mutants` naming the empty denominator — *a run whose every
+mutant was skipped states no more than a run that never happened* — and exited 1. The rule BDL-068
+added for exactly this shape is what makes the item visible at all.
+
+**Two separate things are wrong.** The guard scans the wrong tree; and a nightly whose red nobody
+reads is itself a check reporting into nothing. It was red on 2026-09-10 and 2026-09-11 and was
+found by hand, not by anything in the flow.
+
+**The score is unknown, not low.** No mutant was judged, so nothing here says the declared targets
+are or are not at their floors. The last figure anyone can stand behind is the 2026-09-09 nightly.
+
+**Done when** a mutmut run reaches a verdict on a non-zero population and both scoring steps print
+a score rather than `none` — not when the guard is merely skipped under mutation — and a red
+nightly reaches someone without being looked for.
 
 
 ### P1 — BDL-066: agent behaviour observability, trace and result

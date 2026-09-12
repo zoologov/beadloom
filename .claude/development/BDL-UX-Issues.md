@@ -35,6 +35,49 @@
 
 ## Open Issues
 
+289. [2026-09-12] [HIGH] a self-scanning guard test reads mutmut's own mutated copy of the package, so the nightly mutation run reaches a verdict on 0 of 6544 mutants
+
+    **Severity:** high (the mutation duty has produced no score since 2026-09-10 — the instrument that measures whether the tests can tell a defect from a correct program is itself dead, and the only thing that said so is a nightly nobody is watching)
+    **Command:** the `Mutation` workflow — `uv run mutmut run`, then `beadloom mutation --min-score`
+    **Context:** found 2026-09-12 while verifying `main` after BDL-069 landed. NOT caused by BDL-069; the first red nightly predates the epic's branch.
+    **What happened.** `tests/test_two_readers_of_one_markdown_table.py::TestThePackageHasTwoReadersOfOneRow::test_every_pipe_split_in_the_package_is_declared` fails inside every mutmut run:
+
+    ```
+    AssertionError: a body splits a line on a pipe and no reader has classified it — undeclared
+      [('application/guards/surface.py', 'x__bound__mutmut_2'),
+       ('application/guards/surface.py', 'x__bound__mutmut_3'),
+       ...
+       ('doc_sync/tables.py', 'x_cells_of__mutmut_6'),
+       ('doc_sync/tables.py', 'x_cells_of__mutmut_orig')], gone []
+    !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    1 failed, 4303 passed, 37 skipped, 1 xfailed in 600.70s
+    failed to collect stats. runner returned 1
+    ```
+
+    **The mechanism.** The guard derives its scan root from its own file: `_SRC = Path(__file__).resolve().parent.parent / "src" / "beadloom"` (line 49), and walks `_SRC.rglob("*.py")` (line 103). mutmut 3.x builds a `mutants/` tree and runs the pool from inside it — `mutation.yml:146` says so of `.beadloom/`, and the failure itself shows the TESTS are copied too: the undeclared sites are reported by paths relative to `_SRC`, and they name functions that exist only in mutmut's output. So inside a run `__file__` is under `mutants/`, and `_SRC` resolves to the mutated `src/beadloom` beside it rather than to the repository's. The guard then reads mutmut's generated variants (`x_cells_of__mutmut_1..6`, `x__bound__mutmut_2..4`), each a function body holding a `.split("|")` that no declaration in the test names, and asserts. The test is one of the 136 files in `[tool.mutmut] pytest_add_cli_args_test_selection` (`pyproject.toml:455`), so it runs on every mutant AND on the baseline stats collection, which is where it aborts the run.
+
+    **What the failure costs, measured from the run's own output.** Both `beadloom mutation` invocations report:
+
+    ```
+    Counters: killed 0, mutants 6544, no_tests 0, skipped 0, survived 0, suspicious 0, timeout 0
+    Score: none — see the findings below.
+    Floor: 0.94 — the score is under it.
+    WARN [mutation-run-zero-mutants] ...: the run produced 6544 mutants and reached a
+    verdict on none of them, so the score is a ratio over an empty denominator — a run
+    whose every mutant was skipped states no more than a run that never happened
+    ```
+
+    **The instrument is NOT the defect, and this is the part worth keeping.** `beadloom mutation` was handed 6544 mutants and zero verdicts and refused to divide — it printed `Score: none`, named the population, and exited 1. `mutation-run-zero-mutants` is exactly the rule BDL-068 added for this, and it is the reason this entry exists at all rather than a green nightly over an empty denominator. What is broken is the run it was asked to judge.
+
+    **When it started, derived rather than recalled.** Nightly history: `e17c2258` 2026-09-09 success, `0dd384d9` 2026-09-10 failure, `aa21caff` 2026-09-11 failure. The only commits in that range are `101fe7d1` (#63, BDL-068 S6), `2915363a` (#64) and `0dd384d9` (#65). `git log --diff-filter=A` puts the test's introduction at `101fe7d1`, and `git log -S` puts its entry into `pytest_add_cli_args_test_selection` at the same commit — the guard and its selection landed together, and the first nightly after them went red.
+
+    **Expected:** a guard that scans the package must scan the package under test, not whatever tree it happens to be copied into — the root belongs to an explicit anchor (the installed `beadloom.__file__`, or a path that refuses to resolve inside `mutants/`), and a body mutmut generated is not a reader anyone wrote. Either the guard excludes generated variants by shape, or it is removed from mutmut's selection and stays a plain-suite check. Second, and separately: a nightly whose red nobody sees is a check reporting into nothing — this one has been red for two nights and was found by hand.
+
+    **What this entry does NOT claim.** The mutation SCORE is unknown, not low: no mutant was judged, so nothing here says the declared targets are or are not covered to their floors. The last figure anyone can stand behind is the 2026-09-09 nightly. Whether any OTHER self-scanning test in the 136-file selection has the same shape was not measured — one was found, by its failure, and the class was not swept.
+
+    **Tracker:** `beadloom-ey4m`.
+    **Related:** #269 (the two readers this guard was built to hold apart), #239 (a population of zero reading as coverage — the same shape the WARN refused to produce here).
+
 287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that cannot be read crashes `beadloom ci` with a traceback instead of a verdict — three shapes reach the same raise
 
     **Severity:** medium (an adopter's first-run experience, and the shapes of broken config no gate leg can report on, because the run ends before any leg runs)
