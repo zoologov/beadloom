@@ -45,17 +45,31 @@ graph TD
 | Wave | Beads | Why they run together |
 |---|---|---|
 | 1 | A1 | Everything reads the shared lookup; nothing else can start. |
-| 2 | A2, A5, A6 | Disjoint files: the evaluator, the other two implementations, the declaration. |
-| 3 | A3 | `LintResult` needs the evaluator's population to exist. |
-| 4 | A4 | The readers past `lint()` need the rendering settled. |
-| 5 | A7 | Test, over all of Release A. |
-| 6 | A8 | Review, withheld. |
-| 7 | A9, B1, B2 | Docs for A; the reverse edge and the 16 crossings, both triage. |
-| 8 | B3 | The verdict change, after triage. |
-| 9 | B4 | `architecture_view`'s predicate. |
-| 10 | B5 | Test, over Release B. |
-| 11 | B6 | Review. |
-| 12 | B7 | The claim, at its source in `.beadloom/flow/`, then recomposed. |
+| 2 | A2 | `beadloom waves` serialised A2, A5 and A6 — see below. A2 first: P0, and A3 waits on it. |
+| 3 | A5 | Serialised against A2 on `rule-engine`. |
+| 4 | A6 | Serialised against both on `rule-engine` and `debt-report`. |
+| 5 | A3 | `LintResult` needs the evaluator's population to exist. |
+| 6 | A4 | The readers past `lint()` need the rendering settled. |
+| 7 | A7 | Test, over all of Release A. |
+| 8 | A8 | Review, withheld. |
+| 9 | A9, B1, B2 | Docs for A; the reverse edge and the 16 crossings, both triage. |
+| 10 | B3 | The verdict change, after triage. |
+| 11 | B4 | `architecture_view`'s predicate. |
+| 12 | B5 | Test, over Release B. |
+| 13 | B6 | Review. |
+| 14 | B7 | The claim, at its source in `.beadloom/flow/`, then recomposed. |
+
+**This table was authored wrong and the graph corrected it, which is recorded rather than quietly
+fixed.** It first read `Wave 2: A2, A5, A6 — disjoint files`. That was a guess. `beadloom waves
+--parent beadloom-5tcc` returned three waves for the three beads and named every pair:
+
+    beadloom-06dz | beadloom-1ylk — shared_node: rule-engine
+    beadloom-06dz | beadloom-punn — shared_node: debt-report
+    beadloom-1ylk | beadloom-punn — shared_node: rule-engine
+
+All three touch `graph/rules/`, and `debt-report` is `part_of` `application`, which A5 declares — an
+overlap the file-level guess could not see. The wave count rises from 12 to 14 and the dependency
+DAG is unchanged; what changed is that three beads run one after another instead of together.
 
 ## Beads
 
