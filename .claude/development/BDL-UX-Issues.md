@@ -35,6 +35,20 @@
 
 ## Open Issues
 
+295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
+
+    **Severity:** low (pre-existing on both sides of the change, and it takes a hand-written graph file to produce; what it costs when it happens is the whole run rather than the one node)
+    **Command:** `beadloom lint`, and anything that reaches the rule engine
+    **Context:** BDL-070, review pass 3 (`beadloom-5tcc.4`), 2026-09-12. Found while checking whether the second fix cycle's docstring matched its guard — it does not, and this is the case it does not cover.
+    **What happened.** A node whose `extra` is a readable object but whose `tags` value is a truthy non-iterable — `{"tags": 3}` — reaches `set(declared)` at `graph/rules/node_tags.py:85` and raises `TypeError: 'int' object is not iterable` from inside the single pass over the table. One such row therefore fails every tag question in the run, not the question about that node. It is the shape of this epic's first review Major one level down: the malformation is in `extra["tags"]` rather than in `extra`.
+    **Measured as pre-existing, which is why it was not repaired here.** Two fixture projects that are **not this repository** — one declaring a layer rule, one declaring only a tag-matched `deny` rule — each holding a node written `tags: 3` and reachable by no rule, indexed once and linted by `main`'s sources and by the epic's over the same index. **Both sides raise.** `main` reaches it through `liveness._GraphFacts.tags`, which already read every node's tags whenever any rule carries a tag matcher. So a verdict-neutral release is the wrong place to fix it.
+    **The write side is silent too.** `graph/loader.py:474`–`478` puts every unmapped YAML key into `extra` untyped, so nothing rejects `tags: 3` when the graph file is written. The first thing that notices is a traceback at evaluation time.
+    **A sixth shape the divergence table does not name:** a JSON array (`[]`, `["tier-web"]`). The existing `isinstance` guard covers it, and it diverges from the one-at-a-time reader exactly as the three scalars do.
+    **Expected:** a node whose `extra.tags` is not a sequence is skipped like every other unreadable shape, with a row in `_DIVERGING_SHAPES` naming it — or the indexer refuses it at write time and says which node.
+    **What is NOT established:** whether any real graph file in any project has this shape. The reviewer constructed it; nobody has seen one in the wild.
+    **Tracker:** `beadloom-efcb`.
+    **Related:** #294 (the same pair of readers, disagreeing on the shapes of `extra` itself), #268, #269.
+
 294. [2026-09-12] [LOW] `loader.get_node_tags` raises a bare `AttributeError` on a malformed `nodes.extra`, and disagrees with the batch reader beside it on four measured inputs
 
     **Severity:** low (pre-existing, and no wrong verdict follows from it; what follows is a traceback naming `json` or an attribute instead of the node, and two readers of one fact answering differently)
