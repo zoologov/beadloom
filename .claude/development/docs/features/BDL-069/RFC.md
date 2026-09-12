@@ -115,7 +115,7 @@ twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wa
 | co-writers | graph-layout | 1 | no | writes the directory but emits no nodes |
 | co-writers | agentic-flow-setup | 1 | no | writes the directory but emits no nodes |
 | callers | doc-shape | 3 | no | reads sections, not blocks — a different granularity |
-| callers | graph | 1 | no | reader downstream of the loss |
+| callers | graph | 1 | **yes** | **re-ruled 2026-09-12.** `39ap` edited `graph/__init__.py` to export the duplicate report; ruled out at planning as a reader downstream of the loss, which is what it is for the loader's defect and not what it is for the report's surface |
 | callers | cli | — | **yes** | **extension, NEW, `yn6i` and `rqma.1`.** Surfaced in no run: it owns `docs/services/cli.md`, whose `prime` section (`:1224`) and `waves --parent` section (`:1371-1386`) both carry wording the two fixes change |
 | branches | impact | `render_axes_section`, `open_boundary` | **yes** | **extension, NEW, `rqma.2` (#284).** Renders the row that must name unreadable ownership; owns `impact/SPEC.md:107,145-151,230` and `impact.feature:17` |
 | callers | git-activity | 1 — `src/beadloom/infrastructure/git_activity.py` | **yes** | **extension, NEW, `rqma.4`.** `_map_file_to_node` is one of three independent implementations of 'a file lies under a node's source' — the correct one. Owned per `GraphBoundary.owner_of`; in scope because the fix is one helper all three call |
@@ -132,7 +132,7 @@ twenty-three — `cli` and `impact` new, `tui`, `application`, `mcp-server`, `wa
 | callers | role-map | 1 | no | extension; a caller |
 | callers | site-generation | 1 | no | extension; a caller |
 | callers | doc-roots | 1 | no | extension; a caller of the bead-id reader |
-| callers | document-pairs | 1 | no | extension; shipped by `19m6`, a caller of the bead-id reader |
+| callers | document-pairs | 1 | **yes** | **re-ruled 2026-09-12, after `rqma.9`.** The node this epic SHIPPED, and the epic's own fix cycles edit it — `rqma.7` for the refusals, `rqma.9` to delete the dead `resolve_document_pairs`. It was ruled out as a caller of the bead-id reader, which was a different question from who owns the file the fixes change |
 | callers | ignore-block | 1 | no | extension; a caller |
 | callers | ai-techwriter-setup | 6 | no | extension; composes templates it does not own |
 | callers | config-check | 4 | no | extension; compares the composed `task-init.md` and goes quiet once `setup-agentic-flow` recomposes it |
@@ -160,6 +160,16 @@ the three added beads was told to mark, on every row, whether a node owns a non-
 the change may reach. That is how `cli` was found — it surfaced in no run at all and owns the
 reference text two of the fixes change — and how `axes-section` was ruled in before landing
 rather than after: it surfaced as a caller and is the reader of the very format `#284` alters.
+
+**Five rows have now been re-ruled, every one from out of scope to in.** `reindex` and
+`graph-diff` after wave 1, `onboarding` after `qylh`, and `document-pairs` and `graph` after
+`rqma.9` — the last two surfaced by `scope-check`, which words it exactly: "a commit on it is a
+change the human said no to". Five for five in one direction is not five judgement calls; it is
+the method. BDL-UX #284 named it and this epic fixed the half a derivation can see — `impact`
+now carries `Owns unread`, which is what would have caught `onboarding`. The half that remains
+is the one all five share: a node was read by the axis it FIRST surfaced under, and `callers`
+was taken to mean "calls the change, is not changed". No instrument fixes that; the ruling
+does, and it is recorded here rather than left as five separate corrections.
 
 The rows above are the **node level**. The per-function `branches` rows of the eighteen
 sections are omitted for length and are reproducible verbatim by re-running the commands each
