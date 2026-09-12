@@ -51,12 +51,12 @@ stood.
 | `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
 | `beadloom-rqma.5` | ext | one computation of the stale-pair count, populations named, in the existing seam | P1 | — | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ✓ done |
-| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | in progress |
+| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | ✓ done |
 | `beadloom-rqma.6` | — | fix: the review's three majors and three minors | P0 | `qae9` | ✓ done |
 | `beadloom-rqma.7` | — | fix: a malformed `document_pairs:` declaration reads as no declaration (review MAJOR 5) | P0 | `qae9` | ✓ done |
 | `beadloom-rqma.8` | — | fix: the re-review's three majors — #270's CLI surface, its record, readme-pair's count | P0 | `qae9` | ✓ done |
 | `beadloom-rqma.9` | — | fix: `check` reports a false green over an unreadable config; the SPEC states a property the code does not hold | P0 | `qae9` | ✓ done |
-| `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
+| `beadloom-egvd` | — | tech-writer | P1 | `qae9` | ✓ done |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
 four dev branches with their sub-dependencies, and `bd ready --limit 0` names exactly the five
