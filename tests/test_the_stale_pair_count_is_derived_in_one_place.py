@@ -114,6 +114,52 @@ def _phrase_sites() -> dict[str, list[int]]:
     return found
 
 
+def _pair_count_query_sites() -> dict[str, list[int]]:
+    """Every module under `src/` that counts the STALE rows with its own SQL.
+
+    The population is the one `count_stale_pairs` owns — rows whose status is
+    `stale` — so a query over `status IN ('stale', 'missing')` is a different
+    population and is not one of these sites. `application/status.py` and
+    `application/site.py` ask that wider question and are held on
+    `beadloom-r9t5`, which is where the decision about it lives.
+    """
+    found: dict[str, list[int]] = {}
+    for path in sorted(SRC.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        lines = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "count(*) FROM sync_state" in node.value
+            and "status = 'stale'" in node.value
+        ]
+        if lines:
+            found[str(path.relative_to(SRC))] = lines
+    return found
+
+
+class TestNoSiteQueriesThePairCountItself:
+    """The count has one query as well as one noun (BDL-069 review, Minor 2).
+
+    `infrastructure/health.py` kept its own `SELECT count(*) FROM sync_state
+    WHERE status = 'stale'` through `beadloom-rqma.5` — the identical population,
+    in the same layer as the function that now owns it, with no boundary between
+    them. A second copy of the query is what lets a second answer to "how many
+    stale pairs" be born, which is the defect this bead's own name is about.
+
+    The reads that are NOT this population are not in scope here and stay where
+    they are: `context_oracle/builder.py` selects the stale ROWS of a subgraph,
+    `onboarding/scanner/prime.py` selects their paths, and
+    `application/debt_report/collect.py` counts NODES rather than pairs — that
+    last one is a fourth copy of `stale_node_refs` and is recorded on
+    `beadloom-r9t5`, where the decision about its population is already held.
+    """
+
+    def test_only_the_computation_carries_the_query(self) -> None:
+        assert sorted(_pair_count_query_sites()) == ["infrastructure/repository.py"]
+
+
 class TestNoSiteSpellsThePhraseItself:
     """The guard that makes a fifth site unable to be born mislabelled.
 
