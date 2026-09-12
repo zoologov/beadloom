@@ -386,16 +386,21 @@ def declared_log(project_root: Path) -> IssueLog:
         return declaration.log
     if not declaration.refusals:
         raise ValueError(NO_LOG_DECLARED)
-    raise ValueError("; ".join(_refusal_sentence(refusal) for refusal in declaration.refusals))
+    raise ValueError("; ".join(refusal_sentence(refusal) for refusal in declaration.refusals))
 
 
-def _refusal_sentence(refusal: Refusal) -> str:
+def refusal_sentence(refusal: Refusal) -> str:
     """One refusal as a line for a person at a terminal.
 
     ``where`` leads, because "it has no `ledger:` key" is about an entry and a
     reader needs to know which. It is dropped when ``why`` already opens with
     it: the Gate can afford the repetition because its finding carries the file
     in a ``locations`` field beside the sentence, and a one-line refusal cannot.
+
+    Public because ``issue-number check`` renders the same refusals this
+    module's own :func:`declared_log` renders for ``allocate``. Two copies of
+    the rule about dropping ``where`` are two things that can disagree, and the
+    two commands disagreeing about one declaration is what BDL-UX #270 was.
     """
     if refusal.why.startswith(refusal.where):
         return f"{refusal.why} — {refusal.remediation}"

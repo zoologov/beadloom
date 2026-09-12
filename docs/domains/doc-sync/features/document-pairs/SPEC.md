@@ -117,3 +117,6 @@ a missing file compares nothing and says so.
 | `check_document_pairs(project_root)` | every declared pair, the blocks compared, the findings, and the paths it could not read |
 | `compare_documents(source, follower)` | two block sequences aligned, for a caller that already read them |
 | `read_blocks(text)` | one document as its sequence of blocks |
+| `read_pair_declaration(project_root)` | every `document_pairs:` entry the project wrote — the usable pairs, the count of entries looked at, and a refusal per entry that could not be used |
+
+There is no surface returning only the usable pairs. `resolve_document_pairs` was that surface, had no caller, and was deleted in BDL-069 (`beadloom-rqma.9`) for the reason its twin over `issue_log:` was deleted one bead earlier: a caller that cannot see the refusal tells a project which mistyped a key that it declared nothing, which is the defect this feature's declaration reader exists to prevent.

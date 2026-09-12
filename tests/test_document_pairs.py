@@ -35,7 +35,7 @@ from beadloom.doc_sync.document_pairs import (
     check_document_pairs,
     compare_documents,
     read_blocks,
-    resolve_document_pairs,
+    read_pair_declaration,
 )
 
 #: Shared with the acceptance steps, and it lives under ``tests/acceptance/``
@@ -169,16 +169,16 @@ class TestCompareDocuments:
 
 class TestDeclaration:
     def test_a_project_with_no_config_declares_no_pair(self, tmp_path: Path) -> None:
-        assert resolve_document_pairs(tmp_path) == ()
+        assert read_pair_declaration(tmp_path).pairs == ()
 
     def test_a_project_declaring_no_block_declares_no_pair(self, tmp_path: Path) -> None:
         (tmp_path / ".beadloom").mkdir()
         (tmp_path / ".beadloom" / "config.yml").write_text("languages:\n- .py\n", encoding="utf-8")
-        assert resolve_document_pairs(tmp_path) == ()
+        assert read_pair_declaration(tmp_path).pairs == ()
 
     def test_a_declared_pair_resolves_against_the_project_root(self, tmp_path: Path) -> None:
         _declare(tmp_path, ("README.ru.md", "README.md"))
-        pairs = resolve_document_pairs(tmp_path)
+        pairs = read_pair_declaration(tmp_path).pairs
         assert [(p.source, p.follower) for p in pairs] == [
             (tmp_path / "README.ru.md", tmp_path / "README.md")
         ]
@@ -188,16 +188,16 @@ class TestDeclaration:
         (tmp_path / ".beadloom" / "config.yml").write_text(
             "document_pairs:\n  - source: README.ru.md\n", encoding="utf-8"
         )
-        assert resolve_document_pairs(tmp_path) == ()
+        assert read_pair_declaration(tmp_path).pairs == ()
 
     def test_a_path_escaping_the_project_root_is_refused(self, tmp_path: Path) -> None:
         _declare(tmp_path, ("../outside.md", "README.md"))
-        assert resolve_document_pairs(tmp_path) == ()
+        assert read_pair_declaration(tmp_path).pairs == ()
 
     def test_unreadable_config_declares_no_pair(self, tmp_path: Path) -> None:
         (tmp_path / ".beadloom").mkdir()
         (tmp_path / ".beadloom" / "config.yml").write_text("document_pairs: [\n", encoding="utf-8")
-        assert resolve_document_pairs(tmp_path) == ()
+        assert read_pair_declaration(tmp_path).pairs == ()
 
 
 class TestCheckDocumentPairs:

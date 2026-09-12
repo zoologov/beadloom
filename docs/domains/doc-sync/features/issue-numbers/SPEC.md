@@ -147,20 +147,48 @@ issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)`. Reading the decl
 the Gate leg onto the shared reader and the two commands were left on the old one, so a project
 that misspelled `ledger:` was still told it had declared nothing by `issue-number allocate` — the
 surface the table below lists first — while the Gate beside it named the key. `beadloom-rqma.8`
-moved both commands onto the same reader. Every surface of this feature now answers "did this
-project declare a log?" the same way, which is the property the entry was about and not the leg
-the first fix happened to be measured on.
+moved both commands onto the same reader, and `beadloom-rqma.9` closed the third state on
+`check`. Every surface of this feature now tells the three states apart — a log declared, no log
+declared, and a config that could not be read so the key's presence is unknown — and none of them
+reports one as another. That is the property the entry was about and not the leg the first fix
+happened to be measured on.
 
-A config file that could not be read is the one case that does not redden: it says nothing about
-whether the key is there at all, so the step skips, WARNs and names the file rather than judging a
-project that may never have written the key. That holds of the step, which is where it is tested.
-It does not hold of `beadloom ci`, which ends in `infrastructure/scan_paths.py` on a YAML syntax
-error before any leg runs — BDL-UX #287.
+What each surface DOES about the answer still differs, deliberately. `allocate` cannot hand out a
+number against a log it never found, so an unknown costs it exit 2 with the refusal's own words.
+`check` and the Gate step report the unknown without blocking, because neither of them was asked
+to write anything.
+
+A config file that could not be read is the one case that does not redden. It says nothing about
+whether the key is there at all, so the Gate step skips, WARNs and names the file rather than
+judging a project that may never have written the key, and `check` says, at exit 0, that whether
+the project declares a log is unknown and prints the refusal beneath it. `check` printed the
+opt-out's sentence here — `No issue log is declared — no leg ran.`, byte for byte, at exit 0 —
+until `beadloom-rqma.9`: a positive assertion about a declaration nobody read, reached by two
+shapes, a config that does not parse and a config whose top level is a list.
+
+**Why `check` reports this at exit 0.** The code answers "did a leg find something?", and when the
+config could not be read no leg ran and no log was opened, so a non-zero code would be a claim
+about a log nobody saw. Exit 2 is unavailable for a second reason: its documented meaning is "the
+project declares no `issue_log:` block", which is the assertion this state does not have. What
+separates it from a clean run is the verdict's own words and, for a machine, `"undetermined": true`
+in the `--json` payload beside a `"declared"` of `null` rather than `false`.
+
+That holds of the Gate STEP, which is where it is tested, and it does not reach a person who runs
+`beadloom ci`: the run ends in `infrastructure/scan_paths.py` on a YAML syntax error before any
+leg is built — BDL-UX #287. So on a project whose config does not parse, `issue-number check` is
+the only one of the three surfaces that reports this state to the person who typed a command.
+
+Measured on 2026-09-12 on a foreign project, through a clean room's own interpreter, for both
+shapes. Config unreadable: `check` exit 0 and "Whether this project declares an issue log is
+unknown", `allocate` exit 2 with the parse failure. `issue_log:` declared with `ledger:` written
+`ledgr:`: `check` exit 1 and `1 entr(ies) declared, 1 unusable`. Nothing declared: `check` exit 0
+and "No issue log is declared", `allocate` exit 2 with the same sentence. Three states, three
+answers, on each surface.
 
 ### Surfaces
 
 | Surface | Behaviour |
 |---------|-----------|
 | `beadloom issue-number allocate --holder <bead-id>` | takes the next number, writes the claim, prints it; exit 2 when the project declares no log, and exit 2 with the refusal's own words — the entry, the key it lacks and the keys it has — when the project declared one this reader could not use, or wrote a config that could not be read at all |
-| `beadloom issue-number check` | the three legs; exit 1 on a finding |
+| `beadloom issue-number check` | the three legs; exit 1 on a finding, exit 1 with the refusal when the project declared a block this reader could not use — where the leg findings are empty and the exit code is the declaration's — exit 0 saying the declaration is unknown when the config itself could not be read, and exit 0 when the project declared no log |
 | `beadloom ci`, step `issue-log` | the same run, and it **blocks** — unlike its `docs-quality` neighbour, because a duplicate number is a reference that resolves to two entries and to neither, and every leg's repair fits in the same commit |

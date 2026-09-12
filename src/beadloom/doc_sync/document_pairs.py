@@ -504,11 +504,6 @@ def read_pair_declaration(project_root: Path) -> PairDeclaration:
     )
 
 
-def resolve_document_pairs(project_root: Path) -> tuple[DocumentPair, ...]:
-    """The USABLE pairs the project declares, for a caller with nothing to say about the rest."""
-    return read_pair_declaration(project_root).pairs
-
-
 def _pair_from(
     project_root: Path, entry: object, *, where: str
 ) -> tuple[DocumentPair | None, Refusal | None]:

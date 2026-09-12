@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
@@ -218,3 +219,96 @@ def test_check_still_reports_an_opt_out_as_an_opt_out(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert "No issue log is declared" in result.output
+
+
+# ---------------------------------------------------------------------------
+# A config nobody could read — BDL-069, `beadloom-rqma.9`
+# ---------------------------------------------------------------------------
+
+#: The two shapes that reach `read_declaration`'s ``UNREADABLE`` state. The
+#: second parses cleanly, so a fix aimed at the YAML parser alone leaves it
+#: live — which is why both are parameters of the same test rather than one
+#: test and a sentence about the other.
+_UNREADABLE_CONFIGS = [
+    pytest.param("issue_log:\n  - [unclosed\n", id="does-not-parse"),
+    pytest.param("- one\n- two\n", id="top-level-is-a-list"),
+]
+
+
+def _unreadable(root: Path, body: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".beadloom").mkdir(exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(body, encoding="utf-8")
+    return root
+
+
+def _opted_out(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".beadloom").mkdir(exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text("languages:\n- .py\n", encoding="utf-8")
+    return root
+
+
+@pytest.mark.parametrize("body", _UNREADABLE_CONFIGS)
+def test_check_says_the_declaration_is_unknown_over_a_config_it_could_not_read(
+    tmp_path: Path, body: str
+) -> None:
+    """The false green this bead exists to remove.
+
+    `check` printed the opt-out's sentence over a config nobody read, at exit 0
+    — a positive assertion about a declaration that was never seen. The refusal
+    was already on the report and no reader consumed it. Held against the
+    opt-out's own output rather than against a literal, so rewording either
+    sentence cannot pass this.
+    """
+    runner = CliRunner()
+    unreadable = runner.invoke(
+        main, ["issue-number", "check", "--project", str(_unreadable(tmp_path / "u", body))]
+    )
+    absent = runner.invoke(
+        main, ["issue-number", "check", "--project", str(_opted_out(tmp_path / "o"))]
+    )
+    assert unreadable.exit_code == 0, unreadable.output
+    assert unreadable.output != absent.output
+    assert "unknown" in unreadable.output
+    assert "No issue log is declared" not in unreadable.output
+    assert "repair .beadloom/config.yml" in unreadable.output
+
+
+@pytest.mark.parametrize("body", _UNREADABLE_CONFIGS)
+def test_check_json_carries_undetermined_rather_than_a_false_declared(
+    tmp_path: Path, body: str
+) -> None:
+    """A machine acts on this payload, so `"declared": false` was the worse half.
+
+    It stated an opt-out beside the refusal that contradicts it, and carried no
+    key saying which of the two to believe.
+    """
+    result = CliRunner().invoke(
+        main,
+        [
+            "issue-number",
+            "check",
+            "--project",
+            str(_unreadable(tmp_path, body)),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["undetermined"] is True
+    assert payload["declared"] is None
+    assert payload["refusals"], payload
+
+
+def test_check_json_tells_an_opt_out_from_an_unread_config(tmp_path: Path) -> None:
+    """The other side of the constraint: a project that declared nothing still reads as one."""
+    result = CliRunner().invoke(
+        main,
+        ["issue-number", "check", "--project", str(_opted_out(tmp_path)), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["undetermined"] is False
+    assert payload["declared"] is False
+    assert payload["refusals"] == []

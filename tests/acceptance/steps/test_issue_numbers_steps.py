@@ -12,12 +12,14 @@ instead of it.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from click.testing import CliRunner
 from pytest_bdd import given, scenarios, then, when
 
 from beadloom.doc_sync.issue_numbers import (
@@ -27,6 +29,7 @@ from beadloom.doc_sync.issue_numbers import (
     allocate_number,
     check_issue_numbers,
 )
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -285,3 +288,59 @@ def _refusal_is_not_the_opt_out(world: dict[str, Any], tmp_path: Path) -> None:
     with pytest.raises(ValueError) as absent:
         allocate_number(opt_out, holder="a-bead")
     assert str(world["refusal"]) != str(absent.value)
+
+
+# ---------------------------------------------------------------------------
+# beadloom-rqma.9 — a config nobody could read is not an opt-out
+# ---------------------------------------------------------------------------
+
+
+def _unreadable_config(root: Path, body: str) -> Path:
+    """A project whose `.beadloom/config.yml` cannot be read, so the key's presence is unknown."""
+    (root / ".beadloom").mkdir(parents=True, exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(body, encoding="utf-8")
+    return root
+
+
+@given("a project whose config file does not parse as YAML")
+def _config_that_does_not_parse(world: dict[str, Any], tmp_path: Path) -> None:
+    world["root"] = _unreadable_config(tmp_path, "issue_log:\n  - [unclosed\n")
+
+
+@given("a project whose config file is a list at its top level")
+def _config_that_is_a_list(world: dict[str, Any], tmp_path: Path) -> None:
+    """The second shape. It parses, so a fix aimed at the parser alone leaves it live."""
+    world["root"] = _unreadable_config(tmp_path, "- one\n- two\n")
+
+
+@when("the issue numbers are checked at the command line")
+def _check_at_the_command_line(world: dict[str, Any]) -> None:
+    """Both renderings of one run, because the defect is in what each of them says."""
+    runner = CliRunner()
+    arguments = ["issue-number", "check", "--project", str(world["root"])]
+    world["text"] = runner.invoke(main, arguments)
+    world["json"] = runner.invoke(main, [*arguments, "--json"])
+
+
+@then("the check says whether an issue log is declared is unknown")
+def _says_it_is_unknown(world: dict[str, Any]) -> None:
+    result = world["text"]
+    assert "unknown" in result.output, result.output
+    assert ".beadloom/config.yml" in result.output, result.output
+
+
+@then("the check does not print the sentence a project declaring no log gets")
+def _not_the_opt_out_sentence(world: dict[str, Any], tmp_path: Path) -> None:
+    """Held against the opt-out's OWN output, so rewording either one cannot pass it."""
+    opted_out = _project(tmp_path / "opted-out", "## Open Issues\n", declare=False)
+    absent = CliRunner().invoke(main, ["issue-number", "check", "--project", str(opted_out)])
+    assert absent.exit_code == 0, absent.output
+    assert world["text"].output != absent.output
+
+
+@then("the machine-readable verdict states that the declaration is undetermined")
+def _payload_says_undetermined(world: dict[str, Any]) -> None:
+    payload = json.loads(world["json"].stdout)
+    assert payload["undetermined"] is True, payload
+    assert payload["declared"] is None, payload
+    assert payload["refusals"], payload

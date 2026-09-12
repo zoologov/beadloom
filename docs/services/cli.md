@@ -2440,12 +2440,33 @@ $ beadloom issue-number check
 No duplicate, unwritten or unclaimed number.
 ```
 
-Exit codes are the contract a caller may rely on: `0` the number was allocated or the check found
-nothing, `1` the check found at least one finding, `2` nothing was allocated because the project
-declares no `issue_log:` block. Two states report that a leg ran over nothing rather than passing:
-a project that declares no log is told so and no leg runs, and a ledger holding no claim leaves
-`unwritten-claim` and `unclaimed-number` with no number to enter. An absent log is not an empty
-one.
+Exit codes are the contract a caller may rely on: `0` the number was allocated, or the check found
+nothing, or the check could not establish whether a log is declared at all; `1` the check found at
+least one finding, or the project declared an `issue_log:` block this reader could not use; `2`
+nothing was allocated, because the project declares no block or wrote a config that could not be
+read.
+
+**Three states about the declaration, and the check tells them apart** (BDL-069,
+`beadloom-rqma.9`). A project that declared no log is told so. A project that declared one and
+mistyped a key gets `1 entr(ies) declared, 1 unusable — no leg ran.` and the refusal naming the
+key. A project whose `.beadloom/config.yml` could not be read at all is told that whether it
+declares a log is **unknown** — the check never saw the key, so reporting an opt-out would be an
+assertion about a declaration nobody read:
+
+```
+$ beadloom issue-number check
+Whether this project declares an issue log is unknown — no leg ran.
+  .beadloom/config.yml could not be read: it could not be parsed as YAML — repair .beadloom/config.yml so it parses as a YAML mapping
+```
+
+That is exit `0`, matching the Gate's own answer to the same state, which is a non-blocking WARN.
+The `--json` payload separates it from a clean run for a machine: `"undetermined": true`, and
+`"declared"` is `null` rather than `false`, because the wire format carries three states and a
+boolean holds two.
+
+Two further states report that a leg ran over nothing rather than passing: a project that declares
+no log is told so and no leg runs, and a ledger holding no claim leaves `unwritten-claim` and
+`unclaimed-number` with no number to enter. An absent log is not an empty one.
 
 The grammar, the two populations a numbered log states and the regions the legs cannot reach are
 in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).

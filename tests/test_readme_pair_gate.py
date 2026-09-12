@@ -25,6 +25,7 @@ from beadloom.application.gate import run_ci_gate
 from beadloom.onboarding.scanner import generate_agents_md
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from beadloom.application.gate import GateResult, GateStep
@@ -251,7 +252,7 @@ def _stated_findings(summary: str) -> int:
     ],
 )
 def test_the_line_counts_the_findings_the_step_reports(
-    tmp_path: Path, label: str, arrange: object
+    tmp_path: Path, label: str, arrange: Callable[[Path], object]
 ) -> None:
     """The number in the line is the number of findings the step hands the gate.
 
@@ -262,7 +263,7 @@ def test_the_line_counts_the_findings_the_step_reports(
     misstating its own population, inside the epic about checks stating theirs
     (`beadloom-qae9`, re-review MAJOR 3).
     """
-    arrange(tmp_path)  # type: ignore[operator]  # parametrised arrangement callable
+    arrange(tmp_path)
     _project(tmp_path, declaration=_declare(("README.md", "README.ru.md")))
     step, _ = _step(tmp_path)
     assert _stated_findings(step.summary) == len(step.findings), f"{label}: {step.summary}"
