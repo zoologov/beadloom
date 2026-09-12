@@ -35,15 +35,20 @@
 
 ## Open Issues
 
-287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that will not parse crashes `beadloom ci` with a traceback instead of a verdict
+287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that cannot be read crashes `beadloom ci` with a traceback instead of a verdict — three shapes reach the same raise
 
-    **Severity:** medium (an adopter's first-run experience, and the one shape of broken config no gate leg can report on because the run ends before any leg runs)
+    **Severity:** medium (an adopter's first-run experience, and the shapes of broken config no gate leg can report on, because the run ends before any leg runs)
     **Command:** `beadloom ci`
     **Context:** BDL-069, `beadloom-rqma.7`, 2026-09-12. Found while measuring the fix for #270 on a foreign two-package project.
-    **What happened.** With `issue_log:\n  path: [unclosed` in `.beadloom/config.yml`, `beadloom ci` exits 1 with a `yaml.parser.ParserError` traceback from `infrastructure/scan_paths.py:33`, raised inside the reindex step. No gate line is printed, no step reports, and the user is shown a stack trace rather than a verdict.
+    **What happened.** With `issue_log:\n  path: [unclosed` in `.beadloom/config.yml`, `beadloom ci` exits 1 with a `yaml.parser.ParserError` traceback from `infrastructure/scan_paths.py:33`, raised inside the reindex step. No gate line is printed, no step reports, and the user is shown a stack trace rather than a verdict. That is the shape this entry was FILED on; two more reach the same raise and are named below.
     **Why it is filed rather than fixed here.** `beadloom-rqma.7`'s declared scope is `ci-gate, doc-sync`, and the raise is in `infrastructure`. The bead made the two opt-in legs report an UNREADABLE config as "whether this project declares a document pair is unknown" — a skip that WARNs and names the file — and that branch is reachable from `_step_readme_pair` and `_step_issue_numbers` and is covered by tests. It is NOT reachable through `beadloom ci` today, because the run ends in `resolve_scan_paths` first. The claim in the SPECs is written against the step, and says so.
-    **Expected:** every reader of `.beadloom/config.yml` reports a parse failure as a finding against the file, with the line and column YAML already gives, rather than propagating the exception. `resolve_scan_paths` is the first reader on the `ci` path and the place a verdict would have to start.
-    **Related:** #270 (the same file, read by the two opt-in legs, closed by this bead).
+    **Expected:** every reader of `.beadloom/config.yml` reports a failure to READ it — not to parse it only — as a finding against the file, with the line and column YAML already gives where YAML has them, rather than propagating the exception. `resolve_scan_paths` is the first reader on the `ci` path and the place a verdict would have to start.
+    **THREE SHAPES, and this entry covers all three since 2026-09-12.** It was filed naming one — YAML that does not parse — and `beadloom-qae9`'s fourth pass reproduced three, each reaching a traceback out of `resolve_scan_paths` through `beadloom ci`, each at rc 1: `yaml.parser.ParserError` for an unclosed list; `AttributeError: 'list' object has no attribute 'get'` at `scan_paths.py:34`, where `yaml.safe_load` SUCCEEDS and returns a document whose top level is a list rather than a mapping; and `UnicodeDecodeError` for a file that is not UTF-8. The three share one line — `yaml.safe_load(config_path.read_text(encoding="utf-8"))` and the `.get` on its result — which is why a fix measured against the filed shape alone would leave two live. **None of the three is a false green:** all print a traceback at rc 1, so the run is loud and useless rather than quiet and wrong.
+    **What this entry does NOT cover**, stated so that a fix measured against it knows its own edges:
+    - **A config that cannot be opened at all** — no read permission. `read_text` raises `PermissionError` from the same line, so the shape is the same by reading; it was NOT reproduced through `beadloom ci`, and the entry claims nothing about it. What WAS measured is one surface over: `chmod 000 .beadloom/config.yml`, then `beadloom issue-number check`, gives rc 0 and `it could not be read (PermissionError) — repair .beadloom/config.yml so it parses as a YAML mapping` — a remediation that is the wrong repair for this shape and hands a person an exception class name. That is `beadloom-ovam`, not this entry.
+    - **A `.beadloom/config.yml` that is a DIRECTORY**, which is not a read failure anywhere: `read_declaration` tests `is_file()`, so it reads as absence and `issue-number check` says `No issue log is declared`. Defensible — a directory is not a config file anyone wrote — and recorded as the one input shape in this area that still answers a question it did not establish.
+    - **Any reader of `.beadloom/config.yml` other than `resolve_scan_paths`.** That is the first reader on the `ci` path and therefore the one that decides the verdict; the others were not measured here.
+    **Related:** #270 (the same file, read by the two opt-in legs, closed by this bead). `beadloom-ovam` (the remediation that misnames the repair for two of the shapes above).
 
 286. [2026-09-12] [MEDIUM] a review launch prompt can defeat the withholding it is meant to preserve, and nothing counts it
 
@@ -2265,11 +2270,21 @@ done — so this one records, per surface, which bead closed it and what the re-
     `beadloom-rqma.7` moved the Gate leg onto `read_log_declaration`, and `beadloom-rqma.8`
     moved the two COMMAND surfaces onto it after `beadloom-qae9` measured them still live.
 
-    | Surface | Declaring nothing | `ledger:` written `ledgr:` | Closed by |
-    |---------|-------------------|----------------------------|-----------|
-    | `beadloom ci`, step `issue-log` | rc 0, `SKIP: skipped — no issue log is declared; add an `issue_log:` block …` | rc 1, `FAIL: 0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)` | `beadloom-rqma.7` |
-    | `beadloom issue-number allocate` | rc 2, `Refused: no issue log is declared; add an `issue_log:` block …` | rc 2, `Refused: issue_log: it has no `ledger:` key; it has `path:`, `ledgr:` — give the entry `path:`, `ledger:`, …` | `beadloom-rqma.8` |
-    | `beadloom issue-number check` | rc 0, `No issue log is declared — no leg ran.` | rc 1, `1 entr(ies) declared, 1 unusable — no leg ran.`, and the refusal on the line beneath | `beadloom-rqma.8` |
+    | Surface | Declaring nothing | `ledger:` written `ledgr:` | A config that could not be read | Closed by |
+    |---------|-------------------|----------------------------|---------------------------------|-----------|
+    | `beadloom ci`, step `issue-log` | rc 0, `SKIP: skipped — no issue log is declared; add an `issue_log:` block …` | rc 1, `FAIL: 0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)` | the STEP skips and WARNs, `whether this project declares an issue log is unknown` — **not reached through `beadloom ci`**, which ends in `resolve_scan_paths` first (#287) | `beadloom-rqma.7` |
+    | `beadloom issue-number allocate` | rc 2, `Refused: no issue log is declared; add an `issue_log:` block …` | rc 2, `Refused: issue_log: it has no `ledger:` key; it has `path:`, `ledgr:` — give the entry `path:`, `ledger:`, …` | rc 2 with the parse failure — unchanged by `beadloom-rqma.9`, and correct: a caller that is about to ALLOCATE a number must refuse | `beadloom-rqma.8` |
+    | `beadloom issue-number check` | rc 0, `No issue log is declared — no leg ran.` | rc 1, `1 entr(ies) declared, 1 unusable — no leg ran.`, and the refusal on the line beneath | rc 0, `Whether this project declares an issue log is unknown — no leg ran.` with `.beadloom/config.yml could not be read: <why>` beneath; `--json` `"declared": null`, `"undetermined": true` | `beadloom-rqma.8`, and `beadloom-rqma.9` for this column |
+
+    **The fourth column is the shape this closure cycle added last**, and it is recorded here on
+    the same standard as the other two: per surface, with the sentence and the exit code. Before
+    `beadloom-rqma.9`, `check` printed `No issue log is declared — no leg ran.` at rc 0 over a
+    config it had never opened — the opt-out's sentence, byte for byte, for a project that may
+    have declared a log perfectly well. The state has a machine spelling now, because
+    `"declared": false` is a false statement when the truth is unknown: the field widened from
+    `bool` to `bool | null`. Two shapes were measured for this column, a config that does not
+    parse and one whose top level is a list; both give the same sentence with their own `why`.
+    `beadloom-qae9`'s fourth pass is what found the table a surface short.
 
     **The allocator was the surface the feature's own Surfaces table lists first**, and the one
     still printing the opt-out's sentence byte for byte while the Gate beside it named the key.
