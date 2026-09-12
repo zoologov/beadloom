@@ -35,6 +35,18 @@
 
 ## Open Issues
 
+286. [2026-09-12] [MEDIUM] a review launch prompt can defeat the withholding it is meant to preserve, and nothing counts it
+
+    **Severity:** medium (the findings were reproduced from the code and stand; what was lost is the independence of the SEARCH, and the loss is invisible to every party but the reviewer)
+    **Command:** `/coordinator`'s review launch, `beadloom review-brief <bead-id>`
+    **Context:** BDL-069's review, `beadloom-qae9`, 2026-09-12. Filed by the coordinator against itself, after the reviewer reported it.
+    **What happened.** `/coordinator` says the review prompt carries "the bead id and nothing else about the change", and that if a measurement must reach the reviewer anyway, the prompt must SAY so, "so the reviewer can record that the withholding was defeated. An undeclared paste is invisible to everyone including the reviewer." The coordinator's prompt carried three directed observations it had not derived: that `rules.yml` gained an exemption and one exit condition is a condition rather than a date; that `NodeSource`, the stale-pair count and the `ref_id` allocator are three duplicated rules replaced by one body; and that several beads added reports, a new gate leg and a new column in `impact`. None was declared as a defeat.
+    **What the reviewer wrote, unprompted:** "Each is a directed pointer at a specific site. Nothing in this process counts them, and they converged me on where to look before I had looked. The findings below were all reproduced from the code, but the search order was not mine."
+    **Why the rule as written cannot hold.** It asks the launcher to notice that it is about to defeat the withholding and to declare it. The launcher is the party least able to see it: a pointer feels like context, not like a leak, and the difference is only visible from the reader's seat. `beadloom review-brief` counts and reports the comments IT withholds — a number the reviewer reads — and has no way to see what arrived through the prompt beside it.
+    **Measured about the neighbouring mechanism, in the same run:** `beadloom review-brief beadloom-qae9 --release` exited 1 and named its reason — every role in this repository writes under one tracker identity, so the gate cannot tell an independent verdict from the author's own. That check knows its own limit and says it. The prompt channel has no such check.
+    **Expected:** the brief should state the channel it does NOT cover, the way every other instrument in this project names the boundary of its knowledge — "N author comment(s) withheld; anything the launch prompt carried is not counted here". A reviewer would then know the number it is reading is partial. A stronger form: the launch prompt itself becomes an artifact the brief can read, so pointers are counted rather than remembered.
+    **Related:** #212 and #219 (the withholding defeated by the epic document and by commit messages), #284 (a rule held by attention rather than by a check).
+
 285. [2026-09-11] [WITHDRAWN] ~~a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line~~
 
     > **WITHDRAWN 2026-09-11, the same day, by the coordinator who filed it. The entry is wrong and the instrument was right.**
