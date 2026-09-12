@@ -8,11 +8,12 @@
 
 ## Current focus
 
-Every dev bead, the test bead and the RE-REVIEW's three majors are done. `beadloom-rqma.6`
+Every dev bead, the test bead and all three review passes are answered. `beadloom-rqma.6`
 answered the first verdict's three majors and three minors, `beadloom-rqma.7` answered MAJOR 5,
-and `beadloom-rqma.8` answered the re-review's three: the CLI surface of BDL-UX #270, its
-record, and the `readme-pair` line's own count. What is left is `beadloom-egvd` (tech-writer),
-which carries the CHANGELOG entry and the declared-surface re-record.
+`beadloom-rqma.8` answered the re-review's three, and `beadloom-rqma.9` answered the third
+pass's two majors and two minors: the false green `check` printed over a config it could not
+read, and the two SPEC sentences shipped beside it. What is left is `beadloom-egvd`
+(tech-writer), which carries the CHANGELOG entry and the declared-surface re-record.
 
 All three of the re-review's majors were this epic's thesis failing inside this epic's own
 fixes, and the pattern is worth naming once: a fix measured on the surface it was written for.
@@ -54,6 +55,7 @@ stood.
 | `beadloom-rqma.6` | — | fix: the review's three majors and three minors | P0 | `qae9` | ✓ done |
 | `beadloom-rqma.7` | — | fix: a malformed `document_pairs:` declaration reads as no declaration (review MAJOR 5) | P0 | `qae9` | ✓ done |
 | `beadloom-rqma.8` | — | fix: the re-review's three majors — #270's CLI surface, its record, readme-pair's count | P0 | `qae9` | ✓ done |
+| `beadloom-rqma.9` | — | fix: `check` reports a false green over an unreadable config; the SPEC states a property the code does not hold | P0 | `qae9` | ✓ done |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
@@ -860,6 +862,73 @@ Seven `readme-pair` cases re-run on the foreign project: the line's count now eq
 of findings the same run emits about that leg in all seven, where five printed `0 finding(s)`
 before. Three `issue_log:` surfaces re-run across four misdeclaration shapes: all three now
 agree, and a project that declares nothing keeps the verdict it had on every one.
+
+**2026-09-12 — the third pass's two majors and two minors answered (`beadloom-rqma.9`).**
+
+MAJOR 1, the last false green of the shape this epic exists to remove, and the fourth instance
+of one fix measured on the surface it was written for. `issue-number check` over a
+`.beadloom/config.yml` it could not read printed the opt-out's own sentence — `No issue log is
+declared — no leg ran.`, byte for byte — and exited 0. `check_issue_numbers` had set
+`report.undetermined` since `rqma.7` and no reader under `services/` consumed it: `_lines`
+branched on `not report.declared` and stopped, and `unusable = report.declared and
+report.refusals` was False for the same reason, so the refusal the report was carrying was never
+reached. The `--json` payload was the worse half, because a machine acts on it: `"declared":
+false` beside a refusal that contradicts it.
+
+TWO SHAPES, and the second is why widening the parse case alone would not have closed it. A
+config ending `issue_log:\n  - [unclosed` does not parse; a config whose top level is a list
+parses cleanly and still holds no keys. Both were reproduced red on a foreign project before the
+change, exit codes read without a pipe, and both are green through the clean room's own
+interpreter after it.
+
+THE EXIT CODE WAS CHOSEN, not inherited. It stays 0, and the reason is written in `_exit_code`'s
+docstring and in the SPEC: the code answers "did a leg find something?", and when no leg ran and
+no log was opened a non-zero code is a claim about a log nobody saw. Exit 2 was unavailable for
+a second reason — its documented meaning is "the project declares no `issue_log:` block", the
+one assertion this state does not have. It matches the Gate's answer to the same state, a
+non-blocking WARN. What separates it from a clean run is the verdict's words and, for a machine,
+`"undetermined": true` beside a `"declared"` of `null` rather than `false`: the wire format
+carries three states and a boolean holds two. That null is an API change and is logged as one.
+
+MAJOR 2, the two sentences the previous cycle shipped. The thesis at SPEC:150 — "every surface
+now answers `did this project declare a log?` the same way" — was the epic's own claim asserted
+about code that did not hold it. Fixing MAJOR 1 makes it true, so it was kept and made precise:
+the three states each surface tells apart, with what each surface DOES about the answer stated
+separately, because `allocate` refusing at exit 2 and `check` reporting at exit 0 is a
+difference by design and not a disagreement. The measurement sits beneath it — three surfaces
+over three states, run 2026-09-12 through a clean room's interpreter. The `check` row of the
+Surfaces table named one of its four exit codes; it now names all four. `cli.md` and the
+`cli-commands` DOC carry the same contract, so no two documents state it differently.
+
+MINOR 1, `resolve_document_pairs` deleted: no production caller, and its twin over `issue_log:`
+was deleted one bead earlier for the reason that applies here — a resolver that drops the
+refusal is what produced BDL-UX #270. Its tests read `read_pair_declaration().pairs`, and the
+document-pairs SPEC records the deletion and why there is no surface returning only the usable
+pairs. MINOR 2, the `type: ignore[operator]` replaced by `Callable[[Path], object]`.
+`refusal_sentence` is public so the two commands render one refusal through one rule rather than
+two copies that can disagree. `gate.py` is unchanged at 1391 lines.
+
+MEASURED. GREEN IN A CLEAN ROOM over 13 carried files, `room-beadloom-rqma.9`, built by
+`beadloom clean-room beadloom-rqma.9` from commit 4a07cf79 with extras
+dev+graphql+languages+mutation+tui+watch: `pytest` 10331 passed, 62 skipped, 13 xfailed; `ruff`
+clean; `mypy --strict` clean over 296 files. That is a claim about those 13 files and never
+about the tree. GREEN ON THE TREE, a separate claim and this wave's gate owner's to make, Darwin
+arm64 CPython 3.13.7: `pytest` 10380 passed, 13 skipped, 13 xfailed; `ruff` clean; `mypy
+--strict` clean against 3.10, 3.11, 3.12 and 3.13 as TARGETS, which varies what the checker is
+asked about and not the interpreter it runs under; `beadloom ci` rc 0; `sync-check` rc 0 at a
+fixpoint; `lint --strict` and `doctor` rc 0. Neither verdict entered any of the 21 declared
+rooms: no Linux, no CPython 3.10-3.12 as an interpreter, neither locale leg, no mutation leg, no
+`site-build`, no `ai-techwriter`.
+
+TWO THINGS FOR THE RECORD. `beadloom sync-update --yes --all` re-baselined nine reference
+documents as well as the four stale refs, including `README.md` and `README.ru.md`, which this
+bead did not revise. That record lives in the untracked index and nothing about it is committed:
+`.beadloom/sync-surface.json` is unchanged and the `450 → 473 pair(s)` warn stands for
+`beadloom-egvd`. And the pre-commit scope check warns that `src/beadloom/doc_sync/document_pairs.py`
+falls outside the axes the RFC declared — the `callers` axis rules `document-pairs` out of
+scope. The file is this epic's own creation and the deletion in it was directed by the review,
+so the warn is left standing for a human to rule on rather than answered by widening the section
+after the fact.
 
 ## Waves
 
