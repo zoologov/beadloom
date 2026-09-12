@@ -91,7 +91,9 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.evaluators import _disk_modules
+from beadloom.graph.rules.layers import own_layer_of
 from beadloom.graph.rules.loader import validate_rules
+from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     CardinalityRule,
     CycleRule,
@@ -110,6 +112,7 @@ from beadloom.graph.rules.types import (
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Collection, Mapping
     from pathlib import Path
 
     from beadloom.graph.rules.types import Rule, Violation
@@ -137,16 +140,13 @@ class _GraphFacts:
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
-        from beadloom.graph.loader import get_node_tags
-
         self._conn = conn
         rows = conn.execute("SELECT ref_id, kind, source FROM nodes").fetchall()
         self.nodes: list[tuple[str, str, str | None]] = [
             (str(r[0]), str(r[1]), None if r[2] is None else str(r[2])) for r in rows
         ]
         self.ref_ids: set[str] = {ref_id for ref_id, _, _ in self.nodes}
-        self._tags_cache: dict[str, set[str]] = {}
-        self._get_node_tags = get_node_tags
+        self._tags = node_tags(conn)
 
     @property
     def is_empty(self) -> bool:
@@ -154,10 +154,18 @@ class _GraphFacts:
         return not self.nodes
 
     def tags(self, ref_id: str) -> set[str]:
-        """Tags of *ref_id*, cached across every rule in the run."""
-        if ref_id not in self._tags_cache:
-            self._tags_cache[ref_id] = self._get_node_tags(self._conn, ref_id)
-        return self._tags_cache[ref_id]
+        """Tags of *ref_id*, read once for the whole run.
+
+        The private cache this used to keep was the sixth copy of the closure
+        :mod:`.node_tags` replaced; liveness reads the same object the
+        evaluators do, so a rule's liveness and its verdict cannot be decided
+        from two different readings of the same column.
+        """
+        return self._tags.of(ref_id)
+
+    def all_tags(self) -> Mapping[str, Collection[str]]:
+        """Every tagged node's tags — the map the layer lookup takes."""
+        return self._tags.as_mapping()
 
     def matched(self, matcher: NodeMatcher) -> list[str]:
         """Every node ref_id *matcher* selects."""
@@ -283,23 +291,33 @@ _MIN_POPULATED_LAYERS = 2
 
 
 def _layer_reasons(rule: LayerRule, facts: _GraphFacts) -> list[str]:
-    tag_to_index = {layer.tag: idx for idx, layer in enumerate(rule.layers)}
-    layer_of: dict[str, int] = {}
-    for ref_id, _, _ in facts.nodes:
-        for tag in sorted(facts.tags(ref_id)):
-            if tag in tag_to_index:
-                layer_of[ref_id] = tag_to_index[tag]
-                break
+    """Why *rule* cannot fire — decided on the layer each node DECLARES.
 
-    carried = set(layer_of.values())
+    :func:`~beadloom.graph.rules.layers.own_layer_of` replaces the third reading
+    of "what layer is this node in" this module used to keep. It also settles an
+    ambiguity the loop it replaces left to chance: a node carrying two declared
+    tags is in the topmost of them, rather than in whichever sorted first.
+
+    **Own tags, not inherited ones, and deliberately so.** A node that takes a
+    layer from its ``part_of`` container would make this rule live on an edge
+    that runs between two INHERITING nodes — a rule reported inert today would
+    stop being reported, which is a verdict change. ``beadloom-ku26`` (B3) makes
+    that move in the release that announces it; here the answer comes from one
+    lookup and the verdict is the one liveness already gave.
+    """
+    tags = facts.all_tags()
+    layer_at = {ref_id: own_layer_of(ref_id, rule.layers, tags) for ref_id, _, _ in facts.nodes}
+    carried = {index for index in layer_at.values() if index is not None}
     if len(carried) < _MIN_POPULATED_LAYERS:
-        empty = sorted(tag for tag, idx in tag_to_index.items() if idx not in carried)
+        empty = sorted(
+            layer.tag for index, layer in enumerate(rule.layers) if index not in carried
+        )
         return [
             "fewer than two of its layers are populated (no node carries "
             f"{', '.join(repr(tag) for tag in empty)})"
         ]
     if not any(
-        src in layer_of and dst in layer_of
+        layer_at.get(src) is not None and layer_at.get(dst) is not None
         for src, dst in facts.live_edges_of_kinds((rule.edge_kind,))
     ):
         return [f"no live '{rule.edge_kind}' edge runs between two of its layers"]

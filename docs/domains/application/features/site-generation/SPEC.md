@@ -25,12 +25,36 @@ One feature node covers the cooperating modules below (all annotated
 - `site.py` — orchestrator / use-case entry point (`generate_site`)
 - `architecture_view.py` — the interactive **architecture** data model
   (`architecture.data.json`): each node carries its `layer`, its `layer_rank`
-  (the partition index for the canonical layered-lanes layout — service=0 …
-  infra=3, inherited from the nearest layered container when untagged), symbol
-  count, doc-status, served `.html` doc links (gated by the published-slug set
-  so a link never 404s), and the `beadloom why` dependency lists; each
-  `depends_on` edge carries a `violation` flag (true when it points up or
-  cross-cuts the layer order). Honest degradation throughout.
+  (the partition index for the canonical layered-lanes layout — the index of the
+  node's layer in the declared order, inherited from the nearest layered
+  container when the node declares none), symbol count, doc-status, served
+  `.html` doc links (gated by the published-slug set so a link never 404s), and
+  the `beadloom why` dependency lists; each `depends_on` edge carries a
+  `violation` flag (true when it points up or cross-cuts the layer order).
+  Honest degradation throughout.
+
+  **Which layers exist is read, not written down here (BDL-070 A5).** The view
+  held a table of four `layer-*` tags and a table of four ranks and climbed
+  `part_of` in a loop of its own — one of the three disagreeing answers to "what
+  layer is this node in" that BDL-070 exists to remove. It now reads the layer
+  order from the indexed `rules` table (the same graph every other read in the
+  module goes through, so generating the site needs no second path to
+  `rules.yml`) and resolves membership through `graph.rules.layers`, which is
+  what the rule engine decides on. A graph whose index carries no layer rule
+  gets no lanes rather than every node in lane 0.
+
+  The `layer` field stays the short token — the declared tag with its
+  conventional `layer-` prefix removed — because those tokens are the
+  front-end's contract (`site/.vitepress/theme/architectureTheme.js` keys its
+  colors and lane labels by them). A tag that does not carry the prefix is used
+  verbatim and colors grey, which is the same honest degradation the rest of the
+  module follows. `layer` reads the node's OWN tag while `layer_rank` inherits:
+  the card states what the node declares, and the layout needs a lane for a
+  feature that declares nothing.
+
+  The edge `violation` predicate — `dst_rank <= src_rank`, which flags a
+  same-layer edge the rule engine does not — is UNCHANGED here and disagrees
+  with the rule engine on purpose until `beadloom-w34m` resolves it.
 
   It also carries **declared runtime coupling** (`uses` edges) — a subprocess
   call or a file-format contract — as `uses` / `used_by`, kept SEPARATE from the

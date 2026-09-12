@@ -50,6 +50,13 @@ from beadloom.graph.rules.layer_reach import (
     LAYER_POPULATION_RULE_TYPE,
     LayerReach,
     layer_rule_reach,
+    part_of_parents,
+)
+from beadloom.graph.rules.layers import (
+    LayerPopulation,
+    layer_of,
+    own_layer_of,
+    part_of_ancestors,
 )
 from beadloom.graph.rules.liveness import (
     INERT_RULE_HINT,
@@ -61,6 +68,7 @@ from beadloom.graph.rules.loader import (
     load_rules_with_tags,
     validate_rules,
 )
+from beadloom.graph.rules.node_tags import NodeTags, node_tags
 from beadloom.graph.rules.scenario_coverage import (
     BEAD_NOT_VERIFIED,
     SCENARIO_COVERAGE_RULE_TYPE,
@@ -289,10 +297,12 @@ __all__ = [
     "ImportBoundaryRule",
     "ImportExemption",
     "LayerDef",
+    "LayerPopulation",
     "LayerReach",
     "LayerRule",
     "ModuleCoverageRule",
     "NodeMatcher",
+    "NodeTags",
     "NonBehaviouralNode",
     "RequireRule",
     "Rule",
@@ -318,9 +328,14 @@ __all__ = [
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",
+    "layer_of",
     "layer_rule_reach",
     "load_rules",
     "load_rules_with_tags",
+    "node_tags",
+    "own_layer_of",
+    "part_of_ancestors",
+    "part_of_parents",
     "suppressed_crossings",
     "validate_rules",
 ]

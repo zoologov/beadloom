@@ -39,7 +39,7 @@ literal in `src/` outside a test fixture.
 | `beadloom-1ylk` | A2 | Done | `evaluate_layer_rules` states its reach: `layer_reach.py` emits one `layer_population` finding per rule (`warn`, never the declared `error`), `node_tags.py` replaces the five identical tag closures. Measured here: 16 of 363 by own tags, 355 of 363 by `part_of`. 30 + 3 tests. No verdict moved — `lint --strict` exit 0 before and after, 0 findings removed, 1 added, and the identity is asserted against the pre-change code path run in the same process |
 | `beadloom-2dgz` | A3 | Blocked | LintResult carries a per-rule population |
 | `beadloom-q6jh` | A4 | Blocked | the readers that bypass lint() |
-| `beadloom-06dz` | A5 | Blocked | liveness and architecture_view |
+| `beadloom-06dz` | A5 | Done | `architecture_view` drops `_LAYER_TAGS`, `_LAYER_RANK`, `_layer_of`, `_own_layers` and `_layer_rank`, reads the declared layer order from the indexed `rules` table and resolves membership through `graph.rules.layers`; `liveness` reads its layer through `own_layer_of` and its tags through `node_tags`, keeping OWN-tag membership so no inert verdict moves. `src/` now holds no layer tag as a literal at all — the guard's exemption set is empty. 10 new tests; 3 existing test files adjusted. Measured here: the artifact is byte-identical over 106 nodes (136 743 bytes), and `lint --strict --format porcelain` is identical line for line after a full reindex — 0 findings removed, 0 added, exit 0 both sides. The view's `dst_rank <= src_rank` predicate is untouched (B4) |
 | `beadloom-punn` | A6 | Blocked | one validated declaration |
 | `beadloom-cfkk` | A7 | Blocked | tests, release A |
 | `beadloom-mrof` | A8 | Blocked | review, release A |

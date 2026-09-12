@@ -127,6 +127,40 @@ def _seed_arch(conn: sqlite3.Connection) -> None:
     _add_doc(conn, "domains/graph/SPEC.md", "domain", "graph")
     _mark_stale(conn, "graph", "domains/graph/SPEC.md", "src/beadloom/graph/loader.py")
 
+    # The layer declaration: the view takes its lanes from the indexed rule.
+    _declare_layers(conn)
+
+
+def _declare_layers(conn: sqlite3.Connection) -> None:
+    """Declare the layer order the way a reindexed project carries it.
+
+    The view reads the declaration out of the indexed `rules` table (BDL-070 A5)
+    instead of holding a table of four tags of its own, so a fixture that tags
+    its nodes and declares nothing has no layers — which is what the view now
+    reports for it, honestly.
+    """
+    conn.execute(
+        "INSERT INTO rules (name, description, rule_type, rule_json, enabled) "
+        "VALUES (?, ?, 'layers', ?, 1)",
+        (
+            "architecture-layers",
+            "Services -> application -> domains -> infrastructure",
+            json.dumps(
+                {
+                    "layers": [
+                        {"name": "services", "tag": "layer-service"},
+                        {"name": "application", "tag": "layer-application"},
+                        {"name": "domains", "tag": "layer-domain"},
+                        {"name": "infrastructure", "tag": "layer-infra"},
+                    ],
+                    "enforce": "top-down",
+                    "allow_skip": True,
+                    "edge_kind": "depends_on",
+                }
+            ),
+        ),
+    )
+
 
 def _pages() -> dict[str, str]:
     return {

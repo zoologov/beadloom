@@ -10,10 +10,10 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
-- `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
+- `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
-- `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2).
+- `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
@@ -195,7 +195,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
 | `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
-| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes | `liveness.py` |
+| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes. "Layered" means the node DECLARES a layer tag: a node that would inherit one through `part_of` is not counted, because counting it would stop reporting a rule that is inert today, and that is a verdict change (BDL-070 A5; `beadloom-ku26` makes the move in the release that announces it) | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |

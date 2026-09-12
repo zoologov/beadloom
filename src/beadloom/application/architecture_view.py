@@ -29,37 +29,30 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.application.site_pages import _KIND_DIR
+from beadloom.graph.rule_engine import LayerDef, layer_of, node_tags, own_layer_of, part_of_parents
 from beadloom.infrastructure.repository import count_symbols_owned_by_node
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Collection, Mapping
 
 logger = logging.getLogger(__name__)
 
 # Artifact schema version (additive bumps; the view tolerates missing blocks).
 ARCHITECTURE_SCHEMA_VERSION = 1
 
-# layer-* tag -> the short layer name the view strata-colors by.
-_LAYER_TAGS = {
-    "layer-service": "service",
-    "layer-application": "application",
-    "layer-domain": "domain",
-    "layer-infra": "infra",
-}
-
-# Layer name -> its rank (its partition index in the canonical top→bottom
-# stratification: service on top, infra at the bottom). Drives the ELK
-# partitioning the view uses to lay the graph out as STABLE horizontal layer
-# lanes (NOT topology-derived layering) and the edge layering-violation verdict.
-_LAYER_RANK = {
-    "service": 0,
-    "application": 1,
-    "domain": 2,
-    "infra": 3,
-}
+# The conventional prefix a layer tag carries, removed to get the short token
+# the view strata-colors by (``layer-domain`` -> ``domain``). It is NOT a layer:
+# the layers are whatever the project declares, read from the indexed rule. The
+# prefix is stripped because the four tokens are the front-end's contract
+# (``site/.vitepress/theme/architectureTheme.js`` keys its colors and its lane
+# labels by them), and a tag that does not carry the prefix is used verbatim,
+# which colors grey rather than wrongly.
+_LAYER_TAG_PREFIX = "layer-"
 
 # Served extension for a published doc page. The site is built WITHOUT VitePress
 # ``cleanUrls``, so a doc README is served at ``…/README.html`` — a ``.md`` link
@@ -79,28 +72,89 @@ _DOC_NONE = "none"
 # ---------------------------------------------------------------------------
 
 
-def _layer_of(extra_raw: str) -> str:
-    """The node's layer (``service`` / ``application`` / ``domain`` / ``infra``).
+@dataclass(frozen=True)
+class _LayerView:
+    """What layer each node is in, for the declaration THIS graph carries.
 
-    Read from the ``layer-*`` tag in the node ``extra`` JSON. Honest empty string
-    when no layer tag is present (a feature/component carries no layer tag).
+    The view used to answer this itself, from a table of four tags and a table
+    of four ranks, and it climbed ``part_of`` in a loop of its own. It was one
+    of the three answers BDL-070 found disagreeing, so the arithmetic now lives
+    in :mod:`beadloom.graph.rules.layers` and this class only says which of its
+    two questions the view asks:
+
+    - :meth:`token` reads the node's OWN tag, because the card shows what the
+      node declares — a feature inside a domain declares no layer and says so.
+    - :meth:`rank` INHERITS through ``part_of``, because a feature has to sit in
+      its container's lane or the layout has no lane for it.
+
+    The two differ on purpose, and the rule engine's verdict predicate is a
+    third question this class does not answer.
     """
-    if not extra_raw:
-        return ""
+
+    layers: tuple[LayerDef, ...]
+    parents: Mapping[str, Collection[str]]
+    tags: Mapping[str, Collection[str]]
+
+    def token(self, ref_id: str) -> str:
+        """The short layer name for the node's OWN tag; ``""`` when it has none."""
+        index = own_layer_of(ref_id, self.layers, self.tags)
+        if index is None:
+            return ""
+        return self.layers[index].tag.removeprefix(_LAYER_TAG_PREFIX)
+
+    def rank(self, ref_id: str) -> int | None:
+        """The node's lane: its own layer's index, else its nearest container's.
+
+        ``None`` when no ``part_of`` ancestor declares a layer either — honest,
+        and a different fact from sitting in the bottom lane.
+        """
+        return layer_of(ref_id, self.layers, self.parents, self.tags)
+
+
+def _declared_layers(conn: sqlite3.Connection) -> tuple[LayerDef, ...]:
+    """The layer order this project DECLARES, read from the indexed rules.
+
+    Read from the ``rules`` table — the same indexed graph every other read in
+    this module goes through — rather than from ``rules.yml``, so generating the
+    site needs no second path to the declaration and no project root. The JSON
+    is the one ``application.reindex.rules_loader._serialize_rule`` writes; that
+    is a coupling between a writer and a reader of one shape, stated here
+    because it is the kind of pair that drifts silently.
+
+    Empty when the index carries no layer rule (a graph that declares no layers,
+    or one indexed before rules were loaded): the view then shows no lanes,
+    which is honest, rather than putting every node in lane 0.
+
+    A project with more than one layer rule gets the first by name. The view
+    draws ONE stratification and has no way to show two.
+    """
+    row = conn.execute(
+        "SELECT rule_json FROM rules WHERE rule_type = 'layers' ORDER BY name LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return ()
     try:
-        extra = json.loads(extra_raw)
+        definition = json.loads(str(row[0]))
     except json.JSONDecodeError:
-        return ""
-    if not isinstance(extra, dict):
-        return ""
-    tags = extra.get("tags")
-    if not isinstance(tags, list):
-        return ""
-    for tag in tags:
-        layer = _LAYER_TAGS.get(str(tag))
-        if layer is not None:
-            return layer
-    return ""
+        logger.warning("architecture view: the indexed layer rule is not readable JSON")
+        return ()
+    declared = definition.get("layers") if isinstance(definition, dict) else None
+    if not isinstance(declared, list):
+        return ()
+    return tuple(
+        LayerDef(name=str(layer.get("name", "")), tag=str(layer["tag"]))
+        for layer in declared
+        if isinstance(layer, dict) and layer.get("tag")
+    )
+
+
+def _layer_view(conn: sqlite3.Connection) -> _LayerView:
+    """The layer lookup for one build, over the declaration the index holds."""
+    return _LayerView(
+        layers=_declared_layers(conn),
+        parents=part_of_parents(conn),
+        tags=node_tags(conn).as_mapping(),
+    )
 
 
 def _symbol_count(conn: sqlite3.Connection, ref_id: str) -> int:
@@ -184,40 +238,9 @@ def _doc_links(
 # ---------------------------------------------------------------------------
 
 
-def _own_layers(conn: sqlite3.Connection) -> dict[str, str]:
-    """Each node's OWN layer name (from its ``layer-*`` tag), empty when untagged."""
-    rows = conn.execute("SELECT ref_id, extra FROM nodes").fetchall()
-    return {str(r["ref_id"]): _layer_of(str(r["extra"] or "")) for r in rows}
-
-
-def _layer_rank(
-    ref_id: str,
-    own_layers: dict[str, str],
-    parent: dict[str, str],
-) -> int | None:
-    """The node's layer rank — its own, else its nearest layered ancestor's.
-
-    A feature/component carries no ``layer-*`` tag; it inherits the rank of its
-    ``part_of`` container so it sits in that container's lane (stable lanes,
-    independent of graph topology). ``None`` when no layered ancestor exists
-    (honest — an unlayered node with no layered container has no lane).
-    """
-    seen: set[str] = set()
-    current: str | None = ref_id
-    while current is not None and current not in seen:
-        seen.add(current)
-        rank = _LAYER_RANK.get(own_layers.get(current, ""))
-        if rank is not None:
-            return rank
-        nxt = parent.get(current, "")
-        current = nxt or None
-    return None
-
-
 def _arch_edges(
     conn: sqlite3.Connection,
-    own_layers: dict[str, str],
-    parent: dict[str, str],
+    layers: _LayerView,
 ) -> tuple[
     list[dict[str, object]],
     dict[str, list[str]],
@@ -262,8 +285,8 @@ def _arch_edges(
         if kind == "depends_on":
             depends_on.setdefault(src, set()).add(dst)
             depended_on_by.setdefault(dst, set()).add(src)
-            src_rank = _layer_rank(src, own_layers, parent)
-            dst_rank = _layer_rank(dst, own_layers, parent)
+            src_rank = layers.rank(src)
+            dst_rank = layers.rank(dst)
             if src_rank is not None and dst_rank is not None:
                 edge["violation"] = dst_rank <= src_rank
         elif kind == "uses":
@@ -299,11 +322,10 @@ def _node_dict(
     kind: str,
     summary: str,
     source: str | None,
-    extra_raw: str,
     *,
     pages: dict[str, str],
     parent: dict[str, str],
-    own_layers: dict[str, str],
+    layers: _LayerView,
     depends_on: dict[str, list[str]],
     depended_on_by: dict[str, list[str]],
     uses: dict[str, list[str]],
@@ -317,8 +339,8 @@ def _node_dict(
         "label": ref_id,
         "kind": kind,
         "summary": summary,
-        "layer": _layer_of(extra_raw),
-        "layer_rank": _layer_rank(ref_id, own_layers, parent),
+        "layer": layers.token(ref_id),
+        "layer_rank": layers.rank(ref_id),
         "group": _KIND_DIR.get(kind, "other"),
         "symbols": _symbol_count(conn, ref_id),
         "doc_status": _doc_status(conn, ref_id),
@@ -368,12 +390,10 @@ def build_architecture_view_data(
     """
     page_map = pages or {}
     parent = _parent_map(conn)
-    own_layers = _own_layers(conn)
-    edges, depends_on, depended_on_by, uses, used_by = _arch_edges(
-        conn, own_layers, parent
-    )
+    layers = _layer_view(conn)
+    edges, depends_on, depended_on_by, uses, used_by = _arch_edges(conn, layers)
     rows = conn.execute(
-        "SELECT ref_id, kind, summary, source, extra FROM nodes ORDER BY ref_id"
+        "SELECT ref_id, kind, summary, source FROM nodes ORDER BY ref_id"
     ).fetchall()
     nodes = [
         _node_dict(
@@ -382,10 +402,9 @@ def build_architecture_view_data(
             str(r["kind"]),
             str(r["summary"] or ""),
             r["source"],
-            str(r["extra"] or ""),
             pages=page_map,
             parent=parent,
-            own_layers=own_layers,
+            layers=layers,
             depends_on=depends_on,
             depended_on_by=depended_on_by,
             uses=uses,

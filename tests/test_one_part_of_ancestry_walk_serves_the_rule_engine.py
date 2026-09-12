@@ -43,11 +43,12 @@ THE_WALK = "beadloom/graph/rules/layers.py::part_of_generations"
 #: Files still holding a layer tag as a literal, each with the bead that removes
 #: it. Compared for EQUALITY, so a stale entry fails as loudly as a new literal:
 #: an exemption that outlives its reason is how the next `_LAYER_TAGS` gets in.
-LITERAL_EXEMPTIONS = {
-    # `_LAYER_TAGS` / `_LAYER_RANK` — removed by BDL-070 A5 (`beadloom-06dz`),
-    # which brings `architecture_view` onto the shared lookup.
-    "beadloom/application/architecture_view.py",
-}
+#:
+#: Empty since BDL-070 A5 (`beadloom-06dz`) removed `_LAYER_TAGS` / `_LAYER_RANK`
+#: from `architecture_view`, which was the last holder. An empty set is a
+#: stronger assertion than a populated one, not a weaker: every module in `src/`
+#: is now inside the scan with no exception to argue about.
+LITERAL_EXEMPTIONS: set[str] = set()
 
 PART_OF = "part_of"
 
