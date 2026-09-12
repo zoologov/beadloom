@@ -45,7 +45,25 @@
     **Expected:** a coverage run is a measurement of the same suite, not a different one. Either the tests that reindex the project root are isolated from each other under instrumentation, or the corruption's cause is found and removed.
     **What is NOT established:** the mechanism. `--cov` changes timing and adds `atexit` work, and the suite reindexes the project root from a session fixture and from subprocess tests; which pair of writers overlaps was not derived. Nor was it checked on Linux — every run above is macOS, Python 3.13, in one room.
     **Consequence for this project's own numbers:** every coverage figure this repository has quoted was taken from a run in which those 18 tests failed. The per-module figures still stand — the failing tests are in three files and the modules they cover are exercised elsewhere — but the TOTAL is taken over a suite that did not finish as intended.
-    **Tracker:** not filed as a bead; the coordinator decides whether it earns one.
+    **THE COORDINATOR RAN THE SAME FORM ON THE TREE AND IT DID NOT REPRODUCE, 2026-09-12.**
+    `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80` over the whole
+    suite on `features/BDL-070` at `18345ccd`: **10545 passed, 13 skipped, 13 xfailed, 0 failed**,
+    713.74s. That is the invocation this project's own completion checklist names, with `--cov`, and
+    none of the eighteen failed. An earlier coverage run by the coordinator at `183fe47c` was green
+    too (10501 passed, 0 failed).
+    So the entry stands on ONE room's measurement and is contradicted by two runs on the tree. The
+    difference the two accounts do not resolve: the reporter's runs each started from **a room with
+    no index at all** and the coordinator's ran against an index already built. That is a candidate
+    mechanism, not a finding — nobody has run the crossed cases. Until someone does, "running the
+    suite with `--cov` corrupts the index" is not established as a property of the command; what is
+    established is that it happened three times in `room-beadloom-cfkk` and not twice on the tree.
+    **Consequence for the line above it:** the sentence "every coverage figure this repository has
+    quoted was taken from a run in which those 18 tests failed" is now known to be false for at least
+    the two runs named here.
+    **Tracker:** not filed as a bead. The coordinator's decision, 2026-09-12: it does not earn one
+    yet, because the two accounts disagree and the next step is a measurement rather than a repair —
+    whoever takes it should run the crossed cases (fresh room without `--cov`, existing index with
+    `--cov`) and only then file.
 
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
