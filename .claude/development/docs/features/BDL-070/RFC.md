@@ -157,12 +157,21 @@ rule then checks.
 | | count |
 |---|---|
 | same layer, **same** tagged ancestor (internal to one domain) | **114** |
-| same layer, **different** tagged ancestor (peer crossing) | **16** |
+| same layer, **different** tagged ancestor (peer crossing) | **16** — see the correction below |
 
 `evaluators.py:632` (`# Same layer -- always OK`) would pass all 130, including the 16 crossings the
 project's own ARCHITECTURE section forbids: *"No domain depends on a peer domain."*
 `architecture_view.py:268` (`dst_rank <= src_rank`) would flag all 130, including the 114 that are
 plainly legal.
+
+**CORRECTION, 2026-09-13, found by `beadloom-xmfs` (B2) and confirmed by the coordinator.** The 16
+above was computed by the wrong rule — *the same nearest TAGGED container* — and reported under a
+different one. The two differ on any pair whose ends each carry a tag of their own while sharing a
+tagged parent; measured, exactly one pair does: `cli-commands -> guard-probes`, both `part_of cli`,
+and `cli` carries `layer-service`. Under the predicate this section decides, that edge is internal.
+**The figure should have read 15.** It is corrected here rather than overwritten, because a count
+produced by one rule and published under another is the defect this whole epic exists to remove, and
+the coordinator produced one inside the document that defines the rule.
 
 **Neither survives. The predicate is the third one, decided by the owner on 2026-09-12:** an edge
 within one layer is legal when both ends share a tagged ancestor, and a finding when they do not.
