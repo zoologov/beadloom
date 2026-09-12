@@ -8,17 +8,14 @@
 
 ## Current focus
 
-Every dev bead, the test bead and the review are done, and `beadloom-rqma.6` has answered the
-review's three majors and three minors. What is left is `beadloom-egvd` (tech-writer), which
-now carries the CHANGELOG entry and the declared-surface re-record rather than the two PRD
-non-behavioural criteria — `rqma.6` took those and they are ticked in the PRD with their
-evidence.
+Every dev bead, the test bead and the review are done. `beadloom-rqma.6` answered the review's
+three majors and three minors, and `beadloom-rqma.7` answered MAJOR 5 — the defect in the leg
+this epic itself shipped. What is left is `beadloom-egvd` (tech-writer), which now carries the
+CHANGELOG entry and the declared-surface re-record rather than the two PRD non-behavioural
+criteria — `rqma.6` took those and they are ticked in the PRD with their evidence.
 
-One thing blocks a push and belongs to nobody in this epic: `beadloom ci` is rc 1 on the tree
-with `unwritten-claim: #286 is claimed by withholding-pointers and no entry in
-BDL-UX-Issues.md defines it`. `.claude/development/BDL-UX-Issues/0286.md` is UNTRACKED, was
-written at 03:59 on 2026-09-12 and was already failing the Gate before `rqma.6` made its first
-edit. Either the entry is written or the allocation is deleted.
+The `#286` blocker is gone: the entry is written into `BDL-UX-Issues.md`, `issue-log` is PASS
+over 261 entries and 26 claims, and `beadloom ci` is rc 0 on the tree.
 
 ## Beads
 
@@ -44,6 +41,7 @@ edit. Either the entry is written or the allocation is deleted.
 | `beadloom-956f` | — | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ✓ done |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | in progress |
 | `beadloom-rqma.6` | — | fix: the review's three majors and three minors | P0 | `qae9` | ✓ done |
+| `beadloom-rqma.7` | — | fix: a malformed `document_pairs:` declaration reads as no declaration (review MAJOR 5) | P0 | `qae9` | in progress |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
@@ -738,6 +736,63 @@ in a run taken before this bead's first edit. Every other leg passes, `readme-pa
 `beadloom-956f`'s. Neither room entered any of the 21 declared: no Linux, no CPython 3.10-3.12
 interpreter, neither locale leg, and the mypy sweep varies the TARGET version rather than the
 interpreter it runs under.
+
+**2026-09-12 — the review's MAJOR 5 answered (`beadloom-rqma.7`).** The epic's own thesis
+failing in the epic's own new leg. Four ways of misdeclaring `document_pairs:` reached the
+verdict a project that declared nothing gets — `readme-pair SKIP: skipped — no document pair is
+declared`, byte for byte — because the refusal went to `logging`, which the Gate renders none
+of. Reproduced before anything was written, at HEAD on a foreign two-package project built for
+it, `beadloom ci` after each edit to `.beadloom/config.yml` and every exit code read without a
+pipe: A passed, B, C, D and E were identical to the opt-out's line and the whole gate exited 0,
+F failed. After the fix, on the same rig, rc 1 on each of the four: B `FAIL … 1 entr(ies)
+declared, 1 unusable: document_pairs[0] (it has no ``follower:`` key; it has ``source:``)`, C
+the same naming ``followr:`` beside ``source:``, D `(``source: ../README.ru.md`` resolves
+outside the project root)`, E `(``document_pairs:`` is a string, not a list of
+``source:``/``follower:`` entries)`. A and F kept their verdicts exactly, and a project
+declaring nothing kept its skip.
+
+**The count is the fix, not the wording.** The reviewer's constraint was that widening the
+skip's phrasing would be the same defect in softer words, so the line carries two numbers read
+off the report — how many entries were declared and how many could not be used — and every
+assertion in the suite is against the opt-out's OWN verdict plus that count. Thirty tests were
+red before the change, measured in a worktree at HEAD with the new tests copied in: twenty-nine
+units and the acceptance scenario `A mistyped declaration is reported as a bad declaration,
+never as none`.
+
+**BDL-UX #270 was fixed rather than deferred, and that was the decision the bead required.** It
+is the identical defect in the neighbouring `issue_log:` leg, pinned as an `xfail(strict=True)`
+since BDL-068 S6. Fixing one and leaving the other would have started the second copy of the
+rule the bead warned about, so both legs now read their declaration through one new component,
+`doc-sync/components/config-declarations` — the four states a declaration can be in, and a
+refusal that names the ENTRY with the keys it actually carries, which is what makes a
+one-letter typo visible. The `xfail` is gone and its test asserts the behaviour; its sibling
+asserts the count rather than the defect. Measured on the same rig: a misspelled `path:`, a
+misspelled `ledger:` and a scalar block each produce `FAIL: 0 leg(s) run; 1 entr(ies) declared,
+1 unusable: issue_log (…)` at rc 1, and a project declaring none keeps its skip.
+
+**One limit, stated because it would otherwise read as covered.** A `.beadloom/config.yml` that
+cannot be read at all is neither a declaration nor its absence, and both steps answer it with a
+skip that WARNs and names the file. That is true of `_step_readme_pair` and
+`_step_issue_numbers` and is tested there. It is NOT true of `beadloom ci`: a YAML syntax error
+ends the run inside `infrastructure/scan_paths.py` during the reindex step, with a traceback
+and no gate line at all. The raise is outside this bead's declared scope `ci-gate, doc-sync`,
+so it is filed as BDL-UX #287 rather than fixed here, and every document that states the WARN
+says which of the two it is describing.
+
+**Gate owner of a wave of one, and the two claims are not the same claim.** GREEN IN A CLEAN
+ROOM over 21 carried files, `room-beadloom-rqma.7`, built by `beadloom clean-room` from
+`ae1fc47a` with its own interpreter and extras `dev+graphql+languages+mutation+tui+watch`:
+`pytest` 10311 passed, 62 skipped, 13 xfailed; `ruff` clean; `mypy --strict` clean over 293
+files against all four targets; `beadloom ci` rc 0, with `readme-pair PASS: 1 pair(s) held, 109
+block(s) compared` and `issue-log PASS` over 261 entries and 26 claims, and `sync-check` WARN
+rather than PASS because the room carries no `.git` and has no baseline for its 467 pairs. That
+verdict is a claim about those 21 files and never about the tree. ON THE TREE, Darwin arm64
+CPython 3.13.7: `pytest` 10360 passed, 13 skipped, 13 xfailed, 0 failed; `ruff` clean; `mypy
+--strict` clean over 293 files against 3.10, 3.11, 3.12 and 3.13 as targets; `beadloom ci` rc 0
+with `sync-check PASS: 467 pair(s) fresh`, and `doctor` rc 0. Coverage was not measured here —
+the 94.55% on the record is `beadloom-956f`'s. Neither room entered any of the 21 declared: no
+Linux, no CPython 3.10-3.12 interpreter, neither locale leg, and the mypy sweep varies the
+TARGET version rather than the interpreter it runs under.
 
 ## Waves
 

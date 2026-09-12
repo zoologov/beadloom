@@ -135,6 +135,21 @@ A project that declares no `issue_log:` block is not judged: the Gate step is a 
 `beadloom issue-number allocate` refuses and names the key. The upgrade that ships this step
 turns nobody's green tree red.
 
+A project that declares the block and mistypes a key is a different project, and gets a different
+verdict. Four ways of misdeclaring `issue_log:` used to reach the skip above word for word — the
+refusal went to `logging`, which the Gate does not render — so a project that had opted in was
+told it had opted out and the three legs never ran. That was BDL-UX #270, pinned as an `xfail`
+since BDL-068 S6 and closed by `beadloom-rqma.7` together with its twin in `document_pairs:`.
+The step now fails and says `0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no
+`ledger:` key; it has `path:`, `ledgr:`)`. Reading the declaration is
+`doc-sync/components/config-declarations`.
+
+A config file that could not be read is the one case that does not redden: it says nothing about
+whether the key is there at all, so the step skips, WARNs and names the file rather than judging a
+project that may never have written the key. That holds of the step, which is where it is tested.
+It does not hold of `beadloom ci`, which ends in `infrastructure/scan_paths.py` on a YAML syntax
+error before any leg runs — BDL-UX #287.
+
 ### Surfaces
 
 | Surface | Behaviour |

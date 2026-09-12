@@ -23,3 +23,17 @@ Feature: the Gate holds a project's declared document pairs against each other
     When the gate runs
     Then the readme-pair step fails and the gate verdict is red
     And the readme-pair line names the pair it held and the blocks it compared
+
+  # BDL-069, beadloom-rqma.7. The third scenario is the epic's own thesis
+  # failing in the epic's own new leg: a project that opted in and mistyped one
+  # key reached the verdict above, word for word, and its two READMEs were
+  # never compared. What tells the two apart is a count, not an adverb -- a
+  # skip reworded to "possibly nothing was declared" is the same defect in
+  # softer words.
+  @bead:beadloom-rqma.7
+  Scenario: A mistyped declaration is reported as a bad declaration, never as none
+    Given a project that declares a document pair and misspells the follower key
+    When the gate runs
+    Then the readme-pair step fails and the gate verdict is red
+    And the readme-pair line says how many entries were declared and how many were unusable
+    And the readme-pair line names the key that could not be used

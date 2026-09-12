@@ -178,13 +178,26 @@ def test_an_entry_below_the_floor_is_not_required_to_have_been_allocated(
     assert report.findings == ()
 
 
-def test_a_config_block_missing_the_ledger_key_declares_nothing(tmp_path: Path) -> None:
+def test_a_config_block_missing_the_ledger_key_is_refused_and_not_read_as_absence(
+    tmp_path: Path,
+) -> None:
+    """The block yields no log, and the project is still recorded as having opted in.
+
+    It used to report ``declared=False``, which is the verdict a project that
+    wrote no ``issue_log:`` at all gets (BDL-UX #270, closed by
+    ``beadloom-rqma.7``). The refusal names the key that is missing and the keys
+    the block does carry, so a misspelling shows itself.
+    """
     (tmp_path / ".beadloom").mkdir()
     (tmp_path / ".beadloom" / "config.yml").write_text(
         "issue_log:\n  path: log.md\n", encoding="utf-8"
     )
     assert resolve_issue_log(tmp_path) is None
-    assert check_issue_numbers(tmp_path).declared is False
+    report = check_issue_numbers(tmp_path)
+    assert report.declared is True
+    assert report.entries_declared == 1
+    assert [refusal.where for refusal in report.refusals] == ["issue_log"]
+    assert "`ledger:`" in report.refusals[0].why
 
 
 # ---------------------------------------------------------------------------

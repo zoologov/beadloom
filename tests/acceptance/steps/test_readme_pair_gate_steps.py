@@ -101,3 +101,30 @@ def _names_population(world: dict[str, Any]) -> None:
     assert "1 pair(s) held" in summary
     assert "block(s) compared" in summary
     assert "README.md <-> README.ru.md" in summary
+
+
+@given("a project that declares a document pair and misspells the follower key")
+def _misdeclared_pair(tmp_path: Path, world: dict[str, Any]) -> None:
+    """The reviewer's case C, which reached the opt-out's verdict word for word."""
+    (tmp_path / "README.md").write_text("# Title\n\nFirst paragraph.\n", encoding="utf-8")
+    (tmp_path / "README.ru.md").write_text("# Zagolovok\n\nPervyi abzats.\n", encoding="utf-8")
+    _project(tmp_path)
+    config = tmp_path / ".beadloom" / "config.yml"
+    existing = config.read_text(encoding="utf-8") if config.is_file() else ""
+    config.write_text(
+        existing + "\ndocument_pairs:\n  - source: README.md\n    followr: README.ru.md\n",
+        encoding="utf-8",
+    )
+    world["root"] = tmp_path
+
+
+@then("the readme-pair line says how many entries were declared and how many were unusable")
+def _names_the_count(world: dict[str, Any]) -> None:
+    assert "1 entr(ies) declared, 1 unusable" in _step(world).summary
+
+
+@then("the readme-pair line names the key that could not be used")
+def _names_the_key(world: dict[str, Any]) -> None:
+    summary = _step(world).summary
+    assert "document_pairs[0]" in summary
+    assert "followr" in summary

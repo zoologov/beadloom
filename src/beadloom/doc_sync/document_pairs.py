@@ -25,6 +25,13 @@ green tree red on the upgrade that ships it. The declaration is modelled on
 ``issue_log:`` — a block in ``.beadloom/config.yml``, absent by default, and a
 project that declares none is not judged.
 
+**Declaring none and declaring badly are two different answers.** They were one
+answer until ``beadloom-rqma.7``: four ways of mistyping the block reached the
+verdict ``skipped — no document pair is declared``, because the refusal went to
+``logging`` and the Gate renders none of it. A refused entry now travels back
+with the usable pairs — see :class:`PairDeclaration` — so the verdict can say
+how many entries were declared and how many of them could not be used.
+
 **The table reading is not this module's.** ``doc_sync.tables`` already answers
 what a table row is and where one table ends, and two answers to that question
 is how one section holding two tables was read as one, twice (BDL-UX #213,
@@ -50,24 +57,37 @@ compare across languages — so the heading is what tells a reader where to look
 from __future__ import annotations
 
 import difflib
-import logging
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.doc_sync.declarations import (
+    Refusal,
+    describe_value,
+    entries_of,
+    fold,
+    inside_project,
+    read_declaration,
+    string_field,
+)
 from beadloom.doc_sync.tables import cells_of, table_blocks
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
 #: The ``.beadloom/config.yml`` block that declares the pairs. A project that
 #: declares none is not judged: nothing here guesses a filename.
 CONFIG_KEY = "document_pairs"
 SOURCE_KEY = "source"
 FOLLOWER_KEY = "follower"
+
+#: How the block and one of its entries are described back to a project that
+#: wrote either in the wrong shape. Two phrasings because they sit in two
+#: sentences — "not a list of ..." and "not a mapping with ...".
+_ENTRY_SHAPE = f"`{SOURCE_KEY}:`/`{FOLLOWER_KEY}:` entries"
+_ENTRY_FIELDS = f"`{SOURCE_KEY}:` and `{FOLLOWER_KEY}:`"
 
 #: The five block kinds. A document is a sequence of these, and that sequence is
 #: the only thing compared across two languages.
@@ -165,16 +185,42 @@ class PairComparison:
 
 
 @dataclass(frozen=True)
+class PairDeclaration:
+    """What the project wrote under ``document_pairs:``, usable or not.
+
+    ``entries_declared`` counts the declarations LOOKED AT, so a verdict can say
+    "2 entr(ies) declared, 1 unusable" rather than reporting the one it could
+    use. A block written in the wrong shape counts as one entry: the project
+    wrote one declaration, and it could not be used.
+    """
+
+    pairs: tuple[DocumentPair, ...] = ()
+    entries_declared: int = 0
+    declared: bool = False
+    undetermined: bool = False
+    refusals: tuple[Refusal, ...] = ()
+
+
+@dataclass(frozen=True)
 class PairReport:
-    """Every declared pair, what was compared, and what was not read.
+    """Every declared pair, what was compared, what was not read, and what was refused.
 
     ``declared`` is false for a project that declares no pair, which is the
     state every adopter is in until they opt in. A caller renders that as a
     skip with a reason rather than as a pass.
+
+    ``declared`` is true for a project that opted in BADLY — a mistyped key is
+    an opt-in, and the entry it could not be used for is in ``refusals``.
+    ``undetermined`` is the third state: the config file itself could not be
+    read, so whether the project opted in is unknown and neither of the other
+    two answers is honest.
     """
 
     declared: bool
     comparisons: tuple[PairComparison, ...]
+    entries_declared: int = 0
+    undetermined: bool = False
+    refusals: tuple[Refusal, ...] = ()
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -424,59 +470,80 @@ def _describe(block: Block) -> str:
 # ---------------------------------------------------------------------------
 
 
-def resolve_document_pairs(project_root: Path) -> tuple[DocumentPair, ...]:
-    """The pairs the project declares, or an empty tuple when it declares none.
+def read_pair_declaration(project_root: Path) -> PairDeclaration:
+    """Every ``document_pairs:`` entry the project wrote: the usable ones and the rest.
 
-    A half-written entry is refused rather than completed by a guess: the whole
-    point of the declaration is that no filename is assumed.
+    A half-written entry is refused rather than completed by a guess — the whole
+    point of the declaration is that no filename is assumed — and the refusal
+    travels back with the pairs. It used to go to ``logging``, which the Gate
+    does not render, so a project that mistyped ``follower:`` was told it had
+    declared nothing (BDL-069, ``beadloom-rqma.7``).
     """
-    config_path = project_root / ".beadloom" / "config.yml"
-    if not config_path.is_file():
-        return ()
-    import yaml
-
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        logger.warning("Failed to read .beadloom/config.yml for %s", CONFIG_KEY)
-        return ()
-    if not isinstance(data, dict):
-        return ()
-    block = data.get(CONFIG_KEY)
-    if not isinstance(block, list):
-        return ()
+    declaration = read_declaration(project_root, CONFIG_KEY)
+    if declaration.undetermined:
+        return PairDeclaration(undetermined=True, refusals=declaration.refusals)
+    if not declaration.present:
+        return PairDeclaration()
+    entries, shape_refusals = entries_of(declaration, _ENTRY_SHAPE)
     pairs: list[DocumentPair] = []
-    for entry in block:
-        pair = _pair_from(project_root, entry)
+    refusals: list[Refusal] = list(shape_refusals)
+    for index, entry in enumerate(entries):
+        pair, refusal = _pair_from(project_root, entry, where=f"{CONFIG_KEY}[{index}]")
         if pair is not None:
             pairs.append(pair)
-    return tuple(pairs)
+        if refusal is not None:
+            refusals.append(refusal)
+    entries_declared = len(entries) + len(shape_refusals)
+    return PairDeclaration(
+        pairs=tuple(pairs),
+        entries_declared=entries_declared,
+        # A block written as an empty list declares no pair, and a project whose
+        # config already says `document_pairs: []` keeps the verdict it had.
+        declared=entries_declared > 0,
+        refusals=tuple(refusals),
+    )
 
 
-def _pair_from(project_root: Path, entry: object) -> DocumentPair | None:
+def resolve_document_pairs(project_root: Path) -> tuple[DocumentPair, ...]:
+    """The USABLE pairs the project declares, for a caller with nothing to say about the rest."""
+    return read_pair_declaration(project_root).pairs
+
+
+def _pair_from(
+    project_root: Path, entry: object, *, where: str
+) -> tuple[DocumentPair | None, Refusal | None]:
     if not isinstance(entry, dict):
-        logger.warning("%s: each entry needs %r and %r", CONFIG_KEY, SOURCE_KEY, FOLLOWER_KEY)
-        return None
-    source = entry.get(SOURCE_KEY)
-    follower = entry.get(FOLLOWER_KEY)
-    if not isinstance(source, str) or not isinstance(follower, str):
-        logger.warning("%s: each entry needs %r and %r", CONFIG_KEY, SOURCE_KEY, FOLLOWER_KEY)
-        return None
-    resolved = _inside(project_root, source), _inside(project_root, follower)
-    if resolved[0] is None or resolved[1] is None:
-        logger.warning("%s: %r and %r must be inside the project", CONFIG_KEY, source, follower)
-        return None
-    return DocumentPair(source=resolved[0], follower=resolved[1])
+        return None, Refusal(
+            where=where,
+            why=f"the entry is {describe_value(entry)}, not a mapping with {_ENTRY_FIELDS}",
+            remediation=f"write the entry as a mapping with {_ENTRY_FIELDS}",
+        )
+    problems: list[Refusal] = []
+    resolved: dict[str, Path] = {}
+    for field in (SOURCE_KEY, FOLLOWER_KEY):
+        declared, refusal = string_field(
+            entry, field, where=where, needs=(SOURCE_KEY, FOLLOWER_KEY)
+        )
+        if declared is None:
+            problems.append(_not_none(refusal))
+            continue
+        path, escaped = inside_project(project_root, declared, where=where, field=field)
+        if path is None:
+            problems.append(_not_none(escaped))
+            continue
+        resolved[field] = path
+    folded = fold(where, problems)
+    if folded is not None:
+        return None, folded
+    return DocumentPair(source=resolved[SOURCE_KEY], follower=resolved[FOLLOWER_KEY]), None
 
 
-def _inside(project_root: Path, declared: str) -> Path | None:
-    """*declared* under *project_root*, or ``None`` when it points outside it."""
-    candidate = project_root / declared
-    try:
-        candidate.resolve().relative_to(project_root.resolve())
-    except ValueError:
-        return None
-    return candidate
+def _not_none(refusal: Refusal | None) -> Refusal:
+    """The refusal that accompanies a ``None`` result, asserted rather than assumed."""
+    if refusal is None:  # pragma: no cover - the two helpers never return (None, None)
+        message = "a refused field must carry its refusal"
+        raise AssertionError(message)
+    return refusal
 
 
 # ---------------------------------------------------------------------------
@@ -485,13 +552,14 @@ def _inside(project_root: Path, declared: str) -> Path | None:
 
 
 def check_document_pairs(project_root: Path) -> PairReport:
-    """Compare every declared pair, and say what was compared and what was not read."""
-    pairs = resolve_document_pairs(project_root)
-    if not pairs:
-        return PairReport(declared=False, comparisons=())
+    """Compare every usable pair; say what was compared, what was not read, what was refused."""
+    declaration = read_pair_declaration(project_root)
     return PairReport(
-        declared=True,
-        comparisons=tuple(_compare_pair(project_root, pair) for pair in pairs),
+        declared=declaration.declared,
+        comparisons=tuple(_compare_pair(project_root, pair) for pair in declaration.pairs),
+        entries_declared=declaration.entries_declared,
+        undetermined=declaration.undetermined,
+        refusals=declaration.refusals,
     )
 
 

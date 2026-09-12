@@ -19,3 +19,6 @@ edges:
   - src: document-pairs
     dst: markdown-tables
     kind: depends_on
+  - src: document-pairs
+    dst: config-declarations
+    kind: depends_on

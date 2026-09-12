@@ -91,7 +91,11 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    records (BDL-UX #187). Every leg's repair fits in the commit that trips it,
    which is what makes blocking fair. It cannot redden a project that has not
    opted in: the log is DECLARED under `issue_log:` in `.beadloom/config.yml`,
-   and a project declaring none is a NAMED skip that states the key to add.
+   and a project declaring none is a NAMED skip that states the key to add. A
+   project that declared the block and mistyped a key reached that same skip
+   until `beadloom-rqma.7` (BDL-UX #270); it now fails with `0 leg(s) run; 1
+   entr(ies) declared, 1 unusable: issue_log (...)`, on the same rule as
+   `readme-pair` below and through the same reader.
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
@@ -139,6 +143,37 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    README is their business and a check that guessed `README.<lang>.md` would
    turn somebody's green tree red on the upgrade that ships it. A project
    declaring none is a NAMED skip that states the key to add.
+
+   **A project that opted in BADLY is reddened, and this is the leg's own
+   thesis.** Four ways of mistyping the block — an absent `follower:`, a
+   misspelled one, a path resolving outside the project root, and a scalar where
+   the list belongs — reached the skip above word for word, because the refusal
+   went to `logging`, which the Gate renders none of. Measured at HEAD on a
+   foreign two-package project, `beadloom ci` exited 0 on all four while the two
+   READMEs of a project that had opted in were never compared. Each is a finding
+   now, and the line carries the count:
+
+   ```
+   readme-pair FAIL | 0 pair(s) held, 0 block(s) compared, 1 finding(s);
+                      1 entr(ies) declared, 1 unusable: document_pairs[0]
+                      (it has no `follower:` key; it has `source:`, `followr:`)
+   ```
+
+   The count is what tells "declared none" from "declared badly". A skip
+   reworded to "possibly nothing was declared" would be the same defect in
+   softer words, which is why the number of unusable entries is in the line and
+   not the phrasing (`beadloom-rqma.7`). `issue-log` was fixed in the same act —
+   one rule about what a misdeclaration costs, in one place, reading the
+   declaration through `doc-sync/components/config-declarations`.
+
+   One case does not redden: a `.beadloom/config.yml` that could not be read at
+   all says nothing about whether the key is there, so the STEP skips, WARNs and
+   names the file rather than reddening a project that may never have written
+   it. That is a statement about `_step_readme_pair` and `_step_issue_numbers`,
+   which is where it is tested, and not about `beadloom ci`: a config file with
+   a YAML syntax error ends the run in `infrastructure/scan_paths.py` during the
+   reindex step, with a traceback and no gate line at all, before either leg is
+   reached. Measured on a foreign project, 2026-09-12, and filed as BDL-UX #287.
 
    The line names the population and not only the verdict, because `0
    finding(s)` alone cannot be told apart from a declaration that left nothing

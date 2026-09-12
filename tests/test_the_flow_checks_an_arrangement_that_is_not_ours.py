@@ -14,11 +14,18 @@ planning documents live, which column of its bead table carries the bead id, how
 it spells an alignment row, whether its graph is one file or one per node, and
 whether it declares an issue log at all.
 
-Three findings are pinned as ``xfail(strict=True)`` with ``FINDING BDL-068.S6-N``
+Two findings are pinned as ``xfail(strict=True)`` with ``FINDING BDL-068.S6-N``
 in the reason, the convention ``.18`` set and ``.22`` carried. Everything else was
 written after the behaviour and is a boundary guard: it holds the population each
 check entered where the check states it correctly today, so a later change that
 narrows one is reported rather than absorbed.
+
+The third, S6-3 (BDL-UX #270), was closed by ``beadloom-rqma.7``: its four broken
+``issue_log:`` declarations now each produce a verdict a project that declared
+nothing does not get, so the pin below asserts the behaviour instead of the
+defect. It was fixed together with its twin in ``document_pairs:`` — one rule
+about what a misdeclaration costs, in one place, rather than two copies drifting
+apart.
 """
 
 from __future__ import annotations
@@ -98,16 +105,6 @@ class TestTheIssueLogStepUnderAProjectThatOptedIn:
         assert step.skipped is True
         assert "no issue log is declared" in step.summary
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-068.S6-3 (BDL-UX #270): four ways of misdeclaring `issue_log:` reach the "
-            "same gate verdict as declaring none — `skipped — no issue log is "
-            "declared`. The refusal goes to `logging`, which the Gate does not "
-            "render, so a project that opted in and mistyped one key is told it "
-            "opted out"
-        ),
-    )
     @pytest.mark.parametrize(("label", "config"), BROKEN_DECLARATIONS, ids=lambda v: v)
     def test_a_broken_declaration_does_not_read_as_no_declaration(
         self, tmp_path: Path, label: str, config: str
@@ -122,14 +119,27 @@ class TestTheIssueLogStepUnderAProjectThatOptedIn:
         )
 
     @pytest.mark.parametrize(("label", "config"), BROKEN_DECLARATIONS, ids=lambda v: v)
-    def test_each_broken_declaration_is_the_one_recorded(
+    def test_each_broken_declaration_says_how_many_entries_it_could_not_use(
         self, tmp_path: Path, label: str, config: str
     ) -> None:
-        """The red above is red for the reason claimed, and for no other."""
+        """The verdict above differs by a COUNT, not by an adverb.
+
+        A skip reworded to "possibly nothing was declared" would pass the test
+        above and be the same defect in softer words, so the number of unusable
+        entries is asserted here.
+        """
         root = _built(OURS, tmp_path)
         (root / ".beadloom" / "config.yml").write_text(config, encoding="utf-8")
-        assert check_issue_numbers(root).declared is False, label
-        assert _step_issue_numbers(root).skipped is True, label
+        step = _step_issue_numbers(root)
+        if "will not parse" in label:
+            # The file itself is broken, so whether the key is there at all is
+            # unknown and no count over entries is available. It skips and WARNs
+            # rather than blocking a project that may never have written the key.
+            assert (step.skipped, step.not_verified) == (True, True), label
+            assert "could not be read" in step.summary, label
+            return
+        assert check_issue_numbers(root).entries_declared == 1, label
+        assert "1 entr(ies) declared, 1 unusable" in step.summary, label
 
 
 class TestTheLedgerAndTheAllocatorAgreeOnWhatAClaimIs:

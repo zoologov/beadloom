@@ -92,7 +92,17 @@ guesses a filename: an adopter's translated README is their business, and a chec
 `README.<lang>.md` would turn somebody's green tree red on the upgrade that ships it.
 
 A half-written entry — one that names a `source` and no `follower`, or a path that resolves
-outside the project root — is refused and logged rather than completed by a guess.
+outside the project root — is refused rather than completed by a guess, and the refusal travels
+back with the usable pairs. It used to go to `logging`, which the Gate does not render, so four
+ways of mistyping the block reached the verdict a project that declared nothing gets and the two
+READMEs were never compared (`beadloom-rqma.7`).
+
+Declaring none and declaring badly are now two verdicts. A refused entry is a finding, and the
+`readme-pair` line carries the count: `2 entr(ies) declared, 1 unusable: document_pairs[1] (it has
+no `follower:` key; it has `source:`, `followr:`)`. The refusal lists the keys the entry does
+carry, which is what makes a one-letter typo visible. Reading the declaration is
+`doc-sync/components/config-declarations`, shared with `issue_log:` so that one rule about what a
+misdeclaration costs lives in one place.
 
 ### The population it reports
 

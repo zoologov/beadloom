@@ -1,0 +1,17 @@
+  # Component: what a project declared under one `.beadloom/config.yml` key, and
+  # what about that declaration was unusable (BDL-069, `beadloom-rqma.7`;
+  # BDL-UX #270). Lifted out of `document-pairs` and `issue-numbers` when both
+  # were found answering "is there a usable declaration here?" and reporting a
+  # mistyped key as no key at all -- one rule about what a misdeclaration costs,
+  # in one place, rather than two copies drifting apart.
+nodes:
+  - ref_id: config-declarations
+    kind: component
+    summary: "What a project declared under one `.beadloom/config.yml` key: the four states a declaration can be in, and the refusal that names the entry it could not use"
+    source: src/beadloom/doc_sync/declarations.py
+    docs:
+      - docs/domains/doc-sync/components/config-declarations/DOC.md
+edges:
+  - src: config-declarations
+    dst: doc-sync
+    kind: part_of

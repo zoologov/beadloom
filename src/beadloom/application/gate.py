@@ -57,11 +57,13 @@ from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
     from pathlib import Path
 
     from beadloom.application.doctor import Check
     from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
+    from beadloom.doc_sync.declarations import Refusal
     from beadloom.doc_sync.doc_quality import QualityFinding
     from beadloom.doc_sync.document_pairs import (
         DocumentPair,
@@ -689,6 +691,86 @@ def _convention_finding(convention: SectionConvention) -> Finding:
     }
 
 
+#: How many refusals a verdict names before it stops listing. The counts in
+#: front of the list are over ALL of them, as with ``_NAMED_PAIRS``.
+_NAMED_REFUSALS = 3
+
+
+def _unusable_phrase(entries_declared: int, refusals: Sequence[Refusal]) -> str:
+    """``; N entr(ies) declared, M unusable: <where> (<why>)`` — or nothing.
+
+    The two numbers are the whole point of this clause. "Declared none" and
+    "declared badly" were one sentence in both opt-in legs until
+    ``beadloom-rqma.7``, and a skip reworded to "possibly nothing was declared"
+    would have been the same defect in softer words: what tells the two apart is
+    a count, not an adverb.
+    """
+    if not refusals:
+        return ""
+    named = ", ".join(
+        f"{refusal.where} ({refusal.why})" for refusal in refusals[:_NAMED_REFUSALS]
+    )
+    line = (
+        f"; {entries_declared} entr(ies) declared, {len(refusals)} unusable: {named}"
+    )
+    remaining = len(refusals) - _NAMED_REFUSALS
+    if remaining > 0:
+        line += f", and {remaining} more not named here"
+    return line
+
+
+def _unusable_declaration_step(
+    name: str, entries_declared: int, refusals: Sequence[Refusal]
+) -> GateStep:
+    """A leg whose whole declaration could not be used: nothing ran, and it says so.
+
+    It BLOCKS, for the reason a declaration pointing at a missing file already
+    blocked: the project opted in, the leg it asked for did not run, and a green
+    tree that silently skipped a check somebody switched on is the defect class
+    this epic exists for. A project that opted OUT never reaches here.
+    """
+    return GateStep(
+        name,
+        passed=False,
+        findings=[_refusal_finding(name, refusal) for refusal in refusals],
+        summary="0 leg(s) run" + _unusable_phrase(entries_declared, refusals),
+    )
+
+
+def _undetermined_declaration_step(
+    name: str, subject: str, refusals: Sequence[Refusal]
+) -> GateStep:
+    """The config itself could not be read, so whether the project opted in is unknown.
+
+    Neither of the other two answers is honest here. Reporting absence tells an
+    adopter they opted out; reporting a broken declaration reddens a project
+    that may never have written the key. So it skips, and it WARNs: the leg
+    could not read the population it reports on.
+    """
+    return GateStep(
+        name,
+        skipped=True,
+        not_verified=True,
+        summary=(
+            "skipped — "
+            + "; ".join(refusal.why for refusal in refusals)
+            + f", so whether this project declares {subject} is unknown"
+        ),
+    )
+
+
+def _refusal_finding(name: str, refusal: Refusal) -> Finding:
+    """One unusable declaration, located at the config file that holds it."""
+    return {
+        "kind": name,
+        "rule": "unusable-declaration",
+        "severity": "error",
+        "locations": [{"file": ".beadloom/config.yml"}],
+        "why": f"{refusal.where}: {refusal.why}",
+        "remediation": refusal.remediation,
+    }
+
+
 def _step_issue_numbers(project_root: Path) -> GateStep:
     """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
 
@@ -705,6 +787,14 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
     ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
     the upgrade that ships this step turns nobody's green tree red.
 
+    **A project that opted in BADLY is a different project.** Writing
+    ``issue_log:`` and misspelling ``ledger:`` is opting in, and the verdict it
+    gets says how many entries were declared and how many could not be used —
+    not the sentence a project that wrote nothing gets (BDL-UX #270, closed by
+    ``beadloom-rqma.7`` together with its twin in ``readme-pair``). Only the
+    third case skips: a config file that will not parse says nothing about
+    whether the key is there at all.
+
     ``not_verified`` carries the honest half: before a project's first
     allocation the ledger has no floor, so ``unwritten-claim`` and
     ``unclaimed-number`` enter no number at all and a clean result would
@@ -713,6 +803,8 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
     from beadloom.doc_sync.issue_numbers import check_issue_numbers
 
     report = check_issue_numbers(project_root)
+    if report.undetermined:
+        return _undetermined_declaration_step("issue-log", "an issue log", report.refusals)
     if not report.declared:
         return GateStep(
             "issue-log",
@@ -721,6 +813,10 @@ def _step_issue_numbers(project_root: Path) -> GateStep:
                 "skipped — no issue log is declared; add an `issue_log:` block with "
                 "`path:` and `ledger:` to .beadloom/config.yml"
             ),
+        )
+    if report.refusals:
+        return _unusable_declaration_step(
+            "issue-log", report.entries_declared, report.refusals
         )
     if report.log_missing:
         return GateStep(
@@ -809,6 +905,14 @@ def _step_readme_pair(project_root: Path) -> GateStep:
     tree red on the upgrade that ships it. A project declaring none gets a named
     skip that states the key to add, exactly as ``issue-log`` does.
 
+    **Declaring none and declaring badly are two verdicts, not one.** Four ways
+    of mistyping the block reached the skip above word for word, and the two
+    READMEs of a project that had opted in were never compared
+    (``beadloom-rqma.7``). A refused entry is a finding now, and the line says
+    how many entries were declared and how many were unusable: what tells the
+    two apart has to be a count, because a skip reworded to "possibly nothing
+    was declared" is the same defect in softer words.
+
     Where it BLOCKS it blocks for the ``issue-log`` reason rather than the
     ``docs-quality`` one: a block one document has and the other does not is not
     an opinion about prose, it is a statement one language makes and the other
@@ -824,6 +928,10 @@ def _step_readme_pair(project_root: Path) -> GateStep:
     from beadloom.doc_sync.document_pairs import check_document_pairs
 
     report = check_document_pairs(project_root)
+    if report.undetermined:
+        return _undetermined_declaration_step(
+            "readme-pair", "a document pair", report.refusals
+        )
     if not report.declared:
         return GateStep(
             "readme-pair",
@@ -833,7 +941,8 @@ def _step_readme_pair(project_root: Path) -> GateStep:
                 "of `source:`/`follower:` entries to .beadloom/config.yml"
             ),
         )
-    findings = [_unreadable_document_finding(path) for path in report.unreadable]
+    findings = [_refusal_finding("readme-pair", refusal) for refusal in report.refusals]
+    findings += [_unreadable_document_finding(path) for path in report.unreadable]
     findings += [
         _document_pair_finding(project_root, comparison, finding)
         for comparison in report.comparisons
@@ -893,7 +1002,7 @@ def _document_pair_summary(project_root: Path, report: PairReport) -> str:
             f"; NOT COMPARED: {len(nothing_held)} pair(s) were read and hold no "
             "block at all, so nothing was held against anything"
         )
-    return line
+    return line + _unusable_phrase(report.entries_declared, report.refusals)
 
 
 def _pair_label(project_root: Path, pair: DocumentPair) -> str:

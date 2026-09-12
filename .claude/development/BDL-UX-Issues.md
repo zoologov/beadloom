@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that will not parse crashes `beadloom ci` with a traceback instead of a verdict
+
+    **Severity:** medium (an adopter's first-run experience, and the one shape of broken config no gate leg can report on because the run ends before any leg runs)
+    **Command:** `beadloom ci`
+    **Context:** BDL-069, `beadloom-rqma.7`, 2026-09-12. Found while measuring the fix for #270 on a foreign two-package project.
+    **What happened.** With `issue_log:\n  path: [unclosed` in `.beadloom/config.yml`, `beadloom ci` exits 1 with a `yaml.parser.ParserError` traceback from `infrastructure/scan_paths.py:33`, raised inside the reindex step. No gate line is printed, no step reports, and the user is shown a stack trace rather than a verdict.
+    **Why it is filed rather than fixed here.** `beadloom-rqma.7`'s declared scope is `ci-gate, doc-sync`, and the raise is in `infrastructure`. The bead made the two opt-in legs report an UNREADABLE config as "whether this project declares a document pair is unknown" — a skip that WARNs and names the file — and that branch is reachable from `_step_readme_pair` and `_step_issue_numbers` and is covered by tests. It is NOT reachable through `beadloom ci` today, because the run ends in `resolve_scan_paths` first. The claim in the SPECs is written against the step, and says so.
+    **Expected:** every reader of `.beadloom/config.yml` reports a parse failure as a finding against the file, with the line and column YAML already gives, rather than propagating the exception. `resolve_scan_paths` is the first reader on the `ci` path and the place a verdict would have to start.
+    **Related:** #270 (the same file, read by the two opt-in legs, closed by this bead).
+
 286. [2026-09-12] [MEDIUM] a review launch prompt can defeat the withholding it is meant to preserve, and nothing counts it
 
     **Severity:** medium (the findings were reproduced from the code and stand; what was lost is the independence of the SEARCH, and the loss is invisible to every party but the reviewer)
