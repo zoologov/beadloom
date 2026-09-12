@@ -20,11 +20,16 @@ something they did not know is the worst version of that: the finding is not
 actionable in the run that reddened, because tagging the ends is a change to the
 graph, not to the commit under test.
 
-The exclusion is BY RULE TYPE and not by severity. Every other ``warn`` — an
-expired exemption, an inert rule, a scenario a node has no binding for — is a
-statement about something a person chose, and ``--fail-on-warn`` goes on exiting
-1 on it. :class:`~beadloom.graph.linter.LintResult.fails_on_warn` is where the
-distinction is applied, so the CLI reads one property instead of re-deriving it.
+The exclusion selects BY RULE TYPE, and it stops at ``error``. Every other
+``warn`` — an expired exemption, an inert rule, a scenario a node has no binding
+for — is a statement about something a person chose, and ``--fail-on-warn`` goes
+on exiting 1 on it. So does an advisory at ``error``: ``--strict`` exits 1 on any
+error, and a flag meant to be harsher reading softer than it on the same run is a
+false green by construction (A8 re-review, Minor 3). Both constructors below
+hardcode ``warn`` today and neither is obliged to, which is why the bound is part
+of the predicate rather than a test asserted about them.
+:class:`~beadloom.graph.linter.LintResult.fails_on_warn` applies both halves, so
+the CLI reads one property instead of re-deriving it.
 
 **When this exclusion should be revisited.** Release B of BDL-070 makes the real
 under-evaluation an ERROR from the rule itself, which is a verdict change the
@@ -48,10 +53,10 @@ if TYPE_CHECKING:
     from beadloom.graph.rules.types import Violation
 
 #: The rule types whose findings report reach rather than a defect. Adding a
-#: type here removes it from what ``--fail-on-warn`` exits on, so an entry needs
-#: the same justification the two above carry: the finding must decide nothing
-#: about the graph, and must be capable of appearing on a project that changed
-#: nothing.
+#: type here keeps its ``warn`` findings out of what ``--fail-on-warn`` exits on,
+#: so an entry needs the same justification the two above carry: the finding must
+#: decide nothing about the graph, and must be capable of appearing on a project
+#: that changed nothing.
 ADVISORY_RULE_TYPES = frozenset({LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE})
 
 

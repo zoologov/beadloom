@@ -37,21 +37,37 @@ if TYPE_CHECKING:
 def _read_all_tags(conn: sqlite3.Connection) -> dict[str, set[str]]:
     """Every node's ``extra["tags"]``, in one pass over the nodes table.
 
-    A node whose ``extra`` is absent, null, unparseable, not an object, or
-    carries no ``tags`` key is simply not in the result, so :meth:`NodeTags.of`
-    answers the empty set for it — which is what
-    :func:`~beadloom.graph.loader.get_node_tags` answers for the same node, one
-    node at a time.
+    This reader and :func:`~beadloom.graph.loader.get_node_tags` answer the same
+    question, and they agree on the shapes a graph ordinarily holds: a node the
+    graph does not hold, a row whose ``extra`` column is SQL ``NULL``, and an
+    object with or without a ``tags`` key. :meth:`NodeTags.of` answers the empty
+    set for the first three and the declared set for the fourth, which is what
+    the one-node reader answers for each of them.
 
-    **Skipping the unreadable row is the one deliberate difference**, and it is
-    what makes reading the whole table safe: one node at a time, a malformed
-    ``extra`` could only break the question that asked about THAT node, while a
-    single pass puts every row on the path of every tag question in the run. The
-    ``isinstance`` guard covers ``null`` / ``3`` / ``"x"``, which parse and are
-    not objects; :exc:`json.JSONDecodeError` covers text that does not parse at
-    all. Both end the same way — the node has no tags — because a row this
-    function cannot read is a row it cannot answer for, and raising here would
-    turn it into an answer about the whole graph.
+    **On a malformed ``extra`` they do not agree, and that difference is the
+    point of this function.** Measured shape by shape in
+    ``test_the_layer_rule_states_the_population_it_judged.py``,
+    ``TestWhereTheTwoTagReadersAgreeAndWhereTheyDoNot``:
+
+    ==================  ===============  ==================================
+    stored ``extra``    ``NodeTags.of``  ``get_node_tags``
+    ==================  ===============  ==================================
+    ``null``            ``set()``        raises :exc:`AttributeError`
+    ``3``               ``set()``        raises :exc:`AttributeError`
+    ``"x"``             ``set()``        raises :exc:`AttributeError`
+    ``{not json``       ``set()``        raises :exc:`json.JSONDecodeError`
+    ==================  ===============  ==================================
+
+    **Skipping the unreadable row is deliberate**, and it is what makes reading
+    the whole table safe: one node at a time, a malformed ``extra`` could only
+    break the question that asked about THAT node, while a single pass puts every
+    row on the path of every tag question in the run. The ``isinstance`` guard
+    covers the first three rows, which parse and are not objects;
+    :exc:`json.JSONDecodeError` covers the fourth, which does not parse at all.
+    Neither guard is redundant — dropping one reddens its own rows of the table
+    above and no others. All four end the same way here — the node has no tags —
+    because a row this function cannot read is a row it cannot answer for, and
+    raising would turn it into an answer about the whole graph.
     """
     tags: dict[str, set[str]] = {}
     for row in conn.execute("SELECT ref_id, extra FROM nodes"):

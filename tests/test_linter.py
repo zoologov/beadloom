@@ -19,6 +19,8 @@ from beadloom.graph.linter import (
     lint,
 )
 from beadloom.graph.rule_engine import Violation
+from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
+from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
@@ -625,3 +627,64 @@ class TestFormatGithub:
     def test_github_deterministic(self) -> None:
         result = _make_result(violations=_remediated_violations())
         assert format_github(result) == format_github(result)
+
+
+# ---------------------------------------------------------------------------
+# TestFailsOnWarnIsNeverSofterThanStrict — BDL-070 A8 re-review, Minor 3
+# ---------------------------------------------------------------------------
+
+
+def _finding(rule_type: str, severity: str) -> Violation:
+    """One finding of *rule_type* at *severity*, with nothing else varying."""
+    return Violation(
+        rule_name="tier-order",
+        rule_description="web -> core -> store",
+        rule_type=rule_type,
+        severity=severity,
+        file_path=None,
+        line_number=None,
+        from_ref_id=None,
+        to_ref_id=None,
+        message="a finding",
+    )
+
+
+class TestFailsOnWarnIsNeverSofterThanStrict:
+    """`--fail-on-warn` exits 1 on everything `--strict` does, and then some.
+
+    The two advisories are excluded from that flag by RULE TYPE (BDL-070 A8),
+    and both their constructors hardcode `severity="warn"` today. Nothing
+    asserts that they must. An advisory shipped at `error` would then exit 1
+    under `--strict` and 0 under `--fail-on-warn` on the same run — the harsher
+    flag reading softer than the milder one, which is a false green by
+    construction (A8 re-review, Minor 3). The exclusion is bounded by severity
+    so the shape cannot arise, rather than pinned by a test somebody can delete.
+    """
+
+    def test_an_advisory_at_error_severity_still_fails_the_flag(self) -> None:
+        # Arrange
+        result = _make_result(violations=[_finding(LAYER_POPULATION_RULE_TYPE, "error")])
+        # Assert
+        assert result.has_errors is True
+        assert result.fails_on_warn is True
+
+    def test_an_advisory_at_warn_is_still_excluded(self) -> None:
+        """The whole of A8's fix, unchanged: this is the shape that ships today."""
+        # Arrange
+        result = _make_result(violations=[_finding(LAYER_POPULATION_RULE_TYPE, "warn")])
+        # Assert
+        assert result.has_errors is False
+        assert result.fails_on_warn is False
+
+    @pytest.mark.parametrize(
+        "rule_type", [LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE, "layer"]
+    )
+    @pytest.mark.parametrize("severity", ["warn", "error"])
+    def test_strict_exiting_one_implies_the_flag_does(
+        self, rule_type: str, severity: str
+    ) -> None:
+        """The superset property itself, over both advisory types and a decision."""
+        # Arrange
+        result = _make_result(violations=[_finding(rule_type, severity)])
+        # Assert
+        assert not (result.has_errors and not result.fails_on_warn)

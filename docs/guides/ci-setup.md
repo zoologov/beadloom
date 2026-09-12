@@ -103,9 +103,10 @@ arch-lint:
 | `2` | Configuration error (invalid rules.yml, missing DB) |
 
 `--fail-on-warn` exits 1 on any finding a rule decided, warnings included. It does
-**not** exit 1 on a layer rule's population or declaration statement: those report
-how far the rule reached rather than anything it found wrong, and they appear on a
-graph nobody changed. A pipeline that wants them to block reads the `layer_population`
+**not** exit 1 on a layer rule's population or declaration statement at `warn`:
+those report how far the rule reached rather than anything it found wrong, and
+they appear on a graph nobody changed. Anything at `error` severity exits 1 under
+both flags, so `--fail-on-warn` never reads softer than `--strict` on one run. A pipeline that wants them to block reads the `layer_population`
 and `layer_declaration` records out of `--format json` itself.
 
 ### Output Formats

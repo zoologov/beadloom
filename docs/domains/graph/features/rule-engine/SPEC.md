@@ -760,9 +760,12 @@ flag, which exits on any finding. Measured on a fixture with two tagged edges an
 clean under every rule it declares: the code before this release exits 0 and the code with the
 population statement exits 1. So `ADVISORY_RULE_TYPES` — `layer_population` and
 `layer_declaration` — is subtracted in `LintResult.fails_on_warn`, the key that flag reads as
-`has_errors` is `--strict`'s. The exclusion is by rule type and not by severity: an expired
-exemption, an inert rule and an unbound scenario are statements about something a person chose,
-and they still exit 1. A pipeline that wants the advisories to block reads their records out of
+`has_errors` is `--strict`'s. The exclusion selects by rule type and stops at `error`: an
+expired exemption, an inert rule and an unbound scenario are statements about something a person
+chose, and they still exit 1 — and so does an advisory at `error`, so the flag stays a superset of
+`--strict` rather than reading softer than it on the same run. Both advisory constructors hardcode
+`warn` today and neither is obliged to, which is why the bound is in the predicate rather than
+asserted about them (A8 re-review, Minor 3). A pipeline that wants the advisories to block reads their records out of
 `--format json`. Release B makes the real under-evaluation an error from the rule itself, which is
 a verdict change that release states.
 

@@ -32,6 +32,7 @@ from click.testing import CliRunner
 from beadloom.graph import rules
 from beadloom.graph.linter import lint
 from beadloom.graph.rules import evaluators
+from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.services.cli import main
 from tests.acceptance.steps.tiered_project import (
@@ -124,6 +125,20 @@ def partly_tiered_project(tmp_path: Path) -> Path:
     """
     nodes, edges = graph_with(tiered_edges=2, untiered_edges=1)
     return write_tiered_project(tmp_path / "partly", nodes=nodes, edges=edges)
+
+
+@pytest.fixture()
+def project_declaring_a_tier_no_node_is_in(tmp_path: Path) -> Path:
+    """Three tiers declared, two populated, every edge judged — otherwise clean.
+
+    The graph the DECLARATION advisory fires on and the population advisory does
+    not: `tier-store` is in `rules.yml` and on no node, which is the ordinary
+    state of a project that declared its layering before it finished building
+    it. It is the fixture the A8 re-review used to show that dropping
+    `layer_declaration` from the exclusion is silent (Minor 2).
+    """
+    nodes, edges = graph_with(tiered_edges=1, untiered_edges=0)
+    return write_tiered_project(tmp_path / "declared", nodes=nodes, edges=edges)
 
 
 @pytest.fixture()
@@ -280,7 +295,10 @@ class TestTheExitCodeFailOnWarnReads:
     that nobody had changed, which the epic's CONTEXT forbids. Both directions
     are asserted so neither half of the fix can be undone silently: drop the
     exclusion and the first test fails, widen it from the two advisory types to
-    warnings in general and the second does.
+    warnings in general and the second does. Both TYPES are asserted too — the
+    re-review measured that removing `layer_declaration` from the set left 421
+    tests green, so the third test below is the one that reddens for it
+    (Minor 2).
     """
 
     def test_a_run_whose_only_warning_is_the_advisory_exits_zero(
@@ -304,6 +322,21 @@ class TestTheExitCodeFailOnWarnReads:
         ]
         assert any(v.rule_type == LAYER_POPULATION_RULE_TYPE for v in found)
         assert _lint_exit_code(project_whose_own_rule_warns, "--fail-on-warn") == 1
+
+    def test_a_run_whose_only_warning_is_the_declaration_advisory_exits_zero(
+        self, project_declaring_a_tier_no_node_is_in: Path
+    ) -> None:
+        """The second advisory type, which the first test cannot reach.
+
+        `partly_tiered_project` populates all three tiers, so the declaration
+        statement is silent there and the whole class passed with
+        `layer_declaration` dropped from the exclusion.
+        """
+        # Arrange
+        found = lint(project_declaring_a_tier_no_node_is_in).violations
+        # Assert
+        assert [v.rule_type for v in found] == [LAYER_DECLARATION_RULE_TYPE]
+        assert _lint_exit_code(project_declaring_a_tier_no_node_is_in, "--fail-on-warn") == 0
 
     def test_the_advisory_does_not_move_the_strict_verdict_either(
         self, partly_tiered_project: Path

@@ -41,6 +41,7 @@ import pytest
 
 from beadloom.graph import rules
 from beadloom.graph.linter import lint
+from beadloom.graph.loader import get_node_tags
 from beadloom.graph.rules import evaluators
 from beadloom.graph.rules.evaluators import (
     evaluate_cardinality_rules,
@@ -449,8 +450,6 @@ class TestTheOtherFourRuleKindsAreUnchanged:
     def test_the_lookup_agrees_with_get_node_tags_for_every_node(
         self, live_graph: sqlite3.Connection
     ) -> None:
-        from beadloom.graph.loader import get_node_tags
-
         lookup = node_tags(live_graph)
         ref_ids = [str(row[0]) for row in live_graph.execute("SELECT ref_id FROM nodes")]
         assert ref_ids
@@ -628,3 +627,97 @@ class TestTheLookupItself:
             conn.close()
         # Assert
         assert [v.rule_type for v in found] == [LAYER_POPULATION_RULE_TYPE]
+
+
+# ---------------------------------------------------------------------------
+# The two tag readers, shape by shape — BDL-070 A8 re-review, Major 1
+# ---------------------------------------------------------------------------
+
+
+#: The stored `extra` values for which both readers answer the same set. This is
+#: the whole of the parity claim `_read_all_tags` makes, and the table is here so
+#: that the claim is measured rather than asserted in prose: the docstring the
+#: re-review filed against said the two agreed for every malformed shape too.
+_AGREEING_SHAPES = [
+    pytest.param(None, set(), id="the-column-is-sql-null"),
+    pytest.param("{}", set(), id="an-object-with-no-tags-key"),
+    pytest.param('{"tags": []}', set(), id="an-empty-tags-list"),
+    pytest.param('{"tags": ["tier-web"]}', {"tier-web"}, id="a-tags-list"),
+]
+
+#: The stored `extra` values for which they do NOT, and what the one-at-a-time
+#: reader raises for each. `null`, `3` and `"x"` parse and are not objects, so
+#: `get_node_tags` reaches `.get` on something that has none; `{not json` does
+#: not parse at all.
+_DIVERGING_SHAPES = [
+    pytest.param("null", AttributeError, id="json-null"),
+    pytest.param("3", AttributeError, id="a-number"),
+    pytest.param('"x"', AttributeError, id="a-string"),
+    pytest.param("{not json", json.JSONDecodeError, id="text-that-does-not-parse"),
+]
+
+
+def _one_node_with_extra(db_path: Path, raw: str | None) -> sqlite3.Connection:
+    """A graph holding exactly one node, whose `extra` column is *raw*."""
+    conn = open_db(db_path)
+    create_schema(conn)
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+        ("only", "feature", "the only node", raw),
+    )
+    conn.commit()
+    return conn
+
+
+class TestWhereTheTwoTagReadersAgreeAndWhereTheyDoNot:
+    """`NodeTags.of` against `loader.get_node_tags`, one stored shape at a time.
+
+    The two readers answer the same question — what tags does this node carry —
+    and the table read at once must guard shapes the single-row read does not,
+    because one malformed row is on the path of every tag question in the run.
+    The A8 re-review measured that the guard makes the two DIVERGE for every
+    malformed shape rather than agree, which is the opposite of what the
+    docstring beside it said. The boundary is measured here so the prose has
+    something to point at.
+    """
+
+    @pytest.mark.parametrize(("raw", "expected"), _AGREEING_SHAPES)
+    def test_both_readers_answer_the_same_set(
+        self, tmp_path: Path, raw: str | None, expected: set[str]
+    ) -> None:
+        # Arrange
+        conn = _one_node_with_extra(tmp_path / "agree.db", raw)
+        # Act / Assert
+        try:
+            assert node_tags(conn).of("only") == expected
+            assert get_node_tags(conn, "only") == expected
+        finally:
+            conn.close()
+
+    @pytest.mark.parametrize(("raw", "raised"), _DIVERGING_SHAPES)
+    def test_the_table_read_answers_empty_where_the_row_read_raises(
+        self, tmp_path: Path, raw: str, raised: type[Exception]
+    ) -> None:
+        # Arrange
+        conn = _one_node_with_extra(tmp_path / "diverge.db", raw)
+        # Act / Assert
+        try:
+            assert node_tags(conn).of("only") == set()
+            assert node_tags(conn).as_mapping() == {}
+            with pytest.raises(raised):
+                get_node_tags(conn, "only")
+        finally:
+            conn.close()
+
+    def test_neither_reader_raises_for_a_node_the_graph_does_not_hold(
+        self, tmp_path: Path
+    ) -> None:
+        """The one shape that is not about `extra` at all."""
+        # Arrange
+        conn = _one_node_with_extra(tmp_path / "absent.db", '{"tags": ["tier-web"]}')
+        # Act / Assert
+        try:
+            assert node_tags(conn).of("no-such-node") == set()
+            assert get_node_tags(conn, "no-such-node") == set()
+        finally:
+            conn.close()

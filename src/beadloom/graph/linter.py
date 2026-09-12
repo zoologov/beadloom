@@ -132,8 +132,15 @@ class LintResult:
         than a filter in the CLI because the debt report and the MCP tool read
         this result too, and a second place deciding what "any violation" means
         is how one flag comes to mean two things.
+
+        **The exclusion stops at ``error``**, so this stays a superset of
+        ``has_errors``: an advisory that ever shipped at the rule's declared
+        severity would otherwise exit 1 under ``--strict`` and 0 under the
+        flag that is meant to be harsher, on the same run. Both advisory
+        constructors hardcode ``warn`` today and neither is obliged to, so the
+        property is bounded here rather than left to a test on them.
         """
-        return any(not is_advisory(v) for v in self.violations)
+        return any(v.severity == "error" or not is_advisory(v) for v in self.violations)
 
 
 # ---------------------------------------------------------------------------
