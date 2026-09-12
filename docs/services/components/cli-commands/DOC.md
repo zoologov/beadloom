@@ -304,6 +304,16 @@ above holds — but the exit code is a decision this command makes, and every br
 a file under `.beadloom/_graph/` makes it: `--yes` in any mode, `--bootstrap`, `--import`, and
 the default interactive wizard.
 
+`init` also hands the re-index IN. Both init entry points take it as a required keyword
+argument and this command supplies `application.reindex.reindex`, because onboarding is a
+domain and the re-index is an application use case: the domain importing it ran against the
+declared direction `services → application → domains → infrastructure`, and it was the only
+import in this repository that did so (BDL-070 `beadloom-46am`, which holds the measurement —
+a count of judged edges moves with every commit and is not a fact this document can keep). A service sits above both
+and reaches down to each, which is what makes this the right place to resolve it. Nothing about
+WHEN the re-index runs moved: it still runs inside `init_flow`, after every block that writes a
+graph file, which is what the verdict above depends on.
+
 The enumeration is over branches that WRITE rather than over branches that bootstrap, since
 BDL-067 `.17`. Until then the guard was `"bootstrap" in result` and `--import` was carved out
 on a stated reason — it re-indexed nothing, so there was no index of its own output to judge —

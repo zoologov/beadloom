@@ -18,6 +18,12 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+#: The real re-index, handed to `init` the way `beadloom init` hands it in.
+#: Onboarding is a domain and the re-index is an application use case, so the
+#: caller supplies it rather than the domain importing it (BDL-070
+#: `beadloom-46am`). These tests assert what `init` does WITH a real index, so
+#: they pass the real one and their behaviour is unchanged.
+from beadloom.application.reindex import reindex as real_reindex
 from beadloom.onboarding.scanner import auto_link_docs
 
 if TYPE_CHECKING:
@@ -390,7 +396,7 @@ class TestAutoLinkDocsNonInteractiveInitIntegration:
         doc.parent.mkdir(parents=True)
         doc.write_text("# Auth docs\n")
 
-        result = non_interactive_init(tmp_path)
+        result = non_interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         assert "docs_linked" in result

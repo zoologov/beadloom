@@ -346,6 +346,42 @@ class ClusterEntry(TypedDict):
     source_dir: str                     # Owning top-level source directory
 ```
 
+### `IndexCounts` / `Reindexer` (`reindex_port.py`)
+
+What `init` needs from the layer above it, stated as a type onboarding owns.
+
+```python
+class IndexCounts(Protocol):
+    symbols_indexed: int    # code symbols the run indexed
+    imports_indexed: int    # import statements the run indexed
+    edges_loaded: int       # graph edges the run loaded
+    docs_indexed: int       # documents the run indexed (the wizard reports this one)
+
+Reindexer = Callable[[Path], IndexCounts]
+```
+
+`interactive_init(project_root, *, reindex)` and
+`non_interactive_init(project_root, *, reindex, mode=..., force=...)` take the re-index as a
+**required** keyword argument, and `services/commands/setup.py` supplies
+`application.reindex.reindex`.
+
+Why it is handed in. The declared direction is
+`services → application → domains → infrastructure`; onboarding is a domain and the re-index is
+an application use case, so `init_flow.py` importing `beadloom.application.reindex` ran against
+it. It did, twice and function-locally, and that was the only reverse-direction edge of the 357 that inheritance through `part_of` brings into the
+layer check's scope on this repository once layer membership is inherited through `part_of`
+(BDL-070 `beadloom-46am`). The inversion moves only where the callable comes from: the call
+itself still runs after every block that writes a graph file, which is the ordering BDL-067
+`.14` and `.18` established.
+
+Why it is required rather than defaulted. A default meaning "do not re-index" would let a caller
+take `init`'s verdict over an index the run never refreshed — rc 0 from `init`, rc 1 from the
+adopter's next `lint --strict`, which is exactly what `.14` closed. A default that resolves the
+import lazily would be the layering violation unchanged, and `importlib.import_module` would
+remove the derived edge by hiding the import from the scanner, which is the BDL-059 S3 workaround
+`tests/test_no_domain_package_imports_application.py` exists to prevent. A required argument
+fails at the call site instead.
+
 ## CLI
 
 - `beadloom prime [--json] [--update] [--project PATH]`
@@ -358,7 +394,7 @@ class ClusterEntry(TypedDict):
 
 ## Source
 
-- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py`; the package `__init__.py` re-exports the full public surface
+- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py` / `reindex_port.py`; the package `__init__.py` re-exports the full public surface
 - `src/beadloom/services/commands/query.py` — `prime` CLI command
 - `src/beadloom/services/commands/setup.py` — `setup-rules` and `setup-mcp` CLI commands
 - `src/beadloom/services/mcp_server.py` — `prime` MCP tool
