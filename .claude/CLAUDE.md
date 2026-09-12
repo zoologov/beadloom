@@ -487,17 +487,21 @@ brought into line with it afterwards. This is the opposite of the flow documents
 `.beadloom/flow.yml` — and the two rules are about different files. Do not
 merge them.
 
-**Correspondence is checked structurally, not by eye.** Split both files on
-blank lines, classify each block as heading / paragraph / code / list / table,
-and compare the sequences, with the number of rows for a list or a table:
+**The Gate checks the correspondence, and it blocks.** The leg is `readme-pair`,
+and the pair it reads is declared in `.beadloom/config.yml` under
+`document_pairs:` as a `source:`/`follower:` entry. It compares the two files by
+SHAPE rather than by text, because they are two languages, and its summary line
+states the population it ran over — how many pairs it held and how many blocks
+it compared — so a green is readable as a measurement rather than as silence.
+A project that declares no pair gets a named skip instead of a pass.
 
-    ru == en  ->  same kinds, same order, same lengths
+The comparison itself is written once, in `src/beadloom/doc_sync/document_pairs.py`.
+This paragraph does not restate it: a rule spelled out in prose beside its
+implementation is the copy that cannot go red.
 
-On 2026-09-10 that comparison found a paragraph present in Russian and absent in
-English — the punch line of a section, which the English file had folded into
-the paragraph above it. Both files read correctly on their own, which is exactly
-why reading them does not find this class.
-
-**Nothing enforces this.** There is no gate leg over the pair, so the check
-happens when someone runs it. That gap is filed rather than remembered:
-`beadloom-y8mi`.
+Why the leg exists: on 2026-09-10 a structural comparison found a paragraph
+present in Russian and absent in English — the punch line of a section, which
+the English file had folded into the paragraph above it. Both files read
+correctly on their own, which is exactly why reading them does not find this
+class. Until BDL-069 nothing enforced it and the check happened when someone
+ran it; `beadloom-y8mi` held that gap and this leg closed it.
