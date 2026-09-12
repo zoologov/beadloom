@@ -8,9 +8,17 @@
 
 ## Current focus
 
-Every dev bead and the test bead are closed. What is left is `beadloom-qae9` (review, under
-withholding, in a clean room) and then `beadloom-egvd` (tech-writer), which carries two of the
-PRD's non-behavioural criteria as well as the three documentation obligations recorded below.
+Every dev bead, the test bead and the review are done, and `beadloom-rqma.6` has answered the
+review's three majors and three minors. What is left is `beadloom-egvd` (tech-writer), which
+now carries the CHANGELOG entry and the declared-surface re-record rather than the two PRD
+non-behavioural criteria — `rqma.6` took those and they are ticked in the PRD with their
+evidence.
+
+One thing blocks a push and belongs to nobody in this epic: `beadloom ci` is rc 1 on the tree
+with `unwritten-claim: #286 is claimed by withholding-pointers and no entry in
+BDL-UX-Issues.md defines it`. `.claude/development/BDL-UX-Issues/0286.md` is UNTRACKED, was
+written at 03:59 on 2026-09-12 and was already failing the Gate before `rqma.6` made its first
+edit. Either the entry is written or the allocation is deleted.
 
 ## Beads
 
@@ -34,7 +42,8 @@ PRD's non-behavioural criteria as well as the three documentation obligations re
 | `beadloom-rqma.4` | ext | one rule for 'a file lies under a node's source', called by routes, `docs polish` and git activity | P1 | — | ✓ done |
 | `beadloom-rqma.5` | ext | one computation of the stale-pair count, populations named, in the existing seam | P1 | — | ✓ done |
 | `beadloom-956f` | — | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ✓ done |
-| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | ready |
+| `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | in progress |
+| `beadloom-rqma.6` | — | fix: the review's three majors and three minors | P0 | `qae9` | ✓ done |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
@@ -43,11 +52,14 @@ roots.
 
 ## Source beads this epic takes up
 
-`beadloom-4fdn` (BDL-UX #282), `beadloom-5cpe` (BDL-UX #214) and `beadloom-y8mi` stay open and
-carry a comment pointing here. Each closes only after its BDL-UX entry has been **re-run against
-current behaviour** and moved to `Closed Issues` — the standard that section sets for itself, and
-which a sweep on 2026-09-10 proved necessary by checking four entries and finding three still
-live. BDL-UX #281 has no bead of its own; S3 is its bead.
+`beadloom-4fdn` (BDL-UX #282), `beadloom-5cpe` and `beadloom-7c6k` (both BDL-UX #214) and
+`beadloom-y8mi` are **all closed as of 2026-09-12**, by `beadloom-rqma.6`, on the condition each
+of them set for itself: the BDL-UX entry re-run against current behaviour and moved to `Closed
+Issues` — the standard that section sets, and which a sweep on 2026-09-10 proved necessary by
+checking four entries and finding three still live. Both entries now sit under a dated sweep
+heading carrying two re-runs, `beadloom-956f`'s on a wheel and `rqma.6`'s on the working tree.
+`y8mi` carries no BDL-UX number and closed on the `readme-pair` leg instead. BDL-UX #281 has no
+bead of its own; S3 is its bead.
 
 ## Progress log
 
@@ -669,6 +681,63 @@ rooms, so the Ubuntu legs and both locale legs are unmeasured, and the target sw
 the interpreter mypy itself runs under. The gate names its own gap in the same words: `not run by
 this gate: the test suite, the style linter, the type checker` — all three were run beside it,
 in both rooms.
+
+**2026-09-12 — the review's findings answered (`beadloom-rqma.6`).** Three majors and three
+minors from `beadloom-qae9`, all of one class: a record that states something the code no longer
+does.
+
+The project layer of `CLAUDE.md` said "Nothing enforces this. There is no gate leg over the
+pair" about a leg this epic shipped, and the paragraph above it restated the block-comparison
+algorithm that is now `doc_sync/document_pairs.py`. The sentence was rewritten to name the leg
+(`readme-pair`) and the declaration (`document_pairs:` in `.beadloom/config.yml`); the restated
+algorithm was DELETED rather than corrected, because a rule spelled out beside its
+implementation is the copy that cannot go red. Edited in `.beadloom/flow/claude/CLAUDE.md` and
+recomposed with `beadloom setup-agentic-flow`, never in the composed `.claude/CLAUDE.md`.
+
+The temporary sentence at `README.md:177` and `README.ru.md:177` is gone from both files in one
+commit, Russian first. US-1 was re-measured before it was removed rather than after: a
+two-package `src/` project built for the run, `beadloom init --yes --mode bootstrap` rc 0
+(`Graph: 3 nodes, 3 edges`), then `beadloom ci` rc 0 with `sync-check PASS: 4 pair(s) fresh`, no
+hand editing between them and every exit code read without a pipe. The `readme-pair` leg held
+the removal to both files: `PASS: 1 pair(s) held, 109 block(s) compared, 0 finding(s)`.
+
+BDL-UX #282 and #214 moved to `Closed Issues` under a dated 2026-09-12 sweep heading, each with
+the re-run its own section demands — this bead's, against the working tree, beside
+`beadloom-956f`'s, against a wheel. #214's re-run: `init` reports `Graph: 2 nodes`, `status`
+counts `Nodes: 2`, `ci` rc 0, on the single-package `src/<project>/` layout where 4.0.0 reported
+2 and counted 1. The clause elsewhere in the log that still read "#214, open" now names the date
+it closed instead of being rewritten — the BDL-067 account inside closed entry #192 is not
+falsified, it is annotated. `beadloom-4fdn`, `beadloom-5cpe`, `beadloom-7c6k` and `beadloom-y8mi` closed on those
+measurements.
+
+Two code-shaped minors, each written test-first and each RED before it was green. The
+`onboarding-no-direct-infra` exemption for `node_source` was `from: "*"` while its reason argued
+one caller, so a second onboarding caller would have been excused silently; it now names
+`src/beadloom/onboarding/doc_generator.py`, and lint still reports it suppressing exactly that
+one crossing. `infrastructure/health.py` ran its own `SELECT count(*) FROM sync_state WHERE
+status = 'stale'` — the population `repository.count_stale_pairs` owns, in the same layer — and
+now calls it; a new `ast` guard walks every module under `src/` and asserts that query is
+spelled in exactly one file. The two sites that ask `status IN ('stale', 'missing')` are a
+different population and are deliberately outside the guard: they are `beadloom-r9t5`'s
+decision, and so is `debt_report/collect._count_stale`, a fourth copy of `stale_node_refs`,
+recorded there rather than fixed here.
+
+**Gate owner of a wave of one, and the two claims are not the same claim.** GREEN IN A CLEAN
+ROOM over 14 carried files, `room-beadloom-rqma.6`, built by `beadloom clean-room` from
+`7d65f9d7` with its own interpreter and extras `dev+graphql+languages+mutation+tui+watch`:
+`pytest` 10266 passed, 62 skipped, 17 xfailed; `ruff` clean; `mypy --strict` clean over 292
+files against all four targets; `beadloom ci` rc 0, with `issue-log PASS` over 24 claims and
+`sync-check` WARN rather than PASS because the room carries no `.git` and has no baseline for
+its 465 pairs. That verdict is a claim about those 14 files and never about the tree. ON THE
+TREE, Darwin arm64 CPython 3.13.7: `pytest` 10314 passed, 13 skipped, 17 xfailed, **1 failed**; `ruff` clean; `mypy
+--strict` clean over 292 files against 3.10, 3.11, 3.12 and 3.13 as targets; `beadloom ci`
+**rc 1**. The single test failure and the single Gate error are the same finding, and it is not
+this bead's: `unwritten-claim` over the untracked `0286.md`, which was already failing the Gate
+in a run taken before this bead's first edit. Every other leg passes, `readme-pair` and
+`issue-log`'s counts included. Coverage was not measured here — the 94.55% on the record is
+`beadloom-956f`'s. Neither room entered any of the 21 declared: no Linux, no CPython 3.10-3.12
+interpreter, neither locale leg, and the mypy sweep varies the TARGET version rather than the
+interpreter it runs under.
 
 ## Waves
 
