@@ -41,7 +41,7 @@ over 261 entries and 26 claims, and `beadloom ci` is rc 0 on the tree.
 | `beadloom-956f` | — | test: the acceptance scenarios, on foreign projects and the built artifact | P0 | `h7b3`, `39ap`, `jtcx`, `dibq` | ✓ done |
 | `beadloom-qae9` | — | review, under withholding, in a clean room | P0 | `956f` | in progress |
 | `beadloom-rqma.6` | — | fix: the review's three majors and three minors | P0 | `qae9` | ✓ done |
-| `beadloom-rqma.7` | — | fix: a malformed `document_pairs:` declaration reads as no declaration (review MAJOR 5) | P0 | `qae9` | in progress |
+| `beadloom-rqma.7` | — | fix: a malformed `document_pairs:` declaration reads as no declaration (review MAJOR 5) | P0 | `qae9` | ✓ done |
 | `beadloom-egvd` | — | tech-writer | P1 | `qae9` | blocked |
 
 Confirmed against the titles bd echoes, not against ids: `bd dep tree beadloom-956f` shows all
