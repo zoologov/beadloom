@@ -19,6 +19,11 @@ hold:
   graph and on two graphs that are not it, and the only finding the change adds
   is the population statement itself.
 
+The transcription of the pre-change path lives in
+`tests/the_lint_path_before_release_a.py`, because A7 compares the whole
+`lint()` run against the same oracle and two transcriptions of one function
+are two things that can drift.
+
 The five tag-cache closures the evaluators each kept are compared the same way:
 the four rule kinds that are not the layer rule are run against the shared
 lookup and against the closure it replaced, on this repository's real rules, and
@@ -37,7 +42,6 @@ import pytest
 from beadloom.graph import rules
 from beadloom.graph.linter import lint
 from beadloom.graph.rules import evaluators
-from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.evaluators import (
     evaluate_cardinality_rules,
     evaluate_deny_rules,
@@ -45,7 +49,6 @@ from beadloom.graph.rules.evaluators import (
     evaluate_layer_rules,
     evaluate_require_rules,
 )
-from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import (
     LAYER_POPULATION_RULE_TYPE,
     layer_rule_reach,
@@ -63,6 +66,12 @@ from beadloom.graph.rules.types import (
     Violation,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.the_lint_path_before_release_a import (
+    ClosureTags,
+    comparable,
+    decisions,
+    layer_findings_before_release_a,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -80,147 +89,6 @@ DDD_LAYERS = (
 )
 
 
-# ---------------------------------------------------------------------------
-# The oracle: the evaluator exactly as it stood before this bead
-# ---------------------------------------------------------------------------
-
-
-def _layer_findings_before_a2(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]:
-    """`evaluate_layer_rules` transcribed verbatim from `a8c306d8`.
-
-    The oracle is the pre-change function itself, message strings included, so a
-    comparison against it is a comparison of decisions AND of what those
-    decisions say — not of a summary somebody wrote down afterwards. It is kept
-    here rather than read from git because a test that skips on a shallow clone
-    is a test that does not run in CI, which is the shape this project has
-    measured itself getting wrong.
-
-    One property of the transcription is checked rather than assumed: the old
-    body iterated a node's tag `set` and took the first declared tag it met, so
-    on a node carrying two declared layer tags its answer depended on hash
-    order. `test_no_node_carries_two_declared_layer_tags` holds the condition
-    under which that ambiguity is unreachable on this repository's graph.
-    """
-    if not rules:
-        return []
-
-    from beadloom.graph.loader import get_node_tags
-
-    violations: list[Violation] = []
-    tags_cache: dict[str, set[str]] = {}
-
-    def _cached_tags(ref_id: str) -> set[str]:
-        if ref_id not in tags_cache:
-            tags_cache[ref_id] = get_node_tags(conn, ref_id)
-        return tags_cache[ref_id]
-
-    for rule in rules:
-        tag_to_index: dict[str, int] = {}
-        for idx, layer_def in enumerate(rule.layers):
-            tag_to_index[layer_def.tag] = idx
-
-        life_clause, life_params = _live_lifecycle_clause(conn)
-        all_edges = conn.execute(
-            f"SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = ?{life_clause}",  # noqa: S608
-            (rule.edge_kind, *life_params),
-        ).fetchall()
-
-        for edge_row in all_edges:
-            src_ref_id = str(edge_row[0])
-            dst_ref_id = str(edge_row[1])
-
-            src_tags = _cached_tags(src_ref_id)
-            dst_tags = _cached_tags(dst_ref_id)
-
-            src_layer_idx: int | None = None
-            dst_layer_idx: int | None = None
-
-            for tag in src_tags:
-                if tag in tag_to_index:
-                    src_layer_idx = tag_to_index[tag]
-                    break
-
-            for tag in dst_tags:
-                if tag in tag_to_index:
-                    dst_layer_idx = tag_to_index[tag]
-                    break
-
-            if src_layer_idx is None or dst_layer_idx is None:
-                continue
-            if src_layer_idx == dst_layer_idx:
-                continue
-
-            if rule.enforce == "top-down" and src_layer_idx > dst_layer_idx:
-                src_layer_name = rule.layers[src_layer_idx].name
-                dst_layer_name = rule.layers[dst_layer_idx].name
-                violations.append(
-                    Violation(
-                        rule_name=rule.name,
-                        rule_description=rule.description,
-                        rule_type="layer",
-                        severity=rule.severity,
-                        file_path=None,
-                        line_number=None,
-                        from_ref_id=src_ref_id,
-                        to_ref_id=dst_ref_id,
-                        message=(
-                            f"Layer violation: '{src_ref_id}' (layer '{src_layer_name}', "
-                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
-                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
-                            f"Lower layers must not depend on upper layers "
-                            f"(rule '{rule.name}')."
-                        ),
-                    )
-                )
-                continue
-
-            if not rule.allow_skip and (dst_layer_idx - src_layer_idx) > 1:
-                src_layer_name = rule.layers[src_layer_idx].name
-                dst_layer_name = rule.layers[dst_layer_idx].name
-                violations.append(
-                    Violation(
-                        rule_name=rule.name,
-                        rule_description=rule.description,
-                        rule_type="layer",
-                        severity=rule.severity,
-                        file_path=None,
-                        line_number=None,
-                        from_ref_id=src_ref_id,
-                        to_ref_id=dst_ref_id,
-                        message=(
-                            f"Layer skip violation: '{src_ref_id}' (layer '{src_layer_name}', "
-                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
-                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
-                            f"Skipping layers is not allowed "
-                            f"(rule '{rule.name}')."
-                        ),
-                    )
-                )
-
-    return violations
-
-
-class _ClosureTags:
-    """The tag cache each of the five evaluators kept, transcribed from `a8c306d8`.
-
-    The shared lookup is compared against this rather than against a description
-    of it, so "the closures were identical and the replacement is equivalent" is
-    a measurement over this repository's real rules instead of a claim about a
-    diff.
-    """
-
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-        self._cache: dict[str, set[str]] = {}
-
-    def of(self, ref_id: str) -> set[str]:
-        from beadloom.graph.loader import get_node_tags
-
-        if ref_id not in self._cache:
-            self._cache[ref_id] = get_node_tags(self._conn, ref_id)
-        return self._cache[ref_id]
-
-
 class _CountingConnection:
     """A connection that reports how many statements were run through it.
 
@@ -235,38 +103,6 @@ class _CountingConnection:
     def execute(self, sql: str, *args: object) -> sqlite3.Cursor:
         self.queries += 1
         return self._conn.execute(sql, *args)  # type: ignore[arg-type]
-
-
-def _comparable(violations: list[Violation]) -> set[tuple[str | None, ...]]:
-    """A findings list as a set, carrying everything a reader would see."""
-    return {
-        (
-            v.rule_name,
-            v.rule_type,
-            v.severity,
-            v.file_path,
-            None if v.line_number is None else str(v.line_number),
-            v.from_ref_id,
-            v.to_ref_id,
-            v.message,
-        )
-        for v in violations
-    }
-
-
-#: The advisories Release A adds beside the rule's decisions. Each is `warn`,
-#: neither judges an edge, and the differential below is about what the rule
-#: DECIDES — so both are subtracted before the comparison rather than one.
-#: `layer_declaration` (BDL-070 A6) joined the set when `validate_rules` gained
-#: its `LayerRule` case: two of the fixtures here declare four layers over a
-#: graph that populates two, which is exactly the finding that check exists to
-#: make, and it fires on them by design.
-_THE_ADVISORY_TYPES = frozenset({LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE})
-
-
-def _decisions(violations: list[Violation]) -> set[tuple[str | None, ...]]:
-    """The findings that are not one of Release A's advisories."""
-    return _comparable([v for v in violations if v.rule_type not in _THE_ADVISORY_TYPES])
 
 
 # ---------------------------------------------------------------------------
@@ -492,16 +328,16 @@ class TestTheDecisionsAreUnchanged:
 
     def test_on_this_repositorys_own_graph(self, live_graph: sqlite3.Connection) -> None:
         rules = [_rule()]
-        assert _decisions(evaluate_layer_rules(live_graph, rules)) == _comparable(
-            _layer_findings_before_a2(live_graph, rules)
+        assert decisions(evaluate_layer_rules(live_graph, rules)) == comparable(
+            layer_findings_before_release_a(live_graph, rules)
         )
 
     def test_on_a_graph_whose_layers_sit_on_containers(
         self, nested_graph: sqlite3.Connection
     ) -> None:
         rules = [_rule()]
-        assert _decisions(evaluate_layer_rules(nested_graph, rules)) == _comparable(
-            _layer_findings_before_a2(nested_graph, rules)
+        assert decisions(evaluate_layer_rules(nested_graph, rules)) == comparable(
+            layer_findings_before_release_a(nested_graph, rules)
         )
 
     def test_on_a_graph_that_violates_the_direction(self, tmp_path: Path) -> None:
@@ -522,9 +358,9 @@ class TestTheDecisionsAreUnchanged:
         )
         try:
             rules = [_rule(allow_skip=False)]
-            before = _layer_findings_before_a2(conn, rules)
+            before = layer_findings_before_release_a(conn, rules)
             assert len(before) >= 2
-            assert _decisions(evaluate_layer_rules(conn, rules)) == _comparable(before)
+            assert decisions(evaluate_layer_rules(conn, rules)) == comparable(before)
         finally:
             conn.close()
 
@@ -550,8 +386,8 @@ class TestTheDecisionsAreUnchanged:
     ) -> None:
         """Stated as a set difference, so a second addition could not hide in it."""
         rules = [_rule()]
-        added = _comparable(evaluate_layer_rules(live_graph, rules)) - _comparable(
-            _layer_findings_before_a2(live_graph, rules)
+        added = comparable(evaluate_layer_rules(live_graph, rules)) - comparable(
+            layer_findings_before_release_a(live_graph, rules)
         )
         assert {entry[1] for entry in added} == {LAYER_POPULATION_RULE_TYPE}
 
@@ -576,20 +412,20 @@ class TestTheWholeLintRunIsUnchanged:
         self, live_repo_reindexed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         after = self._lint(live_repo_reindexed)
-        monkeypatch.setattr(rules, "evaluate_layer_rules", _layer_findings_before_a2)
-        monkeypatch.setattr(evaluators, "node_tags", _ClosureTags)
+        monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
+        monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
         before = self._lint(live_repo_reindexed)
-        assert _comparable(before), "a comparison over an empty findings list proves nothing"
-        assert _decisions(after) == _comparable(before)
+        assert comparable(before), "a comparison over an empty findings list proves nothing"
+        assert decisions(after) == comparable(before)
 
     def test_the_one_addition_is_the_population_statement(
         self, live_repo_reindexed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Stated as a difference, so a second addition could not hide behind the first."""
         after = self._lint(live_repo_reindexed)
-        monkeypatch.setattr(rules, "evaluate_layer_rules", _layer_findings_before_a2)
-        monkeypatch.setattr(evaluators, "node_tags", _ClosureTags)
-        added = _comparable(after) - _comparable(self._lint(live_repo_reindexed))
+        monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
+        monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
+        added = comparable(after) - comparable(self._lint(live_repo_reindexed))
         assert {entry[1] for entry in added} == {LAYER_POPULATION_RULE_TYPE}
         assert {entry[2] for entry in added} == {"warn"}
 
@@ -598,8 +434,8 @@ class TestTheWholeLintRunIsUnchanged:
     ) -> None:
         """What `lint --strict` and the Gate decide on is the error count alone."""
         after = lint(live_repo_reindexed)
-        monkeypatch.setattr(rules, "evaluate_layer_rules", _layer_findings_before_a2)
-        monkeypatch.setattr(evaluators, "node_tags", _ClosureTags)
+        monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
+        monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
         before = lint(live_repo_reindexed)
         assert after.error_count == before.error_count
         assert after.has_errors is before.has_errors
@@ -645,9 +481,9 @@ class TestTheOtherFourRuleKindsAreUnchanged:
         """Run on this repository's declared rules, against both tag sources."""
         selected = [rule for rule in live_rules if isinstance(rule, rule_class)]
         assert selected, f"this repository declares no {rule_class.__name__}"
-        with_shared = _comparable(evaluate(live_graph, selected))
-        monkeypatch.setattr(evaluators, "node_tags", _ClosureTags)
-        with_closure = _comparable(evaluate(live_graph, selected))
+        with_shared = comparable(evaluate(live_graph, selected))
+        monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
+        with_closure = comparable(evaluate(live_graph, selected))
         assert with_shared == with_closure
 
     def test_the_forbid_edge_rule_matches_it_too(
@@ -674,10 +510,10 @@ class TestTheOtherFourRuleKindsAreUnchanged:
             )
         ]
         try:
-            with_shared = _comparable(evaluate_forbid_edge_rules(conn, rules))
+            with_shared = comparable(evaluate_forbid_edge_rules(conn, rules))
             assert with_shared
-            monkeypatch.setattr(evaluators, "node_tags", _ClosureTags)
-            assert _comparable(evaluate_forbid_edge_rules(conn, rules)) == with_shared
+            monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
+            assert comparable(evaluate_forbid_edge_rules(conn, rules)) == with_shared
         finally:
             conn.close()
 

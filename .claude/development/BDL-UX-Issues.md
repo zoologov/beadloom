@@ -35,6 +35,18 @@
 
 ## Open Issues
 
+293. [2026-09-12] [MEDIUM] running the suite with `--cov` corrupts the project's own index, and 18 tests then fail with `database disk image is malformed`
+
+    **Severity:** medium (no shipped behaviour is wrong. What is wrong is that the one command the role protocol names for proving coverage — `uv run pytest --cov=src` — produces a RED suite over a green tree, so a run taken to measure coverage cannot also be read as a verdict)
+    **Command:** `uv run pytest --cov=src/beadloom`, over the whole suite
+    **Context:** BDL-070, `beadloom-cfkk` (A7), 2026-09-12. Found while taking this bead's coverage figure, and proved **not to be this bead's change** by a control run.
+    **What happened.** Over the full suite the shared `.beadloom/beadloom.db` at the project root ends up corrupt, and every later test that reads it fails with `sqlite3.DatabaseError: database disk image is malformed`. Eighteen fail, in three files — `test_s3_decomposition.py` (5), `test_s4_the_instruments_agree.py` (1) and `test_the_layer_rule_states_the_population_it_judged.py` (12). Without `--cov` the same suite over the same files is green.
+    **How it was proved.** Three runs in `room-beadloom-cfkk`, each starting from a room with no index at all. With `--cov`: 18 failed, 10 478 passed. With `--cov` and this bead's three new test files excluded by `--ignore`: the SAME 18 failed, 10 463 passed — so the trigger is present at `43286775` and is not carried in by A7. Without `--cov`: 10 496 passed, 0 failed. Deleting the index and re-running the three failing files alone passes 64 of 64.
+    **Expected:** a coverage run is a measurement of the same suite, not a different one. Either the tests that reindex the project root are isolated from each other under instrumentation, or the corruption's cause is found and removed.
+    **What is NOT established:** the mechanism. `--cov` changes timing and adds `atexit` work, and the suite reindexes the project root from a session fixture and from subprocess tests; which pair of writers overlaps was not derived. Nor was it checked on Linux — every run above is macOS, Python 3.13, in one room.
+    **Consequence for this project's own numbers:** every coverage figure this repository has quoted was taken from a run in which those 18 tests failed. The per-module figures still stand — the failing tests are in three files and the modules they cover are exercised elsewhere — but the TOTAL is taken over a suite that did not finish as intended.
+    **Tracker:** not filed as a bead; the coordinator decides whether it earns one.
+
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
     **Severity:** low (the panel is a dashboard and decides nothing, but it is one of the surfaces an owner looks at to ask how much is wrong, and it answers `0 warnings` over 71 of them)
