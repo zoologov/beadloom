@@ -14,6 +14,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1).
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated, because `liveness` already names them for exactly that graph (BDL-070 A6).
+- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
@@ -753,6 +754,18 @@ It is always `warn` and never the rule's declared severity. A statement about a 
 a boundary breach, and emitting it at `error` would turn a green Gate red on upgrade for a graph
 nobody changed.
 
+**And it does not exit 1 under `--fail-on-warn` either** (`rules/advisories.py`, BDL-070 A8).
+`warn` keeps a finding out of `--strict` and out of the Gate, and it does not keep it out of that
+flag, which exits on any finding. Measured on a fixture with two tagged edges and one untagged,
+clean under every rule it declares: the code before this release exits 0 and the code with the
+population statement exits 1. So `ADVISORY_RULE_TYPES` — `layer_population` and
+`layer_declaration` — is subtracted in `LintResult.fails_on_warn`, the key that flag reads as
+`has_errors` is `--strict`'s. The exclusion is by rule type and not by severity: an expired
+exemption, an inert rule and an unbound scenario are statements about something a person chose,
+and they still exit 1. A pipeline that wants the advisories to block reads their records out of
+`--format json`. Release B makes the real under-evaluation an error from the rule itself, which is
+a verdict change that release states.
+
 It is silent in two cases and loud in a third:
 
 - **No edge of the rule's kind** — there is no population to report, and a rule that can look at
@@ -832,6 +845,13 @@ name the scan reads, which is held by a case of its own rather than left to be r
 `nodes.extra["tags"]` once, on the first question, and answers from memory afterwards — the
 closures it replaces read one node per call, and four of the five call sites still skip tags
 entirely when no rule in their set matches on one.
+
+Reading the whole table puts every row on the path of every tag question, so a row it cannot read
+is skipped rather than raised: `extra` that is null, that does not parse, or that parses to
+something other than an object leaves the node with no tags. One node at a time, a malformed
+`extra` could only break the question that asked about that node; unguarded, one such row would
+have failed every tag question in the run and escaped `evaluate_all` as a traceback instead of a
+`LintError` (BDL-070 A8).
 
 **What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS
 are compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and

@@ -14,6 +14,7 @@ import sqlite3
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.graph.linter import lint
@@ -21,6 +22,7 @@ from beadloom.graph.rule_engine import evaluate_all
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE, layer_rule_reach
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.types import LayerRule
+from beadloom.services.cli import main
 
 from .tiered_project import TIERS, graph_with, write_tiered_project
 
@@ -92,6 +94,24 @@ def _evaluate_without_lint(world: dict[str, Any]) -> None:
     world["violations"] = evaluate_all(
         world["conn"], world["rules"], project_root=project
     )
+
+
+@when("the project is linted with the flag that fails on warnings")
+def _lint_failing_on_warnings(world: dict[str, Any]) -> None:
+    """The CLI, read-only, with the flag a pipeline that wants a hard line sets."""
+    project = _build(world)
+    result = CliRunner().invoke(
+        main, ["lint", "--no-reindex", "--fail-on-warn", "--project", str(project)]
+    )
+    world["exit_code"] = result.exit_code
+    world["output"] = result.output
+    world["violations"] = lint(project).violations
+    world["reach"] = layer_rule_reach(world["conn"], _layer_rule(world["rules"]))
+
+
+@then(parsers.parse("the command exits {code:d}"))
+def _exit_code(world: dict[str, Any], code: int) -> None:
+    assert world["exit_code"] == code, world["output"]
 
 
 @then(

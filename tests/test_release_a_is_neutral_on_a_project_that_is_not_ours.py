@@ -27,16 +27,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from click.testing import CliRunner
 
 from beadloom.graph import rules
 from beadloom.graph.linter import lint
 from beadloom.graph.rules import evaluators
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
+from beadloom.services.cli import main
 from tests.acceptance.steps.tiered_project import (
     OUR_LAYER_PREFIX,
     TIERS,
     Edge,
     Node,
+    graph_with,
     write_tiered_project,
 )
 from tests.the_lint_path_before_release_a import (
@@ -109,6 +112,47 @@ def project_without_a_layer_rule(tmp_path: Path) -> Path:
         edges=_MIXED_EDGES,
         with_layer_rule=False,
     )
+
+
+@pytest.fixture()
+def partly_tiered_project(tmp_path: Path) -> Path:
+    """Two judged edges, one skipped — the smallest graph the advisory fires on.
+
+    The shape the A8 review measured `--fail-on-warn` flipping on: clean under
+    every rule the project declares, and partly tagged, which is the ordinary
+    state of a graph an adopter has not finished tagging.
+    """
+    nodes, edges = graph_with(tiered_edges=2, untiered_edges=1)
+    return write_tiered_project(tmp_path / "partly", nodes=nodes, edges=edges)
+
+
+@pytest.fixture()
+def project_whose_own_rule_warns(tmp_path: Path) -> Path:
+    """The same mixed graph, with its layering declared `warn` instead of `error`.
+
+    Its `store -> web` edge is then a warning the RULE decided, sitting beside
+    the advisory — the direction that fails if the exclusion ever widens from
+    the two advisory types to warnings in general.
+    """
+    return write_tiered_project(
+        tmp_path / "warned",
+        nodes=_MIXED_NODES,
+        edges=_MIXED_EDGES,
+        severity="warn",
+    )
+
+
+def _lint_exit_code(root: Path, *flags: str) -> int:
+    """The CLI's exit code for a read-only lint of *root*.
+
+    Read from the runner's result rather than from a pipeline, because an exit
+    code that goes through a pipe is the next command's (BDL-070 CONTEXT).
+    """
+    result = CliRunner().invoke(
+        main, ["lint", "--no-reindex", "--project", str(root), *flags]
+    )
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.output
+    return result.exit_code
 
 
 def _before(root: Path, monkeypatch: pytest.MonkeyPatch) -> LintResult:
@@ -227,3 +271,43 @@ class TestTheProjectsReleaseAIsSilentOn:
         # Assert
         assert comparable(after.violations) == comparable(before.violations)
         assert after.error_count == before.error_count == 0
+
+
+class TestTheExitCodeFailOnWarnReads:
+    """`--fail-on-warn` is a verdict too, and Release A must not move it either.
+
+    The A8 review measured this flag flipping 0 -> 1 on a partly tagged graph
+    that nobody had changed, which the epic's CONTEXT forbids. Both directions
+    are asserted so neither half of the fix can be undone silently: drop the
+    exclusion and the first test fails, widen it from the two advisory types to
+    warnings in general and the second does.
+    """
+
+    def test_a_run_whose_only_warning_is_the_advisory_exits_zero(
+        self, partly_tiered_project: Path
+    ) -> None:
+        # Arrange
+        found = lint(partly_tiered_project).violations
+        # Assert
+        assert [v.rule_type for v in found] == [LAYER_POPULATION_RULE_TYPE]
+        assert _lint_exit_code(partly_tiered_project, "--fail-on-warn") == 0
+
+    def test_a_warning_the_rules_decided_still_exits_one(
+        self, project_whose_own_rule_warns: Path
+    ) -> None:
+        # Arrange
+        found = lint(project_whose_own_rule_warns).violations
+        decided = [v for v in found if v.rule_type == "layer"]
+        # Assert
+        assert [(v.from_ref_id, v.to_ref_id, v.severity) for v in decided] == [
+            ("store", "web", "warn")
+        ]
+        assert any(v.rule_type == LAYER_POPULATION_RULE_TYPE for v in found)
+        assert _lint_exit_code(project_whose_own_rule_warns, "--fail-on-warn") == 1
+
+    def test_the_advisory_does_not_move_the_strict_verdict_either(
+        self, partly_tiered_project: Path
+    ) -> None:
+        """Stated beside the other two, so the pair of flags is read together."""
+        # Assert
+        assert _lint_exit_code(partly_tiered_project, "--strict") == 0

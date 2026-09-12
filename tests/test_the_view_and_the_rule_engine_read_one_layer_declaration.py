@@ -21,6 +21,7 @@ layers are named differently.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,8 @@ from beadloom.infrastructure.db import create_schema
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    import pytest
 
 DDD_LAYERS = (
     LayerDef(name="services", tag="layer-service"),
@@ -225,6 +228,67 @@ class TestTheDeclarationDecides:
         for node in data["nodes"]:  # type: ignore[union-attr]
             assert node["layer_rank"] is None
             assert node["layer"] == ""
+
+    def test_a_tagged_graph_with_no_declaration_says_so_in_the_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The one adopter-visible move in Release A, made legible where it happens.
+
+        A project that tags its nodes `layer-*` and whose index carries no layer
+        rule rendered four lanes before this release and renders none after it.
+        The view cannot decide which of the two the project meant, so it reports
+        the fact rather than guessing (A8 review, Major 3).
+        """
+        # Arrange
+        conn = _open()
+        try:
+            _ddd_graph(conn)
+            conn.commit()
+            # Act
+            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+                build_architecture_view_data(conn, pages={})
+        finally:
+            conn.close()
+        # Assert
+        logged = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+        assert len(logged) == 1
+        assert "4" in logged[0]
+        assert "no layer rule" in logged[0]
+
+    def test_a_declared_graph_logs_nothing(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The line is absent on the ordinary run, so its presence means something."""
+        # Arrange
+        conn = _open()
+        try:
+            _ddd_graph(conn)
+            _declare_layers(conn, DDD_LAYERS)
+            conn.commit()
+            # Act
+            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+                build_architecture_view_data(conn, pages={})
+        finally:
+            conn.close()
+        # Assert
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.INFO] == []
+
+    def test_an_untagged_graph_with_no_declaration_logs_nothing_either(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A project with no layering at all lost nothing and is told nothing."""
+        # Arrange
+        conn = _open()
+        try:
+            _node(conn, "solo", "domain")
+            conn.commit()
+            # Act
+            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+                build_architecture_view_data(conn, pages={})
+        finally:
+            conn.close()
+        # Assert
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.INFO] == []
 
     def test_an_edge_carries_no_violation_flag_without_a_declaration(self) -> None:
         conn = _open()

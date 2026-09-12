@@ -43,6 +43,14 @@ One feature node covers the cooperating modules below (all annotated
   what the rule engine decides on. A graph whose index carries no layer rule
   gets no lanes rather than every node in lane 0.
 
+  **That is the one adopter-visible change of rendered output in Release A**, and
+  it is stated here because nothing else would show it: a project that carries
+  `layer-*` tags and declares no layer rule rendered four lanes before and
+  renders none now. This repository declares the rule, so nothing moves here —
+  which is exactly why the case would go unnoticed. The view cannot tell which
+  layering such a project meant, so it logs the case at INFO with the number of
+  tagged nodes instead of drawing a stratification nobody declared.
+
   The `layer` field stays the short token — the declared tag with its
   conventional `layer-` prefix removed — because those tokens are the
   front-end's contract (`site/.vitepress/theme/architectureTheme.js` keys its

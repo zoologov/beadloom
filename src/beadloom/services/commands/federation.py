@@ -253,7 +253,11 @@ _FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
     "--fail-on-warn",
     is_flag=True,
     default=False,
-    help="Exit 1 on any violation including warnings.",
+    help=(
+        "Exit 1 on any violation a rule decided, including warnings. A layer "
+        "rule's population and declaration statements are advisory and do not "
+        "exit 1."
+    ),
 )
 @click.option(
     "--no-reindex",
@@ -287,8 +291,9 @@ def lint(
     byte-identical and refuses to run when there is no index to read.
 
     Exit codes: 0 = clean or violations below threshold,
-    1 = violations with --strict (errors only) or --fail-on-warn (any),
-    2 = configuration error or missing index.
+    1 = violations with --strict (errors only) or --fail-on-warn (any finding a
+    rule decided; the layer population and declaration statements are advisory
+    and exit 0), 2 = configuration error or missing index.
     """
     from beadloom.application.reindex import incremental_reindex
     from beadloom.graph.linter import (
@@ -346,7 +351,11 @@ def lint(
             f"{_population_note(result)}"
         )
 
-    if fail_on_warn and result.violations:
+    if fail_on_warn and result.fails_on_warn:
+        # Not `result.violations`: BDL-070's two advisories state how far a layer
+        # rule reached and decide nothing, so a graph nobody changed would exit 1
+        # on upgrade for a message that cannot be acted on in the run it reddened
+        # (A8 review, Major 1). `fails_on_warn` names the excluded set and why.
         sys.exit(1)
     if strict and result.has_errors:
         sys.exit(1)

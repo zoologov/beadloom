@@ -42,8 +42,19 @@ Edge = tuple[str, str, str]
 _CONFIG = "languages:\n- .py\nscan_paths:\n- src\n"
 
 
-def rules_yaml(*, tiers: tuple[str, ...] = TIERS, with_layer_rule: bool = True) -> str:
-    """The project's `rules.yml`: one layer rule over *tiers*, or no rule at all."""
+def rules_yaml(
+    *,
+    tiers: tuple[str, ...] = TIERS,
+    with_layer_rule: bool = True,
+    severity: str = "error",
+) -> str:
+    """The project's `rules.yml`: one layer rule over *tiers*, or no rule at all.
+
+    *severity* is a parameter because an adopter may declare its layering at
+    `warn` — and because a warning the RULE decided is the only way to tell
+    that flag's exclusion of Release A's advisories from an exclusion of
+    warnings in general (A8 review, Major 1).
+    """
     if not with_layer_rule:
         return "version: 3\n\nrules: []\n"
     declared = "\n".join(
@@ -54,7 +65,7 @@ def rules_yaml(*, tiers: tuple[str, ...] = TIERS, with_layer_rule: bool = True) 
         "rules:\n"
         "  - name: tier-order\n"
         '    description: "web -> core -> store, and never the other way"\n'
-        "    severity: error\n"
+        f"    severity: {severity}\n"
         "    layers:\n"
         f"{declared}\n"
         "    enforce: top-down\n"
@@ -88,6 +99,7 @@ def write_tiered_project(
     edges: list[Edge],
     tiers: tuple[str, ...] = TIERS,
     with_layer_rule: bool = True,
+    severity: str = "error",
 ) -> Path:
     """Write the project at *root* and index it ONCE, returning *root*.
 
@@ -102,7 +114,8 @@ def write_tiered_project(
     graph_dir.mkdir(parents=True)
     (root / ".beadloom" / "config.yml").write_text(_CONFIG, encoding="utf-8")
     (graph_dir / "rules.yml").write_text(
-        rules_yaml(tiers=tiers, with_layer_rule=with_layer_rule), encoding="utf-8"
+        rules_yaml(tiers=tiers, with_layer_rule=with_layer_rule, severity=severity),
+        encoding="utf-8",
     )
     (graph_dir / "nodes.yml").write_text(nodes_yaml(nodes, edges), encoding="utf-8")
     for ref_id, _kind, _tags in nodes:

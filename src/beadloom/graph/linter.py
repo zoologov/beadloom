@@ -18,6 +18,7 @@ from beadloom.graph.rule_engine import (
     count_unattributed_import_files,
     evaluate_all,
     inert_rule_names,
+    is_advisory,
     layer_rule_reaches,
     load_rules,
     population_phrase,
@@ -118,6 +119,21 @@ class LintResult:
     def has_errors(self) -> bool:
         """Return True if any violation has severity 'error'."""
         return any(v.severity == "error" for v in self.violations)
+
+    @property
+    def fails_on_warn(self) -> bool:
+        """The key ``--fail-on-warn`` decides on, as ``has_errors`` is ``--strict``'s.
+
+        Every finding except the two advisories
+        (:data:`~beadloom.graph.rules.advisories.ADVISORY_RULE_TYPES`), which
+        report how far a rule reached rather than anything it decided. The
+        reason the exclusion exists, and the condition under which it should be
+        revisited, are written at the set itself. It is a property here rather
+        than a filter in the CLI because the debt report and the MCP tool read
+        this result too, and a second place deciding what "any violation" means
+        is how one flag comes to mean two things.
+        """
+        return any(not is_advisory(v) for v in self.violations)
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +251,16 @@ def _evaluate(
         # prose. Both counts come from `reach_of` over this one connection, so
         # they cannot differ in logic — what would differ is a renderer parsing
         # a sentence back into integers.
+        #
+        # A lint run therefore reads the containment map and the tag map TWICE:
+        # once here, and once inside `evaluate_layer_rules` below. That is two
+        # extra queries per run — one over `edges` where kind = 'part_of', one
+        # over `nodes` — and it is the price of `evaluate_all` being a function
+        # of a connection alone, which is what lets the TUI panel and the debt
+        # report call it without assembling a linter's state (A8 review, Minor 6).
+        # Both readings go through the same two functions, so they cannot
+        # disagree; if this run ever needs to be faster, the maps get passed in
+        # rather than the second reading being made to differ.
         populations = layer_rule_reaches(
             conn, [rule for rule in rules if isinstance(rule, LayerRule)]
         )

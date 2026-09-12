@@ -35,3 +35,14 @@ Feature: a layer rule states how much of its edge set it judged
     When the evaluators are called the way a reader past lint calls them
     Then that reader receives the population statement
     And the statement is a warning even though the rule is declared an error
+
+  # The A8 review measured this flag flipping 0 -> 1 on a partly tagged graph
+  # nobody had changed. The finding cannot be acted on in the run that reddened:
+  # tagging the ends is a change to the graph, not to the commit under test.
+  @bead:beadloom-5tcc.1
+  Scenario: a pipeline that fails on warnings does not redden for the population statement
+    Given a project whose layering is declared as three tiers
+    And 2 dependency edges between tiered nodes and 1 with an untiered end
+    When the project is linted with the flag that fails on warnings
+    Then the command exits 0
+    And the run states that it evaluated 2 of 3 dependency edges

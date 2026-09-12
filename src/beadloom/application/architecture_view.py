@@ -149,11 +149,39 @@ def _declared_layers(conn: sqlite3.Connection) -> tuple[LayerDef, ...]:
 
 
 def _layer_view(conn: sqlite3.Connection) -> _LayerView:
-    """The layer lookup for one build, over the declaration the index holds."""
+    """The layer lookup for one build, over the declaration the index holds.
+
+    Reports the one case in which this release changes what a project sees: a
+    graph whose nodes carry layer tags and whose index holds no layer rule
+    rendered lanes from a table this module kept of its own and renders none
+    now. The view has no way to tell which layering such a project meant — that
+    is why the declaration is read rather than guessed — so it states the fact
+    where it happens instead of drawing a stratification nobody declared.
+
+    The condition counts ``layer-``-prefixed tags specifically, and that is not a
+    hardcoded layer: the table this module used to keep held exactly the
+    ``layer-*`` tags, so those are exactly the nodes whose lane moved. A project
+    whose tags are named otherwise rendered no lanes before this release either,
+    and is told nothing — the correct silence rather than a miss.
+    """
+    layers = _declared_layers(conn)
+    tags = node_tags(conn).as_mapping()
+    if not layers:
+        tagged = sum(
+            1 for node in tags.values() if any(tag.startswith(_LAYER_TAG_PREFIX) for tag in node)
+        )
+        if tagged:
+            logger.info(
+                "architecture view: %d node(s) carry a `%s` tag and the index holds "
+                "no layer rule, so no lanes are drawn — the lanes come from the "
+                "declaration, and a project that declares none gets none",
+                tagged,
+                _LAYER_TAG_PREFIX,
+            )
     return _LayerView(
-        layers=_declared_layers(conn),
+        layers=layers,
         parents=part_of_parents(conn),
-        tags=node_tags(conn).as_mapping(),
+        tags=tags,
     )
 
 

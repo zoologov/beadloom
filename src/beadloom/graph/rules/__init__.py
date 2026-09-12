@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules.advisories import ADVISORY_RULE_TYPES, is_advisory
 from beadloom.graph.rules.attribution import (
     FileAttribution,
     count_unattributed_import_files,
@@ -274,6 +275,7 @@ def evaluate_all(
 
 
 __all__ = [
+    "ADVISORY_RULE_TYPES",
     "BEAD_NOT_VERIFIED",
     "DEFAULT_DOC_AREA_MIN_SUPPORT",
     "DEFAULT_DOC_AREA_THRESHOLD",
@@ -330,6 +332,7 @@ __all__ = [
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",
+    "is_advisory",
     "layer_of",
     "layer_rule_reach",
     "layer_rule_reaches",

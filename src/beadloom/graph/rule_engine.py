@@ -24,6 +24,7 @@ questions, answered separately and on purpose.
 from __future__ import annotations
 
 from beadloom.graph.rules import (
+    ADVISORY_RULE_TYPES,
     BEAD_NOT_VERIFIED,
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
@@ -81,6 +82,7 @@ from beadloom.graph.rules import (
     evaluate_unregistered_feature_candidate_rules,
     exit_condition_deadline,
     inert_rule_names,
+    is_advisory,
     layer_of,
     layer_rule_reach,
     layer_rule_reaches,
@@ -96,6 +98,7 @@ from beadloom.graph.rules import (
 )
 
 __all__ = [
+    "ADVISORY_RULE_TYPES",
     "BEAD_NOT_VERIFIED",
     "DEFAULT_DOC_AREA_MIN_SUPPORT",
     "DEFAULT_DOC_AREA_THRESHOLD",
@@ -153,6 +156,7 @@ __all__ = [
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",
+    "is_advisory",
     "layer_of",
     "layer_rule_reach",
     "layer_rule_reaches",

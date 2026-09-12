@@ -37,20 +37,31 @@ if TYPE_CHECKING:
 def _read_all_tags(conn: sqlite3.Connection) -> dict[str, set[str]]:
     """Every node's ``extra["tags"]``, in one pass over the nodes table.
 
-    A node whose ``extra`` is absent, null, not an object, or carries no
-    ``tags`` key is simply not in the result, so :meth:`NodeTags.of` answers the
-    empty set for it — which is what :func:`~beadloom.graph.loader.get_node_tags`
-    answers for the same node, one node at a time. The ``isinstance`` guard is
-    the one deliberate difference: reading every row at once means one malformed
-    ``extra`` would otherwise break an evaluation that never asked about that
-    node.
+    A node whose ``extra`` is absent, null, unparseable, not an object, or
+    carries no ``tags`` key is simply not in the result, so :meth:`NodeTags.of`
+    answers the empty set for it — which is what
+    :func:`~beadloom.graph.loader.get_node_tags` answers for the same node, one
+    node at a time.
+
+    **Skipping the unreadable row is the one deliberate difference**, and it is
+    what makes reading the whole table safe: one node at a time, a malformed
+    ``extra`` could only break the question that asked about THAT node, while a
+    single pass puts every row on the path of every tag question in the run. The
+    ``isinstance`` guard covers ``null`` / ``3`` / ``"x"``, which parse and are
+    not objects; :exc:`json.JSONDecodeError` covers text that does not parse at
+    all. Both end the same way — the node has no tags — because a row this
+    function cannot read is a row it cannot answer for, and raising here would
+    turn it into an answer about the whole graph.
     """
     tags: dict[str, set[str]] = {}
     for row in conn.execute("SELECT ref_id, extra FROM nodes"):
         raw = row[1]
         if raw is None:
             continue
-        extra = json.loads(str(raw))
+        try:
+            extra = json.loads(str(raw))
+        except json.JSONDecodeError:
+            continue
         if not isinstance(extra, dict):
             continue
         declared = extra.get("tags", [])

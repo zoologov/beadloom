@@ -581,21 +581,22 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         return []
 
     violations: list[Violation] = []
-    tags = node_tags(conn)
+    # One map for the whole evaluation, named above the loop. `as_mapping()`
+    # answers from the same cached dict however often it is called, so calling
+    # it per edge was right and read as though the map were re-derived each time.
+    tags = node_tags(conn).as_mapping()
     parents = part_of_parents(conn)
 
     for rule in rules:
         # Live edges only (planned/deprecated/dead edges are intent or history,
         # not live layering violations).
         all_edges = live_edges_of_kind(conn, rule.edge_kind)
-        violations.extend(
-            population_statement(rule, reach_of(rule, all_edges, parents, tags.as_mapping()))
-        )
-        violations.extend(declaration_statement(rule, tags.as_mapping()))
+        violations.extend(population_statement(rule, reach_of(rule, all_edges, parents, tags)))
+        violations.extend(declaration_statement(rule, tags))
 
         for src_ref_id, dst_ref_id in all_edges:
-            src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags.as_mapping())
-            dst_layer_idx = own_layer_of(dst_ref_id, rule.layers, tags.as_mapping())
+            src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags)
+            dst_layer_idx = own_layer_of(dst_ref_id, rule.layers, tags)
 
             # Skip if either node is not in any layer
             if src_layer_idx is None or dst_layer_idx is None:

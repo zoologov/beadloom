@@ -566,3 +566,65 @@ class TestTheLookupItself:
         self, fully_tagged_graph: sqlite3.Connection
     ) -> None:
         assert node_tags(fully_tagged_graph).as_mapping()["dom"] == {"layer-domain"}
+
+    def test_one_unreadable_extra_does_not_take_the_rest_of_the_table_with_it(
+        self, tmp_path: Path
+    ) -> None:
+        """Three rows — valid, NULL, unparseable — and the valid one still answers.
+
+        Reading every row at once means a malformed `extra` on a node nobody
+        asked about is on the path of every tag question in the run; one node at
+        a time, only the node you asked about could raise (A8 review, Major 2).
+        """
+        # Arrange
+        conn = open_db(tmp_path / "malformed.db")
+        create_schema(conn)
+        for ref_id, extra in [
+            ("good", json.dumps({"tags": ["layer-domain"]})),
+            ("empty", None),
+            ("broken", "not json at all"),
+        ]:
+            conn.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+                (ref_id, "feature", ref_id, extra),
+            )
+        conn.commit()
+        # Act
+        try:
+            lookup = node_tags(conn)
+            # Assert
+            assert lookup.of("good") == {"layer-domain"}
+            assert lookup.of("empty") == set()
+            assert lookup.of("broken") == set()
+            assert lookup.as_mapping() == {"good": {"layer-domain"}}
+        finally:
+            conn.close()
+
+    def test_a_malformed_extra_does_not_escape_the_whole_evaluation(
+        self, tmp_path: Path
+    ) -> None:
+        """`evaluate_all` answers findings or `LintError`, never a JSON traceback."""
+        # Arrange
+        conn = _build_graph(
+            tmp_path / "one-bad-row.db",
+            nodes=[("svc", ["layer-service"]), ("infra", ["layer-infra"])],
+            edges=[("infra", "svc", "depends_on")],
+        )
+        conn.execute("UPDATE nodes SET extra = ? WHERE ref_id = ?", ("{not json", "infra"))
+        conn.commit()
+        rule = LayerRule(
+            name="architecture-layers",
+            description="services over infrastructure",
+            layers=list(DDD_LAYERS),
+            enforce="top-down",
+            allow_skip=True,
+            edge_kind="depends_on",
+            severity="error",
+        )
+        # Act
+        try:
+            found = evaluate_layer_rules(conn, [rule])
+        finally:
+            conn.close()
+        # Assert
+        assert [v.rule_type for v in found] == [LAYER_POPULATION_RULE_TYPE]

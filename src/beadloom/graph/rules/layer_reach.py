@@ -177,6 +177,13 @@ def layer_rule_reaches(
     :func:`reach_of` — and a test holds that, because "the fast one" and "the
     correct one" being different functions is how a population comes to depend
     on which caller asked.
+
+    Once for the whole list, and a second time inside the evaluation:
+    :func:`beadloom.graph.linter._evaluate` calls this and then calls
+    ``evaluate_all``, which builds both maps again for
+    :func:`~beadloom.graph.rules.evaluators.evaluate_layer_rules`. Two extra
+    queries per lint run, stated here because a reader of this docstring alone
+    would take "read ONCE" to be a claim about the run.
     """
     if not rules:
         return []
