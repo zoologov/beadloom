@@ -33,7 +33,11 @@ Measured at HEAD on a foreign two-package project, `beadloom ci` after each edit
 B through E were byte-identical to the line a project that declares nothing gets, and the gate
 exited 0 on all four. F is the case the leg got right and is the model the other four were brought
 to: the declaration pointed at nothing and the verdict said so, by name. The same four shapes
-under `issue_log:` were BDL-UX #270, pinned as an `xfail` since BDL-068 S6 and closed here.
+under `issue_log:` were BDL-UX #270, pinned as an `xfail` since BDL-068 S6 and closed here for
+the Gate leg. Its two command surfaces read `issue_log:` through their own resolver and kept the
+old answer for one more bead; `beadloom-rqma.8` moved them here too, which is what made the entry
+closeable. A module that exists so one rule has one home is worth only as much as the number of
+callers that reach it.
 
 ## The four states
 

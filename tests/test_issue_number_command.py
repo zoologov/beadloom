@@ -144,3 +144,77 @@ def test_check_json_carries_the_unreached_population(tmp_path: Path) -> None:
     (root / "ledger" / "0008.md").write_text("# 8\n", encoding="utf-8")
     result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root), "--json"])
     assert json.loads(result.stdout)["entries_below_floor"] == 3
+
+
+# ---------------------------------------------------------------------------
+# The three surfaces of one declaration — BDL-069, `beadloom-rqma.8`
+# ---------------------------------------------------------------------------
+
+
+def _misdeclared(root: Path) -> Path:
+    """A project that opted in and misspelled one key: `ledger:` written `ledgr:`."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "log.md").write_text("7. an entry\n", encoding="utf-8")
+    (root / ".beadloom").mkdir(exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(
+        "issue_log:\n  path: log.md\n  ledgr: ledger\n", encoding="utf-8"
+    )
+    return root
+
+
+def test_allocate_tells_a_misdeclaration_from_an_opt_out(tmp_path: Path) -> None:
+    """BDL-UX #270 on the command a person types, not on the Gate leg beside it.
+
+    Both surfaces answer "did this project declare a log?" and they gave two
+    answers: the Gate named the key while `allocate` printed, byte for byte, the
+    sentence a project that wrote nothing gets. The assertion holds the two
+    outputs against each other rather than against a literal, so rewording
+    either one cannot pass it.
+    """
+    opted_out = tmp_path / "opted-out"
+    opted_out.mkdir()
+    (opted_out / ".beadloom").mkdir()
+    (opted_out / ".beadloom" / "config.yml").write_text("languages:\n- .py\n", encoding="utf-8")
+    misdeclared = _misdeclared(tmp_path / "misdeclared")
+
+    runner = CliRunner()
+    absent = runner.invoke(
+        main, ["issue-number", "allocate", "--holder", "a-bead", "--project", str(opted_out)]
+    )
+    refused = runner.invoke(
+        main, ["issue-number", "allocate", "--holder", "a-bead", "--project", str(misdeclared)]
+    )
+    assert absent.exit_code == 2
+    assert refused.exit_code == 2
+    assert refused.output != absent.output
+    assert "`ledger:`" in refused.output
+    assert "`ledgr:`" in refused.output
+
+
+def test_check_reports_a_declaration_it_could_not_use_rather_than_a_clean_log(
+    tmp_path: Path,
+) -> None:
+    """The third surface #270's own `Command:` line names.
+
+    It never printed the opt-out's sentence, so it was not the byte-identical
+    shape the entry measured — it printed `No duplicate, unwritten or unclaimed
+    number.` and exited 0, a CLEAN verdict over a log it never opened. A green
+    over a population of zero is the same false green one surface along, and the
+    refusal it needs is already on the report the Gate renders.
+    """
+    result = CliRunner().invoke(
+        main, ["issue-number", "check", "--project", str(_misdeclared(tmp_path))]
+    )
+    assert result.exit_code == 1, result.output
+    assert "No duplicate, unwritten or unclaimed number." not in result.output
+    assert "`ledger:`" in result.output
+    assert "`ledgr:`" in result.output
+
+
+def test_check_still_reports_an_opt_out_as_an_opt_out(tmp_path: Path) -> None:
+    """The constraint the fix must not break: declaring nothing is not a finding."""
+    (tmp_path / ".beadloom").mkdir()
+    (tmp_path / ".beadloom" / "config.yml").write_text("languages:\n- .py\n", encoding="utf-8")
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "No issue log is declared" in result.output

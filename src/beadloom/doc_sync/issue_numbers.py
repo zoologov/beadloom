@@ -319,7 +319,10 @@ def read_log_declaration(project_root: Path) -> LogDeclaration:
     The refusal used to go to ``logging``, which the Gate does not render, so a
     project that had written ``issue_log:`` and misspelled ``ledger:`` got the
     verdict of a project that had written nothing (BDL-UX #270, closed by
-    ``beadloom-rqma.7`` together with its twin in ``document_pairs:``).
+    ``beadloom-rqma.7`` on the Gate leg together with its twin in
+    ``document_pairs:``, and by ``beadloom-rqma.8`` on the two ``issue-number``
+    commands, which reached ``issue_log:`` through their own resolver and kept
+    the old answer for one bead longer).
     """
     declaration = read_declaration(project_root, CONFIG_KEY)
     if declaration.undetermined:
@@ -352,9 +355,51 @@ def read_log_declaration(project_root: Path) -> LogDeclaration:
     )
 
 
-def resolve_issue_log(project_root: Path) -> IssueLog | None:
-    """The USABLE log and ledger, for a caller with nothing to say about a refusal."""
-    return read_log_declaration(project_root).log
+#: What a project that wrote no ``issue_log:`` block at all is told. Held apart
+#: from every refusal below because it is the one case where nothing is wrong:
+#: the project opted out, and the sentence is an instruction rather than a
+#: complaint.
+NO_LOG_DECLARED = (
+    "no issue log is declared; add an `issue_log:` block with `path:` and "
+    "`ledger:` to .beadloom/config.yml"
+)
+
+
+def declared_log(project_root: Path) -> IssueLog:
+    """The declared log, or a refusal in the declaration's OWN words.
+
+    This replaces a resolver that returned the usable log and dropped the reason
+    there was none. Its caller is a person at a terminal, who has everything to
+    say about a refusal: a project that wrote ``issue_log:`` and misspelled one
+    key was told, byte for byte, the sentence a project that wrote nothing gets,
+    while the Gate over the same config named the key (BDL-UX #270, closed on
+    the Gate leg by ``beadloom-rqma.7`` and on this surface by
+    ``beadloom-rqma.8``).
+
+    Three states, three answers. No refusal and no log is the opt-out. A refusal
+    is rendered whether it came from a declaration this reader could not use or
+    from a config file it could not read at all — in both cases the project did
+    something the allocator cannot silently call "nothing".
+    """
+    declaration = read_log_declaration(project_root)
+    if declaration.log is not None:
+        return declaration.log
+    if not declaration.refusals:
+        raise ValueError(NO_LOG_DECLARED)
+    raise ValueError("; ".join(_refusal_sentence(refusal) for refusal in declaration.refusals))
+
+
+def _refusal_sentence(refusal: Refusal) -> str:
+    """One refusal as a line for a person at a terminal.
+
+    ``where`` leads, because "it has no `ledger:` key" is about an entry and a
+    reader needs to know which. It is dropped when ``why`` already opens with
+    it: the Gate can afford the repetition because its finding carries the file
+    in a ``locations`` field beside the sentence, and a one-line refusal cannot.
+    """
+    if refusal.why.startswith(refusal.where):
+        return f"{refusal.why} — {refusal.remediation}"
+    return f"{refusal.where}: {refusal.why} — {refusal.remediation}"
 
 
 def _read_log(declared: IssueLog) -> LogNumbers | None:
@@ -435,13 +480,7 @@ def allocate_number(
     against their own ledger, and only the merge shows it. That population is
     :func:`check_issue_numbers`'s.
     """
-    declared = resolve_issue_log(project_root)
-    if declared is None:
-        message = (
-            "no issue log is declared; add an `issue_log:` block with `path:` and "
-            "`ledger:` to .beadloom/config.yml"
-        )
-        raise ValueError(message)
+    declared = declared_log(project_root)
     numbers = _read_log(declared)
     highest_in_log = numbers.highest if numbers is not None else 0
     claims = read_claims(declared.ledger)

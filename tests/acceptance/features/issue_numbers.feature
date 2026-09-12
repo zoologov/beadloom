@@ -72,3 +72,18 @@ Feature: an issue number is allocated from the log, never read off the end of it
     Given a ledger whose floor is the log's own first entry
     When the issue numbers are checked
     Then the verdict names no entry as below the floor
+
+  # BDL-069, beadloom-rqma.8. BDL-UX #270 was closed on the Gate leg and stayed
+  # live on the command a person actually types: `allocate` read the log through
+  # a resolver that returns the USABLE log and drops the reason, so a project
+  # that had written `issue_log:` and misspelled one key was told, byte for
+  # byte, the sentence a project that had written nothing gets -- while the
+  # Gate over the same config named the key. Two surfaces of one feature
+  # answering "did this project declare a log?" two ways, and the wrong one is
+  # the one the SPEC's Surfaces table lists first.
+  @bead:beadloom-rqma.8
+  Scenario: A misdeclared log refuses the allocator with the key it could not read
+    Given a project that declares an issue log and misspells the ledger key
+    When a number is allocated
+    Then the allocation is refused with the key that could not be read
+    And the refusal is not the sentence a project declaring no log gets

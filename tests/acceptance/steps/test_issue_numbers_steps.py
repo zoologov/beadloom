@@ -116,6 +116,17 @@ def _no_log(world: dict[str, Any], tmp_path: Path) -> None:
     world["root"] = _project(tmp_path, "## Open Issues\n", declare=False)
 
 
+@given("a project that declares an issue log and misspells the ledger key")
+def _misdeclared_log(world: dict[str, Any], tmp_path: Path) -> None:
+    """An opt-in with one key mistyped, which is the act #270 read as an opt-out."""
+    root = _project(tmp_path, "## Open Issues\n", declare=False)
+    (root / ".beadloom" / "config.yml").write_text(
+        "issue_log:\n  path: .claude/development/Issues.md\n  ledgr: .claude/development/issues\n",
+        encoding="utf-8",
+    )
+    world["root"] = root
+
+
 # ---------------------------------------------------------------------------
 # When
 # ---------------------------------------------------------------------------
@@ -148,7 +159,16 @@ def _two_writers(world: dict[str, Any]) -> None:
 
 @when("a number is allocated")
 def _allocate_one(world: dict[str, Any]) -> None:
-    world["claim"] = allocate_number(world["root"], holder="a-bead")
+    """The refusal is kept rather than raised through, so a scenario can read it.
+
+    A scenario about what the allocator SAYS when it refuses cannot assert on an
+    exception that ended the step, and a second when-step would let the two
+    scenarios drift apart on the call they are both about.
+    """
+    try:
+        world["claim"] = allocate_number(world["root"], holder="a-bead")
+    except ValueError as refusal:
+        world["refusal"] = refusal
 
 
 @when("the issue numbers are checked")
@@ -249,3 +269,19 @@ def _three_below_the_floor(world: dict[str, Any]) -> None:
 @then("the verdict names no entry as below the floor")
 def _none_below_the_floor(world: dict[str, Any]) -> None:
     assert world["report"].entries_below_floor == 0, world["report"]
+
+
+@then("the allocation is refused with the key that could not be read")
+def _refusal_names_the_key(world: dict[str, Any]) -> None:
+    refusal = str(world["refusal"])
+    assert "`ledger:`" in refusal, refusal
+    assert "`ledgr:`" in refusal, refusal
+
+
+@then("the refusal is not the sentence a project declaring no log gets")
+def _refusal_is_not_the_opt_out(world: dict[str, Any], tmp_path: Path) -> None:
+    """Held against the OTHER surface's own words, so rewording one cannot pass it."""
+    opt_out = _project(tmp_path / "opted-out", "## Open Issues\n", declare=False)
+    with pytest.raises(ValueError) as absent:
+        allocate_number(opt_out, holder="a-bead")
+    assert str(world["refusal"]) != str(absent.value)

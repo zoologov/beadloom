@@ -139,10 +139,17 @@ A project that declares the block and mistypes a key is a different project, and
 verdict. Four ways of misdeclaring `issue_log:` used to reach the skip above word for word — the
 refusal went to `logging`, which the Gate does not render — so a project that had opted in was
 told it had opted out and the three legs never ran. That was BDL-UX #270, pinned as an `xfail`
-since BDL-068 S6 and closed by `beadloom-rqma.7` together with its twin in `document_pairs:`.
-The step now fails and says `0 leg(s) run; 1 entr(ies) declared, 1 unusable: issue_log (it has no
-`ledger:` key; it has `path:`, `ledgr:`)`. Reading the declaration is
+since BDL-068 S6. The step now fails and says `0 leg(s) run; 1 entr(ies) declared, 1 unusable:
+issue_log (it has no `ledger:` key; it has `path:`, `ledgr:`)`. Reading the declaration is
 `doc-sync/components/config-declarations`.
+
+**#270 is one defect on three surfaces, and it was closed in two acts.** `beadloom-rqma.7` moved
+the Gate leg onto the shared reader and the two commands were left on the old one, so a project
+that misspelled `ledger:` was still told it had declared nothing by `issue-number allocate` — the
+surface the table below lists first — while the Gate beside it named the key. `beadloom-rqma.8`
+moved both commands onto the same reader. Every surface of this feature now answers "did this
+project declare a log?" the same way, which is the property the entry was about and not the leg
+the first fix happened to be measured on.
 
 A config file that could not be read is the one case that does not redden: it says nothing about
 whether the key is there at all, so the step skips, WARNs and names the file rather than judging a
@@ -154,6 +161,6 @@ error before any leg runs — BDL-UX #287.
 
 | Surface | Behaviour |
 |---------|-----------|
-| `beadloom issue-number allocate --holder <bead-id>` | takes the next number, writes the claim, prints it; exit 2 when the project declares no log |
+| `beadloom issue-number allocate --holder <bead-id>` | takes the next number, writes the claim, prints it; exit 2 when the project declares no log, and exit 2 with the refusal's own words — the entry, the key it lacks and the keys it has — when the project declared one this reader could not use, or wrote a config that could not be read at all |
 | `beadloom issue-number check` | the three legs; exit 1 on a finding |
 | `beadloom ci`, step `issue-log` | the same run, and it **blocks** — unlike its `docs-quality` neighbour, because a duplicate number is a reference that resolves to two entries and to neither, and every leg's repair fits in the same commit |

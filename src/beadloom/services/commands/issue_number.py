@@ -103,7 +103,8 @@ def check(project: Path, *, as_json: bool) -> None:
     else:
         for line in _lines(report):
             click.echo(line)
-    raise SystemExit(_EXIT_FINDINGS if report.findings else _EXIT_CLEAN)
+    unusable = report.declared and report.refusals
+    raise SystemExit(_EXIT_FINDINGS if report.findings or unusable else _EXIT_CLEAN)
 
 
 def _payload(report: IssueNumberReport) -> dict[str, object]:
@@ -116,6 +117,11 @@ def _payload(report: IssueNumberReport) -> dict[str, object]:
         "not_verified": report.not_verified,
         "unaccounted": list(report.unaccounted),
         "entries_below_floor": report.entries_below_floor,
+        "entries_declared": report.entries_declared,
+        "refusals": [
+            {"where": refusal.where, "why": refusal.why, "remediation": refusal.remediation}
+            for refusal in report.refusals
+        ],
         "findings": [
             {
                 "check": finding.check,
@@ -143,6 +149,27 @@ def _named(numbers: tuple[int, ...]) -> str:
     return f"{shown} and {rest} more" if rest > 0 else shown
 
 
+def _refused_lines(report: IssueNumberReport) -> list[str]:
+    """A declaration this reader could not use, said so rather than counted as zero.
+
+    The project opted in, so the opt-out's sentence is the wrong answer; and no
+    leg opened a log, so "No duplicate, unwritten or unclaimed number." is a
+    clean verdict over a population of zero. This surface printed the second and
+    exited 0 — the third surface of BDL-UX #270, closed with the other two by
+    ``beadloom-rqma.8``. The refusals are the ones the Gate's own leg renders,
+    read off the same report through the same declaration reader.
+    """
+    lines = [
+        f"{report.entries_declared} entr(ies) declared, {len(report.refusals)} unusable "
+        "— no leg ran."
+    ]
+    lines += [
+        f"  {refusal.where}: {refusal.why} — {refusal.remediation}"
+        for refusal in report.refusals
+    ]
+    return lines
+
+
 def _lines(report: IssueNumberReport) -> list[str]:
     """The report as a reader sees it, stating what each leg could not read."""
     if not report.declared:
@@ -150,6 +177,8 @@ def _lines(report: IssueNumberReport) -> list[str]:
             "No issue log is declared — no leg ran.",
             "  add an `issue_log:` block with `path:` and `ledger:` to .beadloom/config.yml",
         ]
+    if report.refusals:
+        return _refused_lines(report)
     if report.log_missing:
         return ["The declared issue log is missing or unreadable — no leg ran."]
     lines = [

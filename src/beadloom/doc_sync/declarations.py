@@ -140,10 +140,10 @@ def _unreadable(key: str, why: str) -> Declaration:
             Refusal(
                 where=_CONFIG_RELATIVE,
                 why=f"{_CONFIG_RELATIVE} could not be read: {why}",
-                remediation=(
-                    f"repair {_CONFIG_RELATIVE} so it parses as a YAML mapping, then run "
-                    "the gate again"
-                ),
+                # The command is not named. This refusal reaches the Gate and
+                # the allocator, and until `beadloom-rqma.8` it told a person
+                # running `issue-number allocate` to run the gate again.
+                remediation=f"repair {_CONFIG_RELATIVE} so it parses as a YAML mapping",
             ),
         ),
     )
