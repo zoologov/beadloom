@@ -96,6 +96,46 @@ docs_audit:
     - path: docs/guides/architecture-model.md
       fact: version
       value: "3.0.0"
+    # BDL-071, the 5.0.0 release (`beadloom-2716`) and the 6.0.0 release
+    # (`beadloom-h784`) - the same three triples on both. Three sentences record
+    # a MEASUREMENT taken on 4.0.0, and each stays true after the bump: "measured
+    # on the published 4.0.0 wheel" twice (BDL-UX #214, in graph-loader and in
+    # the onboarding README), and "Measured on this repository on 2026-09-11,
+    # against `4.0.0`" over the `version-surface` sample in cli.md. Measured on
+    # the bump: these three and nothing else were the audit's stale findings,
+    # each `version` = 4.0.0 against the new version, and the Gate failed on
+    # them. Same shape and same justification as the architecture-model triple
+    # above (BDL-UX #205): the extractor has no notion of a dated past tense.
+    # Not reworded, because fitting a true measurement to the attribution
+    # vocabulary would game the instrument. Not raised, because a statement
+    # about 4.0.0 would become a false statement about a later release. A
+    # triple only silences 4.0.0 in its own file, so a current claim left at
+    # 4.0.0 anywhere else still fails.
+    - path: docs/domains/graph/components/graph-loader/DOC.md
+      fact: version
+      value: "4.0.0"
+    - path: docs/domains/onboarding/README.md
+      fact: version
+      value: "4.0.0"
+    # THE cli.md TRIPLE HIDES MORE THAN ITS SENTENCE (BDL-071 R3 review, minor
+    # 2). An ignore rule matches {path, fact, value} and no line
+    # (`doc_sync/audit.py`, `IgnoreRule`), so it silences EVERY `4.0.0` in
+    # cli.md, including the current-release example at cli.md:821 if that line
+    # ever regressed to 4.0.0. Mitigated WITHOUT a code change, by a test that
+    # already exists. Measured 2026-09-14 with cli.md:821 put back to 4.0.0
+    # under a 6.0.0 manifest: `beadloom docs audit` exited 0 with "No stale
+    # mentions found" and 17 verified mentions where it had 18, and
+    # `tests/test_version_surface.py`, test
+    # `test_each_of_the_nine_is_found_with_its_checker[docs/services/cli.md-...]`,
+    # failed, because no line of cli.md stated the current version under the
+    # `docs-audit` checker any more. That test catches the regression only
+    # while cli.md:821 is the one audit-checked line of cli.md that states the
+    # current version. If a second such line is added, the regression hides
+    # again. The remedy then is a line-scoped suppression, which is a code
+    # change this release does not make.
+    - path: docs/services/cli.md
+      fact: version
+      value: "4.0.0"
     # RETIRED 2026-09-09 by `beadloom-0mdo.63` (BDL-UX #253), which replaced
     # ten version triples with a rule about the token beside the number: a
     # version is attributed to the nearest subject NAME to its left inside its
