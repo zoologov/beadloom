@@ -842,9 +842,9 @@ expired exemption, an inert rule and an unbound scenario are statements about so
 chose, and they still exit 1 — and so does an advisory at `error`, so the flag stays a superset of
 `--strict` rather than reading softer than it on the same run. Both advisory constructors hardcode
 `warn` today and neither is obliged to, which is why the bound is in the predicate rather than
-asserted about them (A8 re-review, Minor 3). A pipeline that wants the advisories to block reads their records out of
-`--format json`. Release B makes the real under-evaluation an error from the rule itself, which is
-a verdict change that release states.
+asserted about them (A8 re-review, Minor 3). A pipeline that wants the advisories to block reads
+their records out of `--format json`. Release B makes the real under-evaluation an error from the
+rule itself, which is a verdict change that release states.
 
 It is silent in two cases and loud in a third:
 
@@ -854,6 +854,37 @@ It is silent in two cases and loud in a third:
   of every project trains a reader to skip the one that matters.
 - **Zero of N reached** — reported, once for the rule rather than once per unjudged edge. This is
   the case where "the rule found nothing wrong" and "the rule never looked" are the same output.
+
+##### What the rule reports, and what it still decides on (BDL-070 Release A)
+
+Release A changed what `architecture-layers` REPORTS. It did not change what the rule DECIDES,
+and a reader who does not hold the two apart will read the new statement as a new verdict.
+
+- **The rule decides on a node's OWN declared tags, and inheritance has NOT shipped.**
+  `evaluate_layer_rules` resolves each end of an edge through `own_layer_of` and moves to the
+  next edge when either end declares no layer tag of its own. `layer_of` climbs `part_of`, and the
+  callers that want an inherited answer use it — the architecture view's lane rank, and the
+  `inherited` half of the population count below — but the RULE does not take a node's layer from
+  its container. `beadloom-ku26` makes that move, in the release that announces it.
+- **The rule reports both populations.** `population_statement` states what own tags reach
+  beside what inheritance would reach, so the distance between the check and its subject is a
+  number rather than an inference. Measured on this repository on 2026-09-13 over a warm full
+  rebuild of the index: **365** live `depends_on` edges, **16 judged** by own tags, **349
+  skipped** for want of a tag at one end or both, and **357** with a layer at both ends by
+  `part_of` ancestry. The porcelain record is
+  `# layer_population:architecture-layers:depends_on:16:365:349:357`. The lineage is part of the
+  figure and not a detail of how it was taken — see the note below on BDL-UX #290, which is why
+  the older measurements quoted in this section read 362 and 363 over the same repository.
+- **An edge inside one layer is still legal unconditionally.** The evaluator returns to the next
+  edge as soon as both ends resolve to the same layer index, so the 14 peer crossings
+  `same_layer_crossings` finds here are reported by no rule in this release. The `exempt:`
+  entries BDL-070 B2 wrote against them are bookkeeping for now: `_layer_exemption_statements`
+  consults them only to report an entry that is DEAD or EXPIRED, and the finding for an
+  un-excused crossing arrives with the predicate that refuses one.
+
+So a green `architecture-layers` in Release A means "none of the 16 edges this rule judged points
+the wrong way". The population finding beside it is what says 16 rather than 365, and it says so
+at `warn`, which is why no adopter's Gate decides differently after the upgrade than before it.
 
 ##### Where the population is reported (BDL-070 A3)
 
