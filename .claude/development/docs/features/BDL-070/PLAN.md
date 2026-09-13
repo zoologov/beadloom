@@ -92,6 +92,24 @@ DAG is unchanged; what changed is that three beads run one after another instead
 | B6 | review of release B | P0 | B5 | Pending |
 | B7 | the shipped claim brought to what the rule checks | P1 | B6 | Pending |
 
+## DAG changes after approval
+
+Recorded here rather than made silently, as `/coordinator` requires.
+
+- **Review cycles added.** Release A needed three passes (3 major → 1 → OK) with two fix beads between
+  them; Release B needed four review beads and two fix beads (3 major → 2 → 1). Each fix bead sits
+  between two review beads, and the downstream bead waits on the last review.
+- **Release A shipped on its own pull request** (#72, `main` at `7efa4006`) before any
+  verdict-changing bead started, so that the population report reaches `main` first. Two pull
+  requests preserve the ORDER; they are not two releases — see the open decision in `CHANGELOG.md`.
+- **B7 runs as a `dev` subagent, not `tech-writer`** (2026-09-13). Its work — the shipped role
+  template under `src/`, the `.beadloom/flow/` sources and their recomposition, a source docstring and
+  a test's population phrase — is text throughout, but most of it lies outside `docs/`, and the
+  tech-writer role edits only `docs/`. A9 hit exactly that wall.
+- **Review pass 3's findings were folded into B7**, on the reviewer's own recommendation, instead of a
+  third dev cycle. Because that lets the docs wave start without a clean review behind it, a **final
+  review bead (`beadloom-5tcc.11`) now follows B7**, and the second pull request waits on its verdict.
+
 ## Bead Details
 
 ### A1: the shared layer lookup, pure and declaration-reading
