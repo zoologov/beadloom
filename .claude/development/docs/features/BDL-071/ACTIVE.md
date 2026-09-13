@@ -7,11 +7,10 @@
 
 ## Current Bead
 
-**Bead:** R5 `beadloom-h784` — the 6.0.0 release pull request
-**Goal:** `main` raised to 6.0.0, with `[5.0.0]` copied byte-for-byte from the published commit and
-`[6.0.0]` naming what 6.0.0 removed from it.
-**Done when:** the `[5.0.0]` diff against `d6eaee60` is empty, `[6.0.0]` lists the three keys and the
-porcelain field under Removed, and the Gate and the full suite are green.
+**Bead:** R6 `beadloom-p02a` — review of 6.0.0 before it is merged
+**Goal:** an independent verdict on PR #75 at `78166c20`, while its nine checks run.
+**Done when:** the reviewer's own `diff` shows `[5.0.0]` byte-identical to `d6eaee60`, the `### Removed`
+entry matches the shapes measured at `7efa4006` and on `main`, and the version surface is re-derived.
 
 ## Progress
 
@@ -33,7 +32,7 @@ porcelain field under Removed, and the Gate and the full suite are green.
 | `beadloom-u7jp` | R3 | Done | review of 5.0.0 before publishing |
 | `beadloom-7foi` | R4 | Done | publish 5.0.0 and verify the downloaded wheel |
 | `beadloom-h784` | R5 | Done | 6.0.0 PR open (URL in bead comment): [5.0.0] diff vs d6eaee60 empty; ci rc 0, suite green on Darwin/3.13 |
-| `beadloom-p02a` | R6 | Blocked | review of 6.0.0 before merging |
+| `beadloom-p02a` | R6 | Ready | review of 6.0.0 before merging |
 | `beadloom-bicw` | R7 | Blocked | publish 6.0.0 and verify the downloaded wheel |
 | `beadloom-tmgp` | R8 | Blocked | records: ROADMAP and the issue log |
 
