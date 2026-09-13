@@ -232,8 +232,15 @@ def _count_violations(
     Returns (error_count, warning_count, per_node_violations, layer_populations).
 
     The fourth value is why this function changed at all. The counts beside it
-    are counts over whatever set the rules could look at, and a layer rule looks
-    only at edges whose ends carry a declared tag — on this project, 16 of 363.
+    are counts over whatever set the rules could look at, and a layer rule judges
+    only edges whose ends are both in a declared layer — by a node's own tag, or
+    since BDL-070 B3 by its nearest ``part_of`` container's. No figure is quoted
+    here, because it moves with the graph, and on this repository this function
+    loads no rules at all until BDL-UX #291 is repaired: it looks for the rules
+    file at ``rules.yml`` and ``.beadloom/rules.yml``, and this project declares
+    them in ``.beadloom/_graph/rules.yml``. The debt-report SPEC carries that
+    measurement with its date.
+
     This collector is one of the two surfaces that call ``evaluate_all`` without
     ever building a ``LintResult``, so the population is read here from the same
     ``reach_of`` the evaluator uses rather than parsed back out of a finding's

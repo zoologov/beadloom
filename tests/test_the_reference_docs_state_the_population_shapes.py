@@ -12,16 +12,23 @@ Two shapes are machine-read rather than prose: the keys under
 `--format porcelain`. A consumer that split the porcelain record on `:` and read field 7
 got the skipped count where the document promised it the inherited one.
 
-**The population is derived, not listed.** Every Markdown file under `docs/`, plus the
-README pair, is scanned; a document enters the population by STATING one of the two
-shapes — by enumerating the keys, by counting them ("the same eight keys"), or by
-writing a porcelain template. A reference added tomorrow is covered without anyone
-editing this module, which is the property the one-file version did not have.
+**The population is derived, not listed.** Every Markdown file under `docs/`, the README
+pair, `.beadloom/AGENTS.md` and every `*.md.txt` role and command template under
+`src/beadloom/onboarding/templates/` is scanned; a document enters the population by
+STATING one of the two shapes in one of five forms — inline, by enumerating the keys in
+backticks, by counting them ("the same eight keys"), or by writing a backticked porcelain
+record; fenced, as a JSON object carrying the emitted keys or a line opening
+`# layer_population:`. A reference added tomorrow under those roots, in one of those
+forms, is covered without anyone editing this module, which is the property the one-file
+version did not have. A shape stated in any other form — a table of keys, key names
+without backticks — is NOT read, and `POPULATION.phrase` says so beside the counts. The
+templates joined the population in B7 (`beadloom-57wl`), after a claim about the layer
+rule was found in one that no walk of `docs/` could reach.
 
 **Dated records are outside it, with a reason.** `CHANGELOG.md` and the work-item
 documents under `.claude/development/` describe the shape of releases that are over — a
 superseded shape is correct there by construction, and checking it against today's code
-would fail the sentence that records the supersession. `POPULATION_PHRASE` states that
+would fail the sentence that records the supersession. `POPULATION.phrase` states that
 exclusion beside the count, so the population this module ran over is readable rather
 than assumed.
 
@@ -54,6 +61,14 @@ DOCS_ROOT = REPO_ROOT / "docs"
 #: The README pair ships to a reader as reference too, so it is in the population
 #: even on the day neither file states a shape.
 README_PAIR = (REPO_ROOT / "README.md", REPO_ROOT / "README.ru.md")
+
+#: The role and command templates every adopter's agent is composed from. They are
+#: reference an agent acts on, and B7 (`beadloom-57wl`) found a claim about the layer
+#: rule in one of them that no walk of `docs/` could reach.
+TEMPLATES_ROOT = REPO_ROOT / "src" / "beadloom" / "onboarding" / "templates"
+
+#: The agent-facing summary `beadloom setup-rules` writes, committed in this repository.
+AGENTS_MD = REPO_ROOT / ".beadloom" / "AGENTS.md"
 
 #: Named so the phrase below can say what this module did not read.
 DATED_RECORDS = ("CHANGELOG.md", ".claude/development/")
@@ -156,7 +171,33 @@ class PorcelainClaim:
 
 def _documents() -> list[Path]:
     """The published reference set, derived by walking it."""
-    return sorted(DOCS_ROOT.rglob("*.md")) + [p for p in README_PAIR if p.exists()]
+    named = [p for p in (*README_PAIR, AGENTS_MD) if p.exists()]
+    return sorted(DOCS_ROOT.rglob("*.md")) + named + sorted(TEMPLATES_ROOT.rglob("*.md.txt"))
+
+
+def _fences(text: str) -> Iterator[tuple[tuple[int, str], ...]]:
+    """The content lines of every fenced code block, each with its line number."""
+    inside = False
+    lines: list[tuple[int, str]] = []
+    for number, raw in enumerate(text.splitlines(), start=1):
+        if raw.lstrip().startswith(("```", "~~~")):
+            if inside:
+                yield tuple(lines)
+                lines = []
+            inside = not inside
+            continue
+        if inside:
+            lines.append((number, raw))
+
+
+#: A flat JSON object — the innermost braces, which is where a population entry sits.
+_FLAT_OBJECT = re.compile(r"\{[^{}]*\}")
+
+_A_JSON_KEY = re.compile(r'"([a-z][a-z_]*)"\s*:')
+
+#: How many emitted keys other than `rule` a fenced object must carry to be read as a
+#: population entry. `rule` alone is every finding object's key too.
+_SHARED_KEYS_FOR_AN_ENTRY = 2
 
 
 @dataclass(frozen=True)
@@ -243,6 +284,22 @@ def _key_list_claims(document: Path, text: str) -> list[KeyListClaim]:
             cardinality = _CARDINALITY.search(window)
             if cardinality is not None:
                 claims.append(KeyListClaim(site, quote, None, _number(cardinality.group("count"))))
+    return claims + _fenced_key_list_claims(document, text)
+
+
+def _fenced_key_list_claims(document: Path, text: str) -> list[KeyListClaim]:
+    """A JSON sample in a code block whose flat object carries the emitted keys."""
+    distinctive = set(_A_REACH.to_dict()) - {"rule"}
+    claims: list[KeyListClaim] = []
+    for fence in _fences(text):
+        joined = "\n".join(raw for _, raw in fence)
+        for match in _FLAT_OBJECT.finditer(joined):
+            keys = tuple(_A_JSON_KEY.findall(match.group()))
+            if len(distinctive & set(keys)) < _SHARED_KEYS_FOR_AN_ENTRY:
+                continue
+            line = fence[joined.count("\n", 0, match.start())][0]
+            site = Site(document, line)
+            claims.append(KeyListClaim(site, match.group().strip(), keys, len(keys)))
     return claims
 
 
@@ -256,6 +313,23 @@ def _porcelain_claims(document: Path, text: str) -> list[PorcelainClaim]:
             fields = ("layer_population", *rest.split(":"))
             site = Site(document, block.line_at(match.start()))
             claims.append(PorcelainClaim(site, rest, fields))
+    return claims + _fenced_porcelain_claims(document, text)
+
+
+def _fenced_porcelain_claims(document: Path, text: str) -> list[PorcelainClaim]:
+    """A record shown as output in a code block — a line, not a backticked span."""
+    lead = f"{POPULATION_MARKER}layer_population:"
+    claims: list[PorcelainClaim] = []
+    for fence in _fences(text):
+        for number, raw in fence:
+            line = raw.strip()
+            if not line.startswith(lead):
+                continue
+            rest = line.removeprefix(lead)
+            if any(mark in rest for mark in _ABBREVIATIONS):
+                continue
+            fields = ("layer_population", *rest.split(":"))
+            claims.append(PorcelainClaim(Site(document, number), rest, fields))
     return claims
 
 
@@ -276,13 +350,22 @@ class Population:
     @property
     def phrase(self) -> str:
         stating = ", ".join(str(p.relative_to(REPO_ROOT)) for p in self.stating)
+        templates = sum(1 for p in self.documents if TEMPLATES_ROOT in p.parents)
         return (
-            f"read {len(self.documents)} published document(s) under "
-            f"{DOCS_ROOT.name}/ and the README pair; {len(self.stating)} state a shape "
-            f"({stating or 'none'}), over {len(self.key_lists)} key-list claim(s) and "
-            f"{len(self.porcelain)} porcelain record(s). Outside this population: "
+            f"read {len(self.documents)} document(s): every *.md under "
+            f"{DOCS_ROOT.name}/, the README pair, {AGENTS_MD.relative_to(REPO_ROOT)} and "
+            f"{templates} *.md.txt template(s) under "
+            f"{TEMPLATES_ROOT.relative_to(REPO_ROOT)}/. {len(self.stating)} state a shape "
+            f"in a form this module reads ({stating or 'none'}), over "
+            f"{len(self.key_lists)} key-list claim(s) and {len(self.porcelain)} porcelain "
+            "record(s). Five forms are read: an inline backticked key list, an inline "
+            "count of keys, an inline backticked porcelain record, a fenced JSON object "
+            "carrying two emitted keys besides rule, and a fenced line opening "
+            "'# layer_population:'. A shape stated any other way — a table of keys, key "
+            "names without backticks — is not read. Outside this population: "
             f"{', '.join(DATED_RECORDS)} — a superseded shape is correct in a record of "
-            "the release that superseded it"
+            "the release that superseded it — and the composed .claude/ copies, which "
+            "test_live_flow_equals_its_composition holds to the templates"
         )
 
 
@@ -337,6 +420,62 @@ class TestThePopulationIsEveryDocumentThatStatesAShape:
         """The phrase travels with the result, so a green names what it covered."""
         record_property("layer_population_docs", POPULATION.phrase)
         assert POPULATION.documents, f"no published document was read: {POPULATION.phrase}"
+
+    def test_the_shipped_templates_and_the_agents_file_are_read(self) -> None:
+        """What ships to an adopter's agent is reference too, and B7 found claims there."""
+        read = set(POPULATION.documents)
+        assert REPO_ROOT / ".beadloom" / "AGENTS.md" in read, POPULATION.phrase
+        assert any(TEMPLATES_ROOT in path.parents for path in read), POPULATION.phrase
+
+    def test_the_phrase_names_the_forms_it_reads_and_the_roots_it_walked(self) -> None:
+        """A population statement that omits its own limit is the claim this epic retires."""
+        phrase = POPULATION.phrase
+        assert "src/beadloom/onboarding/templates/" in phrase
+        assert ".beadloom/AGENTS.md" in phrase
+        assert "fenced" in phrase
+        assert "not read" in phrase
+
+
+_FENCE = "```"
+
+
+class TestTheReaderSeesAFencedSample:
+    """A sample in a code block is how a document most often shows output."""
+
+    def test_a_fenced_porcelain_record_is_a_claim(self) -> None:
+        text = f"Prose.\n\n{_FENCE}text\n# layer_population:r:depends_on:1:2:1:9\n{_FENCE}\n"
+        claims = _porcelain_claims(Path("x.md"), text)
+        assert [claim.fields for claim in claims] == [
+            ("layer_population", "r", "depends_on", "1", "2", "1", "9")
+        ]
+        assert claims[0].site.line == 4
+
+    def test_a_fenced_record_with_its_tail_elided_is_not_a_claim(self) -> None:
+        text = f"{_FENCE}\n# layer_population:r:depends_on:…\n{_FENCE}\n"
+        assert _porcelain_claims(Path("x.md"), text) == []
+
+    def test_a_porcelain_record_outside_a_fence_is_not_read_by_the_fenced_form(self) -> None:
+        """A Markdown heading that happens to start the same way is not a record."""
+        assert _porcelain_claims(Path("x.md"), "# layer_population:r:d:1:2:3\n") == []
+
+    def test_a_fenced_json_object_carrying_emitted_keys_is_a_key_list_claim(self) -> None:
+        text = (
+            f"{_FENCE}json\n"
+            '{"summary": {"layer_populations": [\n'
+            '  {"rule": "r", "edge_kind": "depends_on", "evaluated": 1,\n'
+            '   "total": 2, "skipped_untagged": 1, "unjudged": 0}\n'
+            "]}}\n"
+            f"{_FENCE}\n"
+        )
+        claims = _key_list_claims(Path("x.md"), text)
+        assert [claim.keys for claim in claims] == [
+            ("rule", "edge_kind", "evaluated", "total", "skipped_untagged", "unjudged")
+        ]
+        assert claims[0].site.line == 3
+
+    def test_a_fenced_finding_object_sharing_only_rule_is_not_a_key_list_claim(self) -> None:
+        text = f'{_FENCE}json\n{{"rule": "r", "severity": "error", "node": "a"}}\n{_FENCE}\n'
+        assert _key_list_claims(Path("x.md"), text) == []
 
 
 @pytest.mark.parametrize(

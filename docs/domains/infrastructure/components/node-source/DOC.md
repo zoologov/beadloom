@@ -62,10 +62,13 @@ module through an exemption in `.beadloom/_graph/rules.yml` that states its reas
 `beadloom lint` counts that crossing among the suppressed ones on every run.
 
 Placing it in a domain was measured as well. `lint --strict` reported no finding for
-an `infrastructure -> graph` import, because `architecture-layers` evaluates only
-edges whose two ends carry a layer tag, and a tag is not inherited through `part_of`.
-On this repository's index that leaves most of the graph's dependencies unevaluated,
-and the measured count is recorded in `beadloom-t6zq`, where the gap is filed.
+an `infrastructure -> graph` import, because `architecture-layers` then evaluated only
+edges whose two ends carried a layer tag, and a tag was not inherited through `part_of`.
+On this repository's index that left most of the graph's dependencies unevaluated, and
+the count measured then is recorded in `beadloom-t6zq`, where the gap was filed. Since
+BDL-070 B3 an end takes its layer from the nearest `part_of` container that declares
+one, so this component is judged as `layer-infra` through `infrastructure`, which
+carries that tag.
 Choosing a place because the check cannot see it would have been the wrong reason.
 
 ## Collaborators

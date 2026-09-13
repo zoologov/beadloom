@@ -147,8 +147,10 @@ reaches nobody.
 `_count_violations` reads the reaches with `layer_rule_reaches` over the rules it has already
 loaded, from the same `reach_of` the evaluator uses, rather than parsing the finding's prose back
 into integers. The clauses travel on `DebtData.layer_populations` → `DebtReport.layer_populations`,
-and appear as `counted over: architecture-layers judged 357 of 365 live depends_on edge(s)` under
-Rule Violations in the Rich report and under `layer_populations` in `format_debt_json`.
+and appear under Rule Violations in the Rich report as
+`counted over: <rule> judged <evaluated> of <total> live <edge_kind> edge(s)`, and under
+`layer_populations` in `format_debt_json` — on a project where the collector finds the rules
+file, which this repository is not (below).
 
 **On this repository, measured 2026-09-13, neither the clause nor a violation count appears at
 all.** `_count_violations` looks for the rules file at `<root>/rules.yml` and then at

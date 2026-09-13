@@ -979,9 +979,10 @@ repository reads moves by one between them (BDL-UX #290). Hold the lineage const
 before/after comparison.
 
 **The clause is present at FULL reach too, and the finding is not.** They differ deliberately. A
-finding is an item somebody triages, in every project, on every run, so `16 of 16` would be noise;
-a clause on a line already being read costs nothing, and `16 of 16` versus `16 of 362` is the
-distinction this rule exists to make readable. A rule handed no edge of its kind states nothing in
+finding is an item somebody triages, in every project, on every run, so `N of N` would be noise;
+a clause on a line already being read costs nothing, and `N of N` versus `N of M` is the
+distinction this rule exists to make readable. The case that made it concrete is the one this
+epic was opened on: `16 of 362`, measured on this repository at `aa4bfad4`, before BDL-070 B3. A rule handed no edge of its kind states nothing in
 either channel — liveness already says it could not fire.
 
 **The CLI's clean line is keyed on the FORMAT, not on an empty rendering.** It used to print when
