@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
+
+    **Severity:** medium (no wrong code shipped; what is wrong is an independence gate that reports itself in force while one ordinary command defeats it, and that cannot release in the shape the flow prescribes)
+    **Command:** `beadloom review-brief <fix-bead> --release`, then `bd show <fix-bead>`
+    **Context:** BDL-070, three consecutive review passes on 2026-09-13 — `beadloom-5tcc.10` (pass 3), `beadloom-5tcc.11` (final), `beadloom-5tcc.13` (confirmation) — each launched as the flow prescribes, as its own bead depending on the work it reviews.
+    **What happened.** `--release` looks for a verdict **on the fix bead itself**. `/coordinator` places every review on a separate bead that depends on the reviewed work, so the verdict is never where `--release` looks and the author's account stays withheld after the verdict exists. Every one of the three reviewers then read that account through `bd show <fix-bead>`, which prints comments unconditionally. The confirmation pass recorded it: "I ran `bd show beadloom-5tcc.12` to read the fix bead's assignment, and it printed the author's CHECKPOINT and COMPLETED comments before I had measured anything."
+    **Two defects, separable.** (1) `--release` cannot find a verdict placed on a bead that depends on the reviewed bead. (2) `bd show` is a withholding bypass that `review-brief` neither counts nor names — so "N comments withheld" is a population statement over the wrong population.
+    **Why the reviews still stand:** each reviewer re-derived every figure it reported and said so, and stated that the withholding was defeated rather than leaving it to be discovered. The defect is in the instrument's report of independence, not in the verdicts.
+    **Expected:** `--release` accepts a verdict on a bead that depends on the reviewed bead, or the flow records verdicts where `--release` looks; and the brief names the channels it does not cover, `bd show` among them.
+    **What is NOT established:** whether an earlier review in this repository was materially steered through `bd show`. It was measured on these three passes only.
+    **Tracker:** `beadloom-6rfz`.
+    **Related:** #212, #219, #286 — the withholding defeated through the epic document, commit messages and the launch prompt. This is the fourth channel.
+
 296. [2026-09-13] [MEDIUM] a layer rule reports an error and is counted inert in the same run, because liveness still reads own tags
 
     **Severity:** medium (no wrong verdict: the error is reported and `lint --strict` exits 1 as it should. What is wrong is that the same run tells a reader the rule checked nothing, and `rules_inert` is the counter the Gate's summary and the TUI's lint panel present as "this check did nothing")
