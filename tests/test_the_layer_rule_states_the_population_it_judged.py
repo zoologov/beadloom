@@ -13,11 +13,21 @@ hold:
 
 - the rule now STATES that fraction, once per rule, in a finding the two
   readers that call the evaluators without `lint()` also receive;
-- and it DECIDES exactly what it decided before. Release A of this epic moves no
-  verdict; Release B does, and says so. So the decisions are compared against a
-  verbatim transcription of the pre-change evaluator, on this repository's own
-  graph and on two graphs that are not it, and the only finding the change adds
-  is the population statement itself.
+- and its decisions are compared against a verbatim transcription of the
+  pre-change evaluator, on this repository's own graph and on two graphs that
+  are not it.
+
+**The second claim was "nothing moved" and is now "this much moved."** Release A
+of this epic changed no verdict. Release B does: since BDL-070 B3
+(`beadloom-ku26`) an end takes its layer from the nearest `part_of` container
+that declares one, so the differential against the transcription is no longer
+empty and what it contains is asserted by name. On THIS repository it is still
+empty under this repository's own declaration, and that is a fact about two
+beads that ran first — `beadloom-46am` removed the one edge running upward and
+`beadloom-xmfs` excused every same-layer crossing left — rather than a property
+of the predicate. The same graph read without those exemptions reports them,
+which is asserted beside it so the empty differential cannot be read as the
+rule finding nothing.
 
 The transcription of the pre-change path lives in
 `tests/the_lint_path_before_release_a.py`, because A7 compares the whole
@@ -164,6 +174,37 @@ def nested_graph(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture()
+def mixed_graph(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    """A graph the rule reaches part of: two edges judged, one it cannot reach.
+
+    `core-bit` is judged through its container, which is what BDL-070 B3
+    changed; `loose` is inside nothing and carries no tag, so it is in no
+    declared layer at all and the edge from it is what the statement counts as
+    skipped. Both halves are needed, because a statement that names only a
+    numerator reads the same whatever the denominator is.
+    """
+    conn = _build_graph(
+        tmp_path / "mixed.db",
+        nodes=[
+            ("infra", ["layer-infra"]),
+            ("core", ["layer-domain"]),
+            ("core-bit", []),
+            ("loose", []),
+        ],
+        edges=[
+            ("core", "infra", "depends_on"),
+            ("core-bit", "core", "part_of"),
+            ("core-bit", "infra", "depends_on"),
+            ("loose", "core", "depends_on"),
+        ],
+    )
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
 def untagged_graph(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """A graph that declares layers no node carries — the zero denominator."""
     conn = _build_graph(
@@ -238,14 +279,14 @@ class TestThePopulationStatement:
         return [v for v in violations if v.rule_type == LAYER_POPULATION_RULE_TYPE]
 
     def test_it_names_both_the_evaluated_and_the_skipped_count(
-        self, nested_graph: sqlite3.Connection
+        self, mixed_graph: sqlite3.Connection
     ) -> None:
-        statements = self._statements(evaluate_layer_rules(nested_graph, [_rule()]))
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
         assert len(statements) == 1
         message = statements[0].message
-        assert "evaluated 1 of 2" in message
+        assert "evaluated 2 of 3" in message
         assert "skipped 1" in message
-        assert "no layer tag of its own" in message
+        assert "no declared layer" in message
 
     def test_a_rule_that_reaches_every_edge_says_nothing(
         self, fully_tagged_graph: sqlite3.Connection
@@ -269,54 +310,69 @@ class TestThePopulationStatement:
         assert self._statements(evaluate_layer_rules(untagged_graph, [rule])) == []
 
     def test_it_is_a_warning_even_when_the_rule_is_declared_an_error(
-        self, nested_graph: sqlite3.Connection
+        self, mixed_graph: sqlite3.Connection
     ) -> None:
-        """A declared-`error` layer rule must not turn an adopter's Gate red on upgrade."""
-        statements = self._statements(evaluate_layer_rules(nested_graph, [_rule()]))
+        """A statement about a rule's reach is not a boundary breach."""
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
         assert [v.severity for v in statements] == ["warn"]
 
-    def test_it_states_what_inheritance_would_reach(
+    def test_a_graph_whose_containers_carry_the_layers_is_reached_whole(
         self, nested_graph: sqlite3.Connection
     ) -> None:
-        """The two numbers side by side are what makes the next release legible."""
-        statements = self._statements(evaluate_layer_rules(nested_graph, [_rule()]))
-        assert "2 of 2" in statements[0].message
-        assert "part_of" in statements[0].message
+        """The shape Release A reported 1 of 2 on, and B3 judges both edges of.
 
-    def test_it_carries_a_remediation_of_its_own(self, nested_graph: sqlite3.Connection) -> None:
-        statements = self._statements(evaluate_layer_rules(nested_graph, [_rule()]))
-        assert statements[0].remediation is not None
+        Every node here is either a container carrying a layer or inside one, so
+        there is nothing left for the rule to pass over and nothing to state.
+        """
+        assert self._statements(evaluate_layer_rules(nested_graph, [_rule()])) == []
 
-    def test_one_statement_per_rule(self, nested_graph: sqlite3.Connection) -> None:
+    def test_it_names_containment_as_a_way_to_be_judged(
+        self, mixed_graph: sqlite3.Connection
+    ) -> None:
+        """The unjudged edge is actionable two ways, and the remediation says both."""
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
+        assert "part_of" in str(statements[0].remediation)
+
+    def test_one_statement_per_rule(self, mixed_graph: sqlite3.Connection) -> None:
         rules = [_rule(), _rule(allow_skip=False)]
-        statements = self._statements(evaluate_layer_rules(nested_graph, rules))
+        statements = self._statements(evaluate_layer_rules(mixed_graph, rules))
         assert len(statements) == 2
 
 
 class TestTheReachIsReadableWithoutRunningTheRule:
     """`layer_rule_reach` — the numbers, for the readers that render them (A3/A4)."""
 
-    def test_own_tags_and_inheritance_are_counted_separately(
+    def test_an_untagged_part_is_counted_through_its_container(
         self, nested_graph: sqlite3.Connection
     ) -> None:
+        """Own tags reached one of these two edges; containment reaches both."""
         reach = layer_rule_reach(nested_graph, _rule())
-        assert (reach.own_tags.evaluated, reach.own_tags.skipped_untagged) == (1, 1)
-        assert (reach.inherited.evaluated, reach.inherited.skipped_untagged) == (2, 0)
+        assert (reach.population.evaluated, reach.population.skipped_untagged) == (2, 0)
+
+    def test_an_end_inside_nothing_is_still_outside_the_population(
+        self, mixed_graph: sqlite3.Connection
+    ) -> None:
+        """Inheriting a layer is not the same as having one by default."""
+        reach = layer_rule_reach(mixed_graph, _rule())
+        assert (reach.population.evaluated, reach.population.skipped_untagged) == (2, 1)
 
     def test_it_counts_only_edges_of_the_rules_kind(
         self, nested_graph: sqlite3.Connection
     ) -> None:
         """The two `part_of` edges are containment, not the dependencies judged."""
-        assert layer_rule_reach(nested_graph, _rule()).own_tags.total == 2
+        assert layer_rule_reach(nested_graph, _rule()).population.total == 2
 
-    def test_on_this_repository_inheritance_reaches_far_more_than_own_tags(
+    def test_on_this_repository_the_rule_now_reaches_almost_every_edge(
         self, live_graph: sqlite3.Connection
     ) -> None:
-        """The measurement this epic exists for, taken from the code rather than quoted."""
+        """The measurement this epic exists for, taken from the code rather than quoted.
+
+        16 of 362 at `aa4bfad4` by own tags; the figure below is what the rule
+        decides on since `beadloom-ku26`.
+        """
         reach = layer_rule_reach(live_graph, _rule())
-        assert reach.own_tags.total > 300
-        assert reach.own_tags.evaluated < reach.own_tags.total // 10
-        assert reach.inherited.evaluated > reach.own_tags.total * 9 // 10
+        assert reach.population.total > 300
+        assert reach.population.evaluated > reach.population.total * 9 // 10
 
 
 # ---------------------------------------------------------------------------
@@ -324,22 +380,71 @@ class TestTheReachIsReadableWithoutRunningTheRule:
 # ---------------------------------------------------------------------------
 
 
-class TestTheDecisionsAreUnchanged:
-    """The layer rule decides exactly what it decided before this bead."""
+class TestWhatTheDecisionsChangedTo:
+    """The layer rule decides more than it did, and exactly this much more.
 
-    def test_on_this_repositorys_own_graph(self, live_graph: sqlite3.Connection) -> None:
-        rules = [_rule()]
+    Release A moved no verdict and this module held that. BDL-070 B3
+    (`beadloom-ku26`) is the release that moves one, so the claim becomes a
+    differential with a stated content rather than an empty one: against the
+    same transcription of the pre-Release-A evaluator, what is added is the
+    edges an end's `part_of` container brought into the population.
+    """
+
+    def test_on_this_repository_under_its_own_declaration_nothing_moves(
+        self, live_graph: sqlite3.Connection, live_rules: list[Rule]
+    ) -> None:
+        """Not neutrality by construction, and not a property of the predicate.
+
+        This repository's own `rules.yml` is read here rather than `_rule()`.
+        Two beads ran before this one so that this would hold: `beadloom-46am`
+        removed the single edge running from a domain into the application
+        layer, and `beadloom-xmfs` excused every same-layer crossing left, each
+        by name with a reason and an exit condition. The test asserts that work
+        held on the graph rather than in a report of it.
+        """
+        rules = [rule for rule in live_rules if isinstance(rule, LayerRule)]
+        assert rules, "this repository declares a layer rule"
         assert decisions(evaluate_layer_rules(live_graph, rules)) == comparable(
             layer_findings_before_release_a(live_graph, rules)
         )
 
+    def test_the_same_graph_without_those_exemptions_reports_exactly_them(
+        self, live_graph: sqlite3.Connection, live_rules: list[Rule]
+    ) -> None:
+        """The differential above is over a set that is NOT empty by nature.
+
+        `_rule()` is this repository's layering with its `exempt:` block left
+        off. Every crossing it then reports must be one the rules file excuses,
+        and every entry must excuse one — an entry that excused nothing would be
+        a reason written for an edge that is not there. The comparison is a set
+        of pairs and not a count, so it does not have to be rewritten when the
+        number moves; the entries name literal ref_ids on this repository.
+        """
+        declared = next(rule for rule in live_rules if isinstance(rule, LayerRule))
+        added = comparable(evaluate_layer_rules(live_graph, [_rule()])) - comparable(
+            layer_findings_before_release_a(live_graph, [_rule()])
+        )
+        crossings = {(entry[5], entry[6]) for entry in added if entry[1] == "layer"}
+        assert crossings == {
+            (exemption.from_glob, exemption.to_glob) for exemption in declared.exempt
+        }
+
     def test_on_a_graph_whose_layers_sit_on_containers(
         self, nested_graph: sqlite3.Connection
     ) -> None:
+        """The one edge added is the one no own tag reached: `infra-bit -> core-bit`.
+
+        Infrastructure depending on a domain, through two components neither of
+        which carries a tag — the shape an adopter has and this repository
+        hides.
+        """
         rules = [_rule()]
-        assert decisions(evaluate_layer_rules(nested_graph, rules)) == comparable(
+        added = comparable(evaluate_layer_rules(nested_graph, rules)) - comparable(
             layer_findings_before_release_a(nested_graph, rules)
         )
+        assert {(entry[5], entry[6]) for entry in added if entry[1] == "layer"} == {
+            ("infra-bit", "core-bit")
+        }
 
     def test_on_a_graph_that_violates_the_direction(self, tmp_path: Path) -> None:
         """A differential over an empty finding set proves nothing; this one is not empty."""
@@ -382,11 +487,11 @@ class TestTheDecisionsAreUnchanged:
             carried = declared & set(json.loads(str(raw)).get("tags", []))
             assert len(carried) <= 1, f"{row[0]} carries {sorted(carried)}"
 
-    def test_the_only_finding_the_change_adds_is_the_population_statement(
-        self, live_graph: sqlite3.Connection
+    def test_under_its_own_declaration_the_only_addition_is_the_population_statement(
+        self, live_graph: sqlite3.Connection, live_rules: list[Rule]
     ) -> None:
         """Stated as a set difference, so a second addition could not hide in it."""
-        rules = [_rule()]
+        rules = [rule for rule in live_rules if isinstance(rule, LayerRule)]
         added = comparable(evaluate_layer_rules(live_graph, rules)) - comparable(
             layer_findings_before_release_a(live_graph, rules)
         )
@@ -395,6 +500,11 @@ class TestTheDecisionsAreUnchanged:
 
 class TestTheWholeLintRunIsUnchanged:
     """`lint --strict` on this repository, taken twice in one process.
+
+    Still true after BDL-070 B3, and no longer true by construction: the rule
+    now judges 357 of this repository's 365 live `depends_on` edges where it
+    judged 16, and the verdict does not move because `beadloom-46am` and
+    `beadloom-xmfs` disposed of everything it newly reaches.
 
     The comparison is not against a recorded baseline. A baseline of this
     repository's 70 findings would rot on the next bead — `scenario-coverage`

@@ -11,12 +11,16 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
-- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
-- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
-- `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated, because `liveness` already names them for exactly that graph (BDL-070 A6).
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
+- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3).
+- `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
 - `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
+- `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings.
+- `rules/layer_edges.py` — the set of edges a layer rule finds against, as `(src, dst)` pairs,
+  for an instrument that DRAWS the graph rather than reporting on it (BDL-070 B4). It projects
+  the rule's own findings; it holds no predicate of its own.
 - `rules/layer_exemptions.py` — what a SAME-LAYER exemption is doing: which peer crossings it excuses, how many, and whether its exit condition has passed (BDL-070 B2). `layers.same_layer_crossings` decides what crosses; this decides what an entry does about it, the same split `exemptions.py` draws for the import boundary rules.
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
@@ -198,7 +202,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
 | `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
-| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes. "Layered" means the node DECLARES a layer tag: a node that would inherit one through `part_of` is not counted, because counting it would stop reporting a rule that is inert today, and that is a verdict change (BDL-070 A5; `beadloom-ku26` makes the move in the release that announces it) | `liveness.py` |
+| `layers` | no live `edge_kind` edge is one the rule COMPARES — across two layers for direction, or inside one layer against the shared-container predicate. An edge with an unlayered end is passed over and an edge inside one tagged container is legal by construction, so neither is a check the rule performed. A node is in the layer its own tag declares, else its nearest `part_of` container's, which is the reading the rule's own verdict rests on. How many layers hold a node decides only WHICH reason is printed: with fewer than **2** inhabited, the tags nobody carries are named, and otherwise the edge set is (BDL-070 B5-fix, `beadloom-5tcc.6`, closing BDL-UX #296 — before it, one run could report an error from a rule and count that same rule inert) | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
@@ -705,6 +709,13 @@ Algorithm:
 #### The layer a node is in (`rules/layers.py`, BDL-070 A1)
 
 ```python
+@dataclass(frozen=True)
+class LayerMembership:
+    ref_id: str
+    index: int          # the layer, as its index in the declared order
+    declared_by: str    # the node whose own tag decided — itself, or a container
+
+def layer_membership(ref_id, layers, parents, tags) -> LayerMembership | None
 def layer_of(ref_id, layers, parents, tags) -> int | None
 def own_layer_of(ref_id, layers, tags) -> int | None
 def part_of_generations(ref_id, parents) -> list[tuple[str, ...]]
@@ -751,6 +762,9 @@ iteration order:
 
 - A node that declares a layer keeps it and does not climb. A node that declares none takes the
   layer of the nearest `part_of` generation that does, and `None` when no generation does.
+  `layer_membership` returns that index together with `declared_by`, the node whose own tag
+  decided, so a finding about an untagged component can name the container it is in rather than
+  leave a reader to look it up. `layer_of` is one line over it, so the walk exists once.
 - A tie is decided top-down. A node carrying two declared layer tags is in the topmost of them —
   `evaluate_layer_rules` iterated the node's tag `set` and took the first match, so its answer
   depended on hash order — and two tagged ancestors at the same distance resolve the same way.
@@ -765,8 +779,57 @@ iteration order:
 fails on a second walk reachable from `graph/rules/`.
 
 `layer_population` counts an edge set into `evaluated` (a layer at both ends) and
-`skipped_untagged` (the rest). The resolver is a parameter because the same edge set has two
-populations worth stating — what own tags reach and what ancestry reaches.
+`skipped_untagged` (the rest). The resolver is a parameter rather than a fixed call, so the same
+counting serves a caller asking what own tags reach and a caller asking what ancestry reaches; the
+rule asks the second.
+
+#### What the rule says about an edge inside one layer (`rules/layer_crossings.py`, BDL-070 B3)
+
+```python
+SAME_LAYER_REMEDIATION: str
+
+def same_layer_statements(rule, edges, parents, tags) -> list[Violation]
+```
+
+One pass over the edge set produces both halves of what a layer rule has to say about its own
+layer: the crossings no `exempt:` entry excuses, as findings at the severity the rule declares,
+and the entries that have stopped earning their place. They come from one pass because they are
+two readings of one split — deriving them separately is how an excused count and a reported count
+come to disagree.
+
+The finding names each end with the container that gives it its layer, and the remediation offers
+all three honest moves: remove the dependency, bring both ends inside one container the
+declaration gives a layer, or write an `exempt:` entry saying why it stands and what would retire
+it. A remediation naming only the exemption would be advice to silence the check.
+
+#### The edges a layer rule finds against (`rules/layer_edges.py`, BDL-070 B4)
+
+```python
+def flagged_layer_edges(conn, rule) -> frozenset[tuple[str, str]]
+```
+
+The rule engine reports its verdict as findings with messages and remediations, which is what a
+person reads. An instrument that DRAWS the graph needs the same verdict as a set of edges, and
+until this module existed the one that draws it answered the question itself: the architecture
+view flagged every `depends_on` edge at `dst_rank <= src_rank`, which is every edge pointing up
+and every edge staying inside one layer. Measured on this repository on 2026-09-13 over a warm
+full rebuild of the index, the view flagged 130 edges and the rule found against none of them —
+116 dependencies between two parts of one domain and 14 crossings `rules.yml` excuses by name.
+
+**This is not a fourth predicate; it is a projection of the rule's own verdict.** The findings
+come from `evaluate_layer_rules` and the edges are read off them, so a caller gets the direction
+check, the skip check, the same-layer predicate and the project's `exempt:` entries without any of
+the four being stated twice. A shared predicate called by both sides was the alternative, and it
+was rejected for this seam: it leaves two call sites that agree only while somebody keeps them
+agreeing, which is the failure BDL-070 exists to close. The cost is one extra evaluation of the
+rule for a caller that also lints — a pass over the edge set in memory.
+
+The pairs are the ends of the rule's EDGE findings, selected by `types.LAYER_EDGE_RULE_TYPE`. A
+finding about the rule itself — the population it judged, a declared layer no node carries, an
+exemption excusing nothing — names no edge and is not among them. An empty set therefore means the
+rule found against nothing, which is a different fact from the rule judging nothing:
+`layer_rule_reach` answers the second, and a caller rendering a verdict per edge needs both,
+because an edge the rule never judged must not be drawn as healthy.
 
 #### What a same-layer exemption is doing (`rules/layer_exemptions.py`, BDL-070 B2)
 
@@ -806,8 +869,7 @@ LAYER_POPULATION_RULE_TYPE = "layer_population"
 class LayerReach:
     rule_name: str
     edge_kind: str
-    own_tags: LayerPopulation     # what the rule decides on
-    inherited: LayerPopulation    # what `part_of` inheritance would reach
+    population: LayerPopulation   # what the rule decides on, by own tag or by container
 
 def layer_rule_reach(conn, rule) -> LayerReach
 def layer_rule_reaches(conn, rules) -> list[LayerReach]   # one read of the graph for the whole list
@@ -818,9 +880,11 @@ def population_phrase(reach) -> str                       # the clause, for a li
 
 `architecture-layers` ships at `severity: error`, so what it evaluates decides whether `main` is
 mergeable — and it judged 16 of 363 live `depends_on` edges on this repository on 2026-09-12,
-because it reads a node's OWN tags. The green line said `0 violations, 16 rules evaluated`, which
-is what it would say for 363 of 363. `evaluate_layer_rules` now emits one finding per rule naming
-both numbers and what inheritance would reach, so the two are readable apart.
+because it read a node's OWN tags. The green line said `0 violations, 16 rules evaluated`, which
+is what it would say for 363 of 363. `evaluate_layer_rules` emits one finding per rule naming the
+fraction it judged, and since BDL-070 B3 that fraction is the one it decides on: 357 of 365 here,
+measured 2026-09-13. One population and not two, because there is one predicate — a second figure
+beside it would be a second answer to "how much did the rule judge".
 
 The statement is a FINDING rather than a clause in the summary line, following
 `scenario_coverage._population_statement`: `tui/data_providers.py` and
@@ -843,8 +907,9 @@ chose, and they still exit 1 — and so does an advisory at `error`, so the flag
 `--strict` rather than reading softer than it on the same run. Both advisory constructors hardcode
 `warn` today and neither is obliged to, which is why the bound is in the predicate rather than
 asserted about them (A8 re-review, Minor 3). A pipeline that wants the advisories to block reads
-their records out of `--format json`. Release B makes the real under-evaluation an error from the
-rule itself, which is a verdict change that release states.
+their records out of `--format json`. Release B made the under-evaluation
+itself the subject: the rule judges the whole population and decides at its declared severity, and
+the advisory that reports the reach stays out of that flag.
 
 It is silent in two cases and loud in a third:
 
@@ -855,36 +920,43 @@ It is silent in two cases and loud in a third:
 - **Zero of N reached** — reported, once for the rule rather than once per unjudged edge. This is
   the case where "the rule found nothing wrong" and "the rule never looked" are the same output.
 
-##### What the rule reports, and what it still decides on (BDL-070 Release A)
+##### What the rule decides on (BDL-070 Release B)
 
-Release A changed what `architecture-layers` REPORTS. It did not change what the rule DECIDES,
-and a reader who does not hold the two apart will read the new statement as a new verdict.
+Release A changed what `architecture-layers` REPORTS and left what it DECIDES alone. Release B
+(`beadloom-ku26`) is the half that moves the decision onto the population Release A made visible,
+and it is a verdict change: a project that upgrades over both at once can read a finding on a
+graph nobody edited.
 
-- **The rule decides on a node's OWN declared tags, and inheritance has NOT shipped.**
-  `evaluate_layer_rules` resolves each end of an edge through `own_layer_of` and moves to the
-  next edge when either end declares no layer tag of its own. `layer_of` climbs `part_of`, and the
-  callers that want an inherited answer use it — the architecture view's lane rank, and the
-  `inherited` half of the population count below — but the RULE does not take a node's layer from
-  its container. `beadloom-ku26` makes that move, in the release that announces it.
-- **The rule reports both populations.** `population_statement` states what own tags reach
-  beside what inheritance would reach, so the distance between the check and its subject is a
-  number rather than an inference. Measured on this repository on 2026-09-13 over a warm full
-  rebuild of the index: **365** live `depends_on` edges, **16 judged** by own tags, **349
-  skipped** for want of a tag at one end or both, and **357** with a layer at both ends by
-  `part_of` ancestry. The porcelain record is
-  `# layer_population:architecture-layers:depends_on:16:365:349:357`. The lineage is part of the
-  figure and not a detail of how it was taken — see the note below on BDL-UX #290, which is why
-  the older measurements quoted in this section read 362 and 363 over the same repository.
-- **An edge inside one layer is still legal unconditionally.** The evaluator returns to the next
-  edge as soon as both ends resolve to the same layer index, so the 14 peer crossings
-  `same_layer_crossings` finds here are reported by no rule in this release. The `exempt:`
-  entries BDL-070 B2 wrote against them are bookkeeping for now: `_layer_exemption_statements`
-  consults them only to report an entry that is DEAD or EXPIRED, and the finding for an
-  un-excused crossing arrives with the predicate that refuses one.
+- **The rule decides on the layer each end is IN.** `evaluate_layer_rules` resolves both ends
+  through `layer_membership` — a node's own declared tag, else the nearest `part_of` container
+  that declares one — and moves to the next edge only when an end is in no declared layer at all.
+  Measured on this repository on 2026-09-13 over a warm full rebuild of the index: **365** live
+  `depends_on` edges, **357 judged**, **8 skipped** because an end is inside nothing that declares
+  a layer. The porcelain record is `# layer_population:architecture-layers:depends_on:357:365:8`.
+  The lineage is part of the figure and not a detail of how it was taken — see the note below on
+  BDL-UX #290, which is why older measurements quoted in this section read 362 and 363 over the
+  same repository.
+- **A finding about an inherited layer names where the layer came from.** The message carries
+  `inherited from '<container>'` beside the layer name, because the first question such a finding
+  raises is why a node nobody tagged is in that layer. An end carrying its own tag reads exactly
+  as it read before, which is what makes the differential against the pre-release evaluator
+  legible.
+- **An edge inside one layer is legal when a container the declaration gives a layer holds both
+  ends, and a finding when none does.** `layer_crossings.same_layer_statements` reports the
+  crossings no `exempt:` entry excuses, at the severity the rule declares, and the dead or expired
+  entries beside them. This is the first release in which the peer-dependency line most layered
+  architectures state is checked by anything.
 
-So a green `architecture-layers` in Release A means "none of the 16 edges this rule judged points
-the wrong way". The population finding beside it is what says 16 rather than 365, and it says so
-at `warn`, which is why no adopter's Gate decides differently after the upgrade than before it.
+So a green `architecture-layers` now means "none of the 357 edges this rule judged points the
+wrong way, and none of them crosses between peers". The population finding beside it is what says
+357 rather than 365, and it stays `warn`: it reports the rule's reach rather than a breach.
+
+**On this repository the verdict did not move, and that is not a property of the predicate.** Two
+beads ran first. `beadloom-46am` removed the single `depends_on` edge running from a domain into
+the application layer, and `beadloom-xmfs` dispositioned every same-layer crossing left: two fixed
+by moving the shared vocabulary below both layers, fourteen excused by name in `rules.yml`, each
+with a reason and an exit condition. Read the same graph with the `exempt:` block off and the
+fourteen are reported.
 
 ##### Where the population is reported (BDL-070 A3)
 
@@ -895,21 +967,22 @@ own idiom rather than parsing another's prose:
 
 | Rendering | How the population appears |
 |---|---|
-| `format_rich` | a clause on the summary line, on the GREEN line and the RED one alike: `, architecture-layers judged 16 of 362 live depends_on edge(s)` |
-| `format_json` | `summary.layer_populations[]` — `rule`, `edge_kind`, `evaluated`, `total`, `skipped_untagged`, `inherited_evaluated`, `inherited_total`, `unjudged`. Additive: every key that was there keeps its name and its meaning |
+| `format_rich` | a clause on the summary line, on the GREEN line and the RED one alike: `, architecture-layers judged 357 of 365 live depends_on edge(s)` |
+| `format_json` | `summary.layer_populations[]` — `rule`, `edge_kind`, `evaluated`, `total`, `skipped_untagged`. Additive against the keys `lint --format json` carried before BDL-070 |
 | `format_github` | one leading `::notice::` per rule — `notice`, not `warning`, because the fraction is not a finding against anyone's code and must not colour a pull request |
-| `format_porcelain` | one leading marked line, `# layer_population:rule:edge_kind:evaluated:total:skipped:inherited`. The `# ` marker is the same one `scope-check --porcelain` leads its verdict with, and a rule name cannot begin with it, so a consumer drops the marked lines and reads exactly the seven-field records it read before |
+| `format_porcelain` | one leading marked line, `# layer_population:rule:edge_kind:evaluated:total:skipped`. The `# ` marker is the same one `scope-check --porcelain` leads its verdict with, and a rule name cannot begin with it, so a consumer drops the marked lines and reads exactly the seven-field records it read before |
 | `beadloom lint`'s clean line | `0 violations, N rules evaluated` gains the same clause |
 
 The number the clause prints has a lineage: an index carried forward and an index built fresh over
-one tree resolve `beadloom.application.graph_reads` differently, so this repository reads `16 of
-363` on a carried-forward index and `16 of 362` on a fresh one (BDL-UX #290). Hold the lineage
-constant across a before/after comparison.
+one tree resolve `beadloom.application.graph_reads` differently, so the denominator this
+repository reads moves by one between them (BDL-UX #290). Hold the lineage constant across a
+before/after comparison.
 
 **The clause is present at FULL reach too, and the finding is not.** They differ deliberately. A
-finding is an item somebody triages, in every project, on every run, so `16 of 16` would be noise;
-a clause on a line already being read costs nothing, and `16 of 16` versus `16 of 362` is the
-distinction this rule exists to make readable. A rule handed no edge of its kind states nothing in
+finding is an item somebody triages, in every project, on every run, so `N of N` would be noise;
+a clause on a line already being read costs nothing, and `N of N` versus `N of M` is the
+distinction this rule exists to make readable. The case that made it concrete is the one this
+epic was opened on: `16 of 362`, measured on this repository at `aa4bfad4`, before BDL-070 B3. A rule handed no edge of its kind states nothing in
 either channel — liveness already says it could not fire.
 
 **The CLI's clean line is keyed on the FORMAT, not on an empty rendering.** It used to print when
@@ -930,7 +1003,7 @@ Five surfaces report a lint result without being `beadloom lint`, and two of the
 | Surface | How the population appears |
 |---|---|
 | `application/gate.py` `lint_step` | the clause, appended to the step summary beside `_suppressed_note`, from the linter's own formatter so the Gate line cannot drift from the command it summarises |
-| `services/mcp_server.py` `handle_lint` | `summary.layer_populations[]`, the same eight keys `lint --format json` carries. Additive, and outside the severity filter: a finding filter must not be able to hide something that is not a finding |
+| `services/mcp_server.py` `handle_lint` | `summary.layer_populations[]`, the same five keys `lint --format json` carries — it emits `reach.to_dict()`, so there is one shape and not a copy of it. Additive, and outside the severity filter: a finding filter must not be able to hide something that is not a finding |
 | `tui/data_providers.py` + `widgets/lint_panel.py` | past `lint()`. The provider carries the finding's `rule_type` and `message`, which it dropped before, and the panel leads its list with the population rows, rendering the MESSAGE — a population row carries no `from_ref_id`, and the rule description beside it describes the boundary rather than how much of it was looked at |
 | `application/debt_report/collect.py` | past `lint()`. Counts the reaches over the same rules it evaluated and carries `population_phrase` on `DebtData` → `DebtReport`; the Rich report prints `counted over: ...` under Rule Violations, and `format_debt_json` carries `layer_populations` |
 | `onboarding/scanner/prime.py` | the clause on the `Health:` line, and `health.layer_populations` in `--format json`. One clause per DECLARED layer rule rather than per finding, so the list `prime` caps at ten findings can grow without this growing with it |

@@ -97,6 +97,23 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
             "allow_skip": rule.allow_skip,
             "edge_kind": rule.edge_kind,
         }
+        # The same-layer crossings the project has decided about. Carried into
+        # the index since BDL-070 B4, because the architecture view reads its
+        # layer rule from HERE and asks that rule which edges to draw red:
+        # without the entries the site would flag crossings the Gate excuses,
+        # and the two instruments would contradict each other in public. Written
+        # only when there are entries, so the index of a project that excuses
+        # none is unchanged.
+        if rule.exempt:
+            rule_def["exempt"] = [
+                {
+                    "from": exemption.from_glob,
+                    "to": exemption.to_glob,
+                    "reason": exemption.reason,
+                    "until": exemption.until,
+                }
+                for exemption in rule.exempt
+            ]
         return ("layers", rule_def)
 
     if isinstance(rule, CardinalityRule):

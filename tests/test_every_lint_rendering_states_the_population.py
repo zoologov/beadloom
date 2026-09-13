@@ -183,8 +183,8 @@ class TestTheResultCarriesThePopulation:
         assert [p.rule_name for p in result.layer_populations] == ["architecture-layers"]
         population = result.layer_populations[0]
         assert population.edge_kind == "depends_on"
-        assert (population.own_tags.evaluated, population.own_tags.total) == (1, 2)
-        assert population.own_tags.skipped_untagged == 1
+        assert (population.population.evaluated, population.population.total) == (1, 2)
+        assert population.population.skipped_untagged == 1
 
     def test_a_project_with_no_layer_rule_carries_none(self, unlayered_project: Path) -> None:
         assert _run(unlayered_project).layer_populations == []
@@ -208,8 +208,8 @@ class TestTheResultCarriesThePopulation:
 
         assert len(statements) == 1
         message = statements[0].message
-        assert f"{population.own_tags.evaluated} of {population.own_tags.total}" in message
-        assert str(population.own_tags.skipped_untagged) in message
+        assert f"{population.population.evaluated} of {population.population.total}" in message
+        assert str(population.population.skipped_untagged) in message
 
 
 class TestOneReadPerRun:
@@ -292,7 +292,7 @@ class TestTheRichRendering:
         )
         result = _run(project)
 
-        assert result.layer_populations[0].own_tags.total == 0
+        assert result.layer_populations[0].population.total == 0
         assert "judged" not in format_rich(result)
 
 
@@ -309,9 +309,6 @@ class TestTheJsonRendering:
                 "evaluated": 1,
                 "total": 2,
                 "skipped_untagged": 1,
-                "inherited_evaluated": 1,
-                "inherited_total": 2,
-                "unjudged": 0,
             }
         ]
 
@@ -328,12 +325,14 @@ class TestTheJsonRendering:
         assert payload["violations"] == []
         assert payload["summary"]["layer_populations"][0]["total"] == 1
 
-    def test_inheritance_is_reported_beside_own_tags(self, tmp_path: Path) -> None:
-        """The second pair of numbers is what Release B will move.
+    def test_an_edge_reached_only_through_containment_is_inside_the_population(
+        self, tmp_path: Path
+    ) -> None:
+        """A component inside a tagged domain is the shape an adopter has.
 
-        A component inside a tagged domain is the shape an adopter has and this
-        repository hides. Own tags reach 1 of 2 edges here; membership inherited
-        through `part_of` reaches both.
+        Own tags reached 1 of these 2 edges and the rule reported 1 of 2 for the
+        whole of Release A. Since `beadloom-ku26` an end takes its layer from
+        the container, so both edges are judged and the population says so.
         """
         project = _project(
             tmp_path,
@@ -352,8 +351,8 @@ class TestTheJsonRendering:
         )
         entry = json.loads(format_json(_run(project)))["summary"]["layer_populations"][0]
 
-        assert (entry["evaluated"], entry["total"]) == (1, 2)
-        assert (entry["inherited_evaluated"], entry["unjudged"]) == (2, 1)
+        assert (entry["evaluated"], entry["total"]) == (2, 2)
+        assert entry["skipped_untagged"] == 0
 
 
 class TestTheGithubRendering:
@@ -385,7 +384,7 @@ class TestThePorcelainRendering:
         lines = format_porcelain(_run(partly_layered_project)).splitlines()
 
         assert lines[0] == (
-            f"{POPULATION_MARKER}layer_population:architecture-layers:depends_on:1:2:1:1"
+            f"{POPULATION_MARKER}layer_population:architecture-layers:depends_on:1:2:1"
         )
 
     def test_the_violation_records_are_untouched(self, partly_layered_project: Path) -> None:
@@ -413,7 +412,7 @@ class TestThePorcelainRendering:
 
         assert result.violations == []
         assert format_porcelain(result) == (
-            f"{POPULATION_MARKER}layer_population:architecture-layers:depends_on:1:1:0:1"
+            f"{POPULATION_MARKER}layer_population:architecture-layers:depends_on:1:1:0"
         )
 
     def test_a_project_with_no_layer_rule_stays_silent(self, unlayered_project: Path) -> None:

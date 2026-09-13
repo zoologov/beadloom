@@ -499,6 +499,18 @@ Rule = (
 )
 
 
+#: The ``rule_type`` a layer rule's finding about ONE EDGE carries — a
+#: dependency pointing up through the layers, one skipping a layer, or one
+#: crossing between peers inside a layer. It lives here rather than beside
+#: either emitter because :mod:`.evaluators` and :mod:`.layer_crossings` both
+#: produce it and :mod:`.layer_edges` selects on it, and a token written down
+#: in three places is a set that can drift into disagreement without anything
+#: going red. A layer rule's OTHER findings — the population it judged, a
+#: declared layer no node is in, an exemption that excuses nothing — are about
+#: the rule rather than about an edge and carry their own types.
+LAYER_EDGE_RULE_TYPE = "layer"
+
+
 @dataclass(frozen=True)
 class Violation:
     """A single rule violation.

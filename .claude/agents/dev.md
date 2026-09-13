@@ -297,7 +297,7 @@ Services (cli / mcp / tui) → application → Domains → infrastructure
 - ✅ services → application → domains; domains → infrastructure.
 - ❌ domain → domain (no peer-to-peer); domain → services / application (no inward→outward); infrastructure → domain.
 - A **leaf-consumer** domain (e.g. an AI-agent harness) may be imported by no core domain/service — it only consumes the read APIs. Discover such `forbid_import` boundaries from the rules (`beadloom lint --strict`).
-- Boundaries are machine-enforced: `no-dependency-cycles` + `architecture-layers` are `severity: error`, so a green `lint --strict` genuinely enforces direction; `module-coverage` is error too.
+- Boundaries are machine-enforced: `no-dependency-cycles` + `architecture-layers` are `severity: error`, and `module-coverage` is error too. A green `lint --strict` means no `depends_on` edge the layer rule JUDGED points against the declared direction or runs between two peer containers of one layer without a named `exempt:` entry. The rule judges an edge only when both ends are in a declared layer — by their own layer tag, else the nearest `part_of` container's — and every run states how many it judged (`architecture-layers judged N of M live depends_on edge(s)`). An edge with an end in no declared layer is not checked by the layer rule, so read that clause before you rely on the green.
 
 ### Annotation vocabulary (DDD)
 Emit on every new/changed module so it maps to its graph node:

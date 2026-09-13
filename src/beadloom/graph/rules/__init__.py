@@ -47,6 +47,7 @@ from beadloom.graph.rules.exemptions import (
     SuppressedCrossing,
     suppressed_crossings,
 )
+from beadloom.graph.rules.layer_edges import flagged_layer_edges
 from beadloom.graph.rules.layer_reach import (
     LAYER_POPULATION_RULE_TYPE,
     LayerReach,
@@ -339,6 +340,7 @@ __all__ = [
     "evaluate_summary_facts_rules",
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
+    "flagged_layer_edges",
     "inert_rule_names",
     "is_advisory",
     "layer_of",

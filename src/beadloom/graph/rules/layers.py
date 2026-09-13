@@ -10,7 +10,9 @@ a layer at both ends by ``part_of`` ancestry.
 ``application.architecture_view._layer_rank`` climbed ``part_of`` but hardcoded
 the four tags and their ranks, so it cannot serve a project whose layers are
 declared differently — and Beadloom ships to those projects.
-``liveness._layer_reasons`` did neither.
+``liveness._layer_reasons`` did neither. It is a caller too since BDL-070 B5-fix
+(``beadloom-5tcc.6``), which is what stopped one run reporting an error from a
+rule and counting that same rule inert (BDL-UX #296).
 
 This module is the answer the three become callers of. It knows nothing except
 what it is handed:
@@ -59,11 +61,12 @@ if TYPE_CHECKING:
 
 
 #: A layered rule needs two populated layers before "above" and "below" mean
-#: anything: with one, there is no direction for an edge to violate. Declared
-#: here rather than in :mod:`.liveness`, because :mod:`.layer_declaration` stays
-#: silent under exactly the condition liveness reports — and a threshold written
-#: twice is a pair of reports that can drift into saying the same thing twice or
-#: neither of them saying it.
+#: anything: with one, there is no direction for an edge to violate. It can still
+#: compare two peers inside that one layer, which is why :func:`can_fire_on` and
+#: not this threshold decides whether the rule is inert. Declared here rather
+#: than in :mod:`.liveness`, because :mod:`.layer_declaration` reads it too — and
+#: a threshold written twice is a pair of reports that can drift into saying the
+#: same thing twice or neither of them saying it.
 MIN_POPULATED_LAYERS = 2
 
 
@@ -122,13 +125,34 @@ def own_layer_of(
     return None
 
 
-def layer_of(
+@dataclass(frozen=True)
+class LayerMembership:
+    """The layer a node is in, and the node whose own tag put it there.
+
+    ``declared_by`` is the node itself when it carries a declared tag, and the
+    ``part_of`` container it inherited from otherwise. The rule reports it,
+    because the first question a reader asks of a finding about an untagged
+    component is why that component is in that layer at all — and the answer is
+    a node's name, not an argument.
+    """
+
+    ref_id: str
+    index: int
+    declared_by: str
+
+    @property
+    def inherited(self) -> bool:
+        """True when a container decided, rather than the node's own tag."""
+        return self.declared_by != self.ref_id
+
+
+def layer_membership(
     ref_id: str,
     layers: Sequence[LayerDef],
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
-) -> int | None:
-    """Index of the layer the node is in: its own, else its nearest ancestor's.
+) -> LayerMembership | None:
+    """The layer the node is in — its own, else its nearest ancestor's — and whence.
 
     A node that declares a layer KEEPS it and does not climb: a node tagged as a
     domain inside a container tagged as a service is a domain, not a service.
@@ -136,19 +160,42 @@ def layer_of(
     decides, and ``None`` when no generation does: an untagged node with no
     tagged container has no layer, which is a different fact from being in the
     bottom one.
+
+    Within one generation the topmost declared layer wins, as documented at the
+    top of this module, and the node that carries it is the one named — so two
+    ancestors at the same distance give one answer and one provenance rather
+    than an answer whose provenance depends on iteration order.
     """
     own = own_layer_of(ref_id, layers, tags)
     if own is not None:
-        return own
+        return LayerMembership(ref_id=ref_id, index=own, declared_by=ref_id)
     for generation in part_of_generations(ref_id, parents):
         declared = [
-            index
-            for index in (own_layer_of(ancestor, layers, tags) for ancestor in generation)
+            (index, ancestor)
+            for index, ancestor in (
+                (own_layer_of(ancestor, layers, tags), ancestor) for ancestor in generation
+            )
             if index is not None
         ]
         if declared:
-            return min(declared)
+            index, ancestor = min(declared)
+            return LayerMembership(ref_id=ref_id, index=index, declared_by=ancestor)
     return None
+
+
+def layer_of(
+    ref_id: str,
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> int | None:
+    """Index of the layer the node is in, for a caller that needs no provenance.
+
+    One line over :func:`layer_membership`, so the walk exists once: a second
+    body answering the same question is what this module was opened to remove.
+    """
+    membership = layer_membership(ref_id, layers, parents, tags)
+    return None if membership is None else membership.index
 
 
 def tagged_containers(
@@ -184,12 +231,14 @@ def shares_tagged_ancestor(
 ) -> bool:
     """True when one container the declaration gives a layer holds BOTH ends.
 
-    This is the predicate BDL-070 RFC Q1 decided, on a measurement: of this
-    repository's 132 same-layer ``depends_on`` edges, 116 run between two parts
-    of one domain and 16 between peers. The two predicates that existed before
-    it split that population 0/132 and 132/0 — one passed every same-layer edge
-    and the other flagged every one — so neither could tell an internal edge
-    from a peer crossing.
+    This is the predicate BDL-070 RFC Q1 decided. Measured on 2026-09-13 over
+    this repository's index: of 130 same-layer ``depends_on`` edges, 116 run
+    between two parts of one container and 14 between peers. The two predicates
+    that existed before it split that population 0/130 and 130/0 — one passed
+    every same-layer edge and the other flagged every one — so neither could
+    tell an internal edge from a peer crossing. :mod:`.layer_crossings` states
+    the same measurement, and the RFC records the figures the decision was first
+    taken on and their correction.
 
     A container that carries no declared layer tag shares nothing here, which is
     what makes the predicate say anything at all: this project's root service
@@ -227,14 +276,50 @@ def same_layer_crossings(
     return crossings
 
 
+def can_fire_on(
+    edges: Iterable[tuple[str, str]],
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> bool:
+    """True when at least one of *edges* is an edge the rule compares.
+
+    An edge counts when both ends are in a declared layer and it leaves the
+    layer-and-container it starts in: across two layers it is compared for
+    direction, and inside one layer it is compared against
+    :func:`shares_tagged_ancestor`. An edge with an unlayered end is passed over,
+    and an edge inside one tagged container is legal by construction with nothing
+    compared — neither is a check the rule performed.
+
+    **How many layers hold a node is a different question, and BDL-UX #296 is
+    what the difference costs.** Two containers in ONE declared layer, each
+    holding an untagged part, give a graph where the rule reports a same-layer
+    crossing while exactly one layer is inhabited. Liveness counted inhabited
+    layers, so one run reported an error from a rule and counted that same rule
+    inert in the same breath. Asking what the rule compares answers both that
+    shape and the inheriting one with a single predicate.
+    """
+    for src_ref_id, dst_ref_id in edges:
+        src_layer = layer_of(src_ref_id, layers, parents, tags)
+        dst_layer = layer_of(dst_ref_id, layers, parents, tags)
+        if src_layer is None or dst_layer is None:
+            continue
+        if src_layer != dst_layer:
+            return True
+        if not shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class LayerPopulation:
     """How much of an edge set a layer rule actually judged.
 
     ``evaluated`` is the edges with a layer at BOTH ends; ``skipped_untagged``
-    is the rest, which the rule passes over in silence. The green line names no
-    population today, so 16 of 362 is reported in the words that would report
-    362 of 362 — this pair is what makes the two readable apart.
+    is the rest, which the rule does not judge and states only as this count.
+    Until BDL-070 A3 the green line named no population, so 16 of 362 was
+    reported in the words that would report 362 of 362 — this pair is what makes
+    the two readable apart, and A3 is where the line began carrying it.
     """
 
     evaluated: int

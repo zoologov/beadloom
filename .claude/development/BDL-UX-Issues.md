@@ -35,6 +35,100 @@
 
 ## Open Issues
 
+299. [2026-09-13] [LOW] `issue-number allocate` accepts an empty holder and writes a claim that names nobody, and `check` reports it clean
+
+    **Severity:** low (the number is still unique and still written; what breaks is the property the ledger exists for — that every allocated number is HELD by a named work item)
+    **Command:** `beadloom issue-number allocate --holder ""`, then `beadloom issue-number check`
+    **Context:** BDL-070, 2026-09-13, reached by accident while filing #298.
+    **What happened.** `allocate --holder ""` exited 0, allocated #298, and wrote `.claude/development/BDL-UX-Issues/0298.md` with an empty `**Holder:**` line. `check` then printed `No duplicate, unwritten or unclaimed number.` — the malformed claim read as clean.
+    **How an empty holder arrives in practice — an EXTERNAL trigger, recorded because it is the realistic path.** `bd create ... --json` (bd 1.0.4) printed a non-JSON warning to STDOUT before the JSON object, because the title began with `test_` and bd judged it test data: `⚠ Creating test issue in production database … appears to be test data`. A script parsing stdout as JSON failed, the bead id came out empty, and the empty string went straight to `--holder`. The bead itself was created (`beadloom-jorg`). The bd half — a warning on the stream a `--json` caller parses — belongs to steveyegge/beads and is noted, not ours to fix.
+    **Repaired here:** the #298 claim's holder and the #298 entry's tracker were both set to `beadloom-jorg` by hand, since there is no command to set a claim's holder; each repair says so in place.
+    **Expected:** `allocate` refuses an empty or whitespace-only holder with a named error and allocates nothing; `check` reports any existing claim whose holder is empty.
+    **Tracker:** `beadloom-l5jb`.
+    **Related:** #298 (the entry this defect first produced).
+
+298. [2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365
+
+    **Severity:** medium (no wrong code shipped and no verdict moved; what is wrong is a guard whose own reading can be partial, which can redden a CI leg intermittently — and it is the kind of guard this epic added to stop checks reporting over an unnamed population)
+    **Command:** `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80`, the whole suite on the tree
+    **Context:** BDL-070 Release B, 2026-09-13, the wave gate owner's full tree run at `d6e8aa3d`, taken before opening the second pull request.
+    **What happened.** One failure: `tests/test_the_view_flags_what_the_rule_finds.py::TestOnThisRepository::test_the_agreement_is_not_vacuous` — `assert len(verdicts) > 300`, got **57**. The test was added by B4 (`beadloom-w34m`) in this release.
+    **Why it is not a regression, measured rather than argued.**
+
+    | check | result |
+    |---|---|
+    | the two preceding full tree runs on this branch | 10712 and 10719 passed, 0 failed — this test passed |
+    | commits since the last green run | one content commit, seven TEXT files (docstring, role template + recompose, two SPECs) |
+    | live index right after the red run | 108 nodes, 365 active `depends_on`, `PRAGMA integrity_check` ok |
+    | damage signatures in the run's log | 0 `malformed` / `disk I/O` / `OperationalError` |
+    | the failing test alone, on that index | 1 passed |
+    | the failing test alone, after a reindex | 1 passed |
+    | its whole file, after a reindex | 8 passed |
+
+    **The mechanism, stated as inferred.** The test reads the live repository through the shared fixture `live_repo_reindexed` (scope: scope="session"), and at least twelve other test files reindex the live project root in the same run. A read taken while another test is mid-rebuild sees a partial edge set; 57 of 365 is what a torn read looks like. Nobody reproduced the interleaving on purpose.
+    **MEASURED AFTER FILING, 2026-09-13 — and it widens the mechanism above rather than confirming it.** The full re-run was green (10718 passed, 0 failed), and one test moved from passed to skipped: `tests/test_guards_parity.py:198` skipped itself with *"this repository is being written by another process right now — beadloom.db, beadloom.db-shm, beadloom.db-wal changed over an idle 1.19s control window"*. That other process was **the coordinator**. While the suite ran, it committed the #298/#299 repair and pushed the branch; the pre-commit hook runs `beadloom lint` and `sync-check`, and the pre-push Gate runs `beadloom ci`, which re-indexes — all writing the live index the suite was reading. During the first, red run the coordinator was also committing and launching reviews.
+    **So the writer behind the 57-edge read is NOT established as "other tests in the same run".** It is at least as likely to be the gate owner's own git hooks. Which one produced the torn read was not measured. The parity test is the instrument that got this right: it measured the writes, named the cause, and declined to attribute, where the vacuity guard read a partial graph and failed.
+    **A practice rule this entry now carries:** the wave gate owner does not commit or push while its own full tree run is in flight — every hook in this repository writes the index that run reads.
+    **Expected:** a test that asserts on the live repository's graph reads an index no other writer can rebuild underneath it — other tests or an out-of-run process — through an isolated copy or a lock around the rebuild. Or, like `test_guards_parity`, it measures whether the index moved during its reading and skips with the reason rather than failing on a partial graph.
+    **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
+    **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
+    **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
+
+297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
+
+    **Severity:** medium (no wrong code shipped; what is wrong is an independence gate that reports itself in force while one ordinary command defeats it, and that cannot release in the shape the flow prescribes)
+    **Command:** `beadloom review-brief <fix-bead> --release`, then `bd show <fix-bead>`
+    **Context:** BDL-070, three consecutive review passes on 2026-09-13 — `beadloom-5tcc.10` (pass 3), `beadloom-5tcc.11` (final), `beadloom-5tcc.13` (confirmation) — each launched as the flow prescribes, as its own bead depending on the work it reviews.
+    **What happened.** `--release` looks for a verdict **on the fix bead itself**. `/coordinator` places every review on a separate bead that depends on the reviewed work, so the verdict is never where `--release` looks and the author's account stays withheld after the verdict exists. Every one of the three reviewers then read that account through `bd show <fix-bead>`, which prints comments unconditionally. The confirmation pass recorded it: "I ran `bd show beadloom-5tcc.12` to read the fix bead's assignment, and it printed the author's CHECKPOINT and COMPLETED comments before I had measured anything."
+    **Two defects, separable.** (1) `--release` cannot find a verdict placed on a bead that depends on the reviewed bead. (2) `bd show` is a withholding bypass that `review-brief` neither counts nor names — so "N comments withheld" is a population statement over the wrong population.
+    **Why the reviews still stand:** each reviewer re-derived every figure it reported and said so, and stated that the withholding was defeated rather than leaving it to be discovered. The defect is in the instrument's report of independence, not in the verdicts.
+    **Expected:** `--release` accepts a verdict on a bead that depends on the reviewed bead, or the flow records verdicts where `--release` looks; and the brief names the channels it does not cover, `bd show` among them.
+    **What is NOT established:** whether an earlier review in this repository was materially steered through `bd show`. It was measured on these three passes only.
+    **Tracker:** `beadloom-6rfz`.
+    **Related:** #212, #219, #286 — the withholding defeated through the epic document, commit messages and the launch prompt. This is the fourth channel.
+
+296. [2026-09-13] [MEDIUM] a layer rule reports an error and is counted inert in the same run, because liveness still reads own tags
+
+    **Severity:** medium (no wrong verdict: the error is reported and `lint --strict` exits 1 as it should. What is wrong is that the same run tells a reader the rule checked nothing, and `rules_inert` is the counter the Gate's summary and the TUI's lint panel present as "this check did nothing")
+    **Command:** `beadloom lint`, and every surface that reads `rules_inert`
+    **Context:** BDL-070 B5 (`beadloom-bi78`), 2026-09-13. Found writing the acceptance scenarios for Release B on graphs that are not this repository.
+    **What happened.** `evaluate_layer_rules` decides on the DERIVED layer since B3 (`beadloom-ku26`) — a node's own tag, else the nearest `part_of` container that declares one. `graph/rules/liveness.py:288` `_layer_reasons` still decides on `own_layer_of` alone, and its own docstring says the move would happen "in the release that announces it, `beadloom-ku26` (B3)". B3 announced it and did not make it.
+    **Measured** on the nested-parts fixture (`tests/acceptance/steps/tiered_project.py`, `tier-web` / `tier-core` / `tier-store`, two untagged components inside containers in different tiers), written and indexed once and linted:
+
+    | what the run says | value |
+    |---|---|
+    | `error_count` | 1 — `store-db -> web-api`, reported by `tier-order` |
+    | `rules_evaluated` | 1 |
+    | `layer_populations` | `evaluated=2, skipped_untagged=0` |
+    | `rules_inert` | 1 |
+    | liveness message | `Rule 'tier-order' cannot fire: no live 'depends_on' edge runs between two of its layers. It is counted as evaluated but checks nothing` |
+
+    The peer-container fixture reaches the other branch of the same function and says `fewer than two of its layers are populated (no node carries 'tier-store', 'tier-web')` while the rule reports two same-layer crossings.
+    **This repository cannot see it.** Every node here that is in a layer carries the tag itself, so own tags and derived layers agree and liveness is satisfied. `beadloom lint` on this tree emits no `rule_liveness` finding for `architecture-layers`. The shape needs untagged components inside tagged containers — an adopter's shape, and the reason BDL-070's CONTEXT requires every layer claim to be measured on a graph that is not ours.
+    **Expected:** liveness decides on the same layer membership the rule decides on, so a rule that reported a finding is never counted inert. Moving it is a VERDICT CHANGE for an adopter — a rule reported inert today would stop being reported — which is why it belongs in a release that says so rather than in a fix taken in passing.
+    **What is NOT established:** how many adopter projects carry the shape, and whether `rules_inert` feeds anything that blocks. The Gate's summary and the TUI panel present it; no exit code was traced to it.
+    **Held by:** `tests/test_a_layer_rule_that_fired_is_not_reported_inert.py` — three `xfail(strict=True)` statements that go green the day liveness is moved.
+    **Related:** the epic's own subject — one question answered by more than one body. `layers.py`'s module docstring names `liveness._layer_reasons` as the third reader and says it "did neither"; it now agrees with neither.
+
+    **RESOLVED 2026-09-13 by `beadloom-5tcc.6` (BDL-070 Release B).** Fixed in the release that
+    announces the verdict change, which is what this entry asked for. Liveness asks
+    `layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two layers for
+    direction or inside one against the shared-container predicate — over the same derived layer
+    the rule's own verdict rests on. **Swapping the layer lookup alone would have closed one of
+    the two fixtures and not the other**, which is why the predicate changed rather than the
+    lookup: on the peer-container graph no reading of membership inhabits a second layer, and
+    what the rule reports there is a same-layer crossing. Measured on both, each written and
+    indexed once by the same unchanged reindex and linted: nested parts `error_count 1,
+    rules_inert 1` to `error_count 1, rules_inert 0`; peer containers `error_count 2,
+    rules_inert 1` to `error_count 2, rules_inert 0`. No error appears or is withdrawn on either.
+    This repository is unchanged and still cannot see the shape, as the entry says: `lint
+    --strict` rc 0 with 55 findings, 0 errors and 0 inert rules before and after.
+    **One report changed hands.** `layer_declaration` stood down whenever fewer than two layers
+    held a node, because liveness named the same tags for exactly that graph; liveness is now
+    silent on the peer fixture, so the declaration states it instead and prints its sentence with
+    a count of one for the first time — a branch that read "1 of them hold a node" until this
+    bead, and is pinned by a test now.
+
 295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
 
     **Severity:** low (pre-existing on both sides of the change, and it takes a hand-written graph file to produce; what it costs when it happens is the whole run rather than the one node)

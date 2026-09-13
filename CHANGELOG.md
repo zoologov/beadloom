@@ -17,8 +17,31 @@ project that copied this rules file, and a green run said nothing about how much
 had looked at — 16 of 365 live `depends_on` edges on this repository, measured 2026-09-13 over a
 warm full rebuild of the index, because the rule reads a node's OWN layer tags. Release A makes
 that number visible on every surface that reports a lint result. **It changes no verdict**:
-inheritance has not shipped, the rule still decides on own tags, and `beadloom-ku26` makes that
-move in the release that announces it.
+the rule still decides on own tags there. Release B, below, is the half that decides on the
+number Release A made visible.
+
+**THE TWO HALVES ARE NOT YET TWO RELEASES, AND THAT IS AN OPEN DECISION FOR THE OWNER.** The epic's
+CONTEXT holds that no adopter's Gate may change verdict on upgrade, which is why the population
+report was built first and shipped as its own pull request (#72, `main` at `7efa4006`) before the
+verdict change. Splitting the pull requests preserves the ORDER; it does not by itself make two
+releases. This `[Unreleased]` section currently holds BDL-069, BDL-070 Release A and BDL-070
+Release B together, so a single version bump would publish the verdict change in the same release
+that first makes its number visible — which is the thing the constraint exists to prevent. Cutting
+Release A as its own version before Release B is published is what satisfies it. Nobody has taken
+that decision yet, and this paragraph is here so it is taken rather than defaulted into.
+
+BDL-070 Release B. `architecture-layers` now decides on the population it reports. An end takes
+its layer from the nearest `part_of` container that declares one, and an edge that stays inside
+one layer is a finding when no container the declaration gives a layer holds both ends.
+**This changes verdicts on a graph nobody edited**, which is what the upgrade note two sections
+down is for. It also withdraws the second figure Release A reported beside the first: the
+`layer_population` finding states one population and no longer names what inheritance *would*
+reach, `summary.layer_populations[]` drops `inherited_evaluated`, `inherited_total` and
+`unjudged`, and the porcelain record loses its seventh field — five JSON keys and a six-field
+record where the Release A entry under `### Added` describes two populations. That entry is left
+as it was written, because the two halves are legible in the order they happened. Nothing in a
+published version ever carried the three keys, so none of them is `### Removed` from anything an
+adopter has.
 
 ### Upgrade note — one action, and only if you already have an index
 
@@ -47,6 +70,60 @@ The view logs the case at INFO when it happens, with the number of tagged nodes.
 declare the layer rule whose tags the graph already carries; the lanes were being drawn from a
 table written inside the view, and a picture drawn from a table nobody declared is a picture of
 Beadloom's assumptions rather than of the project.
+
+### Upgrade note — `architecture-layers` judges edges it used to pass over
+
+**Measured on this repository 2026-09-13**, with one index lineage held across the change: the
+rule judged **16 of 365** live `depends_on` edges and now judges **357**. The eight it still
+skips have an end in no declared layer at all — neither its own tag nor a `part_of` container's.
+A project whose layer tags sit on containers rather than on the nodes that depend will see the
+largest move, and a project with no `part_of` edges at all will see none: there is nothing to
+inherit from, so it is judged exactly as it was.
+
+Two kinds of finding can appear on a graph nobody changed, and both carry the severity the rule
+declares. That is `error` in the rules file this project ships, so **a Gate that was green can
+turn red on upgrade**:
+
+- **A direction violation between ends that carry no tag of their own.** `store-db` inside a
+  container tagged `tier-store` depending on `web-api` inside one tagged `tier-web` is an edge
+  from the bottom layer into the top one. The finding names the container the layer came from
+  — `inherited from 'store'` — because the first question it raises is why a node nobody tagged
+  is in that layer.
+- **A dependency between peers inside one layer.** Two domains in the same layer, neither
+  inside the other and with no tagged container holding both, were legal under the predicate
+  that passed every same-layer edge. The peer-dependency line most layered architectures state
+  was checked by nothing; it is checked now.
+
+What to do with a new finding, in the order that keeps the check honest: remove the dependency,
+or move both ends inside one container the declaration gives a layer, or add an `exempt:` entry
+to the layer rule naming the pair, why it stands and what would retire it. An entry without a
+`reason` is refused when the rules file is read, and an entry that excuses nothing or outlives
+its own `until:` is reported.
+
+On this repository the verdict did not move, and that is not a property of the predicate: one
+edge was removed and fourteen same-layer crossings were excused by name, each with a reason and
+an exit condition, before this shipped. Read the same graph with the `exempt:` block off and the
+fourteen are reported.
+
+**A third kind of change appears where a rule was reported inert, and it only ever removes a
+line.** Liveness decided on own tags while the rule decided on derived ones, so a rule could
+report a finding and be counted in `rules_inert` in the same run — the counter the Gate summary
+and the TUI lint panel present as "this check did nothing". It asks the rule's own reading now,
+so on a graph whose parts inherit their layers, or whose one inhabited layer holds peers that
+cross, the `rule_liveness` warning goes away and `rules_inert` falls. No `error` appears and none
+is withdrawn by this (BDL-UX #296, in `### Fixed` below).
+
+**The generated site's architecture view moves, and here it moves a lot.** That picture drew a
+dependency arrow red whenever the target's lane was at or above the source's, which is every edge
+pointing up AND every edge staying inside one layer — so a dependency between two parts of one
+domain was drawn as a layering violation while `beadloom lint` found nothing against it. It asks
+the rule now. Measured on this repository on 2026-09-13 over a warm full rebuild of the index: 130
+of the 357 edges the picture renders a verdict on go from `"violation": true` to
+`"violation": false`, 116 of them dependencies inside one domain and 14 crossings the rules file
+excuses. An edge with an end in no declared layer still carries no flag at all, because the rule
+does not judge it. Regenerate with `beadloom docs site` to see the new picture, and reindex first:
+the view reads its layer rule from the index, and an index written before this release carries the
+rule without its `exempt:` entries.
 
 ### Added
 
@@ -141,8 +218,9 @@ Beadloom's assumptions rather than of the project.
 - **A layer the declaration names and no node is in is reported** (BDL-070 Release A).
   `validate_rules` had no `LayerRule` case, because a layer rule names tags rather than `ref_id`s.
   One predicate now answers both the loader's warning and a `warn` finding from the evaluator, and
-  it stands down when fewer than two layers are populated, because rule liveness already names
-  that case.
+  it stands down when fewer than two layers are populated AND the rule can fire on no edge,
+  because that is the case rule liveness already names. Release B added the second half of that
+  condition — see `### Fixed`, BDL-UX #296.
 
 - **`exempt:` on a layer rule, and the bookkeeping that keeps an exemption honest** (BDL-070 B2).
   An entry carries `from`, `to`, `reason` and `until`, all four required; an entry omitting one,
@@ -152,6 +230,37 @@ Beadloom's assumptions rather than of the project.
   finding for an un-excused same-layer crossing arrives with the predicate that refuses one.
 
 ### Fixed
+
+- **A layer rule that reported a finding is no longer counted inert in the same run**
+  (BDL-UX #296, BDL-070 B5-fix). Release B moved `architecture-layers` onto the derived layer and
+  left `liveness._layer_reasons` deciding on a node's own tags, so on a graph with untagged
+  components inside tagged containers one `beadloom lint` run reported an error about an edge,
+  said it had judged every edge it was handed, and reported the same rule as `cannot fire … it
+  checks nothing`. `rules_inert` is the counter the Gate summary and the TUI lint panel present
+  as "this check did nothing", so the run contradicted itself in the release whose subject is
+  removing false signals. Liveness now asks
+  `graph.rules.layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two
+  layers for direction or inside one against the shared-container predicate — which is the same
+  reading the rule's verdict rests on.
+
+  **This is a verdict change, and it is the second one Release B carries.** A rule reported inert
+  on 4.0.0 can stop being reported, on a graph nobody edited. `rules_inert` falls and a
+  `rule_liveness` warning disappears; no `error` appears and none is withdrawn, so a Gate that
+  was green stays green and a Gate that was red stays red for the same findings.
+
+  **Measured on two fixture projects that are not this repository**, each written and indexed
+  once by the same unchanged reindex and linted: two untagged components in containers in
+  different tiers went from `error_count 1, rules_inert 1` to `error_count 1, rules_inert 0`, and
+  two containers in ONE tier each holding an untagged part went from `error_count 2,
+  rules_inert 1` to `error_count 2, rules_inert 0`. This repository cannot see either shape —
+  every node here that is in a layer carries the tag itself — and its own run is unchanged at 55
+  findings, 0 errors, 0 inert.
+
+  One report changed hands rather than disappearing. `layer_declaration` stood down whenever
+  fewer than two layers held a node, because liveness named the same tags for exactly that graph;
+  on the peer fixture liveness is now silent, so the declaration states it instead — `1 of them
+  holds a node: no node carries \`tier-web\`, \`tier-store\``, at `warn`, which is the severity the
+  liveness line carried.
 
 - **A virgin `init` no longer leaves the Gate red** (BDL-UX #282). On a two-package `src/`
   project, `beadloom init --yes --mode bootstrap` exited 0 and the next `beadloom ci` exited 1
@@ -235,6 +344,19 @@ Beadloom's assumptions rather than of the project.
 
 ### Changed
 
+- **The architecture view's edge verdict is the layer rule's, asked of the rule** (BDL-070 B4).
+  `application/architecture_view.py` held the third of the three disagreeing answers this epic
+  set out to remove: it flagged a `depends_on` edge at `dst_rank <= src_rank`, a predicate that
+  is true of every upward edge and of every same-layer edge alike. It now calls
+  `graph.rules.layer_edges.flagged_layer_edges`, which projects the rule's own findings, so an
+  edge is red in the picture exactly when `beadloom lint` reports it — direction, layer skip, the
+  same-layer predicate and the project's `exempt:` entries, none of them stated twice. Measured on
+  this repository on 2026-09-13, with one index lineage held across the change: the view flagged
+  130 edges the rule finds nothing against, and flags none now. A test holds the two sets equal on
+  this repository and on fixture graphs whose layers are declared as `tier-*`.
+- **`reindex` stores a layer rule's `exempt:` entries in the `rules` table.** The architecture
+  view reads its layer rule from that table, so without the entries the generated site would flag
+  crossings the Gate excuses. The key is written only when the rule declares entries.
 - **A stale count says `pair(s)`, because a pair is a document AND a code file.** One
   `sync_state` row is one pair, so three code files in a package give three stale pairs over one
   README — and `4 stale doc(s)` over two documents was a wrong noun on a right number. Nineteen

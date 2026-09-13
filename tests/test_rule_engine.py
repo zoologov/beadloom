@@ -1613,30 +1613,62 @@ class TestEvaluateLayerRules:
         violations = evaluate_layer_rules(db_with_layers, [rule])
         assert len(violations) == 0
 
-    def test_same_layer_no_violation(self, db_with_layers: sqlite3.Connection) -> None:
-        """Edges within the same layer are not violations."""
-        # Add another node in features layer
-        db_with_layers.execute(
+    def _same_layer_pair(self, conn: sqlite3.Connection, *, inside: str | None) -> None:
+        """A second node in the features layer, and an edge to it from `map-feature`.
+
+        *inside* names the container both ends are `part_of`, or is ``None`` for
+        two peers with no container between them. The known violation is removed
+        so the only finding left, if any, is about the same-layer edge.
+        """
+        conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
             ("calendar", "feature", "Calendar", json.dumps({"tags": ["feature-layer"]})),
         )
-        # features -> features edge
-        db_with_layers.execute(
+        conn.execute(
             "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
             ("map-feature", "calendar", "uses"),
         )
-        db_with_layers.commit()
-
-        # Remove the known violation
-        db_with_layers.execute(
+        if inside is not None:
+            conn.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+                (inside, "domain", "The container", json.dumps({"tags": ["feature-layer"]})),
+            )
+            for part in ("map-feature", "calendar"):
+                conn.execute(
+                    "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+                    (part, inside, "part_of"),
+                )
+        conn.execute(
             "DELETE FROM edges WHERE src_ref_id = ? AND dst_ref_id = ?",
             ("api-service", "app-tabs"),
         )
-        db_with_layers.commit()
+        conn.commit()
+
+    def test_same_layer_between_two_parts_of_one_container_is_no_violation(
+        self, db_with_layers: sqlite3.Connection
+    ) -> None:
+        """A dependency inside one container is what a layer is made of."""
+        self._same_layer_pair(db_with_layers, inside="maps")
+
+        rule = self._make_4_layer_rule()
+        assert evaluate_layer_rules(db_with_layers, [rule]) == []
+
+    def test_same_layer_between_peers_is_a_violation(
+        self, db_with_layers: sqlite3.Connection
+    ) -> None:
+        """BDL-070 RFC Q1: no container holds both ends, so this is a crossing.
+
+        The rule passed every same-layer edge until `beadloom-ku26`, which is
+        why the peer-dependency line this project's own architecture states was
+        checked by nothing.
+        """
+        self._same_layer_pair(db_with_layers, inside=None)
 
         rule = self._make_4_layer_rule()
         violations = evaluate_layer_rules(db_with_layers, [rule])
-        assert len(violations) == 0
+        assert [(v.from_ref_id, v.to_ref_id) for v in violations] == [("map-feature", "calendar")]
+        assert violations[0].severity == "error"
+        assert "Same-layer crossing" in violations[0].message
 
     def test_allow_skip_true(self, db_with_layers: sqlite3.Connection) -> None:
         """With allow_skip=True, skipping layers is fine (presentation -> shared)."""

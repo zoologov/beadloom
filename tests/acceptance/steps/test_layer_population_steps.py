@@ -122,21 +122,21 @@ def _exit_code(world: dict[str, Any], code: int) -> None:
 def _states_evaluated(world: dict[str, Any], evaluated: int, total: int) -> None:
     [statement] = _statements(world)
     assert f"evaluated {evaluated} of {total} live `depends_on` edge(s)" in statement.message
-    assert world["reach"].own_tags.evaluated == evaluated
-    assert world["reach"].own_tags.total == total
+    assert world["reach"].population.evaluated == evaluated
+    assert world["reach"].population.total == total
 
 
 @then(parsers.parse("it states that it skipped {skipped:d} for an end carrying no declared layer"))
 def _states_skipped(world: dict[str, Any], skipped: int) -> None:
     [statement] = _statements(world)
-    assert f"skipped {skipped} for an end carrying no layer tag of its own" in statement.message
-    assert world["reach"].own_tags.skipped_untagged == skipped
+    assert f"skipped {skipped} for an end in no declared layer" in statement.message
+    assert world["reach"].population.skipped_untagged == skipped
 
 
 @then(parsers.parse("the rule's reach reports {skipped:d} skipped edges"))
 def _reach_reports_skipped(world: dict[str, Any], skipped: int) -> None:
-    assert world["reach"].own_tags.skipped_untagged == skipped
-    assert world["reach"].own_tags.evaluated == world["reach"].own_tags.total
+    assert world["reach"].population.skipped_untagged == skipped
+    assert world["reach"].population.evaluated == world["reach"].population.total
 
 
 @then("the run makes no statement about its population")
