@@ -928,3 +928,6 @@
 {"id":"int-7f491ed6","kind":"field_change","created_at":"2026-09-13T21:55:18.787404Z","actor":"v.zoologov","issue_id":"beadloom-7foi","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-f36fe1dc","kind":"field_change","created_at":"2026-09-13T21:56:50.046005Z","actor":"v.zoologov","issue_id":"beadloom-h784","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-e9f294f6","kind":"field_change","created_at":"2026-09-13T22:34:52.727926Z","actor":"v.zoologov","issue_id":"beadloom-h784","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-2ecb3ddd","kind":"field_change","created_at":"2026-09-13T22:54:39.990474Z","actor":"v.zoologov","issue_id":"beadloom-p02a","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-b4a7feec","kind":"field_change","created_at":"2026-09-13T23:06:20.631732Z","actor":"v.zoologov","issue_id":"beadloom-bicw","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-f34b8b96","kind":"field_change","created_at":"2026-09-13T23:27:17.838642Z","actor":"v.zoologov","issue_id":"beadloom-bicw","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"6.0.0 published; downloaded wheel verified by the harness"}}
