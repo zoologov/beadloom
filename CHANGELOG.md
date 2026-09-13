@@ -18,7 +18,17 @@ had looked at — 16 of 365 live `depends_on` edges on this repository, measured
 warm full rebuild of the index, because the rule reads a node's OWN layer tags. Release A makes
 that number visible on every surface that reports a lint result. **It changes no verdict**:
 the rule still decides on own tags there. Release B, below, is the half that decides on the
-number Release A made visible, and both are in this release.
+number Release A made visible.
+
+**THE TWO HALVES ARE NOT YET TWO RELEASES, AND THAT IS AN OPEN DECISION FOR THE OWNER.** The epic's
+CONTEXT holds that no adopter's Gate may change verdict on upgrade, which is why the population
+report was built first and shipped as its own pull request (#72, `main` at `7efa4006`) before the
+verdict change. Splitting the pull requests preserves the ORDER; it does not by itself make two
+releases. This `[Unreleased]` section currently holds BDL-069, BDL-070 Release A and BDL-070
+Release B together, so a single version bump would publish the verdict change in the same release
+that first makes its number visible — which is the thing the constraint exists to prevent. Cutting
+Release A as its own version before Release B is published is what satisfies it. Nobody has taken
+that decision yet, and this paragraph is here so it is taken rather than defaulted into.
 
 BDL-070 Release B. `architecture-layers` now decides on the population it reports. An end takes
 its layer from the nearest `part_of` container that declares one, and an edge that stays inside
