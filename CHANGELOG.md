@@ -34,7 +34,14 @@ BDL-070 Release B. `architecture-layers` now decides on the population it report
 its layer from the nearest `part_of` container that declares one, and an edge that stays inside
 one layer is a finding when no container the declaration gives a layer holds both ends.
 **This changes verdicts on a graph nobody edited**, which is what the upgrade note two sections
-down is for.
+down is for. It also withdraws the second figure Release A reported beside the first: the
+`layer_population` finding states one population and no longer names what inheritance *would*
+reach, `summary.layer_populations[]` drops `inherited_evaluated`, `inherited_total` and
+`unjudged`, and the porcelain record loses its seventh field — five JSON keys and a six-field
+record where the Release A entry under `### Added` describes eight and seven. That entry is left
+as it was written, because the two halves are legible in the order they happened. Nothing in a
+published version ever carried the three keys, so none of them is `### Removed` from anything an
+adopter has.
 
 ### Upgrade note — one action, and only if you already have an index
 
@@ -211,8 +218,9 @@ rule without its `exempt:` entries.
 - **A layer the declaration names and no node is in is reported** (BDL-070 Release A).
   `validate_rules` had no `LayerRule` case, because a layer rule names tags rather than `ref_id`s.
   One predicate now answers both the loader's warning and a `warn` finding from the evaluator, and
-  it stands down when fewer than two layers are populated, because rule liveness already names
-  that case.
+  it stands down when fewer than two layers are populated AND the rule can fire on no edge,
+  because that is the case rule liveness already names. Release B added the second half of that
+  condition — see `### Fixed`, BDL-UX #296.
 
 - **`exempt:` on a layer rule, and the bookkeeping that keeps an exemption honest** (BDL-070 B2).
   An entry carries `from`, `to`, `reason` and `until`, all four required; an entry omitting one,

@@ -459,6 +459,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_sync_unverifiable.py",
     "tests/test_sync_update_check_does_not_write.py",
     "tests/test_the_axes_section_is_required_by_the_template.py",
+    "tests/test_the_cli_doc_states_the_population_shapes.py",
     "tests/test_the_commit_gate_states_what_it_compared.py",
     "tests/test_the_derivations_hold_as_shapes.py",
     "tests/test_the_explore_role_is_composed_like_the_others.py",
