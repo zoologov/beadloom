@@ -35,6 +35,30 @@
 
 ## Open Issues
 
+298. [2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365
+
+    **Severity:** medium (no wrong code shipped and no verdict moved; what is wrong is a guard whose own reading can be partial, which can redden a CI leg intermittently — and it is the kind of guard this epic added to stop checks reporting over an unnamed population)
+    **Command:** `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80`, the whole suite on the tree
+    **Context:** BDL-070 Release B, 2026-09-13, the wave gate owner's full tree run at `d6e8aa3d`, taken before opening the second pull request.
+    **What happened.** One failure: `tests/test_the_view_flags_what_the_rule_finds.py::TestOnThisRepository::test_the_agreement_is_not_vacuous` — `assert len(verdicts) > 300`, got **57**. The test was added by B4 (`beadloom-w34m`) in this release.
+    **Why it is not a regression, measured rather than argued.**
+
+    | check | result |
+    |---|---|
+    | the two preceding full tree runs on this branch | 10712 and 10719 passed, 0 failed — this test passed |
+    | commits since the last green run | one content commit, seven TEXT files (docstring, role template + recompose, two SPECs) |
+    | live index right after the red run | 108 nodes, 365 active `depends_on`, `PRAGMA integrity_check` ok |
+    | damage signatures in the run's log | 0 `malformed` / `disk I/O` / `OperationalError` |
+    | the failing test alone, on that index | 1 passed |
+    | the failing test alone, after a reindex | 1 passed |
+    | its whole file, after a reindex | 8 passed |
+
+    **The mechanism, stated as inferred.** The test reads the live repository through the shared fixture `live_repo_reindexed` (scope: scope="session"), and at least twelve other test files reindex the live project root in the same run. A read taken while another test is mid-rebuild sees a partial edge set; 57 of 365 is what a torn read looks like. Nobody reproduced the interleaving on purpose.
+    **Expected:** a test that asserts on the live repository's graph reads an index no other test in the run can rebuild underneath it — an isolated copy, or a lock around the shared rebuild.
+    **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
+    **Tracker:** ``.
+    **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
+
 297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
 
     **Severity:** medium (no wrong code shipped; what is wrong is an independence gate that reports itself in force while one ordinary command defeats it, and that cannot release in the shape the flow prescribes)
