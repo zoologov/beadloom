@@ -7,17 +7,18 @@
 
 ## Current Bead
 
-**Bead:** R3 `beadloom-u7jp` — review of 5.0.0 before it is published
-**Goal:** an independent verdict on `release/5.0.0` at `d6eaee60`, including a repeated harness run.
-**Done when:** the version surface is re-derived, no history line moved, the ignore triples are the
-three measured false positives, `[5.0.0]` matches the branch, and the harness run is the reviewer's own.
+**Bead:** R5 `beadloom-h784` — the 6.0.0 release pull request
+**Goal:** `main` raised to 6.0.0, with `[5.0.0]` copied byte-for-byte from the published commit and
+`[6.0.0]` naming what 6.0.0 removed from it.
+**Done when:** the `[5.0.0]` diff against `d6eaee60` is empty, `[6.0.0]` lists the three keys and the
+porcelain field under Removed, and the Gate and the full suite are green.
 
 ## Progress
 
 - [x] Docs folder, Explore axes and the version-surface supplement (2026-09-13)
 - [x] PRD, RFC, CONTEXT and PLAN approved (2026-09-13)
 - [x] Beads created: epic `beadloom-gskk` + 8, one plan, 7 edges confirmed against the titles
-- [ ] 5.0.0: R1 ✓ → R2 ✓ → R3 → R4 (published and verified on the downloaded wheel)
+- [x] 5.0.0: published 2026-09-13 (tag `v5.0.0` → `d6eaee60`, run 34784341146) and verified on the wheel downloaded from PyPI
 - [ ] 6.0.0: R5 → R6 → R7 (published and verified on the downloaded wheel)
 - [ ] R8: the records
 
@@ -29,9 +30,9 @@ three measured false positives, `[5.0.0]` matches the branch, and the harness ru
 |---|---|---|---|
 | `beadloom-2716` | R1 | Done | release/5.0.0 pushed: bump, 3 audit triples, [5.0.0]; ci rc 0, suite green on Darwin/3.12 |
 | `beadloom-2kty` | R2 | Done | harness in scratchpad (sha256 5d132afb…): 4.0.0 rc 0 no key; 5.0.0 rc 0, 8 keys; main rc 1, 5 keys; mismatch exits 3 |
-| `beadloom-u7jp` | R3 | Ready | review of 5.0.0 before publishing |
-| `beadloom-7foi` | R4 | Blocked | publish 5.0.0 and verify the downloaded wheel |
-| `beadloom-h784` | R5 | Blocked | the 6.0.0 release pull request |
+| `beadloom-u7jp` | R3 | Done | review of 5.0.0 before publishing |
+| `beadloom-7foi` | R4 | Done | publish 5.0.0 and verify the downloaded wheel |
+| `beadloom-h784` | R5 | Ready | the 6.0.0 release pull request |
 | `beadloom-p02a` | R6 | Blocked | review of 6.0.0 before merging |
 | `beadloom-bicw` | R7 | Blocked | publish 6.0.0 and verify the downloaded wheel |
 | `beadloom-tmgp` | R8 | Blocked | records: ROADMAP and the issue log |
