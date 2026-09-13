@@ -136,16 +136,29 @@ Raw counts aggregated from all data sources.
 
 #### What the rule-violation count was counted over (BDL-070 A4)
 
-`error_count` and `warning_count` are counts over whatever set the rules could look at, and a layer
-rule looks only at edges whose ends carry a declared layer tag — 16 of 363 on this repository.
-This collector is one of the two surfaces that call `evaluate_all` without ever building a
-`LintResult`, so the population reaches it here or it reaches nobody.
+`error_count` and `warning_count` are counts over whatever set the rules could look at. A layer
+rule looked only at edges whose ends carry a declared layer tag — 16 of 363 on this repository on
+2026-09-12, because it read a node's OWN tags — and since BDL-070 B3 an end takes its layer from
+the nearest `part_of` container that declares one, so a node carrying no tag at all is judged:
+357 of 365 here, measured 2026-09-13. This collector is one of the two surfaces that call
+`evaluate_all` without ever building a `LintResult`, so the population reaches it here or it
+reaches nobody.
 
 `_count_violations` reads the reaches with `layer_rule_reaches` over the rules it has already
 loaded, from the same `reach_of` the evaluator uses, rather than parsing the finding's prose back
 into integers. The clauses travel on `DebtData.layer_populations` → `DebtReport.layer_populations`,
-and appear as `counted over: architecture-layers judged 16 of 363 live depends_on edge(s)` under
+and appear as `counted over: architecture-layers judged 357 of 365 live depends_on edge(s)` under
 Rule Violations in the Rich report and under `layer_populations` in `format_debt_json`.
+
+**On this repository, measured 2026-09-13, neither the clause nor a violation count appears at
+all.** `_count_violations` looks for the rules file at `<root>/rules.yml` and then at
+`<root>/.beadloom/rules.yml`, and this project declares its rules in `.beadloom/_graph/rules.yml`,
+so the function returns before loading anything: `beadloom status --debt-report` prints
+`Rule Violations 0 pts`, `errors: 0` and `warnings: 0` while `beadloom lint` reports 0 error(s)
+and 55 warning(s) over the same graph, and `DebtReport.layer_populations` is empty, so the
+population has nothing to qualify. A zero that means "the rules were never read" is printed in the
+shape a clean project prints, which is this epic's thesis about a count with no population, one
+layer up. Recorded rather than repaired: the repair moves a debt score.
 
 They are carried UNWEIGHTED. A statement of how much of the graph a count covers is not itself
 debt, and scoring it would put a number in the score that measures the check rather than the code.

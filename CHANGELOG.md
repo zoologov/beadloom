@@ -38,7 +38,7 @@ down is for. It also withdraws the second figure Release A reported beside the f
 `layer_population` finding states one population and no longer names what inheritance *would*
 reach, `summary.layer_populations[]` drops `inherited_evaluated`, `inherited_total` and
 `unjudged`, and the porcelain record loses its seventh field — five JSON keys and a six-field
-record where the Release A entry under `### Added` describes eight and seven. That entry is left
+record where the Release A entry under `### Added` describes two populations. That entry is left
 as it was written, because the two halves are legible in the order they happened. Nothing in a
 published version ever carried the three keys, so none of them is `### Removed` from anything an
 adopter has.

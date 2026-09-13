@@ -314,9 +314,10 @@ class LayerPopulation:
     """How much of an edge set a layer rule actually judged.
 
     ``evaluated`` is the edges with a layer at BOTH ends; ``skipped_untagged``
-    is the rest, which the rule passes over in silence. The green line names no
-    population today, so 16 of 362 is reported in the words that would report
-    362 of 362 — this pair is what makes the two readable apart.
+    is the rest, which the rule passes over in silence. Until BDL-070 A3 the
+    green line named no population, so 16 of 362 was reported in the words that
+    would report 362 of 362 — this pair is what makes the two readable apart,
+    and A3 is where the line began carrying it.
     """
 
     evaluated: int

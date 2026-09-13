@@ -229,10 +229,10 @@ Returns compact project context. Static layer (config, rules, AGENTS.md) always 
   for the same reason. `fmt="json"` is unchanged: `health.stale_docs` already carried
   `doc_path`, `code_path` and `ref_id` per pair
 - **The health line states what the violation count was taken over** (BDL-070 A4). `N lint
-  violations` says the same words whether the layer rule judged 16 of 363 live `depends_on`
-  edges or all 363, so the line carries a clause per declared layer rule:
-  `Health: 0 stale pair(s), 71 lint violations, architecture-layers judged 16 of 363 live
-  depends_on edge(s) | Last reindex: …`. The wording is
+  violations` says the same words whether the layer rule judged 357 of 365 live `depends_on`
+  edges or all 365, so the line carries a clause per declared layer rule:
+  `Health: 0 stale pair(s), 55 lint violations, architecture-layers judged 357 of 365 live
+  depends_on edge(s) | Last reindex: …`, printed on this repository on 2026-09-13. The wording is
   `graph/rules/layer_reach.py::population_phrase`, shared with the Gate line and the four
   `lint` renderings, so one fact has one form. It is one clause per RULE and not per finding,
   so the bounded list above can grow without it growing; a project that declares no layer rule
