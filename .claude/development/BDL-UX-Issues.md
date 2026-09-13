@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+300. [2026-09-13] [HIGH] `scope-check` never runs in CI: Actions checks a pull request out on a detached HEAD, so no branch names a work item and the step skips on every pull request
+
+    **Severity:** high (no wrong code shipped; what is wrong is that the Gate is a required check whose summary lists `scope-check` among its steps, and in CI that step has judged nothing on any pull request — a check reporting over an empty population in the one place this project treats as authoritative)
+    **Command:** the `gate` job in `.github/workflows/ci.yml`, `beadloom ci` under `actions/checkout@v5`
+    **Context:** BDL-070, PR #73, 2026-09-13. Read from the gate job's log after the run completed, while verifying a claim in the pull request's own description.
+    **What happened.** The CI gate job printed `scope-check SKIP: skipped — no branch is checked out, so no work item names the scope to judge against`. `actions/checkout` checks a pull request out on a detached HEAD, so there is no branch name to resolve a work item from, and the step skips **on every pull request, whatever the branch is called**. PR #72 was pushed under the exact work-item name and could not have run it in CI either.
+    **Why it went unnoticed.** A SKIP is a `notice`, and the Gate is still green. Locally, on a named branch, the same step runs and earns its place — on this epic it found four out-of-axes paths that were then re-ruled in the RFC. The pipeline is where the Gate is a required status check, and it is the one place the step never judges.
+    **It corrected a coordinator error on the same epic.** The coordinator recreated the BDL-070 branch under the exact work-item name on the reasoning that this kept `scope-check` running "in the pipeline". That premise was false; the correction is recorded on `beadloom-5tcc` and in PR #73's description.
+    **Expected:** the Gate in CI resolves the work item from the pull request itself — `GITHUB_HEAD_REF`, or `scope-check`'s existing `--branch` fed from it — or, where it cannot, reports the SKIP as a named population of zero on the Gate's summary line rather than a quiet notice beneath a green check.
+    **What is NOT established:** whether any other Gate step also reads the branch name and is silent in CI for the same reason. Only `scope-check` was read.
+    **Tracker:** `beadloom-tsqz`.
+    **Related:** #230 (a suffix after the work-item key names no work item — a different, local cause of the same skip); #273 (a clean room with no `.git` reports the same `no branch is checked out` SKIP).
+
 299. [2026-09-13] [LOW] `issue-number allocate` accepts an empty holder and writes a claim that names nobody, and `check` reports it clean
 
     **Severity:** low (the number is still unique and still written; what breaks is the property the ledger exists for — that every allocated number is HELD by a named work item)
