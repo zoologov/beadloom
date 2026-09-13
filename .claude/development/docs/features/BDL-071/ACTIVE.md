@@ -7,17 +7,17 @@
 
 ## Current Bead
 
-**Bead:** R1 `beadloom-2716` — release/5.0.0: the bump, the audit triples and the 5.0.0 change log
-**Goal:** a release branch on `7efa4006` that builds as 5.0.0 with a green Gate and no Release B in it.
-**Done when:** version-surface agrees at 5.0.0, no history line moved, `[5.0.0]` holds no Release B
-text, the Gate and the full suite are green on the branch commit, and `692205d7` is not an ancestor.
+**Bead:** R3 `beadloom-u7jp` — review of 5.0.0 before it is published
+**Goal:** an independent verdict on `release/5.0.0` at `d6eaee60`, including a repeated harness run.
+**Done when:** the version surface is re-derived, no history line moved, the ignore triples are the
+three measured false positives, `[5.0.0]` matches the branch, and the harness run is the reviewer's own.
 
 ## Progress
 
 - [x] Docs folder, Explore axes and the version-surface supplement (2026-09-13)
 - [x] PRD, RFC, CONTEXT and PLAN approved (2026-09-13)
 - [x] Beads created: epic `beadloom-gskk` + 8, one plan, 7 edges confirmed against the titles
-- [ ] 5.0.0: R1 → R2 → R3 → R4 (published and verified on the downloaded wheel)
+- [ ] 5.0.0: R1 ✓ → R2 ✓ → R3 → R4 (published and verified on the downloaded wheel)
 - [ ] 6.0.0: R5 → R6 → R7 (published and verified on the downloaded wheel)
 - [ ] R8: the records
 
@@ -29,7 +29,7 @@ text, the Gate and the full suite are green on the branch commit, and `692205d7`
 |---|---|---|---|
 | `beadloom-2716` | R1 | Done | release/5.0.0 pushed: bump, 3 audit triples, [5.0.0]; ci rc 0, suite green on Darwin/3.12 |
 | `beadloom-2kty` | R2 | Done | harness in scratchpad (sha256 5d132afb…): 4.0.0 rc 0 no key; 5.0.0 rc 0, 8 keys; main rc 1, 5 keys; mismatch exits 3 |
-| `beadloom-u7jp` | R3 | Blocked | review of 5.0.0 before publishing |
+| `beadloom-u7jp` | R3 | Ready | review of 5.0.0 before publishing |
 | `beadloom-7foi` | R4 | Blocked | publish 5.0.0 and verify the downloaded wheel |
 | `beadloom-h784` | R5 | Blocked | the 6.0.0 release pull request |
 | `beadloom-p02a` | R6 | Blocked | review of 6.0.0 before merging |
