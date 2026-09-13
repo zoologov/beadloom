@@ -30,7 +30,7 @@ One feature node covers the cooperating modules below (all annotated
   container when the node declares none), symbol count, doc-status, served
   `.html` doc links (gated by the published-slug set so a link never 404s), and
   the `beadloom why` dependency lists; each `depends_on` edge carries a
-  `violation` flag (true when it points up or cross-cuts the layer order).
+  `violation` flag (true when the project's layer rule finds against that edge).
   Honest degradation throughout.
 
   **Which layers exist is read, not written down here (BDL-070 A5).** The view
@@ -60,9 +60,33 @@ One feature node covers the cooperating modules below (all annotated
   the card states what the node declares, and the layout needs a lane for a
   feature that declares nothing.
 
-  The edge `violation` predicate — `dst_rank <= src_rank`, which flags a
-  same-layer edge the rule engine does not — is UNCHANGED here and disagrees
-  with the rule engine on purpose until `beadloom-w34m` resolves it.
+  **The edge `violation` flag is the rule engine's verdict, asked of the rule
+  (BDL-070 B4).** It was this module's own predicate — `dst_rank <= src_rank`,
+  true for every edge pointing up AND every edge staying inside one layer — and
+  it was the last of the three disagreeing answers this epic set out to remove.
+  Measured on this repository on 2026-09-13, over a warm full rebuild of the
+  index: the view drew 130 edges red that `beadloom lint` finds nothing against,
+  116 of them dependencies between two parts of one domain and 14 crossings
+  `rules.yml` excuses by name. The view now calls
+  `graph.rules.layer_edges.flagged_layer_edges`, so an edge is red here exactly
+  when the Gate reports it — direction, layer skip, the same-layer predicate
+  RFC Q1 decided and the project's `exempt:` entries, none of them stated twice.
+
+  **The rendered artifact moves for those 130 edges**, from `"violation": true`
+  to `"violation": false`, which is what B4 changes about the picture. The flag
+  stays OMITTED for an edge with an end in no declared layer: the rule does not
+  judge such an edge, and drawing it as healthy would be the same overclaim in
+  the other direction.
+
+  The rule's `exempt:` entries reach the view through the indexed rule, so
+  `reindex` carries them into `rules.rule_json`. An index written by an earlier
+  release carries none, and a project that excuses crossings and regenerates its
+  site without reindexing sees those crossings drawn red until it does.
+
+  A layer rule declared over an edge kind other than `depends_on` flags nothing
+  here. This picture renders the verdict on dependency arrows, so such a rule is
+  reported by `beadloom lint` and drawn by nothing — a gap in what the picture
+  shows rather than a disagreement about what is true.
 
   It also carries **declared runtime coupling** (`uses` edges) — a subprocess
   call or a file-format contract — as `uses` / `used_by`, kept SEPARATE from the

@@ -33,7 +33,7 @@ from beadloom.graph.rules.layer_exemptions import (
     stale_layer_exemption_findings,
 )
 from beadloom.graph.rules.layers import layer_membership, same_layer_crossings
-from beadloom.graph.rules.types import Violation
+from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE, Violation
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
@@ -85,7 +85,7 @@ def _crossing_finding(
     return Violation(
         rule_name=rule.name,
         rule_description=rule.description,
-        rule_type="layer",
+        rule_type=LAYER_EDGE_RULE_TYPE,
         severity=rule.severity,
         file_path=None,
         line_number=None,

@@ -29,6 +29,7 @@ from beadloom.graph.rules.layer_reach import (
 from beadloom.graph.rules.layers import LayerMembership, layer_membership
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
+    LAYER_EDGE_RULE_TYPE,
     MATCHING_FORM_HINT,
     CardinalityRule,
     DenyRule,
@@ -568,7 +569,7 @@ def _direction_finding(
     return Violation(
         rule_name=rule.name,
         rule_description=rule.description,
-        rule_type="layer",
+        rule_type=LAYER_EDGE_RULE_TYPE,
         severity=rule.severity,
         file_path=None,
         line_number=None,

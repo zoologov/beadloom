@@ -18,6 +18,9 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings.
+- `rules/layer_edges.py` — the set of edges a layer rule finds against, as `(src, dst)` pairs,
+  for an instrument that DRAWS the graph rather than reporting on it (BDL-070 B4). It projects
+  the rule's own findings; it holds no predicate of its own.
 - `rules/layer_exemptions.py` — what a SAME-LAYER exemption is doing: which peer crossings it excuses, how many, and whether its exit condition has passed (BDL-070 B2). `layers.same_layer_crossings` decides what crosses; this decides what an entry does about it, the same split `exemptions.py` draws for the import boundary rules.
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
@@ -798,6 +801,35 @@ The finding names each end with the container that gives it its layer, and the r
 all three honest moves: remove the dependency, bring both ends inside one container the
 declaration gives a layer, or write an `exempt:` entry saying why it stands and what would retire
 it. A remediation naming only the exemption would be advice to silence the check.
+
+#### The edges a layer rule finds against (`rules/layer_edges.py`, BDL-070 B4)
+
+```python
+def flagged_layer_edges(conn, rule) -> frozenset[tuple[str, str]]
+```
+
+The rule engine reports its verdict as findings with messages and remediations, which is what a
+person reads. An instrument that DRAWS the graph needs the same verdict as a set of edges, and
+until this module existed the one that draws it answered the question itself: the architecture
+view flagged every `depends_on` edge at `dst_rank <= src_rank`, which is every edge pointing up
+and every edge staying inside one layer. Measured on this repository on 2026-09-13 over a warm
+full rebuild of the index, the view flagged 130 edges and the rule found against none of them —
+116 dependencies between two parts of one domain and 14 crossings `rules.yml` excuses by name.
+
+**This is not a fourth predicate; it is a projection of the rule's own verdict.** The findings
+come from `evaluate_layer_rules` and the edges are read off them, so a caller gets the direction
+check, the skip check, the same-layer predicate and the project's `exempt:` entries without any of
+the four being stated twice. A shared predicate called by both sides was the alternative, and it
+was rejected for this seam: it leaves two call sites that agree only while somebody keeps them
+agreeing, which is the failure BDL-070 exists to close. The cost is one extra evaluation of the
+rule for a caller that also lints — a pass over the edge set in memory.
+
+The pairs are the ends of the rule's EDGE findings, selected by `types.LAYER_EDGE_RULE_TYPE`. A
+finding about the rule itself — the population it judged, a declared layer no node carries, an
+exemption excusing nothing — names no edge and is not among them. An empty set therefore means the
+rule found against nothing, which is a different fact from the rule judging nothing:
+`layer_rule_reach` answers the second, and a caller rendering a verdict per edge needs both,
+because an edge the rule never judged must not be drawn as healthy.
 
 #### What a same-layer exemption is doing (`rules/layer_exemptions.py`, BDL-070 B2)
 

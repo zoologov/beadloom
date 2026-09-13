@@ -33,7 +33,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.application.site_pages import _KIND_DIR
-from beadloom.graph.rule_engine import LayerDef, layer_of, node_tags, own_layer_of, part_of_parents
+from beadloom.graph.rule_engine import (
+    LayerDef,
+    LayerExemption,
+    LayerRule,
+    flagged_layer_edges,
+    layer_of,
+    node_tags,
+    own_layer_of,
+    part_of_parents,
+)
 from beadloom.infrastructure.repository import count_symbols_owned_by_node
 
 if TYPE_CHECKING:
@@ -62,6 +71,12 @@ _LAYER_TAG_PREFIX = "layer-"
 _SERVED_DOC_EXT = ".html"
 _MD_EXT = ".md"
 
+# The edge kind the view renders a layering verdict on. A layer rule can be
+# declared over any edge kind; this picture draws the flag on dependency arrows,
+# so a rule declared over another kind is judged by `beadloom lint` and drawn by
+# nothing here.
+_FLAGGED_EDGE_KIND = "depends_on"
+
 _DOC_FRESH = "fresh"
 _DOC_STALE = "stale"
 _DOC_NONE = "none"
@@ -74,26 +89,36 @@ _DOC_NONE = "none"
 
 @dataclass(frozen=True)
 class _LayerView:
-    """What layer each node is in, for the declaration THIS graph carries.
+    """What layer each node is in, and which edges the layer rule finds against.
 
-    The view used to answer this itself, from a table of four tags and a table
-    of four ranks, and it climbed ``part_of`` in a loop of its own. It was one
-    of the three answers BDL-070 found disagreeing, so the arithmetic now lives
-    in :mod:`beadloom.graph.rules.layers` and this class only says which of its
-    two questions the view asks:
+    The view used to answer both questions itself, from a table of four tags and
+    a table of four ranks, and it climbed ``part_of`` in a loop of its own. It
+    was one of the three answers BDL-070 found disagreeing, so the arithmetic
+    lives in :mod:`beadloom.graph.rules.layers` and the verdict in the rule
+    engine. This class only says which question the view asks:
 
     - :meth:`token` reads the node's OWN tag, because the card shows what the
       node declares — a feature inside a domain declares no layer and says so.
     - :meth:`rank` INHERITS through ``part_of``, because a feature has to sit in
       its container's lane or the layout has no lane for it.
+    - :meth:`flagged` is the RULE's verdict, asked of the rule (BDL-070 B4).
 
-    The two differ on purpose, and the rule engine's verdict predicate is a
-    third question this class does not answer.
+    The first two differ on purpose. The third used to differ too, and that was
+    the defect: the view drew an edge red whenever ``dst_rank <= src_rank``,
+    which is every edge pointing up AND every edge staying inside one layer.
+    Measured on this repository on 2026-09-13, it drew 130 edges red that
+    ``beadloom lint`` finds nothing against — 116 dependencies between two parts
+    of one domain and 14 crossings the rules file excuses by name.
     """
 
-    layers: tuple[LayerDef, ...]
+    rule: LayerRule | None
     parents: Mapping[str, Collection[str]]
     tags: Mapping[str, Collection[str]]
+
+    @property
+    def layers(self) -> tuple[LayerDef, ...]:
+        """The declared layers, top to bottom; empty when none are declared."""
+        return () if self.rule is None else self.rule.layers
 
     def token(self, ref_id: str) -> str:
         """The short layer name for the node's OWN tag; ``""`` when it has none."""
@@ -110,9 +135,23 @@ class _LayerView:
         """
         return layer_of(ref_id, self.layers, self.parents, self.tags)
 
+    def flagged(self, conn: sqlite3.Connection) -> frozenset[tuple[str, str]]:
+        """The edges the declared layer rule finds against — its verdict, not ours.
 
-def _declared_layers(conn: sqlite3.Connection) -> tuple[LayerDef, ...]:
-    """The layer order this project DECLARES, read from the indexed rules.
+        Empty when the project declares no layer rule, and empty when the rule
+        judges an edge kind other than ``depends_on``: this view renders the
+        flag on dependency arrows only, so a rule declared over ``uses`` or
+        ``part_of`` is reported by ``beadloom lint`` and drawn by nothing here.
+        That is a gap in what the picture shows rather than a disagreement about
+        what is true, and it is stated because the two read the same otherwise.
+        """
+        if self.rule is None or self.rule.edge_kind != _FLAGGED_EDGE_KIND:
+            return frozenset()
+        return flagged_layer_edges(conn, self.rule)
+
+
+def _declared_layer_rule(conn: sqlite3.Connection) -> LayerRule | None:
+    """The layer rule this project DECLARES, read from the indexed rules.
 
     Read from the ``rules`` table — the same indexed graph every other read in
     this module goes through — rather than from ``rules.yml``, so generating the
@@ -121,30 +160,81 @@ def _declared_layers(conn: sqlite3.Connection) -> tuple[LayerDef, ...]:
     is a coupling between a writer and a reader of one shape, stated here
     because it is the kind of pair that drifts silently.
 
-    Empty when the index carries no layer rule (a graph that declares no layers,
-    or one indexed before rules were loaded): the view then shows no lanes,
-    which is honest, rather than putting every node in lane 0.
+    ``None`` when the index carries no layer rule (a graph that declares no
+    layers, or one indexed before rules were loaded): the view then shows no
+    lanes, which is honest, rather than putting every node in lane 0.
 
     A project with more than one layer rule gets the first by name. The view
     draws ONE stratification and has no way to show two.
+
+    The rule's ``severity`` is not in the index and is not reconstructed: it
+    decides how loudly a finding is reported and the view asks only WHICH edges
+    are found against. The ``exempt`` entries are in the index as of BDL-070 B4
+    and are reconstructed, because they decide exactly that — an index written
+    by an earlier release carries none, so a project that excuses crossings and
+    renders its site without reindexing sees those crossings drawn red until it
+    does.
     """
     row = conn.execute(
-        "SELECT rule_json FROM rules WHERE rule_type = 'layers' ORDER BY name LIMIT 1"
+        "SELECT name, description, rule_json FROM rules WHERE rule_type = 'layers' "
+        "ORDER BY name LIMIT 1"
     ).fetchone()
     if row is None:
-        return ()
+        return None
     try:
-        definition = json.loads(str(row[0]))
+        definition = json.loads(str(row["rule_json"]))
     except json.JSONDecodeError:
         logger.warning("architecture view: the indexed layer rule is not readable JSON")
-        return ()
-    declared = definition.get("layers") if isinstance(definition, dict) else None
+        return None
+    if not isinstance(definition, dict):
+        return None
+    layers = _declared_layers(definition)
+    if not layers:
+        return None
+    return LayerRule(
+        name=str(row["name"]),
+        description=str(row["description"] or ""),
+        layers=layers,
+        enforce=str(definition.get("enforce", "top-down")),
+        allow_skip=bool(definition.get("allow_skip", True)),
+        edge_kind=str(definition.get("edge_kind", "uses")),
+        exempt=_declared_exemptions(definition),
+    )
+
+
+def _declared_layers(definition: dict[str, object]) -> tuple[LayerDef, ...]:
+    """The rule's layers, top to bottom, from its indexed JSON."""
+    declared = definition.get("layers")
     if not isinstance(declared, list):
         return ()
     return tuple(
         LayerDef(name=str(layer.get("name", "")), tag=str(layer["tag"]))
         for layer in declared
         if isinstance(layer, dict) and layer.get("tag")
+    )
+
+
+def _declared_exemptions(definition: dict[str, object]) -> tuple[LayerExemption, ...]:
+    """The same-layer crossings the rule excuses, from its indexed JSON.
+
+    The entries were validated when the rules file was loaded — each names both
+    ends, a reason and an exit condition, or the load failed — so this reads
+    them rather than re-checking them. An entry missing an end is dropped
+    instead of being reconstructed with an empty glob, which would match
+    nothing and read as an entry that excuses nothing.
+    """
+    declared = definition.get("exempt")
+    if not isinstance(declared, list):
+        return ()
+    return tuple(
+        LayerExemption(
+            from_glob=str(entry["from"]),
+            to_glob=str(entry["to"]),
+            reason=str(entry.get("reason", "")),
+            until=str(entry.get("until", "")),
+        )
+        for entry in declared
+        if isinstance(entry, dict) and entry.get("from") and entry.get("to")
     )
 
 
@@ -164,9 +254,9 @@ def _layer_view(conn: sqlite3.Connection) -> _LayerView:
     whose tags are named otherwise rendered no lanes before this release either,
     and is told nothing — the correct silence rather than a miss.
     """
-    layers = _declared_layers(conn)
+    rule = _declared_layer_rule(conn)
     tags = node_tags(conn).as_mapping()
-    if not layers:
+    if rule is None:
         tagged = sum(
             1 for node in tags.values() if any(tag.startswith(_LAYER_TAG_PREFIX) for tag in node)
         )
@@ -179,7 +269,7 @@ def _layer_view(conn: sqlite3.Connection) -> _LayerView:
                 _LAYER_TAG_PREFIX,
             )
     return _LayerView(
-        layers=layers,
+        rule=rule,
         parents=part_of_parents(conn),
         tags=tags,
     )
@@ -282,14 +372,20 @@ def _arch_edges(
 
     - ``edges``: one entry per ``part_of`` / ``depends_on`` / ``uses`` edge,
       sorted. A ``depends_on`` edge also carries a ``violation`` flag — ``True``
-      when it points UP or cross-cuts the canonical layer order (``dst`` rank
-      ``<=`` ``src`` rank), ``False`` when it points DOWN (healthy). ``part_of``
-      is subtle containment and carries NO ``violation`` (not a flow arrow), and
-      neither does ``uses``: it records a RUNTIME coupling across a process or
-      file boundary (a harness shelling out to the CLI, a reader of a file
-      another node writes), which cannot break a layering rule the way an import
-      can. The flag is honestly omitted when either endpoint has no resolvable
-      rank.
+      when the project's layer rule finds against that edge, ``False`` when it
+      does not. **The verdict is the rule's** (BDL-070 B4): the view asks
+      :func:`~beadloom.graph.rules.layer_edges.flagged_layer_edges` rather than
+      deciding, so an edge is red here exactly when ``beadloom lint`` reports
+      it. Until B4 this module flagged every edge at ``dst_rank <= src_rank``,
+      which drew a dependency between two parts of one domain as a layering
+      violation — 130 such edges on this repository against the rule's nought.
+      ``part_of`` is subtle containment and carries NO ``violation`` (not a flow
+      arrow), and neither does ``uses``: it records a RUNTIME coupling across a
+      process or file boundary (a harness shelling out to the CLI, a reader of a
+      file another node writes), which cannot break a layering rule the way an
+      import can. The flag is honestly omitted when either endpoint has no
+      resolvable rank — an edge the rule never judged must not be drawn as
+      healthy.
     - the four ``why`` lists, sorted + de-duplicated: what a node imports
       (``depends_on``) and who imports it, kept SEPARATE from what it ``uses``
       at runtime and who uses it. Merging them would assert an import binding
@@ -302,6 +398,7 @@ def _arch_edges(
         "WHERE kind IN ('part_of', 'depends_on', 'uses') "
         "ORDER BY kind, src_ref_id, dst_ref_id"
     ).fetchall()
+    flagged = layers.flagged(conn)
     edges: list[dict[str, object]] = []
     depends_on: dict[str, set[str]] = {}
     depended_on_by: dict[str, set[str]] = {}
@@ -310,13 +407,11 @@ def _arch_edges(
     for row in rows:
         src, dst, kind = str(row["src_ref_id"]), str(row["dst_ref_id"]), str(row["kind"])
         edge: dict[str, object] = {"src": src, "dst": dst, "kind": kind}
-        if kind == "depends_on":
+        if kind == _FLAGGED_EDGE_KIND:
             depends_on.setdefault(src, set()).add(dst)
             depended_on_by.setdefault(dst, set()).add(src)
-            src_rank = layers.rank(src)
-            dst_rank = layers.rank(dst)
-            if src_rank is not None and dst_rank is not None:
-                edge["violation"] = dst_rank <= src_rank
+            if layers.rank(src) is not None and layers.rank(dst) is not None:
+                edge["violation"] = (src, dst) in flagged
         elif kind == "uses":
             uses.setdefault(src, set()).add(dst)
             used_by.setdefault(dst, set()).add(src)

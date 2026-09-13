@@ -98,6 +98,18 @@ edge was removed and fourteen same-layer crossings were excused by name, each wi
 an exit condition, before this shipped. Read the same graph with the `exempt:` block off and the
 fourteen are reported.
 
+**The generated site's architecture view moves, and here it moves a lot.** That picture drew a
+dependency arrow red whenever the target's lane was at or above the source's, which is every edge
+pointing up AND every edge staying inside one layer — so a dependency between two parts of one
+domain was drawn as a layering violation while `beadloom lint` found nothing against it. It asks
+the rule now. Measured on this repository on 2026-09-13 over a warm full rebuild of the index: 130
+of the 357 edges the picture renders a verdict on go from `"violation": true` to
+`"violation": false`, 116 of them dependencies inside one domain and 14 crossings the rules file
+excuses. An edge with an end in no declared layer still carries no flag at all, because the rule
+does not judge it. Regenerate with `beadloom docs site` to see the new picture, and reindex first:
+the view reads its layer rule from the index, and an index written before this release carries the
+rule without its `exempt:` entries.
+
 ### Added
 
 - **`beadloom version-surface` — every place this project states its own version, derived, with
@@ -285,6 +297,19 @@ fourteen are reported.
 
 ### Changed
 
+- **The architecture view's edge verdict is the layer rule's, asked of the rule** (BDL-070 B4).
+  `application/architecture_view.py` held the third of the three disagreeing answers this epic
+  set out to remove: it flagged a `depends_on` edge at `dst_rank <= src_rank`, a predicate that
+  is true of every upward edge and of every same-layer edge alike. It now calls
+  `graph.rules.layer_edges.flagged_layer_edges`, which projects the rule's own findings, so an
+  edge is red in the picture exactly when `beadloom lint` reports it — direction, layer skip, the
+  same-layer predicate and the project's `exempt:` entries, none of them stated twice. Measured on
+  this repository on 2026-09-13, with one index lineage held across the change: the view flagged
+  130 edges the rule finds nothing against, and flags none now. A test holds the two sets equal on
+  this repository and on fixture graphs whose layers are declared as `tier-*`.
+- **`reindex` stores a layer rule's `exempt:` entries in the `rules` table.** The architecture
+  view reads its layer rule from that table, so without the entries the generated site would flag
+  crossings the Gate excuses. The key is written only when the rule declares entries.
 - **A stale count says `pair(s)`, because a pair is a document AND a code file.** One
   `sync_state` row is one pair, so three code files in a package give three stale pairs over one
   README — and `4 stale doc(s)` over two documents was a wrong noun on a right number. Nineteen
