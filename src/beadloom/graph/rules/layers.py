@@ -122,13 +122,34 @@ def own_layer_of(
     return None
 
 
-def layer_of(
+@dataclass(frozen=True)
+class LayerMembership:
+    """The layer a node is in, and the node whose own tag put it there.
+
+    ``declared_by`` is the node itself when it carries a declared tag, and the
+    ``part_of`` container it inherited from otherwise. The rule reports it,
+    because the first question a reader asks of a finding about an untagged
+    component is why that component is in that layer at all — and the answer is
+    a node's name, not an argument.
+    """
+
+    ref_id: str
+    index: int
+    declared_by: str
+
+    @property
+    def inherited(self) -> bool:
+        """True when a container decided, rather than the node's own tag."""
+        return self.declared_by != self.ref_id
+
+
+def layer_membership(
     ref_id: str,
     layers: Sequence[LayerDef],
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
-) -> int | None:
-    """Index of the layer the node is in: its own, else its nearest ancestor's.
+) -> LayerMembership | None:
+    """The layer the node is in — its own, else its nearest ancestor's — and whence.
 
     A node that declares a layer KEEPS it and does not climb: a node tagged as a
     domain inside a container tagged as a service is a domain, not a service.
@@ -136,19 +157,42 @@ def layer_of(
     decides, and ``None`` when no generation does: an untagged node with no
     tagged container has no layer, which is a different fact from being in the
     bottom one.
+
+    Within one generation the topmost declared layer wins, as documented at the
+    top of this module, and the node that carries it is the one named — so two
+    ancestors at the same distance give one answer and one provenance rather
+    than an answer whose provenance depends on iteration order.
     """
     own = own_layer_of(ref_id, layers, tags)
     if own is not None:
-        return own
+        return LayerMembership(ref_id=ref_id, index=own, declared_by=ref_id)
     for generation in part_of_generations(ref_id, parents):
         declared = [
-            index
-            for index in (own_layer_of(ancestor, layers, tags) for ancestor in generation)
+            (index, ancestor)
+            for index, ancestor in (
+                (own_layer_of(ancestor, layers, tags), ancestor) for ancestor in generation
+            )
             if index is not None
         ]
         if declared:
-            return min(declared)
+            index, ancestor = min(declared)
+            return LayerMembership(ref_id=ref_id, index=index, declared_by=ancestor)
     return None
+
+
+def layer_of(
+    ref_id: str,
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> int | None:
+    """Index of the layer the node is in, for a caller that needs no provenance.
+
+    One line over :func:`layer_membership`, so the walk exists once: a second
+    body answering the same question is what this module was opened to remove.
+    """
+    membership = layer_membership(ref_id, layers, parents, tags)
+    return None if membership is None else membership.index
 
 
 def tagged_containers(

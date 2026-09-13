@@ -583,7 +583,7 @@ def format_porcelain(result: LintResult) -> str:
 
     Each layer rule's population leads the output on its own line, marked with
     :data:`POPULATION_MARKER` and shaped
-    ``# layer_population:rule:edge_kind:evaluated:total:skipped:inherited``. The
+    ``# layer_population:rule:edge_kind:evaluated:total:skipped``. The
     marker is what keeps the two forms apart — a rule name cannot begin with
     ``"# "`` — so a consumer that reads violation records drops the marked
     lines and reads exactly the seven-field records it read before. Returns an
@@ -591,8 +591,8 @@ def format_porcelain(result: LintResult) -> str:
     """
     lines: list[str] = [
         f"{POPULATION_MARKER}layer_population:{reach.rule_name}:{reach.edge_kind}"
-        f":{reach.own_tags.evaluated}:{reach.own_tags.total}"
-        f":{reach.own_tags.skipped_untagged}:{reach.inherited.evaluated}"
+        f":{reach.population.evaluated}:{reach.population.total}"
+        f":{reach.population.skipped_untagged}"
         for reach in _stated_populations(result)
     ]
     for v in result.violations:

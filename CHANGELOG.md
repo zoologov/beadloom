@@ -17,8 +17,14 @@ project that copied this rules file, and a green run said nothing about how much
 had looked at — 16 of 365 live `depends_on` edges on this repository, measured 2026-09-13 over a
 warm full rebuild of the index, because the rule reads a node's OWN layer tags. Release A makes
 that number visible on every surface that reports a lint result. **It changes no verdict**:
-inheritance has not shipped, the rule still decides on own tags, and `beadloom-ku26` makes that
-move in the release that announces it.
+the rule still decides on own tags there. Release B, below, is the half that decides on the
+number Release A made visible, and both are in this release.
+
+BDL-070 Release B. `architecture-layers` now decides on the population it reports. An end takes
+its layer from the nearest `part_of` container that declares one, and an edge that stays inside
+one layer is a finding when no container the declaration gives a layer holds both ends.
+**This changes verdicts on a graph nobody edited**, which is what the upgrade note two sections
+down is for.
 
 ### Upgrade note — one action, and only if you already have an index
 
@@ -47,6 +53,40 @@ The view logs the case at INFO when it happens, with the number of tagged nodes.
 declare the layer rule whose tags the graph already carries; the lanes were being drawn from a
 table written inside the view, and a picture drawn from a table nobody declared is a picture of
 Beadloom's assumptions rather than of the project.
+
+### Upgrade note — `architecture-layers` judges edges it used to pass over
+
+**Measured on this repository 2026-09-13**, with one index lineage held across the change: the
+rule judged **16 of 365** live `depends_on` edges and now judges **357**. The eight it still
+skips have an end in no declared layer at all — neither its own tag nor a `part_of` container's.
+A project whose layer tags sit on containers rather than on the nodes that depend will see the
+largest move, and a project with no `part_of` edges at all will see none: there is nothing to
+inherit from, so it is judged exactly as it was.
+
+Two kinds of finding can appear on a graph nobody changed, and both carry the severity the rule
+declares. That is `error` in the rules file this project ships, so **a Gate that was green can
+turn red on upgrade**:
+
+- **A direction violation between ends that carry no tag of their own.** `store-db` inside a
+  container tagged `tier-store` depending on `web-api` inside one tagged `tier-web` is an edge
+  from the bottom layer into the top one. The finding names the container the layer came from
+  — `inherited from 'store'` — because the first question it raises is why a node nobody tagged
+  is in that layer.
+- **A dependency between peers inside one layer.** Two domains in the same layer, neither
+  inside the other and with no tagged container holding both, were legal under the predicate
+  that passed every same-layer edge. The peer-dependency line most layered architectures state
+  was checked by nothing; it is checked now.
+
+What to do with a new finding, in the order that keeps the check honest: remove the dependency,
+or move both ends inside one container the declaration gives a layer, or add an `exempt:` entry
+to the layer rule naming the pair, why it stands and what would retire it. An entry without a
+`reason` is refused when the rules file is read, and an entry that excuses nothing or outlives
+its own `until:` is reported.
+
+On this repository the verdict did not move, and that is not a property of the predicate: one
+edge was removed and fourteen same-layer crossings were excused by name, each with a reason and
+an exit condition, before this shipped. Read the same graph with the `exempt:` block off and the
+fourteen are reported.
 
 ### Added
 

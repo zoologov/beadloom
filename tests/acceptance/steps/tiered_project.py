@@ -185,3 +185,34 @@ def graph_with_peer_containers() -> tuple[list[Node], list[Edge]]:
         ("postings-api", "ledger-api", "depends_on"),
     ]
     return nodes, edges
+
+
+def graph_with_nested_parts() -> tuple[list[Node], list[Edge]]:
+    """Two containers in DIFFERENT tiers, each holding an untagged part.
+
+    The shape this repository's own graph has and an own-tag rule cannot see:
+    ``web-api`` and ``store-db`` carry no tag of their own, so every edge
+    between them is invisible to a rule that reads own tags only. Through
+    ``part_of`` they are in ``tier-web`` and ``tier-store``, which makes
+    ``store-db -> web-api`` an edge from the bottom tier into the top one and
+    ``web-api -> store-db`` the same dependency the right way round.
+
+    ``root`` carries no tier, so the two containers are not made peers of one
+    tagged parent by accident.
+    """
+    nodes: list[Node] = [
+        ("root", "service", []),
+        ("web", "domain", [TIERS[0]]),
+        ("store", "domain", [TIERS[2]]),
+        ("web-api", "component", []),
+        ("store-db", "component", []),
+    ]
+    edges: list[Edge] = [
+        ("web", "root", "part_of"),
+        ("store", "root", "part_of"),
+        ("web-api", "web", "part_of"),
+        ("store-db", "store", "part_of"),
+        ("web-api", "store-db", "depends_on"),
+        ("store-db", "web-api", "depends_on"),
+    ]
+    return nodes, edges

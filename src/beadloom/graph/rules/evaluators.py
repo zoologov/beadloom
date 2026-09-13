@@ -18,18 +18,15 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
+from beadloom.graph.rules.layer_crossings import same_layer_statements
 from beadloom.graph.rules.layer_declaration import declaration_statement
-from beadloom.graph.rules.layer_exemptions import (
-    excused_crossings,
-    stale_layer_exemption_findings,
-)
 from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,
     part_of_parents,
     population_statement,
     reach_of,
 )
-from beadloom.graph.rules.layers import own_layer_of, same_layer_crossings
+from beadloom.graph.rules.layers import LayerMembership, layer_membership
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     MATCHING_FORM_HINT,
@@ -53,7 +50,7 @@ from beadloom.infrastructure.repository import (
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable, Collection, Mapping
+    from collections.abc import Callable
 
 
 # ---------------------------------------------------------------------------
@@ -546,31 +543,80 @@ def evaluate_forbid_edge_rules(
 # ---------------------------------------------------------------------------
 
 
-def _layer_exemption_statements(
-    rule: LayerRule,
-    all_edges: list[tuple[str, str]],
-    parents: dict[str, set[str]],
-    tags: Mapping[str, Collection[str]],
-) -> list[Violation]:
-    """Report every ``exempt:`` entry that has stopped earning its place.
+def _layer_phrase(rule: LayerRule, membership: LayerMembership) -> str:
+    """Where a node sits, as a finding says it.
 
-    The crossings themselves are NOT decided here. BDL-070 ships the layer work
-    in two releases and this one changes no verdict: what an adopter sees on
-    upgrade is a report about the entries their own rules file declares, and
-    only bead B3 turns an un-excused crossing into a finding. Until then the
-    predicate is computed anyway, because an exemption that nothing consults is
-    an exemption nobody can tell is dead — which is precisely the failure
-    :mod:`.layer_exemptions` exists to prevent, shipped in the same release that
-    creates the hole.
-
-    A rule declaring no exemption computes nothing: the early return keeps every
-    project that has not written one off this path entirely.
+    Identical to what the rule said before BDL-070 B3 for a node carrying its
+    own tag, and one clause longer for a node that inherited one: the first
+    question a reader asks of a finding about a component they never tagged is
+    why it is in that layer, and the container's name is the answer.
     """
-    if not rule.exempt:
-        return []
-    crossings = same_layer_crossings(all_edges, rule.layers, parents, tags)
-    _, excused = excused_crossings(rule, crossings)
-    return stale_layer_exemption_findings(rule, excused)
+    phrase = f"layer '{rule.layers[membership.index].name}', index {membership.index}"
+    if membership.inherited:
+        phrase += f", inherited from '{membership.declared_by}'"
+    return phrase
+
+
+def _direction_finding(
+    rule: LayerRule,
+    src: LayerMembership,
+    dst: LayerMembership,
+    *,
+    message: str,
+) -> Violation:
+    """One layer-rule decision about an edge between two different layers."""
+    return Violation(
+        rule_name=rule.name,
+        rule_description=rule.description,
+        rule_type="layer",
+        severity=rule.severity,
+        file_path=None,
+        line_number=None,
+        from_ref_id=src.ref_id,
+        to_ref_id=dst.ref_id,
+        message=message,
+    )
+
+
+def _across_layers(rule: LayerRule, src: LayerMembership, dst: LayerMembership) -> list[Violation]:
+    """What the rule decides about an edge whose ends are in DIFFERENT layers.
+
+    Two findings are possible and they are exclusive: an edge running upward
+    breaks the declared direction, and an edge running downward past a layer
+    breaks ``allow_skip: false``. An edge inside one layer is not this
+    function's business — :mod:`.layer_crossings` holds that half.
+    """
+    src_where = _layer_phrase(rule, src)
+    dst_where = _layer_phrase(rule, dst)
+    if rule.enforce == "top-down" and src.index > dst.index:
+        return [
+            _direction_finding(
+                rule,
+                src,
+                dst,
+                message=(
+                    f"Layer violation: '{src.ref_id}' ({src_where}) depends on "
+                    f"'{dst.ref_id}' ({dst_where}). "
+                    f"Lower layers must not depend on upper layers "
+                    f"(rule '{rule.name}')."
+                ),
+            )
+        ]
+    if not rule.allow_skip and (dst.index - src.index) > 1:
+        return [
+            _direction_finding(
+                rule,
+                src,
+                dst,
+                message=(
+                    f"Layer skip violation: '{src.ref_id}' ({src_where}) depends on "
+                    f"'{dst.ref_id}' ({dst_where}). "
+                    f"Skipping layers is not allowed "
+                    f"(rule '{rule.name}')."
+                ),
+            )
+        ]
+    return []
 
 
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]:
@@ -585,28 +631,28 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     lower layer (``j == i + 1``) are permitted; skipping layers produces a
     violation.
 
-    An edge whose source or target carries no declared layer tag of its OWN is
-    not judged — and is no longer passed over in silence. Each rule additionally
-    reports how much of its edge set it judged and how much it skipped
-    (:func:`~beadloom.graph.rules.layer_reach.population_statement`), because
-    "16 of 362 edges, none of them wrong" and "362 of 362 edges, none of them
-    wrong" were the same green line. The statement is ``warn`` and changes no
-    verdict; what the rule DECIDES here is unchanged, which is the property
-    ``tests/test_the_layer_rule_states_the_population_it_judged.py`` holds
-    against a verbatim copy of this function as it stood before.
+    **Which layer a node is in is
+    :func:`~beadloom.graph.rules.layers.layer_membership`'s answer**: its own
+    declared tag, else the nearest ``part_of`` container that declares one.
+    BDL-070 B3 (``beadloom-ku26``) made that the deciding population. Before it,
+    the rule read own tags alone and passed over every other edge in silence —
+    16 of 365 live ``depends_on`` edges on this repository against 357 by
+    ancestry, measured 2026-09-13 — so a green line about sixteen edges read
+    exactly like a green line about all of them.
+
+    An edge whose source or target is in no declared layer at all is still not
+    judged, and the rule states how many it skipped
+    (:func:`~beadloom.graph.rules.layer_reach.population_statement`).
+
+    An edge INSIDE one layer is legal when both ends share a container the
+    declaration gives a layer and a finding when they do not (RFC Q1) —
+    :func:`~beadloom.graph.rules.layer_crossings.same_layer_statements`, which
+    also reports an ``exempt:`` entry that has stopped earning its place.
 
     A layer the DECLARATION names and no node is in is reported too
     (:func:`~beadloom.graph.rules.layer_declaration.declaration_statement`), at
-    ``warn`` for the same reason: a declaration that mentions a tag the graph
-    does not carry describes a check one step shorter than it reads, and
-    ``validate_rules`` — which asks the same function — is reached for no layer
-    rule in production.
-
-    Which layer a node is in is answered by
-    :func:`~beadloom.graph.rules.layers.own_layer_of` rather than by iterating
-    the node's tag ``set``: the declaration decides, so a node carrying two
-    declared tags lands in the topmost of them instead of in whichever one a
-    hash happened to yield first.
+    ``warn``: a declaration that mentions a tag the graph does not carry
+    describes a check one step shorter than it reads.
     """
     if not rules:
         return []
@@ -624,69 +670,21 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         all_edges = live_edges_of_kind(conn, rule.edge_kind)
         violations.extend(population_statement(rule, reach_of(rule, all_edges, parents, tags)))
         violations.extend(declaration_statement(rule, tags))
-        violations.extend(_layer_exemption_statements(rule, all_edges, parents, tags))
+        violations.extend(same_layer_statements(rule, all_edges, parents, tags))
 
         for src_ref_id, dst_ref_id in all_edges:
-            src_layer_idx = own_layer_of(src_ref_id, rule.layers, tags)
-            dst_layer_idx = own_layer_of(dst_ref_id, rule.layers, tags)
+            src = layer_membership(src_ref_id, rule.layers, parents, tags)
+            dst = layer_membership(dst_ref_id, rule.layers, parents, tags)
 
-            # Skip if either node is not in any layer
-            if src_layer_idx is None or dst_layer_idx is None:
+            # An end in no declared layer, its own or a container's: not judged.
+            if src is None or dst is None:
                 continue
 
-            # Same layer -- always OK
-            if src_layer_idx == dst_layer_idx:
+            # Inside one layer, and that half is decided above.
+            if src.index == dst.index:
                 continue
 
-            # Check direction violation: lower layer -> upper layer
-            # src_layer_idx > dst_layer_idx means src is lower, dst is upper
-            if rule.enforce == "top-down" and src_layer_idx > dst_layer_idx:
-                src_layer_name = rule.layers[src_layer_idx].name
-                dst_layer_name = rule.layers[dst_layer_idx].name
-                violations.append(
-                    Violation(
-                        rule_name=rule.name,
-                        rule_description=rule.description,
-                        rule_type="layer",
-                        severity=rule.severity,
-                        file_path=None,
-                        line_number=None,
-                        from_ref_id=src_ref_id,
-                        to_ref_id=dst_ref_id,
-                        message=(
-                            f"Layer violation: '{src_ref_id}' (layer '{src_layer_name}', "
-                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
-                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
-                            f"Lower layers must not depend on upper layers "
-                            f"(rule '{rule.name}')."
-                        ),
-                    )
-                )
-                continue
-
-            # Check skip violation (only when allow_skip=False)
-            if not rule.allow_skip and (dst_layer_idx - src_layer_idx) > 1:
-                src_layer_name = rule.layers[src_layer_idx].name
-                dst_layer_name = rule.layers[dst_layer_idx].name
-                violations.append(
-                    Violation(
-                        rule_name=rule.name,
-                        rule_description=rule.description,
-                        rule_type="layer",
-                        severity=rule.severity,
-                        file_path=None,
-                        line_number=None,
-                        from_ref_id=src_ref_id,
-                        to_ref_id=dst_ref_id,
-                        message=(
-                            f"Layer skip violation: '{src_ref_id}' (layer '{src_layer_name}', "
-                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
-                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
-                            f"Skipping layers is not allowed "
-                            f"(rule '{rule.name}')."
-                        ),
-                    )
-                )
+            violations.extend(_across_layers(rule, src, dst))
 
     return violations
 
@@ -990,9 +988,7 @@ def _node_dir_source_prefixes(conn: sqlite3.Connection, source_root: str) -> set
     * any node whose source equals ``source_root`` itself (the root service
       ``src/beadloom/``) — it spans the entire tree, so it can never be coverage.
     """
-    rows = conn.execute(
-        "SELECT kind, source FROM nodes WHERE source IS NOT NULL"
-    ).fetchall()
+    rows = conn.execute("SELECT kind, source FROM nodes WHERE source IS NOT NULL").fetchall()
     root_norm = source_root.rstrip("/") + "/"
     prefixes: set[str] = set()
     for row in rows:

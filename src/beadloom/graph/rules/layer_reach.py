@@ -5,15 +5,16 @@
 ``architecture-layers`` is this project's only machine check that dependencies
 run in the declared direction, and it ships at ``severity: error``, so what it
 evaluates decides whether ``main`` is mergeable. Measured on this repository at
-``aa4bfad4`` it judged **16 of 362** live ``depends_on`` edges: it reads a node's
-OWN tags and passes over every edge whose ends carry none. The green line said
+``aa4bfad4`` it judged **16 of 362** live ``depends_on`` edges: it read a node's
+OWN tags and passed over every edge whose ends carried none. The green line said
 ``0 violations, 16 rules evaluated`` — the same words it would say for 362 of
 362.
 
-This module is what makes the two readable apart. It counts the rule's edge set
-twice — once by own tags, which is what the rule decides on, and once by layer
-membership inherited through ``part_of``, which is what the same declaration
-would reach — and states the pair as a finding.
+This module is what makes the two readable apart. It counts the edge set the
+rule was handed against the layer each end is IN — its own tag, else the nearest
+``part_of`` container that declares one, which is what the rule decides on since
+BDL-070 B3 — and states the fraction as a finding. Measured on this repository
+2026-09-13, after inheritance shipped: **357 of 365**.
 
 **A finding, not a clause in the summary line**, following
 :func:`~beadloom.graph.rules.scenario_coverage._population_statement`: the TUI's
@@ -34,7 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
-from beadloom.graph.rules.layers import layer_of, layer_population, own_layer_of
+from beadloom.graph.rules.layers import layer_of, layer_population
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import Violation
 
@@ -54,44 +55,32 @@ LAYER_POPULATION_RULE_TYPE = "layer_population"
 
 @dataclass(frozen=True)
 class LayerReach:
-    """What one layer rule could see, counted two ways.
+    """What one layer rule could see, and how much of it there was.
 
-    ``own_tags`` is the population the rule DECIDES on today: an edge is judged
-    when both ends carry a declared layer tag themselves. ``inherited`` is the
-    population the same declaration would reach if a node took its layer from
-    the nearest ``part_of`` container that declares one. The difference between
-    them is the part of the graph a green result says nothing about.
+    ``population`` is what the rule DECIDES on: an edge is judged when both ends
+    are in a declared layer, by their own tag or by the nearest ``part_of``
+    container that carries one. One population and not two, because since
+    BDL-070 B3 there is one predicate — reporting a second figure beside it
+    would be a second answer to "how much did the rule judge", which is the
+    shape this epic was opened to remove.
     """
 
     rule_name: str
     edge_kind: str
-    own_tags: LayerPopulation
-    inherited: LayerPopulation
-
-    @property
-    def unjudged(self) -> int:
-        """Edges inheritance would reach that own tags do not."""
-        return self.inherited.evaluated - self.own_tags.evaluated
+    population: LayerPopulation
 
     def to_dict(self) -> dict[str, object]:
         """JSON-ready mapping for ``lint --format json``.
 
-        Both pairs of numbers, flattened: a machine reader that wants to watch
-        the rule's reach change across Release B needs ``inherited_evaluated``
-        beside ``evaluated``, and a nested object would make the common read —
-        "how much did it judge" — two lookups instead of one. ``unjudged`` is
-        derived and carried anyway, because a consumer that recomputes a
-        subtraction is a second place the arithmetic can be wrong.
+        Flat, because the common read — "how much did it judge" — is one lookup
+        and a nested object would make it two.
         """
         return {
             "rule": self.rule_name,
             "edge_kind": self.edge_kind,
-            "evaluated": self.own_tags.evaluated,
-            "total": self.own_tags.total,
-            "skipped_untagged": self.own_tags.skipped_untagged,
-            "inherited_evaluated": self.inherited.evaluated,
-            "inherited_total": self.inherited.total,
-            "unjudged": self.unjudged,
+            "evaluated": self.population.evaluated,
+            "total": self.population.total,
+            "skipped_untagged": self.population.skipped_untagged,
         }
 
 
@@ -135,7 +124,7 @@ def reach_of(
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
 ) -> LayerReach:
-    """Count *edges* both ways, without reading the graph.
+    """Count *edges* against the declaration, without reading the graph.
 
     Pure, so the arithmetic is testable on a shape rather than on a database,
     and so the evaluator can pass the edge list it has already fetched instead
@@ -144,8 +133,7 @@ def reach_of(
     return LayerReach(
         rule_name=rule.name,
         edge_kind=rule.edge_kind,
-        own_tags=layer_population(edges, lambda ref_id: own_layer_of(ref_id, rule.layers, tags)),
-        inherited=layer_population(
+        population=layer_population(
             edges, lambda ref_id: layer_of(ref_id, rule.layers, parents, tags)
         ),
     )
@@ -211,19 +199,13 @@ def population_statement(rule: LayerRule, reach: LayerReach) -> list[Violation]:
     and it is reported once for the rule rather than once for each edge that
     went unjudged.
     """
-    if reach.own_tags.total == 0 or reach.own_tags.skipped_untagged == 0:
+    if reach.population.total == 0 or reach.population.skipped_untagged == 0:
         return []
     message = (
-        f"this rule evaluated {reach.own_tags.evaluated} of {reach.own_tags.total} "
-        f"live `{reach.edge_kind}` edge(s) and skipped {reach.own_tags.skipped_untagged} "
-        f"for an end carrying no layer tag of its own"
+        f"this rule evaluated {reach.population.evaluated} of {reach.population.total} "
+        f"live `{reach.edge_kind}` edge(s) and skipped {reach.population.skipped_untagged} "
+        f"for an end in no declared layer"
     )
-    if reach.unjudged > 0:
-        message += (
-            f"; inheriting layer membership through `part_of` would reach "
-            f"{reach.inherited.evaluated} of {reach.inherited.total}, so "
-            f"{reach.unjudged} edge(s) pass this rule today by not being looked at"
-        )
     return [
         Violation(
             rule_name=rule.name,
@@ -237,9 +219,9 @@ def population_statement(rule: LayerRule, reach: LayerReach) -> list[Violation]:
             message=message,
             remediation=(
                 f"read the first number as the reach a green result claims: the other "
-                f"{reach.own_tags.skipped_untagged} edge(s) were not judged, which is a "
+                f"{reach.population.skipped_untagged} edge(s) were not judged, which is a "
                 f"different fact from being clean — tag the ends that carry no layer, or "
-                f"place them inside a container that declares one"
+                f"place them inside a `part_of` container that declares one"
             ),
         )
     ]
@@ -254,7 +236,7 @@ def stated_populations(reaches: Sequence[LayerReach]) -> list[LayerReach]:
     the same way through this one function, so "nothing to state" cannot mean
     one thing on the Gate line and another in `prime`.
     """
-    return [reach for reach in reaches if reach.own_tags.total]
+    return [reach for reach in reaches if reach.population.total]
 
 
 def population_phrase(reach: LayerReach) -> str:
@@ -271,6 +253,6 @@ def population_phrase(reach: LayerReach) -> str:
     exists to remove, at the scale of a sentence.
     """
     return (
-        f"{reach.rule_name} judged {reach.own_tags.evaluated} of "
-        f"{reach.own_tags.total} live {reach.edge_kind} edge(s)"
+        f"{reach.rule_name} judged {reach.population.evaluated} of "
+        f"{reach.population.total} live {reach.edge_kind} edge(s)"
     )
