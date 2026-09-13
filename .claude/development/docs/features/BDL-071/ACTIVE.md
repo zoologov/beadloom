@@ -28,7 +28,7 @@ text, the Gate and the full suite are green on the branch commit, and `692205d7`
 | Tracker | Bead | Status | Details |
 |---|---|---|---|
 | `beadloom-2716` | R1 | Done | release/5.0.0 pushed: bump, 3 audit triples, [5.0.0]; ci rc 0, suite green on Darwin/3.12 |
-| `beadloom-2kty` | R2 | Blocked | three-version harness on a project that is not ours |
+| `beadloom-2kty` | R2 | Done | harness in scratchpad (sha256 5d132afb…): 4.0.0 rc 0 no key; 5.0.0 rc 0, 8 keys; main rc 1, 5 keys; mismatch exits 3 |
 | `beadloom-u7jp` | R3 | Blocked | review of 5.0.0 before publishing |
 | `beadloom-7foi` | R4 | Blocked | publish 5.0.0 and verify the downloaded wheel |
 | `beadloom-h784` | R5 | Blocked | the 6.0.0 release pull request |
