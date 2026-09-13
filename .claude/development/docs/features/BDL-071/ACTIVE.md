@@ -35,7 +35,7 @@ are filed, and the pull request is merged with nine green checks.
 | `beadloom-h784` | R5 | Done | 6.0.0 PR open (URL in bead comment): [5.0.0] diff vs d6eaee60 empty; ci rc 0, suite green on Darwin/3.13 |
 | `beadloom-p02a` | R6 | Done | OK, 2 minor + 1 nitpick, all handed to R8; suite green on Darwin/3.12 at `78166c20` |
 | `beadloom-bicw` | R7 | Done | merged `058ef59e`; wheel sha256 09668b53… from PyPI: harness exit 0, 5 keys, verdict change |
-| `beadloom-tmgp` | R8 | Ready | records: ROADMAP and the issue log |
+| `beadloom-tmgp` | R8 | In progress | ROADMAP: 6.0.0 verified, rows for 5.0.0 and 6.0.0; issue log #301, #302, #293 amended |
 
 ## Notes
 

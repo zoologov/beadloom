@@ -1,8 +1,12 @@
 # Beadloom Roadmap
 
-> **Current version: 6.0.0** (the BDL-071 release pull request from `features/BDL-071`, cut
-> 2026-09-14 and NOT yet verified on the downloaded wheel — BDL-071 records that verification
-> when it has been made). 5.0.0 was published from `release/5.0.0` and was never `main`'s
+> **Current version: 6.0.0** (PyPI, published 2026-09-13 from `main` at `058ef59e` and verified
+> on the wheel downloaded from PyPI — not on the local build). What was checked there rather than
+> assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
+> 6.0.0 in a fresh environment; `lint --strict` exits 1 on a layer violation the rule sees only
+> through inheritance, which 5.0.0 did not report; and a `layer_populations` entry carries five
+> keys. That is 6.0.0's verdict change and its narrowed population contract, read out of the
+> artifact an adopter downloads. 5.0.0 was published from `release/5.0.0` and was never `main`'s
 > version. The release before it on `main` is 4.0.0 (PyPI, verified on the downloaded wheel
 > 2026-09-10 — not on the local build). What was checked there rather than assumed: 43
 > commands including all nine the epic added, `GuardOutcome` carrying its sixth member
@@ -30,6 +34,8 @@
 | **v3.0.1** (08-27) | `graph_summary_facts` and `doc_area_coherence`; the audit's three populations; **the audit stopped declaring two facts about Beadloom as facts about the adopter's project**; 14 graph corrections; the package description |
 | **v3.0.2** (08-27) | the description was fixed in two copies of five — the check read the two it compared and printed the word for all of them |
 | **v4.0.0** (09-10) | **MAJOR.** BDL-068, six slices, 86 beads: the flow's rules became instruments. `impact` / `axes` / `scope-check` answer a change's blast radius from the source; `mutation`, `rooms`, `typed-surface`, `bd-calls`, `clean-room`, `issue-number` each replace a convention with a measurement; `waves --parent` derives wave membership from the tracker. Breaking: a sixth guard verdict `unresolved` that warns and permits where `error` blocked, `guard --liveness --json` as an object, and the firing record no longer storing command lines — 1 927 of 1 999 firings held one. Every check now names the boundary of its own knowledge: what it did not run, whose finding it is, and the population it did not reach. |
+| **v5.0.0** (09-13) | **MAJOR.** BDL-069 and BDL-070 Release A, published from `release/5.0.0` at `d6eaee60` and never `main`'s version. `architecture-layers` states how many live `depends_on` edges it judged, and changes none of its verdicts. Four checks that reported over an empty, partial or unnamed population were fixed, and two of those fixes move a verdict: a virgin `init` project passes `beadloom ci`, and a misdeclared `issue_log:` blocks. Breaking: `issue-number check --json` widens `declared` to `bool \| null`. Verified on the wheel downloaded from PyPI (sha256 `08085970bb2dbb8c…`, publish run 34784341146): the release harness exited 0, `lint --strict` returned 0, and a `layer_populations` entry carries eight keys. |
+| **v6.0.0** (09-13) | **MAJOR.** BDL-070 Release B, published from `main` at `058ef59e`, the squash merge of PR #75. `architecture-layers` decides on the population 5.0.0 reported: an end takes its layer through `part_of`, so verdicts change on a graph nobody edited. Over this repository's carried-forward index the rule judges 357 of 365 edges, where it judged 16. Breaking: that verdict change, and a `layer_populations` entry that loses three JSON keys and one porcelain field. Verified on the wheel downloaded from PyPI (sha256 `09668b53e0b60b6d…`, publish run 34788772241): the release harness exited 0, `lint --strict` returned 1 on a violation visible only through an inherited layer, and a `layer_populations` entry carries five keys. |
 
 ---
 
@@ -302,10 +308,12 @@ at `692205d7`) made it decide on that population, and changes verdicts on a grap
   false violations; rule liveness decides on the same layer the rule does (#296); the shipped
   `dev` role template no longer tells adopters a green `lint --strict` enforces more than it does.
 
-**One decision is the owner's and is still open.** Two pull requests preserve the order; they do not
-make two releases. `CHANGELOG.md` `[Unreleased]` holds BDL-069, Release A and Release B together, and
-the epic's CONTEXT requires the population report to reach adopters in a release *before* the verdict
-change. Cutting Release A as its own version first is what satisfies it.
+**The release decision was taken by the owner on 2026-09-13, and both releases are published.** Two
+pull requests preserve the order, but they do not make two releases, so BDL-071 cut two versions.
+**5.0.0** carries BDL-069 and Release A. It was published from `release/5.0.0` at `d6eaee60`, a
+branch cut on `7efa4006`, so the population report reached adopters before any verdict changed.
+**6.0.0** carries Release B. It was published from `main` at `058ef59e`, the squash merge of PR #75.
+Each was verified on the wheel downloaded from PyPI, and `CHANGELOG.md` holds them as two sections.
 
 **Filed on the way, not fixed:** #290 (index lineage moves the denominator), #291 (the debt report
 reads no rules), #294, #295, #297 (the review withholding cannot release and `bd show` defeats it),

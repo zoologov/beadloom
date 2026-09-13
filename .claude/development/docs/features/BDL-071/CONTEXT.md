@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-09-13
-> **Last updated:** 2026-09-13
+> **Last updated:** 2026-09-14
 
 ---
 
@@ -82,6 +82,7 @@ far `architecture-layers` reaches in a release before a release that acts on it.
 | 2026-09-13 | 5.0.0 from a `release/5.0.0` branch on `7efa4006` | Tagging `7efa4006` directly would build 4.0.0 and be skipped silently; reverting B on `main` rewrites history twice. |
 | 2026-09-13 | The three docs-audit history lines get `docs_audit.ignore` triples | Measured: the Gate fails on them after a bump. Rewording would game the instrument; raising them would make three true lines false. |
 | 2026-09-13 | `[5.0.0]` on `main` is copied byte-for-byte from the published branch | A change log that says something other than what shipped is the class this project removes. |
+| 2026-09-13 | `ROADMAP.md`'s Current version moved to 6.0.0 with the bump in R5, ahead of the R8 the plan named, and was marked verified only in R8 | `tests/test_version_surface.py` pins that line to `__version__`, so a ROADMAP left behind the bump fails the suite on the release commit (R4's correction on `beadloom-7foi`). The word "verified" had to wait for R7's harness on the downloaded 6.0.0 wheel, so R5 wrote the line as not yet verified. Recorded by R8 after R6 found the move unexplained. |
 
 ## Related Files
 
