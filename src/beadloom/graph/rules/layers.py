@@ -231,12 +231,14 @@ def shares_tagged_ancestor(
 ) -> bool:
     """True when one container the declaration gives a layer holds BOTH ends.
 
-    This is the predicate BDL-070 RFC Q1 decided, on a measurement: of this
-    repository's 132 same-layer ``depends_on`` edges, 116 run between two parts
-    of one domain and 16 between peers. The two predicates that existed before
-    it split that population 0/132 and 132/0 — one passed every same-layer edge
-    and the other flagged every one — so neither could tell an internal edge
-    from a peer crossing.
+    This is the predicate BDL-070 RFC Q1 decided. Measured on 2026-09-13 over
+    this repository's index: of 130 same-layer ``depends_on`` edges, 116 run
+    between two parts of one container and 14 between peers. The two predicates
+    that existed before it split that population 0/130 and 130/0 — one passed
+    every same-layer edge and the other flagged every one — so neither could
+    tell an internal edge from a peer crossing. :mod:`.layer_crossings` states
+    the same measurement, and the RFC records the figures the decision was first
+    taken on and their correction.
 
     A container that carries no declared layer tag shares nothing here, which is
     what makes the predicate say anything at all: this project's root service

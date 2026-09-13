@@ -160,23 +160,20 @@ so the function returns before loading anything: `beadloom status --debt-report`
 and 55 warning(s) over the same graph, and `DebtReport.layer_populations` is empty, so the
 population has nothing to qualify. A zero that means "the rules were never read" is printed in the
 shape a clean project prints, which is this epic's thesis about a count with no population, one
-layer up. Recorded rather than repaired: the repair moves a debt score.
+layer up.
+
+**The rules file this collector reads is not the one the rest of the product writes** (BDL-UX
+#291). Every other reader, among them `lint`, `reindex`, the TUI and the MCP server, resolves
+`<root>/.beadloom/_graph/rules.yml`, so a project with the standard layout scores zero rule
+violations however many it has. It is recorded rather than repaired because the repair moves this
+repository's raw rule-violations score from 0 to the warning count `lint` reports, at the default
+`rule_warning` weight of 1.0. `tests/test_every_surface_past_lint_states_the_population.py` holds
+the current behaviour, so a repair fails there first.
 
 They are carried UNWEIGHTED. A statement of how much of the graph a count covers is not itself
 debt, and scoring it would put a number in the score that measures the check rather than the code.
 Nothing else about the count changed: the population advisory is still counted among the warnings,
 exactly as BDL-070 A2 left it.
-
-**The rules file this collector reads is not the one the rest of the product writes.** It resolves
-`<root>/rules.yml` and then `<root>/.beadloom/rules.yml`; every other reader — `lint`, `reindex`,
-the TUI, the MCP server, `prime` — resolves `<root>/.beadloom/_graph/rules.yml`. A project with the
-standard layout therefore scores zero rule violations however many it has. Measured on this
-repository on 2026-09-12: `_count_violations` returns 0 errors and 0 warnings, against the 0
-errors and 71 warnings `lint --strict` reports over the same index. It is stated rather than
-repaired here because the repair moves this repository's raw rule-violations score from 0 to 71
-points at the default `rule_warning` weight of 1.0, and BDL-070 Release A ships no number that
-moves on upgrade; `tests/test_every_surface_past_lint_states_the_population.py` holds the current
-behaviour so a repair fails there first.
 
 ### Data Collection Sources
 
