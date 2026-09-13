@@ -96,6 +96,29 @@ docs_audit:
     - path: docs/guides/architecture-model.md
       fact: version
       value: "3.0.0"
+    # BDL-071, the 5.0.0 release (`beadloom-2716`). Three sentences record a
+    # MEASUREMENT taken on 4.0.0, and each stays true after the bump: "measured
+    # on the published 4.0.0 wheel" twice (BDL-UX #214, in graph-loader and in
+    # the onboarding README), and "Measured on this repository on 2026-09-11,
+    # against `4.0.0`" over the `version-surface` sample in cli.md. Measured on
+    # the bump: these three and nothing else were the audit's stale findings,
+    # each `version` = 4.0.0 against 5.0.0, and the Gate failed on them.
+    # Same shape and same justification as the architecture-model triple above
+    # (BDL-UX #205): the extractor has no notion of a dated past tense. Not
+    # reworded, because fitting a true measurement to the attribution
+    # vocabulary would game the instrument. Not raised, because a statement
+    # about 4.0.0 would become a false statement about 5.0.0. A triple only
+    # silences 4.0.0 in its own file, so a current claim left at 4.0.0
+    # anywhere else still fails.
+    - path: docs/domains/graph/components/graph-loader/DOC.md
+      fact: version
+      value: "4.0.0"
+    - path: docs/domains/onboarding/README.md
+      fact: version
+      value: "4.0.0"
+    - path: docs/services/cli.md
+      fact: version
+      value: "4.0.0"
     # RETIRED 2026-09-09 by `beadloom-0mdo.63` (BDL-UX #253), which replaced
     # ten version triples with a rule about the token beside the number: a
     # version is attributed to the nearest subject NAME to its left inside its

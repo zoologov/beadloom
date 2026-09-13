@@ -5,7 +5,17 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.0.0] - 2026-09-13
+
+**This release reports how far `architecture-layers` reached, and changes none of its
+verdicts.** `lint` and the Gate now state how many live `depends_on` edges the rule judged, and
+the rule still decides on a node's own layer tags, so a project it passed on 4.0.0 still passes
+and one it failed still fails. The same release fixes four defects in which a check reported over
+an empty, partial or unnamed population. Two of those fixes do move a verdict, and each is stated
+under Fixed: a virgin `init` project no longer fails `beadloom ci`, and a misdeclared
+`issue_log:` now blocks instead of passing as undeclared. The version is major because
+`issue-number check --json` widens `declared` from `bool` to `bool | null`, as stated under
+Changed.
 
 BDL-069. Four defects with one shape — a check reporting over a population that is empty,
 partial or unnamed — two of them in the first two commands an outside user runs. Every figure

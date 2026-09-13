@@ -1,6 +1,8 @@
 # Beadloom Roadmap
 
-> **Current version: 4.0.0** (PyPI, verified on the downloaded wheel 2026-09-10 — not on the
+> **Current version: 5.0.0** (the `release/5.0.0` branch, cut 2026-09-13 and NOT yet verified
+> on the downloaded wheel — BDL-071 records that verification when it has been made).
+> The previous release is 4.0.0 (PyPI, verified on the downloaded wheel 2026-09-10 — not on the
 > local build). What was checked there rather than assumed: 43 commands including all nine the
 > epic added, `GuardOutcome` carrying its sixth member `unresolved` at exit 1, and the firing
 > record's keys being `command_name` / `command_writes` with no `command`. That is the release's
