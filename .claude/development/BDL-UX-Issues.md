@@ -35,6 +35,18 @@
 
 ## Open Issues
 
+299. [2026-09-13] [LOW] `issue-number allocate` accepts an empty holder and writes a claim that names nobody, and `check` reports it clean
+
+    **Severity:** low (the number is still unique and still written; what breaks is the property the ledger exists for — that every allocated number is HELD by a named work item)
+    **Command:** `beadloom issue-number allocate --holder ""`, then `beadloom issue-number check`
+    **Context:** BDL-070, 2026-09-13, reached by accident while filing #298.
+    **What happened.** `allocate --holder ""` exited 0, allocated #298, and wrote `.claude/development/BDL-UX-Issues/0298.md` with an empty `**Holder:**` line. `check` then printed `No duplicate, unwritten or unclaimed number.` — the malformed claim read as clean.
+    **How an empty holder arrives in practice — an EXTERNAL trigger, recorded because it is the realistic path.** `bd create ... --json` (bd 1.0.4) printed a non-JSON warning to STDOUT before the JSON object, because the title began with `test_` and bd judged it test data: `⚠ Creating test issue in production database … appears to be test data`. A script parsing stdout as JSON failed, the bead id came out empty, and the empty string went straight to `--holder`. The bead itself was created (`beadloom-jorg`). The bd half — a warning on the stream a `--json` caller parses — belongs to steveyegge/beads and is noted, not ours to fix.
+    **Repaired here:** the #298 claim's holder and the #298 entry's tracker were both set to `beadloom-jorg` by hand, since there is no command to set a claim's holder; each repair says so in place.
+    **Expected:** `allocate` refuses an empty or whitespace-only holder with a named error and allocates nothing; `check` reports any existing claim whose holder is empty.
+    **Tracker:** `beadloom-l5jb`.
+    **Related:** #298 (the entry this defect first produced).
+
 298. [2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365
 
     **Severity:** medium (no wrong code shipped and no verdict moved; what is wrong is a guard whose own reading can be partial, which can redden a CI leg intermittently — and it is the kind of guard this epic added to stop checks reporting over an unnamed population)
@@ -56,7 +68,7 @@
     **The mechanism, stated as inferred.** The test reads the live repository through the shared fixture `live_repo_reindexed` (scope: scope="session"), and at least twelve other test files reindex the live project root in the same run. A read taken while another test is mid-rebuild sees a partial edge set; 57 of 365 is what a torn read looks like. Nobody reproduced the interleaving on purpose.
     **Expected:** a test that asserts on the live repository's graph reads an index no other test in the run can rebuild underneath it — an isolated copy, or a lock around the shared rebuild.
     **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
-    **Tracker:** ``.
+    **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
     **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
 
 297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
