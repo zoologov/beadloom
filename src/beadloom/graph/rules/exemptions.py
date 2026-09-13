@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass
-from datetime import date
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.types import (
@@ -42,13 +41,14 @@ from beadloom.graph.rules.types import (
     ImportBoundaryRule,
     ImportExemption,
     Violation,
-    exit_condition_deadline,
     liveness_finding,
     matches_import_target,
 )
+from beadloom.infrastructure.exit_condition import deadline_passed, exit_condition_deadline
 
 if TYPE_CHECKING:
     import sqlite3
+    from datetime import date
 
 #: What to do about an entry whose stated exit condition has passed. It offers
 #: both honest moves — retire it, or re-date it — because "delete it" alone is
@@ -115,8 +115,7 @@ def is_expired(exemption: ImportExemption, *, today: date | None = None) -> bool
     today is still live: an exit condition is an intent, and reading it one day
     early would make every entry expire before its author's own deadline.
     """
-    deadline = exit_condition_deadline(exemption.until)
-    return deadline is not None and deadline < (today or date.today())
+    return deadline_passed(exemption.until, today=today)
 
 
 def stale_exemption_findings(

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config
+from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
@@ -873,7 +874,14 @@ def _collect_source_files(project_root: Path) -> list[Path]:
 
 
 def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
-    """Map each node to the set of nodes it is (transitively) ``part_of``."""
+    """Map each node to the set of nodes it is (transitively) ``part_of``.
+
+    This body reads the direct ``part_of`` edges; the climb is
+    :func:`beadloom.graph.rules.layers.part_of_ancestors`, which is the ONE
+    ancestry walk in the codebase (BDL-070 A1). It used to be two — this one and
+    the rule engine's — and the epic that unified them exists because three
+    bodies answering "what layer is this node in" gave three answers.
+    """
     parents: dict[str, set[str]] = {}
     for row in conn.execute(
         "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
@@ -882,23 +890,7 @@ def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
         if child != parent:  # the root service is part_of itself by convention
             parents.setdefault(child, set()).add(parent)
 
-    resolved: dict[str, set[str]] = {}
-
-    def walk(node: str, seen: set[str]) -> set[str]:
-        if node in resolved:
-            return resolved[node]
-        out: set[str] = set()
-        for parent in parents.get(node, ()):
-            if parent in seen:
-                continue
-            out.add(parent)
-            out |= walk(parent, seen | {parent})
-        resolved[node] = out
-        return out
-
-    for node in parents:
-        walk(node, {node})
-    return resolved
+    return {child: set(part_of_ancestors(child, parents)) for child in parents}
 
 
 # Provenance marker written into the ``extra`` column of every ``depends_on``

@@ -1,0 +1,17 @@
+  # Component: the one definition of what retires a declared exclusion
+  # (BDL-070, `beadloom-xmfs`). It sits in infrastructure, below both layers
+  # that declare an exit condition, because `graph` (rules.yml) and
+  # `onboarding` (flow.yml) are peer domains and the one that wrote it first
+  # was being imported by the other -- two of the sixteen same-layer crossings
+  # this bead triaged.
+nodes:
+  - ref_id: exit-condition
+    kind: component
+    summary: "Exit-condition vocabulary — the date an `until:` names, and whether that day has passed; read by rules.yml exemptions and flow.yml guard exclusions alike"
+    source: src/beadloom/infrastructure/exit_condition.py
+    docs:
+      - docs/domains/infrastructure/components/exit-condition/DOC.md
+edges:
+  - src: exit-condition
+    dst: infrastructure
+    kind: part_of

@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
+from beadloom.graph import rule_engine
 from beadloom.graph.loader import get_node_tags
 from beadloom.graph.rule_engine import (
+    LAYER_POPULATION_RULE_TYPE,
     SUPPORTED_SCHEMA_VERSIONS,
     CardinalityRule,
     DenyRule,
@@ -1091,36 +1093,23 @@ class TestTagsBlock:
         rules = load_rules(rules_path)
         assert len(rules) == 1
 
-    def test_tags_block_returns_tag_assignments(self, tmp_path: Path) -> None:
-        """load_rules_with_tags returns tag assignments when present."""
-        from beadloom.graph.rule_engine import load_rules_with_tags
+    def test_a_top_level_tags_block_is_parsed_past_and_assigns_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """The withdrawal of `load_rules_with_tags`, held as behaviour.
 
+        BDL-070 (`beadloom-punn`, RFC Q5) removed the top-level `tags:` catalog
+        and the function that parsed it: it was a second declaration of a node's
+        tags that no production code read, and it had drifted. A project that
+        still carries such a block must keep LOADING — rejecting it would turn a
+        green Gate red on upgrade — and the block must assign nothing, which is
+        what it did all along.
+        """
         rules_path = tmp_path / "rules.yml"
         rules_path.write_text(
             "version: 3\n"
             "tags:\n"
             "  ui-layer: [app-tabs, app-auth]\n"
-            "  feature-layer: [map, calendar]\n"
-            "rules:\n"
-            "  - name: test\n"
-            '    description: "Test"\n'
-            "    deny:\n"
-            "      from: { tag: ui-layer }\n"
-            "      to: { tag: feature-layer }\n"
-        )
-        _rules, tag_assignments = load_rules_with_tags(rules_path)
-        assert tag_assignments == {
-            "ui-layer": ["app-tabs", "app-auth"],
-            "feature-layer": ["map", "calendar"],
-        }
-
-    def test_no_tags_block(self, tmp_path: Path) -> None:
-        """Missing tags: block returns empty dict."""
-        from beadloom.graph.rule_engine import load_rules_with_tags
-
-        rules_path = tmp_path / "rules.yml"
-        rules_path.write_text(
-            "version: 3\n"
             "rules:\n"
             "  - name: test\n"
             '    description: "Test"\n'
@@ -1128,9 +1117,8 @@ class TestTagsBlock:
             "      from: { ref_id: a }\n"
             "      to: { ref_id: b }\n"
         )
-        rules, tag_assignments = load_rules_with_tags(rules_path)
-        assert tag_assignments == {}
-        assert len(rules) == 1
+        assert len(load_rules(rules_path)) == 1
+        assert not hasattr(rule_engine, "load_rules_with_tags")
 
 
 # ---------------------------------------------------------------------------
@@ -1717,10 +1705,16 @@ class TestEvaluateLayerRules:
         violations = evaluate_layer_rules(db_with_layers, [rule])
         assert len(violations) == 0
 
-    def test_node_not_in_any_layer_skipped(
+    def test_node_not_in_any_layer_is_skipped_and_counted(
         self, db_with_layers: sqlite3.Connection
     ) -> None:
-        """Nodes not belonging to any layer are ignored."""
+        """A node in no layer is not judged — and no longer passed over in silence.
+
+        The edge produces no layer finding, which is unchanged. What changed in
+        BDL-070 A2 is that the rule states how many edges it did not look at, so
+        "no violation" and "no edge examined" stop reading the same (the finding
+        is `warn` and moves no verdict).
+        """
         # Add a node with no layer tag
         db_with_layers.execute(
             "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
@@ -1742,7 +1736,11 @@ class TestEvaluateLayerRules:
 
         rule = self._make_4_layer_rule()
         violations = evaluate_layer_rules(db_with_layers, [rule])
-        assert len(violations) == 0
+        assert [v for v in violations if v.rule_type == "layer"] == []
+        population = [v for v in violations if v.rule_type == LAYER_POPULATION_RULE_TYPE]
+        assert len(population) == 1
+        assert population[0].severity == "warn"
+        assert "evaluated 3 of 4" in population[0].message
 
     def test_empty_rules_no_violations(self, db_with_layers: sqlite3.Connection) -> None:
         """Empty rules list produces no violations."""

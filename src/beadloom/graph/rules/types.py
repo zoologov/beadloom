@@ -10,9 +10,7 @@ evaluation logic, only the immutable model and the constants that bound it.
 from __future__ import annotations
 
 import fnmatch
-import re
 from dataclasses import dataclass
-from datetime import date
 
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
 
@@ -44,36 +42,6 @@ LIVE_EDGE_LIFECYCLES: frozenset[str] = frozenset({"active"})
 #: rule evaluation already runs).
 LIVENESS_RULE_TYPE = "rule_liveness"
 
-#: The one spelling of a deadline an exit condition may lead with, pinned as a
-#: pattern rather than delegated to ``date.fromisoformat``: that parser widened
-#: in Python 3.11 (``20260101`` and week dates parse there and raise on 3.10),
-#: so leaning on it would make the same ``until:`` enforceable on one supported
-#: interpreter and prose on another.
-_ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:\b|$)")
-
-
-def exit_condition_deadline(until: str) -> date | None:
-    """The calendar date an exit condition names, or ``None`` when it names an event.
-
-    ``until`` answers one question — *what retires this exclusion* — and there are
-    two honest answers: a **date** (``2026-09-01``, optionally followed by the
-    prose that explains it) and an **event** (``the repository read seam lands``).
-    Only the first is checkable, and this function is the single definition of
-    which is which: both surfaces that require an exit condition —
-    ``forbid_import.exempt[].until`` in ``rules.yml`` and
-    ``guards.<name>.exclusions[].until`` in ``flow.yml`` — read it here rather
-    than restating it, so the two cannot promise different things.
-
-    A date must LEAD the string: a deadline is the first thing an exit condition
-    says, or it is not one. ``some time after 2026-01-01`` is an event.
-    """
-    match = _ISO_DATE_PREFIX.match(until.strip())
-    if match is None:
-        return None
-    try:
-        return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    except ValueError:  # a well-formed spelling of a day that does not exist
-        return None
 
 #: What each side of a ``forbid_import`` rule is matched against. Stated on every
 #: liveness finding because the mismatch it describes is invisible otherwise: a
@@ -258,6 +226,34 @@ class LayerDef:
 
 
 @dataclass(frozen=True)
+class LayerExemption:
+    """One same-layer crossing a layer rule excuses, why, and what retires it.
+
+    The shape mirrors :class:`ImportExemption` and for the same reason: an
+    exclusion with no reason and no exit condition is how a gate is switched off
+    without saying so (BDL-061 CONTEXT). It differs in what it names — two node
+    ``ref_id`` globs rather than a file path and an import target — because a
+    same-layer crossing is an EDGE, and an entry that named only one of its two
+    ends would excuse everything that touches that end.
+    """
+
+    from_glob: str
+    to_glob: str
+    reason: str
+    until: str
+
+    def covers(self, src_ref_id: str, dst_ref_id: str) -> bool:
+        """True when this entry excuses that edge, in that direction.
+
+        Direction is part of the match: ``a -> b`` and ``b -> a`` are two
+        crossings and a project that excused one did not excuse the other.
+        """
+        return fnmatch.fnmatchcase(src_ref_id, self.from_glob) and fnmatch.fnmatchcase(
+            dst_ref_id, self.to_glob
+        )
+
+
+@dataclass(frozen=True)
 class LayerRule:
     """Enforce dependency direction between ordered architecture layers.
 
@@ -274,6 +270,11 @@ class LayerRule:
     allow_skip: bool = True  # can skip layers (presentation -> service)
     edge_kind: str = "uses"  # which edge kind to check
     severity: str = "error"  # "error" | "warn"
+    #: Same-layer crossings this rule excuses. Empty by default, and every entry
+    #: carries a reason and an exit condition the loader refuses to do without
+    #: (BDL-070 B2): a layer rule that can be switched off silently is a layer
+    #: rule nobody can read the green of.
+    exempt: tuple[LayerExemption, ...] = ()
 
 
 @dataclass(frozen=True)

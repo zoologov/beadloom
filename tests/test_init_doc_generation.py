@@ -12,6 +12,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+#: The real re-index, handed to `init` the way `beadloom init` hands it in.
+#: Onboarding is a domain and the re-index is an application use case, so the
+#: caller supplies it rather than the domain importing it (BDL-070
+#: `beadloom-46am`). These tests assert what `init` does WITH a real index, so
+#: they pass the real one and their behaviour is unchanged.
+from beadloom.application.reindex import reindex as real_reindex
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -66,7 +73,7 @@ class TestInteractiveInitDocGeneration:
             ),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         # Docs should have been generated.
@@ -97,7 +104,7 @@ class TestInteractiveInitDocGeneration:
             ),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         # Docs dir should not have architecture.md.
@@ -126,7 +133,7 @@ class TestInteractiveInitDocGeneration:
             ),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
 
@@ -160,7 +167,7 @@ class TestInteractiveInitDocGeneration:
             patch("rich.prompt.Confirm.ask", confirm_mock),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "import"
         # Confirm.ask should NOT have been called for doc generation.
@@ -183,7 +190,7 @@ class TestInteractiveInitDocGeneration:
             patch("rich.prompt.Confirm.ask", confirm_mock),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result.get("review") == "edit"
         # Should not have prompted for doc generation.

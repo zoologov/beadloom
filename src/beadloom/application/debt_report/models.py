@@ -9,7 +9,7 @@ and per-category scores, the trend delta, and the assembled report.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,13 @@ class DebtData:
     node_issues: dict[str, list[str]]
     # Meta-doc staleness (stale fact mentions in project docs)
     meta_doc_stale_count: int = 0
+    #: How much of its edge set each declared layer rule judged, one clause per
+    #: rule. Carried because ``error_count`` and ``warning_count`` are counts
+    #: over a population, and this collector is one of the two surfaces that
+    #: call ``evaluate_all`` without ever building a ``LintResult`` — so the
+    #: population reaches it or it reaches nobody (BDL-070 A4). Empty for a
+    #: project that declares no layer rule.
+    layer_populations: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -92,3 +99,8 @@ class DebtReport:
     categories: list[CategoryScore]
     top_offenders: list[NodeDebt]
     trend: DebtTrend | None
+    #: The population clauses from :class:`DebtData`, carried through scoring
+    #: unweighted: a statement of how much of the graph the rule-violation count
+    #: covers is not itself debt, and scoring it would put a number in the score
+    #: that measures the check rather than the code.
+    layer_populations: list[str] = field(default_factory=list)

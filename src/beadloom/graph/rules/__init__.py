@@ -6,7 +6,7 @@ This package decomposes the former ``graph/rule_engine.py`` monolith by
 responsibility (BDL-059 S3, cohesion-driven):
 
 - :mod:`.types` — constants, rule dataclasses, ``NodeMatcher``, ``Violation`` (the model).
-- :mod:`.loader` — ``load_rules`` / ``load_rules_with_tags`` / ``validate_rules``
+- :mod:`.loader` — ``load_rules`` / ``validate_rules``
   (YAML -> typed rules + DB validation).
 - :mod:`.evaluators` — per-rule-type evaluation
   (deny/require/import/forbid/layer/cardinality/coverage).
@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules.advisories import ADVISORY_RULE_TYPES, is_advisory
 from beadloom.graph.rules.attribution import (
     FileAttribution,
     count_unattributed_import_files,
@@ -46,6 +47,21 @@ from beadloom.graph.rules.exemptions import (
     SuppressedCrossing,
     suppressed_crossings,
 )
+from beadloom.graph.rules.layer_reach import (
+    LAYER_POPULATION_RULE_TYPE,
+    LayerReach,
+    layer_rule_reach,
+    layer_rule_reaches,
+    part_of_parents,
+    population_phrase,
+    stated_populations,
+)
+from beadloom.graph.rules.layers import (
+    LayerPopulation,
+    layer_of,
+    own_layer_of,
+    part_of_ancestors,
+)
 from beadloom.graph.rules.liveness import (
     INERT_RULE_HINT,
     evaluate_rule_liveness,
@@ -53,9 +69,9 @@ from beadloom.graph.rules.liveness import (
 )
 from beadloom.graph.rules.loader import (
     load_rules,
-    load_rules_with_tags,
     validate_rules,
 )
+from beadloom.graph.rules.node_tags import NodeTags, node_tags
 from beadloom.graph.rules.scenario_coverage import (
     BEAD_NOT_VERIFIED,
     SCENARIO_COVERAGE_RULE_TYPE,
@@ -83,6 +99,7 @@ from beadloom.graph.rules.types import (
     ImportBoundaryRule,
     ImportExemption,
     LayerDef,
+    LayerExemption,
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
@@ -93,8 +110,14 @@ from beadloom.graph.rules.types import (
     SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
     Violation,
-    exit_condition_deadline,
 )
+
+# The exit-condition vocabulary is re-exported from here so the public path
+# `beadloom.graph.rules.exit_condition_deadline` goes on answering; the
+# definition lives below this domain (BDL-070 B2), because `onboarding`
+# declares an exit condition too and was importing a peer domain to read
+# what one is.
+from beadloom.infrastructure.exit_condition import exit_condition_deadline
 
 if TYPE_CHECKING:
     import sqlite3
@@ -259,12 +282,14 @@ def evaluate_all(
 
 
 __all__ = [
+    "ADVISORY_RULE_TYPES",
     "BEAD_NOT_VERIFIED",
     "DEFAULT_DOC_AREA_MIN_SUPPORT",
     "DEFAULT_DOC_AREA_THRESHOLD",
     "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
+    "LAYER_POPULATION_RULE_TYPE",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
@@ -283,9 +308,13 @@ __all__ = [
     "ImportBoundaryRule",
     "ImportExemption",
     "LayerDef",
+    "LayerExemption",
+    "LayerPopulation",
+    "LayerReach",
     "LayerRule",
     "ModuleCoverageRule",
     "NodeMatcher",
+    "NodeTags",
     "NonBehaviouralNode",
     "RequireRule",
     "Rule",
@@ -311,8 +340,17 @@ __all__ = [
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",
+    "is_advisory",
+    "layer_of",
+    "layer_rule_reach",
+    "layer_rule_reaches",
     "load_rules",
-    "load_rules_with_tags",
+    "node_tags",
+    "own_layer_of",
+    "part_of_ancestors",
+    "part_of_parents",
+    "population_phrase",
+    "stated_populations",
     "suppressed_crossings",
     "validate_rules",
 ]

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
+from beadloom.graph.rule_engine import LAYER_POPULATION_RULE_TYPE
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
@@ -60,7 +61,7 @@ class TestLintRecalibrationGuard:
     def test_live_repo_has_no_violation_outside_the_declared_scenario_debt(
         self, live_repo_reindexed: Path
     ) -> None:
-        """The live repo lints clean apart from one rule it deliberately opted into.
+        """The live repo lints clean apart from two findings it deliberately opted into.
 
         This assertion used to read "zero violations of ANY rule/severity", which
         was true by luck: every rule in ``rules.yml`` happened to be satisfied.
@@ -68,13 +69,40 @@ class TestLintRecalibrationGuard:
         ``feature`` node — and Beadloom's own acceptance suite covers two of them.
         The rest is real, measured debt, reported at ``warn`` so it blocks nothing.
 
-        Weakening the assertion to "ignore scenario-coverage" would be the false
-        green this epic exists to remove, so the debt is asserted in BOTH
-        directions instead: nothing else may fire, and the rule must still fire.
+        BDL-070 A2 added the second: ``architecture-layers`` states how much of
+        its edge set it judged. The exclusion is keyed on the finding's TYPE and
+        not on its rule name, which is the whole difference between an accepted
+        advisory and a blind spot — a real layer violation carries
+        ``rule_type: layer`` and still fails here.
+
+        Weakening the assertion to "ignore these rules" would be the false green
+        this epic exists to remove, so the debt is asserted in BOTH directions
+        instead: nothing else may fire, and each of the two must still fire.
         """
         findings = self._live_findings(live_repo_reindexed)
-        other = [f for f in findings if f.get("rule_name") != "scenario-coverage"]
+        other = [
+            f
+            for f in findings
+            if f.get("rule_name") != "scenario-coverage"
+            and f.get("rule_type") != LAYER_POPULATION_RULE_TYPE
+        ]
         assert other == [], other
+
+    def test_the_layer_rules_population_is_reported_and_blocks_nothing(
+        self, live_repo_reindexed: Path
+    ) -> None:
+        """The other direction for the layer population: silence here is a regression.
+
+        The rule judges a minority of this repository's ``depends_on`` edges —
+        16 of 363 when this was written — and the number is stated rather than
+        left to be inferred from a green line. A run that stopped stating it
+        would read exactly like a run that had nothing to state.
+        """
+        findings = self._live_findings(live_repo_reindexed)
+        population = [f for f in findings if f.get("rule_type") == LAYER_POPULATION_RULE_TYPE]
+        assert len(population) == 1, population
+        assert population[0]["severity"] == "warn"
+        assert population[0]["rule_name"] == "architecture-layers"
 
     def test_the_scenario_debt_is_reported_and_blocks_nothing(
         self, live_repo_reindexed: Path

@@ -156,7 +156,16 @@ class LintDataProvider:
     )
 
     def refresh(self) -> None:
-        """Re-evaluate lint rules and cache violations."""
+        """Re-evaluate lint rules and cache violations.
+
+        ``rule_type`` and ``message`` travel with each row. This panel is one
+        of the two surfaces that call ``evaluate_all`` without ever building a
+        :class:`~beadloom.graph.linter.LintResult`, so a finding is the only
+        thing that reaches it — and the layer rule states how much of its edge
+        set it judged IN its message. Dropping the message left the panel
+        rendering a population as ``architecture-layers (?)`` followed by the
+        rule's own description, which says nothing about reach (BDL-070 A4).
+        """
         from beadloom.graph.rule_engine import evaluate_all, load_rules
 
         rules_path = self.project_root / ".beadloom" / "_graph" / "rules.yml"
@@ -170,10 +179,12 @@ class LintDataProvider:
             self._violations = [
                 {
                     "rule_name": v.rule_name,
+                    "rule_type": v.rule_type,
                     "severity": v.severity,
                     "from_ref_id": v.from_ref_id,
                     "to_ref_id": v.to_ref_id,
                     "description": v.rule_description,
+                    "message": v.message,
                 }
                 for v in violations
             ]

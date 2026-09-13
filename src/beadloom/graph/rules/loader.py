@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from beadloom.graph.rules.layer_declaration import declaration_warnings
+from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
@@ -28,6 +30,7 @@ from beadloom.graph.rules.types import (
     ImportBoundaryRule,
     ImportExemption,
     LayerDef,
+    LayerExemption,
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
@@ -362,6 +365,45 @@ AUTHORING_KEYS: frozenset[str] = frozenset(
 _VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
 
 
+def _parse_layer_exemption(
+    name: str,
+    index: int,
+    entry: object,
+) -> LayerExemption:
+    """Parse one entry of a layer rule's ``exempt`` list.
+
+    An entry must name BOTH ends, why the crossing stands, and what retires it.
+    Both ends, because a same-layer crossing is an edge and an entry naming one
+    end would excuse every crossing that touches it. A reason and an exit
+    condition, because a bare allow tells the next reader that somebody decided
+    something and nothing about what (BDL-070 B2).
+    """
+    where = f"Rule '{name}': layers.exempt[{index}]"
+    if not isinstance(entry, dict):
+        msg = f"{where} must be a mapping"
+        raise ValueError(msg)
+
+    from_glob = str(entry.get("from", "") or "").strip()
+    to_glob = str(entry.get("to", "") or "").strip()
+    if not from_glob or not to_glob:
+        msg = f"{where} must name both ends — set 'from' and 'to'"
+        raise ValueError(msg)
+    if from_glob == "*" and to_glob == "*":
+        msg = f"{where} matches every edge, which would exempt the rule"
+        raise ValueError(msg)
+
+    reason = str(entry.get("reason", "") or "").strip()
+    if not reason:
+        msg = f"{where} must carry a non-empty 'reason'"
+        raise ValueError(msg)
+    until = str(entry.get("until", "") or "").strip()
+    if not until:
+        msg = f"{where} must carry a non-empty 'until' (its exit condition)"
+        raise ValueError(msg)
+
+    return LayerExemption(from_glob=from_glob, to_glob=to_glob, reason=reason, until=until)
+
+
 def _parse_layer_rule(
     name: str,
     description: str,
@@ -426,6 +468,14 @@ def _parse_layer_rule(
         )
         raise ValueError(msg)
 
+    exempt_raw = rule_data.get("exempt", [])
+    if not isinstance(exempt_raw, list):
+        msg = f"Rule '{name}': layers.exempt must be a list"
+        raise ValueError(msg)
+    exempt = tuple(
+        _parse_layer_exemption(name, i, entry) for i, entry in enumerate(exempt_raw)
+    )
+
     return LayerRule(
         name=name,
         description=description,
@@ -434,6 +484,7 @@ def _parse_layer_rule(
         allow_skip=allow_skip,
         edge_kind=edge_kind,
         severity=severity,
+        exempt=exempt,
     )
 
 
@@ -1018,40 +1069,6 @@ def load_rules(rules_path: Path) -> list[Rule]:
     return rules
 
 
-def load_rules_with_tags(
-    rules_path: Path,
-) -> tuple[list[Rule], dict[str, list[str]]]:
-    """Parse rules.yml returning both rules and tag assignments.
-
-    The optional top-level ``tags:`` block (schema v3) maps tag names to
-    lists of ref_ids for bulk tag assignment, e.g.::
-
-        tags:
-          ui-layer: [app-tabs, app-auth]
-          feature-layer: [map, calendar]
-
-    Returns a ``(rules, tag_assignments)`` tuple.  *tag_assignments* is
-    an empty dict when no ``tags:`` block is present.
-    """
-    with rules_path.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
-
-    if not isinstance(data, dict):
-        msg = "rules.yml must be a YAML mapping"
-        raise ValueError(msg)
-
-    # Extract tag assignments before delegating to load_rules
-    tags_block = data.get("tags", {})
-    tag_assignments: dict[str, list[str]] = {}
-    if isinstance(tags_block, dict):
-        for tag_name, ref_ids in tags_block.items():
-            if isinstance(ref_ids, list):
-                tag_assignments[str(tag_name)] = [str(r) for r in ref_ids]
-
-    rules = load_rules(rules_path)
-    return rules, tag_assignments
-
-
 # ---------------------------------------------------------------------------
 # Database-aware validation (warnings, not errors)
 # ---------------------------------------------------------------------------
@@ -1062,6 +1079,13 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
 
     Checks that ref_id values referenced in matchers actually exist in the
     nodes table.  Returns a list of warning strings (empty if all is well).
+
+    A ``LayerRule`` mentions no ref_id — it names TAGS — so it was outside the
+    ``isinstance`` chain below and a rule could declare a layer whose tag no node
+    carries without anything saying so. That is the same class of mistake the
+    ref_id check exists for, and it is answered by
+    :func:`~beadloom.graph.rules.layer_declaration.declaration_warnings`, the one
+    function the evaluator's finding is also derived from.
     """
     warnings: list[str] = []
 
@@ -1085,6 +1109,15 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
                 ref_ids.add(rule.to_matcher.ref_id)
         elif isinstance(rule, CardinalityRule) and rule.for_matcher.ref_id is not None:
             ref_ids.add(rule.for_matcher.ref_id)
+
+    # A layer rule references the graph through tags rather than ref_ids, so the
+    # tag map is read only when one is present — `node_tags` defers its query
+    # until the first question is asked.
+    layer_rules = [rule for rule in rules if isinstance(rule, LayerRule)]
+    if layer_rules:
+        tags = node_tags(conn).as_mapping()
+        for rule in layer_rules:
+            warnings.extend(declaration_warnings(rule, tags))
 
     # Check each against the database
     for ref_id in sorted(ref_ids):

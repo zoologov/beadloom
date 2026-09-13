@@ -12,6 +12,14 @@ partial or unnamed — two of them in the first two commands an outside user run
 below was measured, and where the measurement was taken somewhere other than this repository it
 says so.
 
+BDL-070 Release A. `architecture-layers` decides whether `main` is mergeable here and in every
+project that copied this rules file, and a green run said nothing about how much of the graph it
+had looked at — 16 of 365 live `depends_on` edges on this repository, measured 2026-09-13 over a
+warm full rebuild of the index, because the rule reads a node's OWN layer tags. Release A makes
+that number visible on every surface that reports a lint result. **It changes no verdict**:
+inheritance has not shipped, the rule still decides on own tags, and `beadloom-ku26` makes that
+move in the release that announces it.
+
 ### Upgrade note — one action, and only if you already have an index
 
 Run `beadloom reindex --full` once after upgrading.
@@ -29,6 +37,16 @@ different package until a file of that node changes or the full reindex runs.
 
 Nothing else here asks an adopter to do anything. The new Gate leg skips unless it is declared,
 and the new report the graph loader emits is a report and not a refusal.
+
+Nothing in BDL-070 Release A asks an adopter to do anything either, and one thing they may SEE is
+worth naming. The architecture view reads the layer declaration from the index; a project that
+carries `layer-*` tags and declares no layer rule now renders no lanes where it rendered four. It
+is the only adopter-visible change of rendered output in Release A. On this repository nothing
+moves, because this repository declares the rule — which is exactly why it would not be noticed.
+The view logs the case at INFO when it happens, with the number of tagged nodes. The fix is to
+declare the layer rule whose tags the graph already carries; the lanes were being drawn from a
+table written inside the view, and a picture drawn from a table nobody declared is a picture of
+Beadloom's assumptions rather than of the project.
 
 ### Added
 
@@ -100,6 +118,38 @@ and the new report the graph loader emits is a report and not a refusal.
   runtime fact, and inferring it from string literals would be a confident guess. The row says
   the node owns surface the answer is blind to, which is what a person needs before reading a
   quiet row as "not changed".
+
+- **`architecture-layers` states the population it judged, on every surface that reports a lint
+  result** (BDL-070 Release A). One finding per layer rule, `layer_population`, carrying what
+  the rule's own tags reach beside what `part_of` inheritance would reach: 16 of 365 live
+  `depends_on` edges judged on this repository, against 357 inheritance would reach. It is a
+  finding rather than a clause in a summary line because `tui/data_providers.py` and
+  `application/debt_report/collect.py` call the evaluators directly and never see a
+  `LintResult`. `beadloom lint` states it in each format's own idiom: a clause on the rich
+  summary line, GREEN and RED alike; `summary.layer_populations[]` under `--format json`,
+  additive, with every existing key unmoved; a leading `::notice::` under `--format github`, a
+  notice and not a warning because the fraction is not a finding against anyone's code; and a
+  leading `# layer_population:…` line in porcelain, behind the `# ` marker `scope-check` already
+  uses. Five surfaces outside that command state it too: the Gate's lint step, `prime`'s
+  `Health:` line and `health.layer_populations`, the debt report, the MCP `lint` summary, and
+  the TUI's lint panel. Every one that prints the clause as prose builds it from
+  `layer_reach.population_phrase` rather than from a string of its own, so the wording cannot
+  drift between them. The finding is silent at full reach and when the rule is handed no edge of
+  its kind, while the clause is printed at full reach anyway: a finding is triaged in every
+  project, and a clause on a line already being read costs nothing.
+
+- **A layer the declaration names and no node is in is reported** (BDL-070 Release A).
+  `validate_rules` had no `LayerRule` case, because a layer rule names tags rather than `ref_id`s.
+  One predicate now answers both the loader's warning and a `warn` finding from the evaluator, and
+  it stands down when fewer than two layers are populated, because rule liveness already names
+  that case.
+
+- **`exempt:` on a layer rule, and the bookkeeping that keeps an exemption honest** (BDL-070 B2).
+  An entry carries `from`, `to`, `reason` and `until`, all four required; an entry omitting one,
+  or matching every edge with `*`/`*`, is a rules-load `ValueError`. Matching is by `ref_id` on
+  both ends and by direction. The entries are read in this release only to report one that is DEAD
+  (excuses nothing) or EXPIRED (past its own deadline while still excusing), both at `warn`: the
+  finding for an un-excused same-layer crossing arrives with the predicate that refuses one.
 
 ### Fixed
 
@@ -219,7 +269,24 @@ and the new report the graph loader emits is a report and not a refusal.
   it would not have removed it. `entries_declared` and `refusals` are carried on both the pair
   report and the issue-number report.
 
+- **`lint --fail-on-warn` no longer exits 1 on a layer rule's population or declaration
+  statement** (BDL-070 Release A). Both report how far a rule reached rather than anything it
+  found wrong, and both appear on a graph nobody changed, so a pipeline running the flag would
+  have turned red on upgrade for a message that cannot be acted on in the run that reddened.
+  Measured on a fixture with two tagged edges and one untagged, clean under every rule it
+  declares: the flag exits 0 on the code before Release A and would have exited 1 on the code
+  after it. Every other warning still exits 1, and so does an advisory emitted at `error`, so
+  the flag stays a superset of `--strict` rather than reading softer than it on the same run. A
+  pipeline that wants the advisories to block reads the `layer_population` and
+  `layer_declaration` records out of `--format json`.
+
 ### Removed
+
+- **`load_rules_with_tags`, and with it the reading of a v3 rules file's top-level `tags:`
+  block** (BDL-070 Release A). Nothing ever applied the block — an AST scan over every module
+  under `src/` found no production reader of the function that parsed it — and a node's own
+  `tags:` already declares its tags, so the parser went rather than the block alone. A file
+  still carrying the block loads unchanged, and the block assigns nothing.
 
 - **`resolve_document_pairs` and `resolve_issue_log`.** Each returned only the USABLE part of a
   declaration, which is the shape that tells a project which mistyped one key that it declared

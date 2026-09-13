@@ -144,6 +144,7 @@ def resolve_import_to_node(
 | `_find_node_by_source_prefix` | Walk path hierarchy from deepest to shallowest, query `nodes.source` with and without trailing `/`.         |
 | `_find_node_for_file`         | The node that OWNS a file — delegates to `infrastructure/repository.get_owning_ref_id` (most specific `source` wins). Used by `create_import_edges`. Previously walked up from the file's PARENT directory, so a node whose source IS a file never owned that file and its imports were credited to the enclosing directory's node. |
 | `_walk`                       | Pre-order traversal of the whole AST in document order; every extractor iterates it so imports below the top level are seen. |
+| `_part_of_ancestors`          | Each node mapped to the set of nodes it is transitively `part_of`, for the containment skip in `create_import_edges`. Reads the direct `part_of` edges and delegates the climb to `graph/rules/layers.py::part_of_ancestors`, which is the one ancestry walk in the codebase (BDL-070 A1). |
 
 ### Edge Generation
 

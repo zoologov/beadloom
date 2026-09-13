@@ -1454,10 +1454,19 @@ def init(
 
     # Non-interactive mode: --yes / -y flag.
     if non_interactive:
+        from beadloom.application.reindex import reindex as do_reindex
         from beadloom.onboarding.scanner import non_interactive_init
 
+        # The re-index is handed IN. `init` runs one after every block that
+        # writes a graph file, and that call stays where it always was, inside
+        # `non_interactive_init`; what moved is where the callable comes from.
+        # Onboarding is a domain and the re-index is an application use case, so
+        # the domain cannot import it. This command is a service, above both,
+        # and reaches down to each (BDL-070 `beadloom-46am`).
         mode = init_mode or "bootstrap"
-        result = non_interactive_init(project_root, mode=mode, force=force)
+        result = non_interactive_init(
+            project_root, reindex=do_reindex, mode=mode, force=force
+        )
 
         if result["mode"] == "skipped":
             click.echo("Warning: .beadloom/ already exists. Use --force to overwrite.")
@@ -1588,9 +1597,11 @@ def init(
         return
 
     # Default: interactive mode.
+    from beadloom.application.reindex import reindex as do_reindex
     from beadloom.onboarding import interactive_init
 
-    result = interactive_init(project_root)
+    # Handed in for the reason given at the `--yes` branch above.
+    result = interactive_init(project_root, reindex=do_reindex)
     # The branch a human adopter meets first. It was left out when the verdict
     # landed (BDL-067 `.2`) because the test that covered the other two was
     # parametrised over the two BINDINGS of `bootstrap_project` — and the wizard

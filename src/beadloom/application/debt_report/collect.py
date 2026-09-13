@@ -226,29 +226,51 @@ def _count_untested(
 def _count_violations(
     conn: sqlite3.Connection,
     project_root: Path,
-) -> tuple[int, int, dict[str, list[str]]]:
-    """Count rule violations (errors and warnings).
+) -> tuple[int, int, dict[str, list[str]], list[str]]:
+    """Count rule violations, and state the population they were counted over.
 
-    Returns (error_count, warning_count, per_node_violations).
+    Returns (error_count, warning_count, per_node_violations, layer_populations).
+
+    The fourth value is why this function changed at all. The counts beside it
+    are counts over whatever set the rules could look at, and a layer rule looks
+    only at edges whose ends carry a declared tag — on this project, 16 of 363.
+    This collector is one of the two surfaces that call ``evaluate_all`` without
+    ever building a ``LintResult``, so the population is read here from the same
+    ``reach_of`` the evaluator uses rather than parsed back out of a finding's
+    prose (BDL-070 A4).
+
+    Nothing here re-counts: the population advisory is counted exactly as A2
+    left it counted, among the warnings.
     """
     try:
-        from beadloom.graph.rule_engine import evaluate_all, load_rules
+        from beadloom.graph.rule_engine import (
+            LayerRule,
+            evaluate_all,
+            layer_rule_reaches,
+            load_rules,
+            population_phrase,
+            stated_populations,
+        )
     except ImportError:
-        return 0, 0, {}
+        return 0, 0, {}, []
 
     rules_path = project_root / "rules.yml"
     if not rules_path.is_file():
         # Also try .beadloom/rules.yml
         rules_path = project_root / ".beadloom" / "rules.yml"
         if not rules_path.is_file():
-            return 0, 0, {}
+            return 0, 0, {}, []
 
     try:
         rules = load_rules(rules_path)
         violations = evaluate_all(conn, rules, project_root=project_root)
+        reaches = layer_rule_reaches(
+            conn, [rule for rule in rules if isinstance(rule, LayerRule)]
+        )
     except (ValueError, OSError):
-        return 0, 0, {}
+        return 0, 0, {}, []
 
+    populations = [population_phrase(reach) for reach in stated_populations(reaches)]
     errors = 0
     warnings = 0
     node_violations: dict[str, list[str]] = {}
@@ -266,7 +288,7 @@ def _count_violations(
                 f"violation:{sev}:{v.rule_name}"
             )
 
-    return errors, warnings, node_violations
+    return errors, warnings, node_violations, populations
 
 
 def collect_debt_data(
@@ -285,7 +307,7 @@ def collect_debt_data(
     node_issues: dict[str, list[str]] = {}
 
     # 1. Rule violations
-    error_count, warning_count, violation_nodes = _count_violations(
+    error_count, warning_count, violation_nodes, layer_populations = _count_violations(
         conn, project_root
     )
     for ref_id, reasons in violation_nodes.items():
@@ -341,4 +363,5 @@ def collect_debt_data(
         dormant_count=dormant_count,
         untested_count=untested_count,
         node_issues=node_issues,
+        layer_populations=layer_populations,
     )

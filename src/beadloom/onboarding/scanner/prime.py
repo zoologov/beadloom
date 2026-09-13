@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from beadloom.onboarding.scanner.project_scan import _detect_project_name
@@ -14,22 +15,49 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _get_lint_violations(project_root: Path) -> list[dict[str, str]]:
-    """Get lint violations without reindexing (fast path)."""
+@dataclass(frozen=True)
+class LintSnapshot:
+    """One lint run, as `prime` reports it: the findings and their population.
+
+    Both come from one run. Reading them separately would mean linting twice —
+    and a health line whose count and whose denominator could be taken over two
+    different indexes is worse than one that states neither.
+    """
+
+    #: Each finding as `prime` lists it: rule, node, message.
+    violations: list[dict[str, str]]
+    #: One clause per declared layer rule — how much of its edge set it judged.
+    #: Per RULE, not per finding, so the list `prime` caps at ten findings can
+    #: grow without this one growing with it.
+    populations: list[str]
+
+
+def _get_lint_snapshot(project_root: Path) -> LintSnapshot:
+    """Run lint without reindexing (fast path) and read both facts off it."""
     try:
         from beadloom.graph.linter import lint as run_lint
+        from beadloom.graph.rules.layer_reach import (
+            population_phrase,
+            stated_populations,
+        )
 
         result = run_lint(project_root)
-        return [
-            {
-                "rule": v.rule_name,
-                "node": v.from_ref_id or "",
-                "message": v.message,
-            }
-            for v in result.violations
-        ]
+        return LintSnapshot(
+            violations=[
+                {
+                    "rule": v.rule_name,
+                    "node": v.from_ref_id or "",
+                    "message": v.message,
+                }
+                for v in result.violations
+            ],
+            populations=[
+                population_phrase(reach)
+                for reach in stated_populations(result.layer_populations)
+            ],
+        )
     except Exception:  # graceful degradation
-        return []
+        return LintSnapshot(violations=[], populations=[])
 
 
 #: How many findings ``prime`` lists before it stops and states the remainder.
@@ -93,9 +121,16 @@ def _format_prime_markdown(
         stale_count = len(dynamic.get("stale_docs", []))
         violations_count = len(dynamic.get("violations", []))
         last_reindex = dynamic.get("last_reindex", "never")
+        # What the violation count was taken over. One clause per DECLARED
+        # layer rule, so it does not grow with the graph — and it is present at
+        # full reach as well, because `16 of 362` and `362 of 362` read alike
+        # when neither is printed (BDL-070 A4).
+        populations = "".join(
+            f", {phrase}" for phrase in dynamic.get("layer_populations", [])
+        )
         lines.append(
             f"Health: {stale_count} stale pair(s),"
-            f" {violations_count} lint violations"
+            f" {violations_count} lint violations{populations}"
             f" | Last reindex: {last_reindex}"
         )
         lines.append("")
@@ -196,6 +231,7 @@ def _format_prime_json(
         result["health"] = {
             "stale_docs": dynamic.get("stale_docs", []),
             "lint_violations": dynamic.get("violations", []),
+            "layer_populations": dynamic.get("layer_populations", []),
             "last_reindex": dynamic.get("last_reindex", "never"),
         }
         result["domains"] = dynamic.get("domains", [])
@@ -286,8 +322,8 @@ def prime_context(
                 for r in stale_rows
             ]
 
-            # Lint violations (fast, no reindex)
-            violations = _get_lint_violations(project_root)
+            # Lint violations and their population (fast, no reindex)
+            snapshot = _get_lint_snapshot(project_root)
 
             # Last reindex
             last_reindex = get_meta(conn, "last_reindex_at", "never")
@@ -297,7 +333,8 @@ def prime_context(
                 "symbols": symbols,
                 "domains": domains,
                 "stale_docs": stale_docs,
-                "violations": violations,
+                "violations": snapshot.violations,
+                "layer_populations": snapshot.populations,
                 "last_reindex": last_reindex,
             }
 

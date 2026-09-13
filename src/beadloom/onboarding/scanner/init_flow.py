@@ -15,6 +15,8 @@ from beadloom.onboarding.scanner.project_scan import scan_project
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.onboarding.scanner.reindex_port import Reindexer
+
 
 def _format_review_table(
     nodes: list[dict[str, str]],
@@ -40,6 +42,7 @@ def _format_review_table(
 def non_interactive_init(
     project_root: Path,
     *,
+    reindex: Reindexer,
     mode: str = "bootstrap",
     force: bool = False,
 ) -> dict[str, Any]:
@@ -49,6 +52,14 @@ def non_interactive_init(
     ----------
     project_root:
         Root of the project.
+    reindex:
+        How to re-index the project once every graph file is written. Supplied
+        by the caller because onboarding is a domain and the re-index is an
+        application use case — see
+        :mod:`beadloom.onboarding.scanner.reindex_port`. Required rather than
+        defaulted, because a default meaning "do not re-index" would let a
+        caller take its verdict over an index this run never refreshed, which is
+        the defect BDL-067 `.14` closed.
     mode:
         Init mode — ``"bootstrap"`` (default), ``"import"``, or ``"both"``.
     force:
@@ -141,9 +152,7 @@ def non_interactive_init(
     # `generate_skeletons` counts as such a block: it patches a `docs:` field
     # into the graph YAML for every skeleton it creates, so it has to run before
     # this reindex and not after it (BDL-067 `.18`, which moved it down to here).
-    from beadloom.application.reindex import reindex as do_reindex
-
-    ri = do_reindex(project_root)
+    ri = reindex(project_root)
     result["reindex"] = {
         "symbols": ri.symbols_indexed,
         "imports": ri.imports_indexed,
@@ -153,11 +162,15 @@ def non_interactive_init(
     return result
 
 
-def interactive_init(project_root: Path) -> dict[str, Any]:
+def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any]:
     """Run interactive initialization wizard.
 
     Shows a menu to choose init mode, handles re-init detection,
     and guides the user through the setup process.
+
+    *reindex* is supplied by the caller for the reason given in
+    :func:`non_interactive_init` and in
+    :mod:`beadloom.onboarding.scanner.reindex_port`.
 
     Returns dict with summary of what was done.
     """
@@ -316,9 +329,7 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
 
     # Auto-reindex: populate DB with imports, edges, FTS.
     console.print("\n[bold]Running reindex...[/bold]")
-    from beadloom.application.reindex import reindex as do_reindex
-
-    ri = do_reindex(project_root)
+    ri = reindex(project_root)
     console.print(f"  Indexed {ri.symbols_indexed} symbols, {ri.imports_indexed} imports")
     result["reindex"] = {
         "symbols": ri.symbols_indexed,
@@ -346,7 +357,7 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
             )
             # Re-index to pick up newly created doc files.
             if skel_result["files_created"] > 0:
-                ri2 = do_reindex(project_root)
+                ri2 = reindex(project_root)
                 console.print(f"  Re-indexed: {ri2.docs_indexed} docs")
 
     # Final instructions.

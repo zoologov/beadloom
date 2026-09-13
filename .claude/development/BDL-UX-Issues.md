@@ -35,6 +35,116 @@
 
 ## Open Issues
 
+295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
+
+    **Severity:** low (pre-existing on both sides of the change, and it takes a hand-written graph file to produce; what it costs when it happens is the whole run rather than the one node)
+    **Command:** `beadloom lint`, and anything that reaches the rule engine
+    **Context:** BDL-070, review pass 3 (`beadloom-5tcc.4`), 2026-09-12. Found while checking whether the second fix cycle's docstring matched its guard — it does not, and this is the case it does not cover.
+    **What happened.** A node whose `extra` is a readable object but whose `tags` value is a truthy non-iterable — `{"tags": 3}` — reaches `set(declared)` at `graph/rules/node_tags.py:85` and raises `TypeError: 'int' object is not iterable` from inside the single pass over the table. One such row therefore fails every tag question in the run, not the question about that node. It is the shape of this epic's first review Major one level down: the malformation is in `extra["tags"]` rather than in `extra`.
+    **Measured as pre-existing, which is why it was not repaired here.** Two fixture projects that are **not this repository** — one declaring a layer rule, one declaring only a tag-matched `deny` rule — each holding a node written `tags: 3` and reachable by no rule, indexed once and linted by `main`'s sources and by the epic's over the same index. **Both sides raise.** `main` reaches it through `liveness._GraphFacts.tags`, which already read every node's tags whenever any rule carries a tag matcher. So a verdict-neutral release is the wrong place to fix it.
+    **The write side is silent too.** `graph/loader.py:474`–`478` puts every unmapped YAML key into `extra` untyped, so nothing rejects `tags: 3` when the graph file is written. The first thing that notices is a traceback at evaluation time.
+    **A sixth shape the divergence table does not name:** a JSON array (`[]`, `["tier-web"]`). The existing `isinstance` guard covers it, and it diverges from the one-at-a-time reader exactly as the three scalars do.
+    **Expected:** a node whose `extra.tags` is not a sequence is skipped like every other unreadable shape, with a row in `_DIVERGING_SHAPES` naming it — or the indexer refuses it at write time and says which node.
+    **What is NOT established:** whether any real graph file in any project has this shape. The reviewer constructed it; nobody has seen one in the wild.
+    **Tracker:** `beadloom-efcb`.
+    **Related:** #294 (the same pair of readers, disagreeing on the shapes of `extra` itself), #268, #269.
+
+294. [2026-09-12] [LOW] `loader.get_node_tags` raises a bare `AttributeError` on a malformed `nodes.extra`, and disagrees with the batch reader beside it on four measured inputs
+
+    **Severity:** low (pre-existing, and no wrong verdict follows from it; what follows is a traceback naming `json` or an attribute instead of the node, and two readers of one fact answering differently)
+    **Command:** any command that reads node tags — `beadloom lint`, `ctx`, the TUI
+    **Context:** BDL-070, the re-review `beadloom-5tcc.2`, 2026-09-12. Found while checking whether the fix for the first pass's Major 2 was redundant. **Not introduced by this epic** and deliberately not repaired inside a verdict-neutral release.
+    **Measured** over a four-row `nodes` table, `graph/rules/node_tags.NodeTags.of(ref)` against `graph/loader.get_node_tags(conn, ref)`:
+
+    | `extra` | batch reader | one-at-a-time reader |
+    |---|---|---|
+    | `null` | `set()` | raises `AttributeError` |
+    | `3` | `set()` | raises `AttributeError` |
+    | `"x"` | `set()` | raises `AttributeError` |
+    | `{not json` | `set()` | raises `json.JSONDecodeError` |
+
+    **Two things are wrong, and they are separable.** The exception is not derived from this project's base error, so a caller cannot tell "this row is unreadable" from a programming mistake. And the two readers of one fact disagree on all four shapes — the batch reader answers empty by design, because one unreadable row must not fail an evaluation that never asked about that node.
+    **Why the disagreement is defensible and still worth recording:** the batch reader's tolerance is the whole reason it can read the table in one pass. The defect is not that they differ but that nothing says so where either is declared, which is the shape #268 and #269 record for two other reader pairs in this codebase.
+    **Expected:** a malformed `nodes.extra` reaches the caller as an error this project defines, naming the node and the shape; and the two readers' difference is either removed or stated where both are declared.
+    **What is NOT established:** how many callers of `get_node_tags` would see the raise. The reviewer measured the function, not its call sites.
+    **Tracker:** `beadloom-ui47`.
+    **Related:** #268, #269 (two readers of one fact, answering differently). The batch reader's own guard was added by BDL-070's first fix cycle, against the first review pass's Major 2.
+
+293. [2026-09-12] [MEDIUM] running the suite with `--cov` corrupts the project's own index, and 18 tests then fail with `database disk image is malformed`
+
+    **Severity:** medium (no shipped behaviour is wrong. What is wrong is that the one command the role protocol names for proving coverage — `uv run pytest --cov=src` — produces a RED suite over a green tree, so a run taken to measure coverage cannot also be read as a verdict)
+    **Command:** `uv run pytest --cov=src/beadloom`, over the whole suite
+    **Context:** BDL-070, `beadloom-cfkk` (A7), 2026-09-12. Found while taking this bead's coverage figure, and proved **not to be this bead's change** by a control run.
+    **What happened.** Over the full suite the shared `.beadloom/beadloom.db` at the project root ends up corrupt, and every later test that reads it fails with `sqlite3.DatabaseError: database disk image is malformed`. Eighteen fail, in three files — `test_s3_decomposition.py` (5), `test_s4_the_instruments_agree.py` (1) and `test_the_layer_rule_states_the_population_it_judged.py` (12). Without `--cov` the same suite over the same files is green.
+    **How it was proved.** Three runs in `room-beadloom-cfkk`, each starting from a room with no index at all. With `--cov`: 18 failed, 10 478 passed. With `--cov` and this bead's three new test files excluded by `--ignore`: the SAME 18 failed, 10 463 passed — so the trigger is present at `43286775` and is not carried in by A7. Without `--cov`: 10 496 passed, 0 failed. Deleting the index and re-running the three failing files alone passes 64 of 64.
+    **Expected:** a coverage run is a measurement of the same suite, not a different one. Either the tests that reindex the project root are isolated from each other under instrumentation, or the corruption's cause is found and removed.
+    **What is NOT established:** the mechanism. `--cov` changes timing and adds `atexit` work, and the suite reindexes the project root from a session fixture and from subprocess tests; which pair of writers overlaps was not derived. Nor was it checked on Linux — every run above is macOS, Python 3.13, in one room.
+    **Consequence for this project's own numbers:** every coverage figure this repository has quoted was taken from a run in which those 18 tests failed. The per-module figures still stand — the failing tests are in three files and the modules they cover are exercised elsewhere — but the TOTAL is taken over a suite that did not finish as intended.
+    **THE COORDINATOR RAN THE SAME FORM ON THE TREE AND IT DID NOT REPRODUCE, 2026-09-12.**
+    `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80` over the whole
+    suite on `features/BDL-070` at `18345ccd`: **10545 passed, 13 skipped, 13 xfailed, 0 failed**,
+    713.74s. That is the invocation this project's own completion checklist names, with `--cov`, and
+    none of the eighteen failed. An earlier coverage run by the coordinator at `183fe47c` was green
+    too (10501 passed, 0 failed).
+    So the entry stands on ONE room's measurement and is contradicted by two runs on the tree. The
+    difference the two accounts do not resolve: the reporter's runs each started from **a room with
+    no index at all** and the coordinator's ran against an index already built. That is a candidate
+    mechanism, not a finding — nobody has run the crossed cases. Until someone does, "running the
+    suite with `--cov` corrupts the index" is not established as a property of the command; what is
+    established is that it happened three times in `room-beadloom-cfkk` and not twice on the tree.
+    **Consequence for the line above it:** the sentence "every coverage figure this repository has
+    quoted was taken from a run in which those 18 tests failed" is now known to be false for at least
+    the two runs named here.
+    **Tracker:** not filed as a bead. The coordinator's decision, 2026-09-12: it does not earn one
+    yet, because the two accounts disagree and the next step is a measurement rather than a repair —
+    whoever takes it should run the crossed cases (fresh room without `--cov`, existing index with
+    `--cov`) and only then file.
+
+292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
+
+    **Severity:** low (the panel is a dashboard and decides nothing, but it is one of the surfaces an owner looks at to ask how much is wrong, and it answers `0 warnings` over 71 of them)
+    **Command:** `beadloom tui`, the Lint panel
+    **Context:** BDL-070, `beadloom-q6jh` (A4), 2026-09-12. Found while measuring what the panel renders before and after the bead's own change, and explicitly **not that bead's change**.
+    **What happened.** `tui/widgets/lint_panel.py:19` and `:27` branch on `severity == "warning"`. The vocabulary is `VALID_RULE_SEVERITIES = frozenset({"error", "warn"})` (`graph/rules/types.py:29`), and every `Violation` carries one of those two. The branch is therefore dead: no finding ever takes it.
+    **How it was proved.** Measured over this repository's own index in `room-beadloom-q6jh`, where `lint --strict` reports 0 errors and 71 warnings: the panel header renders `Lint ℹ 71 info`. The warning count and the warning icon are unreachable, and every `warn` finding renders in the `dim` info style.
+    **Expected:** the panel reads the severity vocabulary the rule engine defines rather than a spelling of its own, so a finding the linter calls a warning is a warning on the screen.
+    **What is NOT established:** whether any other reader of `Violation.severity` outside `graph/` carries the same spelling. One was found, by reading the two functions this bead had to touch; the class was not swept.
+    **Tracker:** `beadloom-vu0a`.
+    **Related:** #272 — the same shape at a different grain, a reader keyed on a form its producer does not emit.
+
+291. [2026-09-12] [MEDIUM] the debt report reads `rules.yml` from two paths, and the product writes it to a third — so its rule-violation category is silently zero on every standard-layout project
+
+    **Severity:** medium (no verdict is wrong: `beadloom debt` is not a Gate step. What is wrong is a health number that reads as measured and was never taken, which is the class this project's last three epics exist to remove)
+    **Command:** `beadloom status`, the TUI debt gauge, the site dashboard, the MCP `get_debt_report` tool — every caller of `collect_debt_data`
+    **Context:** BDL-070, `beadloom-q6jh` (A4), 2026-09-12. Found while wiring the layer population into the debt surface, and explicitly **not that bead's change**: the paths predate it.
+    **What happened.** `application/debt_report/collect.py:239-243` resolves `<root>/rules.yml`, then `<root>/.beadloom/rules.yml`, and returns `(0, 0, {})` when neither is a file. The canonical location — the one `graph/linter.py`, `application/reindex/full.py`, `tui/data_providers.py`, `services/mcp_server.py` and `onboarding/scanner/rules_gen.py` all resolve — is `<root>/.beadloom/_graph/rules.yml`. A project laid out the way `beadloom init` lays it out therefore loads no rules here at all.
+    **How it was proved.** Measured on this repository, over its own index: `_count_violations(conn, root)` returns 0 errors and 0 warnings, while `beadloom lint --strict` over the same index reports 0 errors and 71 warnings. `collect_debt_data` returns `error_count=0, warning_count=0`, so the `rule_violations` category scores 0 points out of the 71 it would score at the default `rule_warning` weight of 1.0.
+    **Why it is filed rather than fixed.** The repair is one line — try the canonical location too — and it moves this repository's raw rule-violations score from 0 to 71 points. BDL-070 Release A ships no number that moves on upgrade, and a debt score is a number an adopter watches over time; a silent jump would be indistinguishable from a real regression.
+    **Expected:** the debt collector resolves the rules file the way every other reader does, or one function resolves it for all of them.
+    **What is NOT established:** what the score's trend history means across the repair. `metrics_history.json` holds points taken under the current behaviour, so the delta on the first run after a fix is an artefact of the fix rather than of the code, and nothing here says how that should be presented.
+    **Guarded meanwhile:** `tests/test_every_surface_past_lint_states_the_population.py::TestTheDebtReportReadsRulesFromAPlaceNobodyWritesThem` holds the current behaviour, so the repair fails there first and the test that fails names this entry.
+    **Tracker:** `beadloom-is2z`.
+    **Related:** #287 — a declaration resolved from a path nothing writes to, reported as an absence rather than as a misdeclaration.
+
+290. [2026-09-12] [MEDIUM] `beadloom reindex` is not idempotent across a fresh and a carried-forward index, and the layer rule's new population statement inherits the difference
+
+    **Severity:** medium (no wrong verdict was produced; what moves is a DENOMINATOR the project had just started printing, and a number that changes with how you arrived at it is the class three consecutive epics exist to remove)
+    **Command:** `beadloom reindex`, then `beadloom lint --strict`
+    **Context:** BDL-070, `beadloom-punn` (A6), 2026-09-12. Found by the bead while re-taking a neutrality measurement, and explicitly reported as **not that bead's own change**.
+    **What happened.** An import into a node whose `source` is a single FILE inside a parent node's directory resolves differently depending on how the index was BUILT rather than on what the tree contains. At commit `4172c331`, `beadloom.application.graph_reads` resolves to the node `graph-reads` in an index carried forward, and to `application` in one built from scratch.
+    **How it was proved**, by the bead: this tree's `.beadloom/beadloom.db` was carried into a worktree at `4172c331` and reindexed. The active `depends_on` count went **362 → 363 with no source file changing**. The extra edge is `tui -> graph-reads`.
+    **Why it reaches further than a count.** BDL-070's A2 (`beadloom-1ylk`) shipped the sentence `this rule evaluated 16 of 363 live depends_on edge(s) and skipped 347 for an end carrying no layer tag of its own`. That denominator is now lineage-dependent. The population statement was added so a green line would stop being a silence; a denominator that depends on index history puts a smaller version of the same defect inside the sentence that fixes it.
+    **What the coordinator measured separately, and what it does NOT show.** An incremental `reindex` run immediately after a `--full` one, with nothing changed in between, is stable: 363 both times, `tui -> graph-reads` present both times. That is idempotency-after-full, a different property from the lineage difference above. It is recorded here so the entry is not read as having two confirmations when it has one.
+    **Swept, and the mechanism named, 2026-09-13 by BDL-070 `beadloom-46am`.** Both of this entry's unestablished points are now measured, on commit `30352b92`, in a worktree of this repository with no code difference at all: `rm .beadloom/beadloom.db`, then three consecutive `beadloom reindex --full`. The first run reports 364 `depends_on` edges and resolves `tui/app.py:17` to `application`; the second and third report 365 and resolve it to `graph-reads`. So the difference is not fresh-worktree against carried-forward tree -- it is the FIRST build of an empty index against every build after it.
+    **How many others have this shape: two, of 2371.** The `code_imports` table was dumped after the cold run and after the warm one and compared row by row. Exactly two rows differ, `src/beadloom/tui/app.py:17` and `src/beadloom/tui/widgets/status_bar.py:11`, both importing `beadloom.application.graph_reads`, and both flipping `application` -> `graph-reads`. One derived edge follows, `tui -> graph-reads`, which is the one this entry already names.
+    **Which answer is correct: the warm one, and the cold index contradicts itself.** `resolve_import_to_node("beadloom.application.graph_reads", Path("src/beadloom/tui/app.py"), conn, ["src"])` re-run against the FINISHED cold index answers `graph-reads`, while that same index has `application` stored. The cause is Strategy 1 of `graph/import_resolver.py:809`-`:820`: it returns the node that owns the imported FILE, but only when that file is already present in `code_symbols` or `file_index`. On the first build both tables are empty while `index_imports` runs, so Strategy 1 never fires and Strategy 3's directory-prefix match collapses a file-sourced node into its enclosing directory node. That is the BDL-UX #144 regression Strategy 1 was written to close, still live on the cold path.
+    **Which makes the cold path the adopter's first one.** `beadloom init` builds an index from nothing and then takes its Gate verdict over it (BDL-067), so the graph an adopter is judged against on the run that creates it is the one that resolves these imports wrongly. Nothing here establishes that any adopter has been affected -- this repository's own two instances produce no finding, because neither `tui` nor `graph-reads` decides a rule today.
+    **It also swallowed a measurement while being measured.** `beadloom-46am` first compared a cold before-index against a warm after-index and read `lint --strict --format porcelain` as identical, 62 lines both sides. Re-taken with both sides warm, the population line moves `16:365:349:357` -> `16:364:348:356`. The two errors cancelled: the lineage difference added an edge on the after side while the bead removed one. A mismatched lineage does not only add noise, it can subtract a real change.
+    **Expected:** a fresh index and a carried-forward index over one tree resolve every import to the same node. Where that cannot hold, `reindex` reports that the answer depends on the index it started from, rather than returning a different graph in silence.
+    **What is NOT established:** how many other imports have this shape — one was found, by its effect on a count somebody happened to be watching, and the class was not swept. Nor whether the fresh answer or the carried-forward answer is the correct one; the entry claims only that they differ.
+    **Tracker:** `beadloom-xzvp`.
+    **Related:** #269 and BDL-069's `beadloom-rqma.4` — `reindex` attributing a prefix-sharing sibling's API routes to a node. Same family: a node whose source is a path inside another node's reach.
+
 289. [2026-09-12] [HIGH] a self-scanning guard test reads mutmut's own mutated copy of the package, so the nightly mutation run reaches a verdict on 0 of 6544 mutants
 
     **Severity:** high (the mutation duty has produced no score since 2026-09-10 — the instrument that measures whether the tests can tell a defect from a correct program is itself dead, and the only thing that said so is a nightly nobody is watching)

@@ -13,11 +13,16 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rule_engine import (
     ImportBoundaryRule,
+    LayerRule,
     Violation,
     count_unattributed_import_files,
     evaluate_all,
     inert_rule_names,
+    is_advisory,
+    layer_rule_reaches,
     load_rules,
+    population_phrase,
+    stated_populations,
     suppressed_crossings,
 )
 from beadloom.infrastructure.db import connection, create_schema, readonly_connection
@@ -26,7 +31,16 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
-    from beadloom.graph.rules import Rule, SuppressedCrossing
+    from beadloom.graph.rules import LayerReach, Rule, SuppressedCrossing
+
+
+#: What marks a line of porcelain output that is not a violation record. The
+#: same two characters ``scope-check`` marks its verdict with
+#: (``application.declared_scope.VERDICT_MARKER``), spelled again here rather
+#: than imported: the graph layer must not depend on the application layer, and
+#: the shape is a property of the two line forms — a rule name cannot begin with
+#: ``"# "`` — rather than a convention either end invented.
+POPULATION_MARKER = "# "
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +86,18 @@ class LintResult:
     #: coverage of a green result is stated rather than assumed.
     files_unattributed: int = 0
     imports_resolved: int = 0
+    #: How much of its edge set each layer rule judged — one entry per declared
+    #: layer rule, empty for a project that declares none. Carried as the
+    #: counts themselves rather than a sentence, so each rendering states them
+    #: in its own idiom and none has to parse another's prose. Measured on this
+    #: repository at `aa4bfad4`, `architecture-layers` judged 16 of 362 live
+    #: `depends_on` edges while the summary line said `16 rules evaluated` —
+    #: the same words it would say for 362 of 362 (BDL-070 A3). The DENOMINATOR
+    #: is lineage-dependent: an index carried forward and an index built fresh
+    #: over one tree resolve `beadloom.application.graph_reads` differently, so
+    #: the two differ by one edge (BDL-UX #290). Hold the lineage constant
+    #: across any before/after comparison of this number.
+    layer_populations: list[LayerReach] = field(default_factory=list)
     elapsed_ms: float = 0.0
 
     @property
@@ -93,6 +119,28 @@ class LintResult:
     def has_errors(self) -> bool:
         """Return True if any violation has severity 'error'."""
         return any(v.severity == "error" for v in self.violations)
+
+    @property
+    def fails_on_warn(self) -> bool:
+        """The key ``--fail-on-warn`` decides on, as ``has_errors`` is ``--strict``'s.
+
+        Every finding except the two advisories
+        (:data:`~beadloom.graph.rules.advisories.ADVISORY_RULE_TYPES`), which
+        report how far a rule reached rather than anything it decided. The
+        reason the exclusion exists, and the condition under which it should be
+        revisited, are written at the set itself. It is a property here rather
+        than a filter in the CLI because the debt report and the MCP tool read
+        this result too, and a second place deciding what "any violation" means
+        is how one flag comes to mean two things.
+
+        **The exclusion stops at ``error``**, so this stays a superset of
+        ``has_errors``: an advisory that ever shipped at the rule's declared
+        severity would otherwise exit 1 under ``--strict`` and 0 under the
+        flag that is meant to be harsher, on the same run. Both advisory
+        constructors hardcode ``warn`` today and neither is obliged to, so the
+        property is bounded here rather than left to a test on them.
+        """
+        return any(v.severity == "error" or not is_advisory(v) for v in self.violations)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +252,26 @@ def _evaluate(
             conn, [rule for rule in rules if isinstance(rule, ImportBoundaryRule)]
         )
 
+        # How much of its edge set each layer rule can judge. Counted here for
+        # the same reason `inert_rule_names` and `suppressed_crossings` are:
+        # `evaluate_all` returns findings, and a finding carries the numbers as
+        # prose. Both counts come from `reach_of` over this one connection, so
+        # they cannot differ in logic — what would differ is a renderer parsing
+        # a sentence back into integers.
+        #
+        # A lint run therefore reads the containment map and the tag map TWICE:
+        # once here, and once inside `evaluate_layer_rules` below. That is two
+        # extra queries per run — one over `edges` where kind = 'part_of', one
+        # over `nodes` — and it is the price of `evaluate_all` being a function
+        # of a connection alone, which is what lets the TUI panel and the debt
+        # report call it without assembling a linter's state (A8 review, Minor 6).
+        # Both readings go through the same two functions, so they cannot
+        # disagree; if this run ever needs to be faster, the maps get passed in
+        # rather than the second reading being made to differ.
+        populations = layer_rule_reaches(
+            conn, [rule for rule in rules if isinstance(rule, LayerRule)]
+        )
+
         # files_scanned: distinct file_path in code_imports.
         row = conn.execute("SELECT COUNT(DISTINCT file_path) FROM code_imports").fetchone()
         files_scanned: int = int(row[0]) if row is not None else 0
@@ -236,6 +304,7 @@ def _evaluate(
         files_scanned=files_scanned,
         files_unattributed=files_unattributed,
         imports_resolved=imports_resolved,
+        layer_populations=populations,
         elapsed_ms=(time.monotonic() - start) * 1000,
     )
 
@@ -282,6 +351,36 @@ def _unattributed_note(result: LintResult) -> str:
     if not result.files_unattributed:
         return ""
     return f", {result.files_unattributed} attributable to no node"
+
+
+def _stated_populations(result: LintResult) -> list[LayerReach]:
+    """The layer populations there is anything to say about.
+
+    A rule handed no edge of its kind has no denominator: liveness already
+    reports that it could not fire, and saying it a second way is the
+    affirm-it-twice shape this project has filed before. The filter itself is
+    :func:`~beadloom.graph.rules.layer_reach.stated_populations`, shared with
+    the five surfaces that never see a :class:`LintResult` (BDL-070 A4), so
+    "nothing to state" cannot mean one thing here and another on the Gate line.
+    """
+    return stated_populations(result.layer_populations)
+
+
+def _population_note(result: LintResult) -> str:
+    """The clause that stops the rule count from standing in for the population.
+
+    Unlike :func:`_inert_note`, :func:`_suppressed_note` and
+    :func:`_unattributed_note`, this clause is present at FULL reach as well.
+    Those three name an anomaly, so their absence means "nothing to qualify". A
+    population is the denominator of the verdict beside it, and the defect this
+    epic was opened on is precisely that `16 of 362` and `362 of 362` read
+    alike when neither is printed. The finding the evaluator emits stays silent
+    at full reach for its own reason — a finding is an item somebody has to
+    triage, in every project, on every run — and that split is deliberate.
+    """
+    return "".join(
+        f", {population_phrase(reach)}" for reach in _stated_populations(result)
+    )
 
 
 def format_rich(result: LintResult) -> str:
@@ -335,12 +434,13 @@ def format_rich(result: LintResult) -> str:
         lines.append(
             f"Errors: {result.error_count}, Warnings: {result.warning_count} "
             f"({result.rules_evaluated} rules evaluated{_inert_note(result)}"
-            f"{_suppressed_note(result)}, {elapsed_str})"
+            f"{_suppressed_note(result)}{_population_note(result)}, {elapsed_str})"
         )
     else:
         lines.append(
             f"\u2713 No violations found ({result.rules_evaluated} rules evaluated"
-            f"{_inert_note(result)}{_suppressed_note(result)}, {elapsed_str})"
+            f"{_inert_note(result)}{_suppressed_note(result)}{_population_note(result)}"
+            f", {elapsed_str})"
         )
 
     return "\n".join(lines)
@@ -422,6 +522,12 @@ def format_json(result: LintResult) -> str:
             "files_scanned": result.files_scanned,
             "files_unattributed": result.files_unattributed,
             "imports_resolved": result.imports_resolved,
+            # How much of its edge set each layer rule judged. Additive: every
+            # key above keeps its name and its meaning, so a consumer reading
+            # `rules_evaluated` reads the same number it read before — and can
+            # now find out what that number covers. Empty for a project that
+            # declares no layer rule.
+            "layer_populations": [reach.to_dict() for reach in result.layer_populations],
             "elapsed_ms": result.elapsed_ms,
         },
     }
@@ -441,12 +547,16 @@ def format_github(result: LintResult) -> str:
     location (graph-level violations omit them). Newlines inside a message are
     escaped to ``%0A`` per the workflow-command spec so the annotation stays on
     one logical line. Output is deterministic (violations are pre-sorted).
-    Returns an empty string when there are no violations.
+    Each layer rule's population leads the stream as a ``::notice``, including
+    on a clean run. ``notice`` rather than ``warning`` because the fraction is
+    not a finding against anyone's code and must not colour a pull request; it
+    leads rather than trails because the reach of a check is what the
+    annotations under it are true of. Returns an empty string only when there
+    is neither a violation nor a population to state.
     """
-    if not result.violations:
-        return ""
-
-    lines: list[str] = []
+    lines: list[str] = [
+        f"::notice::{population_phrase(reach)}" for reach in _stated_populations(result)
+    ]
     for v in result.violations:
         level = "error" if v.severity == "error" else "warning"
         params: list[str] = []
@@ -470,12 +580,21 @@ def format_porcelain(result: LintResult) -> str:
     Format: ``rule_name:rule_type:severity:file_path:line:from_ref:to_ref``
 
     Empty file_path/line_number/ref_ids are represented as empty strings.
-    Returns empty string when there are no violations.
-    """
-    if not result.violations:
-        return ""
 
-    lines: list[str] = []
+    Each layer rule's population leads the output on its own line, marked with
+    :data:`POPULATION_MARKER` and shaped
+    ``# layer_population:rule:edge_kind:evaluated:total:skipped:inherited``. The
+    marker is what keeps the two forms apart — a rule name cannot begin with
+    ``"# "`` — so a consumer that reads violation records drops the marked
+    lines and reads exactly the seven-field records it read before. Returns an
+    empty string only when there is neither a violation nor a population.
+    """
+    lines: list[str] = [
+        f"{POPULATION_MARKER}layer_population:{reach.rule_name}:{reach.edge_kind}"
+        f":{reach.own_tags.evaluated}:{reach.own_tags.total}"
+        f":{reach.own_tags.skipped_untagged}:{reach.inherited.evaluated}"
+        for reach in _stated_populations(result)
+    ]
     for v in result.violations:
         file_path = v.file_path if v.file_path is not None else ""
         line_number = str(v.line_number) if v.line_number is not None else ""

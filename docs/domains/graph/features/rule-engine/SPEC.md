@@ -6,12 +6,18 @@ Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, 
 
 The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
-- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`, and `exit_condition_deadline` (the `until:` grammar).
-- `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`. The `until:` grammar is no longer here: `exit_condition_deadline` moved to `infrastructure/exit_condition.py` in BDL-070 B2, because `onboarding` declares an exit condition too and was importing this peer domain to read what one is. `beadloom.graph.rules.exit_condition_deadline` still answers — `rules/__init__.py` re-exports it.
+- `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
-- `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
+- `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's. Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
+- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted both by own tags and by `part_of` inheritance, and the finding that states the pair (BDL-070 A2).
+- `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated, because `liveness` already names them for exactly that graph (BDL-070 A6).
+- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
+- `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
+- `rules/layer_exemptions.py` — what a SAME-LAYER exemption is doing: which peer crossings it excuses, how many, and whether its exit condition has passed (BDL-070 B2). `layers.same_layer_crossings` decides what crosses; this decides what an entry does about it, the same split `exemptions.py` draws for the import boundary rules.
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
 - `rules/summary_facts.py` — `summary_facts`: the numeric and version claims a node `summary` states, checked against the same fact the project computes. The extraction and the comparison are the documentation audit's, so there is no second notion of "a version" here (BDL-062 `.1`).
@@ -161,7 +167,7 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 - a **deadline**: the value LEADS with an ISO `YYYY-MM-DD` date, optionally followed by the prose that explains it (`2026-09-01 — when the repository read seam lands`). It is parsed, and once that day has passed while the entry is still suppressing something, the run reports it;
 - an **event**: anything else (`the rule is re-scoped — BDL-UX #150 follow-up`). Not parseable, and deliberately still legal: what retires a real baseline is usually a landed change, not a day. An event is reported as prose, never treated as satisfied.
 
-The spelling is pinned to a leading `YYYY-MM-DD` by a pattern rather than delegated to `date.fromisoformat`, because that parser widened in Python 3.11 (`20260101` and week dates parse there and raise on 3.10) — the same `until:` must not be enforceable on one supported interpreter and prose on another. A date in the MIDDLE of a sentence is an event: a deadline is the first thing an exit condition says, or it is not one. `exit_condition_deadline` is the single definition, shared with the `guards.<name>.exclusions[].until` of `flow.yml`, so the two surfaces cannot promise different things.
+The spelling is pinned to a leading `YYYY-MM-DD` by a pattern rather than delegated to `date.fromisoformat`, because that parser widened in Python 3.11 (`20260101` and week dates parse there and raise on 3.10) — the same `until:` must not be enforceable on one supported interpreter and prose on another. A date in the MIDDLE of a sentence is an event: a deadline is the first thing an exit condition says, or it is not one. `exit_condition_deadline` is the single definition, shared with the `guards.<name>.exclusions[].until` of `flow.yml` and with `layers.exempt[].until`, so the three surfaces cannot promise different things. It lives in `infrastructure/exit_condition.py` since BDL-070 B2, below every layer that declares one.
 
 **Every exemption is visible, whatever it does.** The three channels are exhaustive over what an entry can be doing, and this is the guarantee the `rules.yml` comment used to overstate:
 
@@ -175,7 +181,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 **Severity is `warn`, and expiry never changes what is suppressed.** A finding here is a statement about the CONFIGURATION, not about the code — the distinction BDL-061.48 drew for inert rules — and it is honoured harder in this case: a crossing does **not** reappear at `error` severity because a calendar day passed, because a build that reddens with no commit behind it is worse than the silence being fixed. A project that wants a hard deadline has `lint --fail-on-warn`.
 
-**Named limit.** The suppressed count appears wherever a run could read as clean — `rich`, `--format json`, and the `0 violations, N rules evaluated` line the CLI prints when a piped run has nothing to report. It does **not** appear in `porcelain` output that already carries violations (one line per violation is the format's contract), nor in the Gate's own `N rules, 0 violations` step summary, which belongs to `application/gate.py`.
+**Named limit.** The suppressed count appears wherever a run could read as clean — `rich`, `--format json`, and the `0 violations, N rules evaluated` line the CLI prints for a format whose clean output states no verdict of its own (`porcelain`, `github`). It does **not** appear in `porcelain` output that already carries violations (one line per violation is the format's contract), nor in the Gate's own `N rules, 0 violations` step summary, which belongs to `application/gate.py`.
 
 #### Rule liveness (a rule that cannot fire)
 
@@ -192,7 +198,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
 | `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
-| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes | `liveness.py` |
+| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes. "Layered" means the node DECLARES a layer tag: a node that would inherit one through `part_of` is not counted, because counting it would stop reporting a rule that is inert today, and that is a verdict change (BDL-070 A5; `beadloom-ku26` makes the move in the release that announces it) | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
@@ -324,6 +330,26 @@ Enforces dependency direction between ordered architecture layers.
 | `allow_skip` | `bool`                | If `False`, forbids skipping intermediate layers (default `True`). |
 | `edge_kind`  | `str`                 | Edge kind to check (default `"uses"`).                  |
 | `severity`   | `str`                 | `"error"` or `"warn"`.                                  |
+| `exempt`     | `tuple[LayerExemption, ...]` | Same-layer crossings the rule excuses (default empty). |
+
+#### `LayerExemption`
+
+One same-layer crossing a layer rule excuses, why, and what retires it (BDL-070 B2).
+
+| Field       | Type  | Description                                                     |
+|-------------|-------|-----------------------------------------------------------------|
+| `from_glob` | `str` | `fnmatch` pattern over the source node's `ref_id`.               |
+| `to_glob`   | `str` | `fnmatch` pattern over the target node's `ref_id`.               |
+| `reason`    | `str` | Why the crossing stands. Mandatory.                              |
+| `until`     | `str` | Its exit condition — a leading `YYYY-MM-DD`, or an event. Mandatory. |
+
+`covers(src, dst)` matches BOTH ends and matches direction: `a -> b` and `b -> a` are two crossings,
+and a project that excused one did not excuse the other. `load_rules` raises `ValueError` when an
+entry omits `from`, `to`, `reason` or `until`, or when both globs are `*` — an entry matching every
+edge would exempt the rule rather than a crossing in it. The shape mirrors `ImportExemption` and for
+the same reason: an exclusion with no reason and no exit condition is how a gate is switched off
+without saying so. It differs in what it names, because a same-layer crossing is an EDGE and an
+entry naming one end would excuse everything that touches it.
 
 #### `CardinalityRule`
 
@@ -486,15 +512,10 @@ graph, so there is no house preference to respect.
 
 ### rules.yml Schema
 
-Schema supports versions 1, 2, and 3. Version 3 adds the optional top-level `tags:` block for bulk tag assignments.
+Schema supports versions 1, 2, and 3. Version 3 ADDED an optional top-level `tags:` block described as bulk tag assignments; nothing ever applied it, and BDL-070 A6 withdrew `load_rules_with_tags`, the only function that read it. A node's tags are declared on the node, and a `rules.yml` still carrying such a block loads unchanged while the block assigns nothing.
 
 ```yaml
 version: 3
-
-# Optional (v3): bulk tag assignments — tag_name: [ref_id, ...]
-tags:
-  layer-service: [cli, mcp-server, tui]
-  layer-domain: [context-oracle, doc-sync, graph, onboarding]
 
 rules:
   # --- deny: forbid imports between matched nodes ---
@@ -556,6 +577,11 @@ rules:
     enforce: top-down                          # higher layers may depend on lower
     allow_skip: true                           # optional, default: true
     edge_kind: depends_on                      # optional, default: uses
+    exempt:                                    # optional, excuses same-layer crossings
+      - from: <src-ref-id-or-glob>             # mandatory
+        to: <dst-ref-id-or-glob>               # mandatory
+        reason: "<why this crossing stands>"   # mandatory
+        until: "<a YYYY-MM-DD deadline, or the event that retires it>"  # mandatory
 
   # --- check (cardinality): enforce complexity limits ---
   - name: <unique-rule-name>
@@ -578,8 +604,7 @@ def load_rules(rules_path: Path) -> list[Rule]
 
 1. Read and parse `rules_path` with `yaml.safe_load`.
 2. Validate top-level `version` field is in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Raise `ValueError` on mismatch or absence.
-3. If version 3, parse optional top-level `tags:` block for bulk tag assignments.
-4. Iterate `rules` list. For each entry:
+3. Iterate `rules` list. For each entry:
    a. Require a non-empty string `name` field.
    b. Enforce unique names (tracked via `seen_names` set). Raise `ValueError` on duplicate.
    c. Require exactly one of `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`. Raise `ValueError` if none or multiple are present.
@@ -593,6 +618,8 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]
 ```
 
 Collects all `ref_id` values from all matchers across all rules (deny, require, forbid_edge, cardinality and unregistered-feature-candidate). Queries the `nodes` table for each. Returns a list of warning strings for any `ref_id` not found in the database. This is advisory (warnings, not errors).
+
+**A `LayerRule` is checked too, since BDL-070 A6.** It names no ref_id, so it was outside the chain above and the same class of mistake went unreported: a layer whose tag no node carries. One warning per rule names every empty layer, through `layer_declaration.declaration_warnings` — the function the evaluator's finding is also derived from, so the two surfaces cannot state different tags. The tag map is read only when the rule set holds a layer rule.
 
 **Its return value is consumed, not dropped.** Until BDL-061.48 `linter.py` called this function as a bare statement and discarded the list, so a rule naming `no-such-node-at-all` produced the exact right diagnosis and threw it away while `lint --strict` printed `13 rules evaluated, 0 violations` at exit 0. The unknown-`ref_id` question is now answered per rule by `liveness.py` (which names the ref_id in the finding, attributed to the rule that references it) and by this function for any rule kind the liveness pass does not model — one finding per rule, never two.
 
@@ -675,6 +702,276 @@ Algorithm:
    c. If any target matches `has_edge_to`, the node satisfies the rule.
    d. If no matching edge is found, emit a `Violation`.
 
+#### The layer a node is in (`rules/layers.py`, BDL-070 A1)
+
+```python
+def layer_of(ref_id, layers, parents, tags) -> int | None
+def own_layer_of(ref_id, layers, tags) -> int | None
+def part_of_generations(ref_id, parents) -> list[tuple[str, ...]]
+def part_of_ancestors(ref_id, parents) -> frozenset[str]
+def layer_population(edges, layer_at) -> LayerPopulation
+def tagged_containers(ref_id, layers, parents, tags) -> frozenset[str]
+def shares_tagged_ancestor(src, dst, layers, parents, tags) -> bool
+def same_layer_crossings(edges, layers, parents, tags) -> list[tuple[str, str]]
+```
+
+One answer to "what layer is this node in", for every caller that asks. Three bodies asked it
+before and disagreed: `evaluate_layer_rules` read a node's OWN tags and skipped every edge whose
+ends carried none, `application/architecture_view.py` climbed `part_of` with the four tags and
+their ranks written into it, and `liveness.py` did neither. Measured on this repository at
+`aa4bfad4`: 362 live `depends_on` edges, 16 with a layer at both ends by own tags, 354 by `part_of`
+ancestry.
+
+The functions are pure — the declaration, the parent map and the tag map are arguments, and there
+is no connection and no filesystem — so the rule's hardest property is testable without a graph.
+A layer is returned as its INDEX in the declared order (`0` is topmost), because the index is what
+the rule compares to decide direction.
+
+**What containment makes of an edge INSIDE one layer** (BDL-070 B2). `shares_tagged_ancestor` is the
+predicate RFC Q1 decided: an edge between two ends in the same layer is legal when one container the
+declaration gives a layer holds BOTH ends, and a crossing when none does. It is reflexive — a node
+that declares a layer is the container of its own membership — or a part would cross with the very
+container it is inside. A container carrying no declared layer tag shares nothing, which is what
+makes the predicate say anything: this repository's root service holds every domain and every
+service and is untagged, so peers under it cross, and tagging that root would make every same-layer
+edge legal by construction.
+
+Measured on this repository on 2026-09-13 over a warm full rebuild of the index: 365 live
+`depends_on` edges, 357 with a layer at both ends by ancestry, 130 inside one layer, of which 116
+run between two parts of one container and 14 between peers. The two predicates that existed before
+split that population 0/130 and 130/0 — one passed every same-layer edge and the other flagged
+every one — so neither could tell an internal edge from a peer crossing.
+
+`same_layer_crossings` applies it to an edge set and returns only the crossings. An edge whose ends
+are in DIFFERENT layers is not among them: direction is the rest of the layer rule's business. An
+edge with an unlayered end is not judged at all.
+
+Two properties hold, and both are settled by the declaration rather than by a dictionary's
+iteration order:
+
+- A node that declares a layer keeps it and does not climb. A node that declares none takes the
+  layer of the nearest `part_of` generation that does, and `None` when no generation does.
+- A tie is decided top-down. A node carrying two declared layer tags is in the topmost of them —
+  `evaluate_layer_rules` iterated the node's tag `set` and took the first match, so its answer
+  depended on hash order — and two tagged ancestors at the same distance resolve the same way.
+  There is no uniformly conservative choice here, so the tie is settled for determinism and said
+  so out loud. Measured on this repository's graph on 2026-09-12: no node has more than one
+  `part_of` parent, so the ancestor tie is unreachable here and exists for the graphs Beadloom
+  ships to.
+
+`part_of_generations` is the ONE `part_of` ancestry walk in the codebase.
+`import_resolver._part_of_ancestors` reads the direct edges out of SQLite and calls
+`part_of_ancestors` rather than climbing a second time; a test derives that from the source and
+fails on a second walk reachable from `graph/rules/`.
+
+`layer_population` counts an edge set into `evaluated` (a layer at both ends) and
+`skipped_untagged` (the rest). The resolver is a parameter because the same edge set has two
+populations worth stating — what own tags reach and what ancestry reaches.
+
+#### What a same-layer exemption is doing (`rules/layer_exemptions.py`, BDL-070 B2)
+
+```python
+def layer_exemption_index_for(rule, src_ref_id, dst_ref_id) -> int | None
+def excused_crossings(rule, crossings) -> tuple[list[tuple[str, str]], dict[int, int]]
+def stale_layer_exemption_findings(rule, excused_per_exemption, *, today=None) -> list[Violation]
+```
+
+A layer rule that reports peer crossings needs a way to say "this one is known and decided", or the
+only way to a green result is to narrow the rule until it catches nothing. An exemption is honest
+only while it stays visible, and the two ways an entry can stop being visible are the ones
+`exemptions.py` names for `forbid_import`: it excuses a crossing and nobody says so, or its exit
+condition passes and nobody notices.
+
+Both are reported. An entry that excuses nothing is DEAD — the edge it named is gone, so the entry
+only hides the next one that looks like it. An entry still excusing crossings past its own deadline
+is EXPIRED, reported with the count it is still excusing. Both are `warn` and neither enforces: a
+crossing does not become a finding because a calendar day passed. An entry naming an event never
+expires on its own, because nothing in a date can observe whether the event happened, so the COUNT
+is the mechanism an event-dated entry relies on to be remembered.
+
+`layers.same_layer_crossings` decides what crosses; this decides what an entry does about it. The
+population a layer rule judged is counted BEFORE any exemption is consulted, so excusing a crossing
+does not shrink the denominator a reader checks the verdict against.
+
+`excused_crossings` returns both halves — the crossings no entry excuses and a count per entry —
+because both are needed, and deriving one from the other twice is how a reported count and an
+excused count come to disagree.
+
+#### The population a layer rule judged (`rules/layer_reach.py`, BDL-070 A2)
+
+```python
+LAYER_POPULATION_RULE_TYPE = "layer_population"
+
+@dataclass(frozen=True)
+class LayerReach:
+    rule_name: str
+    edge_kind: str
+    own_tags: LayerPopulation     # what the rule decides on
+    inherited: LayerPopulation    # what `part_of` inheritance would reach
+
+def layer_rule_reach(conn, rule) -> LayerReach
+def layer_rule_reaches(conn, rules) -> list[LayerReach]   # one read of the graph for the whole list
+def population_statement(rule, reach) -> list[Violation]  # the finding, with its remediation
+def stated_populations(reaches) -> list[LayerReach]       # the ones there is anything to say about
+def population_phrase(reach) -> str                       # the clause, for a line already being read
+```
+
+`architecture-layers` ships at `severity: error`, so what it evaluates decides whether `main` is
+mergeable — and it judged 16 of 363 live `depends_on` edges on this repository on 2026-09-12,
+because it reads a node's OWN tags. The green line said `0 violations, 16 rules evaluated`, which
+is what it would say for 363 of 363. `evaluate_layer_rules` now emits one finding per rule naming
+both numbers and what inheritance would reach, so the two are readable apart.
+
+The statement is a FINDING rather than a clause in the summary line, following
+`scenario_coverage._population_statement`: `tui/data_providers.py` and
+`application/debt_report/collect.py` call `evaluate_all` directly and never see a `LintResult`, so
+a clause in the summary cannot reach them.
+
+It is always `warn` and never the rule's declared severity. A statement about a rule's reach is not
+a boundary breach, and emitting it at `error` would turn a green Gate red on upgrade for a graph
+nobody changed.
+
+**And it does not exit 1 under `--fail-on-warn` either** (`rules/advisories.py`, BDL-070 A8).
+`warn` keeps a finding out of `--strict` and out of the Gate, and it does not keep it out of that
+flag, which exits on any finding. Measured on a fixture with two tagged edges and one untagged,
+clean under every rule it declares: the code before this release exits 0 and the code with the
+population statement exits 1. So `ADVISORY_RULE_TYPES` — `layer_population` and
+`layer_declaration` — is subtracted in `LintResult.fails_on_warn`, the key that flag reads as
+`has_errors` is `--strict`'s. The exclusion selects by rule type and stops at `error`: an
+expired exemption, an inert rule and an unbound scenario are statements about something a person
+chose, and they still exit 1 — and so does an advisory at `error`, so the flag stays a superset of
+`--strict` rather than reading softer than it on the same run. Both advisory constructors hardcode
+`warn` today and neither is obliged to, which is why the bound is in the predicate rather than
+asserted about them (A8 re-review, Minor 3). A pipeline that wants the advisories to block reads
+their records out of `--format json`. Release B makes the real under-evaluation an error from the
+rule itself, which is a verdict change that release states.
+
+It is silent in two cases and loud in a third:
+
+- **No edge of the rule's kind** — there is no population to report, and a rule that can look at
+  nothing is already the subject of a liveness finding. Saying it twice is noise.
+- **Every edge reached** — there is nothing the rule could not see. A line saying so on every run
+  of every project trains a reader to skip the one that matters.
+- **Zero of N reached** — reported, once for the rule rather than once per unjudged edge. This is
+  the case where "the rule found nothing wrong" and "the rule never looked" are the same output.
+
+##### What the rule reports, and what it still decides on (BDL-070 Release A)
+
+Release A changed what `architecture-layers` REPORTS. It did not change what the rule DECIDES,
+and a reader who does not hold the two apart will read the new statement as a new verdict.
+
+- **The rule decides on a node's OWN declared tags, and inheritance has NOT shipped.**
+  `evaluate_layer_rules` resolves each end of an edge through `own_layer_of` and moves to the
+  next edge when either end declares no layer tag of its own. `layer_of` climbs `part_of`, and the
+  callers that want an inherited answer use it — the architecture view's lane rank, and the
+  `inherited` half of the population count below — but the RULE does not take a node's layer from
+  its container. `beadloom-ku26` makes that move, in the release that announces it.
+- **The rule reports both populations.** `population_statement` states what own tags reach
+  beside what inheritance would reach, so the distance between the check and its subject is a
+  number rather than an inference. Measured on this repository on 2026-09-13 over a warm full
+  rebuild of the index: **365** live `depends_on` edges, **16 judged** by own tags, **349
+  skipped** for want of a tag at one end or both, and **357** with a layer at both ends by
+  `part_of` ancestry. The porcelain record is
+  `# layer_population:architecture-layers:depends_on:16:365:349:357`. The lineage is part of the
+  figure and not a detail of how it was taken — see the note below on BDL-UX #290, which is why
+  the older measurements quoted in this section read 362 and 363 over the same repository.
+- **An edge inside one layer is still legal unconditionally.** The evaluator returns to the next
+  edge as soon as both ends resolve to the same layer index, so the 14 peer crossings
+  `same_layer_crossings` finds here are reported by no rule in this release. The `exempt:`
+  entries BDL-070 B2 wrote against them are bookkeeping for now: `_layer_exemption_statements`
+  consults them only to report an entry that is DEAD or EXPIRED, and the finding for an
+  un-excused crossing arrives with the predicate that refuses one.
+
+So a green `architecture-layers` in Release A means "none of the 16 edges this rule judged points
+the wrong way". The population finding beside it is what says 16 rather than 365, and it says so
+at `warn`, which is why no adopter's Gate decides differently after the upgrade than before it.
+
+##### Where the population is reported (BDL-070 A3)
+
+The finding reaches a reader who reads findings. The line most readers read is the summary, so
+`LintResult` carries the same fact as DATA — `layer_populations: list[LayerReach]`, one entry per
+declared layer rule, empty for a project that declares none — and every rendering states it in its
+own idiom rather than parsing another's prose:
+
+| Rendering | How the population appears |
+|---|---|
+| `format_rich` | a clause on the summary line, on the GREEN line and the RED one alike: `, architecture-layers judged 16 of 362 live depends_on edge(s)` |
+| `format_json` | `summary.layer_populations[]` — `rule`, `edge_kind`, `evaluated`, `total`, `skipped_untagged`, `inherited_evaluated`, `inherited_total`, `unjudged`. Additive: every key that was there keeps its name and its meaning |
+| `format_github` | one leading `::notice::` per rule — `notice`, not `warning`, because the fraction is not a finding against anyone's code and must not colour a pull request |
+| `format_porcelain` | one leading marked line, `# layer_population:rule:edge_kind:evaluated:total:skipped:inherited`. The `# ` marker is the same one `scope-check --porcelain` leads its verdict with, and a rule name cannot begin with it, so a consumer drops the marked lines and reads exactly the seven-field records it read before |
+| `beadloom lint`'s clean line | `0 violations, N rules evaluated` gains the same clause |
+
+The number the clause prints has a lineage: an index carried forward and an index built fresh over
+one tree resolve `beadloom.application.graph_reads` differently, so this repository reads `16 of
+363` on a carried-forward index and `16 of 362` on a fresh one (BDL-UX #290). Hold the lineage
+constant across a before/after comparison.
+
+**The clause is present at FULL reach too, and the finding is not.** They differ deliberately. A
+finding is an item somebody triages, in every project, on every run, so `16 of 16` would be noise;
+a clause on a line already being read costs nothing, and `16 of 16` versus `16 of 362` is the
+distinction this rule exists to make readable. A rule handed no edge of its kind states nothing in
+either channel — liveness already says it could not fire.
+
+**The CLI's clean line is keyed on the FORMAT, not on an empty rendering.** It used to print when
+the formatter returned nothing at all, which was the same test until a clean `porcelain` or
+`github` run started carrying a population line. Keyed on emptiness, the one sentence saying there
+were no violations would have vanished from exactly the two formats it exists for.
+
+`LintResult.layer_populations` is counted in `linter._evaluate` beside `inert_rule_names` and
+`suppressed_crossings` rather than returned by `evaluate_all`, which returns findings. Both counts
+come from `reach_of` over one connection, so they cannot differ in logic, and a test holds the
+numbers on the result against the numbers in the finding.
+
+##### The surfaces outside `beadloom lint` (BDL-070 A4)
+
+Five surfaces report a lint result without being `beadloom lint`, and two of them never see a
+`LintResult` at all — which is why the population is emitted as a finding in the first place.
+
+| Surface | How the population appears |
+|---|---|
+| `application/gate.py` `lint_step` | the clause, appended to the step summary beside `_suppressed_note`, from the linter's own formatter so the Gate line cannot drift from the command it summarises |
+| `services/mcp_server.py` `handle_lint` | `summary.layer_populations[]`, the same eight keys `lint --format json` carries. Additive, and outside the severity filter: a finding filter must not be able to hide something that is not a finding |
+| `tui/data_providers.py` + `widgets/lint_panel.py` | past `lint()`. The provider carries the finding's `rule_type` and `message`, which it dropped before, and the panel leads its list with the population rows, rendering the MESSAGE — a population row carries no `from_ref_id`, and the rule description beside it describes the boundary rather than how much of it was looked at |
+| `application/debt_report/collect.py` | past `lint()`. Counts the reaches over the same rules it evaluated and carries `population_phrase` on `DebtData` → `DebtReport`; the Rich report prints `counted over: ...` under Rule Violations, and `format_debt_json` carries `layer_populations` |
+| `onboarding/scanner/prime.py` | the clause on the `Health:` line, and `health.layer_populations` in `--format json`. One clause per DECLARED layer rule rather than per finding, so the list `prime` caps at ten findings can grow without this growing with it |
+
+**One wording, not five.** `population_phrase` is the single clause and `stated_populations` the
+single "is there anything to say" filter. `linter._population_note` and `format_github` were
+rewritten to call them, so the six places that state the fraction cannot drift into six wordings —
+the defect this epic is about, at the scale of a sentence.
+
+**A4 states; it does not re-count.** Every number these five surfaces printed before it, they
+print after it — the population advisory is still counted among the warnings, exactly as A2 left
+it. Whether an advisory counts as a violation is one question with one answer, and it belongs in
+`LintResult`'s counting properties rather than in five leaves.
+
+**A test names the callers of `evaluate_all` and fails when a new one appears.** The set is derived
+by an AST scan over the installed package, following `import` and `from ... import` by name
+(including `as`), and compared for equality: `linter._evaluate`,
+`tui.data_providers.LintDataProvider.refresh` and `debt_report.collect._count_violations`. Its
+ceiling is that a caller reaching the evaluator through an attribute chain or `importlib` binds no
+name the scan reads, which is held by a case of its own rather than left to be rediscovered.
+
+`node_tags.NodeTags` is the tag lookup the five evaluators share. It reads
+`nodes.extra["tags"]` once, on the first question, and answers from memory afterwards — the
+closures it replaces read one node per call, and four of the five call sites still skip tags
+entirely when no rule in their set matches on one.
+
+Reading the whole table puts every row on the path of every tag question, so a row it cannot read
+is skipped rather than raised: `extra` that is null, that does not parse, or that parses to
+something other than an object leaves the node with no tags. One node at a time, a malformed
+`extra` could only break the question that asked about that node; unguarded, one such row would
+have failed every tag question in the run and escaped `evaluate_all` as a traceback instead of a
+`LintError` (BDL-070 A8).
+
+**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS
+are compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and
+the other four rule kinds against the closure they each kept, both run against this repository's
+own index in the same process
+(`tests/test_the_layer_rule_states_the_population_it_judged.py`). Measured on this repository:
+`lint --strict` exits 0 before and after, no finding was removed, and the one finding added is the
+population statement.
+
 #### Combined Evaluation
 
 ```python
@@ -707,7 +1004,6 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 
 ```python
 def load_rules(rules_path: Path) -> list[Rule]: ...
-def load_rules_with_tags(rules_path: Path) -> tuple[list[Rule], dict[str, list[str]]]: ...
 def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]: ...
 def evaluate_rule_liveness(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 def inert_rule_names(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> set[str]: ...
@@ -781,6 +1077,13 @@ class LayerDef:
     tag: str
 
 @dataclass(frozen=True)
+class LayerExemption:
+    from_glob: str
+    to_glob: str
+    reason: str
+    until: str
+
+@dataclass(frozen=True)
 class LayerRule:
     name: str
     description: str
@@ -789,6 +1092,7 @@ class LayerRule:
     allow_skip: bool = True
     edge_kind: str = "uses"
     severity: str = "error"
+    exempt: tuple[LayerExemption, ...] = ()
 
 @dataclass(frozen=True)
 class CardinalityRule:
@@ -901,6 +1205,8 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 - **Unknown ref_id warning.** Create rules referencing a `ref_id` not in `nodes`. Assert `validate_rules` returns a warning string.
 - **All ref_ids exist.** Assert empty warning list.
+- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity (`tests/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
+- **Every layer populated.** Assert both surfaces are silent.
 
 ### Liveness Tests (`tests/test_rule_liveness_all_types.py`)
 
@@ -914,7 +1220,7 @@ One **pair** per rule type — an inert rule that must be reported, and a live r
 
 ### Exit-condition Tests (`tests/test_exit_condition_expiry.py`)
 
-Both surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how the two would drift into promising different things.
+All three surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until`, `layers.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how they would drift into promising different things.
 
 - **The grammar.** A bare ISO date is a deadline; a date LEADING a sentence is a deadline; a date mid-sentence, `2026-1-1`, `20260101`, `2026-W01-1` and prose are all events. The rejected spellings include the two `date.fromisoformat` accepts on Python 3.11+ and rejects on 3.10 — the assertion that keeps the grammar interpreter-independent.
 - **Expiry, with its non-vacuity twin.** Same fixture, same exemption, only the date differs: a past deadline is reported, a future one is not. `until` equal to *today* is not expired (a deadline names the last day it covers); yesterday is.

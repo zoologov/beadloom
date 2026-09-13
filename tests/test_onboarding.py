@@ -6,6 +6,12 @@ from typing import TYPE_CHECKING, ClassVar
 
 import yaml
 
+#: The real re-index, handed to `init` the way `beadloom init` hands it in.
+#: Onboarding is a domain and the re-index is an application use case, so the
+#: caller supplies it rather than the domain importing it (BDL-070
+#: `beadloom-46am`). These tests assert what `init` does WITH a real index, so
+#: they pass the real one and their behaviour is unchanged.
+from beadloom.application.reindex import reindex as real_reindex
 from beadloom.onboarding import (
     bootstrap_project,
     classify_doc,
@@ -1083,7 +1089,7 @@ class TestInteractiveInit:
             patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         assert (tmp_path / ".beadloom" / "_graph").is_dir()
@@ -1097,7 +1103,7 @@ class TestInteractiveInit:
         (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
 
         with patch("rich.prompt.Prompt.ask", return_value="import"), patch("rich.console.Console"):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "import"
 
@@ -1108,7 +1114,7 @@ class TestInteractiveInit:
         (tmp_path / ".beadloom").mkdir()
 
         with patch("rich.prompt.Prompt.ask", return_value="cancel"), patch("rich.console.Console"):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "cancelled"
         assert result["reinit"] is False
@@ -1132,7 +1138,7 @@ class TestInteractiveInit:
             patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["reinit"] is True
         assert result["mode"] == "bootstrap"
@@ -1153,7 +1159,7 @@ class TestInteractiveInit:
             patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         # Verify the first prompt offered only bootstrap.
@@ -1177,7 +1183,7 @@ class TestInteractiveInit:
             ),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result.get("review") == "edit"
         assert result["agents_md_created"] is True
@@ -1199,7 +1205,7 @@ class TestInteractiveInit:
             ),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "cancelled"
 
@@ -1221,7 +1227,7 @@ class TestInteractiveInit:
             patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
-            result = interactive_init(tmp_path)
+            result = interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
         assert "reindex" in result
@@ -2409,7 +2415,7 @@ class TestNonInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        result = non_interactive_init(tmp_path, mode="bootstrap")
+        result = non_interactive_init(tmp_path, reindex=real_reindex, mode="bootstrap")
 
         assert result["mode"] == "bootstrap"
         assert (tmp_path / ".beadloom" / "_graph").is_dir()
@@ -2422,7 +2428,7 @@ class TestNonInteractiveInit:
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
 
-        result = non_interactive_init(tmp_path, mode="import")
+        result = non_interactive_init(tmp_path, reindex=real_reindex, mode="import")
 
         assert result["mode"] == "import"
         assert "import" in result
@@ -2438,7 +2444,7 @@ class TestNonInteractiveInit:
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
 
-        result = non_interactive_init(tmp_path, mode="both")
+        result = non_interactive_init(tmp_path, reindex=real_reindex, mode="both")
 
         assert result["mode"] == "both"
         assert "bootstrap" in result
@@ -2451,7 +2457,7 @@ class TestNonInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        result = non_interactive_init(tmp_path)
+        result = non_interactive_init(tmp_path, reindex=real_reindex)
 
         assert result["mode"] == "bootstrap"
 
@@ -2468,7 +2474,7 @@ class TestNonInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        result = non_interactive_init(tmp_path, mode="bootstrap", force=True)
+        result = non_interactive_init(tmp_path, reindex=real_reindex, mode="bootstrap", force=True)
 
         assert result["mode"] == "bootstrap"
         # Old marker should be gone.
@@ -2481,7 +2487,9 @@ class TestNonInteractiveInit:
         beadloom_dir = tmp_path / ".beadloom"
         beadloom_dir.mkdir()
 
-        result = non_interactive_init(tmp_path, mode="bootstrap", force=False)
+        result = non_interactive_init(
+            tmp_path, reindex=real_reindex, mode="bootstrap", force=False
+        )
 
         assert result["mode"] == "skipped"
         assert result["reason"] == "exists"
@@ -2497,7 +2505,7 @@ class TestNonInteractiveInit:
         (svc / "app.py").write_text("def main():\n    pass\n")
 
         with patch("rich.prompt.Prompt.ask") as mock_ask:
-            non_interactive_init(tmp_path, mode="bootstrap")
+            non_interactive_init(tmp_path, reindex=real_reindex, mode="bootstrap")
             mock_ask.assert_not_called()
 
     def test_returns_result_dict(self, tmp_path: Path) -> None:
@@ -2508,7 +2516,7 @@ class TestNonInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        result = non_interactive_init(tmp_path, mode="bootstrap")
+        result = non_interactive_init(tmp_path, reindex=real_reindex, mode="bootstrap")
 
         assert isinstance(result, dict)
         assert "mode" in result

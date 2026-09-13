@@ -60,6 +60,7 @@ import beadloom
 from beadloom.application.reindex import reindex
 from beadloom.application.source_derivation import callee_name, statement_trail
 from beadloom.onboarding.doc_generator import generate_skeletons
+from beadloom.onboarding.scanner import reindex_port
 
 #: The writer this module is about, read off the function object so a rename
 #: fails at import here rather than leaving a scan that finds no call site and
@@ -76,6 +77,12 @@ THE_REINDEX = reindex.__name__
 THE_REINDEX_MODULES = frozenset(
     {reindex.__module__, reindex.__module__.rsplit(".", 1)[0]}
 )
+
+#: The module a caller imports the re-index PORT's type from, read off the
+#: module object. A caller that is HANDED its re-index imports no re-index, so
+#: an import scan sees none: what it imports is the type of the parameter it
+#: takes, and that annotation is the binding (BDL-070 `beadloom-46am`).
+THE_REINDEX_PORT_MODULE = reindex_port.__name__
 
 #: The parameter the writer takes, read off its signature. The claim below is
 #: that every call site hands it the project root; the name of the thing it
@@ -121,21 +128,61 @@ def _package_root() -> Path:
     return Path(inspect.getfile(beadloom)).parent
 
 
+def _imported_names_from(tree: ast.Module, modules: frozenset[str] | set[str]) -> set[str]:
+    """The local names this file binds by importing from any of *modules*."""
+    return {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in modules
+        for alias in node.names
+    }
+
+
 def _reindex_names_in(tree: ast.Module) -> set[str]:
     """The local names bound to a re-index function in this file.
 
     Derived from the file's own imports: `from beadloom.application.reindex
-    import reindex as do_reindex` binds `do_reindex`, and every caller in the
-    product spells it that way. A caller that imports the module and calls
-    `reindex.reindex(...)` binds nothing here and would read as not re-indexing
-    — the ceiling is stated in `test_a_caller_that_re_indexes_under_a_name_this_
-    scan_cannot_see`.
+    import reindex as do_reindex` binds `do_reindex`. A caller that imports the
+    module and calls `reindex.reindex(...)` binds nothing here and would read as
+    not re-indexing — the ceiling is stated in
+    `test_a_caller_that_re_indexes_under_a_name_this_scan_cannot_see`.
+
+    **This is no longer where the product's own two init entry points are
+    found.** BDL-070 `beadloom-46am` inverted that dependency: onboarding is a
+    domain and the re-index is an application use case, so `init_flow` imports
+    none and is handed one. The parameter it is handed is picked up by
+    :func:`_handed_reindex_names_in`, and until that existed this scan reported
+    both entry points as callers that re-index nowhere.
     """
+    return _imported_names_from(tree, THE_REINDEX_MODULES)
+
+
+def _handed_reindex_names_in(
+    tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef
+) -> set[str]:
+    """The parameters of *function* annotated with the re-index port's type.
+
+    Nothing is named as a literal. The file says which names it imported from
+    the port module, and a parameter annotated with one of them is a re-index —
+    so a project that renames the type, or the parameter, is read the same way.
+
+    A string annotation is unwrapped, because `from __future__ import
+    annotations` leaves the source spelling and a quoted forward reference does
+    not: both reach here as text and only one carries the quotes.
+    """
+    port_types = _imported_names_from(tree, {THE_REINDEX_PORT_MODULE})
+    if not port_types:
+        return set()
+    arguments = function.args
     return {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module in THE_REINDEX_MODULES
-        for alias in node.names
+        argument.arg
+        for argument in (
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+        )
+        if argument.annotation is not None
+        and ast.unparse(argument.annotation).strip("\"'") in port_types
     }
 
 
@@ -175,6 +222,7 @@ def _call_sites_in(source: str, where: str) -> list[SkeletonCallSite]:
             for parent in ast.walk(function)
             for child in ast.iter_child_nodes(parent)
         }
+        reachable = names | _handed_reindex_names_in(tree, function)
         for node in ast.walk(function):
             if not (
                 isinstance(node, ast.Call)
@@ -190,12 +238,12 @@ def _call_sites_in(source: str, where: str) -> list[SkeletonCallSite]:
                     source=ast.unparse(node),
                     arguments=_argument_names(node),
                     re_indexes_before=any(
-                        _calls_a_reindex(statement, names)
+                        _calls_a_reindex(statement, reachable)
                         for block, index in trail
                         for statement in block[:index]
                     ),
                     re_indexes_after=any(
-                        _calls_a_reindex(statement, names)
+                        _calls_a_reindex(statement, reachable)
                         for block, index in trail
                         for statement in block[index + 1 :]
                     ),
@@ -279,6 +327,31 @@ def scaffold(project_root):
     return result
 """.replace("SKELETONS", THE_SKELETON_WRITER)
 
+#: A caller that is HANDED its re-index instead of importing one. BDL-070
+#: `beadloom-46am` inverted that dependency: onboarding is a domain and the
+#: re-index is an application use case, so `init_flow` no longer imports it and
+#: the service passes `application.reindex.reindex` in. The order rule is
+#: unchanged and the call sits where it always sat, but a scan that reads only
+#: IMPORT bindings sees no re-index at all and reports both init entry points as
+#: callers that re-index nowhere. This is the shape that must still be read.
+A_CALLER_HANDED_ITS_RE_INDEX = """
+from beadloom.onboarding.scanner.reindex_port import Reindexer
+
+
+def scaffold(project_root, *, reindex: Reindexer):
+    bootstrap_project(project_root)
+    result = SKELETONS(project_root)
+    reindex(project_root)
+    return result
+""".replace("SKELETONS", THE_SKELETON_WRITER)
+
+#: The same injected caller with the two lines swapped, so the case above cannot
+#: pass by the scan calling everything `after`.
+A_CALLER_HANDED_ITS_RE_INDEX_AND_RUNNING_IT_FIRST = A_CALLER_HANDED_ITS_RE_INDEX.replace(
+    f"    result = {THE_SKELETON_WRITER}(project_root)\n    reindex(project_root)\n",
+    f"    reindex(project_root)\n    result = {THE_SKELETON_WRITER}(project_root)\n",
+)
+
 #: A caller that hands over part of the tree. The parameter that used to let it
 #: pass a node list is gone, so this is the shape the mistake has left: the same
 #: single argument, a different path.
@@ -340,6 +413,33 @@ class TestTheScanItself:
         [site] = _call_sites_in(A_CALLER_THAT_RE_INDEXES_ONLY_BEFORE, "synthetic.py")
 
         assert (site.re_indexes_before, site.re_indexes_after) == (True, False)
+
+    def test_it_reads_a_re_index_the_caller_was_handed_rather_than_imported(
+        self,
+    ) -> None:
+        """An attribute call binds no name an import scan reads (BDL-070 B1).
+
+        `init_flow`'s two entry points take the re-index as a parameter, so a
+        scan keyed on `from ... import reindex as do_reindex` sees neither of
+        them re-index and every order case above passes over them vacuously. The
+        binding a parameter makes is read from the parameter's ANNOTATION, which
+        the file imports from the port, so nothing here names a type or a
+        parameter as a literal.
+        """
+        [handed] = _call_sites_in(A_CALLER_HANDED_ITS_RE_INDEX, "synthetic.py")
+        [first] = _call_sites_in(
+            A_CALLER_HANDED_ITS_RE_INDEX_AND_RUNNING_IT_FIRST, "synthetic.py"
+        )
+
+        assert (handed.re_indexes_before, handed.re_indexes_after) == (False, True)
+        assert (first.re_indexes_before, first.re_indexes_after) == (True, False)
+
+    def test_the_injected_shape_is_the_one_the_product_uses(self) -> None:
+        """Anti-vacuity for the case above: the mutant must differ from its base."""
+        assert (
+            A_CALLER_HANDED_ITS_RE_INDEX_AND_RUNNING_IT_FIRST
+            != A_CALLER_HANDED_ITS_RE_INDEX
+        ), "the anchor the mutation edits is gone, so the swap it names never happened"
 
     def test_it_reads_the_argument_a_call_site_hands_over(self) -> None:
         """Anti-vacuity for the shape case: the scan must see a wrong one."""

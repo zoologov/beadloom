@@ -226,6 +226,13 @@ def _load_export_artifacts(
     return artifacts
 
 
+#: The `lint` formats whose clean output states no verdict of its own. `rich`
+#: prints "No violations found" and `json` carries a `summary` object; these two
+#: are line-per-violation streams, so a clean run leaves a reader nothing to
+#: read unless the command says so itself.
+_FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
+
+
 # beadloom:domain=context-oracle
 @main.command()
 @click.option(
@@ -246,7 +253,12 @@ def _load_export_artifacts(
     "--fail-on-warn",
     is_flag=True,
     default=False,
-    help="Exit 1 on any violation including warnings.",
+    help=(
+        "Exit 1 on any violation a rule decided, including warnings. A layer "
+        "rule's population and declaration statements are advisory and do not "
+        "exit 1 at warn severity. An advisory emitted at error severity exits 1 "
+        "under --fail-on-warn as it does under --strict."
+    ),
 )
 @click.option(
     "--no-reindex",
@@ -280,11 +292,19 @@ def lint(
     byte-identical and refuses to run when there is no index to read.
 
     Exit codes: 0 = clean or violations below threshold,
-    1 = violations with --strict (errors only) or --fail-on-warn (any),
-    2 = configuration error or missing index.
+    1 = violations with --strict (errors only) or --fail-on-warn (any finding a
+    rule decided; the layer population and declaration statements are advisory
+    and exit 0 at warn severity), 2 = configuration error or missing index. An
+    advisory emitted at error severity exits 1 under --fail-on-warn as it does
+    under --strict.
     """
     from beadloom.application.reindex import incremental_reindex
-    from beadloom.graph.linter import LintError, _suppressed_note, _unattributed_note
+    from beadloom.graph.linter import (
+        LintError,
+        _population_note,
+        _suppressed_note,
+        _unattributed_note,
+    )
     from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
     from beadloom.graph.linter import format_porcelain as _format_porcelain
@@ -316,17 +336,29 @@ def lint(
     output = formatters[fmt](result)
     if output:
         click.echo(output)
-    elif not result.violations:
+    if not result.violations and fmt in _FORMATS_SILENT_WHEN_CLEAN:
         # The line the reviewer measured as a false green: it read
         # "0 violations, 12 rules evaluated" while six crossings sat behind
         # exemptions. What was excused is now part of the same sentence
-        # (BDL-061.49).
+        # (BDL-061.49), and so is the population the rules judged (BDL-070 A3).
+        #
+        # The condition is the FORMAT rather than "the formatter printed
+        # nothing", which is what it used to be. Those were the same test until
+        # a clean porcelain or github run started carrying a population line:
+        # keyed on emptiness, this sentence would have vanished from exactly the
+        # two formats it exists for, and the population would have read as the
+        # verdict it only qualifies.
         click.echo(
             f"0 violations, {result.rules_evaluated} rules evaluated"
             f"{_suppressed_note(result)}{_unattributed_note(result)}"
+            f"{_population_note(result)}"
         )
 
-    if fail_on_warn and result.violations:
+    if fail_on_warn and result.fails_on_warn:
+        # Not `result.violations`: BDL-070's two advisories state how far a layer
+        # rule reached and decide nothing, so a graph nobody changed would exit 1
+        # on upgrade for a message that cannot be acted on in the run it reddened
+        # (A8 review, Major 1). `fails_on_warn` names the excluded set and why.
         sys.exit(1)
     if strict and result.has_errors:
         sys.exit(1)

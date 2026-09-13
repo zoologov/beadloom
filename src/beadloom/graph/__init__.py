@@ -49,7 +49,6 @@ from beadloom.graph.rule_engine import (
     evaluate_deny_rules,
     evaluate_require_rules,
     load_rules,
-    load_rules_with_tags,
     validate_rules,
 )
 from beadloom.graph.snapshot import (
@@ -98,7 +97,6 @@ __all__ = [
     "list_snapshots",
     "load_graph",
     "load_rules",
-    "load_rules_with_tags",
     "parse_graph_file",
     "render_diff",
     "resolve_import_to_node",

@@ -95,6 +95,8 @@ Raw counts aggregated from all data sources.
 | `dormant_count` | `int` | Dormant domains |
 | `untested_count` | `int` | Untested domains |
 | `node_issues` | `dict[str, list[str]]` | Per-node issue tracking for top offenders |
+| `meta_doc_stale_count` | `int` | Stale fact mentions in project documents |
+| `layer_populations` | `list[str]` | One clause per declared layer rule — how much of its edge set it judged |
 
 #### CategoryScore (frozen dataclass)
 
@@ -130,6 +132,36 @@ Raw counts aggregated from all data sources.
 | `categories` | `list[CategoryScore]` | Four category scores |
 | `top_offenders` | `list[NodeDebt]` | Top 10 nodes ranked by debt contribution |
 | `trend` | `DebtTrend \| None` | Trend vs last snapshot, or `None` |
+| `layer_populations` | `list[str]` | Carried through from `DebtData`, unweighted |
+
+#### What the rule-violation count was counted over (BDL-070 A4)
+
+`error_count` and `warning_count` are counts over whatever set the rules could look at, and a layer
+rule looks only at edges whose ends carry a declared layer tag — 16 of 363 on this repository.
+This collector is one of the two surfaces that call `evaluate_all` without ever building a
+`LintResult`, so the population reaches it here or it reaches nobody.
+
+`_count_violations` reads the reaches with `layer_rule_reaches` over the rules it has already
+loaded, from the same `reach_of` the evaluator uses, rather than parsing the finding's prose back
+into integers. The clauses travel on `DebtData.layer_populations` → `DebtReport.layer_populations`,
+and appear as `counted over: architecture-layers judged 16 of 363 live depends_on edge(s)` under
+Rule Violations in the Rich report and under `layer_populations` in `format_debt_json`.
+
+They are carried UNWEIGHTED. A statement of how much of the graph a count covers is not itself
+debt, and scoring it would put a number in the score that measures the check rather than the code.
+Nothing else about the count changed: the population advisory is still counted among the warnings,
+exactly as BDL-070 A2 left it.
+
+**The rules file this collector reads is not the one the rest of the product writes.** It resolves
+`<root>/rules.yml` and then `<root>/.beadloom/rules.yml`; every other reader — `lint`, `reindex`,
+the TUI, the MCP server, `prime` — resolves `<root>/.beadloom/_graph/rules.yml`. A project with the
+standard layout therefore scores zero rule violations however many it has. Measured on this
+repository on 2026-09-12: `_count_violations` returns 0 errors and 0 warnings, against the 0
+errors and 71 warnings `lint --strict` reports over the same index. It is stated rather than
+repaired here because the repair moves this repository's raw rule-violations score from 0 to 71
+points at the default `rule_warning` weight of 1.0, and BDL-070 Release A ships no number that
+moves on upgrade; `tests/test_every_surface_past_lint_states_the_population.py` holds the current
+behaviour so a repair fails there first.
 
 ### Data Collection Sources
 

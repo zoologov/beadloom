@@ -102,12 +102,21 @@ arch-lint:
 | `1` | Violations found (with `--strict`) |
 | `2` | Configuration error (invalid rules.yml, missing DB) |
 
+`--fail-on-warn` exits 1 on any finding a rule decided, warnings included. It does
+**not** exit 1 on a layer rule's population or declaration statement at `warn`:
+those report how far the rule reached rather than anything it found wrong, and
+they appear on a graph nobody changed. Anything at `error` severity exits 1 under
+both flags, so `--fail-on-warn` never reads softer than `--strict` on one run. A
+pipeline that wants them to block reads the `layer_population` and
+`layer_declaration` records out of `--format json` itself.
+
 ### Output Formats
 
 ```bash
 beadloom lint                     # Human-readable (rich) — default in TTY
 beadloom lint --format json       # Structured JSON for scripts
-beadloom lint --format porcelain  # Machine-readable, one line per violation
+beadloom lint --format porcelain  # Machine-readable: one record per violation,
+                                  # led by a `# `-marked line per layer rule
 beadloom lint --format github     # GitHub Actions ::error annotations (inline on the PR)
 beadloom lint --no-reindex        # Read the index as-is (read-only; see the note below)
 ```

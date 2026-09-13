@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from beadloom.graph.rules import exit_condition_deadline
+from beadloom.infrastructure.exit_condition import exit_condition_deadline
 
 #: Keys a suppression entry may carry; all three are required.
 SUPPRESSION_KEYS: tuple[str, ...] = ("rule", "reason", "until")
