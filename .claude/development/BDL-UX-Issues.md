@@ -35,6 +35,29 @@
 
 ## Open Issues
 
+296. [2026-09-13] [MEDIUM] a layer rule reports an error and is counted inert in the same run, because liveness still reads own tags
+
+    **Severity:** medium (no wrong verdict: the error is reported and `lint --strict` exits 1 as it should. What is wrong is that the same run tells a reader the rule checked nothing, and `rules_inert` is the counter the Gate's summary and the TUI's lint panel present as "this check did nothing")
+    **Command:** `beadloom lint`, and every surface that reads `rules_inert`
+    **Context:** BDL-070 B5 (`beadloom-bi78`), 2026-09-13. Found writing the acceptance scenarios for Release B on graphs that are not this repository.
+    **What happened.** `evaluate_layer_rules` decides on the DERIVED layer since B3 (`beadloom-ku26`) — a node's own tag, else the nearest `part_of` container that declares one. `graph/rules/liveness.py:288` `_layer_reasons` still decides on `own_layer_of` alone, and its own docstring says the move would happen "in the release that announces it, `beadloom-ku26` (B3)". B3 announced it and did not make it.
+    **Measured** on the nested-parts fixture (`tests/acceptance/steps/tiered_project.py`, `tier-web` / `tier-core` / `tier-store`, two untagged components inside containers in different tiers), written and indexed once and linted:
+
+    | what the run says | value |
+    |---|---|
+    | `error_count` | 1 — `store-db -> web-api`, reported by `tier-order` |
+    | `rules_evaluated` | 1 |
+    | `layer_populations` | `evaluated=2, skipped_untagged=0` |
+    | `rules_inert` | 1 |
+    | liveness message | `Rule 'tier-order' cannot fire: no live 'depends_on' edge runs between two of its layers. It is counted as evaluated but checks nothing` |
+
+    The peer-container fixture reaches the other branch of the same function and says `fewer than two of its layers are populated (no node carries 'tier-store', 'tier-web')` while the rule reports two same-layer crossings.
+    **This repository cannot see it.** Every node here that is in a layer carries the tag itself, so own tags and derived layers agree and liveness is satisfied. `beadloom lint` on this tree emits no `rule_liveness` finding for `architecture-layers`. The shape needs untagged components inside tagged containers — an adopter's shape, and the reason BDL-070's CONTEXT requires every layer claim to be measured on a graph that is not ours.
+    **Expected:** liveness decides on the same layer membership the rule decides on, so a rule that reported a finding is never counted inert. Moving it is a VERDICT CHANGE for an adopter — a rule reported inert today would stop being reported — which is why it belongs in a release that says so rather than in a fix taken in passing.
+    **What is NOT established:** how many adopter projects carry the shape, and whether `rules_inert` feeds anything that blocks. The Gate's summary and the TUI panel present it; no exit code was traced to it.
+    **Held by:** `tests/test_a_layer_rule_that_fired_is_not_reported_inert.py` — three `xfail(strict=True)` statements that go green the day liveness is moved.
+    **Related:** the epic's own subject — one question answered by more than one body. `layers.py`'s module docstring names `liveness._layer_reasons` as the third reader and says it "did neither"; it now agrees with neither.
+
 295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
 
     **Severity:** low (pre-existing on both sides of the change, and it takes a hand-written graph file to produce; what it costs when it happens is the whole run rather than the one node)

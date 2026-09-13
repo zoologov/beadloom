@@ -42,3 +42,53 @@ Feature: the layer rule judges an edge by the layer each end is in
     When the project is linted
     Then the run states that it evaluated 3 of 5 dependency edges
     And no finding is a layering violation
+
+  # BDL-070 B5 (`beadloom-bi78`). The three scenarios below are named by the
+  # PRD, and the two after them exist because a part ONE generation under its
+  # tagged container cannot tell a climb to the NEAREST tagged ancestor from a
+  # climb to the last one — the graphs above have only one tagged ancestor to
+  # reach, so both readings give the same answer there.
+  #
+  # The import project declares its layers as `application` / `domain` /
+  # `infrastructure` over the tags `zone-app` / `zone-domain` / `zone-infra`,
+  # so the name a finding prints and the tag a node carries are different
+  # strings: a message that echoed the tag would read the same under an
+  # implementation that never opened the declaration.
+
+  @bead:beadloom-bi78
+  Scenario: an import from infrastructure into a domain is reported
+    Given a project whose dependencies come only from Python imports
+    When the project is linted
+    Then no dependency edge was written in the graph file by hand
+    And "storage-pool -> catalog" is reported as a layering violation
+    And the finding says the source is in layer "infrastructure" and the target in layer "domain"
+    And the finding says that layer was inherited from "storage"
+
+  @bead:beadloom-bi78
+  Scenario: an import running down the layering is not reported
+    Given a project whose dependencies come only from Python imports
+    When the project is linted
+    Then no finding names "checkout -> catalog"
+
+  @bead:beadloom-bi78
+  Scenario: a node with its own tag keeps it rather than inheriting
+    Given a project where a part carries a tier its container does not
+    When the project is linted
+    Then "web-cache -> web-api" is reported as a layering violation
+    And "web-cache -> store-db" is reported as a same-layer crossing
+    And no finding says "web-cache" inherited a layer
+    And no finding names "web-api -> web-cache"
+
+  @bead:beadloom-bi78
+  Scenario: a container between the part and the tagged one does not change the answer
+    Given a project whose parts are two part_of generations below the tagged container
+    When the project is linted
+    Then "store-db-pool -> web-api-handlers" is reported as a layering violation
+    And the finding says that layer was inherited from "store"
+
+  @bead:beadloom-bi78
+  Scenario: the nearer of two tagged containers decides
+    Given a project whose parts are two generations down and the nearer container is tagged
+    When the project is linted
+    Then "store-db-pool -> web-api-handlers" is reported as a same-layer crossing
+    And no finding says "web-api-handlers" is in a layer inherited from "web"
