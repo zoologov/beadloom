@@ -122,8 +122,39 @@ evaluators without passing through `lint()` at all. The declaration is a file no
 | `application/site_dashboard/gate_metrics.py:38`, `alerts.py:82`–`:85` | application | no | Consume counters this change adds to rather than replaces. Verified as consumers; no edit derived. |
 | `application/status.py`; `context_oracle/builder.py:443`–`:472`; `context_oracle/why.py`; `graph/federation/export.py:103`; `application/doctor.py` | — | no | Checked and found NOT to read tags or layer membership. Listed so the set above is a population rather than a selection. Federation in particular does not select `extra`, so layer membership does not cross that boundary. |
 
+**Re-derivation, 2026-09-13 — a sixth axis block, added because the work reached a node the section
+did not name.** `beadloom-xmfs` (B2) fixed two peer crossings by moving `exit_condition_deadline`
+into `src/beadloom/infrastructure/exit_condition.py`, below both layers that declare an `until:`.
+`scope-check` reported it rather than letting it pass: *"outside every axis the work item declared …
+so what the human approved no longer covers this change: `exit-condition`, in bounded context
+`infrastructure`."* The rows below are its answer, ruled here.
+
+> **Derived by:** `beadloom impact src/beadloom/infrastructure/exit_condition.py` over `src/beadloom`
+> **Seed:** none — no name the target reaches performs a declared effect under rule
+> `reaches-an-effect-sink`, so every axis below is unresolved and not empty
+> **Unresolved:** 1 no-seed
+
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|---|---|---|---|---|---|
+| branches | exit-condition | `exit_condition_deadline` and `deadline_passed`, 1 branch each | none | yes | The body B2 moved. It is the work site. |
+| callers | rule-engine | 4 — `graph/rules/exemptions.py:111` | none | yes | Already in scope; it reads the moved body to decide whether an exemption has expired, which is what B2's fourteen `exempt:` entries rest on. |
+| callers | config-check | 1 — `onboarding/config_sync.py:754` | none | **yes** | **Re-ruled 2026-09-13, within minutes of being written.** It was ruled `no` on the ground that the move leaves it "unchanged … one import line". An import line is an edit: `git diff main..HEAD` shows the file changed, and `scope-check` named it the moment the block above was indexed. The rule the epic keeps re-learning is that a node whose file the change touches is a work site whatever the change is made of. |
+| callers | flow-guards | 1 — `application/guards/config.py:180` | none | no | Measured: `git diff main..HEAD` shows this file UNCHANGED — it reaches the moved body through a re-export, so no line of it moved. Ruled out on a measurement rather than on the argument that broke for the two above. |
+| callers | flow-suppression | 1 — `onboarding/flow_suppression.py:58` | none | **yes** | Same re-ruling, same reason, same measurement — its import line moved too. |
+| callers | wave-plan | 1 — `application/waves/models.py:414` | none | no | Measured unchanged, as `flow-guards`. |
+| branches | flow-guards, wave-plan, rule-engine | `expired`, `is_expired`, `_expired_finding`, from a caller's seat | none | no | Caller-seat views of the same predicate; none is edited. |
+| co-writers | — | unresolved — no seed | — | no | Names no node, as in the first block. |
+
+**Why this was not taken back to the owner as a scope question.** The move is the mechanically
+required consequence of a decision the owner already approved — RFC Q1 makes a peer crossing a
+finding, and two of them could only be cleared by putting the shared body below both layers. No new
+product judgement was made. It is recorded here, and named in the epic's report, so that the
+difference between "approved" and "entailed by something approved" stays visible rather than being
+absorbed.
+
 **Nodes kept in scope:** `rule-engine`, `graph`, `graph-loader`, `application`, `tui`, `mcp-server`,
-`ci-gate`, `agent-prime`, `debt-report`, `cli-commands`, `guard-probes`, `onboarding`.
+`ci-gate`, `agent-prime`, `debt-report`, `cli-commands`, `guard-probes`, `onboarding`, and — from the
+re-derivation above — `exit-condition`, `config-check` and `flow-suppression`.
 
 ## Proposed Solution
 
