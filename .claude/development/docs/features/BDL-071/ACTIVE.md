@@ -32,7 +32,7 @@ porcelain field under Removed, and the Gate and the full suite are green.
 | `beadloom-2kty` | R2 | Done | harness in scratchpad (sha256 5d132afb…): 4.0.0 rc 0 no key; 5.0.0 rc 0, 8 keys; main rc 1, 5 keys; mismatch exits 3 |
 | `beadloom-u7jp` | R3 | Done | review of 5.0.0 before publishing |
 | `beadloom-7foi` | R4 | Done | publish 5.0.0 and verify the downloaded wheel |
-| `beadloom-h784` | R5 | Ready | the 6.0.0 release pull request |
+| `beadloom-h784` | R5 | Done | 6.0.0 PR open (URL in bead comment): [5.0.0] diff vs d6eaee60 empty; ci rc 0, suite green on Darwin/3.13 |
 | `beadloom-p02a` | R6 | Blocked | review of 6.0.0 before merging |
 | `beadloom-bicw` | R7 | Blocked | publish 6.0.0 and verify the downloaded wheel |
 | `beadloom-tmgp` | R8 | Blocked | records: ROADMAP and the issue log |

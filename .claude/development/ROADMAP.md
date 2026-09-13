@@ -1,10 +1,14 @@
 # Beadloom Roadmap
 
-> **Current version: 4.0.0** (PyPI, verified on the downloaded wheel 2026-09-10 — not on the
-> local build). What was checked there rather than assumed: 43 commands including all nine the
-> epic added, `GuardOutcome` carrying its sixth member `unresolved` at exit 1, and the firing
-> record's keys being `command_name` / `command_writes` with no `command`. That is the release's
-> three breaking changes, read out of the artifact an adopter downloads.
+> **Current version: 6.0.0** (the BDL-071 release pull request from `features/BDL-071`, cut
+> 2026-09-14 and NOT yet verified on the downloaded wheel — BDL-071 records that verification
+> when it has been made). 5.0.0 was published from `release/5.0.0` and was never `main`'s
+> version. The release before it on `main` is 4.0.0 (PyPI, verified on the downloaded wheel
+> 2026-09-10 — not on the local build). What was checked there rather than assumed: 43
+> commands including all nine the epic added, `GuardOutcome` carrying its sixth member
+> `unresolved` at exit 1, and the firing record's keys being `command_name` / `command_writes`
+> with no `command`. That is 4.0.0's three breaking changes, read out of the artifact an adopter
+> downloads.
 > Rewritten 2026-08-31. The previous revision was headed *post-v2.0.0* and had not
 > been touched through two major releases: it still listed BDL-061 as unstarted
 > P0 work after it shipped as 3.0.0, and named BDL-062 through BDL-066 nowhere.

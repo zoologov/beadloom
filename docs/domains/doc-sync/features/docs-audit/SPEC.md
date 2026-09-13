@@ -81,10 +81,15 @@ collector now records why it declared nothing, and the audit reports three popul
 | not applicable to this project | `not_applicable[name].reason` | The audit declared no value here, and says why. Outside the denominator entirely |
 | declared but unverified | `unverified_facts` | A value exists and nothing checked it. Named, never counted as fine |
 
-`version` on this repository sits in the third population with zero mentions -- every version
-literal in the tree is a dependency pin, a token attributed to another product, or one of two
-`docs_audit.ignore` triples with a stated reason, so the audit is correctly reporting that no
-document states the current version as a claim.
+`version` on this repository sits in the first population with two mentions, measured
+2026-09-14: `docs/getting-started.md` states the current release as a claim, and the example in
+`docs/services/cli.md` that quotes that claim is read the same way. Every other version literal
+the audit reads is a dependency pin, a token attributed to another product, or one of five
+`docs_audit.ignore` triples with a stated reason. Two of the five are the `v2.2.0` example and
+the `3.0.0` past tense; the other three silence `4.0.0` in documents that record a measurement
+taken on that release. A triple matches a path, a fact and a value and no line, so it silences
+that value everywhere in its document -- `.beadloom/config.yml` states, beside the `cli.md`
+triple, which test catches a current claim that regresses under it.
 
 ### Version attribution: whose version a version is
 
@@ -104,8 +109,8 @@ the foreign-subject face of #190). Eight went inert when the rule landed, measur
 |----------|--------------|---------|
 | `Measured on bd 1.0.4` | `bd` | the tracker's release |
 | `Every verdict on CPython 3.13.7` | `cpython` | the interpreter's release |
-| `The current release is 4.0.0` | none | this project's version |
-| `bd 1.0.4 answers and beadloom 4.0.0 asks` | `bd`, then `beadloom` | one each |
+| `The current release is 6.0.0` | none | this project's version |
+| `bd 1.0.4 answers and beadloom 6.0.0 asks` | `bd`, then `beadloom` | one each |
 
 **The vocabulary is derived where a project already declares it** and configured where it
 cannot be: every distribution in `pyproject.toml`, `package.json` or `Cargo.toml`; the
