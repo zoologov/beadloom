@@ -36,8 +36,11 @@ Rule type                        Inert when
 ``forbid_import``                glob matches 0 indexed files / 0 indexed import paths
                                  (owned by :mod:`.evaluators` — see below)
 ``forbid``                       ``from``/``to`` selects 0 nodes, or 0 edges of ``edge_kind``
-``layers``                       fewer than 2 layers are populated, or no live edge of
-                                 ``edge_kind`` runs between two layered nodes
+``layers``                       no live edge of ``edge_kind`` is one the rule COMPARES:
+                                 across two layers for direction, or inside one
+                                 against the shared-container predicate. How many
+                                 layers hold a node decides only which reason is
+                                 printed (:func:`~beadloom.graph.rules.layers.can_fire_on`)
 ``check``                        ``for`` selects 0 nodes, or no threshold is set
 ``unregistered_feature_...``     ``for`` selects 0 nodes, or none of them declares a source
 ``module_coverage``              0 candidate modules under ``source_root``
@@ -91,7 +94,8 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.evaluators import _disk_modules
-from beadloom.graph.rules.layers import MIN_POPULATED_LAYERS, own_layer_of
+from beadloom.graph.rules.layer_reach import part_of_parents
+from beadloom.graph.rules.layers import MIN_POPULATED_LAYERS, can_fire_on, layer_of
 from beadloom.graph.rules.loader import validate_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
@@ -147,6 +151,10 @@ class _GraphFacts:
         ]
         self.ref_ids: set[str] = {ref_id for ref_id, _, _ in self.nodes}
         self._tags = node_tags(conn)
+        #: Each node's direct ``part_of`` containers, read from the same
+        #: function the layer rule reads them from, so a rule's liveness and its
+        #: verdict cannot be decided from two different readings of containment.
+        self.parents: Mapping[str, Collection[str]] = part_of_parents(conn)
 
     @property
     def is_empty(self) -> bool:
@@ -286,37 +294,48 @@ def _forbid_edge_reasons(rule: ForbidEdgeRule, facts: _GraphFacts) -> list[str]:
 
 
 def _layer_reasons(rule: LayerRule, facts: _GraphFacts) -> list[str]:
-    """Why *rule* cannot fire — decided on the layer each node DECLARES.
+    """Why *rule* cannot fire — decided on the layer the RULE decides on.
 
-    :func:`~beadloom.graph.rules.layers.own_layer_of` replaces the third reading
-    of "what layer is this node in" this module used to keep. It also settles an
-    ambiguity the loop it replaces left to chance: a node carrying two declared
-    tags is in the topmost of them, rather than in whichever sorted first.
+    :func:`~beadloom.graph.rules.layers.can_fire_on` is the predicate, and it is
+    the one the evaluator's own verdict rests on: a node is in the layer its own
+    tag declares, else its nearest ``part_of`` container's, and an edge counts
+    when the rule compares it. BDL-070 B3 moved the evaluator onto that reading
+    and left this function on own tags alone, so one run on an inheriting graph
+    reported an error from a rule and counted that same rule inert, with the
+    message "it checks nothing" (BDL-UX #296). B5-fix (``beadloom-5tcc.6``)
+    moved it, in the release that announces the change: a rule reported inert
+    today can stop being reported, on a graph nobody edited.
 
-    **Own tags, not inherited ones, and deliberately so.** A node that takes a
-    layer from its ``part_of`` container would make this rule live on an edge
-    that runs between two INHERITING nodes — a rule reported inert today would
-    stop being reported, which is a verdict change. ``beadloom-ku26`` (B3) makes
-    that move in the release that announces it; here the answer comes from one
-    lookup and the verdict is the one liveness already gave.
+    **Two shapes, one predicate.** Untagged parts in containers in DIFFERENT
+    layers are answered by reading the derived layer. Untagged parts in two
+    containers in ONE layer are not — no reading of layer membership makes a
+    second layer inhabited there — and what the rule reports on that graph is a
+    same-layer crossing. Counting inhabited layers cannot see it, which is why
+    the question is what the rule compares rather than what the graph carries.
+
+    The count still chooses the WORDING once the rule is inert: with fewer than
+    :data:`~beadloom.graph.rules.layers.MIN_POPULATED_LAYERS` layers inhabited,
+    naming the tags nobody carries is the actionable diagnosis, and otherwise the
+    edge set is.
     """
     tags = facts.all_tags()
-    layer_at = {ref_id: own_layer_of(ref_id, rule.layers, tags) for ref_id, _, _ in facts.nodes}
-    carried = {index for index in layer_at.values() if index is not None}
-    if len(carried) < MIN_POPULATED_LAYERS:
+    edges = facts.live_edges_of_kinds((rule.edge_kind,))
+    if can_fire_on(edges, rule.layers, facts.parents, tags):
+        return []
+    inhabited = {
+        index
+        for ref_id, _, _ in facts.nodes
+        if (index := layer_of(ref_id, rule.layers, facts.parents, tags)) is not None
+    }
+    if len(inhabited) < MIN_POPULATED_LAYERS:
         empty = sorted(
-            layer.tag for index, layer in enumerate(rule.layers) if index not in carried
+            layer.tag for index, layer in enumerate(rule.layers) if index not in inhabited
         )
         return [
             "fewer than two of its layers are populated (no node carries "
             f"{', '.join(repr(tag) for tag in empty)})"
         ]
-    if not any(
-        layer_at.get(src) is not None and layer_at.get(dst) is not None
-        for src, dst in facts.live_edges_of_kinds((rule.edge_kind,))
-    ):
-        return [f"no live '{rule.edge_kind}' edge runs between two of its layers"]
-    return []
+    return [f"no live '{rule.edge_kind}' edge runs between two of its layers"]
 
 
 def _cardinality_reasons(rule: CardinalityRule, facts: _GraphFacts) -> list[str]:

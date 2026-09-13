@@ -58,6 +58,25 @@
     **Held by:** `tests/test_a_layer_rule_that_fired_is_not_reported_inert.py` — three `xfail(strict=True)` statements that go green the day liveness is moved.
     **Related:** the epic's own subject — one question answered by more than one body. `layers.py`'s module docstring names `liveness._layer_reasons` as the third reader and says it "did neither"; it now agrees with neither.
 
+    **RESOLVED 2026-09-13 by `beadloom-5tcc.6` (BDL-070 Release B).** Fixed in the release that
+    announces the verdict change, which is what this entry asked for. Liveness asks
+    `layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two layers for
+    direction or inside one against the shared-container predicate — over the same derived layer
+    the rule's own verdict rests on. **Swapping the layer lookup alone would have closed one of
+    the two fixtures and not the other**, which is why the predicate changed rather than the
+    lookup: on the peer-container graph no reading of membership inhabits a second layer, and
+    what the rule reports there is a same-layer crossing. Measured on both, each written and
+    indexed once by the same unchanged reindex and linted: nested parts `error_count 1,
+    rules_inert 1` to `error_count 1, rules_inert 0`; peer containers `error_count 2,
+    rules_inert 1` to `error_count 2, rules_inert 0`. No error appears or is withdrawn on either.
+    This repository is unchanged and still cannot see the shape, as the entry says: `lint
+    --strict` rc 0 with 55 findings, 0 errors and 0 inert rules before and after.
+    **One report changed hands.** `layer_declaration` stood down whenever fewer than two layers
+    held a node, because liveness named the same tags for exactly that graph; liveness is now
+    silent on the peer fixture, so the declaration states it instead and prints its sentence with
+    a count of one for the first time — a branch that read "1 of them hold a node" until this
+    bead, and is pinned by a test now.
+
 295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
 
     **Severity:** low (pre-existing on both sides of the change, and it takes a hand-written graph file to produce; what it costs when it happens is the whole run rather than the one node)

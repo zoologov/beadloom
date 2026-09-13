@@ -24,11 +24,16 @@ empty" would be free to disagree — the defect this epic is about, one level up
 
 **They differ in one stated way, and only one.** The evaluator is SILENT when
 fewer than :data:`~beadloom.graph.rules.layers.MIN_POPULATED_LAYERS` layers are
-populated, because :func:`beadloom.graph.rules.liveness._layer_reasons` already
-names the empty layers for exactly that graph and reporting it twice is the
-affirm-it-twice defect this project has filed before. `validate_rules` has no
-such neighbour — liveness reaches it only for a rule kind it does not model —
-so it answers unconditionally.
+populated AND the rule is inert, because
+:func:`beadloom.graph.rules.liveness._layer_reasons` names the empty layers for
+exactly that graph and reporting it twice is the affirm-it-twice defect this
+project has filed before. **Both halves are needed since BDL-070 B5-fix**
+(`beadloom-5tcc.6`): a rule whose one inhabited layer holds two peers that cross
+is live, so liveness says nothing about it, and deferring on the layer count
+alone would have dropped the report that two of three declared tiers are
+inhabited by nobody (BDL-UX #296). `validate_rules` has no such neighbour —
+liveness reaches it only for a rule kind it does not model — so it answers
+unconditionally.
 """
 
 from __future__ import annotations
@@ -88,6 +93,8 @@ def declaration_warnings(
 def declaration_statement(
     rule: LayerRule,
     tags: Mapping[str, Collection[str]],
+    *,
+    can_fire: bool = True,
 ) -> list[Violation]:
     """*rule*'s empty layers as a finding, or nothing when there is none.
 
@@ -95,11 +102,20 @@ def declaration_statement(
     to say, and a line saying so on every run of every project is the noise that
     trains a reader to skip the one that matters. When fewer than
     :data:`~beadloom.graph.rules.layers.MIN_POPULATED_LAYERS` layers are
-    populated the rule cannot fire at all, and liveness already reports it as
-    inert and names the same tags.
+    populated AND *can_fire* is false, the rule checks nothing and liveness
+    reports it as inert naming the same tags.
+
+    *can_fire* is the caller's answer from
+    :func:`~beadloom.graph.rules.layers.can_fire_on`, which is the predicate
+    liveness decides inertness with. It is a parameter rather than a second
+    computation here because this module answers from the declaration and the tag
+    map alone, and it defaults to ``True`` so a caller that knows nothing about
+    the edge set reports rather than hides the fact.
     """
     empty = layers_no_node_is_in(rule.layers, tags)
-    if not empty or len(rule.layers) - len(empty) < MIN_POPULATED_LAYERS:
+    if not empty:
+        return []
+    if not can_fire and len(rule.layers) - len(empty) < MIN_POPULATED_LAYERS:
         return []
     named = ", ".join(f"`{tag}`" for tag in empty)
     populated = len(rule.layers) - len(empty)
@@ -115,8 +131,8 @@ def declaration_statement(
             to_ref_id=None,
             message=(
                 f"this rule declares {len(rule.layers)} layer(s) and {populated} of them "
-                f"hold a node: no node carries {named}, so the direction this rule checks "
-                f"is shorter than the declaration reads"
+                f"{'holds' if populated == 1 else 'hold'} a node: no node carries {named}, "
+                f"so the direction this rule checks is shorter than the declaration reads"
             ),
             remediation=(
                 f"tag a node with {named}, or drop the layer from the declaration — an "

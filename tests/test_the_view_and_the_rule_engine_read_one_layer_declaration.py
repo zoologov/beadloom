@@ -6,11 +6,15 @@ table and climbed `part_of` itself; `graph.rules.liveness` read a node's tags
 into a third map of its own. Both now call
 `graph.rules.layers`, and this file holds the properties that say so.
 
-**Each caller keeps the verdict it had.** The view INHERITS a layer through
-`part_of`, because a feature has to sit in its container's lane; liveness reads
-OWN TAGS ONLY, because inheriting would change which rules it calls inert, and
-Release A changes no verdict. The disagreement between the view's edge predicate
-and the rule engine's is NOT resolved here — `beadloom-w34m` (B4) owns it.
+**Each caller kept the verdict it had through Release A.** The view INHERITS a
+layer through `part_of`, because a feature has to sit in its container's lane;
+liveness read OWN TAGS ONLY, because inheriting changes which rules it calls
+inert and Release A changes no verdict. **Release B made that change**, in
+`beadloom-5tcc.6`, because a rule reporting an error while the same run counted
+it inert was a false signal this epic introduced (BDL-UX #296) — the class below
+is what moved, and it says which case moved and which did not. The disagreement
+between the view's edge predicate and the rule engine's is NOT resolved here —
+`beadloom-w34m` (B4) owns it.
 
 **The declaration is read, never written down.** A fixture below declares
 `tier-*` layers, which this project does not use, and the view ranks by them.
@@ -302,16 +306,23 @@ class TestTheDeclarationDecides:
             assert "violation" not in edge
 
 
-class TestLivenessKeepsItsOwnVerdict:
-    """Liveness reads OWN tags, because inheriting would move a verdict."""
+class TestLivenessReadsTheLayerTheRuleDecidesOn:
+    """The one verdict Release B moved, and the graphs it did not move.
 
-    def test_an_edge_between_two_inheriting_nodes_does_not_wake_the_rule(self) -> None:
-        """The verdict Release A must not change, stated as the case that would.
+    Release A pinned liveness to OWN tags here and said why: inheriting changes
+    which rules it calls inert. `beadloom-5tcc.6` made that change in the release
+    that announces it, so the first test below is the verdict that moved — it
+    asserted an inert rule and now asserts a live one, on the same graph.
+    """
+
+    def test_an_edge_between_two_inheriting_nodes_wakes_the_rule(self) -> None:
+        """The verdict Release B moved, on the graph Release A pinned it with.
 
         ``deep`` and ``other`` both inherit a layer through ``part_of``, so the
-        inheriting lookup sees an edge between two layers where the own-tag
-        lookup sees none. Liveness must report the rule inert, exactly as it did
-        before the shared lookup existed.
+        rule judges ``deep -> other`` as an edge from the service layer to the
+        infrastructure one. Liveness reported the rule inert here until
+        BDL-UX #296 was closed, which is a rule reported inert on 4.0.0 and not
+        reported on the next release, on a graph nobody edited.
         """
         conn = _open()
         try:
@@ -324,12 +335,9 @@ class TestLivenessKeepsItsOwnVerdict:
             _edge(conn, "deep", "other", "depends_on")
             conn.commit()
             found = inert_rules(conn, [_layer_rule(DDD_LAYERS)])
-            inert = {rule.name: reason for rule, reason in found}
         finally:
             conn.close()
-        assert inert == {
-            "architecture-layers": "no live 'depends_on' edge runs between two of its layers"
-        }
+        assert found == []
 
     def test_a_single_populated_layer_names_the_empty_tags_in_the_old_words(self) -> None:
         conn = _open()

@@ -26,7 +26,7 @@ from beadloom.graph.rules.layer_reach import (
     population_statement,
     reach_of,
 )
-from beadloom.graph.rules.layers import LayerMembership, layer_membership
+from beadloom.graph.rules.layers import LayerMembership, can_fire_on, layer_membership
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     LAYER_EDGE_RULE_TYPE,
@@ -653,7 +653,9 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     A layer the DECLARATION names and no node is in is reported too
     (:func:`~beadloom.graph.rules.layer_declaration.declaration_statement`), at
     ``warn``: a declaration that mentions a tag the graph does not carry
-    describes a check one step shorter than it reads.
+    describes a check one step shorter than it reads. It is handed
+    :func:`~beadloom.graph.rules.layers.can_fire_on`'s answer, because it stands
+    down only for the graph where liveness reports the same tags.
     """
     if not rules:
         return []
@@ -670,7 +672,11 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         # not live layering violations).
         all_edges = live_edges_of_kind(conn, rule.edge_kind)
         violations.extend(population_statement(rule, reach_of(rule, all_edges, parents, tags)))
-        violations.extend(declaration_statement(rule, tags))
+        violations.extend(
+            declaration_statement(
+                rule, tags, can_fire=can_fire_on(all_edges, rule.layers, parents, tags)
+            )
+        )
         violations.extend(same_layer_statements(rule, all_edges, parents, tags))
 
         for src_ref_id, dst_ref_id in all_edges:

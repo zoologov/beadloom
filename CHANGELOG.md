@@ -98,6 +98,14 @@ edge was removed and fourteen same-layer crossings were excused by name, each wi
 an exit condition, before this shipped. Read the same graph with the `exempt:` block off and the
 fourteen are reported.
 
+**A third kind of change appears where a rule was reported inert, and it only ever removes a
+line.** Liveness decided on own tags while the rule decided on derived ones, so a rule could
+report a finding and be counted in `rules_inert` in the same run — the counter the Gate summary
+and the TUI lint panel present as "this check did nothing". It asks the rule's own reading now,
+so on a graph whose parts inherit their layers, or whose one inhabited layer holds peers that
+cross, the `rule_liveness` warning goes away and `rules_inert` falls. No `error` appears and none
+is withdrawn by this (BDL-UX #296, in `### Fixed` below).
+
 **The generated site's architecture view moves, and here it moves a lot.** That picture drew a
 dependency arrow red whenever the target's lane was at or above the source's, which is every edge
 pointing up AND every edge staying inside one layer — so a dependency between two parts of one
@@ -214,6 +222,37 @@ rule without its `exempt:` entries.
   finding for an un-excused same-layer crossing arrives with the predicate that refuses one.
 
 ### Fixed
+
+- **A layer rule that reported a finding is no longer counted inert in the same run**
+  (BDL-UX #296, BDL-070 B5-fix). Release B moved `architecture-layers` onto the derived layer and
+  left `liveness._layer_reasons` deciding on a node's own tags, so on a graph with untagged
+  components inside tagged containers one `beadloom lint` run reported an error about an edge,
+  said it had judged every edge it was handed, and reported the same rule as `cannot fire … it
+  checks nothing`. `rules_inert` is the counter the Gate summary and the TUI lint panel present
+  as "this check did nothing", so the run contradicted itself in the release whose subject is
+  removing false signals. Liveness now asks
+  `graph.rules.layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two
+  layers for direction or inside one against the shared-container predicate — which is the same
+  reading the rule's verdict rests on.
+
+  **This is a verdict change, and it is the second one Release B carries.** A rule reported inert
+  on 4.0.0 can stop being reported, on a graph nobody edited. `rules_inert` falls and a
+  `rule_liveness` warning disappears; no `error` appears and none is withdrawn, so a Gate that
+  was green stays green and a Gate that was red stays red for the same findings.
+
+  **Measured on two fixture projects that are not this repository**, each written and indexed
+  once by the same unchanged reindex and linted: two untagged components in containers in
+  different tiers went from `error_count 1, rules_inert 1` to `error_count 1, rules_inert 0`, and
+  two containers in ONE tier each holding an untagged part went from `error_count 2,
+  rules_inert 1` to `error_count 2, rules_inert 0`. This repository cannot see either shape —
+  every node here that is in a layer carries the tag itself — and its own run is unchanged at 55
+  findings, 0 errors, 0 inert.
+
+  One report changed hands rather than disappearing. `layer_declaration` stood down whenever
+  fewer than two layers held a node, because liveness named the same tags for exactly that graph;
+  on the peer fixture liveness is now silent, so the declaration states it instead — `1 of them
+  holds a node: no node carries \`tier-web\`, \`tier-store\``, at `warn`, which is the severity the
+  liveness line carried.
 
 - **A virgin `init` no longer leaves the Gate red** (BDL-UX #282). On a two-package `src/`
   project, `beadloom init --yes --mode bootstrap` exited 0 and the next `beadloom ci` exited 1

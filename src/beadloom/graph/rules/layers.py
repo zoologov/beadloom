@@ -10,7 +10,9 @@ a layer at both ends by ``part_of`` ancestry.
 ``application.architecture_view._layer_rank`` climbed ``part_of`` but hardcoded
 the four tags and their ranks, so it cannot serve a project whose layers are
 declared differently — and Beadloom ships to those projects.
-``liveness._layer_reasons`` did neither.
+``liveness._layer_reasons`` did neither. It is a caller too since BDL-070 B5-fix
+(``beadloom-5tcc.6``), which is what stopped one run reporting an error from a
+rule and counting that same rule inert (BDL-UX #296).
 
 This module is the answer the three become callers of. It knows nothing except
 what it is handed:
@@ -59,11 +61,12 @@ if TYPE_CHECKING:
 
 
 #: A layered rule needs two populated layers before "above" and "below" mean
-#: anything: with one, there is no direction for an edge to violate. Declared
-#: here rather than in :mod:`.liveness`, because :mod:`.layer_declaration` stays
-#: silent under exactly the condition liveness reports — and a threshold written
-#: twice is a pair of reports that can drift into saying the same thing twice or
-#: neither of them saying it.
+#: anything: with one, there is no direction for an edge to violate. It can still
+#: compare two peers inside that one layer, which is why :func:`can_fire_on` and
+#: not this threshold decides whether the rule is inert. Declared here rather
+#: than in :mod:`.liveness`, because :mod:`.layer_declaration` reads it too — and
+#: a threshold written twice is a pair of reports that can drift into saying the
+#: same thing twice or neither of them saying it.
 MIN_POPULATED_LAYERS = 2
 
 
@@ -269,6 +272,41 @@ def same_layer_crossings(
         if not shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
             crossings.append((src_ref_id, dst_ref_id))
     return crossings
+
+
+def can_fire_on(
+    edges: Iterable[tuple[str, str]],
+    layers: Sequence[LayerDef],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> bool:
+    """True when at least one of *edges* is an edge the rule compares.
+
+    An edge counts when both ends are in a declared layer and it leaves the
+    layer-and-container it starts in: across two layers it is compared for
+    direction, and inside one layer it is compared against
+    :func:`shares_tagged_ancestor`. An edge with an unlayered end is passed over,
+    and an edge inside one tagged container is legal by construction with nothing
+    compared — neither is a check the rule performed.
+
+    **How many layers hold a node is a different question, and BDL-UX #296 is
+    what the difference costs.** Two containers in ONE declared layer, each
+    holding an untagged part, give a graph where the rule reports a same-layer
+    crossing while exactly one layer is inhabited. Liveness counted inhabited
+    layers, so one run reported an error from a rule and counted that same rule
+    inert in the same breath. Asking what the rule compares answers both that
+    shape and the inheriting one with a single predicate.
+    """
+    for src_ref_id, dst_ref_id in edges:
+        src_layer = layer_of(src_ref_id, layers, parents, tags)
+        dst_layer = layer_of(dst_ref_id, layers, parents, tags)
+        if src_layer is None or dst_layer is None:
+            continue
+        if src_layer != dst_layer:
+            return True
+        if not shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
+            return True
+    return False
 
 
 @dataclass(frozen=True)
