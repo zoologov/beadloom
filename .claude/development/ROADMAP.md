@@ -280,7 +280,35 @@ BDL-069 keeps the mechanical half — one shared computation with the population
 work item keeps the nineteen decisions. Making them inside a closing epic, by one agent, is the
 thing that epic exists to prevent.
 
-### P0 — `architecture-layers` evaluates 16 of 353 edges, and a green `lint --strict` claims all of them
+### P0 — `architecture-layers` evaluates 16 of 353 edges, and a green `lint --strict` claims all of them — SHIPPED by BDL-070
+
+**State on `main`, 2026-09-13 — measured, not claimed.** `architecture-layers` now decides on the layer
+each end of an edge inherits through `part_of`, and judges **357 of 365** live `depends_on` edges over
+this repository's carried-forward index (**356 of 364** in CI, which builds its index from empty —
+BDL-UX #290). It judged 16. Shipped in two pull requests, deliberately in this order: **#72**
+(`main` at `7efa4006`) made the rule report its population and changed no verdict; **#73** (`main`
+at `692205d7`) made it decide on that population, and changes verdicts on a graph nobody edited.
+
+- The one reverse edge, `agent-prime -> reindex`, was a real layering violation and was fixed by
+  dependency inversion, not exempted.
+- The same-layer rule is checked for the first time: an edge inside one layer is a finding when no
+  tagged container holds both ends. The **14** peer crossings on this repository are excused by name
+  in `rules.yml`, each with a reason and an exit condition; a bare allow is a rules-load error.
+- The architecture view asks the rule instead of computing its own verdict, which had shown **130**
+  false violations; rule liveness decides on the same layer the rule does (#296); the shipped
+  `dev` role template no longer tells adopters a green `lint --strict` enforces more than it does.
+
+**One decision is the owner's and is still open.** Two pull requests preserve the order; they do not
+make two releases. `CHANGELOG.md` `[Unreleased]` holds BDL-069, Release A and Release B together, and
+the epic's CONTEXT requires the population report to reach adopters in a release *before* the verdict
+change. Cutting Release A as its own version first is what satisfies it.
+
+**Filed on the way, not fixed:** #290 (index lineage moves the denominator), #291 (the debt report
+reads no rules), #294, #295, #297 (the review withholding cannot release and `bd show` defeats it),
+#298 (a vacuity guard read a partial graph mid-run), #299 (an empty holder is accepted), and #300
+(`scope-check` never runs in CI — Actions checks a pull request out on a detached HEAD).
+
+The text below is kept as the record of why the item was ranked P0.
 
 **`beadloom-t6zq` · its own epic, next after BDL-069 · not started — the next step is `/task-init`.**
 

@@ -1,6 +1,6 @@
 # RFC: BDL-070 — The layer a node is in, answered once and reported over its population
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-12
 
 ---

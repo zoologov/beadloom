@@ -1,6 +1,6 @@
 # CONTEXT: BDL-070 — The layer a node is in, answered once and reported over its population
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-12
 > **Last updated:** 2026-09-12
 
@@ -105,6 +105,6 @@ Discover via `beadloom ctx <ref-id>` — never hardcode. The nodes this epic kee
 
 ## Current Phase
 
-- **Phase:** Planning
+- **Phase:** Done
 - **Current bead:** none — beads are created after PLAN is approved
 - **Blockers:** none

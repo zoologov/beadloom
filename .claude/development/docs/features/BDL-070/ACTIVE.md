@@ -1,13 +1,13 @@
 # ACTIVE: BDL-070 — The layer a node is in, answered once and reported over its population
 
 > **Last updated:** 2026-09-13
-> **Phase:** Development
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** none open — Release B reviewed OK; next is the second pull request, then merge and the epic's close
+**Bead:** none — the epic is closed. Release A shipped as PR #72 (`main` at `7efa4006`), Release B as PR #73 (`main` at `692205d7`).
 **Goal:** the fix cycle its findings open, then B7 and the second pull request.
 **Done when:** the three majors are repaired, a re-review returns OK, and B7 brings the shipped
 role template to what the rule now checks.
@@ -32,7 +32,7 @@ role template to what the rule now checks.
 - [x] Release A shipped: PR #72, squash-merged to `main` as `7efa4006`, nine of nine checks green
 - [x] Release B dev: B1, B2, B3 (16 → 357 of 365 judged), B4, B5, and the liveness fix for #296
 - [x] Release B reviewed: passes 3 major → 2 → 1 → 1, then a scoped confirmation OK
-- [ ] Release B: the second pull request, merge, and the epic's close
+- [x] Release B shipped: PR #73, squash-merged to `main` as `692205d7`, nine of nine checks green; epic `beadloom-5tcc` closed
 
 ## Results
 
