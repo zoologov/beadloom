@@ -256,7 +256,8 @@ _FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
     help=(
         "Exit 1 on any violation a rule decided, including warnings. A layer "
         "rule's population and declaration statements are advisory and do not "
-        "exit 1."
+        "exit 1 at warn severity. An advisory emitted at error severity exits 1 "
+        "under --fail-on-warn as it does under --strict."
     ),
 )
 @click.option(
@@ -293,7 +294,9 @@ def lint(
     Exit codes: 0 = clean or violations below threshold,
     1 = violations with --strict (errors only) or --fail-on-warn (any finding a
     rule decided; the layer population and declaration statements are advisory
-    and exit 0), 2 = configuration error or missing index.
+    and exit 0 at warn severity), 2 = configuration error or missing index. An
+    advisory emitted at error severity exits 1 under --fail-on-warn as it does
+    under --strict.
     """
     from beadloom.application.reindex import incremental_reindex
     from beadloom.graph.linter import (
