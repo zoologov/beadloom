@@ -35,6 +35,32 @@
 
 ## Open Issues
 
+302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
+
+    **Severity:** medium (no wrong code shipped; what is wrong is an instrument whose output describes a different change or no work item at all, with nothing on the command line that could correct it, so the only remedy is to rearrange the checkout around the tool)
+    **Command:** `beadloom review-brief <bead>`, `beadloom waves <bead>`
+    **Context:** BDL-071, two measurements a day apart by two roles.
+    **Case 1 — the change under review, `review-brief` (R3, `beadloom-u7jp`, 2026-09-13).** The review of `release/5.0.0` ran while the main checkout was on `features/BDL-071`. `beadloom review-brief beadloom-u7jp` measured the checked-out `features/BDL-071` against `main`: its change inventory listed 7 planning and tracker files and none of the 10 files under review, so on a release branch the brief's primary pointer was empty. `--since` names the base of the comparison, and no option names its head.
+    **Case 2 — the work item, `waves` (coordinator, 2026-09-14).** PR #75 was squash-merged, so the follow-up work for the same epic needed a new branch, first named `features/BDL-071-records` locally. `beadloom waves beadloom-tmgp` printed `the branch names no work item among the planning documents` and left the `focus-document` precondition unmeasured, exit 1. `waves` has no option that names the work item. The remedy in force is a local branch still named `features/BDL-071`, pushed by explicit refspec to `features/BDL-071-records`, because the remote `features/BDL-071` is the merged head and must not be overwritten.
+    **Why one entry and not two.** Both instruments resolve a subject the user already knows from the state of the checkout, and neither lets the user state it. #230 (a suffix after the key names no work item) is the matching rule behind case 2, and fixing it would resolve `features/BDL-071-records`. It would not help case 1, a separate worktree, or the detached HEAD of #300, and each of those needs an explicit subject.
+    **Expected:** every instrument that resolves a subject from the checkout also accepts it — a head ref for `review-brief`, a work-item key for `waves` — and prints the subject it used and where that came from, so a brief about the wrong change says so on its first line.
+    **What is NOT established:** which other instruments resolve a work item or a change from the checkout. Only these two were met, and `scope-check` already has `--branch` (#300). No sweep was run.
+    **Tracker:** not filed as a bead. The number is held by `beadloom-tmgp`, which recorded it.
+    **Related:** #300 (the same resolution in CI, where no branch is checked out), #230 (the suffix matching rule), #273 (a clean room with no `.git` reports the same skip).
+
+301. [2026-09-14] [MEDIUM] a release's own "verified on the published wheel" sentences fail the Gate on the next version bump, and the suppression that excuses them is file-wide
+
+    **Severity:** medium (no wrong release shipped; what is wrong is that the release flow requires a verification to name the release it was taken on, the audit reads that true sentence as a stale current-version claim, and the only remedy silences more than the sentence)
+    **Command:** `beadloom docs audit`, and `beadloom ci` on a version-bump commit
+    **Context:** BDL-071, 2026-09-13: R1 (`beadloom-2716`, 5.0.0) and R5 (`beadloom-h784`, 6.0.0). The width of the suppression was found by R3's review (`beadloom-u7jp`, minor 2).
+    **What happened.** Measured before planning: bumping only the true current-version places left `beadloom ci` at rc 1, and the audit's stale findings were exactly three `version` mentions of 4.0.0. Two say "measured on the published 4.0.0 wheel", in `docs/domains/graph/components/graph-loader/DOC.md` and `docs/domains/onboarding/README.md`. The third says "Measured on this repository on 2026-09-11, against `4.0.0`", in `docs/services/cli.md`. Each stays true after the bump. Each got a `{path, fact, value}` triple in `.beadloom/config.yml`, on `release/5.0.0` and again on `main` for 6.0.0.
+    **The suppression is wider than its sentence.** An ignore rule matches path, fact and value, and no line (`IgnoreRule`, `doc_sync/audit.py`), so the cli.md triple silences every 4.0.0 in cli.md. The config records the measurement, taken 2026-09-14: with cli.md:821, the current-release example, put back to 4.0.0 under a 6.0.0 manifest, `beadloom docs audit` exited 0 with "No stale mentions found" and 17 verified mentions where it had 18. What caught the regression was `tests/test_version_surface.py`, and it catches it only while cli.md:821 is the single audit-checked line of cli.md that states the current version.
+    **Why it recurs.** `_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a pin and has no notion of a dated past tense — #205 is that general form, and still open. What this entry adds is that the project's own release discipline now produces the sentence: a verification must name the release it measured, so every release that records one in a scanned document plants a finding for the next bump. BDL-071 avoided planting new ones only by a rule in its CONTEXT, that verification records go to `ROADMAP.md` and the issue log and never into a scanned document.
+    **Expected:** a version beside a dated or attributed measurement ("measured on", "published", a date in the same clause) is read as history, not as a claim about the current version. Or a suppression can be scoped to a line or a sentence, so a triple excuses what it names and nothing else.
+    **What is NOT established:** how an adopter's documents fare. Only this repository's three sentences were measured, and no count was taken of dated version sentences on another project.
+    **Tracker:** not filed as a bead. The number is held by `beadloom-tmgp`, which recorded it.
+    **Related:** #205 (the past tense, the general form, open), #253 (a dependency's version, resolved by attribution to a subject name), #190 (a version mentioned as an example).
+
 300. [2026-09-13] [HIGH] `scope-check` never runs in CI: Actions checks a pull request out on a detached HEAD, so no branch names a work item and the step skips on every pull request
 
     **Severity:** high (no wrong code shipped; what is wrong is that the Gate is a required check whose summary lists `scope-check` among its steps, and in CI that step has judged nothing on any pull request — a check reporting over an empty population in the one place this project treats as authoritative)
@@ -206,6 +232,30 @@
     yet, because the two accounts disagree and the next step is a measurement rather than a repair —
     whoever takes it should run the crossed cases (fresh room without `--cov`, existing index with
     `--cov`) and only then file.
+    **AMENDED 2026-09-14 (BDL-071, `beadloom-tmgp`): REPRODUCED ON LINUX, IN CI, ON A REQUIRED CHECK.**
+    The sentence above that it "was not checked on Linux" is now false. PR #75, the 6.0.0 release
+    pull request, run `34787188082` at head `78166c20`, attempt 1: the `tests (3.12)` job, on
+    `ubuntu-latest` with CPython 3.12.14, step `Tests with coverage`, ended
+    `2 failed, 10663 passed, 65 skipped, 13 xfailed` in 727.96s. Both failures are
+    `sqlite3.DatabaseError: database disk image is malformed`:
+    `tests/test_graph_summary_facts.py::TestThisRepositoryIsChecked::test_this_repository_s_summaries_state_checkable_facts`
+    and
+    `tests/test_s4_the_instruments_agree.py::TestOneApprovalIsReadOnce::test_a_resolved_approval_is_named_identically_by_both`.
+    In the same attempt `tests (3.10)`, `tests (3.11)`, `tests (3.13)` and both `tests-locale` legs
+    passed. Attempt 2 re-ran it and every job succeeded. Read from the job log and the attempt's job
+    list, not from a summary.
+    **What this adds, and what it does not.** It is the first measurement on Linux and on CPython
+    3.12, and the first time the defect reddened a required check — on a release pull request. The
+    failing set differs from the 18 of `room-beadloom-cfkk`: two tests in two files, and only one of
+    those files, `test_s4_the_instruments_agree.py`, is also in that set. The job ran
+    `uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80` on a fresh runner,
+    which builds its index from empty. That is the condition the reporter's rooms had and the
+    coordinator's tree runs did not, so the Linux run is CONSISTENT with the "no index at the start"
+    candidate. It does not establish it: the crossed cases are still unrun, and the other three
+    `tests` legs of the same attempt ran the same command from the same empty start and passed. So
+    the symptom is intermittent under one condition, which a mechanism will have to explain.
+    **The bead question is the owner's**, and is put to the coordinator on `beadloom-tmgp` rather than
+    decided here, because creating a bead changes a plan's DAG.
 
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
