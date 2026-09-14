@@ -1,6 +1,6 @@
 # CONTEXT: BDL-071 — Release 5.0.0, then 6.0.0: the population report ships before the verdict change
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-13
 > **Last updated:** 2026-09-14
 

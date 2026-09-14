@@ -256,6 +256,20 @@
     the symptom is intermittent under one condition, which a mechanism will have to explain.
     **The bead question is the owner's**, and is put to the coordinator on `beadloom-tmgp` rather than
     decided here, because creating a bead changes a plan's DAG.
+    **AMENDED AGAIN 2026-09-14 (BDL-071 close-out, the coordinator): TWO LEGS OF THE NEXT PULL REQUEST.**
+    PR #76, the records pull request, run `34790798779` at head `617e082c`, attempt 1, read from the
+    two job logs: `tests (3.11)` ended `10 failed, 10655 passed, 65 skipped, 13 xfailed` in 834.48s,
+    and `tests (3.12)` ended `2 failed, 10663 passed, 58 skipped, 13 xfailed, 7 errors` in 727.98s —
+    every failure and every setup error `sqlite3.DatabaseError: database disk image is malformed`.
+    `tests (3.10)`, `tests (3.13)` and both `tests-locale` legs passed; attempt 2 re-ran the two and
+    both passed. The 3.12 set is new again — seven setup errors in
+    `test_a_commit_is_judged_against_the_declared_axes.py`, failures there and in
+    `test_bead18_s5_relation.py` — while the 3.11 set includes `test_graph_summary_facts.py`, one of
+    PR #75's two. So across two consecutive pull requests it reddened three of eight `tests` legs,
+    on three Python versions, never with the same set twice. That is what the intermittency claim
+    above rests on now, and it is also the argument against reading any single green re-run as a
+    verdict. The implementer's recommendation on `beadloom-tmgp` is to file a bead now, with the crossed
+    cases as its first step and #298 (same shared live index) considered in the same bead.
 
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
