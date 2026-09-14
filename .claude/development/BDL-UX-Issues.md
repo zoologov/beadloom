@@ -111,6 +111,7 @@
     **Expected:** a test that asserts on the live repository's graph reads an index no other writer can rebuild underneath it — other tests or an out-of-run process — through an isolated copy or a lock around the rebuild. Or, like `test_guards_parity`, it measures whether the index moved during its reading and skips with the reason rather than failing on a partial graph.
     **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
     **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
+    **Folded 2026-09-14 into `beadloom-qq6m`** by owner decision, with #293: one bead for the suite's shared live index. `beadloom-jorg` is closed with a pointer, and its description remains this entry's specification.
     **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
 
 297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
@@ -256,6 +257,31 @@
     the symptom is intermittent under one condition, which a mechanism will have to explain.
     **The bead question is the owner's**, and is put to the coordinator on `beadloom-tmgp` rather than
     decided here, because creating a bead changes a plan's DAG.
+    **AMENDED AGAIN 2026-09-14 (BDL-071 close-out, the coordinator): TWO LEGS OF THE NEXT PULL REQUEST.**
+    PR #76, the records pull request, run `34790798779` at head `617e082c`, attempt 1, read from the
+    two job logs: `tests (3.11)` ended `10 failed, 10655 passed, 65 skipped, 13 xfailed` in 834.48s,
+    and `tests (3.12)` ended `2 failed, 10663 passed, 58 skipped, 13 xfailed, 7 errors` in 727.98s —
+    every failure and every setup error `sqlite3.DatabaseError: database disk image is malformed`.
+    `tests (3.10)`, `tests (3.13)` and both `tests-locale` legs passed; attempt 2 re-ran the two and
+    both passed. The 3.12 set is new again — seven setup errors in
+    `test_a_commit_is_judged_against_the_declared_axes.py`, failures there and in
+    `test_bead18_s5_relation.py` — while the 3.11 set includes `test_graph_summary_facts.py`, one of
+    PR #75's two. So across two consecutive pull requests it reddened three of eight `tests` legs,
+    on three Python versions, never with the same set twice. That is what the intermittency claim
+    above rests on now, and it is also the argument against reading any single green re-run as a
+    verdict. The implementer's recommendation on `beadloom-tmgp` is to file a bead now, with the crossed
+    cases as its first step and #298 (same shared live index) considered in the same bead.
+    **FILED 2026-09-14 by owner decision: `beadloom-qq6m` (P1, bug), covering #293 and #298 together.**
+    This supersedes the "not filed as a bead" line above. Its first step is the crossed cases.
+    **AND A THIRD PULL REQUEST, WITH A DIFFERENT SIGNATURE.** PR #77, the BDL-071 close-out (documents
+    and tracker only), run `34793288575`, `tests (3.10)`: `9 failed, 10647 passed, 65 skipped,
+    13 xfailed, 9 errors` in 848.86s — none of them `malformed`; every one
+    `sqlite3.OperationalError: disk I/O error`, in tests that read this repository's own index
+    (`test_the_same_layer_split_is_recomputed.py`, `test_a_layer_the_declaration_names_and_no_node_is_in.py`,
+    `test_s3_decomposition.py`, `test_bead18_s5_relation.py`). The other seven required checks that
+    reported passed. Two things this adds: the family has a second symptom, so a triage that matches
+    only `malformed` misses it; and the CLI told the reader `index cannot be read (disk I/O error) —
+    it predates the current schema. Run beadloom reindex`, naming a schema cause for an I/O failure.
 
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
