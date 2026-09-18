@@ -2079,6 +2079,29 @@ required status check: the run is two to three times the ~16-28 runner-minute bu
 withdrew this project's Windows leg, and a scheduled workflow produces no check-run on a pull
 request, so requiring its context would make `main` unmergeable.
 
+**A nightly nobody opens is the same silence as a check that never reports, so since BDL-072
+the workflow speaks outside the Actions tab.** Between 2026-09-10 and 2026-09-18 the run
+reached a verdict on 0 of 7 187 mutants nine nights in a row and nothing said so. 643 mutants
+entered the declared scope while it was dead. `mutation.yml` now carries a second job,
+`announce`, which holds `issues: write` and opens ONE issue labelled `mutation-nightly` when a
+night produces no verdict. While that issue is open each further failed night adds a comment to
+it instead of a new issue, so the comment count is the length of the outage, and the first run
+that judges the declared scope comments and closes it. The job reads two things rather than the
+job status alone, because a dead run can be green: `needs.mutation.result` for the shape where
+a step exits non-zero, and the `verdict` output of the step that reads the run's own counters
+for the shape where every step succeeds over a verdict that covers almost nothing.
+
+**What the announcement does not cover is stated in the workflow rather than discovered
+later:** a nightly that never starts. GitHub disables a scheduled workflow after 60 days
+without repository activity, and a run that does not happen runs no job that could speak, so
+that shape is named and not built. What is measured about the announcement itself is one half
+of it. `tests/test_mutation_nightly_announcement.py` runs the reading step's program over six
+counter shapes and the announcement's shell over six run states against a stubbed `gh` that
+records the calls. No test reaches `gh` itself — whether the label can be created, whether the
+issue appears, whether the mention notifies — and no issue has ever been opened by this
+workflow, so the branches are measured and the announcement is not until a dispatched run opens
+one (`beadloom-e8m4`).
+
 **The workflow has since run on a GitHub runner, and the numbers moved two decisions**
 (BDL-068 S4, run 33851288658, 2026-09-04, the first in this project's history). Over identical
 mutants it measured 95.56% against the 96.19% taken on the macOS machine — 25 more survivors,
@@ -2168,7 +2191,10 @@ check that never reports makes `main` unmergeable.
 see which declared rooms the run covers and which it does not. It is not a step and carries
 no status.
 
-Measured on this repository, 2026-09-08, with rows and reasons elided:
+Measured on this repository, 2026-09-08, with rows and reasons elided. **The block stands as
+history and is deliberately not re-taken**, because the environment it was taken in carried the
+`mutation` extra and that is the difference the paragraph below it rests on. Its count is the
+count of that day, and the sentence after the block states today's.
 
 ```
 $ beadloom rooms
@@ -2202,11 +2228,19 @@ code base at one commit gave **0 mypy errors under `.[all,dev]` and 82 under `.[
 whole `tui` suite left the run under the second, three modules skipping and one erroring. A verdict that does not
 state its extras cannot be reproduced from what it prints.
 
-A local run is in **0 of the 21 rooms this project declares**, and that is the point rather
-than a caveat: nine "green on the tree" reports across BDL-067 were taken in exactly this
-room. The `mutation` leg above was added by the slice that added it and appeared in the
-census with no edit to the census's own code, which is the property the required-contexts
-tuple lacks.
+A local run is in **0 of the 22 rooms this project declares** — measured 2026-09-19 — and that
+is the point rather than a caveat: nine "green on the tree" reports across BDL-067 were taken
+in exactly this room. The `mutation` leg above was added by the slice that added it and
+appeared in the census with no edit to the census's own code, which is the property the
+required-contexts tuple lacks.
+
+**The count was 21 until 2026-09-18, when `mutation.yml` gained its `announce` job.** A job is
+a declared room, so a workflow that grows a job grows the census by the same act, and the
+number a document states in the present tense goes stale without anything in the census being
+wrong. `beadloom sync-check` read `[ok]` over that change on a fresh index, and that is the
+machinery answering the question it was asked rather than a failure of it: this page declares
+`watches=cli,graph,flow.yml`, and none of those three surfaces moved. A workflow is not among
+them, so a reader who states a derived number here is the one who owns re-measuring it.
 
 A run enters a declared room only when every dimension is comparable and equal. A runner
 label naming no platform (`self-hosted`) and a dimension this run cannot describe (the two

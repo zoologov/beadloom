@@ -85,6 +85,17 @@ a 10-core machine, against the ~16-28 runner-minute budget that withdrew `tests-
 Naming it on every gate run would add a line no reader can act on. `config-check` already
 reports the mutation **scope**, which is the part a gate can check in milliseconds.
 
+**Outside the gate is not the same as unwatched, as of BDL-072.** The nightly reached a verdict
+on 0 of 7 187 mutants for nine consecutive nights and the only place that was visible was the
+Actions tab. `mutation.yml` now carries a second job, `announce`, holding `issues: write`,
+which opens one issue labelled `mutation-nightly` when a night produces no verdict, comments on
+that issue each further failed night, and closes it on the first run that judges the declared
+scope. It does not cover a nightly that never starts, because a run that does not happen runs
+no job that could speak, and `gh` itself is unmeasured until a dispatched run opens the first
+issue (`beadloom-e8m4`). That channel reports on the nightly and never on a gate run, so
+nothing this component claims changes: it still names only the verifications a gate run
+declared and did not perform.
+
 ## Where it surfaces
 
 - `beadloom ci --format rich` — a block under the verdict, beside the room lines.
