@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-ey4m` — the helper in `tests/` and the four walking tests moved onto it.
+**Bead:** `beadloom-95dm` — the nightly announces a dead or red run. `beadloom-ey4m` closed 2026-09-18.
 **Goal:** a `mutmut run` that reaches a verdict on a non-zero population, and a nightly whose
 silence can no longer be mistaken for success.
 **Done when:** both scoring steps print a score instead of `Score: none`, measured on a real run.
