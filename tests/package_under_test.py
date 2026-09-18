@@ -58,6 +58,21 @@ PACKAGE_ROOT: Path = Path(beadloom.__file__).resolve().parent
 _GENERATED_NAME = re.compile(r"^(?:mutants_)?x(?:_|ǁ).*__mutmut(?:_(?:orig|\d+))?$")
 
 
+#: The modules the import mutmut injects can name. MEASURED in mutmut 3.7.0
+#: rather than guessed: ``mutation/trampoline_templates.py:52-54`` holds the only
+#: text the generator prepends to a module it rewrites, and it names ONE module —
+#: ``from mutmut.mutation.trampoline import wrap_in_trampoline as _mutmut_mutated,
+#: MutantDict``. A set rather than a string, so a second injected module is one
+#: entry here instead of a second predicate.
+#:
+#: Matched by equality and not by prefix, because a prefix also drops a
+#: dependency named ``mutmut_anything`` — a population that lost an entry in
+#: silence, which is the failure class this module exists to remove. If a later
+#: mutmut renames the module, the injected line survives the prune and arrives in
+#: a population as an undeclared import: a red that names itself, not a silence.
+INJECTED_IMPORT_MODULES = frozenset({"mutmut.mutation.trampoline"})
+
+
 def is_generated_name(name: str) -> bool:
     """Whether *name* was written by mutmut rather than by this package."""
     return _GENERATED_NAME.match(name) is not None
@@ -102,7 +117,7 @@ def _is_generated(item: object) -> bool:
     if isinstance(item, ast.Assign):
         return any(_names_a_generated_target(target) for target in item.targets)
     if isinstance(item, ast.ImportFrom):
-        return (item.module or "").startswith("mutmut")
+        return item.module in INJECTED_IMPORT_MODULES
     if isinstance(item, ast.Call):  # a decorator: ``@_mutmut_mutated(<dict>)``
         return isinstance(item.func, ast.Name) and item.func.id == "_mutmut_mutated"
     return False

@@ -31,9 +31,11 @@ from tests.mutmut_copy import (
     DECLARED_SITES_IN_THE_MIMIC,
     GENERATED_NAMES_IN_THE_MIMIC,
     MIMIC_MODULES,
+    TRAMPOLINE_IMPORT,
     write_mutmut_copy,
 )
 from tests.package_under_test import (
+    INJECTED_IMPORT_MODULES,
     PACKAGE_ROOT,
     is_generated_name,
     module_tree,
@@ -175,6 +177,45 @@ class TestReadingAModuleOfTheCopy:
         assert ast.dump(module_tree(path)) == ast.dump(ast.parse(path.read_text(encoding="utf-8")))
 
 
+class TestWhichImportsThePruningDrops:
+    """The injected import goes by its module NAME, not by a prefix of it.
+
+    The prune has to drop one line — the one mutmut writes at the top of every
+    module it rewrites — and nothing else. A predicate that dropped every module
+    beginning with ``mutmut`` would also drop a future dependency called
+    ``mutmut_anything`` from a population, in silence, leaving the guard built on
+    it green over less than it claims. That is the failure class this helper
+    exists to remove, so it may not reintroduce it one statement lower.
+    """
+
+    def test_the_line_mutmut_injects_is_dropped(self, tmp_path: Path) -> None:
+        """``TRAMPOLINE_IMPORT`` is the mimic's copy of mutmut's own template
+        (``mutmut/mutation/trampoline_templates.py:52-54``, 3.7.0)."""
+        module = tmp_path / "injected.py"
+        module.write_text(f"{TRAMPOLINE_IMPORT}\n", encoding="utf-8")
+
+        assert _imported_modules(module_tree(module)) == ()
+
+    def test_the_declared_set_holds_the_line_the_mimic_carries(self) -> None:
+        """The two copies of mutmut's template are bound to each other.
+
+        ``tests/mutmut_copy.py`` holds the injected line verbatim and the helper
+        holds the module it names. Read apart they can drift; asserted together,
+        a mutmut that renames the module reddens here rather than emptying a
+        population somewhere else.
+        """
+        assert INJECTED_IMPORT_MODULES
+        assert TRAMPOLINE_IMPORT.split()[1] in INJECTED_IMPORT_MODULES
+
+    def test_a_module_whose_name_merely_starts_with_mutmut_survives(self, tmp_path: Path) -> None:
+        module = tmp_path / "neighbour.py"
+        module.write_text(
+            "from mutmut_anything import thing\nfrom mutmut import other\n", encoding="utf-8"
+        )
+
+        assert _imported_modules(module_tree(module)) == ("mutmut", "mutmut_anything")
+
+
 class TestTheTestsThatWalkThePackageStayOnTheHelper:
     """The regression lock for the four files this bead moved.
 
@@ -201,6 +242,13 @@ class TestTheTestsThatWalkThePackageStayOnTheHelper:
             f"{filename} builds {constant} from its own location again, so under "
             f"mutation it reads the copied tree"
         )
+
+
+def _imported_modules(tree: ast.Module) -> tuple[str, ...]:
+    """Every module a surviving ``from ... import`` names, in a stable order."""
+    return tuple(
+        sorted(node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
+    )
 
 
 def _module_level_bindings(tree: ast.Module) -> dict[str, ast.expr]:

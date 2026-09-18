@@ -125,10 +125,27 @@
 # in the same run, so a scope change moves both sides together.
 #
 # WHAT THE ANNOUNCEMENT DOES NOT COVER, stated here rather than discovered
-# later: a nightly that never starts. GitHub disables a scheduled workflow after
-# 60 days without repository activity, and a run that does not happen runs no job
-# that could speak. Detecting that needs a second trigger on another schedule;
-# this repository commits daily, so the shape is named and not built.
+# later. Two shapes, and neither is built.
+#
+#   A nightly that never starts. GitHub disables a scheduled workflow after 60
+#   days without repository activity, and a run that does not happen runs no job
+#   that could speak. Detecting that needs a second trigger on another schedule;
+#   this repository commits daily, so the shape is named and not built.
+#
+#   A cancellation the run did not suffer. The announcement reads `cancelled` as
+#   an outage, which is right for a job killed by `timeout-minutes: 340` or
+#   stopped by hand, and wrong for a run SUPERSEDED by a newer one of the same
+#   kind — a second dispatch started while the first is running would comment on
+#   the watch issue about a supersession. The concurrency group above removes the
+#   collision this work item would itself have caused, between a dispatch and the
+#   schedule; what is left needs a human at the keyboard, and that human is
+#   watching the run they just replaced.
+#
+#   Telling the two apart INSIDE the run was considered and not built. GitHub
+#   publishes no cancellation reason, so it takes an `actions: read` grant on the
+#   announcing job and a `gh run list` query about sibling runs: a second
+#   unmeasured `gh` call — on the one surface no test here reaches, as the next
+#   paragraph says — to remove a case that only happens while someone is looking.
 #
 # WHAT IS MEASURED AND WHAT IS NOT, because a notifier nobody has seen fire is
 # the same silence in a new place. `tests/test_mutation_nightly_announcement.py`
@@ -147,8 +164,17 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
+# ONE RUN PER KIND, rather than one per branch, and the difference is the
+# announcement below. `cancel-in-progress` is here so two nightlies of the same
+# shape never run the declared scope twice over, and that is kept. What the group
+# gains is `github.event_name`: a hand `workflow_dispatch` and the schedule are
+# then two groups, so dispatching a run — which is how the first real verdict is
+# taken, `beadloom-e8m4` — can no longer cancel the scheduled one and have the
+# announcement report a supersession as an outage. The two can now overlap; the
+# price is two runners for the hours they share, against a watch issue opened
+# about the verification itself.
 concurrency:
-  group: mutation-${{ github.ref }}
+  group: mutation-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:

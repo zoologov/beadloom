@@ -365,11 +365,56 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
         assert "issue create -R" not in _verbs(calls)
 
     def test_a_cancelled_job_is_an_outage_and_not_a_pass(self, tmp_path: Path) -> None:
-        """`timeout-minutes: 340` and `cancel-in-progress` both end the job
+        """`timeout-minutes: 340` and a cancellation by hand both end the job
         without a verdict, which is the state a `needs`-based announcement can
-        report and a step inside that job cannot."""
+        report and a step inside that job cannot.
+
+        The behaviour is unchanged and its reason moved (`beadloom-vd6r`).
+        `cancel-in-progress` used to be the third way to reach this branch and
+        the one that made it lie: a run superseded by a newer one is not an
+        outage. The concurrency group is now scoped by event, so a dispatch
+        cannot cancel the schedule; a supersession by a run of the SAME kind
+        still reaches here, and the workflow's header names it among the cases
+        the announcement does not cover.
+        """
         calls = _announce(tmp_path, result="cancelled", verdict="", open_issue="12")
         assert "issue comment 12" in _verbs(calls)
+
+
+class TestWhichCancellationsCanReachTheAnnouncement:
+    """A run cancelled because a newer one superseded it is not an outage.
+
+    The announcement reads `cancelled` as an outage, deliberately: a timed-out
+    or killed nightly is exactly what it exists to report, and the job status is
+    all it has to read from. GitHub tells nobody WHY a run was cancelled, so the
+    only place the distinction can be made is where the cancellation is caused.
+
+    So the concurrency group is scoped by event as well as by ref. A hand
+    dispatch and the schedule are then two groups, and the dispatch cannot cancel
+    the scheduled run — which is the cancellation this work item would otherwise
+    have caused itself, because `beadloom-e8m4` dispatches a run by hand to read
+    the first real verdict.
+    """
+
+    def test_a_hand_dispatched_run_cannot_cancel_the_scheduled_one(self) -> None:
+        concurrency = _workflow()["concurrency"]
+        assert isinstance(concurrency, dict)
+        group = str(concurrency["group"])
+
+        assert "github.event_name" in group, (
+            "a dispatch and the schedule share a concurrency group, so dispatching "
+            "a run cancels the scheduled one and the announcement reports an "
+            "outage that is a supersession"
+        )
+        assert "github.ref" in group, "two branches must not cancel each other either"
+
+    def test_a_superseding_run_of_the_same_kind_still_cancels(self) -> None:
+        """The property the group was set for in the first place is kept: two
+        scheduled runs, or two dispatches, do not run the scope twice over."""
+        concurrency = _workflow()["concurrency"]
+        assert isinstance(concurrency, dict)
+
+        assert concurrency["cancel-in-progress"] is True
 
 
 class TestItStillCannotLockTheTrunk:
