@@ -42,11 +42,19 @@ from beadloom.application.active_table.table import is_separator_cells, split_ta
 from beadloom.doc_sync import tables
 from beadloom.doc_sync.axes_section import read_axes_section
 from beadloom.doc_sync.tables import cells_of, is_separator
+from tests.mutmut_copy import DECLARED_SITES_IN_THE_MIMIC, write_mutmut_copy
+from tests.package_under_test import PACKAGE_ROOT, module_tree, modules_under
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-_SRC = Path(__file__).resolve().parent.parent / "src" / "beadloom"
+#: The package under test, asked of the IMPORT and not of this file. Under
+#: `mutmut run` the suite is copied beside the mutated sources, so a root built
+#: from `__file__` pointed at the copy and this guard read mutmut's generated
+#: bodies as undeclared pipe splits — nine nightlies scored 0 of 7187 mutants
+#: (BDL-UX #289). `tests/package_under_test.py` answers both halves: where the
+#: package is, and which of its names it actually declares.
+_SRC = PACKAGE_ROOT
 _PLANNING = (
     Path(__file__).resolve().parent.parent / ".claude" / "development" / "docs" / "features"
 )
@@ -90,18 +98,23 @@ SINGLE_HYPHEN_ROW = "|-|-|"
 EMPTY_CELLED_ROW = "| |"
 
 
-def _pipe_split_sites() -> list[tuple[str, str]]:
-    """Every ``<expr>.split("|")`` in the package, with the function holding it.
+def _pipe_split_sites(root: Path = _SRC) -> list[tuple[str, str]]:
+    """Every ``<expr>.split("|")`` under *root*, with the function holding it.
 
     A SHAPE and not a spelling: the call is found in the parsed tree, so a body
     that writes ``line.split('|')``, ``stripped.strip('|').split("|")`` or
     ``match.group(1).split(SEP)`` where ``SEP`` is the literal is found the same
     way. What it cannot see is a split through a variable holding the pipe, which
     is stated here rather than left for a reader to discover.
+
+    Each module is read through ``module_tree``, so mutmut's generated bodies do
+    not enter the population when this runs inside a mutation run. *root* is a
+    parameter so the mimic in ``tests/mutmut_copy.py`` can be walked by the same
+    code the guard uses.
     """
     sites: list[tuple[str, str]] = []
-    for path in sorted(_SRC.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for path in modules_under(root):
+        tree = module_tree(path)
         for holder, call in _calls_with_owner(tree):
             func = call.func
             if not isinstance(func, ast.Attribute) or func.attr != "split":
@@ -111,7 +124,7 @@ def _pipe_split_sites() -> list[tuple[str, str]]:
             arg = call.args[0]
             if not (isinstance(arg, ast.Constant) and arg.value == "|"):
                 continue
-            sites.append((path.relative_to(_SRC).as_posix(), holder))
+            sites.append((path.relative_to(root).as_posix(), holder))
     return sites
 
 
@@ -144,6 +157,25 @@ class TestThePackageHasTwoReadersOfOneRow:
             f"undeclared {sorted(found - set(DECLARED_PIPE_SPLITS))}, "
             f"gone {sorted(set(DECLARED_PIPE_SPLITS) - found)}"
         )
+
+    def test_the_population_is_the_same_when_the_package_is_a_mutated_copy(
+        self, tmp_path: Path
+    ) -> None:
+        """The defect itself, in the cheapest honest shape available here.
+
+        The mimic is a package written from bodies mutmut 3.7.0 actually emits:
+        the declared function under its own name, ``__mutmut_orig`` beside it and
+        one ``__mutmut_N`` per mutant. Walked with the guard's own collector it
+        must yield the DECLARED sites and nothing else — not the generated ones
+        (which is the red of BDL-UX #289) and not fewer (which is what dropping
+        every name mutmut touched would give).
+
+        It is a proxy, and it is named as one: the verdict this bead's epic
+        accepts is a dispatched ``Mutation`` run, bead ``beadloom-e8m4``.
+        """
+        package = write_mutmut_copy(tmp_path)
+
+        assert tuple(sorted(_pipe_split_sites(package))) == DECLARED_SITES_IN_THE_MIMIC
 
     def test_two_of_them_read_a_table_row_and_neither_calls_the_other(self) -> None:
         readers = [site for site, kind in DECLARED_PIPE_SPLITS.items() if kind == "row-reader"]

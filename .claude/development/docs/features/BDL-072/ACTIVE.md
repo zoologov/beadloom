@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** none yet — waiting for the BRIEF's approval before the first wave starts.
+**Bead:** `beadloom-ey4m` — the helper in `tests/` and the four walking tests moved onto it.
 **Goal:** a `mutmut run` that reaches a verdict on a non-zero population, and a nightly whose
 silence can no longer be mistaken for success.
 **Done when:** both scoring steps print a score instead of `Score: none`, measured on a real run.
@@ -17,7 +17,10 @@ silence can no longer be mistaken for success.
 - [x] Docs folder and the Explore axes (2026-09-18) — 4 seeds, 0 kept nodes, the route recorded
 - [x] BRIEF written, `docs quality` clean, beads created
 - [ ] BRIEF approved by the owner
-- [ ] The class fix and the announcement
+- [x] `beadloom-ey4m` (2026-09-18) — `tests/package_under_test.py` answers both halves; the four
+      walking tests read the package through it. Green on the tree (10766 passed, 13 skipped,
+      13 xfailed) and green in a clean room over 7 carried files (284 passed, 5 xfailed).
+- [ ] The nightly's announcement (`beadloom-95dm`)
 - [ ] Tests, review
 - [ ] The real verdict from a dispatched run
 
@@ -28,7 +31,7 @@ silence can no longer be mistaken for success.
 | Tracker | Bead | Status | Details |
 |---|---|---|---|
 | `beadloom-3js4` | parent | Open | BDL-072 parent |
-| `beadloom-ey4m` | dev-1 | Ready | the helper in `tests/` and the four walking tests; open since 2026-09-12 |
+| `beadloom-ey4m` | dev-1 | Closed | the helper in `tests/` and the four walking tests; verified over a room built from real mutmut 3.7.0 output |
 | `beadloom-95dm` | dev-2 | Ready | a dead or red nightly announces itself |
 | `beadloom-hz0n` | test | Blocked | a guard cannot read a generated mutant again |
 | `beadloom-d7qn` | review | Blocked | nothing was merely skipped |
