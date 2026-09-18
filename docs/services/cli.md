@@ -2092,15 +2092,16 @@ a step exits non-zero, and the `verdict` output of the step that reads the run's
 for the shape where every step succeeds over a verdict that covers almost nothing.
 
 **What the announcement does not cover is stated in the workflow rather than discovered
-later:** a nightly that never starts. GitHub disables a scheduled workflow after 60 days
-without repository activity, and a run that does not happen runs no job that could speak, so
-that shape is named and not built. What is measured about the announcement itself is one half
-of it. `tests/test_mutation_nightly_announcement.py` runs the reading step's program over six
-counter shapes and the announcement's shell over six run states against a stubbed `gh` that
-records the calls. No test reaches `gh` itself — whether the label can be created, whether the
-issue appears, whether the mention notifies — and no issue has ever been opened by this
-workflow, so the branches are measured and the announcement is not until a dispatched run opens
-one (`beadloom-e8m4`).
+later**, and each shape named there is declined for a stated reason rather than missed. One of
+them is a nightly that never starts: GitHub disables a scheduled workflow after 60 days without
+repository activity, and a run that does not happen runs no job that could speak. The workflow
+header is the list, and this page does not keep a second copy of it. What is measured about the
+announcement itself is one half of it. `tests/test_mutation_nightly_announcement.py` runs the
+reading step's program over six counter shapes and the announcement's shell over six run states
+against a stubbed `gh` that records the calls. No test reaches `gh` itself — whether the label
+can be created, whether the issue appears, whether the mention notifies — and no issue has ever
+been opened by this workflow, so the branches are measured and the announcement is not until a
+dispatched run opens one (`beadloom-e8m4`).
 
 **The workflow has since run on a GitHub runner, and the numbers moved two decisions**
 (BDL-068 S4, run 33851288658, 2026-09-04, the first in this project's history). Over identical
