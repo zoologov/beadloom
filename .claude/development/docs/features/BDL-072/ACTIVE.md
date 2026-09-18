@@ -1,6 +1,6 @@
 # ACTIVE: BDL-072 — The nightly mutation run judges nothing
 
-> **Last updated:** 2026-09-18
+> **Last updated:** 2026-09-19
 > **Phase:** Development
 
 ---
@@ -16,13 +16,13 @@ silence can no longer be mistaken for success.
 
 - [x] Docs folder and the Explore axes (2026-09-18) — 4 seeds, 0 kept nodes, the route recorded
 - [x] BRIEF written, `docs quality` clean, beads created
-- [ ] BRIEF approved by the owner
+- [x] BRIEF approved by the owner (2026-09-18)
 - [x] `beadloom-ey4m` (2026-09-18) — `tests/package_under_test.py` answers both halves; the four
       walking tests read the package through it. Green on the tree (10766 passed, 13 skipped,
       13 xfailed) and green in a clean room over 7 carried files (284 passed, 5 xfailed).
-- [ ] The nightly's announcement (`beadloom-95dm`)
-- [ ] Tests, review
-- [ ] The real verdict from a dispatched run
+- [x] The nightly's announcement (`beadloom-95dm`, `ea23a6c2`) — both failure shapes, `gh` itself still unmeasured
+- [x] Tests (`26de3711`, 43 added) and review — ISSUES: 0 critical, 1 major, 4 minor, 3 nitpick
+- [ ] The review's fixes, then the real verdict from a dispatched run
 
 ## Results
 
@@ -35,6 +35,7 @@ silence can no longer be mistaken for success.
 | `beadloom-95dm` | dev-2 | Closed | the `announce` job: one labelled issue, both shapes of silence, `gh` itself still unmeasured |
 | `beadloom-hz0n` | test | Closed | 43 tests: the class guard over the 155 selected files, the 4-site number held over a mutated copy of the real package, and six breaks of the announcement each proven to turn a test red |
 | `beadloom-d7qn` | review | Blocked | nothing was merely skipped |
+| `beadloom-vd6r` | fix-dev | Closed | the concurrency group is scoped by event, so the verify bead's dispatch cannot cancel the schedule and be announced as an outage; the import prune matches mutmut's injected module by name |
 | `beadloom-e8m4` | verify | Blocked | dispatched run, the real numbers |
 
 ## Notes

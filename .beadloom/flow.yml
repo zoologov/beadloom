@@ -67,5 +67,9 @@ waves:
   overrides:
   - beads: [beadloom-95dm, beadloom-ey4m]
     decision: parallel
-    reason: "BDL-072's two dev beads occupy disjoint file sets that no graph node owns: beadloom-ey4m edits tests/ only (a copy-safe helper and the four tests that walk a __file__-derived root), beadloom-95dm edits .github/workflows/mutation.yml only. The serialisation is correct for what the graph can see - neither tree is a node, so both scopes read ref_not_in_graph - and it is wrong about these two. Recorded rather than argued in a launch prompt."
+    reason: "BDL-072's two dev beads occupy disjoint file sets that no graph node owns: beadloom-ey4m edits tests/ (a copy-safe helper and the four tests that walk a __file__-derived root), beadloom-95dm edits .github/workflows/mutation.yml and its own new test file tests/test_mutation_nightly_announcement.py. Corrected after the review on beadloom-d7qn, which caught this reason naming one file where the bead touched two trees. The one file both write is .beads/issues.jsonl, the tracker export, and the merge slot is what orders it - so the override rests on the commits being serialised, not on the file sets being wholly disjoint. The serialisation waves derived is correct for what the graph can see - neither tree is a node, so both scopes read ref_not_in_graph - and it is wrong about these two. Recorded rather than argued in a launch prompt."
+    until: "2026-10-31"
+  - beads: [beadloom-r7eg, beadloom-vd6r]
+    decision: parallel
+    reason: "The two fix beads the review on beadloom-d7qn produced: beadloom-r7eg edits docs/ only (the room count in cli.md and the channel neither doc mentions), beadloom-vd6r edits .github/workflows/mutation.yml and tests/ only. Disjoint apart from .beads/issues.jsonl, the tracker export, which the merge slot orders. waves serialises them because beadloom-vd6r's scope is not a node the graph has - the same ref_not_in_graph as the first override, for the same reason: this work item lives outside src/."
     until: "2026-10-31"
