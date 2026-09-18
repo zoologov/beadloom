@@ -62,3 +62,10 @@ mutation:
   - src/beadloom/services/bd_seam/assumptions.py
   - src/beadloom/services/bd_seam/creation.py
   - src/beadloom/services/bd_seam/invocations.py
+
+waves:
+  overrides:
+  - beads: [beadloom-95dm, beadloom-ey4m]
+    decision: parallel
+    reason: "BDL-072's two dev beads occupy disjoint file sets that no graph node owns: beadloom-ey4m edits tests/ only (a copy-safe helper and the four tests that walk a __file__-derived root), beadloom-95dm edits .github/workflows/mutation.yml only. The serialisation is correct for what the graph can see - neither tree is a node, so both scopes read ref_not_in_graph - and it is wrong about these two. Recorded rather than argued in a launch prompt."
+    until: "2026-10-31"
