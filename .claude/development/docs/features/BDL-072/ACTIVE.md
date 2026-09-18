@@ -32,7 +32,7 @@ silence can no longer be mistaken for success.
 |---|---|---|---|
 | `beadloom-3js4` | parent | Open | BDL-072 parent |
 | `beadloom-ey4m` | dev-1 | Closed | the helper in `tests/` and the four walking tests; verified over a room built from real mutmut 3.7.0 output |
-| `beadloom-95dm` | dev-2 | Ready | a dead or red nightly announces itself |
+| `beadloom-95dm` | dev-2 | Closed | the `announce` job: one labelled issue, both shapes of silence, `gh` itself still unmeasured |
 | `beadloom-hz0n` | test | Blocked | a guard cannot read a generated mutant again |
 | `beadloom-d7qn` | review | Blocked | nothing was merely skipped |
 | `beadloom-e8m4` | verify | Blocked | dispatched run, the real numbers |
