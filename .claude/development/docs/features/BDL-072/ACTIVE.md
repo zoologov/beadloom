@@ -33,7 +33,7 @@ silence can no longer be mistaken for success.
 | `beadloom-3js4` | parent | Open | BDL-072 parent |
 | `beadloom-ey4m` | dev-1 | Closed | the helper in `tests/` and the four walking tests; verified over a room built from real mutmut 3.7.0 output |
 | `beadloom-95dm` | dev-2 | Closed | the `announce` job: one labelled issue, both shapes of silence, `gh` itself still unmeasured |
-| `beadloom-hz0n` | test | Blocked | a guard cannot read a generated mutant again |
+| `beadloom-hz0n` | test | Closed | 43 tests: the class guard over the 155 selected files, the 4-site number held over a mutated copy of the real package, and six breaks of the announcement each proven to turn a test red |
 | `beadloom-d7qn` | review | Blocked | nothing was merely skipped |
 | `beadloom-e8m4` | verify | Blocked | dispatched run, the real numbers |
 
