@@ -1,6 +1,6 @@
 # ACTIVE: BDL-072 — The nightly mutation run judges nothing
 
-> **Last updated:** 2026-09-19
+> **Last updated:** 2026-09-19 (second pass)
 > **Phase:** Development
 
 ---
@@ -28,16 +28,17 @@ silence can no longer be mistaken for success.
 
 > The bead id is the FIRST cell of every row: the focus-document medium reads the first cell only (BDL-UX #272).
 
-| Tracker | Bead | Status | Details |
+| Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-3js4` | parent | Open | BDL-072 parent |
-| `beadloom-ey4m` | dev-1 | Closed | the helper in `tests/` and the four walking tests; verified over a room built from real mutmut 3.7.0 output |
-| `beadloom-95dm` | dev-2 | Closed | the `announce` job: one labelled issue, both shapes of silence, `gh` itself still unmeasured |
-| `beadloom-hz0n` | test | Closed | 43 tests: the class guard over the 155 selected files, the 4-site number held over a mutated copy of the real package, and six breaks of the announcement each proven to turn a test red |
-| `beadloom-d7qn` | review | Blocked | nothing was merely skipped |
-| `beadloom-3js4.1` | fix-dev | Closed | the announcement's script reaches bash as a UTF-8 file instead of an argv the locale's codec must hold, and the break harness no longer reads its own failure as the break it planted; measured red then green in a Linux container under `LC_ALL=C` and `LC_ALL=en_US.ISO-8859-1` |
-| `beadloom-vd6r` | fix-dev | Closed | the concurrency group is scoped by event, so the verify bead's dispatch cannot cancel the schedule and be announced as an outage; the import prune matches mutmut's injected module by name |
-| `beadloom-e8m4` | verify | Blocked | dispatched run, the real numbers |
+| `beadloom-3js4` | parent | ready | BDL-072 parent |
+| `beadloom-ey4m` | dev-1 | ✓ done | the helper in `tests/` and the four walking tests; verified over a room built from real mutmut 3.7.0 output |
+| `beadloom-95dm` | dev-2 | ✓ done | the `announce` job: one labelled issue, both shapes of silence, `gh` itself still unmeasured |
+| `beadloom-hz0n` | test | ✓ done | 43 tests: the class guard over the 155 selected files, the 4-site number held over a mutated copy of the real package, and six breaks of the announcement each proven to turn a test red |
+| `beadloom-d7qn` | review | ✓ done | three passes: ISSUES (1 major), ISSUES (1 critical, 1 major), then OK. The critical was the locale defect two required legs then proved |
+| `beadloom-3js4.1` | fix-dev | ✓ done | the announcement's script reaches bash as a UTF-8 file instead of an argv the locale's codec must hold, and the break harness no longer reads its own failure as the break it planted; measured red then green in a Linux container under `LC_ALL=C` and `LC_ALL=en_US.ISO-8859-1` |
+| `beadloom-vd6r` | fix-dev | ✓ done | the concurrency group is scoped by event, so the verify bead's dispatch cannot cancel the schedule and be announced as an outage; the import prune matches mutmut's injected module by name |
+| `beadloom-r7eg` | fix-docs | ✓ done | the twenty-second declared room in `cli.md`, and both pages now name the announcement channel |
+| `beadloom-e8m4` | verify | In progress | run 35405302194 judged 4151 of 7187 mutants before the runner was shut down; re-dispatch owes a completed score |
 
 ## Notes
 
