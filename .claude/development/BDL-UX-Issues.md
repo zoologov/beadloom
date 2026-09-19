@@ -35,6 +35,25 @@
 
 ## Open Issues
 
+303. [2026-09-19] [HIGH] the nightly mutation job is killed by its runner at 93-100 minutes, so the declared scope has had no aggregate score since 2026-09-09 even now that the run works
+
+    **Severity:** high (the guard defect BDL-UX #289 records is fixed and the chain is proven, but the duty this project declares — an aggregate mutation score over fifteen declared targets, held against two floors — has still never been measured on the runner that is supposed to hold it, and nothing in the pipeline says that out loud)
+    **Command:** the `Mutation` workflow, dispatched by hand on a branch
+    **Context:** BDL-072, `beadloom-e8m4`, 2026-09-19, measured on two dispatched runs after the #289 fix landed.
+    **What happened.** Both runs started, built the index, entered the rules slice and classified mutants — and were then killed mid-step with `##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.` followed by `##[error]The operation was canceled.` Steps 8-14 (both exports, both scoring steps, the artifact) were skipped each time, so neither run printed a score.
+
+    | run | head | started -> ended | wall | reached |
+    |---|---|---|---|---|
+    | `35405302194` | `aa89a831` | 23:20:35Z -> 01:00:57Z | 100 min | 4151 of 7187 mutants classified (4001 killed, 1 timeout, 149 survived) |
+    | `35419948880` | `1f0b3d45` | 03:56:33Z -> 05:30:04Z | 93.5 min | same step, cancelled |
+
+    **What it is NOT.** Not `timeout-minutes` (340, and neither run came near it). Not a concurrency supersession: the workflow's last five runs were checked both times and no other run of the group existed, and the group is scoped by `github.event_name` since BDL-072. Not the guard defect: the mutants ran, which is precisely what nine previous nightlies could not do.
+    **What was measured instead, and it is a smaller claim.** One declared target end to end on a developer machine: `mutmut run 'beadloom.application.waves.landing.*'`, `export-cicd-stats`, then `beadloom mutation --min-score 0.80` → `Counters: killed 28, mutants 7187, survived 1` and **`Score: 96.6% of 29 scored mutants`**, floor met, exit 0. The first printed score since 2026-09-09. It proves the chain; it does not touch the aggregate, the 0.94 rules floor or the 0.88 scope floor.
+    **Expected:** either the job completes on the runner it declares, or the duty is restated as something this project can actually measure — a slice per night, a resumable run, or a stated acceptance that the aggregate is taken elsewhere. A floor nobody can reach is not a gate.
+    **What is NOT established:** the cause of the shutdown. Disk exhaustion in `mutants/`, a runner reclamation, and an account-level limit are all consistent with two samples, and none was measured. The obvious next step is a run with `df` and memory reported per step.
+    **Related:** #289 (the guard that made every night score zero — fixed by BDL-072), #293/#298 (`beadloom-qq6m`, the shared live index), #226 (`beadloom-jwfc`, the pre-push crash that trains `--no-verify`).
+    **Tracker:** `beadloom-5isv` (P1). The number was allocated by `beadloom-e8m4`, the BDL-072 bead that measured both killed runs.
+
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
     **Severity:** medium (no wrong code shipped; what is wrong is an instrument whose output describes a different change or no work item at all, with nothing on the command line that could correct it, so the only remedy is to rearrange the checkout around the tool)
