@@ -249,11 +249,33 @@ jobs:
       # `mutmut run` exits non-zero whenever a mutant survives, which is a normal
       # outcome and not this job's verdict. The verdict is the scoring step, over
       # the counters the run leaves behind.
+      # DIAGNOSTIC BRANCH ONLY (beadloom-5isv) - never merged. Two runs were killed
+      # here by `The runner has received a shutdown signal` at 93-100 minutes, at
+      # the same queue position both times. This samples the machine from inside
+      # the job, to stdout so the lines survive the kill, and separates the two
+      # live hypotheses: memory exhaustion versus the Actions agent starved of CPU.
       - name: Run the mutants of the rules slice
-        run: >-
-          uv run mutmut run --max-children 4
-          'beadloom.graph.rules.*'
-          || true
+        run: |
+          (
+            while true; do
+              MEM=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
+              SWAP=$(awk '/SwapFree/{print $2}' /proc/meminfo)
+              LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
+              DISK=$(df -m --output=avail / | tail -1)
+              PSS=$(for f in /proc/*/smaps_rollup; do
+                      pid=${f#/proc/}; pid=${pid%/smaps_rollup}
+                      if grep -qa mutmut /proc/$pid/cmdline 2>/dev/null; then
+                        awk '/^Pss:/{print $2}' "$f" 2>/dev/null
+                      fi
+                    done | awk '{s+=$1} END {print s+0}')
+              NPROC=$(pgrep -fc mutmut || echo 0)
+              echo "SAMPLE t=$(date -u +%H:%M:%S) mem_avail_mb=$((MEM/1024)) swapfree_mb=$((SWAP/1024)) disk_avail_mb=$DISK load=$LOAD mutmut_pss_mb=$((PSS/1024)) mutmut_procs=$NPROC"
+              sleep 30
+            done
+          ) &
+          SAMPLER=$!
+          uv run mutmut run --max-children 4 'beadloom.graph.rules.*' || true
+          kill $SAMPLER 2>/dev/null || true
 
       - name: Export the rules slice's counters
         run: |
