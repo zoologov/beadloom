@@ -49,6 +49,7 @@ import pytest
 from beadloom.graph.linter import POPULATION_MARKER, LintResult, format_porcelain
 from beadloom.graph.rules.layer_reach import LayerReach
 from beadloom.graph.rules.layers import LayerPopulation
+from tests.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -65,7 +66,12 @@ README_PAIR = (REPO_ROOT / "README.md", REPO_ROOT / "README.ru.md")
 #: The role and command templates every adopter's agent is composed from. They are
 #: reference an agent acts on, and B7 (`beadloom-57wl`) found a claim about the layer
 #: rule in one of them that no walk of `docs/` could reach.
-TEMPLATES_ROOT = REPO_ROOT / "src" / "beadloom" / "onboarding" / "templates"
+#: Derived from the IMPORTED package rather than from this file: under
+#: `mutmut run` the suite is copied beside the mutated sources, so a root built
+#: from `__file__` answers about the copy (BDL-UX #289). This walk reads
+#: `*.md.txt`, which mutmut copies rather than mutates, so the move keeps the
+#: population identical and removes the shape.
+TEMPLATES_ROOT = PACKAGE_ROOT / "onboarding" / "templates"
 
 #: The agent-facing summary `beadloom setup-rules` writes, committed in this repository.
 AGENTS_MD = REPO_ROOT / ".beadloom" / "AGENTS.md"

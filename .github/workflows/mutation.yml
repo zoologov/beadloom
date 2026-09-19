@@ -82,6 +82,79 @@
 # 4 h 40 m late. GitHub documents scheduled workflows as delayable under load;
 # nothing here is wrong, and a reader expecting an 03:17 artifact should not
 # conclude the job failed.
+#
+# NINE NIGHTS OF SILENCE, AND WHY THIS FILE GAINED A SECOND JOB. Between
+# 2026-09-10 and 2026-09-18 this job reached a verdict on 0 of 7 187 mutants
+# every night and nobody saw it. The last scored run is `e17c2258`, 2026-09-09;
+# five of the nine failures ran on the same commit, `2f744c4a`, so nothing about
+# the work of those days caused it. A scheduled workflow reports no check-run on
+# a pull request — the same fact the paragraph above forbids putting into
+# `DEFAULT_STATUS_CHECK_CONTEXTS` — so its red is visible to whoever opens the
+# Actions tab and to nobody else. Nine nights is how long that took to notice,
+# and 643 mutants entered the declared scope while it was dead.
+#
+# THE SILENCE HAS TWO SHAPES AND THEY NEED DIFFERENT DETECTORS, which is why
+# `if: failure()` is not the answer: it covers one of them.
+#
+#   THE RED SHAPE — a step exits non-zero. `needs.mutation.result` reads it, and
+#   this is the shape the nine nights actually took. MEASURED in the run's own
+#   log and in the runner's source: the pool's selected tests fail before
+#   scoring, so `mutmut` aborts at the stats phase (`failed to collect stats.
+#   runner returned 1`); `mutmut export-cicd-stats` then finds no `.meta` file,
+#   prints `No previous mutation data found` AND RETURNS 0 WITHOUT WRITING THE
+#   FILE (mutmut 3.7.0, `__main__.py:1213-1218`); and the scoring steps go red on
+#   `mutation-run-zero-mutants` over counters that were never written. So the job
+#   was red every night, and being red is not the same as being seen.
+#
+#   THE GREEN SHAPE — every step succeeds and the verdict still covers almost
+#   nothing. Both runner invocations carry `|| true`, and have to: the runner
+#   exits non-zero whenever a mutant survives, which is a normal outcome. That
+#   makes an invocation which dies in its first second indistinguishable from one
+#   that worked. `export-cicd-stats` recomputes over every mutant that HAS a
+#   result, so a dead second invocation still leaves an export carrying the rules
+#   slice's counters; the scoring step names all fifteen targets on its command
+#   line and scores ~95% over one of them; and the job is green with thirteen
+#   targets unjudged. No job status can see this, because `--target` says what a
+#   run was ASKED to cover and the counters say nothing about what it did.
+#
+# So the reading step below compares the two exports rather than trusting either
+# status: the whole-scope population must EXCEED the rules-slice population it
+# contains, because the second export is cumulative over the first — the fact the
+# two-runs-two-verdicts comment above already rests on. That comparison keeps no
+# number of its own to maintain. It holds one measurement against another taken
+# in the same run, so a scope change moves both sides together.
+#
+# WHAT THE ANNOUNCEMENT DOES NOT COVER, stated here rather than discovered
+# later. Two shapes, and neither is built.
+#
+#   A nightly that never starts. GitHub disables a scheduled workflow after 60
+#   days without repository activity, and a run that does not happen runs no job
+#   that could speak. Detecting that needs a second trigger on another schedule;
+#   this repository commits daily, so the shape is named and not built.
+#
+#   A cancellation the run did not suffer. The announcement reads `cancelled` as
+#   an outage, which is right for a job killed by `timeout-minutes: 340` or
+#   stopped by hand, and wrong for a run SUPERSEDED by a newer one of the same
+#   kind — a second dispatch started while the first is running would comment on
+#   the watch issue about a supersession. The concurrency group above removes the
+#   collision this work item would itself have caused, between a dispatch and the
+#   schedule; what is left needs a human at the keyboard, and that human is
+#   watching the run they just replaced.
+#
+#   Telling the two apart INSIDE the run was considered and not built. GitHub
+#   publishes no cancellation reason, so it takes an `actions: read` grant on the
+#   announcing job and a `gh run list` query about sibling runs: a second
+#   unmeasured `gh` call — on the one surface no test here reaches, as the next
+#   paragraph says — to remove a case that only happens while someone is looking.
+#
+# WHAT IS MEASURED AND WHAT IS NOT, because a notifier nobody has seen fire is
+# the same silence in a new place. `tests/test_mutation_nightly_announcement.py`
+# RUNS both halves: the reading step's program over six counter shapes, and the
+# announcement's shell over the six run states, against a stubbed `gh` that
+# records the calls. What no test reaches is `gh` itself — whether the label can
+# be created, whether the issue appears, whether the mention notifies. No issue
+# has ever been opened by this workflow. Until a dispatched run opens one
+# (`beadloom-e8m4`), the branches are measured and the announcement is not.
 name: Mutation
 
 on:
@@ -91,8 +164,17 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
+# ONE RUN PER KIND, rather than one per branch, and the difference is the
+# announcement below. `cancel-in-progress` is here so two nightlies of the same
+# shape never run the declared scope twice over, and that is kept. What the group
+# gains is `github.event_name`: a hand `workflow_dispatch` and the schedule are
+# then two groups, so dispatching a run — which is how the first real verdict is
+# taken, `beadloom-e8m4` — can no longer cancel the scheduled one and have the
+# announcement report a supersession as an outage. The two can now overlap; the
+# price is two runners for the hours they share, against a watch issue opened
+# about the verification itself.
 concurrency:
-  group: mutation-${{ github.ref }}
+  group: mutation-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -126,6 +208,12 @@ jobs:
     # that DOES trip reports nothing at all, which is the asymmetry this number
     # is set from.
     timeout-minutes: 340
+    # What the announcement below reads. A job status answers "did a step exit
+    # non-zero"; these answer "was anything judged", which is the question the
+    # nine nights turned out to need.
+    outputs:
+      verdict: ${{ steps.judged.outputs.verdict }}
+      detail: ${{ steps.judged.outputs.detail }}
     steps:
       - uses: actions/checkout@v5
 
@@ -281,6 +369,96 @@ jobs:
           --tool "mutmut 3.7"
           --min-score 0.88
 
+      - name: Read what the run judged
+        # THE GREEN SHAPE OF SILENCE, detected from the counters rather than from
+        # a status. Two facts make this necessary and neither is visible to
+        # `if: failure()`: the runner's invocations carry `|| true`, so one that
+        # dies immediately exits 0, and `export-cicd-stats` is CUMULATIVE over
+        # every mutant that has a result, so the whole-scope export still carries
+        # the rules slice when the second invocation produced nothing.
+        #
+        # The comparison is therefore between the two exports of this same run.
+        # The whole-scope population must exceed the rules-slice population it
+        # contains — 7 187 against 3 989 when both invocations work — and no
+        # number is authored here, so a scope change moves both sides together.
+        #
+        # `if: always()` because the interesting cases are the ones where an
+        # earlier step went red. `total` is the key mutmut 3.7 writes for the
+        # population (`__main__.py:1177-1191`), and a file it declined to write
+        # is read as an absence rather than as a zero.
+        id: judged
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import pathlib
+
+
+          def counters(name):
+              """The counters a run exported, or None if it exported none."""
+              path = pathlib.Path("mutants") / name
+              if not path.is_file():
+                  return None
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, ValueError):
+                  return None
+              return data if isinstance(data, dict) else None
+
+
+          def population(data):
+              """The mutant total, and None when the export does not carry one."""
+              if data is None:
+                  return None
+              value = data.get("total")
+              return value if isinstance(value, int) else None
+
+
+          rules = counters("rules-cicd-stats.json")
+          whole = counters("mutmut-cicd-stats.json")
+          rules_total = population(rules)
+          whole_total = population(whole)
+
+          reasons = []
+          if whole is None:
+              reasons.append(
+                  "the whole-scope counters were never exported, so this run "
+                  "judged nothing at all"
+              )
+          elif whole_total is None:
+              reasons.append("the whole-scope export carries no mutant total")
+          elif whole_total == 0:
+              reasons.append("the whole-scope export counts 0 mutants")
+          elif rules_total is None:
+              reasons.append(
+                  "the rules-slice counters were never exported, so the two runs "
+                  "cannot be told apart and the score may cover one of them"
+              )
+          elif whole_total <= rules_total:
+              reasons.append(
+                  f"the second run added no mutants to the first: the whole scope "
+                  f"counts {whole_total} and the rules slice alone counts "
+                  f"{rules_total}, so thirteen declared targets went unjudged "
+                  f"while every step exited 0"
+              )
+          if whole is not None and whole.get("check_was_interrupted_by_user"):
+              reasons.append(
+                  "the run was interrupted, so its counters cover part of the "
+                  "population and the score is a ratio over the part"
+              )
+
+          print("verdict=" + ("silent" if reasons else "judged"))
+          print(
+              "detail="
+              + (
+                  "; ".join(reasons)
+                  if reasons
+                  else f"{whole_total} mutants scored, {rules_total} of them the "
+                  f"rules slice"
+              )
+          )
+          PY
+
       - name: Keep the counters and the surviving mutants
         if: always()
         uses: actions/upload-artifact@v4
@@ -291,3 +469,95 @@ jobs:
             mutants/rules-cicd-stats.json
             mutants/**/*.meta
           retention-days: 14
+
+  # THE ANNOUNCEMENT. A separate job rather than a final step, for two reasons
+  # that are both about what it can still do when the first job cannot.
+  #
+  #   A step cannot speak for a job that was killed. `timeout-minutes: 340` and
+  #   the `concurrency` block above both END the job; a step guarded by
+  #   `if: always()` is not guaranteed to run through either. A dependent job
+  #   reads `needs.mutation.result` as `failure` or `cancelled` and runs anyway,
+  #   which covers the two shapes where the run reports the least.
+  #
+  #   And `issues: write` stays off the job that executes mutated code. The
+  #   runner imports `mutants/src/beadloom`, whose bodies were rewritten by a
+  #   generator; the smallest job that needs the token is the one that should
+  #   carry it. The file's top-level grant stays `contents: read`.
+  announce:
+    needs: mutation
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Say it where it is seen, once per outage and not once per night
+        # NINE IDENTICAL ISSUES ARE THE SAME SILENCE IN A LOUDER FORM, so there
+        # is one issue and it is found by LABEL. The label survives a retitling,
+        # where a marker in the title does not, and `gh label create --force` is
+        # idempotent — the label need not exist before the first failure. While
+        # an issue carrying it is open, each further night adds a comment naming
+        # that night's cause and its run; the comment count is then the length of
+        # the outage, which nine separate issues would have stated as nine.
+        #
+        # The owner is @-mentioned rather than assigned: a mention notifies
+        # whether or not they watch all activity, and an invalid assignee would
+        # fail this step under `set -e` and take the announcement with it.
+        #
+        # A run that judges its scope CLOSES the open issue instead of staying
+        # quiet. A watch issue left open after the thing it watches recovered is
+        # a second silence, of the kind that gets muted.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          WATCH_LABEL: mutation-nightly
+          WATCH_TITLE: "Mutation nightly: no verdict"
+          RESULT: ${{ needs.mutation.result }}
+          VERDICT: ${{ needs.mutation.outputs.verdict }}
+          DETAIL: ${{ needs.mutation.outputs.detail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          gh label create "$WATCH_LABEL" -R "$REPO" --force \
+            --color "B60205" \
+            --description "The nightly mutation run reached no verdict"
+
+          number="$(gh issue list -R "$REPO" --state open \
+            --label "$WATCH_LABEL" --limit 50 --json number \
+            --jq '.[0].number // empty')"
+
+          if [ "$RESULT" = "success" ] && [ "$VERDICT" = "judged" ]; then
+            if [ -n "$number" ]; then
+              gh issue comment "$number" -R "$REPO" --body \
+                "The nightly reached a verdict again: ${DETAIL:-no detail}. Run: $RUN_URL"
+              gh issue close "$number" -R "$REPO" --reason completed
+            fi
+            echo "the nightly judged its declared scope; nothing to announce"
+            exit 0
+          fi
+
+          if [ -n "${DETAIL:-}" ]; then
+            cause="$DETAIL"
+          else
+            cause="the job did not reach the step that reads its counters"
+          fi
+
+          body="$(printf '%s\n' \
+            "@$OWNER — the nightly mutation run reached no verdict." \
+            "" \
+            "- **Job result:** \`$RESULT\`" \
+            "- **What the counters say:** $cause" \
+            "- **Run:** $RUN_URL" \
+            "" \
+            "This issue is the one place the nightly speaks through: while it is" \
+            "open, each further failed night adds a comment here instead of a new" \
+            "issue, and the first run that judges the declared scope closes it.")"
+
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$REPO" --body "$body"
+          else
+            gh issue create -R "$REPO" --label "$WATCH_LABEL" \
+              --title "$WATCH_TITLE" --body "$body"
+          fi

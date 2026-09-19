@@ -72,8 +72,16 @@ from tests.filesystem_names import (
     as_the_process_receives,
     filesystem_can_name,
 )
+from tests.package_under_test import PACKAGE_ROOT, module_tree, modules_under
 
-_SRC = Path(__file__).resolve().parents[1] / "src" / "beadloom"
+#: The package under test, asked of the IMPORT and not of this file. Under
+#: `mutmut run` the suite is copied beside the mutated sources, so a root built
+#: from `__file__` reads the copy; `tests/package_under_test.py` resolves it
+#: through the imported package and declines mutmut's generated names (BDL-UX
+#: #289). This file's populations cannot trip on the second half today — no
+#: mutated module holds a `record_firing(` call or a process terminator — so the
+#: move keeps its behaviour and removes the shape.
+_SRC = PACKAGE_ROOT
 _COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
 _GUARDS_PACKAGE = _SRC / "application" / "guards"
 _BOUNDARY_MODULE = _GUARDS_PACKAGE / "invocation.py"
@@ -512,7 +520,8 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
 
 def _module_ast(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    """*path* parsed without whatever mutmut generated into it."""
+    return module_tree(path)
 
 
 def _calls_named(tree: ast.AST, name: str) -> list[ast.Call]:
@@ -597,7 +606,7 @@ def boundary_path_modules() -> tuple[Path, ...]:
     Discovered from the package rather than listed, because a listed scope is
     what ``.30`` walked past: the boundary module itself was never read.
     """
-    return (_COMMAND_MODULE, *sorted(_GUARDS_PACKAGE.rglob("*.py")))
+    return (_COMMAND_MODULE, *modules_under(_GUARDS_PACKAGE))
 
 
 def terminators_on_the_boundary_path() -> list[tuple[str, str]]:
@@ -805,7 +814,7 @@ def access_can_be_refused() -> bool:
 
 def _source_modules() -> tuple[Path, ...]:
     """Every module in the package — the scope of the "one writer" pin."""
-    return tuple(sorted(_SRC.rglob("*.py")))
+    return modules_under(_SRC)
 
 
 def record_firing_sites() -> list[tuple[str, str]]:
@@ -841,7 +850,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         """A module added to the guards package is in scope the day it is added."""
         scope = boundary_path_modules()
 
-        assert set(scope) == {_COMMAND_MODULE, *_GUARDS_PACKAGE.rglob("*.py")}
+        assert set(scope) == {_COMMAND_MODULE, *modules_under(_GUARDS_PACKAGE)}
         assert _BOUNDARY_MODULE in scope, "the boundary module itself must be read"
         assert _DISCOVERY_MODULE in scope
         assert len(scope) >= 15, [path.name for path in scope]
