@@ -1,6 +1,6 @@
 # BRIEF: BDL-072 — The nightly mutation run judges nothing: a guard reads mutmut's own mutated copy
 
-> **Status:** Approved
+> **Status:** Done
 > **Type:** bug
 > **Created:** 2026-09-18
 > **Tracker:** `beadloom-ey4m` (P1, open since 2026-09-12) · **Log entry:** BDL-UX #289
