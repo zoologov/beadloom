@@ -49,12 +49,21 @@ class Break:
     new: str
     case: str
     notices: str
+    #: How the covering test goes red on this edit, checked when it is run. The
+    #: field exists so `_A_RED_TEST` is a measurement rather than a claim: a
+    #: spelling no row produces is a spelling nothing here has ever exercised.
+    spelling: type[Exception]
 
 
-#: The six edits, each on a line the announcement's behaviour rests on. `old` is
-#: required to occur EXACTLY once, so an edit that silently matched nothing —
+#: The eight edits, each on a line the announcement's behaviour rests on. `old`
+#: is required to occur EXACTLY once, so an edit that silently matched nothing —
 #: which would make every assertion below pass over an unchanged workflow — is a
 #: failure of this file rather than a pass of the suite.
+#:
+#: Two rows share the edit that removes `gh issue create` and differ in the test
+#: they are read through, because the red it produces differs: the failed-night
+#: case asserts on the call list, while the case for a night that judged nothing
+#: picks the create call out of it first and so goes red as a `StopIteration`.
 BREAKS: tuple[Break, ...] = (
     Break(
         name="the counters are read from the wrong directory",
@@ -63,6 +72,7 @@ BREAKS: tuple[Break, ...] = (
         case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
         "test_two_populations_that_differ_are_a_judged_run",
         notices="a judged run would be reported as silent",
+        spelling=AssertionError,
     ),
     Break(
         name="the two populations are no longer compared",
@@ -71,6 +81,7 @@ BREAKS: tuple[Break, ...] = (
         case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
         "test_a_whole_scope_export_equal_to_the_slice_is_silent",
         notices="the green shape of silence would be reported as a verdict",
+        spelling=AssertionError,
     ),
     Break(
         name="an interrupted run stops being one",
@@ -79,6 +90,7 @@ BREAKS: tuple[Break, ...] = (
         case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
         "test_an_interrupted_run_is_silent_even_with_a_full_population",
         notices="a score over a truncated population would be reported as a verdict",
+        spelling=AssertionError,
     ),
     Break(
         name="a failed night opens no issue",
@@ -86,6 +98,7 @@ BREAKS: tuple[Break, ...] = (
         new='gh issue view -R "$REPO" --label "$WATCH_LABEL"',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::test_a_red_job_opens_the_first_issue",
         notices="the nine nights would repeat with nothing said",
+        spelling=AssertionError,
     ),
     Break(
         name="the owner is no longer mentioned",
@@ -93,6 +106,25 @@ BREAKS: tuple[Break, ...] = (
         new='"The nightly mutation run reached no verdict." \\',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::test_a_red_job_opens_the_first_issue",
         notices="the issue would open and notify nobody",
+        spelling=AssertionError,
+    ),
+    Break(
+        name="a night that judged nothing opens no issue either",
+        old='gh issue create -R "$REPO" --label "$WATCH_LABEL"',
+        new='gh issue view -R "$REPO" --label "$WATCH_LABEL"',
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_a_green_job_that_judged_nothing_opens_one_too",
+        notices="the shape no job status can see would stay invisible",
+        spelling=StopIteration,
+    ),
+    Break(
+        name="a judged night reports its own step as failed",
+        old="exit 0",
+        new="exit 1",
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_a_judged_run_with_nothing_open_says_nothing",
+        notices="a recovered nightly would go red in the announcement it recovered into",
+        spelling=subprocess.CalledProcessError,
     ),
     Break(
         name="a recovered nightly leaves its watch issue open",
@@ -101,6 +133,7 @@ BREAKS: tuple[Break, ...] = (
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
         "test_a_judged_run_closes_the_issue_the_outage_opened",
         notices="a stale watch issue would stay open and get muted",
+        spelling=AssertionError,
     ),
 )
 
@@ -118,9 +151,17 @@ def _case(case: str) -> Callable[..., None]:
 #: How a red test in this file is legitimately spelled, and nothing wider.
 #: Catching every exception made the harness indistinguishable from the break it
 #: planted: on both locale legs of run 35404835459 each call below raised
-#: `UnicodeEncodeError` before the edited workflow could matter, and the six
-#: break tests read green over a mechanism that never ran. That is this file's
-#: own subject — a gate passing while the thing under it is dead — one level up.
+#: `UnicodeEncodeError` before the edited workflow could matter, and all six
+#: break tests the file then carried read green over a mechanism that never ran.
+#: That is this file's own subject — a gate passing while the thing under it is
+#: dead — one level up.
+#:
+#: Each entry is PRODUCED by a row of `BREAKS` and checked there, so the tuple
+#: states what this file has exercised rather than what an exception could in
+#: principle be. Three rows were declared before the review measured them and
+#: only one spelling was real; the two rows that make the others real were added
+#: rather than the claim narrowed, because a break CAN go red as either and a
+#: harness that reported it as its own failure would be the wrong answer twice.
 _A_RED_TEST: tuple[type[Exception], ...] = (
     AssertionError,  # an `assert` in the test under measurement
     StopIteration,  # a `gh` call list with no entry to pick
@@ -193,6 +234,11 @@ class TestTheAnnouncementsTestsGoRedWhenItIsBroken:
             f"{edit.case} passes against a workflow where {edit.name}, so "
             f"{edit.notices} and nothing in the suite would say so"
         )
+        assert isinstance(failure, edit.spelling), (
+            f"{edit.case} goes red as {type(failure).__name__} and the row declares "
+            f"{edit.spelling.__name__} — `_A_RED_TEST` is measured through these rows, "
+            "so a row whose spelling drifts makes the harness's accepted set a claim again"
+        )
 
     @pytest.mark.parametrize("case", CASES)
     def test_it_passes_against_the_workflow_as_it_stands(
@@ -202,6 +248,22 @@ class TestTheAnnouncementsTestsGoRedWhenItIsBroken:
         failure = _run(case, workflow=intact, at=tmp_path / "room")
 
         assert failure is None, failure
+
+    def test_every_spelling_the_harness_accepts_is_produced_by_a_break(self) -> None:
+        """`_A_RED_TEST` is a population, so it is held against one.
+
+        A spelling accepted there and produced by no row is a widening nothing
+        measured — which is how the tuple was first written, and the review
+        found all three rows spelled the same. The rows that produce the other
+        two run in `test_the_test_that_covers_it_fails`, where the spelling each
+        declares is checked against what it raised.
+        """
+        declared = {edit.spelling for edit in BREAKS}
+
+        assert set(_A_RED_TEST) <= declared, (
+            "the harness accepts a spelling no break produces: "
+            f"{sorted(spelling.__name__ for spelling in set(_A_RED_TEST) - declared)}"
+        )
 
     def test_the_population_of_breaks_is_not_empty(self) -> None:
         """A parametrisation that collected nothing reports no tests and no red."""

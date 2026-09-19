@@ -463,9 +463,16 @@ class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
             with pytest.raises(UnicodeEncodeError):
                 script.encode(codec)
 
-    def test_no_argument_handed_to_bash_needs_more_than_ascii(
+    def test_no_argument_handed_to_bash_carries_the_workflows_prose(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """The argv may hold what the filesystem gave it, and not the workflow.
+
+        The subject is the ANNOUNCEMENT's characters, so that is what this
+        measures. Requiring the whole argv to be ASCII would fail on a machine
+        whose `TMPDIR` carries a non-ASCII character while the code was right:
+        a path the filesystem codec produced can always be encoded back by it.
+        """
         recorded: list[list[str]] = []
 
         def _record(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
@@ -476,9 +483,12 @@ class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
         _announce(tmp_path, result="failure", verdict="")
 
         assert recorded, "the announcement was never invoked, so nothing was measured"
-        carried = [arg for argv in recorded for arg in argv if not arg.isascii()]
+        prose = {char for char in _announcement_script() if not char.isascii()}
+        carried = sorted(
+            {char for argv in recorded for arg in argv for char in arg if char in prose}
+        )
         assert not carried, (
-            "an argument carries a character the locale's filesystem codec need not "
-            "hold, so this call raises UnicodeEncodeError on a non-UTF-8 leg and "
-            f"nowhere else: {carried}"
+            "an argument carries the workflow's own prose, whose codec is then the "
+            "locale's rather than this file's, so the call raises UnicodeEncodeError "
+            f"on a non-UTF-8 leg and nowhere else: {carried}"
         )
