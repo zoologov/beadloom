@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import inspect
 import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -114,12 +115,26 @@ def _case(case: str) -> Callable[..., None]:
     return cast("Callable[..., None]", getattr(getattr(announcement, class_name)(), method))
 
 
-def _run(case: str, *, workflow: Path, at: Path) -> BaseException | None:
+#: How a red test in this file is legitimately spelled, and nothing wider.
+#: Catching every exception made the harness indistinguishable from the break it
+#: planted: on both locale legs of run 35404835459 each call below raised
+#: `UnicodeEncodeError` before the edited workflow could matter, and the six
+#: break tests read green over a mechanism that never ran. That is this file's
+#: own subject — a gate passing while the thing under it is dead — one level up.
+_A_RED_TEST: tuple[type[Exception], ...] = (
+    AssertionError,  # an `assert` in the test under measurement
+    StopIteration,  # a `gh` call list with no entry to pick
+    subprocess.CalledProcessError,  # a script that exits non-zero under `set -e`
+)
+
+
+def _run(case: str, *, workflow: Path, at: Path) -> Exception | None:
     """Run *case* against *workflow* and return what it raised, or ``None``.
 
-    Whatever the failure is spelled as — an assertion, a `gh` call list that has
-    no entry to pick, a script that exits non-zero under `set -e` — it is a red
-    test, which is the property under measurement.
+    Only the spellings in `_A_RED_TEST` count as the test going red. Anything
+    else — a workflow that cannot be read, an argv the image's codec cannot
+    hold — is the harness failing, and it propagates rather than being reported
+    as a break that was caught.
 
     Every case here RUNS a program and so takes a room to run it in. A case that
     only read the workflow as data would take no argument, and running it would
@@ -134,7 +149,7 @@ def _run(case: str, *, workflow: Path, at: Path) -> BaseException | None:
     announcement.MUTATION = workflow
     try:
         test(at)
-    except Exception as failure:
+    except _A_RED_TEST as failure:
         return failure
     else:
         return None
@@ -193,3 +208,23 @@ class TestTheAnnouncementsTestsGoRedWhenItIsBroken:
         assert len(BREAKS) >= 6
         assert len(CASES) >= 4
         assert all(hasattr(announcement, item.case.partition("::")[0]) for item in BREAKS)
+
+
+class TestTheHarnessCannotPassItselfOffAsTheBreakItPlanted:
+    """The same defect this file is about, one level up (beadloom-3js4.1).
+
+    `_run` used to report any exception as the break, so a harness that never
+    reached the break read as a gate that had caught it. Measured on both
+    locale legs of run 35404835459: every call raised `UnicodeEncodeError`
+    while encoding the announcement's argv, the six break tests passed, and the
+    only red came from the three control cases — the mechanism was dead and
+    this file said the opposite.
+
+    A red test here is spelled as an assertion, as a `gh` call list with no
+    entry to pick, or as a script that exits non-zero under `set -e`. Anything
+    else is the harness failing, and it propagates.
+    """
+
+    def test_a_workflow_that_cannot_be_read_is_not_a_red_test(self, tmp_path: Path) -> None:
+        with pytest.raises(OSError):
+            _run(CASES[0], workflow=tmp_path / "gone.yml", at=tmp_path / "room")

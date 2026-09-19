@@ -172,8 +172,17 @@ def _announce(
     )
     bash = shutil.which("bash")
     assert bash is not None
+    # ON DISK, AND NOT IN THE ARGV. `encoding=` governs the child's streams;
+    # an argv is encoded with `sys.getfilesystemencoding()`, which the locale
+    # chooses — ascii under `LC_ALL=C`, iso8859-1 under `en_US.ISO-8859-1`.
+    # The announcement's owner mention carries an em dash (`mutation.yml:548`),
+    # so handing the script to bash as an argument raised UnicodeEncodeError on
+    # both locale legs of run 35404835459 and on no UTF-8 tree. The script is
+    # the workflow's text, so the encoding moves and the prose does not.
+    script = tmp_path / "announce.sh"
+    script.write_text(_announcement_script(), encoding="utf-8")
     subprocess.run(  # noqa: S603 — the argv is this repository's own workflow
-        [bash, "-c", _announcement_script()],
+        [bash, str(script)],
         env=env,
         capture_output=True,
         encoding="utf-8",
@@ -427,3 +436,49 @@ class TestItStillCannotLockTheTrunk:
 
         for name in _jobs():
             assert str(name) not in DEFAULT_STATUS_CHECK_CONTEXTS
+
+
+class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
+    """What the two locale legs found, held where every leg can see it.
+
+    `subprocess` encodes an argv with the FILESYSTEM codec, and outside macOS
+    the locale chooses it: ASCII under `LC_ALL=C`, iso8859-1 under
+    `en_US.ISO-8859-1`, and neither holds the em dash the announcement's owner
+    mention carries (`mutation.yml:548`). So run 35404835459 was red on both
+    locale legs with `UnicodeEncodeError` and green on the UTF-8 tree, which is
+    the difference those legs exist for.
+
+    The character is the WORKFLOW's, not a test's, so the fix is where the
+    encoding is decided and not in the prose: the script reaches bash through a
+    file this module writes as UTF-8, and the argv is then a path. These two
+    tests hold that on every leg rather than only on the two that vary the
+    locale.
+    """
+
+    def test_the_announcement_carries_a_character_neither_locale_can_encode(self) -> None:
+        """Stated first: over ASCII prose the test below would pass vacuously."""
+        script = _announcement_script()
+
+        for codec in ("ascii", "iso8859-1"):
+            with pytest.raises(UnicodeEncodeError):
+                script.encode(codec)
+
+    def test_no_argument_handed_to_bash_needs_more_than_ascii(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: list[list[str]] = []
+
+        def _record(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            recorded.append([str(arg) for arg in argv])
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", _record)
+        _announce(tmp_path, result="failure", verdict="")
+
+        assert recorded, "the announcement was never invoked, so nothing was measured"
+        carried = [arg for argv in recorded for arg in argv if not arg.isascii()]
+        assert not carried, (
+            "an argument carries a character the locale's filesystem codec need not "
+            "hold, so this call raises UnicodeEncodeError on a non-UTF-8 leg and "
+            f"nowhere else: {carried}"
+        )
