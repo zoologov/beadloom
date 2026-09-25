@@ -90,6 +90,7 @@ closing the five gaps its surviving mutants name.
 | 2026-09-25 | The gap tests land before the table refactor | They pin today's messages and codec, so the refactor is proven against them rather than alongside them. |
 | 2026-09-25 | Front 1 (ordering) withdrawn; B2 restated as `--max-children 2` | mutmut 3.7.0 already orders covering tests cheapest-first (`__main__.py:1478-1479`); the premise came from misreading `:1443`. |
 | 2026-09-25 | A real dispatched run goes first, after wave 1; B3 and B4 proceed while it runs | Owner decision: the first aggregate, or the first honest death at two children, is worth more than finishing the plan blind. |
+| 2026-09-25 | The memo compares the file's text rather than trusting `(st_mtime_ns, st_size)`; it is forgotten before every test | A same-size edit inside one timestamp tick was served the old rules under the stat key, red in two tests; a hit costs 50.5 us against a 15.94 ms parse, measured. mutmut forks each mutant's run from a parent that ran the clean suite, so an inherited memo would answer without executing the mutant. |
 
 ## Related Files
 

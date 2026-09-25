@@ -907,13 +907,35 @@ _KEYS_THAT_DEFAULT_TO_WARN: frozenset[str] = frozenset(
 )
 
 
+#: What :func:`load_rules` last parsed at each resolved path: the text it read and
+#: the rules it returned. One ``beadloom init`` re-indexes and then lints, and both
+#: read the same ``rules.yml``; one suite run made 1581 parses, 783 of them of a
+#: file that had not changed (BDL-073). The entry is trusted only while the file
+#: still holds the same TEXT. A path alone would serve old rules to the TUI, which
+#: refreshes in one long process while its user edits the file; ``st_mtime_ns``
+#: with ``st_size`` would do the same for an edit that keeps the size and lands in
+#: one timestamp tick, which a coarse-clock filesystem makes milliseconds wide.
+#: Reading the file costs microseconds; the parse is what is saved. The list is
+#: shared between callers, which is safe because every rule type is a frozen
+#: dataclass of immutable fields and no caller mutates the list.
+_PARSED: dict[Path, tuple[str, list[Rule]]] = {}
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
+
+    A file whose text has not changed since the last call for its path is not
+    parsed again: the rules parsed then are returned, as the same list object.
 
     Raises ``ValueError`` on schema errors (missing version, invalid kinds, etc.).
     """
     with rules_path.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
+        text = fh.read()
+    memo_key = rules_path.resolve()
+    remembered = _PARSED.get(memo_key)
+    if remembered is not None and remembered[0] == text:
+        return remembered[1]
+    data = yaml.safe_load(text)
 
     if not isinstance(data, dict):
         msg = "rules.yml must be a YAML mapping"
@@ -984,6 +1006,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
             raise ValueError(msg)
         rules.append(_MAPPING_PARSERS[key](name, description, block, severity=severity))
 
+    _PARSED[memo_key] = (text, rules)
     return rules
 
 
