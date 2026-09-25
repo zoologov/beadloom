@@ -2798,6 +2798,21 @@ class TestDetectRuleType:
         # Unknown falls back to "unknown"
         assert _detect_rule_type({"name": "x"}) == "unknown"
 
+    def test_a_rule_naming_two_kinds_is_labelled_by_the_first_its_author_wrote(self) -> None:
+        """The loader rejects such a rule; the agent instructions still label it one way.
+
+        Since BDL-073 B3 the label is read against the loader's `AUTHORING_KEYS`, a
+        frozenset whose iteration order moves with the process's hash seed. Walking
+        the rule's own keys instead keeps the label a function of the file: the kind
+        its author wrote first. Before B3 a private twelve-key map decided, in its own
+        order, so a `deny` written above a `require` read as `require`.
+        """
+        from beadloom.onboarding.scanner import _detect_rule_type
+
+        assert _detect_rule_type({"name": "x", "deny": {}, "require": {}}) == "deny"
+        assert _detect_rule_type({"name": "x", "require": {}, "deny": {}}) == "require"
+        assert _detect_rule_type({"name": "x", "forbid": {}, "check": {}}) == "forbid_edge"
+
     def test_every_authoring_key_the_loader_accepts_has_a_type(self) -> None:
         """A rule kind the agent instructions call "unknown" is one they mis-describe.
 

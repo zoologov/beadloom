@@ -9,7 +9,7 @@ database-aware reference validation that produces advisory warnings.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import yaml
 
@@ -336,30 +336,6 @@ def _parse_forbid_rule(
         edge_kind=edge_kind,
         severity=severity,
     )
-
-
-#: Every key a rule may declare to select its type. A rule declares exactly one.
-#:
-#: Named once so the set has a single reader-visible definition: the validation
-#: message below is built from it, and `onboarding.scanner.rules_gen` is held to
-#: it by a test, because a key added here and not there makes the generated agent
-#: instructions call the rule's kind "unknown" and nothing fails (BDL-062 `.4`).
-AUTHORING_KEYS: frozenset[str] = frozenset(
-    {
-        "deny",
-        "require",
-        "forbid_cycles",
-        "forbid_import",
-        "forbid",
-        "layers",
-        "check",
-        "unregistered_feature_candidate",
-        "module_coverage",
-        "scenario_coverage",
-        "doc_area_coherence",
-        "summary_facts",
-    }
-)
 
 
 _VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
@@ -875,6 +851,62 @@ def _parse_non_behavioural(
     return NonBehaviouralNode(node=node, reason=reason)
 
 
+class _MappingParser(Protocol):
+    """Read one rule type's mapping into its typed rule, severity already resolved."""
+
+    def __call__(
+        self, name: str, description: str, data: dict[str, object], /, *, severity: str
+    ) -> Rule: ...
+
+
+#: The authoring key read from the rule itself rather than from a mapping under
+#: it: a layer rule's ``layers`` is a list, and its ``enforce``, ``allow_skip``,
+#: ``edge_kind`` and ``exempt`` sit beside it, so ``_parse_layer_rule`` is handed
+#: the whole rule. It is the one key the table below cannot hold.
+_KEY_READ_FROM_THE_RULE = "layers"
+
+#: Every authoring key whose value is a mapping, and the parser that reads it.
+#: ``load_rules`` checks the value is a mapping, with one message for every key,
+#: and hands it on — the check and the message were written out eleven times
+#: before BDL-073 B3, identically but for the key. ``forbid_cycles`` is an entry
+#: like any other: it was the chain's ``else`` arm only because the exactly-one
+#: check above the chain made it the one key left.
+_MAPPING_PARSERS: dict[str, _MappingParser] = {
+    "deny": _parse_deny_rule,
+    "require": _parse_require_rule,
+    "forbid_cycles": _parse_cycle_rule,
+    "forbid_import": _parse_forbid_import_rule,
+    "forbid": _parse_forbid_rule,
+    "check": _parse_check_rule,
+    "unregistered_feature_candidate": _parse_unregistered_feature_candidate_rule,
+    "module_coverage": _parse_module_coverage_rule,
+    "scenario_coverage": _parse_scenario_coverage_rule,
+    "doc_area_coherence": _parse_doc_area_coherence_rule,
+    "summary_facts": _parse_summary_facts_rule,
+}
+
+#: Every key a rule may declare to select its type. A rule declares exactly one.
+#:
+#: Derived from the table rather than listed beside it, so a rule type cannot be
+#: accepted by one and missing from the other. The validation message below is
+#: built from it, and `onboarding.scanner.rules_gen` labels rules by it, because a
+#: key it did not know became the word "unknown" in the generated agent
+#: instructions and nothing failed (BDL-062 `.4`).
+AUTHORING_KEYS: frozenset[str] = frozenset({*_MAPPING_PARSERS, _KEY_READ_FROM_THE_RULE})
+
+#: The authoring keys whose rule defaults to ``warn`` when ``severity`` is
+#: omitted: advisory checks that must not fail the build until a project has
+#: classified what they report on. Every other rule defaults to ``error``.
+_KEYS_THAT_DEFAULT_TO_WARN: frozenset[str] = frozenset(
+    {
+        "unregistered_feature_candidate",
+        "module_coverage",
+        "scenario_coverage",
+        "doc_area_coherence",
+    }
+)
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -923,25 +955,11 @@ def load_rules(rules_path: Path) -> list[Rule]:
 
         description = str(rule_data.get("description", ""))
 
-        has_unregistered = "unregistered_feature_candidate" in rule_data
-        has_module_coverage = "module_coverage" in rule_data
-
-        # Parse severity (v2 feature, defaults to "error" for v1 backward compat).
-        # The advisory ``unregistered_feature_candidate`` and ``module_coverage``
-        # checks default to "warn" when severity is omitted (they must never fail
-        # the build until S3b classifies every module).
-        has_scenario_coverage_block = "scenario_coverage" in rule_data
-        has_doc_area_block = "doc_area_coherence" in rule_data
-        default_severity = (
-            "warn"
-            if (
-                has_unregistered
-                or has_module_coverage
-                or has_scenario_coverage_block
-                or has_doc_area_block
-            )
-            else "error"
-        )
+        # Severity is a v2 feature and defaults to "error" for v1 backward compat;
+        # it is resolved before the rule type is, so a rule that is wrong in both
+        # ways is reported for its severity.
+        declared = AUTHORING_KEYS.intersection(rule_data)
+        default_severity = "warn" if declared & _KEYS_THAT_DEFAULT_TO_WARN else "error"
         severity_raw = rule_data.get("severity", default_severity)
         severity = str(severity_raw)
         if severity not in VALID_RULE_SEVERITIES:
@@ -951,120 +969,20 @@ def load_rules(rules_path: Path) -> list[Rule]:
             )
             raise ValueError(msg)
 
-        has_deny = "deny" in rule_data
-        has_require = "require" in rule_data
-        has_forbid_cycles = "forbid_cycles" in rule_data
-        has_forbid_import = "forbid_import" in rule_data
-        has_forbid = "forbid" in rule_data
-        has_layers = "layers" in rule_data
-        has_check = "check" in rule_data
-        has_scenario_coverage = "scenario_coverage" in rule_data
-        has_doc_area = "doc_area_coherence" in rule_data
-        has_summary_facts = "summary_facts" in rule_data
-
-        rule_type_count = sum(
-            [
-                has_deny,
-                has_require,
-                has_forbid_cycles,
-                has_forbid_import,
-                has_forbid,
-                has_layers,
-                has_check,
-                has_unregistered,
-                has_module_coverage,
-                has_scenario_coverage,
-                has_doc_area,
-                has_summary_facts,
-            ]
-        )
-        if rule_type_count != 1:
+        if len(declared) != 1:
             listed = ", ".join(f"'{key}'" for key in sorted(AUTHORING_KEYS))
             msg = f"rules.yml: rule '{name}' must have exactly one of {listed}"
             raise ValueError(msg)
+        (key,) = declared
 
-        if has_deny:
-            deny_data = rule_data["deny"]
-            if not isinstance(deny_data, dict):
-                msg = f"Rule '{name}': 'deny' must be a mapping"
-                raise ValueError(msg)
-            rules.append(_parse_deny_rule(name, description, deny_data, severity=severity))
-        elif has_require:
-            require_data = rule_data["require"]
-            if not isinstance(require_data, dict):
-                msg = f"Rule '{name}': 'require' must be a mapping"
-                raise ValueError(msg)
-            rules.append(_parse_require_rule(name, description, require_data, severity=severity))
-        elif has_forbid_import:
-            forbid_import_data = rule_data["forbid_import"]
-            if not isinstance(forbid_import_data, dict):
-                msg = f"Rule '{name}': 'forbid_import' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_forbid_import_rule(name, description, forbid_import_data, severity=severity)
-            )
-        elif has_forbid:
-            forbid_data = rule_data["forbid"]
-            if not isinstance(forbid_data, dict):
-                msg = f"Rule '{name}': 'forbid' must be a mapping"
-                raise ValueError(msg)
-            rules.append(_parse_forbid_rule(name, description, forbid_data, severity=severity))
-        elif has_layers:
+        if key == _KEY_READ_FROM_THE_RULE:
             rules.append(_parse_layer_rule(name, description, rule_data, severity=severity))
-        elif has_check:
-            check_data = rule_data["check"]
-            if not isinstance(check_data, dict):
-                msg = f"Rule '{name}': 'check' must be a mapping"
-                raise ValueError(msg)
-            rules.append(_parse_check_rule(name, description, check_data, severity=severity))
-        elif has_unregistered:
-            ufc_data = rule_data["unregistered_feature_candidate"]
-            if not isinstance(ufc_data, dict):
-                msg = f"Rule '{name}': 'unregistered_feature_candidate' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_unregistered_feature_candidate_rule(
-                    name, description, ufc_data, severity=severity
-                )
-            )
-        elif has_module_coverage:
-            mc_data = rule_data["module_coverage"]
-            if not isinstance(mc_data, dict):
-                msg = f"Rule '{name}': 'module_coverage' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_module_coverage_rule(name, description, mc_data, severity=severity)
-            )
-        elif has_scenario_coverage:
-            sc_data = rule_data["scenario_coverage"]
-            if not isinstance(sc_data, dict):
-                msg = f"Rule '{name}': 'scenario_coverage' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_scenario_coverage_rule(name, description, sc_data, severity=severity)
-            )
-        elif has_doc_area:
-            da_data = rule_data["doc_area_coherence"]
-            if not isinstance(da_data, dict):
-                msg = f"Rule '{name}': 'doc_area_coherence' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_doc_area_coherence_rule(name, description, da_data, severity=severity)
-            )
-        elif has_summary_facts:
-            sf_data = rule_data["summary_facts"]
-            if not isinstance(sf_data, dict):
-                msg = f"Rule '{name}': 'summary_facts' must be a mapping"
-                raise ValueError(msg)
-            rules.append(
-                _parse_summary_facts_rule(name, description, sf_data, severity=severity)
-            )
-        else:
-            cycle_data = rule_data["forbid_cycles"]
-            if not isinstance(cycle_data, dict):
-                msg = f"Rule '{name}': 'forbid_cycles' must be a mapping"
-                raise ValueError(msg)
-            rules.append(_parse_cycle_rule(name, description, cycle_data, severity=severity))
+            continue
+        block = rule_data[key]
+        if not isinstance(block, dict):
+            msg = f"Rule '{name}': '{key}' must be a mapping"
+            raise ValueError(msg)
+        rules.append(_MAPPING_PARSERS[key](name, description, block, severity=severity))
 
     return rules
 
