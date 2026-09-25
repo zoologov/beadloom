@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-09-25
-> **Last updated:** 2026-09-25
+> **Last updated:** 2026-09-25 (correction)
 
 ---
 
@@ -88,6 +88,8 @@ closing the five gaps its surviving mutants name.
 | 2026-09-20 | Ordering is applied by a thin repo-local entry point, not by patching the installed package or vendoring mutmut | RFC front 1: visible, survives `uv sync`, and can refuse when the patched line moves. |
 | 2026-09-20 | `--max-children` 4 → 2 | A measured false kill through the shared live index at 4-way concurrency; nothing pins the value. |
 | 2026-09-25 | The gap tests land before the table refactor | They pin today's messages and codec, so the refactor is proven against them rather than alongside them. |
+| 2026-09-25 | Front 1 (ordering) withdrawn; B2 restated as `--max-children 2` | mutmut 3.7.0 already orders covering tests cheapest-first (`__main__.py:1478-1479`); the premise came from misreading `:1443`. |
+| 2026-09-25 | A real dispatched run goes first, after wave 1; B3 and B4 proceed while it runs | Owner decision: the first aggregate, or the first honest death at two children, is worth more than finishing the plan blind. |
 
 ## Related Files
 

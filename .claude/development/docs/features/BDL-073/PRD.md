@@ -106,3 +106,24 @@ mutant's tests cheapest-first, so my own budget buys eleven times more verdicts.
 - `rules.yml` is parsed once per `beadloom init`, measured by a call counter over the same path, and
   the TUI's lint panel still sees a file edited while it is open.
 - `beadloom ci` rc 0, the suite green on the tree, and the nine required checks green on the PR.
+
+## Correction (2026-09-25) — the ordering premise was wrong
+
+**Front 1 is withdrawn.** mutmut 3.7.0 already hands each mutant's covering tests to pytest
+cheapest-first: `mutmut/__main__.py:1478-1479`, inside the forked child, reads `# Run fast tests
+first` / `sorted_tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])`.
+The fan-out analysis read `:1443`, where the set is fetched, and missed `:1479`, where it is sorted;
+the coordinator had `:1479` in a grep result on 2026-09-19 and did not register it. Found by the B2
+dev agent (`beadloom-7omx`) and verified in the installed source.
+
+**What that withdraws from this document:** the 4.2 s / 21.8 s / 46.7 s table describes the explore
+agent's own hand runs, not mutmut's behaviour — stock 3.7.0 killed the same six mutants in a mean of
+**1.16 s**. And the "28.3 h against a 22.7 h budget" arithmetic is mutmut's
+`estimated_worst_case_time`, which prices every mutant as a survivor running its whole covering set;
+at an 83% kill rate with ordered tests, kills cost seconds and the real cost of the tail is its
+**survivors** (~50 s each for `load_rules`). The slice was never shown to be unscorable by time.
+
+**What stands:** the runner kill (eight runs, 73-102 min, far under `timeout-minutes: 340` — killed,
+not timed out); `--max-children 2`, landed in `a3bf2e2d`; the gap tests, which now carry the most
+weight, because each one that kills a survivor removes ~50 s from the tail; the table and the memo.
+The owner chose to dispatch a real run after wave 1 rather than wait for the end of the plan.
