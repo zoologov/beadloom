@@ -84,13 +84,14 @@ closing the five gaps its surviving mutants name.
 |---|---|---|
 | 2026-09-20 | Full scope: tooling, tests and product | Owner decision after the fan-out analysis on `beadloom-5isv`. |
 | 2026-09-20 | Kept nodes: `rule-engine`, `reindex`, `graph`, `tui`, `onboarding` | Owner ruling on the RFC's axes; `onboarding` kept although `beadloom impact` cannot show it, for its second twelve-key map. |
-| 2026-09-20 | The double parse is removed by a memo keyed on `(path, st_mtime_ns, st_size)` | Owner decision. A path-only key breaks a named test and blinds the TUI. |
+| 2026-09-20 | The double parse is removed by a memo keyed on `(path, st_mtime_ns, st_size)` | Owner decision. A path-only key breaks a named test and blinds the TUI. **Superseded 2026-09-25 by the row below.** |
 | 2026-09-20 | Ordering is applied by a thin repo-local entry point, not by patching the installed package or vendoring mutmut | RFC front 1: visible, survives `uv sync`, and can refuse when the patched line moves. |
 | 2026-09-20 | `--max-children` 4 → 2 | A measured false kill through the shared live index at 4-way concurrency; nothing pins the value. |
 | 2026-09-25 | The gap tests land before the table refactor | They pin today's messages and codec, so the refactor is proven against them rather than alongside them. |
 | 2026-09-25 | Front 1 (ordering) withdrawn; B2 restated as `--max-children 2` | mutmut 3.7.0 already orders covering tests cheapest-first (`__main__.py:1478-1479`); the premise came from misreading `:1443`. |
 | 2026-09-25 | A real dispatched run goes first, after wave 1; B3 and B4 proceed while it runs | Owner decision: the first aggregate, or the first honest death at two children, is worth more than finishing the plan blind. |
 | 2026-09-25 | The memo compares the file's text rather than trusting `(st_mtime_ns, st_size)`; it is forgotten before every test | A same-size edit inside one timestamp tick was served the old rules under the stat key, red in two tests; a hit costs 50.5 us against a 15.94 ms parse, measured. mutmut forks each mutant's run from a parent that ran the clean suite, so an inherited memo would answer without executing the mutant. |
+| 2026-09-25 | **Owner accepted** the text-comparing memo in place of `(st_mtime_ns, st_size)` | Asked explicitly because it departs from the owner's 2026-09-20 decision; accepted on the measurement (stale rules served after a same-size edit inside one tick; 50 µs per compare against 15.94 ms per parse). B6 need not rule on it. |
 
 ## Related Files
 
