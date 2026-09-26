@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-nzlc.1` (F1, the review's minors), then `beadloom-xn48` (B7, docs).
-**Goal:** the memo returns a copy, the upstream ordering is pinned by a test, a seam replaces reaching into `_PARSED`; then the four stale doc pairs.
-**Done when:** F1 green on the tree; then `sync-check` rc 0 after B7.
+**Bead:** the Gate wave, then `beadloom-kj8t` (B8, verify) — the coordinator's.
+**Goal:** the combined tree green, the pull request's nine checks green, and a dispatched run on the final head that either prints both scores or dies somewhere the bead records.
+**Done when:** all three are on record; merge only on nine green checks.
 
 ## Progress
 
@@ -22,7 +22,7 @@
 - [x] Wave 4: B5 (`f77975e4`) — load_rules 123/136 killed serially (90.4%), 13 survivors; two children still false-kill; no child above 399 MiB, parent flat ~550 MiB (memory ruled out for the loader on Darwin)
 - [x] Wave 5: B6 review OK — main vs HEAD `load_rules` over 1904 generated rules files, 0 differences; 4 minors + 1 nitpick
 - [x] F1: the review's minors (added to the DAG 2026-09-26)
-- [ ] Wave 6: B7 (docs)
+- [x] Wave 6: B7 (`a4e2a341`) — four stale pairs to zero; `beadloom ci` rc 0
 - [ ] Wave 7: B8 — a dispatched run prints both scores (needs `gh auth refresh -s workflow`)
 
 ## Results
@@ -39,8 +39,8 @@
 | `beadloom-4243` | B5 test | ✓ done | `load_rules` 136 mutants on HEAD; serial `mutmut run`: 123 killed / 13 survived (90.4%, 2 equivalent + 11 gaps); at two children 128/8 and 126/10 - the difference is false kills; memo: no false survival with or without the fixture; 855 covering tests (827 + 28 new); peak RSS per child 399 MiB, parent flat ~550 MiB - memory ruled out for the loader on Darwin; suite 10857 passed on the tree; coverage 86% / 96%, changed lines 100% |
 | `beadloom-8cbm` | B6 review | ✓ done | no hidden special case, no silent patch |
 | `beadloom-nzlc.1` | F1 dev | ✓ done | the memo stores a tuple and returns a new list per call (copy 0.078 us vs 13.31 ms parse, measured); mutmut's cheapest-first sort and `-p no:randomly` pinned by `tests/test_mutmut_runs_covering_tests_cheapest_first.py` (green on 3.7.0 and 3.8.0, red on a stand-in); `forget_parsed_rules()` replaces both reaches into `_PARSED`; suite 10869 passed on the tree, Darwin 3.13; no new stale pair |
-| `beadloom-xn48` | B7 tech-writer | ready | SPEC, cli.md, gate-coverage |
-| `beadloom-kj8t` | B8 verify | blocked | a dispatched run prints both scores |
+| `beadloom-xn48` | B7 tech-writer | ✓ done | four stale pairs 4 -> 0 (graph README, rule-engine SPEC, onboarding README, agent-prime SPEC); cli.md + gate-coverage: two children and why, cheapest-first already upstream and pinned, the runner's killer still open (`beadloom-5isv`); commit `a4e2a341`; `beadloom ci` rc 0 on the tree, Darwin; doc-reading tests 957 + acceptance 510 passed |
+| `beadloom-kj8t` | B8 verify | ready | a dispatched run prints both scores |
 
 ## Notes
 
