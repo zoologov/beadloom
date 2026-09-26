@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** Wave 3 — `beadloom-m19h` (B4, one parse per init), while dispatched run 36101121952 measures the branch at two children.
-**Goal:** `load_rules` memoised on path, mtime and size, so one `init` parses `rules.yml` once and the TUI still sees an edit.
-**Done when:** B4's done-when in PLAN.md holds. The Gate is red on sync-check only (four doc pairs made stale by B3), owned by B7.
+**Bead:** Wave 5 — `beadloom-8cbm` (B6, review), withholding the authors' accounts.
+**Goal:** an independent verdict on B1-B5, including the two departures B3 put to review and whether B4's autouse fixture is needed (B5 found all 136 verdicts identical without it).
+**Done when:** the verdict is on the bead; ISSUES become fix beads before the docs wave.
 
 ## Progress
 
@@ -18,8 +18,9 @@
 - [x] Beads created: epic `beadloom-nzlc` + 8, one plan, 7 edges confirmed against the titles; swarm valid, 7 waves
 - [x] Wave 1: B1 (`1688c707`, 20 cases; all five survivors killed on the activated mutant) + B2 restated as `--max-children 2` (`a3bf2e2d`) — the ordering premise was withdrawn, see the correction in PRD/RFC
 - [x] Wave 2: B3 (`f5160866`) — `load_rules` 333 → 126 mutants; `forbid_cycles` folded into the table and no `requires_mapping` column, both put to review
-- [ ] Wave 3: B4 (the memo)
-- [ ] Wave 4-6: B5 (numbers), B6 (review), B7 (docs)
+- [x] Wave 3: B4 (`ca671a78`) — one parse per init; the memo compares the file's text (owner accepted)
+- [x] Wave 4: B5 (`f77975e4`) — load_rules 123/136 killed serially (90.4%), 13 survivors; two children still false-kill; no child above 399 MiB, parent flat ~550 MiB (memory ruled out for the loader on Darwin)
+- [ ] Wave 5-6: B6 (review), B7 (docs)
 - [ ] Wave 7: B8 — a dispatched run prints both scores (needs `gh auth refresh -s workflow`)
 
 ## Results
