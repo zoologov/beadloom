@@ -60,7 +60,7 @@ good enough — which measurement contradicts by a factor of eleven.
 
 - A dispatched `Mutation` run **completes** and both scoring steps print a score over a non-zero
   population, with the run's own numbers recorded against the two floors.
-- Time-to-kill is decided by the durations mutmut already measured, not by set ordering.
+- Time-to-kill is decided by the durations mutmut already measured, not by set ordering. *(withdrawn 2026-09-25 — see Correction)*
 - `load_rules` stops carrying a fifth of the slice: the twelve-branch dispatch becomes a table.
 - The five gaps the survivors name are closed by tests, starting with the loader's codec.
 - The kill count stops containing false kills produced by concurrency against the shared index.
@@ -97,7 +97,7 @@ mutant's tests cheapest-first, so my own budget buys eleven times more verdicts.
   finding, never by moving the floor.
 - The covering tests of each mutant are ordered by their recorded durations. Measured on the same
   six mutants as the baseline: identical verdicts, and a mean time-to-kill at or under 6 s against
-  the 21.8 s baseline.
+  the 21.8 s baseline. *(withdrawn 2026-09-25 — see Correction)* Stock mutmut 3.7.0 already meets it: 1.16 s.
 - `load_rules` carries at most 160 mutants (from 333), measured by counting
   `def x_load_rules__mutmut_N` in the generated tree, and the twelve authoring keys still round-trip
   — every test that pins the current dispatch keeps passing, named in the RFC.

@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** Wave 5 — `beadloom-8cbm` (B6, review), withholding the authors' accounts.
-**Goal:** an independent verdict on B1-B5, including the two departures B3 put to review and whether B4's autouse fixture is needed (B5 found all 136 verdicts identical without it).
-**Done when:** the verdict is on the bead; ISSUES become fix beads before the docs wave.
+**Bead:** `beadloom-nzlc.1` (F1, the review's minors), then `beadloom-xn48` (B7, docs).
+**Goal:** the memo returns a copy, the upstream ordering is pinned by a test, a seam replaces reaching into `_PARSED`; then the four stale doc pairs.
+**Done when:** F1 green on the tree; then `sync-check` rc 0 after B7.
 
 ## Progress
 
@@ -20,7 +20,9 @@
 - [x] Wave 2: B3 (`f5160866`) — `load_rules` 333 → 126 mutants; `forbid_cycles` folded into the table and no `requires_mapping` column, both put to review
 - [x] Wave 3: B4 (`ca671a78`) — one parse per init; the memo compares the file's text (owner accepted)
 - [x] Wave 4: B5 (`f77975e4`) — load_rules 123/136 killed serially (90.4%), 13 survivors; two children still false-kill; no child above 399 MiB, parent flat ~550 MiB (memory ruled out for the loader on Darwin)
-- [ ] Wave 5-6: B6 (review), B7 (docs)
+- [x] Wave 5: B6 review OK — main vs HEAD `load_rules` over 1904 generated rules files, 0 differences; 4 minors + 1 nitpick
+- [ ] F1: the review's minors (added to the DAG 2026-09-26)
+- [ ] Wave 6: B7 (docs)
 - [ ] Wave 7: B8 — a dispatched run prints both scores (needs `gh auth refresh -s workflow`)
 
 ## Results
@@ -35,7 +37,8 @@
 | `beadloom-jqoa` | B3 dev | ✓ done | `load_rules` 333 -> 126 mutants (mutmut 3.7.0 `mutate_file_contents`, generation only); one table of eleven mapping keys, `layers` explicit, `forbid_cycles` a table entry; `rules_gen` reads `AUTHORING_KEYS`; full suite green on the tree, Darwin 3.13; four doc pairs stale for `beadloom-xn48` |
 | `beadloom-m19h` | B4 dev | ✓ done | one parse per `init` (2 -> 1, both `--yes` and `--bootstrap`); memo keyed on the resolved path and trusted only while the text is unchanged, so a same-size edit inside one timestamp tick is re-parsed; forgotten before every test by an autouse fixture (mutmut fork hazard); 11 tests; suite green on the tree, Darwin 3.13; no new stale pair |
 | `beadloom-4243` | B5 test | ✓ done | `load_rules` 136 mutants on HEAD; serial `mutmut run`: 123 killed / 13 survived (90.4%, 2 equivalent + 11 gaps); at two children 128/8 and 126/10 - the difference is false kills; memo: no false survival with or without the fixture; 855 covering tests (827 + 28 new); peak RSS per child 399 MiB, parent flat ~550 MiB - memory ruled out for the loader on Darwin; suite 10857 passed on the tree; coverage 86% / 96%, changed lines 100% |
-| `beadloom-8cbm` | B6 review | ready | no hidden special case, no silent patch |
+| `beadloom-8cbm` | B6 review | ✓ done | no hidden special case, no silent patch |
+| `beadloom-nzlc.1` | F1 dev | ready | the review's minors |
 | `beadloom-xn48` | B7 tech-writer | blocked | SPEC, cli.md, gate-coverage |
 | `beadloom-kj8t` | B8 verify | blocked | a dispatched run prints both scores |
 

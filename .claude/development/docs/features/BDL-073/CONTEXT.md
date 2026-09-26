@@ -8,10 +8,10 @@
 
 ## Goal
 
-A dispatched `Mutation` run completes and prints a score for both scoring steps, over a declared
-scope whose cost fits the job's budget — reached by ordering each mutant's covering tests by the
-durations mutmut already measured, by taking `load_rules` from 333 mutants to at most 160, and by
-closing the five gaps its surviving mutants name.
+A dispatched `Mutation` run completes and prints a score for both scoring steps — reached by running
+two mutmut children instead of four, by taking `load_rules` from 333 mutants to at most 160, and by
+closing the five gaps its surviving mutants name. (The original goal also named ordering each
+mutant's covering tests; that was withdrawn on 2026-09-25 — mutmut 3.7.0 already does it.)
 
 ## Key Constraints
 
@@ -20,8 +20,9 @@ closing the five gaps its surviving mutants name.
 - **The runner's killer is not this work item's to settle.** `beadloom-5isv` stays open; eight runs
   now show seven deaths at queue positions 4146-4226 and one at 3281 after 102 min. This work item
   shrinks the job; it does not claim the job then survives.
-- **A patch that stops applying must say so.** The ordered entry point asserts the shape of the
-  expression it replaces and refuses to run otherwise.
+- **An upstream behaviour this work relies on must be pinned.** No ordered entry point was built
+  (withdrawn 2026-09-25); the cost model now relies on mutmut 3.7.0 sorting each mutant's covering
+  tests itself (`__main__.py:1478-1479`), and a test pins that so an upgrade cannot change it silently.
 - **Nothing is removed from the mutation scope to make it fit.** `only_mutate` and
   `mutation.targets` keep every declared target.
 - **The twelve authoring keys stay twelve, and stay one list.** `AUTHORING_KEYS` becomes the table's
@@ -46,7 +47,7 @@ closing the five gaps its surviving mutants name.
 |---|---|
 | TDD | The gap tests are written first and seen red against the mutant each one answers; the table refactor then lands against them green. |
 | Clean Code | SRP, DRY, KISS — one table for the authoring keys, not two twelve-key maps |
-| Architecture | `services -> application -> domains -> infrastructure`; unchanged by this work |
+| Architecture | `services -> application -> domains -> infrastructure`; one new import, `onboarding/scanner/rules_gen` -> the loader's key table, under the existing agent-prime -> rule-engine exemption (reason and `until` restated in `rules.yml`) |
 
 ### Testing
 
@@ -92,6 +93,8 @@ closing the five gaps its surviving mutants name.
 | 2026-09-25 | A real dispatched run goes first, after wave 1; B3 and B4 proceed while it runs | Owner decision: the first aggregate, or the first honest death at two children, is worth more than finishing the plan blind. |
 | 2026-09-25 | The memo compares the file's text rather than trusting `(st_mtime_ns, st_size)`; it is forgotten before every test | A same-size edit inside one timestamp tick was served the old rules under the stat key, red in two tests; a hit costs 50.5 us against a 15.94 ms parse, measured. mutmut forks each mutant's run from a parent that ran the clean suite, so an inherited memo would answer without executing the mutant. |
 | 2026-09-25 | **Owner accepted** the text-comparing memo in place of `(st_mtime_ns, st_size)` | Asked explicitly because it departs from the owner's 2026-09-20 decision; accepted on the measurement (stale rules served after a same-size edit inside one tick; 50 µs per compare against 15.94 ms per parse). B6 need not rule on it. |
+| 2026-09-26 | `forbid_cycles` is a table entry, and the table has no `requires_mapping` column | B3's departures from the RFC, ruled on by review `beadloom-8cbm`: `forbid_cycles`' old `else` arm had the same guard, message and parser signature as the other ten and was last only because the exactly-one check left it last; with `layers` kept explicit, `requires_mapping` would be `True` for every entry. The RFC's mitigation 'keep both explicit' is replaced by the review's differential check (main vs HEAD over 1904 generated rules files, 0 differences) and B1's per-key message tests. |
+| 2026-09-26 | The review's minors are fixed before the docs wave (bead `beadloom-nzlc.1`) | The memo returns a copy; the upstream ordering is pinned by a test; a seam replaces reaching into `_PARSED`. The autouse fixture stays, by the review's ruling. |
 
 ## Related Files
 

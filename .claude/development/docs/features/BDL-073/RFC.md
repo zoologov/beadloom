@@ -177,6 +177,9 @@ lands on someone else's schedule, and this repository's floors are red tonight.
 
 - **The table hides a special case.** Mitigated by keeping `has_layers` and `forbid_cycles` explicit
   and by front 3's tests, which pin the messages the table now produces from one place.
+  *(2026-09-26: `forbid_cycles` went into the table after all — see CONTEXT's decision row; the
+  mitigation that actually held is the review's differential check, 0 differences over 1904
+  generated rules files, plus B1's per-key message tests.)*
 - **The patched entry point stops patching silently** after a mutmut upgrade. Mitigated by asserting
   the patched expression's shape and failing loudly; the same class this project files as
   "a check that reports green over a dead mechanism".

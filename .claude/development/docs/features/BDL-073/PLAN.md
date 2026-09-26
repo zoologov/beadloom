@@ -36,12 +36,13 @@ W5 {B6} · W6 {B7} · W7 {B8}.
 | ID | Name | Priority | Depends On | Status |
 |---|---|---|---|---|
 | B1 | the five gap tests, each seen red against its mutant, before any refactor | P1 | - | Pending |
-| B2 | covering tests ordered cheapest-first by a repo-local entry point; two children | P1 | - | Pending |
+| B2 | two mutmut children (restated 2026-09-25: the ordering entry point was withdrawn) | P1 | - | Done |
 | B3 | the twelve-branch dispatch becomes a table, and the authoring keys become one list | P1 | B1 | Pending |
 | B4 | one parse per `init`: `load_rules` memoised on path, mtime and size | P1 | B3 | Pending |
 | B5 | test: the numbers the PRD promised, measured | P1 | B2, B4 | Pending |
-| B6 | review | P1 | B5 | Pending |
-| B7 | tech-writer: the rule-engine SPEC, the cli.md mutation section, gate-coverage | P2 | B6 | Pending |
+| B6 | review — the table hides no special case (the entry point question lapsed with its withdrawal) | P1 | B5 | Done |
+| F1 | the review's minors: the memo returns a copy, the upstream ordering pinned, a seam to forget (`beadloom-nzlc.1`) | P1 | B6 | Pending |
+| B7 | tech-writer: the four stale doc pairs, the cli.md mutation section, gate-coverage | P2 | F1 | Pending |
 | B8 | verify: a dispatched `Mutation` run prints both scores | P1 | B7 | Pending |
 
 ## Bead Details
