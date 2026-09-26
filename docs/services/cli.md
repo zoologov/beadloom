@@ -2158,6 +2158,54 @@ is the first measurement of these seven in the room that judges them, and it sho
 scaled component of the floor's composition with a measured one.
 <!-- TODO: verify against the first nightly run that covers the seven S5 cores. -->
 
+**The runner kills the nightly, and that is still open (`beadloom-5isv`).** Eight runs at
+`--max-children 4` died after 73-102 minutes, far under `timeout-minutes: 340`: seven at queue
+positions 4146-4226, where the `load_rules` mutants sit, and one at 3281. None printed a score.
+What follows shrinks the job and lowers its load. It does not show that the job now survives,
+and this page does not claim it: only a dispatched run (`beadloom-kj8t`) measures that.
+
+**The nightly runs two mutmut children, not four (BDL-073).** Two measurements decided it.
+
+- **A false kill through the shared live index.** At four children a `load_rules` mutant was
+  counted killed in 16 s by an `IntegrityError` from the index the children share
+  (`beadloom-qq6m`), and survived in 49 s when run alone — measured 2026-09-19. A false kill
+  raises the score the floors are held to. Two children reduce that class and do not remove
+  it: over the 136 `load_rules` mutants, two runs at two children counted 128 and 126 kills and a
+  serial run counted 123, and every disagreement was a kill that disappears when the mutant runs
+  alone — two of them on loader lines no test executes (B5, Darwin arm64, CPython 3.13.7). The
+  nightly's kill count at two children therefore still holds false kills, in a number nobody has
+  measured.
+- **GitHub's own diagnosis of a killed run.** The first run at two children (run 36101121952,
+  2026-09-25, before the dispatch table and the memo below) lasted 262.4 minutes against 73-102
+  for the eight at four, then failed with its log gone and this annotation on the job: *"The
+  hosted runner lost communication with the server. Anything in your workflow that terminates
+  the runner process, starves it for CPU/Memory, or blocks its network access can cause this
+  error."* Halving the children moved the death and did not prevent it. The annotation names
+  three causes and does not choose between CPU and memory. For the loader, memory is ruled out
+  in one room: no `load_rules` child peaked above 399 MiB and the parent stayed flat at about
+  550 MiB (B5, exact per-child peak RSS, Darwin arm64). That room is not the 4-vCPU Linux
+  runner, and it covers the loader's mutants, not the rest of the slice.
+
+**mutmut 3.7.0 already runs each mutant's covering tests cheapest first, and no ordering patch is
+carried.** Inside the forked child it sorts the covering tests by their recorded durations
+(`mutmut/__main__.py:1478-1479`) and hands them to pytest with `-p no:randomly`, which keeps
+that order. Stock mutmut 3.7.0 killed six `load_rules` mutants in a mean of 1.16 s, one child,
+in a clean room (2026-09-25). `tests/test_mutmut_runs_covering_tests_cheapest_first.py` pins
+both facts by reading the installed package's source, green on mutmut 3.7.0 and on
+mutmut 3.8.0, where the sort moved to `workers/isolation.py`. Its two cases that read the installed runner run only
+where the `mutation` extra is installed; no CI test leg installs it, so on CI only the matcher
+cases run. `tests/test_mutation_ci_job.py` fails if an invocation asks for more than two
+children.
+
+**The cost of the tail is its survivors.** A killed mutant stops at its first failing test; a
+survivor runs its whole covering set — 855 tests and about 57 s for a `load_rules` mutant,
+serially. BDL-073 attacked that count rather than the order: `load_rules` went from 333 mutants
+to 136, counted with mutmut 3.7.0's own generator after its dispatch became one table and the
+memo landed, and B1's tests killed five of its survivors. The serial run still leaves 13
+survivors, 2 of them equivalent. `timeout-minutes: 340` was derived from a 171-minute
+projection at four children, and halving the children takes that projection to about the cap
+itself, so the dispatched run also measures whether the cap trips first.
+
 `beadloom ci` asks whether a mutant COULD run at a declared path and never whether one DID, and
 `beadloom mutation --only` prints "this run did not cover it" and "no run has ever covered it"
 as the same sentence. That is filed as BDL-UX #246 and routed to S6; until it lands, a declared

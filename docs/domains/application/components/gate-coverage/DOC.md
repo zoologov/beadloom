@@ -96,6 +96,20 @@ issue (`beadloom-e8m4`). That channel reports on the nightly and never on a gate
 nothing this component claims changes: it still names only the verifications a gate run
 declared and did not perform.
 
+**And outside the gate is not the same as scored.** The runner kills the nightly before it
+prints a score, and the cause is open (`beadloom-5isv`): eight runs at four mutmut children died
+after 73-102 minutes, and the first at two died after 262.4 minutes with GitHub's annotation
+*"The hosted runner lost communication with the server. Anything in your workflow that
+terminates the runner process, starves it for CPU/Memory, or blocks its network access can
+cause this error."* BDL-073 runs two children rather than four, because a mutant was counted
+killed at four through the live index the children share and survived when run alone, and
+because fewer children put less load on a 4-vCPU runner. Two still produce false kills, measured
+over the `load_rules` mutants. mutmut 3.7.0 already runs each mutant's covering tests cheapest
+first, and a test pins that, so no ordering patch is carried. Whether the nightly now completes
+is measured only by a dispatched run (`beadloom-kj8t`); the detail and the numbers are in
+[`beadloom mutation`](../../../../services/cli.md#beadloom-mutation). None of it changes what
+this component reports, which is still only what a gate run declared and did not perform.
+
 ## Where it surfaces
 
 - `beadloom ci --format rich` — a block under the verdict, beside the room lines.

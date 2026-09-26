@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.graph.rules import loader as rules_loader
 from beadloom.infrastructure.db import create_schema, open_db
 from tests.tracked_write_guard import TrackedWriteGuard
 
@@ -68,6 +69,21 @@ def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
         if written:
             pytest.fail(_GUARD.describe(written), pytrace=False)
     return outcome
+
+
+@pytest.fixture(autouse=True)
+def _load_rules_forgets_between_tests() -> None:
+    """Forget every ``rules.yml`` parse before each test (BDL-073 B4).
+
+    ``load_rules`` remembers what it parsed for as long as the process lives, which
+    is right for one ``init`` and for the TUI, and wrong for a suite. A test would
+    be answered from a parse another test made of a path both read — this
+    repository's own ``rules.yml`` is one. And mutmut forks each mutant's run from
+    a parent that already ran the clean suite in-process: an inherited memo answers
+    the child without executing the mutated parse, which is a false survival.
+    tests/test_load_rules_parses_once.py holds this fixture to every test.
+    """
+    rules_loader.forget_parsed_rules()
 
 
 @pytest.fixture(scope="session")
