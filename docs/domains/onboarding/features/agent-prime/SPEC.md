@@ -250,6 +250,13 @@ Auto-detects IDEs by marker files and creates adapter files. Returns list of cre
 
 Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`. Preserves user content below `## Custom`.
 
+Each injected rule is labelled by `scanner/rules_gen._detect_rule_type()`, which reads the
+authoring keys from `graph.rules.loader.AUTHORING_KEYS` rather than from a copy of its own
+(BDL-073 B3), so every key the loader accepts has a label and the word `unknown` is left for a
+rule that names none. `check` is labelled `cardinality` and `forbid` `forbid_edge`; every other
+key is its own label. A rule naming two keys, which the loader rejects, is labelled by the first
+one its author wrote.
+
 ### `refresh_claude_md(project_root, *, dry_run=False)`
 
 Regenerates the auto-managed regions of `.claude/CLAUDE.md` between
