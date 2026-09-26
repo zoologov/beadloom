@@ -83,7 +83,7 @@ def _load_rules_forgets_between_tests() -> None:
     the child without executing the mutated parse, which is a false survival.
     tests/test_load_rules_parses_once.py holds this fixture to every test.
     """
-    rules_loader._PARSED.clear()
+    rules_loader.forget_parsed_rules()
 
 
 @pytest.fixture(scope="session")

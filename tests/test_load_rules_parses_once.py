@@ -59,6 +59,20 @@ def counted(monkeypatch: pytest.MonkeyPatch) -> _CountingYaml:
     return counter
 
 
+@pytest.fixture(scope="module")
+def parsed_before_the_test(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A rules file parsed at module setup, before any test's autouse fixtures run.
+
+    pytest sets a module-scoped fixture up before the function-scoped ones, the
+    forgetting fixture included, so a test that reads this file again observes
+    whether that fixture forgot the parse — without reaching into the memo.
+    """
+    rules_path = tmp_path_factory.mktemp("parsed-before") / "rules.yml"
+    rules_path.write_text(_rule_named("rule-a"), encoding="utf-8")
+    loader.load_rules(rules_path)
+    return rules_path
+
+
 def _rule_named(name: str) -> str:
     """A one-rule file whose byte length does not depend on *name*'s letters."""
     return (
@@ -115,6 +129,27 @@ class TestTheMemoAnswersForTheContent:
         assert counted.parses == 1
         assert second == first
         assert [rule.name for rule in second] == ["rule-a"]
+
+    def test_one_callers_change_to_its_rules_does_not_reach_the_next_caller(
+        self, tmp_path: Path, counted: _CountingYaml
+    ) -> None:
+        """Each caller gets its own list, so the memo holds no invariant about callers.
+
+        Review ``beadloom-8cbm`` Minor 1: while the memo handed out the list it
+        stored, one caller's ``append`` changed every later caller's rules, and only
+        a docstring sentence said no caller does that.
+        """
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(_rule_named("rule-a"), encoding="utf-8")
+
+        first = loader.load_rules(rules_path)
+        first.append(first[0])
+        second = loader.load_rules(rules_path)
+        second.clear()
+        third = loader.load_rules(rules_path)
+
+        assert [rule.name for rule in third] == ["rule-a"]
+        assert counted.parses == 1
 
     def test_an_edited_file_is_parsed_again(self, tmp_path: Path, counted: _CountingYaml) -> None:
         rules_path = tmp_path / "rules.yml"
@@ -234,5 +269,21 @@ class TestNoTestSeesAnotherTestsParse:
     ) -> None:
         assert FORGETTING_FIXTURE in request.fixturenames
 
-    def test_every_test_starts_with_nothing_remembered(self) -> None:
-        assert loader._PARSED == {}
+    def test_every_test_starts_with_nothing_remembered(
+        self, parsed_before_the_test: Path, counted: _CountingYaml
+    ) -> None:
+        loader.load_rules(parsed_before_the_test)
+
+        assert counted.parses == 1
+
+    def test_forgetting_makes_the_next_call_parse(
+        self, tmp_path: Path, counted: _CountingYaml
+    ) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(_rule_named("rule-a"), encoding="utf-8")
+        loader.load_rules(rules_path)
+
+        loader.forget_parsed_rules()
+
+        assert [rule.name for rule in loader.load_rules(rules_path)] == ["rule-a"]
+        assert counted.parses == 2

@@ -915,17 +915,23 @@ _KEYS_THAT_DEFAULT_TO_WARN: frozenset[str] = frozenset(
 #: refreshes in one long process while its user edits the file; ``st_mtime_ns``
 #: with ``st_size`` would do the same for an edit that keeps the size and lands in
 #: one timestamp tick, which a coarse-clock filesystem makes milliseconds wide.
-#: Reading the file costs microseconds; the parse is what is saved. The list is
-#: shared between callers, which is safe because every rule type is a frozen
-#: dataclass of immutable fields and no caller mutates the list.
-_PARSED: dict[Path, tuple[str, list[Rule]]] = {}
+#: Reading the file costs microseconds; the parse is what is saved. The rules are
+#: kept as a tuple and every caller gets a list of its own, so one caller's
+#: ``append`` cannot change what the next caller is served. The rules themselves
+#: are frozen dataclasses, and those are shared.
+_PARSED: dict[Path, tuple[str, tuple[Rule, ...]]] = {}
+
+
+def forget_parsed_rules() -> None:
+    """Forget every parse :func:`load_rules` remembers, so the next call parses."""
+    _PARSED.clear()
 
 
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
     A file whose text has not changed since the last call for its path is not
-    parsed again: the rules parsed then are returned, as the same list object.
+    parsed again: the rules parsed then are returned, in a new list per call.
 
     Raises ``ValueError`` on schema errors (missing version, invalid kinds, etc.).
     """
@@ -934,7 +940,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
     memo_key = rules_path.resolve()
     remembered = _PARSED.get(memo_key)
     if remembered is not None and remembered[0] == text:
-        return remembered[1]
+        return list(remembered[1])
     data = yaml.safe_load(text)
 
     if not isinstance(data, dict):
@@ -1006,7 +1012,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
             raise ValueError(msg)
         rules.append(_MAPPING_PARSERS[key](name, description, block, severity=severity))
 
-    _PARSED[memo_key] = (text, rules)
+    _PARSED[memo_key] = (text, tuple(rules))
     return rules
 
 
