@@ -11,8 +11,9 @@ responsibility (BDL-059 S4, cohesion-driven):
   table (``_serialize_rule`` / ``_load_rules_into_db``).
 - :mod:`.indexing` — scan docs and source files into ``docs``/``chunks`` and
   ``code_symbols`` rows; docs-dir + doc-ref-map resolution.
-- :mod:`.enrichment` — augment ``nodes.extra`` with test mappings, routes, and
-  git activity.
+- :mod:`.enrichment` — augment ``nodes.extra`` with routes and git activity.
+- :mod:`.test_index` — record test files in their own tables, bound to nodes, and
+  rebuild ``nodes.extra["tests"]`` from that binding (BDL-074 C1).
 - :mod:`.sync_state` — snapshot and rebuild the ``sync_state`` baselines.
 - :mod:`.change_detection` — file-index hashing/diffing + parser fingerprint
   (the incremental change-detection layer).
@@ -42,7 +43,6 @@ from beadloom.application.reindex.change_detection import (
 from beadloom.application.reindex.enrichment import (
     _extract_and_store_routes,
     _store_git_activity,
-    _store_test_mappings,
     _update_node_extra,
 )
 from beadloom.application.reindex.full import _beadloom_version, _drop_all_tables, reindex
@@ -115,7 +115,6 @@ __all__ = [
     "_snapshot_sync_baselines",
     "_store_git_activity",
     "_store_parser_fingerprint",
-    "_store_test_mappings",
     "_update_file_index",
     "_update_node_extra",
     "analyze_git_activity",

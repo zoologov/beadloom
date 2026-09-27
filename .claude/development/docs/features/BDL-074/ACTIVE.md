@@ -27,16 +27,16 @@
 | Bead | Role | Status | Details |
 |---|---|---|---|
 | `beadloom-2mj3` | epic | ready | BDL-074 parent |
-| `beadloom-l67s` | A1 dev | ready | chdir guard and contact guard |
+| `beadloom-l67s` | A1 dev | in progress | chdir guard and contact guard |
 | `beadloom-kixx` | A2 dev | blocked | the self-check snapshot |
 | `beadloom-2esy` | A3 dev | blocked | the self-check triage |
 | `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |
 | `beadloom-1bd6` | B2 dev | blocked | relocate the 227 clear-node files |
 | `beadloom-d0bp` | B3 dev | blocked | relocate acceptance |
-| `beadloom-5qgt` | C1 dev | ready | the test index and the binding |
-| `beadloom-3z94` | C2 dev | blocked | ctx and debt-report read the binding |
+| `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding |
+| `beadloom-3z94` | C2 dev | ready | ctx and debt-report read the binding |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
-| `beadloom-vr0b` | D1 dev | blocked | mutation per change and the weekly sample |
+| `beadloom-vr0b` | D1 dev | ready | mutation per change and the weekly sample |
 | `beadloom-cs2o` | E1 dev | blocked | the rule-engine pilot |
 | `beadloom-kug7` | E2 dev | blocked | test standards |
 | `beadloom-75pl` | T test | blocked | the criteria, measured |

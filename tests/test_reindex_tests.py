@@ -71,9 +71,10 @@ class TestReindexTestMapping:
         # conftest.py to mark pytest
         _write_file(project / "conftest.py", "import pytest\n")
 
-        # Test files that map to "auth" node
+        # Test files laid out under the mirror of src/auth/ (BDL-074 C1): the
+        # binding reads where a file lives, not what its name resembles.
         _write_file(
-            project / "tests" / "test_auth.py",
+            project / "tests" / "unit" / "auth" / "test_service.py",
             (
                 "from auth import service\n\n"
                 "def test_login():\n    assert True\n\n"
@@ -81,7 +82,7 @@ class TestReindexTestMapping:
             ),
         )
         _write_file(
-            project / "tests" / "test_auth_advanced.py",
+            project / "tests" / "unit" / "auth" / "test_advanced.py",
             "def test_auth_token():\n    assert True\n",
         )
 
@@ -100,11 +101,12 @@ class TestReindexTestMapping:
 
         tests_info = extra["tests"]
         assert tests_info["framework"] == "pytest"
-        assert isinstance(tests_info["test_files"], list)
-        assert len(tests_info["test_files"]) > 0
-        assert isinstance(tests_info["test_count"], int)
-        assert tests_info["test_count"] > 0
-        assert tests_info["coverage_estimate"] in ("high", "medium", "low", "none")
+        assert tests_info["test_files"] == [
+            "tests/unit/auth/test_advanced.py",
+            "tests/unit/auth/test_service.py",
+        ]
+        assert tests_info["test_count"] == 3
+        assert tests_info["coverage_estimate"] == "medium"
         conn.close()
 
     def test_reindex_no_test_framework(self, tmp_path: Path) -> None:
@@ -171,11 +173,11 @@ class TestReindexTestMapping:
 
         _write_file(project / "conftest.py", "import pytest\n")
         _write_file(
-            project / "tests" / "test_auth.py",
+            project / "tests" / "unit" / "auth" / "test_login.py",
             "def test_login():\n    assert True\n",
         )
         _write_file(
-            project / "tests" / "test_billing.py",
+            project / "tests" / "integration" / "billing" / "test_invoice.py",
             "def test_invoice():\n    assert True\n\ndef test_payment():\n    assert True\n",
         )
 
@@ -192,6 +194,7 @@ class TestReindexTestMapping:
             extra = json.loads(row["extra"])
             assert "tests" in extra, f"Node {ref_id} should have tests in extra"
             assert extra["tests"]["framework"] == "pytest"
+            assert len(extra["tests"]["test_files"]) == 1, extra["tests"]
 
         conn.close()
 

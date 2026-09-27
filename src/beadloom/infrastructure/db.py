@@ -266,6 +266,39 @@ CREATE TABLE IF NOT EXISTS rules (
     enabled     INTEGER NOT NULL DEFAULT 1
 );
 
+-- Test files (BDL-074 C1). Tests live in their OWN tables and never in
+-- code_symbols / code_imports / file_index: they must not become code — no
+-- symbols, no module coverage, no ownership of code. ``placement`` says how the
+-- file was bound (mirror | override) or why it was not (unowned | unplaced |
+-- other_kind); ``file_hash`` lets an incremental reindex see a test-only change.
+CREATE TABLE IF NOT EXISTS test_files (
+    path        TEXT PRIMARY KEY,
+    kind        TEXT,
+    ref_id      TEXT,
+    placement   TEXT NOT NULL,
+    test_count  INTEGER NOT NULL,
+    file_hash   TEXT NOT NULL
+);
+
+-- A test file's imports, in the shape of code_imports so an import rule can read
+-- them the same way.
+CREATE TABLE IF NOT EXISTS test_imports (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path       TEXT NOT NULL,
+    line_number     INTEGER NOT NULL,
+    import_path     TEXT NOT NULL,
+    resolved_ref_id TEXT,
+    UNIQUE(file_path, line_number, import_path)
+);
+
+-- The ``tests:`` path prefixes a node declares in its YAML, kept apart from
+-- nodes.extra, whose ``tests`` key the reindex rebuilds from the binding.
+CREATE TABLE IF NOT EXISTS test_overrides (
+    ref_id  TEXT NOT NULL,
+    prefix  TEXT NOT NULL,
+    PRIMARY KEY (ref_id, prefix)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);
@@ -278,6 +311,8 @@ CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_state(status);
 CREATE INDEX IF NOT EXISTS idx_sync_ref ON sync_state(ref_id);
 CREATE INDEX IF NOT EXISTS idx_imports_file ON code_imports(file_path);
 CREATE INDEX IF NOT EXISTS idx_imports_ref ON code_imports(resolved_ref_id);
+CREATE INDEX IF NOT EXISTS idx_test_files_ref ON test_files(ref_id);
+CREATE INDEX IF NOT EXISTS idx_test_imports_file ON test_imports(file_path);
 """
 
 

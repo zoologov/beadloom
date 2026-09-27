@@ -27,6 +27,9 @@ _IMPORT_PROVENANCE_VERSION = "1"
 # Tables to drop on reindex (order matters for FK constraints).
 _TABLES_TO_DROP = [
     "search_index",
+    "test_imports",
+    "test_files",
+    "test_overrides",
     "sync_state",
     "code_imports",
     "rules",
@@ -91,6 +94,10 @@ class ReindexResult:
     symbols_indexed: int = 0
     imports_indexed: int = 0
     rules_loaded: int = 0
+    #: Test files recorded in ``test_files`` (BDL-074 C1), and how many of them are
+    #: not yet laid out under a mirrored folder and so bind to no node.
+    test_files_indexed: int = 0
+    test_files_unplaced: int = 0
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

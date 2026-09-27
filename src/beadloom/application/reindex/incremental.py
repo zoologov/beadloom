@@ -23,6 +23,7 @@ from beadloom.application.reindex.change_detection import (
     _graph_yaml_changed,
     _scan_project_files,
     _update_file_index,
+    code_paths,
 )
 from beadloom.application.reindex.enrichment import _extract_and_store_routes
 from beadloom.application.reindex.full import _beadloom_version, reindex
@@ -43,6 +44,11 @@ from beadloom.application.reindex.models import (
 from beadloom.application.reindex.sync_state import (
     _build_initial_sync_state,
     _snapshot_sync_baselines,
+)
+from beadloom.application.reindex.test_index import (
+    index_test_files,
+    is_test_index_current,
+    needs_full_test_reindex,
 )
 from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
 from beadloom.infrastructure.doc_roots import SPACE_TO_BE
@@ -113,6 +119,12 @@ def incremental_reindex(
         conn.close()
         return reindex(project_root, docs_dir=docs_dir)
 
+    # An index written before the test tables holds no `tests:` declarations —
+    # only a full rebuild reads them from the graph — so it is rebuilt once.
+    if needs_full_test_reindex(conn):
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
     # Belt-and-suspenders: always check graph YAML files directly.
     # This catches changes even if file_index got out of sync with the DB
     # (e.g. interrupted reindex, partial writes, or upgrade edge cases).
@@ -123,7 +135,9 @@ def incremental_reindex(
 
     changed, added, deleted = _diff_files(current_files, stored_files)
 
-    if not changed and not added and not deleted:
+    # Test files are not in file_index (they must not become code), so a
+    # test-only change is seen by comparing the test index against the disk.
+    if not changed and not added and not deleted and is_test_index_current(project_root, conn):
         # Nothing changed — just update timestamp.
         now = datetime.now(tz=timezone.utc).isoformat()
         set_meta(conn, "last_reindex_at", now)
@@ -276,6 +290,13 @@ def incremental_reindex(
 
     # Update file_index.
     _update_file_index(conn, current_files, changed, added, deleted)
+
+    # Rebuild the test index and extra["tests"] (BDL-074 C1). Wholesale, like the
+    # TO-BE space: a code file added or removed can change what a mirror names.
+    # After file_index, because a test's imports resolve through it.
+    tests = index_test_files(project_root, conn, code_files=code_paths(current_files))
+    result.test_files_indexed = tests.total
+    result.test_files_unplaced = tests.unplaced
 
     # Update meta.
     now = datetime.now(tz=timezone.utc).isoformat()

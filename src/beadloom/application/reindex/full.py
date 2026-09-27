@@ -20,11 +20,11 @@ from beadloom.application.reindex.change_detection import (
     _populate_file_index,
     _scan_project_files,
     _store_parser_fingerprint,
+    code_paths,
 )
 from beadloom.application.reindex.enrichment import (
     _extract_and_store_routes,
     _store_git_activity,
-    _store_test_mappings,
 )
 from beadloom.application.reindex.indexing import (
     _build_doc_ref_map,
@@ -44,6 +44,10 @@ from beadloom.application.reindex.rules_loader import _load_rules_into_db
 from beadloom.application.reindex.sync_state import (
     _build_initial_sync_state,
     _snapshot_sync_baselines,
+)
+from beadloom.application.reindex.test_index import (
+    index_test_files,
+    record_declared_test_overrides,
 )
 from beadloom.infrastructure.db import SCHEMA_VERSION, create_schema, open_db, set_meta
 from beadloom.infrastructure.health import take_snapshot
@@ -114,6 +118,9 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
         result.edges_loaded = graph_result.edges_loaded
         result.errors.extend(graph_result.errors)
         result.warnings.extend(graph_result.warnings)
+        # A node's `tests:` declaration is read here, once, into its own table:
+        # the `extra["tests"]` it arrived in is rebuilt from the binding below.
+        result.warnings.extend(record_declared_test_overrides(conn))
 
     # Collect known ref_ids for edge creation.
     seen_ref_ids = {row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()}
@@ -179,9 +186,6 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     if rules_path.is_file():
         _load_rules_into_db(rules_path, conn, result)
 
-    # 3d. Map test files to source nodes and store in nodes.extra.
-    _store_test_mappings(project_root, conn)
-
     # 3e. Analyze git activity and store in nodes.extra.
     _store_git_activity(conn, project_root)
 
@@ -197,6 +201,13 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # because there was nothing there.
     current_files = _scan_project_files(project_root, docs_dir)
     _populate_file_index(conn, current_files)
+
+    # 3h. Index test files in their own tables and rebuild each node's
+    # extra["tests"] from the binding (BDL-074 C1). After file_index, because a
+    # test's imports resolve through the same ownership the code's do.
+    tests = index_test_files(project_root, conn, code_files=code_paths(current_files))
+    result.test_files_indexed = tests.total
+    result.test_files_unplaced = tests.unplaced
 
     # 4. Build initial sync state.
     _build_initial_sync_state(
