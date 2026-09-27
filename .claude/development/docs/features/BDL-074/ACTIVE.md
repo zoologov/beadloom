@@ -27,7 +27,7 @@
 | Bead | Role | Status | Details |
 |---|---|---|---|
 | `beadloom-2mj3` | epic | ready | BDL-074 parent |
-| `beadloom-l67s` | A1 dev | in progress | chdir guard and contact guard |
+| `beadloom-l67s` | A1 dev | in progress | chdir and contact guards; 115 tests in 20 files broke before the fix (measured); allowed list 44 entries |
 | `beadloom-kixx` | A2 dev | blocked | the self-check snapshot |
 | `beadloom-2esy` | A3 dev | blocked | the self-check triage |
 | `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |

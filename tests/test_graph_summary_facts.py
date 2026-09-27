@@ -24,7 +24,6 @@ here. The one test that DOES read this repository says so in its name.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -42,15 +41,18 @@ from beadloom.graph.rules import (
 )
 from beadloom.graph.rules.summary_facts import collect_claims, summary_facts_inert_reason
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from beadloom.graph.linter import LintResult
     from beadloom.graph.rules import Violation
 
-#: The rule module, read as text by the "no second notion" guard.
-RULE_MODULE = Path("src/beadloom/graph/rules/summary_facts.py")
+#: The rule module, read as text by the "no second notion" guard. Resolved through
+#: the imported package rather than the working directory (BDL-074 A1).
+RULE_MODULE = PACKAGE_ROOT / "graph" / "rules" / "summary_facts.py"
 
 
 def _graph(tmp_path: Path, summaries: dict[str, str]) -> sqlite3.Connection:
@@ -763,20 +765,23 @@ class TestWiring:
 class TestThisRepositoryIsChecked:
     """The rule is live on Beadloom's own graph, whatever it currently reports."""
 
-    def test_this_repository_s_summaries_state_checkable_facts(self) -> None:
+    def test_this_repository_s_summaries_state_checkable_facts(
+        self, live_repo_reindexed: Path
+    ) -> None:
         """A rule that stood down here would prove nothing about the corrections.
 
         This asserts liveness, not cleanliness: the four findings this repository
         currently carries are BDL-062 `.4`'s to correct, and pinning their number
         here would make this test fail on the commit that fixes them.
+
+        The root is named through ``live_repo_reindexed`` (BDL-074 A1): read from
+        the working directory, the index was absent under the empty directory the
+        suite now runs in, and the test SKIPPED instead of asserting.
         """
         from beadloom.infrastructure.db import open_db as open_index
 
-        index = Path(".beadloom/beadloom.db")
-        if not index.exists():  # pragma: no cover - a clone before its first reindex
-            pytest.skip("no index; run `beadloom reindex`")
-        conn = open_index(index)
+        conn = open_index(live_repo_reindexed / ".beadloom" / "beadloom.db")
         try:
-            assert summary_facts_inert_reason(conn, Path.cwd()) is None
+            assert summary_facts_inert_reason(conn, live_repo_reindexed) is None
         finally:
             conn.close()

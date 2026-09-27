@@ -16,7 +16,7 @@ S4 split the ``services/cli.py`` monolith into cohesive command modules under
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
@@ -32,6 +32,9 @@ from beadloom.services.cli import (
     _query_bd_statuses,
     main,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # The complete, ordered command set the CLI exposes (the S4 split must not add,
 # drop, or rename any command — registration is behavior-preserving). A LATER
@@ -231,7 +234,7 @@ class TestStatusLogicLayering:
         assert hasattr(status_mod, "compute_context_metrics")
         assert hasattr(status_mod, "StatusData")
 
-    def test_gather_status_reads_counts(self) -> None:
+    def test_gather_status_reads_counts(self, tmp_path: Path) -> None:
         from beadloom.application.status import gather_status
         from beadloom.infrastructure.db import create_schema
 
@@ -243,7 +246,7 @@ class TestStatusLogicLayering:
         )
         conn.commit()
 
-        data = gather_status(conn, Path.cwd())
+        data = gather_status(conn, tmp_path)  # a named root, not the cwd (BDL-074 A1)
         assert data.nodes_count == 1
         assert data.coverage_pct == 0.0
         conn.close()

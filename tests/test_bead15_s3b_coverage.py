@@ -58,16 +58,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _built_repo_graph() -> None:
-    """Build the live repo graph DB once before the tests that query it.
-
-    The tests below run ``ctx``/``lint --project REPO_ROOT`` against the real
-    repo. A fresh CI checkout has no graph DB (it's gitignored and the ``tests``
-    job doesn't reindex), so those assertions fail with "node not found" unless
-    we build it here. ``reindex`` is deterministic + idempotent.
-    """
-    CliRunner().invoke(main, ["reindex", "--project", str(REPO_ROOT)])
+# The classes that run ``ctx``/``lint``/``sync-check --project REPO_ROOT`` against
+# the real repository request ``live_repo_reindexed``: a fresh CI checkout has no
+# graph DB (it is gitignored and the ``tests`` job does not reindex), so those
+# assertions need it built first. Until BDL-074 A1 a module-wide autouse fixture
+# did that for EVERY test here, the synthetic ones included, so each of them
+# reached the live index; they are named in tests/contact_guard.py instead.
 
 
 GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"
@@ -359,6 +355,7 @@ class TestDirSourceCoverageDepth:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("live_repo_reindexed")
 class TestSiteGenerationCluster:
     """The 9 application/site*.py modules are covered by the single site-generation node."""
 
@@ -411,6 +408,7 @@ class TestSiteGenerationCluster:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("live_repo_reindexed")
 class TestNewNodesResolve:
     NEW_FEATURES = (
         "code-indexer",
@@ -475,6 +473,7 @@ class TestNewNodesResolve:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("live_repo_reindexed")
 class TestAnnotationNodeConsistency:
     """Annotations and nodes must agree: no dangling annotation, no unannotated source.
 
@@ -593,7 +592,7 @@ _FRESHNESS_SAMPLE = frozenset(
 
 
 @pytest.fixture(scope="module")
-def live_sync_pairs() -> list[dict[str, object]]:
+def live_sync_pairs(live_repo_reindexed: Path) -> list[dict[str, object]]:
     """Every pair ``sync-check`` reports for this checkout, read once per module.
 
     Module-scoped because the command walks 449 pairs over the real tree and
@@ -608,7 +607,9 @@ def live_sync_pairs() -> list[dict[str, object]]:
     than on what they check. Exit 1 IS refused: it means no database or an
     invalid ref, and there is no payload behind it.
     """
-    result = CliRunner().invoke(main, ["sync-check", "--json", "--project", str(REPO_ROOT)])
+    result = CliRunner().invoke(
+        main, ["sync-check", "--json", "--project", str(live_repo_reindexed)]
+    )
     assert result.exit_code in {0, 2}, (
         f"sync-check exited {result.exit_code}, which is neither clean (0) nor "
         f"blocking (2), so it reported no pairs to read:\n{result.output}"

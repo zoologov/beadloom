@@ -2850,21 +2850,18 @@ class TestUnregisteredFeatureCandidateRealRepo:
     ``# beadloom:feature=`` annotation and NO LONGER be flagged as candidates.
     """
 
-    def test_remodeled_onboarding_modules_no_longer_candidates(self) -> None:
-        import pathlib
-
+    def test_remodeled_onboarding_modules_no_longer_candidates(
+        self, live_repo_reindexed: Path
+    ) -> None:
+        # The live index is reached through `live_repo_reindexed` (BDL-074 A1): read
+        # as it happened to be on disk, the answer depended on the last reindex.
         from beadloom.graph.rule_engine import (
             UnregisteredFeatureCandidateRule,
             evaluate_unregistered_feature_candidate_rules,
         )
         from beadloom.infrastructure.db import open_db
 
-        repo_root = pathlib.Path(__file__).resolve().parents[1]
-        db_path = repo_root / ".beadloom" / "beadloom.db"
-        if not db_path.is_file():
-            pytest.skip("real index db not present")
-
-        conn = open_db(db_path)
+        conn = open_db(live_repo_reindexed / ".beadloom" / "beadloom.db")
         try:
             rules = [
                 UnregisteredFeatureCandidateRule(
@@ -3919,7 +3916,10 @@ class TestTheSpecTableIsCheckedAgainstTheLoader:
     `.beadloom/AGENTS.md` read `(unknown)` for three rules at the same time.
     """
 
-    SPEC = Path("docs/domains/graph/features/rule-engine/SPEC.md")
+    #: Named from this file rather than from the working directory (BDL-074 A1).
+    SPEC = (
+        Path(__file__).resolve().parent.parent / "docs/domains/graph/features/rule-engine/SPEC.md"
+    )
 
     #: How the SPEC spells each cardinal it may use for the count. Written out
     #: because a number spelled as a word is invisible to `docs audit`, which is

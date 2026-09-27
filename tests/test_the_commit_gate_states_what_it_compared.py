@@ -32,7 +32,6 @@ keep in step with the graph. What it lacked was somewhere to be read.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -42,6 +41,8 @@ from beadloom.application.declared_scope import VERDICT_MARKER
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from beadloom.doc_sync.scope_check import ScopeVerdict
 
 #: The eleven commits of `features/BDL-068` that preceded this bead, oldest
@@ -168,11 +169,10 @@ class TestTheExemptSetOnThisRepositorysOwnCommits:
     """
 
     @pytest.fixture
-    def project(self) -> Path:
-        root = Path(__file__).resolve().parent.parent
-        if not (root / ".beadloom" / "beadloom.db").is_file():
-            pytest.skip("no index in this checkout, so no path can be resolved to a node")
-        return root
+    def project(self, live_repo_reindexed: Path) -> Path:
+        # Through `live_repo_reindexed` (BDL-074 A1): read as found on disk, the
+        # ownership answers depended on the last reindex, and without one it skipped.
+        return live_repo_reindexed
 
     @staticmethod
     def _verdict(project: Path, commit: str) -> ScopeVerdict:

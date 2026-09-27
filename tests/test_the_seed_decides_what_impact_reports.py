@@ -309,17 +309,18 @@ def _the_commit_is_in_this_checkout() -> bool:
 @pytest.fixture(scope="module")
 def the_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """`src/beadloom` at the tree the measurement was taken on, extracted once."""
+    # Probed here rather than in a class-level `skipif` (BDL-074 A1): a marker is
+    # evaluated at COLLECTION, outside any test, so its git read of this
+    # repository's history could be attributed to no test the contact guard allows.
+    if not _the_commit_is_in_this_checkout():
+        pytest.skip(
+            f"{THE_BDL067_TREE[:8]} is not in this checkout. CI's `tests` job uses "
+            "actions/checkout@v5 at the default depth of one, so this case does not "
+            "run there; TestTheSeedDecidesTheAnswer is the half that always does."
+        )
     return _the_tree_at(THE_BDL067_TREE, tmp_path_factory.mktemp("bdl067"))
 
 
-@pytest.mark.skipif(
-    not _the_commit_is_in_this_checkout(),
-    reason=(
-        f"{THE_BDL067_TREE[:8]} is not in this checkout. CI's `tests` job uses "
-        "actions/checkout@v5 at the default depth of one, so this case does not "
-        "run there; TestTheSeedDecidesTheAnswer is the half that always does."
-    ),
-)
 class TestTheMeasurementAtTheBdl067Tree:
     """The original measurement, re-run against the real commit."""
 

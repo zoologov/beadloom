@@ -33,6 +33,10 @@ from beadloom.graph.rule_engine import (
 from beadloom.infrastructure.db import create_schema
 from beadloom.services.cli import main
 
+#: This repository's own rules.yml, named from this file rather than from the
+#: working directory (BDL-074 A1). A tracked source file, read as text.
+_REAL_RULES_YML = Path(__file__).resolve().parent.parent / ".beadloom" / "_graph" / "rules.yml"
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -506,7 +510,7 @@ class TestRealRepoCoveragePromoted:
 
     def test_live_repo_module_coverage_rule_is_error(self) -> None:
         """The repo's `module-coverage` rule has been PROMOTED from warn to error."""
-        rules = load_rules(Path.cwd() / ".beadloom" / "_graph" / "rules.yml")
+        rules = load_rules(_REAL_RULES_YML)
         mc = [r for r in rules if isinstance(r, ModuleCoverageRule)]
         assert len(mc) == 1
         assert mc[0].severity == "error"
@@ -625,7 +629,7 @@ class TestSerializeRoundTrip:
         """The repo's real rules.yml round-trips: module-coverage lands as module_coverage."""
         from beadloom.application.reindex import ReindexResult, _load_rules_into_db
 
-        rules_path = Path.cwd() / ".beadloom" / "_graph" / "rules.yml"
+        rules_path = _REAL_RULES_YML
         result = ReindexResult()
         _load_rules_into_db(rules_path, mem_db, result)
         mem_db.commit()
@@ -645,7 +649,7 @@ class TestSerializeRoundTrip:
 class TestUnregisteredFeatureCandidateRetired:
     def test_no_active_unregistered_rule_in_real_rules_yml(self) -> None:
         """The repo's rules.yml carries NO active unregistered_feature_candidate rule."""
-        rules_path = Path.cwd() / ".beadloom" / "_graph" / "rules.yml"
+        rules_path = _REAL_RULES_YML
         rules = load_rules(rules_path)
         type_names = {type(r).__name__ for r in rules}
         assert "UnregisteredFeatureCandidateRule" not in type_names
@@ -656,7 +660,7 @@ class TestUnregisteredFeatureCandidateRetired:
         Post-S3b (BEAD-14): every module is classified, so the rule has been
         PROMOTED from warn to error (any future shadow module fails CI).
         """
-        rules_path = Path.cwd() / ".beadloom" / "_graph" / "rules.yml"
+        rules_path = _REAL_RULES_YML
         rules = load_rules(rules_path)
         mc = [r for r in rules if isinstance(r, ModuleCoverageRule)]
         assert len(mc) == 1

@@ -232,10 +232,9 @@ class TestTheDeclaredSectionsAreDerived:
     def test_the_shipped_templates_declare_the_sections_this_flow_writes(
         self, tmp_path: Path
     ) -> None:
-        del tmp_path
-        from pathlib import Path as _Path
-
-        sections = shipped_decision_sections(_Path.cwd())
+        # A project with no flow.yml of its own: the sections come from the shipped
+        # templates alone. Named rather than taken from the cwd (BDL-074 A1).
+        sections = shipped_decision_sections(tmp_path)
         assert "architectural decisions" in sections
         assert "axes" in sections
 

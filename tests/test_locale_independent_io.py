@@ -550,6 +550,35 @@ _TOLERANCE_GLYPH = "\u00b1"
 #: the interpreter's own ``PYTHONPATH`` decides which source answers.
 _CLI_ENTRY = "from beadloom.services.cli import main; main()"
 
+def _a_project_whose_audit_carries_a_tolerance_label(tmp_path: Path) -> Path:
+    """A project whose ``docs audit`` verifies one fact within a tolerance (+/-5%).
+
+    ``test_count`` carries a 5% tolerance by default, so one README mention of the
+    indexed count is reported with a plus-minus tolerance label: the glyph the row needs.
+    """
+    import json
+
+    from beadloom.infrastructure.db import create_schema, open_db
+
+    project = tmp_path / "audited"
+    (project / ".beadloom").mkdir(parents=True)
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1.0.0"\n', encoding="utf-8"
+    )
+    (project / "README.md").write_text("# Demo\n\nThe suite has 50 tests.\n", encoding="utf-8")
+    conn = open_db(project / ".beadloom" / "beadloom.db")
+    try:
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("counted", "feature", "a node with tests", json.dumps({"tests": {"test_count": 50}})),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return project
+
+
 #: The control room for the row below: UTF-8 STATED rather than inherited.
 #: ``PYTHONUTF8=1`` overrides the locale, MEASURED — under both ``LC_ALL=C`` and
 #: ``LC_ALL=en_US.ISO8859-1`` a child reports ``utf-8``. Inheriting the parent's
@@ -686,7 +715,7 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
         assert r"\xb1" in done.stdout, done.stdout
 
     def test_the_reported_command_returns_the_same_verdict_in_both_rooms(
-        self, ascii_terminal: dict[str, str]
+        self, ascii_terminal: dict[str, str], tmp_path: Path
     ) -> None:
         """The instance, and the assertion is the verdict rather than a fixed code.
 
@@ -697,7 +726,10 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
 
         The control also locks the row against vacuity: a project whose report
         carries no tolerance label offers the ASCII run no unencodable character
-        at all, and a pass would mean nothing. It runs in a STATED UTF-8 room
+        at all, and a pass would mean nothing. The project is built here rather
+        than inherited from the working directory (BDL-074 A1): run where the
+        suite happened to start, this row read this repository's live index, and
+        from anywhere else it skipped. It runs in a STATED UTF-8 room
         rather than the parent's, because a control that inherits an ASCII
         parent produces an ASCII report and skips the row on the two legs that
         exist for this dimension.
@@ -711,17 +743,18 @@ class TestTheConsoleSurvivesTheHandlerTheImageChose:
         is what ``beadloom clean-room`` sets. The installed script has its own
         row in the 8-bit class above.
         """
+        project = _a_project_whose_audit_carries_a_tolerance_label(tmp_path)
         control = _run_under(
-            _UTF8_ENV, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+            _UTF8_ENV, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], project
         )
-        if _TOLERANCE_GLYPH not in control.stdout:
-            pytest.skip(
-                "this project's audit report carries no tolerance label, so the ASCII run "
-                "would meet no unencodable character and this row would assert nothing"
-            )
+        assert _TOLERANCE_GLYPH in control.stdout, (
+            "the fixture's audit report carries no tolerance label, so the ASCII run "
+            "would meet no unencodable character and this row would assert nothing:\n"
+            + control.stdout
+        )
 
         done = _run_under(
-            ascii_terminal, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], Path.cwd()
+            ascii_terminal, [sys.executable, "-c", _CLI_ENTRY, "docs", "audit"], project
         )
 
         assert "UnicodeEncodeError" not in done.stderr, done.stderr

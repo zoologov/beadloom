@@ -160,7 +160,8 @@ class TestLintRecalibrationGuard:
 
         from beadloom.graph.rules import CardinalityRule, load_rules
 
-        rules_path = _Path.cwd() / ".beadloom" / "_graph" / "rules.yml"
+        # Named from this file rather than the cwd (BDL-074 A1).
+        rules_path = _Path(__file__).resolve().parent.parent / ".beadloom" / "_graph" / "rules.yml"
         rules = load_rules(rules_path)
         size_rules = [
             r

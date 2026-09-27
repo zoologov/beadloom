@@ -808,7 +808,7 @@ class TestAnExcusedPairSaysSo:
             summary[key] for key in ("ok", "stale", "missing", "unverified", "unchecked", "exempt")
         )
 
-    def test_the_shipped_layout_excuses_no_pair_at_all(self) -> None:
+    def test_the_shipped_layout_excuses_no_pair_at_all(self, live_repo_reindexed: Path) -> None:
         """Measured, and it is why the omission has been invisible.
 
         ``index_docs`` walks the docs directory alone, so a document outside it
@@ -819,10 +819,9 @@ class TestAnExcusedPairSaysSo:
         a true sentence about a population that was never in the check.
         """
         report = _repo_report()
-        db_path = REPO_ROOT / ".beadloom" / "beadloom.db"
-        if not db_path.is_file():  # pragma: no cover - the index is a build artifact
-            pytest.skip("no index built; this leg reads the real sync_state")
-        conn = open_db(db_path)
+        # Through `live_repo_reindexed` (BDL-074 A1): read as found on disk, the
+        # answer depended on the last reindex, and without one the leg skipped.
+        conn = open_db(live_repo_reindexed / ".beadloom" / "beadloom.db")
         pairs = conn.execute("SELECT doc_path FROM sync_state").fetchall()
         spaces = resolve_doc_spaces(REPO_ROOT)
         excused = [p for (p,) in pairs if spaces.space_of(str(p)) == SPACE_WORKING]

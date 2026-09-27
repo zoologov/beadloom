@@ -570,7 +570,7 @@ def _verdict_over(index_root: Path, scope: DeclaredScope, commit: str) -> ScopeV
 
 
 @pytest.fixture(scope="module")
-def pinned_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def pinned_project(tmp_path_factory: pytest.TempPathFactory, live_repo_reindexed: Path) -> Path:
     """A project root carrying the pinned table and this repository's index.
 
     The index is COPIED rather than rebuilt because these cases are about the
@@ -578,7 +578,7 @@ def pinned_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     same ones the live cases get. Nothing else of this repository is copied, so
     the only thing the pinned run reads from a document is the six rows.
     """
-    root = _repository_root()
+    root = live_repo_reindexed  # the copied index reflects the source (BDL-074 A1)
     project = tmp_path_factory.mktemp("pinned-axes")
     (project / ".beadloom").mkdir()
     shutil.copy2(root / ".beadloom" / "beadloom.db", project / ".beadloom" / "beadloom.db")
@@ -616,8 +616,10 @@ class TestTheCheckOnThisRepositorysOwnCommits:
     """
 
     @pytest.fixture
-    def project(self) -> Path:
-        return _repository_root()
+    def project(self, live_repo_reindexed: Path) -> Path:
+        # Through `live_repo_reindexed` rather than whatever index is on disk: read
+        # as found, the ownership answers depended on the last reindex (BDL-074 A1).
+        return live_repo_reindexed
 
     @pytest.fixture
     def live_scope(self, project: Path) -> DeclaredScope:
