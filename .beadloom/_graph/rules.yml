@@ -410,7 +410,11 @@ rules:
     severity: warn
     scenario_coverage:
       for: { kind: feature }
-      features: "tests/acceptance/features/**/*.feature"
+      # The whole acceptance tree (BDL-074 B3): a scenario lives under the
+      # package of the node it binds to, tests/acceptance/<package>/, and one
+      # whose @node: tag disagrees with the node its steps execute stays in
+      # tests/acceptance/features/ until its content is rewritten.
+      features: "tests/acceptance/**/*.feature"
       references:
         - ".claude/development/docs/features/**/PRD.md"
         - ".claude/development/docs/features/**/BRIEF.md"

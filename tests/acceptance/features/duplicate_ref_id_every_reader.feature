@@ -2,7 +2,7 @@
 # references it by, stated over the WHOLE population rather than over the two
 # readers `beadloom-39ap` changed.
 #
-# `features/duplicate_ref_id_report.feature` pins what the loader and `graph-diff`
+# `graph/duplicate_ref_id_report.feature` pins what the loader and `graph-diff`
 # do with a duplicate. That is two bodies. The PRD's goal is wider — "reported
 # rather than silently reduced, through every reader of `.beadloom/_graph/` —
 # measured at seven, of which one is the declared policy" — and a scenario over
