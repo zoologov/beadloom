@@ -12,14 +12,12 @@ up -- the acceptance suite runs inside ``uv run pytest``, not beside it.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
-import beadloom
 from beadloom.onboarding import ignore_block
 from beadloom.onboarding.ignore_block import (
     GENERATED_WORKING_SET,
@@ -28,15 +26,13 @@ from beadloom.onboarding.ignore_block import (
     undeclared_patterns,
 )
 from beadloom.services.cli import main
+from tests.support.package_under_test import SHIPPED_FROM
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 scenarios("../features/ignore_block_drift.feature")
 
-#: The project the package under test ships from: src/beadloom/__init__.py's
-#: grandparent. Derived from the PACKAGE and not from this file, because the
-#: suite is copied out of the tree by `tests/test_bead14_s4_binding.py` while
-#: PYTHONPATH still names the source under test -- a scenario that located the
-#: project by counting parents of its own path answered about the copy.
-_SHIPPED_FROM = Path(beadloom.__file__).resolve().parents[2]
 
 
 @pytest.fixture()
@@ -106,10 +102,10 @@ def _generator_grows(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> 
 
 @given("the .gitignore of the project this flow ships from")
 def _this_repositorys_ignore_file(world: dict[str, Any]) -> None:
-    path = _SHIPPED_FROM / ".gitignore"
+    path = SHIPPED_FROM / ".gitignore"
     # Asserted rather than skipped: a room without the file is a checkout this
     # scenario cannot be taken in, and the claim is the same in every room.
-    assert path.is_file(), f"no .gitignore beside the package under test at {_SHIPPED_FROM}"
+    assert path.is_file(), f"no .gitignore beside the package under test at {SHIPPED_FROM}"
     world["text"] = path.read_text(encoding="utf-8")
 
 

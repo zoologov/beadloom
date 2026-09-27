@@ -7,7 +7,7 @@ Two halves, matching the two modules: the vocabulary and roots
 The adopter half is not decoration. Every check in this epic has measured
 Beadloom measuring Beadloom, and a classification that reads correct here
 because our own layout happens to match the default is exactly the class
-``tests/adopter_project.py`` was built to catch — so the relation is exercised
+``tests/support/adopter_project.py`` was built to catch — so the relation is exercised
 against a TypeScript project with its own tree and no ``.claude/`` at all.
 """
 
@@ -37,7 +37,7 @@ from beadloom.infrastructure.doc_roots import (
     document_kind,
     resolve_doc_spaces,
 )
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
 
 if TYPE_CHECKING:
     from pathlib import Path

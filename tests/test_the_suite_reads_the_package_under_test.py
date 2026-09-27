@@ -14,7 +14,7 @@ does not help on its own. What removes the defect is resolving the root through
 the import AND declining the names mutmut generated.
 
 **What these tests are and are not.** They run against a mimic built by
-``tests/mutmut_copy.py`` from shapes mutmut actually emitted. That is a proxy: a
+``tests/support/mutmut_copy.py`` from shapes mutmut actually emitted. That is a proxy: a
 directory that looks like the room, not the room. The verdict BDL-072 accepts is
 a dispatched ``Mutation`` run, and it is bead ``beadloom-e8m4``.
 """
@@ -27,32 +27,33 @@ from pathlib import Path
 import pytest
 
 import beadloom
-from tests.mutmut_copy import (
+from tests.support.mutmut_copy import (
     DECLARED_SITES_IN_THE_MIMIC,
     GENERATED_NAMES_IN_THE_MIMIC,
     MIMIC_MODULES,
     TRAMPOLINE_IMPORT,
     write_mutmut_copy,
 )
-from tests.package_under_test import (
+from tests.support.package_under_test import (
     INJECTED_IMPORT_MODULES,
     PACKAGE_ROOT,
     is_generated_name,
     module_tree,
     modules_under,
 )
+from tests.support.repository_root import TESTS_ROOT as _TESTS_DIR
 
 #: The tests moved onto the helper by ``beadloom-ey4m``, each with the name it
 #: used to build from ``__file__``. Listed so the guard below states its
 #: population instead of walking a set nobody decided.
 MOVED_ONTO_THE_HELPER: dict[str, str] = {
-    "test_two_readers_of_one_markdown_table.py": "_SRC",
-    "test_guards_invocation.py": "_SRC",
+    # BDL-074 B1 moved these two constants into the support modules their tests
+    # share with a neighbour; the lock follows the constant, not the old file.
+    "support/pipe_splits.py": "_SRC",
+    "support/guard_boundary.py": "SRC",
     "test_the_reference_docs_state_the_population_shapes.py": "TEMPLATES_ROOT",
     "test_s2_move_regression.py": "_TPL",
 }
-
-_TESTS_DIR = Path(__file__).resolve().parent
 
 
 class TestWhereThePackageUnderTestIs:
@@ -68,7 +69,7 @@ class TestWhereThePackageUnderTestIs:
         A helper that resolved ``__file__`` would answer about wherever it was
         copied to — which is the whole defect, one module further in.
         """
-        source = (_TESTS_DIR / "package_under_test.py").read_text(encoding="utf-8")
+        source = (_TESTS_DIR / "support" / "package_under_test.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
 
         own_location = [
@@ -199,7 +200,7 @@ class TestWhichImportsThePruningDrops:
     def test_the_declared_set_holds_the_line_the_mimic_carries(self) -> None:
         """The two copies of mutmut's template are bound to each other.
 
-        ``tests/mutmut_copy.py`` holds the injected line verbatim and the helper
+        ``tests/support/mutmut_copy.py`` holds the injected line verbatim and the helper
         holds the module it names. Read apart they can drift; asserted together,
         a mutmut that renames the module reddens here rather than emptying a
         population somewhere else.

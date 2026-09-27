@@ -16,9 +16,14 @@ rather than in a red `site-build` job (BDL-061 S6).
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-DOCS = Path(__file__).resolve().parents[3] / "docs"
+from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+DOCS = REPO_ROOT / "docs"
 
 
 def _spans_that_spill_with_a_tag(path: Path) -> list[tuple[int, str]]:

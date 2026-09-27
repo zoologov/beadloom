@@ -8,17 +8,13 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.doc_sync.issue_numbers import (
     DUPLICATE_NUMBER,
     UNCLAIMED_NUMBER,
     UNWRITTEN_CLAIM,
     check_issue_numbers,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 CHECKS = (DUPLICATE_NUMBER, UNWRITTEN_CLAIM, UNCLAIMED_NUMBER)
 

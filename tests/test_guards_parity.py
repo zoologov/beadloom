@@ -21,9 +21,7 @@ import subprocess
 import sys
 import time
 import warnings
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
@@ -32,65 +30,15 @@ from beadloom.application.guards.contract import ClaimedBead, GuardProbes
 from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import FIRINGS_RELPATH
 from beadloom.services.cli import main
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
-
-
-#: Floor for the control window that decides "the guard wrote" from "somebody
-#: else did". The measurement window is normally ~1s of real ``bd``/``git``
-#: calls; a control shorter than that would be a weaker probe than the thing it
-#: is checking, and would rule out a concurrent writer it never had time to see.
-_CONTROL_WINDOW_FLOOR_S = 0.5
-
-
-def _differing(before: dict[str, str], after: dict[str, str]) -> list[str]:
-    """Names whose digest changed, appeared, or vanished between two snapshots."""
-    return sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
-
-
-def _moved_with_nothing_running(
-    snapshot: Callable[[], dict[str, str]], window_s: float
-) -> list[str]:
-    """Names that change over an idle window — evidence of a CONTINUOUS writer.
-
-    Non-empty means the repository is being written by a process this test does
-    not control, so a change seen during the measurement window cannot be
-    charged to the guard. Empty means the repository was quiescent *for the
-    duration of one window* — which is weaker than "the evaluation is the only
-    candidate left", and the gap is what BDL-UX #233 was filed about.
-
-    The probe can only see a writer that is still writing when the control
-    window opens. It answers correctly for a concurrent ``beadloom lint``, which
-    holds the index open for as long as it runs, and cannot answer at all for a
-    ``bd`` export, which is one deferred burst with nothing in the session
-    marking when it lands. That is why the caller attributes by FILE first and
-    only reaches this probe for the files timing can decide.
-    """
-    before = snapshot()
-    time.sleep(max(window_s, _CONTROL_WINDOW_FLOOR_S))
-    return _differing(before, snapshot())
-
-
-#: The tracker export, and the one member of the live test's tracked set that no
-#: guard can write. It is here to be ATTRIBUTED, never to be excluded: it stays
-#: in the digest, a change to it is still detected and still named, and only the
-#: writer it is charged to differs. Dropping it would make the live test green
-#: and blind, because a guard genuinely must not write the tracker either.
-#:
-#: Measured on this repository (BDL-UX #233), and the second measurement is the
-#: one that matters. Three consecutive ``bd list --status in_progress --json
-#: --limit 0`` calls — the evaluation's only tracker call — left
-#: ``.beads/issues.jsonl`` unmoved in both byte digest and mtime, so the file
-#: moves only when some OTHER process mutates the tracker. But the rewrite is
-#: **deferred**, not synchronous: four ``bd update --priority`` writes each left
-#: the export unmoved when sampled immediately afterwards, and the file had been
-#: rewritten by the next sample. The flush is therefore a burst that no session
-#: command marks the moment of, which is strictly worse for a control window
-#: than a burst inside its own invocation would be — the window has nothing to
-#: overlap with on purpose. A two-writer wave makes it likelier, not rarer,
-#: since both agents run ``bd comments add``.
-_TRACKER_EXPORT_NAMES = frozenset({"issues.jsonl"})
+from tests.support.guard_parity import (
+    _CONTROL_WINDOW_FLOOR_S,
+    Attribution,
+    _attribute_by_file,
+    _moved_with_nothing_running,
+    attribute,
+    differing,
+    report_attribution,
+)
 
 #: The ``bd`` subcommands a guard evaluation may issue. Exactly one, deliberately:
 #: a wider "read-only" set would be an authored claim about bd, and ``comments``
@@ -99,108 +47,6 @@ _TRACKER_EXPORT_NAMES = frozenset({"issues.jsonl"})
 #: against this set, which is what makes :data:`_TRACKER_EXPORT_NAMES` a derived
 #: partition rather than an ignore list somebody wrote down once.
 _READ_ONLY_BD_SUBCOMMANDS = frozenset({"list"})
-
-
-def _attribute_by_file(moved: Sequence[str]) -> tuple[list[str], list[str]]:
-    """Split changed names into ``(the guard could have written, it could not)``.
-
-    Attribution by file rather than by timing, because the digest already names
-    the path that differed and the information is therefore in hand. Every name
-    handed in comes back in exactly one half and none is dropped — "this write
-    was not the guard's" and "this path is not checked" are different facts, and
-    only the first one is ever made here.
-
-    An unrecognised name is the guard's. A file this test has never seen before
-    appearing beside the index is precisely the shape a new write takes, and a
-    default of "somebody else's" would let the next one in without a word.
-    """
-    ours = [name for name in moved if name not in _TRACKER_EXPORT_NAMES]
-    theirs = [name for name in moved if name in _TRACKER_EXPORT_NAMES]
-    return ours, theirs
-
-
-@dataclass(frozen=True)
-class _Attribution:
-    """Who wrote the files that moved — three verdicts, because there are three.
-
-    ``charged``
-        the guard's to answer for, and the only one that makes the live test red.
-    ``elsewhere``
-        another process's, decided by the path. The write happened, it was seen,
-        it was named, and it was not the guard's. This is NOT "not checked".
-    ``unattributable``
-        the repository is being written and nothing here can say by whom. The
-        live test skips on this, which is a check that did not happen and says so.
-    """
-
-    charged: list[str]
-    elsewhere: list[str]
-    unattributable: list[str]
-
-
-def _attribute(
-    moved: Sequence[str],
-    *,
-    snapshot: Callable[[], dict[str, str]],
-    window_s: float,
-) -> _Attribution:
-    """Charge every changed name to a writer, cheapest instrument first.
-
-    The FILE decides first and decides for good: a path outside every guard's
-    reach was written by another process whatever the clock says, and the answer
-    costs nothing. The control WINDOW is consulted only for what is left, so the
-    common case in a wave — a neighbour's ``bd comments add`` and nothing else —
-    now pays no control window at all, where before it paid one and got the
-    wrong answer from it.
-
-    Order matters in one direction only: attributing a burst elsewhere never
-    excuses an index write seen in the same window, because the two halves are
-    disjoint by path.
-    """
-    charged, elsewhere = _attribute_by_file(moved)
-    if not charged:
-        return _Attribution([], elsewhere, [])
-    if _moved_with_nothing_running(snapshot, window_s):
-        return _Attribution([], elsewhere, charged)
-    return _Attribution(charged, elsewhere, [])
-
-
-def _report(attribution: _Attribution, *, window_s: float) -> None:
-    """Deliver an attribution as this session's three outcomes, in three words.
-
-    Separated from the measurement because the measurement cannot be driven
-    deterministically — the tracker defers its export, so a burst cannot be
-    scheduled into a window — while this can, and the words are the part a
-    reader acts on.
-
-    The order is deliberate. What was attributed elsewhere is said FIRST and
-    without stopping the run, so a change charged to the guard in the same
-    window is still raised: a report about one path must never excuse another.
-    """
-    if attribution.elsewhere:
-        warnings.warn(
-            "attributed elsewhere, NOT excluded from the comparison: "
-            f"{', '.join(attribution.elsewhere)} changed during the measurement "
-            "window. No guard can write it — the evaluation's only tracker call "
-            "is a read — so this is another process's `bd` write, which a wave "
-            "makes likelier since both agents run `bd comments add` "
-            "(BDL-UX #233). The read-only claim over the index was still "
-            "measured, and is this test's verdict.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-    if attribution.charged:
-        raise AssertionError(
-            "the evaluation changed a file it may only read: " + ", ".join(attribution.charged)
-        )
-    if attribution.unattributable:
-        pytest.skip(
-            "cannot attribute: this repository is being written by another "
-            f"process right now — {', '.join(attribution.unattributable)} changed "
-            f"over an idle {max(window_s, _CONTROL_WINDOW_FLOOR_S):.2f}s control "
-            "window with no guard running. `beadloom lint` writes the index by "
-            "design (#147) and is the continuous writer this window can see."
-        )
 
 
 @pytest.fixture()
@@ -560,20 +406,20 @@ class TestAttributionDistinguishesTheWriter:
     """The m4 apparatus itself, because a wrong verdict here hides a real write.
 
     These are unit checks on the two helpers the live-index test leans on. If
-    ``_differing`` under-reports, a guard that writes reads green; if
+    ``differing`` under-reports, a guard that writes reads green; if
     ``_moved_with_nothing_running`` over-reports, every run skips and the
     read-only invariant is never measured at all. Both directions are checked.
     """
 
     def test_a_changed_digest_is_reported(self) -> None:
-        assert _differing({"a": "1"}, {"a": "2"}) == ["a"]
+        assert differing({"a": "1"}, {"a": "2"}) == ["a"]
 
     def test_an_appearing_and_a_vanishing_file_are_both_reported(self) -> None:
-        assert _differing({}, {"wal": "1"}) == ["wal"]
-        assert _differing({"wal": "1"}, {}) == ["wal"]
+        assert differing({}, {"wal": "1"}) == ["wal"]
+        assert differing({"wal": "1"}, {}) == ["wal"]
 
     def test_identical_snapshots_report_nothing(self) -> None:
-        assert _differing({"a": "1", "b": "2"}, {"a": "1", "b": "2"}) == []
+        assert differing({"a": "1", "b": "2"}, {"a": "1", "b": "2"}) == []
 
     def test_a_still_repository_yields_no_excuse_to_skip(self) -> None:
         """A stable snapshot must NOT look like a concurrent writer."""
@@ -636,7 +482,7 @@ class TestAttributionByFile:
 
 
 class TestTheTwoInstrumentsInOrder:
-    """``_attribute`` — the file decides what it can, the clock decides the rest.
+    """``attribute`` — the file decides what it can, the clock decides the rest.
 
     Three outcomes and three words, because they are three different facts: the
     guard wrote it, another process wrote it (and we know which class of
@@ -662,37 +508,37 @@ class TestTheTwoInstrumentsInOrder:
         instrument even where its verdict happened not to be used.
         """
         started = time.monotonic()
-        verdict = _attribute(["issues.jsonl"], snapshot=self._moving, window_s=0.0)
+        verdict = attribute(["issues.jsonl"], snapshot=self._moving, window_s=0.0)
         assert time.monotonic() - started < _CONTROL_WINDOW_FLOOR_S
         assert verdict.charged == []
         assert verdict.elsewhere == ["issues.jsonl"]
         assert verdict.unattributable == []
 
     def test_an_index_write_on_a_still_repository_is_the_guards(self) -> None:
-        verdict = _attribute(["beadloom.db"], snapshot=self._still, window_s=0.0)
+        verdict = attribute(["beadloom.db"], snapshot=self._still, window_s=0.0)
         assert verdict.charged == ["beadloom.db"]
         assert verdict.elsewhere == verdict.unattributable == []
 
     def test_an_index_write_on_a_moving_repository_is_unattributable(self) -> None:
         """Not ``elsewhere``: nothing here knows who wrote it, only that somebody did."""
-        verdict = _attribute(["beadloom.db"], snapshot=self._moving, window_s=0.0)
+        verdict = attribute(["beadloom.db"], snapshot=self._moving, window_s=0.0)
         assert verdict.charged == []
         assert verdict.unattributable == ["beadloom.db"]
         assert verdict.elsewhere == []
 
     def test_a_burst_beside_an_index_write_does_not_excuse_the_index_write(self) -> None:
         """Attributing one path elsewhere must not carry the other with it."""
-        verdict = _attribute(["beadloom.db", "issues.jsonl"], snapshot=self._still, window_s=0.0)
+        verdict = attribute(["beadloom.db", "issues.jsonl"], snapshot=self._still, window_s=0.0)
         assert verdict.charged == ["beadloom.db"]
         assert verdict.elsewhere == ["issues.jsonl"]
 
     def test_a_still_repository_that_moved_nothing_charges_nobody(self) -> None:
-        verdict = _attribute([], snapshot=self._moving, window_s=0.0)
+        verdict = attribute([], snapshot=self._moving, window_s=0.0)
         assert verdict.charged == verdict.elsewhere == verdict.unattributable == []
 
 
 class TestTheThreeOutcomesReachTheReaderInDifferentWords:
-    """``_report`` — the wiring, checked deterministically rather than by sampling.
+    """``report_attribution`` — the wiring, checked deterministically rather than by sampling.
 
     The end-to-end path cannot be driven with a real burst: the tracker defers
     its export to a moment no command marks, so scheduling one inside a
@@ -702,12 +548,12 @@ class TestTheThreeOutcomesReachTheReaderInDifferentWords:
     """
 
     @staticmethod
-    def _burst() -> _Attribution:
-        return _Attribution(charged=[], elsewhere=["issues.jsonl"], unattributable=[])
+    def _burst() -> Attribution:
+        return Attribution(charged=[], elsewhere=["issues.jsonl"], unattributable=[])
 
     def test_a_burst_is_reported_and_does_not_fail_the_run(self) -> None:
         with pytest.warns(RuntimeWarning, match=re.escape("issues.jsonl")):
-            _report(self._burst(), window_s=0.0)
+            report_attribution(self._burst(), window_s=0.0)
 
     def test_the_report_says_attributed_and_never_says_ignored(self) -> None:
         """The distinction the bead is about, in the words the reader gets.
@@ -717,23 +563,23 @@ class TestTheThreeOutcomesReachTheReaderInDifferentWords:
         learns to stop believing the check.
         """
         with pytest.warns(RuntimeWarning) as caught:
-            _report(self._burst(), window_s=0.0)
+            report_attribution(self._burst(), window_s=0.0)
         message = str(caught[0].message)
         assert "NOT excluded from the comparison" in message
         assert "was still measured" in message
 
     def test_a_change_nobody_can_attribute_skips_and_names_the_files(self) -> None:
         with pytest.raises(pytest.skip.Exception) as excinfo:
-            _report(
-                _Attribution(charged=[], elsewhere=[], unattributable=["beadloom.db"]),
+            report_attribution(
+                Attribution(charged=[], elsewhere=[], unattributable=["beadloom.db"]),
                 window_s=0.0,
             )
         assert "beadloom.db" in str(excinfo.value)
 
     def test_a_write_charged_to_the_guard_fails_and_names_the_file(self) -> None:
         with pytest.raises(AssertionError, match=re.escape("beadloom.db")):
-            _report(
-                _Attribution(charged=["beadloom.db"], elsewhere=[], unattributable=[]),
+            report_attribution(
+                Attribution(charged=["beadloom.db"], elsewhere=[], unattributable=[]),
                 window_s=0.0,
             )
 
@@ -743,8 +589,8 @@ class TestTheThreeOutcomesReachTheReaderInDifferentWords:
             pytest.warns(RuntimeWarning, match=re.escape("issues.jsonl")),
             pytest.raises(AssertionError, match=re.escape("beadloom.db")),
         ):
-            _report(
-                _Attribution(
+            report_attribution(
+                Attribution(
                     charged=["beadloom.db"], elsewhere=["issues.jsonl"], unattributable=[]
                 ),
                 window_s=0.0,
@@ -753,7 +599,7 @@ class TestTheThreeOutcomesReachTheReaderInDifferentWords:
     def test_a_quiet_repository_is_reported_with_nothing_at_all(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            _report(_Attribution([], [], []), window_s=0.0)
+            report_attribution(Attribution([], [], []), window_s=0.0)
         assert [str(w.message) for w in caught] == []
 
 

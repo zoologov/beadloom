@@ -40,7 +40,7 @@ from beadloom.services.commands.docsync import (
     _HOOK_TEMPLATE_WARN,
     _build_sync_report,
 )
-from tests import stale_pair_project as project
+from tests.support import stale_pair_project as project
 
 if TYPE_CHECKING:
     from collections.abc import Callable

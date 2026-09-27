@@ -8,17 +8,18 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
+from tests.support.repository_root import REPO_ROOT
+
 
 class TestTheAdoptersVersionIsTheAdoptersOwn:
     """The rendered version must come from the project, or not be rendered."""
 
     def test_this_repository_can_read_its_own_declared_version(self) -> None:
         """The dogfood leg — and the one case where being right proves little."""
-        from pathlib import Path as _Path
 
         from beadloom import __version__
         from beadloom.onboarding.scanner.project_facts import detect_project_version
 
-        repo = _Path(__file__).resolve().parents[3]
+        repo = REPO_ROOT
 
         assert detect_project_version(repo) == __version__

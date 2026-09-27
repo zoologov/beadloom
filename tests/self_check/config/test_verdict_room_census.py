@@ -8,9 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.rooms import take_census
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheCensusOverARealDeclaration:
@@ -26,7 +25,7 @@ class TestTheCensusOverARealDeclaration:
         accounted for as entered or not in either room, and an entered leg
         carries no reason, which is the half a developer machine cannot reach.
         """
-        census = take_census(Path(__file__).resolve().parents[3])
+        census = take_census(REPO_ROOT)
         assert census.comparisons != ()
         assert len(census.entered) + len(census.not_entered) == len(census.comparisons)
         assert census.not_entered, "no run is inside every leg this project declares"

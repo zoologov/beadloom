@@ -25,8 +25,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.graph.linter import lint
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
-
-from .tiered_project import (
+from tests.support.tiered_project import (
     TIERS,
     graph_with,
     graph_with_a_deeper_nest,

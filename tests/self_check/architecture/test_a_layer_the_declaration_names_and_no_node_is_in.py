@@ -9,7 +9,7 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -21,9 +21,10 @@ from beadloom.graph.rules.layer_declaration import (
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import LayerRule
+from tests.support.repository_root import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: The file this bead gives an owner, relative to the project root.
 THE_RULES_FILE = ".beadloom/_graph/rules.yml"

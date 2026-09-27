@@ -12,32 +12,32 @@ repo gets the same trunk-based behaviour as Beadloom itself.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.support.ci_workflows import (
+    GH_CI,
+    GH_TEMPLATE,
+    GITHUB_FILES,
+    GITLAB_FILES,
+    GL_CI,
+    GL_TEMPLATE,
+    PAT_FALLBACK_CHECKOUT,
+    PAT_FALLBACK_GH_TOKEN,
+)
 
-# BDL-050: the ai-techwriter job folded into the consolidated ci.yml (the three
-# old PR workflows — beadloom-gate.yml / tests.yml / ai-techwriter.yml — were
-# retired). The ai-techwriter job body moved VERBATIM, so these BDL-049
-# structural checks now run over ci.yml's ``ai-techwriter`` job.
-GH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-GL_PIPELINE = REPO_ROOT / ".gitlab-ci.yml"
-TEMPLATES = REPO_ROOT / "src" / "beadloom" / "onboarding" / "templates" / "ai_techwriter"
-GH_TEMPLATE = TEMPLATES / "github-workflow.yml"
-GL_TEMPLATE = TEMPLATES / "gitlab-ci-job.yml"
+if TYPE_CHECKING:
+    from pathlib import Path
 
-GITHUB_FILES = (GH_WORKFLOW, GH_TEMPLATE)
-GITLAB_FILES = (GL_PIPELINE, GL_TEMPLATE)
 ALL_FILES = GITHUB_FILES + GITLAB_FILES
 
 #: The rows the parametrized tests below run over. The live file's row is a
 #: self-check of this repository and carries the ``self_check`` marker; its twin
 #: row is the product test of the shipped template (BDL-074 A3).
-GITHUB_ROWS = (pytest.param(GH_WORKFLOW, marks=pytest.mark.self_check), GH_TEMPLATE)
-GITLAB_ROWS = (pytest.param(GL_PIPELINE, marks=pytest.mark.self_check), GL_TEMPLATE)
+GITHUB_ROWS = (pytest.param(GH_CI, marks=pytest.mark.self_check), GH_TEMPLATE)
+GITLAB_ROWS = (pytest.param(GL_CI, marks=pytest.mark.self_check), GL_TEMPLATE)
 ALL_ROWS = GITHUB_ROWS + GITLAB_ROWS
 
 
@@ -268,10 +268,6 @@ def test_github_grants_contents_and_pull_request_write(path: Path) -> None:
 # must authenticate with a PAT (secrets.AI_TW_PAT) so it TRIGGERS beadloom-gate,
 # with a fallback to the default token so PAT-less repos still work (variant-C).
 # --------------------------------------------------------------------------- #
-
-#: The fallback expression the checkout token + GH_TOKEN must use on the PR path.
-PAT_FALLBACK_CHECKOUT = "secrets.AI_TW_PAT || github.token"
-PAT_FALLBACK_GH_TOKEN = "secrets.AI_TW_PAT || secrets.GITHUB_TOKEN"  # noqa: S105 - GH expression, not a secret
 
 
 @pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)

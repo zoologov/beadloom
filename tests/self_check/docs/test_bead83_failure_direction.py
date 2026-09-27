@@ -8,6 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
+from tests.support.repository_root import REPO_ROOT
+
 
 class TestTheHonestyNoteAndTheCodeAgree:
     """`.79`'s note listed the line-start protection under ENFORCED. It was not.
@@ -18,10 +20,9 @@ class TestTheHonestyNoteAndTheCodeAgree:
     """
 
     def test_the_spec_states_the_colon_and_the_opening_line(self) -> None:
-        from pathlib import Path as _Path
 
         spec = (
-            _Path(__file__).resolve().parents[3]
+            REPO_ROOT
             / "docs"
             / "domains"
             / "application"

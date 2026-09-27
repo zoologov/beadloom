@@ -16,20 +16,20 @@ from beadloom.doc_sync.doc_quality import (
     UNFILLED_PLACEHOLDER,
     check_documents,
 )
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestOnThisRepositorysOwnDocuments:
     @staticmethod
     @pytest.fixture(scope="class")
     def _report() -> object:
-        from pathlib import Path
 
         from beadloom.application.doc_shape import (
             planning_documents,
             shipped_placeholders,
         )
 
-        root = Path(__file__).resolve().parents[3]
+        root = REPO_ROOT
         return check_documents(
             planning_documents(root),
             project_root=root,

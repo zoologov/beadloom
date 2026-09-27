@@ -16,9 +16,9 @@ from click.testing import CliRunner
 
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
-from tests.test_bead15_s3b_coverage import (
-    _no_baseline_skip_reason,
-    _pairs_have_no_freshness_baseline,
+from tests.support.freshness_baseline import (
+    no_baseline_skip_reason,
+    pairs_have_no_freshness_baseline,
 )
 
 if TYPE_CHECKING:
@@ -148,8 +148,8 @@ class TestSyncCheckNewPairs:
             f"graph no longer has ({sorted(_FRESHNESS_SAMPLE)}) or sync-check "
             "tracked no pair at all."
         )
-        if _pairs_have_no_freshness_baseline(sampled):
-            pytest.skip(_no_baseline_skip_reason(sampled))
+        if pairs_have_no_freshness_baseline(sampled):
+            pytest.skip(no_baseline_skip_reason(sampled))
         stale = [p for p in sampled if p["status"] != "ok"]
         assert stale == [], stale
 

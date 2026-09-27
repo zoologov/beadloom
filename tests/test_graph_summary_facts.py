@@ -41,7 +41,7 @@ from beadloom.graph.rules import (
 )
 from beadloom.graph.rules.summary_facts import collect_claims, summary_facts_inert_reason
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.package_under_test import PACKAGE_ROOT
+from tests.support.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
     import sqlite3

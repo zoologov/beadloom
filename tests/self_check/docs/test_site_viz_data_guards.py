@@ -9,13 +9,13 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
-from tests.test_site_viz_data_guards import (
-    _iter_data_links,
-    _link_target_exists,
+from tests.support.repository_root import REPO_ROOT
+from tests.support.site_links import (
+    iter_data_links,
+    link_target_exists,
 )
 
 
@@ -26,14 +26,14 @@ def test_committed_site_viz_data_has_no_dead_links(payload: str) -> None:
     Skipped on a checkout where the site has not been generated (``site/`` is
     gitignored), mirroring the markdown guard's contract.
     """
-    site = Path(__file__).resolve().parents[3] / "site"
+    site = REPO_ROOT / "site"
     data_path = site / "public" / payload
     if not (site / "index.md").exists() or not data_path.exists():
         pytest.skip(f"dogfood site/{payload} not generated in this checkout")
 
     data = json.loads(data_path.read_text("utf-8"))
     dead = [
-        (owner, url) for owner, url in _iter_data_links(data) if not _link_target_exists(site, url)
+        (owner, url) for owner, url in iter_data_links(data) if not link_target_exists(site, url)
     ]
 
     assert dead == [], f"dead links in site/public/{payload}: {dead}"
@@ -47,7 +47,7 @@ def test_committed_architecture_data_is_referentially_closed() -> None:
     separate queries that can drift apart (the builder emits an edge to an id it
     did not include, rather than dropping it).
     """
-    site = Path(__file__).resolve().parents[3] / "site"
+    site = REPO_ROOT / "site"
     data_path = site / "public" / "architecture.data.json"
     if not data_path.exists():
         pytest.skip("dogfood site/public/architecture.data.json not generated")
@@ -78,7 +78,7 @@ def test_committed_architecture_data_is_referentially_closed() -> None:
 
 def test_committed_landscape_data_is_referentially_closed() -> None:
     """Same closure check for the real landscape payload."""
-    site = Path(__file__).resolve().parents[3] / "site"
+    site = REPO_ROOT / "site"
     data_path = site / "public" / "landscape.data.json"
     if not data_path.exists():
         pytest.skip("dogfood site/public/landscape.data.json not generated")

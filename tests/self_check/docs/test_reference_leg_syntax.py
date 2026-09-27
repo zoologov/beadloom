@@ -8,16 +8,12 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.graph.scenarios import (
     ScenarioReference,
     load_references,
     parse_scenario_references,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 SHIPPED_REFERENCE_GLOBS = (
     ".claude/development/docs/features/**/PRD.md",

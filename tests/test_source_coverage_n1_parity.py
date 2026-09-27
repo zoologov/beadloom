@@ -24,14 +24,13 @@ import pytest
 
 from beadloom.doc_sync import engine
 from beadloom.doc_sync.engine import check_source_coverage
-
-from .test_source_coverage import (
-    _insert_code_symbol,
-    _insert_doc,
-    _insert_edge,
-    _insert_node,
-    _insert_sync_state,
-    _legacy_check_source_coverage,
+from tests.support.source_coverage_rows import (
+    insert_code_symbol,
+    insert_doc,
+    insert_edge,
+    insert_node,
+    insert_sync_state,
+    legacy_check_source_coverage,
 )
 
 if TYPE_CHECKING:
@@ -63,7 +62,7 @@ def conn(project: Path) -> Iterator[sqlite3.Connection]:
 
 def _assert_parity(conn: sqlite3.Connection, project: Path) -> list[dict[str, object]]:
     """Run both implementations and assert structural identity; return actual."""
-    golden = _legacy_check_source_coverage(conn, project)
+    golden = legacy_check_source_coverage(conn, project)
     actual = check_source_coverage(conn, project)
     assert actual == golden
     return actual
@@ -78,19 +77,19 @@ class TestN1ParityEdgeCases:
         of ``_doc_paths_by_ref_id`` together with the hierarchy fan-out."""
         # Arrange
         (project / "src" / "mod").mkdir(parents=True)
-        _insert_node(conn, "parent", "src/mod/", kind="domain")
-        _insert_doc(conn, "parent.md", "parent")  # docs-table doc
-        _insert_node(conn, "child", None, kind="feature")
-        _insert_edge(conn, "child", "parent", "part_of")
+        insert_node(conn, "parent", "src/mod/", kind="domain")
+        insert_doc(conn, "parent.md", "parent")  # docs-table doc
+        insert_node(conn, "child", None, kind="feature")
+        insert_edge(conn, "child", "parent", "part_of")
 
         (project / "src" / "mod" / "via_sync.py").write_text("a = 1\n")
         (project / "src" / "mod" / "via_child_symbol.py").write_text("def g(): pass\n")
         (project / "src" / "mod" / "orphan.py").write_text("z = 9\n")
 
         # Doc reachable via BOTH sync_state (precedence) and docs table.
-        _insert_sync_state(conn, "parent.md", "src/mod/via_sync.py", "parent")
+        insert_sync_state(conn, "parent.md", "src/mod/via_sync.py", "parent")
         # File tracked through the child via a code_symbol annotation.
-        _insert_code_symbol(conn, "src/mod/via_child_symbol.py", "child", symbol_name="g")
+        insert_code_symbol(conn, "src/mod/via_child_symbol.py", "child", symbol_name="g")
 
         # Act / Assert: identical structure, and only the orphan is a gap.
         actual = _assert_parity(conn, project)
@@ -105,7 +104,7 @@ class TestN1ParityEdgeCases:
         sync_state nor docs) is skipped — both implementations agree."""
         # Arrange
         (project / "src" / "nodoc").mkdir(parents=True)
-        _insert_node(conn, "nodoc", "src/nodoc/", kind="domain")
+        insert_node(conn, "nodoc", "src/nodoc/", kind="domain")
         (project / "src" / "nodoc" / "stray.py").write_text("q = 1\n")
 
         # Act / Assert
@@ -120,10 +119,10 @@ class TestN1ParityEdgeCases:
         per-node ``LIKE`` did."""
         # Arrange: file initially tracked via a code_symbol annotation.
         (project / "src" / "mod").mkdir(parents=True)
-        _insert_node(conn, "mod", "src/mod/", kind="domain")
-        _insert_doc(conn, "mod.md", "mod")
+        insert_node(conn, "mod", "src/mod/", kind="domain")
+        insert_doc(conn, "mod.md", "mod")
         (project / "src" / "mod" / "feature.py").write_text("def f(): pass\n")
-        _insert_code_symbol(conn, "src/mod/feature.py", "mod", symbol_name="f")
+        insert_code_symbol(conn, "src/mod/feature.py", "mod", symbol_name="f")
 
         # Sanity: tracked, no gap, parity holds.
         assert _assert_parity(conn, project) == []
@@ -151,8 +150,8 @@ class TestN1ParityEdgeCases:
         """
         # Arrange
         (project / "src" / "mod").mkdir(parents=True)
-        _insert_node(conn, "mod", "src/mod/", kind="domain")
-        _insert_doc(conn, "mod.md", "mod")
+        insert_node(conn, "mod", "src/mod/", kind="domain")
+        insert_doc(conn, "mod.md", "mod")
         (project / "src" / "mod" / "weird.py").write_text("def w(): pass\n")
         # Annotation object with a JSON null value -> json_each emits a NULL.
         conn.execute(
@@ -175,8 +174,8 @@ class TestN1ParityEdgeCases:
         at all) — exercises the docs-fallback branch of ``_doc_paths_by_ref_id``."""
         # Arrange
         (project / "src" / "docsonly").mkdir(parents=True)
-        _insert_node(conn, "docsonly", "src/docsonly/", kind="domain")
-        _insert_doc(conn, "docsonly.md", "docsonly")
+        insert_node(conn, "docsonly", "src/docsonly/", kind="domain")
+        insert_doc(conn, "docsonly.md", "docsonly")
         (project / "src" / "docsonly" / "gap.py").write_text("x = 1\n")
 
         # Act / Assert

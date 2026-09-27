@@ -9,7 +9,6 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 import yaml
 
@@ -17,14 +16,11 @@ from beadloom.application.source_derivation.source_tree import (
     module_tree,
     python_files,
 )
-from tests.test_one_part_of_ancestry_walk_serves_the_rule_engine import (
-    PACKAGE,
-)
+from tests.support.repository_root import REPO_ROOT
 
-SRC = Path(__file__).resolve().parents[3] / "src"
-
-
-RULES_YML = Path(__file__).resolve().parents[3] / ".beadloom" / "_graph" / "rules.yml"
+SRC = REPO_ROOT / "src"
+PACKAGE = SRC / "beadloom"
+RULES_YML = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 
 
 #: Files still holding a layer tag as a literal, each with the bead that removes

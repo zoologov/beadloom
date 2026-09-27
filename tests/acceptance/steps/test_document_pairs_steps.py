@@ -9,15 +9,17 @@ red case is a hand-written approximation of the defect proves the approximation.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
 from beadloom.doc_sync.document_pairs import UNPAIRED_BLOCK, check_document_pairs
+from tests.support.package_under_test import SHIPPED_FROM
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from beadloom.doc_sync.document_pairs import PairReport
 
 scenarios("../features/document_pairs.feature")
@@ -30,7 +32,9 @@ scenarios("../features/document_pairs.feature")
 #: ``tests/test_bead14_s4_binding.py``. A step reaching for a path above the
 #: suite fails in that copy for a reason that is not the sabotage, which is
 #: exactly the collateral that test refuses.
-FIXTURE_PAIR = Path(__file__).resolve().parents[1] / "fixtures" / "readme_pair_2026_09_10"
+#: Read from the checkout the package ships from: this suite is also run from a
+#: copy (`tests/test_bead14_s4_binding.py`), which has no repository root.
+FIXTURE_PAIR = SHIPPED_FROM / "tests" / "acceptance" / "fixtures" / "readme_pair_2026_09_10"
 
 
 @pytest.fixture()

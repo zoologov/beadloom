@@ -41,31 +41,17 @@ from beadloom.services.commands.setup import (
     _graph_file_of_each_node,
     _graph_nodes_now,
 )
-from tests.adopter_project import python_project, typescript_project
-from tests.test_init_verdict_over_its_own_rules import (
+from tests.support.adopter_project import python_project, typescript_project
+from tests.support.init_verdict import (
+    A_DOMAIN_RULE_THE_ADOPTER_WROTE,
     PACKAGE_BINDING,
-    _a_bootstrap_that_forgets_the_edge,
+    a_bootstrap_that_forgets_the_edge,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-#: A rules file the ADOPTER wrote, requiring what the bootstrap's own generated
-#: rule requires. Written by hand so that `bootstrap_project` — which never
-#: rewrites a rules file already on disk — leaves it alone and the run meets a
-#: rule it did not author.
-A_DOMAIN_RULE_THE_ADOPTER_WROTE = """\
-version: 1
-rules:
-  - name: domain-needs-parent
-    description: Every domain must have a part_of edge
-    require:
-      for:
-        kind: domain
-      has_edge_to: {}
-      edge_kind: part_of
-"""
 
 #: A rule about services, which no graph the bootstrap writes can satisfy: the
 #: root service node has no parent by definition, which is why `generate_rules`
@@ -180,7 +166,7 @@ def _both_ours(project: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     AND `rules.yml`, and the sabotage strips the edges back out. This is
     BDL-UX #192's own shape, and the only corner where Beadloom is at fault.
     """
-    _a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
+    a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
     return _bootstrap(project)
 
 
@@ -987,7 +973,7 @@ class TestANodeThisRunRewroteIntoFailingIsThisRunS:
         path = project / ".beadloom" / "_graph" / THE_FILE_THE_BOOTSTRAP_REWRITES
         before = yaml.safe_load(path.read_text(encoding="utf-8"))
 
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
         _bootstrap(project)
 
         after = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1004,7 +990,7 @@ class TestANodeThisRunRewroteIntoFailingIsThisRunS:
         """The corner: our own defect, on a tree that was not virgin."""
         project = _a_tree_this_run_rewrites(tmp_path)
 
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
         result = _bootstrap(project)
 
         assert result.exit_code == 1, result.output

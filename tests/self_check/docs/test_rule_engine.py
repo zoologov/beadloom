@@ -9,8 +9,9 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import ClassVar
+
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheSpecTableIsCheckedAgainstTheLoader:
@@ -26,7 +27,7 @@ class TestTheSpecTableIsCheckedAgainstTheLoader:
 
     #: Named from this file rather than from the working directory (BDL-074 A1).
     SPEC = (
-        Path(__file__).resolve().parents[3] / "docs/domains/graph/features/rule-engine/SPEC.md"
+        REPO_ROOT / "docs/domains/graph/features/rule-engine/SPEC.md"
     )
 
     #: How the SPEC spells each cardinal it may use for the count. Written out

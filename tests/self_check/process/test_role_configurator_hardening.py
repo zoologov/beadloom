@@ -8,8 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from beadloom.onboarding.flow_config import (
@@ -19,8 +17,7 @@ from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
     compose_role,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestBeadloomSelfConsistency:

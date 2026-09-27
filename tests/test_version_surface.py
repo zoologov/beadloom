@@ -31,8 +31,8 @@ from beadloom.doc_sync.version_surface import (
     VersionSurface,
     read_version_surface,
 )
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.support.repository_root import REPO_ROOT
+from tests.support.version_surface import places_at
 
 
 def _manifest(root: Path, *, dynamic: bool = True, version: str = "1.2.3") -> None:
@@ -59,13 +59,8 @@ def _write(root: Path, relative: str, text: str) -> Path:
     return path
 
 
-def _place(surface: VersionSurface, relative: str) -> list[object]:
-    wanted = Path(relative)
-    return [place for place in surface.places if place.path == wanted]
-
-
 def _one(surface: VersionSurface, relative: str) -> object:
-    found = _place(surface, relative)
+    found = places_at(surface, relative)
     assert len(found) == 1, f"{relative}: {found}"
     return found[0]
 
@@ -330,7 +325,7 @@ class TestTheDoctorPopulation:
             "The gap is closed as of 7.3.1.\n",
         )
 
-        places = _place(read_version_surface(tmp_path), ".claude/CLAUDE.md")
+        places = places_at(read_version_surface(tmp_path), ".claude/CLAUDE.md")
 
         assert [place.checkers for place in places] == [(DOCTOR,), ()]
         assert "project-info" in places[1].reason
@@ -363,7 +358,7 @@ class TestThePopulationItSearched:
 
         assert dict(population.not_read)[".json"] == 1
         assert dict(population.not_read)[".html"] == 1
-        assert _place(read_version_surface(tmp_path), "package-lock.json") == []
+        assert places_at(read_version_surface(tmp_path), "package-lock.json") == []
 
     def test_a_skipped_directory_is_named_and_its_files_are_not_places(
         self, tmp_path: Path
@@ -373,7 +368,7 @@ class TestThePopulationItSearched:
 
         surface = read_version_surface(tmp_path)
 
-        assert _place(surface, ".venv/lib/widget.py") == []
+        assert places_at(surface, ".venv/lib/widget.py") == []
         assert ".venv" in surface.population.directories_skipped
 
     def test_a_file_it_could_not_decode_is_reported_with_its_reason(self, tmp_path: Path) -> None:
@@ -414,7 +409,7 @@ class TestEveryPlaceIsAnswerable:
         _manifest(tmp_path, version="7.3.1")
         _write(tmp_path, "docs/sizes.md", "The file is 17.3.111 megabytes.\n")
 
-        assert _place(read_version_surface(tmp_path), "docs/sizes.md") == []
+        assert places_at(read_version_surface(tmp_path), "docs/sizes.md") == []
 
     def test_every_place_carries_a_reason_and_an_excerpt(self, tmp_path: Path) -> None:
         _manifest(tmp_path, version="7.3.1")

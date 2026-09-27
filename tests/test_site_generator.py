@@ -7,19 +7,19 @@ diagram, and nothing is written outside ``--out``.
 
 from __future__ import annotations
 
-import re
 import sqlite3
-from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 
 import pytest
 
 from beadloom.application.site import generate_site
 from beadloom.infrastructure.db import create_schema
+from tests.support.site_links import (
+    dead_links,
+)
 
-# Markdown inline links: capture the URL inside (...). Excludes images is not
-# needed here (the generator emits no images).
-_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -365,83 +365,6 @@ def test_node_page_linked_docs_as_links(conn: sqlite3.Connection, tmp_path: Path
 # ---------------------------------------------------------------------------
 
 
-def _is_external(url: str) -> bool:
-    """A link VitePress does not resolve against the emitted tree."""
-    return (
-        "://" in url
-        or url.startswith(("#", "mailto:", "tel:"))
-        or url.strip() == ""
-    )
-
-
-def _resolve_target(out: Path, page: Path, url: str) -> Path | None:
-    """The file a markdown *url* on *page* should resolve to in the site tree.
-
-    Mirrors VitePress link resolution: absolute (`/foo`) roots at the site root,
-    relative resolves against the page's directory, a trailing `/` means the
-    directory's `index.md`, and the `.md` suffix is optional (clean URLs).
-    Returns ``None`` for external/anchor links (not our concern).
-    """
-    raw = url.split("#", 1)[0].split("?", 1)[0]
-    if _is_external(raw):
-        return None
-    base = PurePosixPath(page.relative_to(out).as_posix()).parent
-    target = (
-        PurePosixPath(raw.lstrip("/"))
-        if raw.startswith("/")
-        else base / raw
-    )
-    # Directory link -> index page.
-    if raw.endswith("/"):
-        target = target / "index"
-    # Try the path as-is, with .md, and as a dir index (clean-URL forms).
-    candidates = [target, target.with_suffix(".md")]
-    if target.suffix == "":
-        candidates.append(target / "index.md")
-    for cand in candidates:
-        resolved = out / PurePosixPath(*cand.parts)
-        if resolved.exists():
-            return resolved
-    return out / PurePosixPath(*target.parts)  # report the primary miss
-
-
-# Directories VitePress does not render (so they are not part of the content
-# tree whose links must resolve): the node toolchain and build/config dirs.
-_NON_CONTENT_DIRS = frozenset({"node_modules", ".vitepress", "dist"})
-
-
-def _dead_links(out: Path) -> list[tuple[str, str]]:
-    """Every internal markdown link in the *content* tree whose target is missing.
-
-    Only the rendered content tree is walked (``node_modules`` / ``.vitepress``
-    are excluded — VitePress does not render them). Links inside fenced code
-    blocks (e.g. Mermaid ``click`` directives) AND inline code spans (e.g. a doc
-    that shows ``[text](README.ru.md)`` syntax as an example) are ignored — they
-    are not rendered as markdown links, so they cannot be dead.
-    """
-    dead: list[tuple[str, str]] = []
-    for md in sorted(out.rglob("*.md")):
-        if any(part in _NON_CONTENT_DIRS for part in md.relative_to(out).parts):
-            continue
-        body = md.read_text(encoding="utf-8")
-        in_fence = False
-        for line in body.splitlines():
-            if line.lstrip().startswith("```"):
-                in_fence = not in_fence
-                continue
-            if in_fence:
-                continue
-            # Strip inline code spans (`` `...` `` / ``` ``...`` ```) — link-like
-            # syntax inside them is illustrative, not a real link (mirrors the
-            # code-span protection in application/site_about.render_about).
-            line = re.sub(r"``[^`]+``|`[^`]+`", "", line)
-            for url in _LINK_RE.findall(line):
-                resolved = _resolve_target(out, md, url)
-                if resolved is not None and not resolved.exists():
-                    dead.append((str(md.relative_to(out)), url))
-    return dead
-
-
 def test_dead_links_ignores_inline_code_examples(tmp_path: Path) -> None:
     """Link-like syntax inside inline code spans is illustrative, not a real link.
 
@@ -457,7 +380,7 @@ def test_dead_links_ignores_inline_code_examples(tmp_path: Path) -> None:
         "and handles the badge idiom `[![alt](img)](target)` — all examples.\n",
         encoding="utf-8",
     )
-    assert _dead_links(out) == []
+    assert dead_links(out) == []
 
 
 def test_generated_internal_links_resolve(
@@ -477,7 +400,7 @@ def test_generated_internal_links_resolve(
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
 
-    assert not _dead_links(out), f"dead internal links: {_dead_links(out)}"
+    assert not dead_links(out), f"dead internal links: {dead_links(out)}"
 
 
 # ---------------------------------------------------------------------------

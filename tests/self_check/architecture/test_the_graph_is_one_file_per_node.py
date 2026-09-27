@@ -9,7 +9,6 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import itertools
-from pathlib import Path
 
 import pytest
 
@@ -20,12 +19,10 @@ from beadloom.onboarding.graph_layout import (
     GraphLayout,
     layout_of,
 )
-from tests.test_the_graph_is_one_file_per_node import (
-    _graph_verdict,
+from tests.support.graph_files_verdict import (
+    graph_files_verdict,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 _GRAPH_DIR = _REPO_ROOT / ".beadloom" / "_graph"
 
@@ -107,4 +104,4 @@ class TestTheMediumStopsNamingAFileEveryNodeAddingBeadWrites:
             GraphFile(path=f".beadloom/_graph/{file.name}", nodes=file.nodes)
             for file in layout_of(_GRAPH_DIR).files
         )
-        assert "a file of its own" in _graph_verdict(files)
+        assert "a file of its own" in graph_files_verdict(files)

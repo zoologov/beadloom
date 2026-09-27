@@ -46,8 +46,8 @@ from beadloom.services.cli import main
 from beadloom.services.commands.setup import (
     WITHDRAWN_COMPLETION_CLAIM as THE_WITHDRAWAL,
 )
-from tests.adopter_project import typescript_project
-from tests.test_init_verdict_over_its_own_rules import (
+from tests.support.adopter_project import typescript_project
+from tests.support.init_verdict import (
     A_RULES_FILE_THE_ADOPTER_WROTE,
     THE_ADOPTERS_RULE,
 )

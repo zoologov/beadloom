@@ -26,27 +26,7 @@ and it names the file and the line rather than the pair of nodes.
 
 from __future__ import annotations
 
-import ast
-
-
-def imported_modules(source: str, filename: str = "<test>") -> list[tuple[int, str]]:
-    """Every module path imported anywhere in *source*, with its line number.
-
-    ``ast.walk`` rather than a pass over the module body, because the imports
-    this catches are function-local: both of the two it was written for sit
-    inside a function, and so did the two BDL-059 S3 removed.
-    """
-    found: list[tuple[int, str]] = []
-    for node in ast.walk(ast.parse(source, filename=filename)):
-        if isinstance(node, ast.Import):
-            found.extend((node.lineno, alias.name) for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
-            found.append((node.lineno, node.module))
-    return found
-
-
-def _is_within(module: str, package: str) -> bool:
-    return module == package or module.startswith(package + ".")
+from tests.support.module_imports import imported_modules, is_within
 
 
 class TestTheInstrumentItself:
@@ -60,7 +40,7 @@ class TestTheInstrumentItself:
 
     def test_a_module_whose_name_merely_starts_alike_is_not_an_offender(self) -> None:
         """``beadloom.applications`` is not inside ``beadloom.application``."""
-        assert not _is_within("beadloom.applications", "beadloom.application")
-        assert _is_within("beadloom.application.reindex", "beadloom.application")
+        assert not is_within("beadloom.applications", "beadloom.application")
+        assert is_within("beadloom.application.reindex", "beadloom.application")
 
 

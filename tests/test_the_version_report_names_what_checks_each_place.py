@@ -27,9 +27,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from click.testing import CliRunner
-
-from beadloom.services.cli import main
+from tests.support.version_surface import block_under, run_version_surface
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,13 +42,6 @@ version = "{_VERSION}"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 """
-
-
-def _run(project: Path, *extra: str) -> tuple[int, str]:
-    result = CliRunner().invoke(main, ["version-surface", "--project", str(project), *extra])
-    if result.exception is not None and not isinstance(result.exception, SystemExit):
-        raise result.exception
-    return result.exit_code, result.output
 
 
 def _write(root: Path, relative: str, text: str) -> None:
@@ -94,10 +85,6 @@ def _project_citing_a_dependency(tmp_path: Path, *, fenced: bool) -> Path:
     return project
 
 
-def _block(output: str, heading: str) -> str:
-    return next((block for block in output.split("\n\n") if heading in block), "")
-
-
 def _indent(line: str) -> int:
     return len(line) - len(line.lstrip())
 
@@ -108,7 +95,7 @@ class TestEveryPlaceIsNamedWithItsChecker:
     def test_the_source_of_truth_is_named_with_the_chain_it_was_derived_through(
         self, tmp_path: Path
     ) -> None:
-        code, output = _run(_project(tmp_path))
+        code, output = run_version_surface(_project(tmp_path))
 
         assert code == 0
         assert _VERSION in output
@@ -116,8 +103,8 @@ class TestEveryPlaceIsNamedWithItsChecker:
         assert "[project] version" in output
 
     def test_a_judged_place_carries_its_instrument_on_its_own_row(self, tmp_path: Path) -> None:
-        _, output = _run(_project(tmp_path))
-        checked = _block(output, "Checked (")
+        _, output = run_version_surface(_project(tmp_path))
+        checked = block_under(output, "Checked (")
 
         assert "docs/getting-started.md" in checked
         assert "docs-audit" in checked
@@ -126,8 +113,8 @@ class TestEveryPlaceIsNamedWithItsChecker:
     def test_an_unjudged_place_is_under_the_gap_with_the_reason_it_falls_outside(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path))
-        gap = _block(output, "Checked by nothing")
+        _, output = run_version_surface(_project(tmp_path))
+        gap = block_under(output, "Checked by nothing")
 
         assert "CHANGELOG.md" in gap
         assert "excluded" in gap
@@ -141,7 +128,7 @@ class TestEveryPlaceIsNamedWithItsChecker:
             f"# Changelog\n\n## [{_VERSION}] - 2026-01-01\n\nReleased {_VERSION} today.\n",
         )
 
-        _, output = _run(project)
+        _, output = run_version_surface(project)
 
         assert "Checked by nothing (2 place(s) in 1 file(s))" in output
 
@@ -154,7 +141,7 @@ class TestEveryPlaceIsNamedWithItsChecker:
             "# Changelog\n\n" + "".join(f"## [{_VERSION}] - 2026-01-0{n}\n" for n in range(1, 6)),
         )
 
-        _, output = _run(project)
+        _, output = run_version_surface(project)
 
         headers = [line for line in output.splitlines() if line.startswith("    CHANGELOG.md")]
         assert headers == [
@@ -173,8 +160,8 @@ class TestEveryPlaceIsNamedWithItsChecker:
         """
         project = _project_citing_a_dependency(tmp_path, fenced=True)
 
-        code, output = _run(project)
-        gap = _block(output, "Checked by nothing")
+        code, output = run_version_surface(project)
+        gap = block_under(output, "Checked by nothing")
         headers = [
             line for line in gap.splitlines() if line.startswith("    docs/getting-started.md")
         ]
@@ -187,8 +174,8 @@ class TestEveryPlaceIsNamedWithItsChecker:
         self, tmp_path: Path
     ) -> None:
         """A reason's second line at a row's indent reads as a place with no line number."""
-        _, output = _run(_project_citing_a_dependency(tmp_path, fenced=False))
-        body = _block(output, "Checked by nothing").splitlines()[1:]
+        _, output = run_version_surface(_project_citing_a_dependency(tmp_path, fenced=False))
+        body = block_under(output, "Checked by nothing").splitlines()[1:]
         rows = [line for line in body if line.lstrip()[:1].isdigit()]
         headers = [line for line in body if _indent(line) == len("    ")]
         continuations = [line for line in body if line not in rows and line not in headers]
@@ -204,7 +191,7 @@ class TestEveryPlaceIsNamedWithItsChecker:
         project = _project(tmp_path)
         _write(project, "CHANGELOG.md", f"# Changelog\n\n## [{_VERSION}] {'x' * 400}\n")
 
-        _, output = _run(project)
+        _, output = run_version_surface(project)
 
         assert "…" in output
         assert max(len(line) for line in output.splitlines()) <= 100
@@ -214,42 +201,42 @@ class TestTheReportStatesItsOwnPopulation:
     """A report that does not say what it read is a claim about everything."""
 
     def test_it_names_the_files_it_read(self, tmp_path: Path) -> None:
-        _, output = _run(_project(tmp_path))
+        _, output = run_version_surface(_project(tmp_path))
 
-        assert "file(s) read" in _block(output, "Population")
+        assert "file(s) read" in block_under(output, "Population")
 
     def test_it_names_the_suffixes_it_did_not_read_with_a_count_each(self, tmp_path: Path) -> None:
         project = _project(tmp_path)
         _write(project, "data.json", '{"version": "7.3.1"}\n')
 
-        _, output = _run(project)
-        population = _block(output, "Population")
+        _, output = run_version_surface(project)
+        population = block_under(output, "Population")
 
         assert ".json (1)" in population
 
     def test_it_names_the_directories_it_pruned(self, tmp_path: Path) -> None:
-        _, output = _run(_project(tmp_path))
+        _, output = run_version_surface(_project(tmp_path))
 
-        assert ".git" in _block(output, "Population")
+        assert ".git" in block_under(output, "Population")
 
     def test_an_unreadable_file_is_named_with_its_reason(self, tmp_path: Path) -> None:
         project = _project(tmp_path)
         (project / "broken.md").write_bytes(b"\xff\xfe version 7.3.1\n")
 
-        _, output = _run(project)
+        _, output = run_version_surface(project)
 
-        assert "broken.md" in _block(output, "Population")
+        assert "broken.md" in block_under(output, "Population")
 
     def test_no_unreadable_file_reads_as_none_rather_than_as_silence(self, tmp_path: Path) -> None:
-        _, output = _run(_project(tmp_path))
+        _, output = run_version_surface(_project(tmp_path))
 
-        assert "Unreadable: none" in _block(output, "Population")
+        assert "Unreadable: none" in block_under(output, "Population")
 
     def test_the_instruments_are_listed_with_the_population_each_holds(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path))
-        instruments = _block(output, "Instruments")
+        _, output = run_version_surface(_project(tmp_path))
+        instruments = block_under(output, "Instruments")
 
         for name in ("packaging-manifest", "docs-audit", "graph-summary-facts", "doctor"):
             assert name in instruments
@@ -261,15 +248,15 @@ class TestTheReportStatesItsOwnPopulation:
         project.mkdir()
         _write(project, "pyproject.toml", f'[project]\nname = "w"\nversion = "{_VERSION}"\n')
 
-        _, output = _run(project)
-        instruments = _block(output, "Instruments")
+        _, output = run_version_surface(project)
+        instruments = block_under(output, "Instruments")
 
         assert "NOT RESOLVED" in instruments
 
     def test_the_limit_of_the_sweep_is_stated_with_the_literal_it_swept_for(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path))
+        _, output = run_version_surface(_project(tmp_path))
 
         assert "current literal" in output
         assert "before the bump" in output
@@ -283,7 +270,7 @@ class TestAVersionThatCannotBeDerived:
         project.mkdir()
         _write(project, "pyproject.toml", '[project]\nname = "widget"\n')
 
-        code, output = _run(project)
+        code, output = run_version_surface(project)
 
         assert code == 2
         assert "NOT DERIVED" in output
@@ -294,7 +281,7 @@ class TestAVersionThatCannotBeDerived:
         project.mkdir()
         _write(project, "pyproject.toml", '[project]\nname = "widget"\n')
 
-        _, output = _run(project)
+        _, output = run_version_surface(project)
 
         assert "Population" not in output
 
@@ -305,7 +292,7 @@ class TestTheJsonPayload:
     def test_every_place_carries_its_line_its_checkers_and_its_reason(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path), "--json")
+        _, output = run_version_surface(_project(tmp_path), "--json")
         payload = json.loads(output)
 
         guide = next(p for p in payload["places"] if p["path"] == "docs/getting-started.md")
@@ -316,7 +303,7 @@ class TestTheJsonPayload:
     def test_the_gap_is_its_own_key_rather_than_a_filter_the_caller_repeats(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path), "--json")
+        _, output = run_version_surface(_project(tmp_path), "--json")
         payload = json.loads(output)
 
         assert [p["path"] for p in payload["unchecked"]] == ["CHANGELOG.md"]
@@ -324,7 +311,7 @@ class TestTheJsonPayload:
     def test_it_carries_the_source_of_truth_the_instruments_and_the_population(
         self, tmp_path: Path
     ) -> None:
-        _, output = _run(_project(tmp_path), "--json")
+        _, output = run_version_surface(_project(tmp_path), "--json")
         payload = json.loads(output)
 
         assert payload["source_of_truth"]["value"] == _VERSION
@@ -338,7 +325,7 @@ class TestTheJsonPayload:
         project.mkdir()
         _write(project, "pyproject.toml", '[project]\nname = "widget"\n')
 
-        code, output = _run(project, "--json")
+        code, output = run_version_surface(project, "--json")
         payload = json.loads(output)
 
         assert code == 2

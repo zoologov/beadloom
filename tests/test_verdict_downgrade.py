@@ -92,7 +92,7 @@ class TestTheCommandReportsTheDowngrade:
         from click.testing import CliRunner
 
         from beadloom.services.cli import main
-        from tests.adopter_project import python_project
+        from tests.support.adopter_project import python_project
 
         project = python_project(tmp_path / "invoice-svc")
         runner = CliRunner()
@@ -139,7 +139,7 @@ class TestOneRootCauseIsOneFinding:
         import sqlite3
 
         from beadloom.onboarding.config_sync import check_config_drift
-        from tests.adopter_project import python_project
+        from tests.support.adopter_project import python_project
 
         project = python_project(tmp_path / "invoice-svc")
         (project.root / ".beadloom").mkdir()

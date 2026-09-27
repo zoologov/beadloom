@@ -24,14 +24,12 @@ from beadloom.graph.rule_engine import (
     load_rules,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.support.violation_kinds import forbidden_of, liveness_of
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
-    from beadloom.graph.rules import Violation
-
-LIVENESS_KIND = "rule_liveness"
 
 
 # ---------------------------------------------------------------------------
@@ -65,14 +63,6 @@ def indexed(conn: sqlite3.Connection) -> sqlite3.Connection:
     return conn
 
 
-def _liveness(violations: list[Violation]) -> list[Violation]:
-    return [v for v in violations if v.rule_type == LIVENESS_KIND]
-
-
-def _forbidden(violations: list[Violation]) -> list[Violation]:
-    return [v for v in violations if v.rule_type == "forbid_import"]
-
-
 # ---------------------------------------------------------------------------
 # A glob that cannot match is reported
 # ---------------------------------------------------------------------------
@@ -90,7 +80,7 @@ class TestDeadGlobIsDiagnosed:
             to_glob="src/pkg/infrastructure/**",
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert len(findings) == 1
         assert findings[0].rule_name == "tui-no-direct-infra"
@@ -107,7 +97,7 @@ class TestDeadGlobIsDiagnosed:
             to_glob="pkg/infrastructure/**",
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert len(findings) == 1
         assert "from" in findings[0].message
@@ -124,7 +114,7 @@ class TestDeadGlobIsDiagnosed:
             to_glob="src/pkg/phantom/**",
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert len(findings) == 1
         assert "src/pkg/ghost/**" in findings[0].message
@@ -158,9 +148,9 @@ class TestDeadGlobIsDiagnosed:
 
         violations = evaluate_import_boundary_rules(indexed, [rule])
 
-        assert _liveness(violations) == []
-        assert len(_forbidden(violations)) == 1
-        assert _forbidden(violations)[0].file_path == "src/pkg/tui/data.py"
+        assert liveness_of(violations) == []
+        assert len(forbidden_of(violations)) == 1
+        assert forbidden_of(violations)[0].file_path == "src/pkg/tui/data.py"
 
     def test_each_dead_rule_is_reported_independently(
         self, indexed: sqlite3.Connection
@@ -181,7 +171,7 @@ class TestDeadGlobIsDiagnosed:
             ),
         ]
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, rules))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, rules))
 
         assert [f.rule_name for f in findings] == ["dead"]
 
@@ -217,7 +207,7 @@ class TestDeadGlobIsDiagnosed:
             severity="error",
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert [f.severity for f in findings] == ["warn"]
 
@@ -236,7 +226,7 @@ class TestDeadGlobIsDiagnosed:
             to_glob="src/pkg/infrastructure/**",
         )
 
-        finding = _liveness(evaluate_import_boundary_rules(indexed, [rule]))[0]
+        finding = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))[0]
 
         assert finding.remediation is not None
         assert "file path" in finding.remediation
@@ -272,7 +262,7 @@ class TestExemptions:
             ),
         )
 
-        violations = _forbidden(evaluate_import_boundary_rules(indexed, [rule]))
+        violations = forbidden_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert [v.file_path for v in violations] == ["src/pkg/tui/data.py"]
 
@@ -295,7 +285,7 @@ class TestExemptions:
             ),
         )
 
-        violations = _forbidden(evaluate_import_boundary_rules(indexed, [rule]))
+        violations = forbidden_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert [v.file_path for v in violations] == ["src/pkg/onboarding/scan.py"]
 
@@ -319,7 +309,7 @@ class TestExemptions:
             ),
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert len(findings) == 1
         assert "pkg/infrastructure/health" in findings[0].message
@@ -345,7 +335,7 @@ class TestExemptions:
             ),
         )
 
-        findings = _liveness(evaluate_import_boundary_rules(indexed, [rule]))
+        findings = liveness_of(evaluate_import_boundary_rules(indexed, [rule]))
 
         assert len(findings) == 1
         assert "to" in findings[0].message
@@ -455,7 +445,7 @@ class TestWhatAToGlobCovers:
             to_glob="pkg/infrastructure/**",
         )
 
-        violations = _forbidden(evaluate_import_boundary_rules(conn, [rule]))
+        violations = forbidden_of(evaluate_import_boundary_rules(conn, [rule]))
 
         assert [v.line_number for v in violations] == [6]
 
@@ -472,7 +462,7 @@ class TestWhatAToGlobCovers:
             to_glob="pkg/infrastructure/**",
         )
 
-        violations = _forbidden(evaluate_import_boundary_rules(conn, [rule]))
+        violations = forbidden_of(evaluate_import_boundary_rules(conn, [rule]))
 
         assert [v.line_number for v in violations] == [7]
 

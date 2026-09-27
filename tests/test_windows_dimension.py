@@ -24,7 +24,7 @@ granted by Developer Mode or an elevated shell). "POSIX symlink semantics" is a
 statement about the operating system's model; the true statement is about this
 process's capability, it is measurable at run time, and on a runner that has the
 privilege the six tests RUN. So all six moved to
-:mod:`tests.symlink_capability`, whose skip states a measured refusal instead of
+:mod:`tests.support.symlink_capability`, whose skip states a measured refusal instead of
 a platform name.
 
 WHAT THIS FILE LOCKS, so the class cannot come back:
@@ -61,7 +61,6 @@ import ast
 import ntpath
 import os
 import posixpath
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
@@ -79,26 +78,19 @@ from beadloom.application.guards.paths import (
     rejection_reason,
     resolve_edit_path,
 )
-from tests import symlink_capability
-from tests.symlink_capability import (
+from tests.support import symlink_capability
+from tests.support.platform_skips import (
+    MarkerFinder,
+    WindowsSkip,
+    assert_every_platform_skip_is_judged,
+    markers_mentioning_platform,
+)
+from tests.support.repository_root import TESTS_ROOT
+from tests.support.symlink_capability import (
     SYMLINK_CAPABILITY,
     SYMLINK_SKIP_REASON,
     SYMLINKS_UNAVAILABLE,
 )
-
-TESTS_DIR = Path(__file__).resolve().parent
-
-
-@dataclass(frozen=True)
-class WindowsSkip:
-    """A skip that survives review: the facility is absent, not merely awkward."""
-
-    #: The POSIX facility Windows does not provide, named specifically enough
-    #: that a reader can check the claim.
-    facility: str
-    #: Why the behaviour under test cannot arise on Windows at all.
-    why: str
-
 
 #: Every ``skipif(... sys.platform ...)`` in ``tests/``, judged. The key is
 #: ``<file>::<qualified name>``, where ``<module>`` means a module-level
@@ -151,82 +143,6 @@ JUDGED_WINDOWS_SKIPS: dict[str, WindowsSkip] = {
 }
 
 
-@dataclass(frozen=True)
-class _Marker:
-    """One ``pytest.mark.<kind>`` call found in a test module."""
-
-    key: str
-    kind: str
-    condition: str
-    keywords: dict[str, str]
-
-
-class _MarkerFinder(ast.NodeVisitor):
-    """Collect ``pytest.mark.skipif`` / ``pytest.mark.xfail`` calls and where they sit."""
-
-    def __init__(self, relative: str) -> None:
-        self._relative = relative
-        self._scope: list[str] = []
-        self.markers: list[_Marker] = []
-
-    def _visit_scope(self, node: ast.AST, name: str) -> None:
-        self._scope.append(name)
-        self.generic_visit(node)
-        self._scope.pop()
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._visit_scope(node, node.name)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._visit_scope(node, node.name)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        kind = _mark_kind(node.func)
-        if kind in {"skipif", "xfail"}:
-            condition = " ".join(ast.unparse(arg) for arg in node.args)
-            keywords = {
-                kw.arg: ast.unparse(kw.value) for kw in node.keywords if kw.arg
-            }
-            condition = " ".join([condition, keywords.get("condition", "")]).strip()
-            self.markers.append(
-                _Marker(
-                    key=f"{self._relative}::{'::'.join(self._scope) or '<module>'}",
-                    kind=kind,
-                    condition=condition,
-                    keywords=keywords,
-                )
-            )
-        self.generic_visit(node)
-
-
-def _mark_kind(func: ast.expr) -> str:
-    """``pytest.mark.skipif`` -> ``"skipif"``; anything else -> ``""``."""
-    if not isinstance(func, ast.Attribute) or not isinstance(func.value, ast.Attribute):
-        return ""
-    if func.value.attr != "mark":
-        return ""
-    return func.attr
-
-
-def _markers_mentioning_platform(kind: str) -> list[_Marker]:
-    """Every *kind* marker in ``tests/`` whose condition reads ``sys.platform``.
-
-    Parsed from the source rather than collected from pytest on purpose: a mark
-    that is inert on this platform is invisible to collection, which is the very
-    property that let six of them sit unexamined.
-    """
-    found: list[_Marker] = []
-    for path in sorted(TESTS_DIR.rglob("*.py")):
-        finder = _MarkerFinder(path.relative_to(TESTS_DIR).as_posix())
-        finder.visit(ast.parse(path.read_text(encoding="utf-8")))
-        found.extend(
-            marker
-            for marker in finder.markers
-            if marker.kind == kind and "sys.platform" in marker.condition
-        )
-    return found
-
-
 def _module_attributes_read(module: Path) -> set[str]:
     """Every ``<name>.<attr>`` the module's CODE reads, prose excluded.
 
@@ -250,18 +166,7 @@ def test_no_win32_skip_is_unjudged() -> None:
     wanted to make it" — that state is what this bead removed, so re-entering it
     requires deleting an assertion rather than adding a line.
     """
-    discovered = {marker.key for marker in _markers_mentioning_platform("skipif")}
-    judged = set(JUDGED_WINDOWS_SKIPS)
-
-    unjudged = discovered - judged
-    stale = judged - discovered
-    assert discovered == judged, (
-        "a platform skip is not accounted for in JUDGED_WINDOWS_SKIPS.\n"
-        f"  skipped on a platform with no judgement: {sorted(unjudged)}\n"
-        f"  judged but no longer present:            {sorted(stale)}\n"
-        "A skip that can never fail proves nothing; either state the POSIX "
-        "facility Windows does not have, or make the test platform-independent."
-    )
+    assert_every_platform_skip_is_judged(JUDGED_WINDOWS_SKIPS)
 
 
 def test_no_platform_xfail_waits_for_a_runner_that_will_not_come() -> None:
@@ -284,7 +189,7 @@ def test_no_platform_xfail_waits_for_a_runner_that_will_not_come() -> None:
     what genuinely needs a kernel is stated as *unverified by decision* in
     ``docs/domains/application/features/flow-guards/SPEC.md``.
     """
-    pinned = [marker.key for marker in _markers_mentioning_platform("xfail")]
+    pinned = [marker.key for marker in markers_mentioning_platform("xfail")]
 
     assert not pinned, (
         f"platform xfails nothing can adjudicate: {sorted(pinned)}.\n"
@@ -308,7 +213,7 @@ class TestTheScannerItselfBites:
             'pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="x")\n',
             encoding="utf-8",
         )
-        finder = _MarkerFinder("test_sample.py")
+        finder = MarkerFinder("test_sample.py")
         finder.visit(ast.parse(module.read_text(encoding="utf-8")))
 
         assert [(m.key, m.kind) for m in finder.markers] == [
@@ -327,7 +232,7 @@ class TestTheScannerItselfBites:
             "        pass\n",
             encoding="utf-8",
         )
-        finder = _MarkerFinder("test_sample.py")
+        finder = MarkerFinder("test_sample.py")
         finder.visit(ast.parse(module.read_text(encoding="utf-8")))
 
         assert [m.key for m in finder.markers] == ["test_sample.py::TestThing::test_it"]
@@ -340,7 +245,7 @@ class TestTheScannerItselfBites:
             'pytestmark = pytest.mark.skipif(condition=sys.platform == "win32", reason="x")\n',
             encoding="utf-8",
         )
-        finder = _MarkerFinder("test_sample.py")
+        finder = MarkerFinder("test_sample.py")
         finder.visit(ast.parse(module.read_text(encoding="utf-8")))
 
         assert "sys.platform" in finder.markers[0].condition
@@ -352,14 +257,14 @@ class TestTheScannerItselfBites:
             'pytestmark = pytest.mark.parametrize("x", [sys.platform])\n',
             encoding="utf-8",
         )
-        finder = _MarkerFinder("test_sample.py")
+        finder = MarkerFinder("test_sample.py")
         finder.visit(ast.parse(module.read_text(encoding="utf-8")))
 
         assert finder.markers == []
 
     def test_the_real_tests_directory_is_scanned_and_not_empty(self) -> None:
         """Guards the glob: a scan that finds nothing would pass the ledger vacuously."""
-        assert _markers_mentioning_platform("skipif"), (
+        assert markers_mentioning_platform("skipif"), (
             "the scanner found no platform skips at all in tests/ — the ledger "
             "would then be satisfied by an empty set rather than by a judgement"
         )
@@ -386,7 +291,7 @@ class TestTheScannerItselfBites:
             "    pass\n",
             encoding="utf-8",
         )
-        finder = _MarkerFinder("test_sample.py")
+        finder = MarkerFinder("test_sample.py")
         finder.visit(ast.parse(module.read_text(encoding="utf-8")))
 
         assert [(m.key, m.kind) for m in finder.markers] == [
@@ -898,7 +803,7 @@ class TestTheSymlinkCapabilityProbe:
         rows are replaced by different ones, and these six are the specific
         tests BDL-061.36 item 3 was written about.
         """
-        source = (TESTS_DIR / "test_guards_paths.py").read_text(encoding="utf-8")
+        source = (TESTS_ROOT / "test_guards_paths.py").read_text(encoding="utf-8")
 
         assert "sys.platform" not in source, (
             "test_guards_paths.py skips on a platform name again; the six "

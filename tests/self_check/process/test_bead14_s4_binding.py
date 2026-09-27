@@ -8,15 +8,18 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB, load_suite
-from tests.test_bead14_s4_binding import (
-    _run_pytest,
+from tests.support.nested_pytest import (
+    run_pytest,
 )
+from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: This repository, so the shipped configuration is read rather than restated.
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _shipped_scenario_count() -> int:
@@ -44,7 +47,7 @@ class TestTheScenariosExecute:
         executed, so the outcome of every row is read individually and a skip is a
         failure of this test. The expected number is the number the suite declares.
         """
-        code, outcomes = _run_pytest(
+        code, outcomes = run_pytest(
             ["tests/acceptance"], cwd=REPO_ROOT, report=tmp_path / "report.xml"
         )
 

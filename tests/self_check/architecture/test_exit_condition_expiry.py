@@ -9,20 +9,20 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
 from beadloom.graph.rule_engine import (
     ImportBoundaryRule,
     exit_condition_deadline,
     load_rules,
 )
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestBeadloomsOwnExemptions:
     """The suite reddens the day one of this project's own baselines outlives its date."""
 
     def test_no_shipped_exemption_has_expired(self) -> None:
-        root = Path(__file__).resolve().parents[3]
+        root = REPO_ROOT
         rules = load_rules(root / ".beadloom" / "_graph" / "rules.yml")
 
         expired = [

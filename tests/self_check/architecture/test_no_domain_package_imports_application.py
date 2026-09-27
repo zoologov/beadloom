@@ -8,21 +8,19 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
-from tests.test_no_domain_package_imports_application import (
-    _is_within,
+from tests.support.module_imports import (
     imported_modules,
+    is_within,
 )
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
-
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+    from pathlib import Path
 
 
 GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"
@@ -85,7 +83,7 @@ def upward_imports(
             for py_file in _python_files(source):
                 text = py_file.read_text(encoding="utf-8")
                 for lineno, module in imported_modules(text, filename=str(py_file)):
-                    if any(_is_within(module, package) for package in above):
+                    if any(is_within(module, package) for package in above):
                         offenders.append((str(py_file.relative_to(REPO_ROOT)), lineno, module))
     return offenders
 

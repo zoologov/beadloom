@@ -13,7 +13,7 @@ This is the source-level instrument, deliberately not an environment one: it
 fails the day a new call site is written, needs no clean room to run, and cannot
 be satisfied by a machine that happens to have ``python`` on ``PATH``.
 
-``SUBPROCESS_CALLS`` and ``called_name`` come from :mod:`tests.decoding_calls`
+``SUBPROCESS_CALLS`` and ``called_name`` come from :mod:`tests.support.decoding_calls`
 rather than being restated here. The question that module asks is about codecs
 and this one is about ``PATH``, but "which callables spawn a process" is a
 single fact, and that module's own docstring records what happens when one fact
@@ -26,9 +26,8 @@ import ast
 import sys
 from pathlib import Path
 
-from tests.decoding_calls import SUBPROCESS_CALLS, called_name
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.support.decoding_calls import SUBPROCESS_CALLS, called_name
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 #: Roots that ship or verify this package. Both are swept: a PATH-sensitive
 #: launch in ``tests/`` reddens the clean room, and one in ``src/`` reddens an

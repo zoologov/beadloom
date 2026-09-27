@@ -23,7 +23,7 @@ from beadloom.onboarding.scanner.claude_md import (
     _render_project_info_section,
     refresh_claude_md,
 )
-from tests.adopter_project import (
+from tests.support.adopter_project import (
     beadloom_local_facts_in,
     hatch_dynamic_project,
     poetry_project,

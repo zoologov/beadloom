@@ -27,15 +27,19 @@ from __future__ import annotations
 import ast
 import sqlite3
 import warnings
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from beadloom.application import graph_reads
 from beadloom.infrastructure import repository as repo
 from beadloom.infrastructure.db import connection, create_schema
+from tests.support.repository_root import REPO_ROOT
 
-_SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "beadloom"
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_SRC_ROOT = REPO_ROOT / "src" / "beadloom"
 _TUI_DIR = _SRC_ROOT / "tui"
 _REPOSITORY_FILE = _SRC_ROOT / "infrastructure" / "repository.py"
 

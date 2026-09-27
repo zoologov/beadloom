@@ -57,7 +57,7 @@ from beadloom.application.waves.population import (
 from beadloom.onboarding.flow_config import resolve_flow_config
 from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS, orphaned_adapters
 from beadloom.services.commands.federation import _gate_ownership_notices
-from tests.adopter_flow import OURS, build_flow
+from tests.support.adopter_flow import OURS, build_flow
 
 if TYPE_CHECKING:
     from pathlib import Path

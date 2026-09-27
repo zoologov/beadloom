@@ -13,7 +13,6 @@ up — the acceptance suite runs inside ``uv run pytest``, not beside it.
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -24,26 +23,14 @@ from beadloom.doc_sync.audit import FactRegistry, run_audit
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
+from tests.support.package_under_test import SHIPPED_FROM
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from beadloom.doc_sync.audit import AuditResult, FactSet
 
 scenarios("../features/audit_self_facts.feature")
-
-def _beadloom_root() -> Path:
-    """This repository's root, found from the installed package rather than here.
-
-    ``tests/acceptance`` is copied out of the repository and run from another
-    directory by ``test_bead14_s4_binding``, so a path derived from this file's
-    own parents points at the copy. The package's location does not move.
-    """
-    import beadloom
-
-    for candidate in Path(beadloom.__file__).resolve().parents:
-        if (candidate / "pyproject.toml").is_file():
-            return candidate
-    raise AssertionError("no manifest above the beadloom package — cannot locate its root")
-
 
 @pytest.fixture()
 def world() -> dict[str, Any]:
@@ -78,7 +65,7 @@ def _adopter_db(root: Path) -> sqlite3.Connection:
 
 
 #: The adopter's own identity. It is built here rather than imported from
-#: ``tests.adopter_project`` because the acceptance suite is copied out of the
+#: ``tests.support.adopter_project`` because the acceptance suite is copied out of the
 #: repository and run from another directory by ``test_bead14_s4_binding``, where
 #: a ``tests.`` import does not resolve and the copy fails at collection.
 ADOPTER_NAME = "invoice-svc"
@@ -111,7 +98,7 @@ def _self(world: dict[str, Any]) -> None:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     create_schema(conn)
-    world["root"] = _beadloom_root()
+    world["root"] = SHIPPED_FROM
     world["db"] = conn
 
 

@@ -8,12 +8,9 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path as _Path
-
 import yaml
 
-REPO_ROOT = _Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 

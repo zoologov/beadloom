@@ -13,7 +13,7 @@ The questions differ (a ``write_text`` can pick the wrong codec but never
 raises ``UnicodeDecodeError``; a ``read_text(errors="replace")`` states its
 codec and cannot raise), so the two verdicts stay in their own modules. What
 lives here is only what they share: how to read a call out of an AST and decide
-what kind of I/O it is. BDL-061.40 extracted :mod:`tests.ambient_codec` for the
+what kind of I/O it is. BDL-061.40 extracted :mod:`tests.support.ambient_codec` for the
 same reason — the epic's own finding is that one fact told twice drifts.
 """
 

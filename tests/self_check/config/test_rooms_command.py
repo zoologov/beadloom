@@ -11,13 +11,13 @@ from __future__ import annotations
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheCommandOverThisRepository:
     def test_it_lists_the_interpreters_this_project_supports(self) -> None:
-        from pathlib import Path as _Path
 
-        root = _Path(__file__).resolve().parents[3]
+        root = REPO_ROOT
         outcome = CliRunner().invoke(
             main, ["rooms", "--project", str(root), "--dimension", "python"]
         )

@@ -5,35 +5,7 @@ This repository's own ci.yml is checked in tests/self_check/config/test_ci_local
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
-import yaml
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-#: The job that carries the dimension.
-LOCALE_JOB = "tests-locale"
-
-
-TEMPLATE = (
-    REPO_ROOT
-    / "src"
-    / "beadloom"
-    / "onboarding"
-    / "templates"
-    / "ai_techwriter"
-    / "github-workflow.yml"
-)
-
-
-def _template_jobs() -> dict[str, Any]:
-    doc = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))
-    assert isinstance(doc, dict)
-    jobs = doc["jobs"]
-    assert isinstance(jobs, dict)
-    return jobs
+from tests.support.ci_workflows import GH_TEMPLATE, LOCALE_JOB, jobs_of
 
 
 def test_the_vendored_template_runs_the_locale_dimension_too() -> None:
@@ -42,7 +14,7 @@ def test_the_vendored_template_runs_the_locale_dimension_too() -> None:
     Adopters running in a container are who .36's defect would have shipped to,
     so the template carrying the dimension is the point rather than a courtesy.
     """
-    assert LOCALE_JOB in _template_jobs(), (
+    assert LOCALE_JOB in jobs_of(GH_TEMPLATE), (
         f"the vendored template declares no {LOCALE_JOB!r} job, but "
         "DEFAULT_STATUS_CHECK_CONTEXTS names its check-runs as REQUIRED — a "
         "scaffolded repo would have required checks that never report"
@@ -60,7 +32,7 @@ def test_every_default_required_context_is_a_check_the_template_runs() -> None:
     from beadloom.onboarding.branch_protection import DEFAULT_STATUS_CHECK_CONTEXTS
 
     rendered: set[str] = set()
-    for key, job in _template_jobs().items():
+    for key, job in jobs_of(GH_TEMPLATE).items():
         base = str(job.get("name", key))
         strategy = job.get("strategy")
         matrix = strategy.get("matrix") if isinstance(strategy, dict) else None

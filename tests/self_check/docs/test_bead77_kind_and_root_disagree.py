@@ -18,12 +18,11 @@ from beadloom.infrastructure.doc_roots import (
     SPACES,
     resolve_doc_spaces,
 )
-from tests.test_bead77_kind_and_root_disagree import (
-    _found_by_any_root,
-    _populations,
+from tests.support.doc_root_populations import (
+    found_by_any_root,
+    populations_by_space,
 )
-
-REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheHoleIsInvisibleOnThisRepositoryAndOnAnAdopter:
@@ -37,10 +36,10 @@ class TestTheHoleIsInvisibleOnThisRepositoryAndOnAnAdopter:
 
     def test_this_repository_places_every_document_a_root_found(self) -> None:
         spaces = resolve_doc_spaces(REPO_ROOT)
-        populations = _populations(REPO_ROOT, spaces)
+        populations = populations_by_space(REPO_ROOT, spaces)
         populations[SPACE_WORKING] = len(spaces.working_documents(REPO_ROOT))
 
-        assert sum(populations.values()) == len(_found_by_any_root(REPO_ROOT, spaces))
+        assert sum(populations.values()) == len(found_by_any_root(REPO_ROOT, spaces))
 
     def test_this_repository_reports_no_disagreement(self) -> None:
         """Zero here, and zero is the honest number rather than a silence."""

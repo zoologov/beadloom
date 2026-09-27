@@ -22,12 +22,12 @@ from beadloom.infrastructure.doc_roots import (
     SPACE_WORKING,
     resolve_doc_spaces,
 )
-from tests.test_bead18_s5_relation import (
-    _EPICS,
-    _HANDED_OUT,
-    _repo_beads,
-    _repo_known_refs,
-    _repo_report,
+from tests.support.relation_report import (
+    EPICS,
+    HANDED_OUT,
+    repo_beads,
+    repo_known_refs,
+    repo_report,
 )
 
 if TYPE_CHECKING:
@@ -81,8 +81,8 @@ def _declared_in_section(text: str, known: set[str]) -> list[str]:
 def _remove_handed_out_roots() -> Iterator[None]:
     """Keep the tests independent of each other and of the machine's temp dir."""
     yield
-    while _HANDED_OUT:
-        shutil.rmtree(_HANDED_OUT.pop(), ignore_errors=True)
+    while HANDED_OUT:
+        shutil.rmtree(HANDED_OUT.pop(), ignore_errors=True)
 
 
 class TestTheDenominatorsAreRecomputable:
@@ -97,7 +97,7 @@ class TestTheDenominatorsAreRecomputable:
     def test_the_three_populations_match_an_independent_count(
         self, self_check_snapshot: Path
     ) -> None:
-        report = _repo_report(self_check_snapshot)
+        report = repo_report(self_check_snapshot)
 
         assert dict(report.populations) == _independent_population(self_check_snapshot)
 
@@ -113,7 +113,7 @@ class TestTheDenominatorsAreRecomputable:
         self, self_check_snapshot: Path
     ) -> None:
         """No epic may be in neither bucket — that is where a denominator hides."""
-        report = _repo_report(self_check_snapshot)
+        report = repo_report(self_check_snapshot)
 
         assert report.epics_declaring_nodes + report.epics_declaring_nothing == report.epics
 
@@ -121,10 +121,10 @@ class TestTheDenominatorsAreRecomputable:
         self, self_check_snapshot: Path
     ) -> None:
         """``refs_checked`` recounted from the CONTEXT sections and the export."""
-        beads = _repo_beads(self_check_snapshot)
-        known = _repo_known_refs(self_check_snapshot)
+        beads = repo_beads(self_check_snapshot)
+        known = repo_known_refs(self_check_snapshot)
         expected = 0
-        for directory in sorted((self_check_snapshot / _EPICS).iterdir()):
+        for directory in sorted((self_check_snapshot / EPICS).iterdir()):
             document = directory / "CONTEXT.md"
             if not document.is_file():
                 document = directory / "BRIEF.md"
@@ -134,24 +134,24 @@ class TestTheDenominatorsAreRecomputable:
                 continue
             expected += len(_declared_in_section(document.read_text(encoding="utf-8"), known))
 
-        assert _repo_report(self_check_snapshot).refs_checked == expected
+        assert repo_report(self_check_snapshot).refs_checked == expected
 
     def test_the_epics_with_closed_beads_are_recountable_from_the_export(
         self, self_check_snapshot: Path
     ) -> None:
-        beads = _repo_beads(self_check_snapshot)
-        report = _repo_report(self_check_snapshot)
+        beads = repo_beads(self_check_snapshot)
+        report = repo_report(self_check_snapshot)
         closed = [key for key, statuses in beads.items() if "closed" in statuses]
 
         assert report.epics_with_closed_beads == sum(
-            1 for key in closed if (self_check_snapshot / _EPICS / key).is_dir()
+            1 for key in closed if (self_check_snapshot / EPICS / key).is_dir()
         )
 
     def test_the_relation_reports_that_it_related_something(
         self, self_check_snapshot: Path
     ) -> None:
         """The premise of every count above: it is not a vacuous run."""
-        assert _repo_report(self_check_snapshot).relation_checked is True
+        assert repo_report(self_check_snapshot).relation_checked is True
 
 
 class TestAnExcusedPairSaysSo:
@@ -174,7 +174,7 @@ class TestAnExcusedPairSaysSo:
         document(s) exempt", which counts documents rather than excused pairs —
         a true sentence about a population that was never in the check.
         """
-        report = _repo_report(self_check_snapshot)
+        report = repo_report(self_check_snapshot)
         # The snapshot's index (BDL-074 A1, A2): read as found on disk, the answer
         # depended on the last reindex, and without one the leg skipped.
         conn = open_db(self_check_snapshot / ".beadloom" / "beadloom.db")

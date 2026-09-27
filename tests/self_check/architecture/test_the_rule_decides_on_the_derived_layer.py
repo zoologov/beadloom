@@ -15,9 +15,7 @@ import pytest
 
 from beadloom.graph.rules.evaluators import evaluate_layer_rules
 from beadloom.graph.rules.layer_reach import layer_rule_reach
-from tests.test_the_rule_decides_on_the_derived_layer import (
-    _rule_of,
-)
+from tests.support.layer_rule import rule_of
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -42,7 +40,7 @@ class TestOnThisRepository:
         self, live: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
         """16 of 365 by own tags before this bead; the ancestry figure is the claim now."""
-        reach = layer_rule_reach(live, _rule_of(self_check_snapshot))
+        reach = layer_rule_reach(live, rule_of(self_check_snapshot))
         assert reach.population.total > 300
         assert reach.population.evaluated > reach.population.total * 9 // 10
 
@@ -53,6 +51,6 @@ class TestOnThisRepository:
         every crossing left was excused by name with a reason (B2). This asserts
         that work held, on the graph, rather than on a report of it.
         """
-        rule = _rule_of(self_check_snapshot)
+        rule = rule_of(self_check_snapshot)
         assert [v for v in evaluate_layer_rules(live, [rule]) if v.rule_type == "layer"] == []
 

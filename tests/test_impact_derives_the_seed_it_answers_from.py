@@ -37,13 +37,8 @@ from beadloom.application.source_derivation import (
     PUTS_BYTES_ON_DISK,
     sweep_modules,
 )
-from beadloom.infrastructure.atomic_io import write_yaml_atomic
-
-#: The commit point every graph YAML routes through, read off the product's own
-#: function object. It is named HERE, in the test, and nowhere in the production
-#: package -- which :class:`TestNoProductionLiteralNamesTheCommitPoint` checks.
-THE_COMMIT_POINT = write_yaml_atomic.__name__
-
+from tests.support.impact_seed import THE_COMMIT_POINT
+from tests.support.repository_root import REPO_ROOT
 
 #: The production modules that must never spell the commit point.
 THE_PRODUCTION_SURFACE = (
@@ -335,7 +330,7 @@ def _spelled_in_code(path: Path) -> set[str]:
 
 
 def _the_production_modules() -> list[Path]:
-    repo = Path(__file__).resolve().parents[1]
+    repo = REPO_ROOT
     found: list[Path] = []
     for relative in THE_PRODUCTION_SURFACE:
         path = repo / relative

@@ -24,12 +24,12 @@ import pytest
 from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.models import GuardOutcome
 from beadloom.application.guards.paths import PathScope, resolve_edit_path
-from tests.filesystem_names import (
+from tests.support.filesystem_names import (
     UNENCODABLE_FRAGMENT,
     filesystem_can_name,
     unnameable_reason,
 )
-from tests.symlink_capability import SYMLINK_SKIP_REASON, SYMLINKS_UNAVAILABLE
+from tests.support.symlink_capability import SYMLINK_SKIP_REASON, SYMLINKS_UNAVAILABLE
 
 _EXCLUDED_SCRIPTS = (
     "guards:\n"
@@ -492,7 +492,7 @@ class TestTheAcceptedPathShape:
         can actually exist.
 
         ``src/файл.py`` is ordinary **on a filesystem that can spell it**. The
-        shape's last clause is ambient by design (:mod:`tests.filesystem_names`),
+        shape's last clause is ambient by design (:mod:`tests.support.filesystem_names`),
         so this row asserts the answer that is true on the image running it
         rather than the answer a UTF-8 machine happens to give — the product is
         right in both worlds, and it was this assertion that was wrong under the

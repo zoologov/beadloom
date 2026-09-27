@@ -23,14 +23,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.contact_guard import (
+from tests.support.contact_guard import (
     ALLOWED_CONTACTS,
     AllowedContact,
     Contact,
     ContactGuard,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 
 @pytest.fixture()
@@ -407,7 +406,7 @@ class TestTheSuiteRunsInAnEmptyDirectory:
 _CONFTEST = '''
 from pathlib import Path
 import pytest
-from tests.contact_guard import ContactGuard, AllowedContact
+from tests.support.contact_guard import ContactGuard, AllowedContact
 
 ROOT = Path({root!r})
 _GUARD = ContactGuard(ROOT, (AllowedContact("test_suite.py::test_allowed", "a self-check"),))

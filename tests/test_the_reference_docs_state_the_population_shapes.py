@@ -49,12 +49,12 @@ import pytest
 from beadloom.graph.linter import POPULATION_MARKER, LintResult, format_porcelain
 from beadloom.graph.rules.layer_reach import LayerReach
 from beadloom.graph.rules.layers import LayerPopulation
-from tests.package_under_test import PACKAGE_ROOT
+from tests.support.package_under_test import PACKAGE_ROOT
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The published reference tree, walked rather than enumerated.
 DOCS_ROOT = REPO_ROOT / "docs"

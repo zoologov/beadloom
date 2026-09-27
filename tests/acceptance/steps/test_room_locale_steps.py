@@ -8,7 +8,7 @@ double.
 One step runs a CHILD process, and it has to. `locale.getpreferredencoding` reads
 the codec the C library resolved when the interpreter started, so setting
 `LC_ALL` inside a running test changes nothing at all — which is the same reason
-`tests/ambient_codec.py` constructs its codec instead of arranging one. A
+`tests/support/ambient_codec.py` constructs its codec instead of arranging one. A
 developer reproducing a locale leg starts a new process, so that is what this
 scenario does.
 

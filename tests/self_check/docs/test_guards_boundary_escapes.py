@@ -9,19 +9,16 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from beadloom.application.guards.contract import GuardProbes
-from tests.test_guards_boundary_escapes import (
-    _cli,
-    _NoBeads,
-    _project,
+from tests.support.guard_project import (
+    NoBeads,
+    guarded_project,
+    invoke_cli,
 )
-
-_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT as _ROOT
 
 _SPEC = _ROOT / "docs" / "domains" / "application" / "features" / "flow-guards" / "SPEC.md"
 
@@ -32,7 +29,7 @@ def stub_probes(monkeypatch):
     from beadloom.services.commands import guard as guard_cmd
 
     monkeypatch.setattr(
-        guard_cmd, "_probes", lambda _root: GuardProbes(tracker=_NoBeads())
+        guard_cmd, "_probes", lambda _root: GuardProbes(tracker=NoBeads())
     )
 
 
@@ -69,9 +66,9 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         self, tmp_path, stub_probes
     ) -> None:
         """Last-wins was an unstated rule. It is stated now, and read back here."""
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
-        result = _cli(
+        result = invoke_cli(
             [
                 "guard",
                 "bead-claimed",

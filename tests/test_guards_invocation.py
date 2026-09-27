@@ -67,36 +67,39 @@ from beadloom.application.guards.config import GuardExclusion
 from beadloom.application.guards.contract import Guard, GuardProbes
 from beadloom.application.guards.firing import read_firings
 from beadloom.services.cli import main
-from tests.filesystem_names import (
+from tests.support.filesystem_names import (
     UNENCODABLE_FRAGMENT,
     as_the_process_receives,
     filesystem_can_name,
 )
-from tests.package_under_test import PACKAGE_ROOT, module_tree, modules_under
-
-#: The package under test, asked of the IMPORT and not of this file. Under
-#: `mutmut run` the suite is copied beside the mutated sources, so a root built
-#: from `__file__` reads the copy; `tests/package_under_test.py` resolves it
-#: through the imported package and declines mutmut's generated names (BDL-UX
-#: #289). This file's populations cannot trip on the second half today — no
-#: mutated module holds a `record_firing(` call or a process terminator — so the
-#: move keeps its behaviour and removes the shape.
-_SRC = PACKAGE_ROOT
-_COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
-_GUARDS_PACKAGE = _SRC / "application" / "guards"
-_BOUNDARY_MODULE = _GUARDS_PACKAGE / "invocation.py"
-_DISCOVERY_MODULE = _GUARDS_PACKAGE / "project_root.py"
-
-#: A guard declared blocking, with one ordinary exclusion over ``src/``.
-_BLOCKING_WITH_EXCLUSION = (
-    "guards:\n"
-    "  bead-claimed:\n"
-    "    strictness: { default: block }\n"
-    "    exclusions:\n"
-    "      - path: 'src/*.py'\n"
-    "        reason: 'generated sources'\n"
-    "        until: 'BDL-999'\n"
+from tests.support.guard_boundary import (
+    COMMAND_MODULE,
+    GUARD_COMMAND,
+    GUARDS_PACKAGE,
+    SRC,
+    THE_ONE_WAY_OUT,
+    boundary_path_modules,
+    click_refuses,
+    declared_conversions,
+    module_ast,
+    parameters_click_converts,
+    parses_an_argv_value,
+    process_terminators,
+    record_firing_sites,
+    source_modules,
+    terminal_name,
+    terminators_on_the_boundary_path,
 )
+from tests.support.guard_exit_paths import (
+    BLOCKING_WITH_EXCLUSION,
+    EXIT_PATHS,
+    INJECTED_FAILURES,
+    NOT_A_PROJECT,
+)
+from tests.support.package_under_test import modules_under
+
+_BOUNDARY_MODULE = GUARDS_PACKAGE / "invocation.py"
+_DISCOVERY_MODULE = GUARDS_PACKAGE / "project_root.py"
 
 
 class _NoBeads:
@@ -107,7 +110,7 @@ class _NoBeads:
         return ()
 
 
-def _project(tmp_path: Path, flow: str = _BLOCKING_WITH_EXCLUSION) -> Path:
+def _project(tmp_path: Path, flow: str = BLOCKING_WITH_EXCLUSION) -> Path:
     (tmp_path / ".beadloom").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".beadloom" / "flow.yml").write_text(flow, encoding="utf-8")
     return tmp_path
@@ -211,10 +214,6 @@ def _produced_a_verdict(*, rest: list[str], exit_code: int) -> bool:
     return not ("--liveness" in rest and exit_code == 0)
 
 
-#: Stands in, inside a row's argv, for a directory that exists and is not a project.
-NOT_A_PROJECT = "{not_a_project}"
-
-
 def _row_argv(
     root: Path, elsewhere: Path, name: str | None, rest: list[str]
 ) -> list[str]:
@@ -232,147 +231,6 @@ def _row_argv(
 def _row_locates_a_project(rest: list[str]) -> bool:
     """A row that points ``--project`` at something that is not one locates none."""
     return NOT_A_PROJECT not in rest
-
-
-#: (label, argv-after-the-name, stdin, flow.yml, guard name, exit code).
-#: Whether the row records is NOT a column — see :func:`_should_record`.
-_EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
-    ("a guard that passes", "working-branch", [], _BLOCKING_WITH_EXCLUSION, "", 0),
-    (
-        "a guard that blocks",
-        "bead-claimed",
-        ["--context", "path=app.py"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        2,
-    ),
-    (
-        "an excluded path",
-        "bead-claimed",
-        ["--context", "path=src/a.py"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        0,
-    ),
-    (
-        "a refused path",
-        "bead-claimed",
-        ["--context", "path=src\\app.py"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        2,
-    ),
-    ("an unreadable flow.yml", "bead-claimed", [], "guards: [1, 2\n", "", 3),
-    (
-        "an exclusion with no reason",
-        "bead-claimed",
-        [],
-        "guards:\n  bead-claimed:\n    exclusions:\n      - path: 'x/**'\n",
-        "",
-        3,
-    ),
-    ("a guard name nobody registered", "no-such-guard", [], _BLOCKING_WITH_EXCLUSION, "", 3),
-    ("no guard name at all", None, [], _BLOCKING_WITH_EXCLUSION, "", 3),
-    (
-        "a malformed --context pair",
-        "bead-claimed",
-        ["--context", "nonsense"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        3,
-    ),
-    (
-        "a --context pair with an empty key",
-        "bead-claimed",
-        ["--context", "=value"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        3,
-    ),
-    (
-        # Exit 1 since BDL-UX #254, having been 3 until BDL-061.33 and 2 between
-        # them. Every other row that answers 3 is reachable from a shell, where 3
-        # keeps a declared-configuration defect distinct from a guard that fired;
-        # this one names a harness, and a harness reads only the code. It is an
-        # `unresolved` verdict — the guard could not evaluate itself, because it
-        # cannot translate the payload this binding sends — and the repair is an
-        # edit to the binding, which the blocking code forbade. The hooked twin
-        # of each 3-row is derived from this table in
-        # ``tests/test_guards_unresolved.py`` rather than written out again.
-        "a harness nobody supports",
-        "bead-claimed",
-        ["--hook", "no-such-harness"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        1,
-    ),
-    (
-        "a hook payload that is not JSON",
-        "bead-claimed",
-        ["--hook", "claude-code"],
-        _BLOCKING_WITH_EXCLUSION,
-        "{not json",
-        2,
-    ),
-    (
-        "a hook payload that is not an object",
-        "bead-claimed",
-        ["--hook", "claude-code"],
-        _BLOCKING_WITH_EXCLUSION,
-        "[1, 2]",
-        2,
-    ),
-    ("the liveness report", None, ["--liveness"], _BLOCKING_WITH_EXCLUSION, "", 0),
-    (
-        "the liveness report with a guard named",
-        "bead-claimed",
-        ["--liveness"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        3,
-    ),
-    (
-        "the liveness report over an unreadable flow.yml",
-        None,
-        ["--liveness"],
-        "guards: [1\n",
-        "",
-        3,
-    ),
-    # Rows BDL-061.30 derived from the code and the CLI surface, which this
-    # table did not carry. Four are argv-reachable and live here; the fifth (an
-    # interrupt during the evaluation) is injected, and is a row of
-    # :data:`_INJECTED_FAILURES` instead.
-    ("an empty guard name", "", [], _BLOCKING_WITH_EXCLUSION, "", 3),
-    (
-        # Exit 3 since BDL-UX #254: an unlocatable project is an inability the
-        # guard has about ITSELF, and this row is a shell caller. Nothing is
-        # manufactured either way — the "creates nothing" half of BDL-061.32 is
-        # asserted on this same row below and did not move.
-        "a --project that is not a project",
-        "bead-claimed",
-        ["--project", NOT_A_PROJECT, "--context", "path=app.py"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        3,
-    ),
-    (
-        "a hook payload of zero bytes",
-        "bead-claimed",
-        ["--hook", "claude-code"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        2,
-    ),
-    (
-        "a --context key supplied twice",
-        "bead-claimed",
-        ["--context", "path=src/a.py", "--context", "path=app.py"],
-        _BLOCKING_WITH_EXCLUSION,
-        "",
-        2,
-    ),
-)
 
 
 class TestEveryExitPathEndsWithAVerdictAndARecord:
@@ -393,8 +251,8 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
     @pytest.mark.parametrize(
         ("label", "name", "rest", "flow", "stdin", "exit_code"),
-        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in _EXIT_PATHS],
-        ids=[row[0] for row in _EXIT_PATHS],
+        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in EXIT_PATHS],
+        ids=[row[0] for row in EXIT_PATHS],
     )
     def test_the_row_records_exactly_when_the_rule_says_it_does(
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
@@ -416,8 +274,8 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
     @pytest.mark.parametrize(
         ("label", "name", "rest", "flow", "stdin", "exit_code"),
-        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in _EXIT_PATHS],
-        ids=[row[0] for row in _EXIT_PATHS],
+        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in EXIT_PATHS],
+        ids=[row[0] for row in EXIT_PATHS],
     )
     def test_the_row_says_something_the_caller_can_read(
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
@@ -434,8 +292,8 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
     @pytest.mark.parametrize(
         ("label", "name", "rest", "flow", "stdin", "exit_code"),
-        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in _EXIT_PATHS],
-        ids=[row[0] for row in _EXIT_PATHS],
+        [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in EXIT_PATHS],
+        ids=[row[0] for row in EXIT_PATHS],
     )
     def test_no_row_exits_one_unless_the_verdict_is_a_warning(
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
@@ -480,8 +338,8 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
     def test_every_enumerated_row_is_reachable_through_the_real_binary(self) -> None:
         """The table is not allowed to shrink quietly."""
-        assert len(_EXIT_PATHS) >= 20
-        assert len({row[0] for row in _EXIT_PATHS}) == len(_EXIT_PATHS)
+        assert len(EXIT_PATHS) >= 20
+        assert len({row[0] for row in EXIT_PATHS}) == len(EXIT_PATHS)
 
 
 # ==========================================================================
@@ -519,23 +377,6 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 #   arrived rather than a dead test session (standing rule 5).
 
 
-def _module_ast(path: Path) -> ast.Module:
-    """*path* parsed without whatever mutmut generated into it."""
-    return module_tree(path)
-
-
-def _calls_named(tree: ast.AST, name: str) -> list[ast.Call]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (
-            (isinstance(node.func, ast.Name) and node.func.id == name)
-            or (isinstance(node.func, ast.Attribute) and node.func.attr == name)
-        )
-    ]
-
-
 def _function(tree: ast.AST, name: str) -> ast.FunctionDef:
     return next(
         node
@@ -544,158 +385,9 @@ def _function(tree: ast.AST, name: str) -> ast.FunctionDef:
     )
 
 
-def _terminal_name(node: ast.expr | None) -> str:
-    """The last component of a dotted expression: ``os._exit`` -> ``_exit``."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    return ""
-
-
-#: Call targets that end the process, matched on their LAST component so the
-#: module they are reached through cannot disguise them: ``sys.exit``,
-#: ``ctx.exit``, ``os._exit`` and a bare ``exit`` are one behaviour.
-TERMINATING_CALL_NAMES = frozenset({"exit", "_exit", "quit"})
-
-#: Call targets whose last component is too ordinary to match on its own, so
-#: these are matched on the whole dotted target instead.
-TERMINATING_CALL_TARGETS = frozenset(
-    {
-        "os.abort",
-        "os.kill",
-        "os.execl",
-        "os.execlp",
-        "os.execv",
-        "os.execve",
-        "os.execvp",
-        "signal.raise_signal",
-    }
-)
-
-#: Exceptions that end the process rather than being handled by it: ``SystemExit``
-#: is not an ``Exception``, and Click turns ``Abort``/``Exit`` into an exit code.
-TERMINATING_EXCEPTIONS = frozenset({"SystemExit", "Abort", "Exit"})
-
-
-def process_terminators(tree: ast.AST) -> list[str]:
-    """Every construct in *tree* that can end the process, however it is spelled.
-
-    A ``raise`` is read from its exception *node* rather than from a call, so a
-    bare ``raise SystemExit`` counts like the rest — ``.29``'s pin could not see
-    one, because there ``node.exc`` is a ``Name`` and not a ``Call``.
-    """
-    found: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if (
-                _terminal_name(node.func) in TERMINATING_CALL_NAMES
-                or ast.unparse(node.func) in TERMINATING_CALL_TARGETS
-            ):
-                found.append(ast.unparse(node))
-        elif isinstance(node, ast.Raise) and node.exc is not None:
-            raised = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
-            if _terminal_name(raised) in TERMINATING_EXCEPTIONS:
-                found.append(ast.unparse(node))
-    return found
-
-
-def boundary_path_modules() -> tuple[Path, ...]:
-    """Every module one guard invocation passes control through.
-
-    Discovered from the package rather than listed, because a listed scope is
-    what ``.30`` walked past: the boundary module itself was never read.
-    """
-    return (_COMMAND_MODULE, *modules_under(_GUARDS_PACKAGE))
-
-
-def terminators_on_the_boundary_path() -> list[tuple[str, str]]:
-    """``(module, spelling)`` for every way control can leave that path."""
-    return [
-        (path.name, spelling)
-        for path in boundary_path_modules()
-        for spelling in process_terminators(_module_ast(path))
-    ]
-
-
-#: The one place control is allowed to leave: module, and the statement itself.
-THE_ONE_WAY_OUT = ("guard.py", "sys.exit(result.exit_code)")
-
-
 # --------------------------------------------------------------------------
 # What Click converts before the callback runs (BDL-061.32).
 # --------------------------------------------------------------------------
-
-#: The subcommand under test, spelled the way an operator types it.
-_GUARD = "guard"
-
-
-def parameters_click_converts() -> list[tuple[str, click.Command, click.Parameter]]:
-    """``(where, command, parameter)`` for everything Click parses on the way in.
-
-    Read from the command Click will DISPATCH for ``beadloom guard`` rather than
-    from a symbol this module imports, so a parameter added through a shared
-    decorator, an ``add_command`` or a plugin is inside the pin on the day it
-    lands. The group's own options are here too, because a validator on
-    ``beadloom --x`` exits before this callback exactly as one on
-    ``beadloom guard --x`` does.
-    """
-    command = main.commands[_GUARD]
-    return [
-        *(("beadloom", main, param) for param in main.params),
-        *((f"beadloom {_GUARD}", command, param) for param in command.params),
-    ]
-
-
-def parses_an_argv_value(param: click.Parameter) -> bool:
-    """Whether Click ever runs an argv string through *param*'s conversion.
-
-    A flag's value is a constant Click supplies itself, so no argv string
-    reaches its type. Everything else is probed — fail-closed, so a parameter
-    kind nobody anticipated is probed rather than excused.
-    """
-    return not getattr(param, "is_flag", False)
-
-
-def _option_spelling(param: click.Parameter) -> str:
-    """The long spelling if there is one: ``--opt=value`` cannot be mistaken for
-    a second option when the value itself begins with a dash."""
-    return next((opt for opt in param.opts if opt.startswith("--")), param.opts[0])
-
-
-def click_refuses(
-    command: click.Command,
-    param: click.Parameter,
-    value: str,
-    *,
-    subcommand: str | None = None,
-) -> str | None:
-    """How Click ended the invocation instead of reaching the callback, if it did.
-
-    ``make_context`` is exactly the parse Click performs before ``invoke``: it
-    converts every parameter and runs their callbacks, and it does *not* call
-    the command's own callback. So "this returned" is precisely "control got as
-    far as the boundary", measured through Click's own machinery rather than
-    inferred from the name of a type.
-    """
-    if isinstance(param, click.Argument):
-        argv = ["--", value]
-    elif _option_spelling(param).startswith("--"):
-        argv = [f"{_option_spelling(param)}={value}"]
-    else:  # pragma: no cover — no short-only option exists today
-        argv = [_option_spelling(param), value]
-    if subcommand is not None:
-        argv.append(subcommand)
-
-    context = None
-    try:
-        context = command.make_context(command.name or "?", argv)
-    except BaseException as exc:  # a usage error, an exit, a raising converter
-        return f"{type(exc).__name__}: {exc}"
-    finally:
-        if context is not None:
-            context.close()
-    return None
 
 
 def refusals_of(
@@ -711,45 +403,6 @@ def refusals_of(
         for what, value in values
         if (refusal := click_refuses(command, param, value, subcommand=subcommand))
     ]
-
-
-def declared_conversion(param: click.Parameter) -> str:
-    """The conversion *param* declares, read from the runtime object.
-
-    From the object and not from the source, so a type built through an alias,
-    a helper or a variable is described as what it IS. A ``click.Path`` is
-    written out as the refusals it can make, because that — not the constructor
-    name — is what decides whether Click exits before the callback.
-    """
-    kind = param.type
-    if isinstance(kind, click.Path):
-        refusals = [
-            name
-            for name, applies in (
-                ("exists", kind.exists),
-                ("file_okay=False", not kind.file_okay),
-                ("dir_okay=False", not kind.dir_okay),
-                ("readable", getattr(kind, "readable", False)),
-                ("writable", getattr(kind, "writable", False)),
-                ("executable", getattr(kind, "executable", False)),
-            )
-            if applies
-        ]
-        path_type = getattr(kind.type, "__name__", repr(kind.type))
-        return (
-            f"click.Path({', '.join(refusals) or 'nothing it can refuse'}, "
-            f"path_type={path_type})"
-        )
-    return repr(kind)
-
-
-def declared_conversions() -> dict[str, str]:
-    """Every conversion an argv string can meet on the way to the callback."""
-    return {
-        f"{where} {param.name}": declared_conversion(param)
-        for where, _command, param in parameters_click_converts()
-        if parses_an_argv_value(param)
-    }
 
 
 #: The conversion each value-taking parameter is allowed to declare. Written out
@@ -812,29 +465,15 @@ def access_can_be_refused() -> bool:
             refused.chmod(0o755)
 
 
-def _source_modules() -> tuple[Path, ...]:
-    """Every module in the package — the scope of the "one writer" pin."""
-    return modules_under(_SRC)
-
-
-def record_firing_sites() -> list[tuple[str, str]]:
-    """Every call of the recorder, anywhere in the source tree."""
-    return [
-        (path.relative_to(_SRC).as_posix(), ast.unparse(call))
-        for path in _source_modules()
-        for call in _calls_named(_module_ast(path), "record_firing")
-    ]
-
-
 def record_firing_importers() -> list[str]:
     """Every module that imports the recorder — an alias would hide a call site."""
     return [
-        path.relative_to(_SRC).as_posix()
-        for path in _source_modules()
+        path.relative_to(SRC).as_posix()
+        for path in source_modules()
         if any(
             isinstance(node, ast.ImportFrom)
             and any(alias.name == "record_firing" for alias in node.names)
-            for node in ast.walk(_module_ast(path))
+            for node in ast.walk(module_ast(path))
         )
     ]
 
@@ -850,7 +489,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         """A module added to the guards package is in scope the day it is added."""
         scope = boundary_path_modules()
 
-        assert set(scope) == {_COMMAND_MODULE, *modules_under(_GUARDS_PACKAGE)}
+        assert set(scope) == {COMMAND_MODULE, *modules_under(GUARDS_PACKAGE)}
         assert _BOUNDARY_MODULE in scope, "the boundary module itself must be read"
         assert _DISCOVERY_MODULE in scope
         assert len(scope) >= 15, [path.name for path in scope]
@@ -872,7 +511,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         """
         raising = {
             node.name
-            for node in ast.walk(_module_ast(_COMMAND_MODULE))
+            for node in ast.walk(module_ast(COMMAND_MODULE))
             if isinstance(node, ast.FunctionDef)
             and any(isinstance(child, ast.Raise) for child in ast.walk(node))
         }
@@ -885,7 +524,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         """One return, and it is the step that writes (or explains) the record."""
         from beadloom.application.guards.invocation import run_invocation
 
-        entry = _function(_module_ast(_BOUNDARY_MODULE), run_invocation.__name__)
+        entry = _function(module_ast(_BOUNDARY_MODULE), run_invocation.__name__)
         returns = [node for node in ast.walk(entry) if isinstance(node, ast.Return)]
 
         assert len(returns) == 1, [ast.unparse(node) for node in returns]
@@ -901,11 +540,11 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         ``try`` whose handler is ``BaseException``, and the exit sits *outside*
         that ``try``, so the code is the verdict's whatever rendering does.
         """
-        callback = _function(_module_ast(_COMMAND_MODULE), "guard")
+        callback = _function(module_ast(COMMAND_MODULE), "guard")
         tries = [node for node in ast.walk(callback) if isinstance(node, ast.Try)]
 
         assert len(tries) == 1, [ast.unparse(node) for node in tries]
-        assert [_terminal_name(handler.type) for handler in tries[0].handlers] == [
+        assert [terminal_name(handler.type) for handler in tries[0].handlers] == [
             "BaseException"
         ]
         assert "_emit(" in ast.unparse(tries[0].body[0])
@@ -919,7 +558,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
                 "record_firing(result.project_root, result.verdict)",
             )
         ], record_firing_sites()
-        assert len(_source_modules()) > 100, len(_source_modules())
+        assert len(source_modules()) > 100, len(source_modules())
 
     def test_the_recorder_is_imported_only_where_it_is_called_or_re_exported(
         self,
@@ -1026,7 +665,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
                 command,
                 param,
                 hostile_argv,
-                subcommand=_GUARD if command is main else None,
+                subcommand=GUARD_COMMAND if command is main else None,
             )
         ]
 
@@ -1226,22 +865,6 @@ class TestEveryResultCarriesTheWitnessThatTheRecordingStepRan:
 # ==========================================================================
 
 
-#: Failures injected at the evaluation seam, and the fragment each must explain.
-#: The third row is BDL-061.30's finding A: ``KeyboardInterrupt`` is neither an
-#: ``Exception`` nor a ``SystemExit``, so it escaped the boundary and Click
-#: turned it into exit 1 — the WARN code the shipped adapter carries on past —
-#: with no verdict and no record.
-_INJECTED_FAILURES = (
-    (
-        "an exception during the evaluation",
-        lambda: RuntimeError("the tracker probe blew up"),
-        "the tracker probe blew up",
-    ),
-    ("a process exit during the evaluation", lambda: SystemExit(7), "exit 7"),
-    ("an interrupt during the evaluation", KeyboardInterrupt, "interrupted"),
-)
-
-
 class TestAFailureNobodyEnumeratedIsStillAVerdict:
     """The boundary's whole point: an unknown defect becomes visible, not silent."""
 
@@ -1262,8 +885,8 @@ class TestAFailureNobodyEnumeratedIsStillAVerdict:
 
     @pytest.mark.parametrize(
         ("label", "failure", "fragment"),
-        _INJECTED_FAILURES,
-        ids=[row[0] for row in _INJECTED_FAILURES],
+        INJECTED_FAILURES,
+        ids=[row[0] for row in INJECTED_FAILURES],
     )
     def test_a_failure_at_the_evaluation_seam_is_a_recorded_error(
         self, tmp_path, monkeypatch, stub_probes, label, failure, fragment
@@ -2201,7 +1824,7 @@ class TestTheNotRecordedReasonNamesTheCaseItActuallyIs:
         """
         from beadloom.application.guards import invocation as boundary
 
-        tree = _module_ast(_BOUNDARY_MODULE)
+        tree = module_ast(_BOUNDARY_MODULE)
         declining = [
             node for node in _function(tree, "_record").body if isinstance(node, ast.If)
         ]

@@ -34,14 +34,14 @@ groups that want different decisions, and only the first is "pass
   ``test_integration``), four ``subprocess(text=True)`` seams, and ~45 test-side
   reads of an artifact the product had already written correctly as UTF-8;
 * **36 were the FILESYSTEM's encoding**, which is a different question — see
-  :mod:`tests.filesystem_names`. There the product's answer was right on every
+  :mod:`tests.support.filesystem_names`. There the product's answer was right on every
   image and the tests were asserting the answer a UTF-8 machine gives.
 
 **The knobs are load-bearing and this is measured, not quoted:** a bare
 ``LC_ALL=C`` is *not* enough — PEP 538/540 coerce UTF-8 mode back on — so
 ``PYTHONUTF8=0`` and ``PYTHONCOERCECLOCALE=0`` are what make the environment real.
 Measured again here on macOS 3.13.7, *correcting* the claim in
-``tests/ambient_codec.py`` that an ambient non-UTF-8 codec cannot be arranged on
+``tests/support/ambient_codec.py`` that an ambient non-UTF-8 codec cannot be arranged on
 this machine: with those knobs ``locale.getpreferredencoding(False)`` reports
 ``US-ASCII`` and ``Path.write_text()`` raises. What macOS forces is the
 **filesystem** encoding (still ``utf-8``), not the text-I/O codec — so the
@@ -62,7 +62,7 @@ Two instruments, because either alone proves too little:
   This class keys on the attribute name and needs no inference, so it is what
   actually covers the package; ``PLW1514`` adds ``tests/``, which this class
   does not read. The shared notion of "a call whose codec somebody chooses"
-  lives in :mod:`tests.decoding_calls` so the two cannot drift apart;
+  lives in :mod:`tests.support.decoding_calls` so the two cannot drift apart;
 * :class:`TestTheGeneratedArtifactsSurviveANonUtf8Locale` runs the *real CLI* in a
   real subprocess under a real non-UTF-8 locale and reads the bytes back, so the
   guarantee is proven end-to-end rather than by grep.
@@ -86,9 +86,9 @@ from beadloom.infrastructure.console_streams import (
     TOLERANT_ERRORS,
     tolerate_unencodable_output,
 )
-from tests import filesystem_names
-from tests.adopter_project import typescript_project
-from tests.decoding_calls import (
+from tests.support import filesystem_names
+from tests.support.adopter_project import typescript_project
+from tests.support.decoding_calls import (
     SUBPROCESS_CALLS,
     TEXT_READWRITE,
     called_name,
@@ -98,9 +98,10 @@ from tests.decoding_calls import (
     opens_without_a_codec,
     states_encoding,
 )
+from tests.support.repository_root import REPO_ROOT
+from tests.support.repository_root import TESTS_ROOT as _TESTS_ROOT
 
-_SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "beadloom"
-_TESTS_ROOT = Path(__file__).resolve().parent
+_SRC_ROOT = REPO_ROOT / "src" / "beadloom"
 _BEADLOOM = shutil.which("beadloom") or str(Path(sys.executable).parent / "beadloom")
 
 #: The knobs that make a non-UTF-8 locale real. A bare ``LC_ALL=C`` is coerced
@@ -115,7 +116,7 @@ _LOCALE_BY_DESIGN: dict[tuple[str, int], str] = {}
 
 #: The same register for the ``tests/`` root, and it is NOT empty. Two rows hold
 #: the defect down on purpose: they arrange an ambient codec with
-#: ``tests.ambient_codec`` and require an unstated reader to mangle and then to
+#: ``tests.support.ambient_codec`` and require an unstated reader to mangle and then to
 #: raise, which is the only check that the double still intercepts anything.
 #: Stating their codec would make both vacuous. Ruff cannot express the exception
 #: either — measured on ruff 0.16.3, a ``noqa`` naming ``PLW1514`` on these lines
@@ -164,7 +165,7 @@ def _ambient_sites(
     decodes_only: bool = False,
 ) -> list[tuple[Path, int, str]]:
     """Every call under *root* whose codec the *image* would choose."""
-    repo = Path(__file__).resolve().parent.parent
+    repo = REPO_ROOT
     sites: list[tuple[Path, int, str]] = []
     for path, tree in _module_sources(root):
         # `relative_to` only when the path IS under the repository: the control
@@ -1029,7 +1030,7 @@ class TestTheStreamPolicyDoesOnlyWhatItSays:
 def _git_project(tmp_path: Path) -> Path:
     """A repository that is **not** Beadloom, with somewhere to install a hook.
 
-    The project axis of ONE PLATFORM IS NOT VERIFIED (``tests.adopter_project``,
+    The project axis of ONE PLATFORM IS NOT VERIFIED (``tests.support.adopter_project``,
     added by BDL-061.58): ``install-hooks`` writes into somebody else's tree, and
     a guarantee measured only on this repository is a guarantee about this
     repository. A TypeScript service is used deliberately — nothing about its
@@ -1122,7 +1123,7 @@ class TestNothingInThePackageAsksTheImageForACodecAtRuntime:
 
 
 class TestTheFilesystemNamePredicateHasItsOwnContract:
-    """:mod:`tests.filesystem_names` decides ~36 rows, so it needs proving itself."""
+    """:mod:`tests.support.filesystem_names` decides ~36 rows, so it needs proving itself."""
 
     @pytest.mark.parametrize(
         ("codec", "expected"),

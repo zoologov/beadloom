@@ -36,16 +36,14 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from tests.package_under_test import PACKAGE_ROOT
+from tests.support.ci_workflows import GH_CI, GL_CI
+from tests.support.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
 _HARNESS_PKG = "beadloom.ai_agents.ai_techwriter"
-_REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
-_CI_YML = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
-_GITLAB_YML = _REPO_ROOT / ".gitlab-ci.yml"
 #: Derived from the IMPORTED package rather than from this file: under
 #: `mutmut run` the suite is copied beside the mutated sources, so a root built
 #: from `__file__` answers about the copy (BDL-UX #289). This walk reads
@@ -230,8 +228,8 @@ class TestNoVendoringScaffold:
 def _ci_configs() -> list[object]:
     """This repository's two CI configs, marked self-checks, then the two shipped templates."""
     return [
-        pytest.param(_CI_YML, marks=pytest.mark.self_check),
-        pytest.param(_GITLAB_YML, marks=pytest.mark.self_check),
+        pytest.param(GH_CI, marks=pytest.mark.self_check),
+        pytest.param(GL_CI, marks=pytest.mark.self_check),
         _TPL / "github-workflow.yml",
         _TPL / "gitlab-ci-job.yml",
     ]

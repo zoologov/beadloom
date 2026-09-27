@@ -36,24 +36,25 @@ from beadloom.graph.linter import lint
 from beadloom.graph.rules.evaluators import evaluate_layer_rules
 from beadloom.graph.rules.layer_crossings import SAME_LAYER_REMEDIATION
 from beadloom.graph.rules.layer_reach import layer_rule_reach
-from beadloom.graph.rules.loader import load_rules
-from beadloom.graph.rules.types import LayerRule, Violation
-from tests.acceptance.steps.tiered_project import (
+from tests.support.layer_rule import rule_of
+from tests.support.the_lint_path_before_release_a import (
+    comparable,
+    decisions,
+    layer_findings_before_release_a,
+)
+from tests.support.tiered_project import (
     TIERS,
     graph_with,
     graph_with_nested_parts,
     graph_with_peer_containers,
     write_tiered_project,
 )
-from tests.the_lint_path_before_release_a import (
-    comparable,
-    decisions,
-    layer_findings_before_release_a,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+
+    from beadloom.graph.rules.types import Violation
 
 #: The only exemption the fixtures below need: one crossing, excused by name.
 _EXCUSING_LEDGER_API = (
@@ -63,15 +64,6 @@ _EXCUSING_LEDGER_API = (
     '        reason: "the two read one ledger and the read seam is not built yet"\n'
     '        until: "2030-01-01"\n'
 )
-
-
-def _rule_of(project: Path) -> LayerRule:
-    """The layer rule the project declares, as the linter loads it."""
-    return next(
-        rule
-        for rule in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
-        if isinstance(rule, LayerRule)
-    )
 
 
 def _conn(project: Path) -> closing[sqlite3.Connection]:
@@ -88,7 +80,7 @@ def _layer_findings(project: Path) -> list[Violation]:
     """What the rule DECIDES about *project* — its advisories left out."""
     with _conn(project) as conn:
         return [
-            v for v in evaluate_layer_rules(conn, [_rule_of(project)]) if v.rule_type == "layer"
+            v for v in evaluate_layer_rules(conn, [rule_of(project)]) if v.rule_type == "layer"
         ]
 
 
@@ -154,7 +146,7 @@ class TestAnEndTakesItsLayerFromItsContainer:
     def test_the_pre_change_rule_saw_neither(self, nested_parts: Path) -> None:
         """The premise: this is a verdict the rule could not reach before B3."""
         with _conn(nested_parts) as conn:
-            assert layer_findings_before_release_a(conn, [_rule_of(nested_parts)]) == []
+            assert layer_findings_before_release_a(conn, [rule_of(nested_parts)]) == []
 
     def test_the_finding_names_the_container_the_layer_came_from(self, nested_parts: Path) -> None:
         """A reader meeting this finding on upgrade asks why the node is in that tier."""
@@ -211,7 +203,7 @@ class TestAGraphWithNoContainmentIsJudgedAsBefore:
 
     def test_the_decisions_are_identical(self, graph_without_containment: Path) -> None:
         with _conn(graph_without_containment) as conn:
-            rules = [_rule_of(graph_without_containment)]
+            rules = [rule_of(graph_without_containment)]
             before = layer_findings_before_release_a(conn, rules)
             assert comparable(before), "a comparison over an empty findings list proves nothing"
             assert decisions(evaluate_layer_rules(conn, rules)) == comparable(before)
@@ -234,14 +226,14 @@ class TestThePopulationIsTheOneTheRuleDecidesOn:
         self, nested_parts: Path
     ) -> None:
         with _conn(nested_parts) as conn:
-            reach = layer_rule_reach(conn, _rule_of(nested_parts))
+            reach = layer_rule_reach(conn, rule_of(nested_parts))
         assert (reach.population.evaluated, reach.population.total) == (2, 2)
 
     def test_an_end_in_no_declared_layer_is_still_skipped(
         self, graph_without_containment: Path
     ) -> None:
         with _conn(graph_without_containment) as conn:
-            reach = layer_rule_reach(conn, _rule_of(graph_without_containment))
+            reach = layer_rule_reach(conn, rule_of(graph_without_containment))
         assert reach.population.skipped_untagged == 2
 
     def test_the_statement_names_containment_as_a_way_to_be_judged(

@@ -30,7 +30,7 @@ which is asserted beside it so the empty differential cannot be read as the
 rule finding nothing.
 
 The transcription of the pre-change path lives in
-`tests/the_lint_path_before_release_a.py`, because A7 compares the whole
+`tests/support/the_lint_path_before_release_a.py`, because A7 compares the whole
 `lint()` run against the same oracle and two transcriptions of one function
 are two things that can drift.
 
@@ -43,7 +43,6 @@ their findings must agree as a set.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -61,13 +60,14 @@ from beadloom.graph.rules.layer_reach import (
 from beadloom.graph.rules.node_tags import NodeTags, node_tags
 from beadloom.graph.rules.types import (
     ForbidEdgeRule,
-    LayerDef,
     LayerRule,
     NodeMatcher,
     Violation,
 )
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.the_lint_path_before_release_a import (
+from tests.support.layer_rule import DDD_LAYERS, ddd_layer_rule
+from tests.support.repository_root import REPO_ROOT
+from tests.support.the_lint_path_before_release_a import (
     ClosureTags,
     comparable,
     decisions,
@@ -77,17 +77,7 @@ from tests.the_lint_path_before_release_a import (
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator
-
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-#: This repository's own declaration, read from `.beadloom/_graph/rules.yml`.
-DDD_LAYERS = (
-    LayerDef(name="services", tag="layer-service"),
-    LayerDef(name="application", tag="layer-application"),
-    LayerDef(name="domains", tag="layer-domain"),
-    LayerDef(name="infrastructure", tag="layer-infra"),
-)
+    from pathlib import Path
 
 
 class _CountingConnection:
@@ -222,23 +212,6 @@ def fully_tagged_graph(tmp_path: Path) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
-def _rule(
-    *,
-    severity: str = "error",
-    edge_kind: str = "depends_on",
-    allow_skip: bool = True,
-) -> LayerRule:
-    return LayerRule(
-        name="architecture-layers",
-        description="Services → application → domains → infrastructure — not reverse",
-        layers=DDD_LAYERS,
-        enforce="top-down",
-        allow_skip=allow_skip,
-        edge_kind=edge_kind,
-        severity=severity,
-    )
-
-
 # ---------------------------------------------------------------------------
 # The population statement
 # ---------------------------------------------------------------------------
@@ -253,7 +226,7 @@ class TestThePopulationStatement:
     def test_it_names_both_the_evaluated_and_the_skipped_count(
         self, mixed_graph: sqlite3.Connection
     ) -> None:
-        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [ddd_layer_rule()]))
         assert len(statements) == 1
         message = statements[0].message
         assert "evaluated 2 of 3" in message
@@ -264,13 +237,13 @@ class TestThePopulationStatement:
         self, fully_tagged_graph: sqlite3.Connection
     ) -> None:
         """There is nothing the rule could not reach, so there is nothing to state."""
-        assert self._statements(evaluate_layer_rules(fully_tagged_graph, [_rule()])) == []
+        assert self._statements(evaluate_layer_rules(fully_tagged_graph, [ddd_layer_rule()])) == []
 
     def test_a_graph_no_layer_tag_reaches_reports_its_zero_denominator_once(
         self, untagged_graph: sqlite3.Connection
     ) -> None:
         """Two unjudged edges, one statement — the count is per rule, not per edge."""
-        statements = self._statements(evaluate_layer_rules(untagged_graph, [_rule()]))
+        statements = self._statements(evaluate_layer_rules(untagged_graph, [ddd_layer_rule()]))
         assert len(statements) == 1
         assert "0 of 2" in statements[0].message
 
@@ -278,14 +251,14 @@ class TestThePopulationStatement:
         self, untagged_graph: sqlite3.Connection
     ) -> None:
         """An empty edge set is the liveness rule's subject, not this one's."""
-        rule = _rule(edge_kind="uses")
+        rule = ddd_layer_rule(edge_kind="uses")
         assert self._statements(evaluate_layer_rules(untagged_graph, [rule])) == []
 
     def test_it_is_a_warning_even_when_the_rule_is_declared_an_error(
         self, mixed_graph: sqlite3.Connection
     ) -> None:
         """A statement about a rule's reach is not a boundary breach."""
-        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [ddd_layer_rule()]))
         assert [v.severity for v in statements] == ["warn"]
 
     def test_a_graph_whose_containers_carry_the_layers_is_reached_whole(
@@ -296,17 +269,17 @@ class TestThePopulationStatement:
         Every node here is either a container carrying a layer or inside one, so
         there is nothing left for the rule to pass over and nothing to state.
         """
-        assert self._statements(evaluate_layer_rules(nested_graph, [_rule()])) == []
+        assert self._statements(evaluate_layer_rules(nested_graph, [ddd_layer_rule()])) == []
 
     def test_it_names_containment_as_a_way_to_be_judged(
         self, mixed_graph: sqlite3.Connection
     ) -> None:
         """The unjudged edge is actionable two ways, and the remediation says both."""
-        statements = self._statements(evaluate_layer_rules(mixed_graph, [_rule()]))
+        statements = self._statements(evaluate_layer_rules(mixed_graph, [ddd_layer_rule()]))
         assert "part_of" in str(statements[0].remediation)
 
     def test_one_statement_per_rule(self, mixed_graph: sqlite3.Connection) -> None:
-        rules = [_rule(), _rule(allow_skip=False)]
+        rules = [ddd_layer_rule(), ddd_layer_rule(allow_skip=False)]
         statements = self._statements(evaluate_layer_rules(mixed_graph, rules))
         assert len(statements) == 2
 
@@ -318,21 +291,21 @@ class TestTheReachIsReadableWithoutRunningTheRule:
         self, nested_graph: sqlite3.Connection
     ) -> None:
         """Own tags reached one of these two edges; containment reaches both."""
-        reach = layer_rule_reach(nested_graph, _rule())
+        reach = layer_rule_reach(nested_graph, ddd_layer_rule())
         assert (reach.population.evaluated, reach.population.skipped_untagged) == (2, 0)
 
     def test_an_end_inside_nothing_is_still_outside_the_population(
         self, mixed_graph: sqlite3.Connection
     ) -> None:
         """Inheriting a layer is not the same as having one by default."""
-        reach = layer_rule_reach(mixed_graph, _rule())
+        reach = layer_rule_reach(mixed_graph, ddd_layer_rule())
         assert (reach.population.evaluated, reach.population.skipped_untagged) == (2, 1)
 
     def test_it_counts_only_edges_of_the_rules_kind(
         self, nested_graph: sqlite3.Connection
     ) -> None:
         """The two `part_of` edges are containment, not the dependencies judged."""
-        assert layer_rule_reach(nested_graph, _rule()).population.total == 2
+        assert layer_rule_reach(nested_graph, ddd_layer_rule()).population.total == 2
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +333,7 @@ class TestWhatTheDecisionsChangedTo:
         which carries a tag — the shape an adopter has and this repository
         hides.
         """
-        rules = [_rule()]
+        rules = [ddd_layer_rule()]
         added = comparable(evaluate_layer_rules(nested_graph, rules)) - comparable(
             layer_findings_before_release_a(nested_graph, rules)
         )
@@ -385,7 +358,7 @@ class TestWhatTheDecisionsChangedTo:
             ],
         )
         try:
-            rules = [_rule(allow_skip=False)]
+            rules = [ddd_layer_rule(allow_skip=False)]
             before = layer_findings_before_release_a(conn, rules)
             assert len(before) >= 2
             assert decisions(evaluate_layer_rules(conn, rules)) == comparable(before)

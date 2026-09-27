@@ -8,8 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from beadloom.doc_sync.audit import (
@@ -17,12 +15,12 @@ from beadloom.doc_sync.audit import (
     _load_ignore_from_config,
 )
 from beadloom.doc_sync.scanner import DocScanner
-from tests.test_bdl062_seams import (
+from tests.support.repository_root import REPO_ROOT
+from tests.support.retired_facts import (
     RETIRED_FACT,
 )
 
 #: This repository's root — the only project whose real config is read here.
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture(scope="module")

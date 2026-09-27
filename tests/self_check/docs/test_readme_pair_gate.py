@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.repository_root import REPO_ROOT
+
 
 def test_this_repository_holds_its_own_readme_pair() -> None:
     """The dogfood leg: the pair this project declares is compared on every run."""
-    from pathlib import Path as _Path
 
-    root = _Path(__file__).resolve().parents[3]
+    root = REPO_ROOT
     if not (root / ".beadloom" / "config.yml").is_file():
         pytest.skip("not running from a checkout of this repository")
     from beadloom.application.gate_document_pairs import step_readme_pair

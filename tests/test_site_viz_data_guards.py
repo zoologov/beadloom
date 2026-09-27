@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from beadloom.application.architecture_view import (
@@ -38,9 +37,11 @@ from beadloom.application.landscape_view import (
 )
 from beadloom.application.site import generate_site
 from beadloom.infrastructure.db import create_schema
+from tests.support.site_links import iter_data_links, link_target_exists
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from pathlib import Path
+    pass
 
 
 _FIXED_TS = "2026-06-05T00:00:00+00:00"
@@ -426,33 +427,6 @@ def test_landscape_edge_endpoints_all_exist_as_nodes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_data_links(data: dict[str, Any]) -> Iterator[tuple[str, str]]:
-    """Yield ``(owner_id, url)`` for every runtime link the payload carries."""
-    for node in data.get("nodes", []):
-        if node.get("url"):
-            yield node["id"], node["url"]
-        for link in node.get("doc_links", []):
-            yield node["id"], link
-
-
-def _link_target_exists(site: Path, url: str) -> bool:
-    """Resolve a site-absolute viz link against the generated tree.
-
-    The payload carries what the BUILT site serves — a node page as an
-    extension-less clean URL (``/domains/graph``) and a published doc as
-    ``.html`` (``/docs/.../SPEC.html``) — while the generator writes markdown.
-    Both forms therefore map back onto ``.md``.
-    """
-    raw = url.split("#", 1)[0].split("?", 1)[0]
-    if not raw.startswith("/"):
-        return False
-    target = PurePosixPath(raw.lstrip("/"))
-    if target.suffix == ".html":
-        target = target.with_suffix(".md")
-    candidates = [target, target.with_suffix(".md"), target / "index.md"]
-    return any((site / PurePosixPath(*c.parts)).exists() for c in candidates)
-
-
 def test_architecture_data_links_resolve_to_generated_pages(tmp_path: Path) -> None:
     """Every url/doc_link the arch graph hands the browser is a real page.
 
@@ -476,7 +450,7 @@ def test_architecture_data_links_resolve_to_generated_pages(tmp_path: Path) -> N
 
     data = json.loads((out / "public" / "architecture.data.json").read_text("utf-8"))
     dead = [
-        (owner, url) for owner, url in _iter_data_links(data) if not _link_target_exists(out, url)
+        (owner, url) for owner, url in iter_data_links(data) if not link_target_exists(out, url)
     ]
 
     assert dead == [], f"dead links in architecture.data.json: {dead}"
@@ -494,7 +468,7 @@ def test_landscape_data_links_resolve_to_generated_pages(tmp_path: Path) -> None
 
     data = json.loads((out / "public" / "landscape.data.json").read_text("utf-8"))
     dead = [
-        (owner, url) for owner, url in _iter_data_links(data) if not _link_target_exists(out, url)
+        (owner, url) for owner, url in iter_data_links(data) if not link_target_exists(out, url)
     ]
 
     assert dead == [], f"dead links in landscape.data.json: {dead}"

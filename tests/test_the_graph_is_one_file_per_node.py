@@ -51,12 +51,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from beadloom.application.waves import (
-    MEDIUM_GRAPH_FILES,
-    STATUS_PASSED,
     GraphFile,
-    GraphInput,
-    WaveEnvironment,
-    check_media,
 )
 from beadloom.onboarding.graph_layout import (
     SharedFile,
@@ -64,6 +59,7 @@ from beadloom.onboarding.graph_layout import (
     node_file_name,
     shared_files,
 )
+from tests.support.graph_files_verdict import graph_files_verdict
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -254,25 +250,11 @@ class TestWhereAnEdgeIsDeclared:
 # ---------------------------------------------------------------------------
 
 
-def _graph_verdict(files: tuple[GraphFile, ...]) -> str:
-    indexed = frozenset(ref for file in files for ref in file.nodes)
-    environment = WaveEnvironment(
-        graph_input=GraphInput(files=files, indexed=indexed)
-    )
-    check = next(
-        c
-        for c in check_media((), environment=environment)
-        if c.medium == MEDIUM_GRAPH_FILES
-    )
-    assert check.status == STATUS_PASSED
-    return check.detail
-
-
 class TestTheMediumStopsNamingAFileEveryNodeAddingBeadWrites:
     """The pass sentence was true of a one-file graph and is false of this one."""
 
     def test_a_split_graph_is_told_the_collision_cannot_be_attempted(self) -> None:
-        detail = _graph_verdict(
+        detail = graph_files_verdict(
             (
                 GraphFile(path=".beadloom/_graph/billing.yml", nodes=("billing",)),
                 GraphFile(path=".beadloom/_graph/shipping.yml", nodes=("shipping",)),
@@ -285,13 +267,13 @@ class TestTheMediumStopsNamingAFileEveryNodeAddingBeadWrites:
         # FILES they are about to create are still in no graph this plan read,
         # and a pass that stopped saying so would be the clean list CONTEXT
         # forbids.
-        detail = _graph_verdict(
+        detail = graph_files_verdict(
             (GraphFile(path=".beadloom/_graph/billing.yml", nodes=("billing",)),)
         )
         assert "no graph this plan could read" in detail
 
     def test_a_shared_file_is_still_named_with_the_count_it_holds(self) -> None:
-        detail = _graph_verdict(
+        detail = graph_files_verdict(
             (
                 GraphFile(
                     path=".beadloom/_graph/services.yml",

@@ -13,10 +13,10 @@ import time
 from pathlib import Path
 
 from beadloom.application.guards.evaluation import evaluate_guard
-from tests.test_guards_parity import (
-    _attribute,
-    _differing,
-    _report,
+from tests.support.guard_parity import (
+    attribute,
+    differing,
+    report_attribution,
 )
 
 
@@ -144,8 +144,8 @@ class TestGuardsAreReadOnly:
         after = digest()
         wal_after = wal.exists()
 
-        _report(
-            _attribute(_differing(before, after), snapshot=digest, window_s=window_s),
+        report_attribution(
+            attribute(differing(before, after), snapshot=digest, window_s=window_s),
             window_s=window_s,
         )
         assert wal_after == wal_before, (

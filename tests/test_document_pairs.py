@@ -18,7 +18,7 @@ the Russian-side edits of 2026-09-10 and lived only between ``31f8c9cb`` and
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -37,11 +37,15 @@ from beadloom.doc_sync.document_pairs import (
     read_blocks,
     read_pair_declaration,
 )
+from tests.support.repository_root import TESTS_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: Shared with the acceptance steps, and it lives under ``tests/acceptance/``
 #: because the suite there is copied out and run on its own.
 FIXTURE_PAIR = (
-    Path(__file__).resolve().parent / "acceptance" / "fixtures" / "readme_pair_2026_09_10"
+    TESTS_ROOT / "acceptance" / "fixtures" / "readme_pair_2026_09_10"
 )
 
 

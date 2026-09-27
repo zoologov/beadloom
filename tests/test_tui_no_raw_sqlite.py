@@ -9,9 +9,14 @@ statically asserts no ``.execute(`` SQL call survives in the tui package
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-_TUI_DIR = Path(__file__).resolve().parent.parent / "src" / "beadloom" / "tui"
+from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_TUI_DIR = REPO_ROOT / "src" / "beadloom" / "tui"
 
 # The single legitimate raw execute: enabling WAL on the app's own connection.
 _ALLOWED_EXECUTE = '.execute("PRAGMA journal_mode=WAL")'

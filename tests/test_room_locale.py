@@ -10,7 +10,7 @@ can name a locale.
 Nothing here doubles ``locale.getpreferredencoding``. It reads the codec the C
 library resolved when the interpreter started, so a monkeypatch of it would
 change what the derivation reads and not what the process is in — the same
-finding ``tests/ambient_codec.py`` records. Where a real locale is needed, a
+finding ``tests/support/ambient_codec.py`` records. Where a real locale is needed, a
 child process is started under it, which is what a developer reproducing a leg
 does.
 """
@@ -24,10 +24,9 @@ import os
 import platform
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 
 from beadloom.application import rooms
 from beadloom.application.rooms import (
@@ -40,8 +39,10 @@ from beadloom.application.rooms import (
     room_line,
     take_census,
 )
+from tests.support.locale_probes import codec_of_a_child, declared_locales
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: The three variables POSIX lets a locale be named in, most specific first.
 _LOCALE_VARS = ("LC_ALL", "LC_CTYPE", "LANG")
@@ -239,17 +240,6 @@ class TestTheComparison:
         assert any("en_US" in u.why for u in census.unresolved), census.unresolved
 
 
-def _declared_locales() -> list[str]:
-    """The locale names this repository's own workflows publish."""
-    found: list[str] = []
-    for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
-        for job in (document or {}).get("jobs", {}).values():
-            matrix = (job or {}).get("strategy", {}).get("matrix", {})
-            found.extend(str(v) for v in matrix.get("locale", []))
-    return found
-
-
 class TestTheNamesThisProjectPublishes:
     """The reproduction #249 is about, taken against this repository's own legs.
 
@@ -261,17 +251,17 @@ class TestTheNamesThisProjectPublishes:
     """
 
 
-    @pytest.mark.parametrize("name", _declared_locales())
+    @pytest.mark.parametrize("name", declared_locales())
     def test_the_census_reports_the_codec_the_child_actually_has(
         self, name: str, tmp_path: Path
     ) -> None:
-        codec = _codec_of_a_child(name)
+        codec = codec_of_a_child(name)
 
         payload = _rooms_in_a_child(_a_project_declaring(tmp_path, name), name)
 
         assert payload["current"][LOCALE_DIMENSION] == codec
 
-    @pytest.mark.parametrize("name", _declared_locales())
+    @pytest.mark.parametrize("name", declared_locales())
     def test_the_locale_axis_separates_the_run_only_when_the_name_resolved_elsewhere(
         self, name: str, tmp_path: Path
     ) -> None:
@@ -281,22 +271,22 @@ class TestTheNamesThisProjectPublishes:
         because `entered` also carries the platform: this repository's legs are
         Ubuntu, so a Darwin run enters none of them whatever its locale, and an
         assertion on `entered` would be about the machine. It is also the arm a
-        suite-wide `tests/room_simulation.py` run breaks, since the fixture's
+        suite-wide `tests/support/room_simulation.py` run breaks, since the fixture's
         platform would be the parent's fabricated one and the child's is real.
         """
-        codec = _codec_of_a_child(name)
+        codec = codec_of_a_child(name)
         wanted = codec_of_locale_name(name)
 
         leg = _rooms_in_a_child(_a_project_declaring(tmp_path, name), name)["declared"][0]
 
         assert (f"{LOCALE_DIMENSION}:" in leg["why"]) == (codec != wanted), leg
 
-    @pytest.mark.parametrize("name", _declared_locales())
+    @pytest.mark.parametrize("name", declared_locales())
     def test_a_name_that_did_not_apply_says_so_rather_than_reading_as_unset(
         self, name: str, tmp_path: Path
     ) -> None:
         """#249's own sentence: the developer asked for it and did not get it."""
-        codec = _codec_of_a_child(name)
+        codec = codec_of_a_child(name)
         if codec == codec_of_locale_name(name):
             pytest.skip(f"`{name}` applied in this room, so nothing degraded here")
 
@@ -321,34 +311,6 @@ def _a_project_declaring(root: Path, name: str) -> Path:
         encoding="utf-8",
     )
     return root
-
-
-def _codec_of_a_child(name: str) -> str:
-    """What a process started under *name* is really in, asked of the stdlib.
-
-    A second child rather than the census's own answer: the assertion is that
-    the two agree, and reading one of them from the thing under test would make
-    it agree with itself.
-    """
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import codecs, locale; "
-            "print(codecs.lookup(locale.getpreferredencoding(False)).name)",
-        ],
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-        check=True,
-        env={
-            **os.environ,
-            "LC_ALL": name,
-            "PYTHONUTF8": "0",
-            "PYTHONCOERCECLOCALE": "0",
-        },
-    )
-    return completed.stdout.strip()
 
 
 def _rooms_in_a_child(root: Path, name: str) -> dict[str, object]:

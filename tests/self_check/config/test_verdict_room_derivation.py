@@ -8,11 +8,10 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from beadloom.application.rooms import derive_declared_rooms
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestThisRepositorysOwnDeclaration:
@@ -20,7 +19,7 @@ class TestThisRepositorysOwnDeclaration:
 
     @pytest.fixture()
     def declared(self) -> object:
-        return derive_declared_rooms(Path(__file__).resolve().parents[3])
+        return derive_declared_rooms(REPO_ROOT)
 
     def test_every_supported_interpreter_has_a_leg(self, declared: object) -> None:
         rooms = declared.rooms  # type: ignore[attr-defined]

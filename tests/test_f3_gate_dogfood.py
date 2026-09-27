@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
@@ -35,8 +35,12 @@ from beadloom.graph.federation import (
 )
 from beadloom.onboarding.config_sync import check_config_drift
 from beadloom.services.cli import main
+from tests.support.repository_root import TESTS_ROOT
 
-_FIXTURES = Path(__file__).parent / "fixtures" / "f3_gate"
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_FIXTURES = TESTS_ROOT / "fixtures" / "f3_gate"
 _T0 = "2026-06-01T00:00:00+00:00"  # injected reference "now"
 
 

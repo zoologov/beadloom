@@ -6,7 +6,7 @@ right way. BDL-UX #240 is the measured precedent: a defect in the typed leg's pa
 filter was invisible here because Beadloom is src-layout, and it survived the bead
 that built the surface.
 
-``tests/adopter_project.py`` already varies the PROJECT — its stack, its manifest,
+``tests/support/adopter_project.py`` already varies the PROJECT — its stack, its manifest,
 its version. This module varies the FLOW: which tools a project composes adapters
 for, where its planning documents live, which column of its bead table carries the
 bead id, how it spells a table's alignment row, whether its graph is one file or
@@ -189,7 +189,7 @@ def build_flow(
 
     The project is not Beadloom: it declares its own name and version, so a check
     that renders one of ours into its artifacts fails with the string that gave it
-    away rather than passing by coincidence (``tests/adopter_project.py``).
+    away rather than passing by coincidence (``tests/support/adopter_project.py``).
     """
     root.mkdir(parents=True, exist_ok=True)
     (root / "pyproject.toml").write_text(

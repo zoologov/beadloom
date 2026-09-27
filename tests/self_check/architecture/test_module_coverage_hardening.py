@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -22,14 +21,16 @@ from beadloom.graph.rule_engine import (
 )
 from beadloom.infrastructure.db import create_schema
 from beadloom.services.cli import main
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 
 #: This repository's own rules.yml, named from this file rather than from the
 #: working directory (BDL-074 A1). A tracked source file, read as text.
-_REAL_RULES_YML = Path(__file__).resolve().parents[3] / ".beadloom" / "_graph" / "rules.yml"
+_REAL_RULES_YML = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 
 
 @pytest.fixture()

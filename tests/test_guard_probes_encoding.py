@@ -26,12 +26,12 @@ Two dimensions, and they need different instruments, so both are here:
   PYTHONCOERCECLOCALE=0`` still reports preferred encoding ``utf-8`` (PEP
   538/540 coercion), and patching ``locale.getpreferredencoding`` does **not**
   reach ``TextIOWrapper``, which resolves the locale codec below Python. So the
-  dimension is *constructed* rather than arranged: :class:`tests.ambient_codec.AmbientTextMode`
-  re-implements CPython's documented text-mode rule ("decoded using
-  ``locale.getpreferredencoding(False)`` unless ``encoding`` is given") with the
-  ambient codec as a parameter. Concluding the defect is absent because this
-  machine cannot produce it is exactly the inference that put .36's two defects
-  into CI.
+  dimension is *constructed* rather than arranged:
+  :class:`tests.support.ambient_codec.AmbientTextMode` re-implements CPython's
+  documented text-mode rule ("decoded using ``locale.getpreferredencoding(False)``
+  unless ``encoding`` is given") with the ambient codec as a parameter.
+  Concluding the defect is absent because this machine cannot produce it is
+  exactly the inference that put .36's two defects into CI.
 
 Standing rule 4 is respected rather than argued around: the ambient-codec rows
 run against a double and therefore prove the double's contract, so every claim
@@ -55,8 +55,8 @@ from beadloom.application.guards.models import GuardOutcome
 from beadloom.services import bd_seam, guard_probes
 from beadloom.services.bd_seam import BdUnavailableError, run_bd
 from beadloom.services.guard_probes import build_probes
-from tests.ambient_codec import under_ambient_codec
-from tests.filesystem_names import as_the_process_receives
+from tests.support.ambient_codec import under_ambient_codec
+from tests.support.filesystem_names import as_the_process_receives
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -21,7 +21,7 @@ from click.testing import CliRunner
 from beadloom.application.gate import _sync_summary
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict
 from beadloom.services.cli import main
-from tests import stale_pair_project as project
+from tests.support import stale_pair_project as project
 
 if TYPE_CHECKING:
     from pathlib import Path

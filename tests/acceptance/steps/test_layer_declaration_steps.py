@@ -23,8 +23,7 @@ from beadloom.graph.linter import lint
 from beadloom.graph.rule_engine import layer_of, node_tags, part_of_parents
 from beadloom.graph.rules.loader import load_rules, validate_rules
 from beadloom.graph.rules.types import LayerRule
-
-from .tiered_project import OUR_LAYER_PREFIX, TIERS, write_tiered_project
+from tests.support.tiered_project import OUR_LAYER_PREFIX, TIERS, write_tiered_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

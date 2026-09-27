@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.test_the_view_flags_what_the_rule_finds import (
-    _rule_flags,
-    _view_flags,
-    _view_verdicts,
+from tests.support.layer_rule import (
+    rule_flags,
+    view_flags,
+    view_verdicts,
 )
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ class TestOnThisRepository:
     """The done-when, taken on the graph the bead names."""
 
     def test_the_two_instruments_flag_the_same_edge_set(self, live: Path) -> None:
-        assert _view_flags(live) == _rule_flags(live)
+        assert view_flags(live) == rule_flags(live)
 
     def test_the_agreement_is_not_vacuous(self, live: Path) -> None:
         """Both sets are empty here, and that has to be a measurement.
@@ -43,8 +43,8 @@ class TestOnThisRepository:
         renders a verdict on the edges the rule judges, and that is most of
         them.
         """
-        verdicts = _view_verdicts(live)
+        verdicts = view_verdicts(live)
         decided = [edge for edge, verdict in verdicts.items() if verdict is not None]
         assert len(verdicts) > 300
         assert len(decided) > len(verdicts) * 9 // 10
-        assert _view_flags(live) == set()
+        assert view_flags(live) == set()

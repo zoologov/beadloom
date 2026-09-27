@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
@@ -23,9 +23,10 @@ from beadloom.graph.rule_engine import (
 from beadloom.infrastructure.db import create_schema
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
+from tests.support.repository_root import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 RULES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 

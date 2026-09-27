@@ -47,7 +47,7 @@ from beadloom.application.guards.paths import (
     resolve_edit_path,
 )
 from beadloom.services.cli import main
-from tests.filesystem_names import (
+from tests.support.filesystem_names import (
     UNENCODABLE_FRAGMENT,
     filesystem_can_name,
     unnameable_reason,

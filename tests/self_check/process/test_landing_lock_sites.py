@@ -8,16 +8,13 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.waves import (
     LOCK_COMMAND,
 )
-from tests.test_landing_lock_sites import (
-    _lock_sites,
+from tests.support.landing_lock import (
+    judged_lock_sites,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 def _this_projects_instructions() -> list[tuple[str, str]]:
@@ -57,7 +54,7 @@ class TestThisRepositoryInstructsOnlyTheFormThatGrantsIt:
     def test_no_instruction_this_project_ships_or_composes_is_defective(self) -> None:
         defective = [
             f"{site.source}:{site.line} `{site.invocation}` {site.defects}"
-            for site in _lock_sites(_this_projects_instructions())
+            for site in judged_lock_sites(_this_projects_instructions())
             if site.defects
         ]
         assert defective == []

@@ -37,11 +37,11 @@ from beadloom.graph.rules.types import (
     RequireRule,
     Violation,
 )
-from tests.test_the_layer_rule_states_the_population_it_judged import (
+from tests.support.layer_rule import (
     DDD_LAYERS,
-    _rule,
+    ddd_layer_rule,
 )
-from tests.the_lint_path_before_release_a import (
+from tests.support.the_lint_path_before_release_a import (
     ClosureTags,
     comparable,
     decisions,
@@ -84,7 +84,7 @@ class TestTheReachIsReadableWithoutRunningTheRule:
         16 of 362 at `aa4bfad4` by own tags; the figure below is what the rule
         decides on since `beadloom-ku26`.
         """
-        reach = layer_rule_reach(live_graph, _rule())
+        reach = layer_rule_reach(live_graph, ddd_layer_rule())
         assert reach.population.total > 300
         assert reach.population.evaluated > reach.population.total * 9 // 10
 
@@ -104,7 +104,7 @@ class TestWhatTheDecisionsChangedTo:
     ) -> None:
         """Not neutrality by construction, and not a property of the predicate.
 
-        This repository's own `rules.yml` is read here rather than `_rule()`.
+        This repository's own `rules.yml` is read here rather than `ddd_layer_rule()`.
         Two beads ran before this one so that this would hold: `beadloom-46am`
         removed the single edge running from a domain into the application
         layer, and `beadloom-xmfs` excused every same-layer crossing left, each
@@ -122,7 +122,7 @@ class TestWhatTheDecisionsChangedTo:
     ) -> None:
         """The differential above is over a set that is NOT empty by nature.
 
-        `_rule()` is this repository's layering with its `exempt:` block left
+        `ddd_layer_rule()` is this repository's layering with its `exempt:` block left
         off. Every crossing it then reports must be one the rules file excuses,
         and every entry must excuse one — an entry that excused nothing would be
         a reason written for an edge that is not there. The comparison is a set
@@ -130,8 +130,8 @@ class TestWhatTheDecisionsChangedTo:
         number moves; the entries name literal ref_ids on this repository.
         """
         declared = next(rule for rule in live_rules if isinstance(rule, LayerRule))
-        added = comparable(evaluate_layer_rules(live_graph, [_rule()])) - comparable(
-            layer_findings_before_release_a(live_graph, [_rule()])
+        added = comparable(evaluate_layer_rules(live_graph, [ddd_layer_rule()])) - comparable(
+            layer_findings_before_release_a(live_graph, [ddd_layer_rule()])
         )
         crossings = {(entry[5], entry[6]) for entry in added if entry[1] == "layer"}
         assert crossings == {

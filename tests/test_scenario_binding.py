@@ -15,7 +15,7 @@ check silently reads zero and calls it clean:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -28,6 +28,10 @@ from beadloom.graph.scenarios import (
     parse_feature,
     parse_scenario_references,
 )
+from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write(path: Path, text: str) -> Path:
@@ -260,7 +264,7 @@ class TestAgreementWithTheRunner:
         )
         from gherkin.token_scanner import TokenScanner
 
-        root = Path(__file__).resolve().parent.parent
+        root = REPO_ROOT
         files = sorted((root / "tests" / "acceptance" / "features").glob("*.feature"))
         assert files, "the acceptance suite is empty — the cross-check would be vacuous"
         rules_seen = 0

@@ -53,14 +53,13 @@ from beadloom.infrastructure.doc_roots import (
     path_matches,
     resolve_doc_spaces,
 )
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
+from tests.support.doc_root_populations import found_by_any_root, populations_by_space
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Mapping
     from pathlib import Path
-
-REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 
 
 def _write(root: Path, rel: str, text: str = "# doc\n") -> None:
@@ -71,30 +70,6 @@ def _write(root: Path, rel: str, text: str = "# doc\n") -> None:
 
 def _config(root: Path, block: Mapping[str, object]) -> None:
     _write(root, ".beadloom/config.yml", yaml.safe_dump({"doc_roots": dict(block)}))
-
-
-def _found_by_any_root(root: Path, spaces: object) -> set[str]:
-    """Every file a declared root matched, spelled project-relative.
-
-    Recomputed here from the configuration rather than asked of the code under
-    test: a classifier that agrees with itself proves nothing about whether it
-    lost a file (`.18`'s recount suite could reproduce M1 faithfully and agreed
-    with it, which is why the reviewer had to plant a file instead).
-    """
-    found: set[str] = set()
-    for space in SPACES:
-        for pattern in spaces.roots.get(space, ()):  # type: ignore[attr-defined]
-            found.update(
-                p.relative_to(root).as_posix() for p in root.glob(pattern) if p.is_file()
-            )
-    return found
-
-
-def _populations(root: Path, spaces: object) -> dict[str, int]:
-    return {
-        space: len(spaces.documents_in(root, space))  # type: ignore[attr-defined]
-        for space in SPACES
-    }
 
 
 def _report(root: Path, **kwargs: object) -> object:
@@ -139,10 +114,10 @@ class TestEveryDocumentARootFoundIsInSomePopulation:
         _write(tmp_path, "docs/notes.md")
         spaces = default_doc_spaces()
 
-        populations = _populations(tmp_path, spaces)
+        populations = populations_by_space(tmp_path, spaces)
         populations[SPACE_WORKING] = len(spaces.working_documents(tmp_path))
 
-        assert sum(populations.values()) == len(_found_by_any_root(tmp_path, spaces))
+        assert sum(populations.values()) == len(found_by_any_root(tmp_path, spaces))
 
     def test_a_document_its_own_space_excludes_is_counted_under_its_kind(
         self, tmp_path: Path

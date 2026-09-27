@@ -11,7 +11,7 @@ Such a test depends on the machine and on the order the suite ran in, and
 empty directory (``tests/conftest.py``). This guard catches the contacts that
 still arrive by an explicit path, a ``cwd=`` or a ``-C``.
 
-It is the sibling of :mod:`tests.tracked_write_guard`: that guard is about
+It is the sibling of :mod:`tests.support.tracked_write_guard`: that guard is about
 WRITES to tracked files, this one about CONTACT with state git does not track.
 Both deliver their verdict from the same conftest hook, in the call phase.
 
@@ -308,7 +308,7 @@ class ContactGuard:
     def suspended(self) -> Iterator[None]:
         """Record nothing for the duration — for the one sanctioned reader of the live tree.
 
-        The self-check snapshot (tests/self_check_snapshot.py) copies the working
+        The self-check snapshot (tests/support/self_check_snapshot.py) copies the working
         tree, the tracker export among it, and clones the git history: reading the
         live tree is its whole job, done once per session, and it touches no index.
         Nothing else suspends the guard; the conftest's terminal summary states
@@ -342,7 +342,7 @@ class ContactGuard:
             "order the suite ran in. Give it an explicit root instead: build the project "
             "in `tmp_path` (or an adopter fixture) and pass it as `--project`, `cwd=` or "
             "`-C`. Only a test that genuinely asserts on this repository belongs in "
-            "ALLOWED_CONTACTS (tests/contact_guard.py), with its reason.",
+            "ALLOWED_CONTACTS (tests/support/contact_guard.py), with its reason.",
         ]
         return "\n".join(lines)
 

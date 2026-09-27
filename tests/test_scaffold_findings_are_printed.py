@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -72,48 +72,31 @@ Known limits, stated rather than discovered later:
 
 from __future__ import annotations
 
-import inspect
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 from typing import NoReturn
 
 import pytest
 
-import beadloom
 from beadloom.application.source_derivation import (
     CallSite,
-    call_sites_in,
     callables_that_reach,
     direct_callers_of,
     functions_that_serialise_yaml_to_disk,
     never_returns,
 )
-from beadloom.infrastructure.atomic_io import write_yaml_atomic
-from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.commands import setup as init_command
-from tests.test_init_verdict_over_its_own_rules import THE_BRANCHES
-
-#: The name of the function that takes the Gate's verdict, read off the function
-#: object instead of written out: a rename fails at import here rather than
-#: leaving a scan that quietly finds no verdict anywhere and reports every branch
-#: as unguarded.
-THE_VERDICT = init_command._verdict_on_the_generated_graph.__name__
-
-#: The narrow seed: one writer, and the one this epic started from.
-THE_BOOTSTRAP = bootstrap_project.__name__
-
-#: The wide seed, and the reason `.15` exists. Every graph YAML in the product
-#: is committed by this one function — `infrastructure/atomic_io.py` states that
-#: as its purpose and `TestNoGraphFileIsWrittenPastTheCommitPoint` checks it — so
-#: "this function writes a graph file" is answerable from the source instead of
-#: from a list. Read off the function object for the same reason `THE_VERDICT`
-#: is: a rename must fail at import rather than leave a scan that finds nothing.
-THE_GRAPH_COMMIT_POINT = write_yaml_atomic.__name__
-
-#: The command under examination, by the name it has in its module.
-THE_COMMAND = "init"
+from tests.support.init_call_sites import (
+    THE_BOOTSTRAP,
+    THE_COMMAND,
+    THE_GRAPH_COMMIT_POINT,
+    THE_VERDICT,
+    bootstrap_call_sites,
+    package_root,
+    the_commands_source,
+)
+from tests.support.init_verdict import THE_BRANCHES
 
 #: The functions that call the commit point directly, as BDL-067 `.14`'s sweep
 #: of `src/` enumerated them by hand. It is asserted against the DERIVED set
@@ -201,40 +184,6 @@ def _deferrals_that_tell_the_adopter_nothing(
     return silent
 
 
-def _package_root() -> Path:
-    """The product's own source tree, which is what every scan here reads."""
-    return Path(inspect.getfile(beadloom)).parent
-
-
-def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[CallSite, ...]:
-    """The derivation's reading of `init`, bound to this command's own names.
-
-    `source_derivation.call_sites_in` answers "where, in this command, does a
-    call from *reaching* sit, and can *marker* still run after it". What this
-    module supplies is which command, which marker, and the module terminator
-    names are resolved through — all three read off the product's own objects, so
-    a rename fails at import here rather than leaving a scan that finds nothing.
-    """
-    return call_sites_in(
-        source,
-        reaching,
-        command=THE_COMMAND,
-        marker=THE_VERDICT,
-        resolving_in=init_command,
-    )
-
-
-def _the_commands_source() -> str:
-    """The source file `init` is defined in, as the imported module resolves it."""
-    return Path(inspect.getfile(init_command)).read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
-def reaching() -> frozenset[str]:
-    """The names that end in a bootstrap, derived from the package's source."""
-    return callables_that_reach(_package_root(), THE_BOOTSTRAP)
-
-
 @pytest.fixture(scope="module")
 def writing() -> frozenset[str]:
     """The names that end in a graph-file write, derived the same way.
@@ -243,19 +192,19 @@ def writing() -> frozenset[str]:
     branch the narrow seed finds is found here too, and the branches that reach
     some OTHER writer are found only here.
     """
-    return callables_that_reach(_package_root(), THE_GRAPH_COMMIT_POINT)
+    return callables_that_reach(package_root(), THE_GRAPH_COMMIT_POINT)
 
 
 @pytest.fixture(scope="module")
 def call_sites(reaching: frozenset[str]) -> tuple[CallSite, ...]:
     """Every bootstrap-reaching call in the real `init`, in source order."""
-    return _call_sites_in(_the_commands_source(), reaching)
+    return bootstrap_call_sites(the_commands_source(), reaching)
 
 
 @pytest.fixture(scope="module")
 def writer_call_sites(writing: frozenset[str]) -> tuple[CallSite, ...]:
     """Every call in the real `init` that ends in a graph-file write."""
-    return _call_sites_in(_the_commands_source(), writing)
+    return bootstrap_call_sites(the_commands_source(), writing)
 
 
 #: A command with the shape the real one has: two flag branches that return, and
@@ -352,6 +301,13 @@ A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO = A_COMMAND_LIKE_INIT.replace(
 )
 
 
+
+@pytest.fixture(scope="module")
+def reaching() -> frozenset[str]:
+    """The names that end in a bootstrap, derived from the package's source."""
+    return callables_that_reach(package_root(), THE_BOOTSTRAP)
+
+
 class TestTheEnumeratorItself:
     """The instrument, before anything is trusted to it.
 
@@ -370,7 +326,7 @@ class TestTheEnumeratorItself:
         self, reaching: frozenset[str]
     ) -> None:
         """Two guarded branches and a fallthrough, which is `init`'s shape."""
-        sites = _call_sites_in(A_COMMAND_LIKE_INIT, reaching)
+        sites = bootstrap_call_sites(A_COMMAND_LIKE_INIT, reaching)
 
         assert [site.guard for site in sites] == [("non_interactive",), ("bootstrap",), ()]
 
@@ -383,7 +339,7 @@ class TestTheEnumeratorItself:
             "unmutated command and the mutation it names never happened"
         )
 
-        sites = _call_sites_in(A_FOURTH_BRANCH_WITHOUT_A_VERDICT, reaching)
+        sites = bootstrap_call_sites(A_FOURTH_BRANCH_WITHOUT_A_VERDICT, reaching)
 
         assert [site.guard for site in sites if not site.reaches_marker] == [("rescan",)]
 
@@ -394,7 +350,7 @@ class TestTheEnumeratorItself:
             "the anchor the mutation edits is gone"
         )
 
-        sites = _call_sites_in(A_FOURTH_BRANCH_WITH_A_VERDICT, reaching)
+        sites = bootstrap_call_sites(A_FOURTH_BRANCH_WITH_A_VERDICT, reaching)
 
         assert [site.guard for site in sites if not site.reaches_marker] == []
         assert ("rescan",) in [site.guard for site in sites]
@@ -407,7 +363,7 @@ class TestTheEnumeratorItself:
             "the anchor the mutation edits is gone"
         )
 
-        sites = _call_sites_in(A_VERDICT_BELOW_THE_RETURN, reaching)
+        sites = bootstrap_call_sites(A_VERDICT_BELOW_THE_RETURN, reaching)
 
         assert [site.guard for site in sites if not site.reaches_marker] == [("non_interactive",)]
 
@@ -427,7 +383,7 @@ class TestTheEnumeratorItself:
             "`return` mutant and the exit it names never happened"
         )
 
-        sites = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
+        sites = bootstrap_call_sites(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
 
         assert [site.guard for site in sites if not site.reaches_marker] == [
             ("non_interactive",)
@@ -442,8 +398,8 @@ class TestTheEnumeratorItself:
         ever read differently again, the classifier has started answering a
         question about spelling rather than about control flow.
         """
-        by_return = _call_sites_in(A_VERDICT_BELOW_THE_RETURN, reaching)
-        by_exit = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
+        by_return = bootstrap_call_sites(A_VERDICT_BELOW_THE_RETURN, reaching)
+        by_exit = bootstrap_call_sites(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
 
         assert [site.reaches_marker for site in by_return] == [
             site.reaches_marker for site in by_exit
@@ -461,7 +417,7 @@ class TestTheEnumeratorItself:
         arrive in silence, which is the defect this module is named after one
         level down.
         """
-        committing = direct_callers_of(_package_root(), THE_GRAPH_COMMIT_POINT)
+        committing = direct_callers_of(package_root(), THE_GRAPH_COMMIT_POINT)
 
         assert committing == THE_WRITERS_THE_SWEEP_FOUND, (
             "the set of functions that commit a graph file has changed. Added: "
@@ -489,10 +445,10 @@ class TestTheEnumeratorItself:
             A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING != A_COMMAND_LIKE_INIT
         ), "the anchor the mutation edits is gone"
 
-        by_bootstrap = _call_sites_in(
+        by_bootstrap = bootstrap_call_sites(
             A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING, reaching
         )
-        by_writer = _call_sites_in(
+        by_writer = bootstrap_call_sites(
             A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING, writing
         )
 
@@ -567,7 +523,7 @@ class TestNoGraphFileIsWrittenPastTheCommitPoint:
 
     def _functions_that_serialise_yaml_to_disk(self) -> dict[str, str]:
         """The derivation's answer, each function named with where it is."""
-        root = _package_root()
+        root = package_root()
         return {
             name: f"{where.path.relative_to(root)}:{where.lineno}"
             for name, where in functions_that_serialise_yaml_to_disk(root).items()
@@ -575,7 +531,7 @@ class TestNoGraphFileIsWrittenPastTheCommitPoint:
 
     def test_the_scan_finds_something_to_judge(self) -> None:
         """Anti-vacuity: a scan that matched nothing would pass the next case."""
-        assert direct_callers_of(_package_root(), THE_GRAPH_COMMIT_POINT), (
+        assert direct_callers_of(package_root(), THE_GRAPH_COMMIT_POINT), (
             f"no function calls {THE_GRAPH_COMMIT_POINT!r}, so the wide seed is "
             "empty and every writer-seeded assertion below asserts nothing"
         )
@@ -737,7 +693,7 @@ class TestTheDeferralChecksStillBite:
             "the anchor the mutation edits is gone, so these cases judge the "
             "unmutated command and the branch they name never existed"
         )
-        return _call_sites_in(A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO, writing)
+        return bootstrap_call_sites(A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO, writing)
 
     def test_a_deferral_matching_an_unjudged_branch_is_accepted(
         self, writing: frozenset[str]

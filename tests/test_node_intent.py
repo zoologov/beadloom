@@ -38,7 +38,7 @@ from beadloom.context_oracle.intent import (
     select_intent,
 )
 from beadloom.services.cli import main
-from tests.adopter_project import beadloom_local_facts_in, typescript_project
+from tests.support.adopter_project import beadloom_local_facts_in, typescript_project
 
 if TYPE_CHECKING:
     from pathlib import Path

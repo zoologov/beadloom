@@ -23,15 +23,19 @@ denied — this is a guard, not a proof.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from beadloom.application.source_derivation.source_tree import (
     functions_in,
     module_tree,
     python_files,
 )
+from tests.support.repository_root import REPO_ROOT
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+if TYPE_CHECKING:
+    from pathlib import Path
+
+SRC = REPO_ROOT / "src"
 PACKAGE = SRC / "beadloom"
 
 #: The one walk. Named here so a failure says which body is supposed to survive.

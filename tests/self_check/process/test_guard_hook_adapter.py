@@ -10,16 +10,15 @@ from __future__ import annotations
 
 import json
 import stat
-from pathlib import Path
 
 from beadloom.onboarding.guard_hooks import (
     GUARD_HOOK_RELPATH,
     SETTINGS_RELPATH,
     scaffold_guard_hooks,
 )
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 #: This repository, used where the claim under test is about the dogfood itself.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class TestThisRepositoryRunsWhatItShips:

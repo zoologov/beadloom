@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_gate_three_states import (
-    _gate,
-    _names_after,
+from tests.support.gate_states import (
+    gate_over_state,
+    names_after,
 )
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 
 def _assert_no_self_count_leaks(line: str) -> None:
@@ -38,7 +39,6 @@ def _assert_no_self_count_leaks(line: str) -> None:
 
 #: This package's own checkout — the only project whose surface counts are
 #: its own, which is exactly what the leak check below must know.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _our_own_surface_counts() -> dict[str, int]:
@@ -78,7 +78,7 @@ class TestTheThreePopulationsStayApartInTheGateLine:
     """``verified`` / ``declared but unverified`` / ``not applicable``, disjoint."""
 
     def _audit_line(self, tmp_path: Path, state: str) -> str:
-        _, payload = _gate(tmp_path, state)
+        _, payload = gate_over_state(tmp_path, state)
         steps = payload["steps"]
         assert isinstance(steps, list)
         for step in steps:
@@ -101,7 +101,7 @@ class TestTheThreePopulationsStayApartInTheGateLine:
         check follows the surface.
         """
         line = self._audit_line(tmp_path, "agrees")
-        declined = _names_after(line, "NOT APPLICABLE to this project:")
+        declined = names_after(line, "NOT APPLICABLE to this project:")
 
         assert {"mcp_tool_count", "cli_command_count"} <= declined
         _assert_no_self_count_leaks(line)

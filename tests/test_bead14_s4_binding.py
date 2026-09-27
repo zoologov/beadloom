@@ -44,10 +44,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
-import sys
-import xml.etree.ElementTree as ET
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -63,14 +59,17 @@ from beadloom.graph.rules import (
 from beadloom.graph.scenarios import load_suite
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
+from tests.support.nested_pytest import run_pytest
+from tests.support.platform_skips import WindowsSkip, assert_every_platform_skip_is_judged
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from beadloom.graph.rules import Violation
 
 #: This repository, so the shipped configuration is read rather than restated.
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SCENARIO_COVERAGE = "scenario_coverage"
 
@@ -531,56 +530,6 @@ class TestTheConfiguredLocationCannotBuyASilentGreen:
 # --------------------------------------------------------------------------- #
 
 
-def _run_pytest(args: list[str], *, cwd: Path, report: Path) -> tuple[int, list[tuple[str, str]]]:
-    """Run pytest in a subprocess and read per-test OUTCOMES from its JUnit report.
-
-    Outcomes rather than the terminal summary: a count scraped from stdout cannot
-    tell a scenario that ran from one that was collected and skipped, and telling
-    those apart is the entire question.
-    """
-    completed = subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            *args,
-            "-p",
-            "no:cacheprovider",
-            "--junitxml",
-            str(report),
-            "-q",
-        ],
-        cwd=cwd,
-        capture_output=True,
-        # These two streams are only ever quoted into a failure message, so the
-        # handler is tolerant while the codec is still stated: a child pytest
-        # writes UTF-8 under a UTF-8 locale and backslash escapes under the C
-        # one, and leaving the choice to the image is the defect BDL-068 `.49`
-        # measured on the `tests-locale (C)` leg.
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if not report.exists():  # pragma: no cover - only on a collection crash
-        pytest.fail(f"pytest produced no report:\n{completed.stdout}\n{completed.stderr}")
-    outcomes: list[tuple[str, str]] = []
-    # S314: the input is the JUnit report pytest just wrote in a temporary
-    # directory, not untrusted data.
-    for case in ET.parse(report).getroot().iter("testcase"):  # noqa: S314
-        name = str(case.get("name"))
-        children = {child.tag for child in case}
-        if "skipped" in children:
-            outcomes.append((name, "skipped"))
-        elif children & {"failure", "error"}:
-            detail = " ".join(
-                str(child.get("message", "")) for child in case if child.tag != "skipped"
-            )
-            outcomes.append((name, f"failed: {detail}"))
-        else:
-            outcomes.append((name, "passed"))
-    return completed.returncode, outcomes
-
-
 def _numbered_with_the_line_above(path: Path) -> list[tuple[int, str, str]]:
     """Every line of *path* numbered, carried with the line before it.
 
@@ -638,12 +587,20 @@ class TestTheScenariosExecute:
         produced a green, `scenario-coverage` would be counting files that execute
         nothing — the false green the rule exists to remove, one level down.
         """
-        suite = tmp_path / "acceptance"
+        suite = tmp_path / "tests" / "acceptance"
         shutil.copytree(
             REPO_ROOT / "tests" / "acceptance",
             suite,
             ignore=shutil.ignore_patterns("__pycache__"),
         )
+        # The steps import their shared helpers from `tests.support` (BDL-074 B1),
+        # so the copy is a `tests` package with its support package beside it.
+        shutil.copytree(
+            REPO_ROOT / "tests" / "support",
+            suite.parent / "support",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        shutil.copyfile(REPO_ROOT / "tests" / "__init__.py", suite.parent / "__init__.py")
         steps = suite / "steps" / "test_scenario_coverage_steps.py"
         source = steps.read_text(encoding="utf-8")
         broken = source.replace(
@@ -653,7 +610,7 @@ class TestTheScenariosExecute:
         assert broken != source, "the anchor for the sabotage is gone"
         steps.write_text(broken, encoding="utf-8")
 
-        code, outcomes = _run_pytest([str(suite)], cwd=tmp_path, report=tmp_path / "report.xml")
+        code, outcomes = run_pytest([str(suite)], cwd=tmp_path, report=tmp_path / "report.xml")
 
         assert code != 0, outcomes
         failures = [outcome for _, outcome in outcomes if outcome.startswith("failed")]
@@ -697,7 +654,7 @@ class TestTheProbeAndTheLedger:
         not claim otherwise. Neither direction is satisfiable by a probe that always
         answers the same thing.
         """
-        from tests.symlink_capability import SYMLINK_CAPABILITY
+        from tests.support.symlink_capability import SYMLINK_CAPABILITY
 
         target = tmp_path / "target.txt"
         target.write_text("x\n", encoding="utf-8")
@@ -714,9 +671,7 @@ class TestTheProbeAndTheLedger:
             f"refusal={SYMLINK_CAPABILITY.refusal!r}"
         )
 
-    def test_the_ledger_reports_a_platform_skip_nobody_judged(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_ledger_reports_a_platform_skip_nobody_judged(self, tmp_path: Path) -> None:
         """Add one, and it reddens — the ledger's FAILING branch, which had no test.
 
         Its scanner is covered; its verdict was not, and a ledger whose failure is
@@ -724,8 +679,6 @@ class TestTheProbeAndTheLedger:
         written to prevent. The scan is redirected at a throwaway tree instead of
         editing a real test file, so the row is repeatable and leaves nothing behind.
         """
-        from tests import test_windows_dimension as ledger
-
         (tmp_path / "test_new_thing.py").write_text(
             "import pytest, sys\n"
             "class TestSomething:\n"
@@ -734,35 +687,23 @@ class TestTheProbeAndTheLedger:
             "        pass\n",
             encoding="utf-8",
         )
-        monkeypatch.setattr(ledger, "TESTS_DIR", tmp_path)
-        monkeypatch.setattr(ledger, "JUDGED_WINDOWS_SKIPS", {})
-
         with pytest.raises(AssertionError) as caught:
-            ledger.test_no_win32_skip_is_unjudged()
+            assert_every_platform_skip_is_judged({}, tmp_path)
 
         assert "test_new_thing.py::TestSomething::test_it" in str(caught.value)
         assert "no judgement" in str(caught.value)
 
-    def test_the_ledger_reports_an_entry_whose_skip_has_gone(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_ledger_reports_an_entry_whose_skip_has_gone(self, tmp_path: Path) -> None:
         """The other direction: a judgement kept after the skip it excused was deleted.
 
         A stale entry is how a ledger stops describing the suite — it accumulates
         verdicts on rows nobody can find, and the next reader trusts the list rather
         than the code.
         """
-        from tests import test_windows_dimension as ledger
-
-        monkeypatch.setattr(ledger, "TESTS_DIR", tmp_path)
-        monkeypatch.setattr(
-            ledger,
-            "JUDGED_WINDOWS_SKIPS",
-            {"test_gone.py::<module>": ledger.WindowsSkip(facility="f", why="w")},
-        )
+        judged = {"test_gone.py::<module>": WindowsSkip(facility="f", why="w")}
 
         with pytest.raises(AssertionError) as caught:
-            ledger.test_no_win32_skip_is_unjudged()
+            assert_every_platform_skip_is_judged(judged, tmp_path)
 
         assert "test_gone.py::<module>" in str(caught.value)
         assert "no longer present" in str(caught.value)

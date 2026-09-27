@@ -47,6 +47,10 @@ from beadloom.graph.rule_engine import (
 )
 from beadloom.infrastructure.db import create_schema
 from beadloom.services.cli import main
+from tests.support.freshness_baseline import (
+    no_baseline_skip_reason,
+    pairs_have_no_freshness_baseline,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -322,43 +326,6 @@ class TestDirSourceCoverageDepth:
 # ---------------------------------------------------------------------------
 
 
-def _pairs_have_no_freshness_baseline(pairs: list[dict[str, object]]) -> bool:
-    """Whether NOTHING in *pairs* was compared against a baseline at all.
-
-    Doc freshness is decided against two baselines and a checkout may hold
-    neither: the index database, which is gitignored, and ``git`` history, which
-    ``sync-check`` consults through ``changed_paths``. With both absent every
-    pair comes back ``unverified`` with ``baseline: none`` — not ``stale``,
-    because nothing was compared. ``changed_paths`` is asked once per run, so
-    the answer is a property of the CHECKOUT and the whole population carries it
-    or none of it does.
-
-    The decision reads ``baseline`` and never ``status``: ``unverified`` also
-    names the ``sibling_symbols_changed`` verdict, which comes WITH an index
-    baseline and is a finding about this tree. Reading the status would let a
-    real finding buy itself a skip, which is the failure mode a skip has.
-
-    An EMPTY population answers ``False`` deliberately. No pairs at all is a
-    broken sample rather than a missing baseline, and ``True`` there would turn
-    a check that found nothing into a skip blaming the room.
-    """
-    return bool(pairs) and all(str(pair.get("baseline")) == BASELINE_NONE for pair in pairs)
-
-
-def _no_baseline_skip_reason(pairs: list[dict[str, object]]) -> str:
-    """Why the freshness assertion did not run, and what would make it run."""
-    return (
-        f"no freshness baseline in this checkout: all {len(pairs)} sampled "
-        f"sync-check pair(s) report baseline '{BASELINE_NONE}', which is the "
-        "verdict for a document compared against nothing. Both baselines are "
-        "absent from a room built by `beadloom clean-room`: the index database "
-        "is gitignored and `git archive` carries no `.git`. WHAT MAKES IT RUN: "
-        "either baseline. It runs in this repository's working tree, and on "
-        "every CI leg, where actions/checkout provides `.git`; it would run in "
-        "a room on the day `beadloom clean-room` carries a baseline into one."
-    )
-
-
 class TestTheFreshnessSkipIsDecidedByTheBaseline:
     """The skip above must fire in a room and in no other checkout.
 
@@ -386,7 +353,7 @@ class TestTheFreshnessSkipIsDecidedByTheBaseline:
         """The room's own shape: every pair unverified against nothing."""
         pairs = [self._pair(BASELINE_NONE) for _ in range(3)]
 
-        assert _pairs_have_no_freshness_baseline(pairs) is True
+        assert pairs_have_no_freshness_baseline(pairs) is True
 
     def test_an_unverified_pair_with_an_index_baseline_is_not_a_missing_baseline(
         self,
@@ -399,13 +366,13 @@ class TestTheFreshnessSkipIsDecidedByTheBaseline:
         """
         pairs = [self._pair("index", status="unverified")]
 
-        assert _pairs_have_no_freshness_baseline(pairs) is False
+        assert pairs_have_no_freshness_baseline(pairs) is False
 
     def test_a_stale_pair_with_a_git_baseline_is_not_a_missing_baseline(self) -> None:
         """The verdict this test exists to report still reaches the assertion."""
         pairs = [self._pair("git:HEAD", status="stale")]
 
-        assert _pairs_have_no_freshness_baseline(pairs) is False
+        assert pairs_have_no_freshness_baseline(pairs) is False
 
     def test_one_baselined_pair_among_unbaselined_ones_still_answers(self) -> None:
         """A checkout that compared anything is a checkout that can be judged."""
@@ -415,11 +382,11 @@ class TestTheFreshnessSkipIsDecidedByTheBaseline:
             self._pair("index", status="ok"),
         ]
 
-        assert _pairs_have_no_freshness_baseline(pairs) is False
+        assert pairs_have_no_freshness_baseline(pairs) is False
 
     def test_an_empty_population_is_not_a_missing_baseline(self) -> None:
         """No pairs is a broken sample, and the caller must fail rather than skip."""
-        assert _pairs_have_no_freshness_baseline([]) is False
+        assert pairs_have_no_freshness_baseline([]) is False
 
     def test_a_pair_that_reports_no_baseline_field_does_not_buy_a_skip(self) -> None:
         """A renamed or dropped field fails the check; it never quiets it.
@@ -429,7 +396,7 @@ class TestTheFreshnessSkipIsDecidedByTheBaseline:
         """
         pairs: list[dict[str, object]] = [{"ref_id": "sync-check", "status": "unverified"}]
 
-        assert _pairs_have_no_freshness_baseline(pairs) is False
+        assert pairs_have_no_freshness_baseline(pairs) is False
 
     def test_the_skip_reason_names_what_would_make_the_test_run(self) -> None:
         """The constraint the suite already enforces, applied to this skip.
@@ -440,7 +407,7 @@ class TestTheFreshnessSkipIsDecidedByTheBaseline:
         colour, so the reason names the count it saw, the baselines it wants and
         the two places that supply them.
         """
-        reason = _no_baseline_skip_reason([self._pair(BASELINE_NONE) for _ in range(4)])
+        reason = no_baseline_skip_reason([self._pair(BASELINE_NONE) for _ in range(4)])
 
         assert "4 sampled" in reason
         assert BASELINE_NONE in reason

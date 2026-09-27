@@ -23,8 +23,7 @@ from beadloom.graph.rules.layers import same_layer_crossings
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import LayerRule
-
-from .tiered_project import graph_with_peer_containers, write_tiered_project
+from tests.support.tiered_project import graph_with_peer_containers, write_tiered_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

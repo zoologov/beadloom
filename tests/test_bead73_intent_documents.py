@@ -48,7 +48,7 @@ from beadloom.infrastructure.doc_roots import (
     SPACE_TO_BE,
     resolve_doc_spaces,
 )
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

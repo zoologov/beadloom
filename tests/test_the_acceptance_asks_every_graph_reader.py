@@ -2,27 +2,28 @@
 
 BDL-069 acceptance (`beadloom-956f`). The scenario
 `A graph file carrying one ref_id twice is reported by every reader of the
-directory` asks a list of readers held in its own step module, and a list held in
+directory` asks a list of readers held in its own probe module, and a list held in
 one place is a list that goes stale in the other. `beadloom-4ad3` derived the
-population by experiment and
-:mod:`tests.test_what_each_reader_of_the_graph_directory_reads_for` holds that
-derivation; this module is the join between the two.
+population by experiment and :mod:`tests.support.graph_directory_readers` holds
+that derivation; this module is the join between the two.
 
-**Why the scenario does not import the derivation directly.**
-`tests/test_bead14_s4_binding.py` copies `tests/acceptance/` out of the
-repository and runs it standalone to prove a broken step binding reddens the
-suite. In that copy the `tests` package is not importable, so an import inside a
-step module turns a sabotage of a different file's binding into a collection
-failure of this one — the shape `test_bootstrap_self_consistency_steps` records
-for its own fixtures. The list therefore travels with the scenario, and this test
-is what stops the two drifting apart: an eighth reader added to the derivation
-fails here, by name, before it can be silently left out of the claim.
+**Why the scenario keeps a list of its own.** The scenario asks each reader
+through a probe (:mod:`tests.support.duplicate_ref_id_probes`), and the probe
+list is what the scenario claims to cover. Deriving it from the population would
+make the claim agree with itself. So the two lists stay two, and this test is
+what stops them drifting apart: an eighth reader added to the derivation fails
+here, by name, before it can be silently left out of the claim.
+
+Until BDL-074 B1 the probes also had to live in the step module, because
+`tests/test_bead14_s4_binding.py` copied `tests/acceptance/` out alone and the
+`tests` package was not importable there. The copy now carries `tests/support/`
+beside it, so the probes live with the other shared helpers.
 """
 
 from __future__ import annotations
 
-from tests.acceptance.steps.test_duplicate_ref_id_every_reader_steps import PROBES
-from tests.test_what_each_reader_of_the_graph_directory_reads_for import (
+from tests.support.duplicate_ref_id_probes import PROBES
+from tests.support.graph_directory_readers import (
     BYTE_READERS,
     NODE_READERS,
     THE_READERS,

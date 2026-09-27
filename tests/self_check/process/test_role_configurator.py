@@ -8,8 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.onboarding.flow_config import (
     load_flow_config,
 )
@@ -17,8 +15,7 @@ from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
     compose_all_roles,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestFlowConfigLoad:

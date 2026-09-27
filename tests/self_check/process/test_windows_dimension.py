@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
-TESTS_DIR = Path(__file__).resolve().parents[2]
-
+from tests.support.repository_root import TESTS_ROOT as TESTS_DIR
 
 #: The six rows BDL-061.36 item 3 was written about, by node id. Named
 #: individually rather than counted: a count stays right while the rows are

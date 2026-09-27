@@ -10,7 +10,7 @@ what the index returns would agree with any binding, so each step records what i
 laid out and the assertions read that.
 
 The project is built here rather than imported from another step module or from
-`tests.adopter_project`: the acceptance suite is copied out of the repository and
+`tests.support.adopter_project`: the acceptance suite is copied out of the repository and
 run standalone, where the `tests` package is not importable.
 """
 

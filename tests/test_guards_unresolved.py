@@ -297,11 +297,11 @@ class TestNoUnresolvedPathBlocksUnderAHarness:
 
     @staticmethod
     def _hookable_unresolved_rows() -> list[tuple[str, str | None, list[str], str]]:
-        from tests.test_guards_invocation import _EXIT_PATHS
+        from tests.support.guard_exit_paths import EXIT_PATHS
 
         return [
             (row[0], row[1], row[2], row[3])
-            for row in _EXIT_PATHS
+            for row in EXIT_PATHS
             if row[5] == EXIT_CODE_UNRESOLVED and "--hook" not in row[2]
         ]
 

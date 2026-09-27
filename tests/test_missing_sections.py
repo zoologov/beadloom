@@ -384,7 +384,7 @@ class TestForAProjectThatIsNotBeadloom:
         """The shape checked is the shape THEIR templates compose to, not ours."""
         from beadloom.onboarding.composer import PROJECT_FLOW_DIRNAME
         from beadloom.onboarding.doc_templates import required_sections_by_node_kind
-        from tests.adopter_project import typescript_project
+        from tests.support.adopter_project import typescript_project
 
         project = typescript_project(tmp_path / "acme")
         fragment = project.root / PROJECT_FLOW_DIRNAME / "docs" / "domain.md"

@@ -14,15 +14,15 @@ from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
 )
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
 def _live_claude_root() -> Path:
-    from pathlib import Path
 
-    return Path(__file__).resolve().parents[3] / ".claude"
+    return REPO_ROOT / ".claude"
 
 
 class TestShippedFlowAssets:
@@ -47,7 +47,6 @@ class TestShippedFlowAssets:
         reason it is the only guard: with the snapshot gone, this is what would
         catch a live role file that stopped matching what an adopter receives.
         """
-        from pathlib import Path
 
         from beadloom.onboarding.agentic_flow_setup import (
             composed_claude_md,
@@ -60,7 +59,7 @@ class TestShippedFlowAssets:
             blank_auto_regions,
         )
 
-        repo = Path(__file__).resolve().parents[3]
+        repo = REPO_ROOT
         config = resolve_flow_config(repo)
         live = _live_claude_root()
         for name in COMMAND_FILES:
@@ -151,10 +150,9 @@ class TestCoordinatorVendoredDriftGuard:
     scaffold ships the latest Gate-loop + parallelism encoding)."""
 
     def test_vendored_coordinator_byte_identical_to_live(self) -> None:
-        from pathlib import Path
 
         vendored = (
-            Path(__file__).resolve().parents[3]
+            REPO_ROOT
             / "src"
             / "beadloom"
             / "onboarding"

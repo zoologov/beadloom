@@ -31,7 +31,7 @@ is the only thing that would notice, so it runs against this repository's real
 config and its real documents.
 
 FAKES PROVE FAKES throughout: every project below is ``invoice-svc``, built by
-:func:`tests.adopter_project.indexed_python_project`, and every state is
+:func:`tests.support.adopter_project.indexed_python_project`, and every state is
 asserted beside its control — a stand-down beside the same fixture checking
 cleanly, a retired name beside the current one.
 """
@@ -53,7 +53,8 @@ from beadloom.doc_sync.scanner import _COUNT_FACTS_WITHOUT_SUFFIX, DocScanner
 from beadloom.graph.rules import LIVENESS_RULE_TYPE, evaluate_all, load_rules
 from beadloom.graph.rules.summary_facts import SUMMARY_FACTS_RULE_TYPE
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.adopter_project import IndexedProjectSpec, indexed_python_project
+from tests.support.adopter_project import IndexedProjectSpec, indexed_python_project
+from tests.support.retired_facts import RETIRED_FACT
 
 if TYPE_CHECKING:
     import sqlite3
@@ -61,11 +62,6 @@ if TYPE_CHECKING:
 
     from beadloom.graph.rules import Violation
 
-
-#: The fact name BDL-UX #193 retired. Two unrelated meanings of "framework"
-#: collided under it: the web frameworks a parser supports, and the nodes that
-#: declare a test framework.
-RETIRED_FACT = "framework_count"
 
 #: What it was renamed to.
 CURRENT_FACT = "nodes_with_framework"
@@ -97,7 +93,7 @@ def _indexed(
 ) -> tuple[Path, sqlite3.Connection]:
     """An indexed adopter project and an open connection to its graph.
 
-    *spec* is the fixture's own keyword shape (``tests.adopter_project``), taken
+    *spec* is the fixture's own keyword shape (``tests.support.adopter_project``), taken
     as one argument rather than as ``**kwargs`` so the keys stay type-checked at
     every call site. It defaults to :data:`SUMMARY_FACTS_ONLY`; a caller wanting
     another rule set passes ``rules`` through.

@@ -52,9 +52,7 @@ from click.testing import CliRunner, Result
 from beadloom.application.doc_spaces import (
     FINDING_NO_AS_IS,
     FINDING_WORKING_CONTRADICTED,
-    SpacesReport,
     beads_by_epic,
-    check_spaces,
     read_epic_intents,
 )
 from beadloom.application.gate import _step_doc_spaces, _sync_summary
@@ -69,14 +67,18 @@ from beadloom.infrastructure.doc_roots import (
     path_matches,
     resolve_doc_spaces,
 )
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
+from tests.support.relation_report import (
+    EPICS,
+    HANDED_OUT,
+    relation_report_of,
+    repo_beads,
+    repo_report,
+)
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator, Mapping, Sequence
-
-#: Where the shipped flow writes an epic's planning documents.
-_EPICS = ".claude/development/docs/features"
 
 
 # --------------------------------------------------------------------------- #
@@ -96,25 +98,6 @@ def _config(root: Path, block: Mapping[str, object]) -> None:
 
 def _context(refs: str) -> str:
     return f"# CONTEXT\n\n## Goal\n\nShip it.\n\n## Related Files\n\n{refs}\n"
-
-
-def _report(
-    root: Path,
-    *,
-    known: set[str] | None = None,
-    documented: set[str] | None = None,
-    declared: set[str] | None = None,
-    beads: Mapping[str, tuple[str, ...]] | None = None,
-) -> SpacesReport:
-    """``check_spaces`` with the graph supplied as data, never as a database."""
-    return check_spaces(
-        root,
-        spaces=resolve_doc_spaces(root),
-        known_refs=frozenset(known or ()),
-        documented_refs=frozenset(documented or ()),
-        declared_doc_paths=frozenset(declared or ()),
-        beads_by_epic=beads,
-    )
 
 
 def _db(root: Path, *, nodes: Mapping[str, str], docs: Mapping[str, str]) -> sqlite3.Connection:
@@ -163,42 +146,6 @@ def _tracker(root: Path, records: Sequence[Mapping[str, str]]) -> None:
     _write(root, ".beads/issues.jsonl", lines + "\n")
 
 
-def _repo_beads(root: Path) -> dict[str, tuple[str, ...]]:
-    """This repository's own tracker export, grouped by epic key.
-
-    *root* is the self-check snapshot (BDL-074 A2): the export is tracked, so the
-    copy carries it, and a concurrent ``bd`` write to the live file cannot land
-    between two reads of one test.
-    """
-    text = (root / ".beads" / "issues.jsonl").read_text(encoding="utf-8")
-    records = [json.loads(line) for line in text.splitlines() if line.strip()]
-    return beads_by_epic(records)
-
-
-def _repo_report(root: Path) -> SpacesReport:
-    return _report(
-        root,
-        known=_repo_known_refs(root),
-        documented=_repo_known_refs(root),
-        beads=_repo_beads(root),
-    )
-
-
-def _repo_known_refs(root: Path) -> set[str]:
-    """Ref ids read from the committed graph YAML, not from an index.
-
-    The database is a build artifact whose freshness is the thing under test
-    elsewhere; the YAML is the declaration.
-    """
-    refs: set[str] = set()
-    for path in (root / ".beadloom" / "_graph").glob("*.yml"):
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        for node in data.get("nodes", []) or []:
-            if isinstance(node, dict) and isinstance(node.get("ref_id"), str):
-                refs.add(node["ref_id"])
-    return refs
-
-
 # --------------------------------------------------------------------------- #
 # Is the population honest?
 # --------------------------------------------------------------------------- #
@@ -223,9 +170,9 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
     def test_a_directory_with_an_intent_document_is_an_epic(self) -> None:
         """The control: the mechanism works when the file name is the one wired in."""
         root = _tmp()
-        _write(root, f"{_EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
 
-        report = _report(root, known={"billing"}, beads={"BDL-1": ("closed",)})
+        report = relation_report_of(root, known={"billing"}, beads={"BDL-1": ("closed",)})
 
         assert report.epics == 1
 
@@ -242,9 +189,9 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         is the shape `.17` applied one layer up.
         """
         root = _tmp()
-        _write(root, f"{_EPICS}/BDL-1/SUMMARY.md", "# SUMMARY\n\nwhat happened.\n")
+        _write(root, f"{EPICS}/BDL-1/SUMMARY.md", "# SUMMARY\n\nwhat happened.\n")
 
-        report = _report(root, beads={"BDL-1": ("closed",)})
+        report = relation_report_of(root, beads={"BDL-1": ("closed",)})
 
         assert report.epics == 1
         assert report.unresolved_epics == ("BDL-1",)
@@ -258,11 +205,11 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         document, which is the shape `.68` gave the ledger.
         """
         root = _tmp()
-        path = root / _EPICS / "BDL-1" / "CONTEXT.md"
+        path = root / EPICS / "BDL-1" / "CONTEXT.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes("# CONTEXT\n\n## Related Files\n\n`биллинг`\n".encode("cp1251"))
 
-        report = _report(root, beads={"BDL-1": ("closed",)})
+        report = relation_report_of(root, beads={"BDL-1": ("closed",)})
 
         assert report.epics == 1
 
@@ -282,7 +229,7 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         _config(project.root, {"to_be": {"roots": ["design/*/*.md"]}})
         _write(project.root, "design/ORD-4/OVERVIEW.md", _context("`checkout`"))
 
-        report = _report(project.root, known={"checkout"}, beads={"ORD-4": ("closed",)})
+        report = relation_report_of(project.root, known={"checkout"}, beads={"ORD-4": ("closed",)})
 
         assert report.epics == 1
 
@@ -299,19 +246,13 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         spaces = resolve_doc_spaces(self_check_snapshot)
         directories = {p.parent for p in spaces.documents_in(self_check_snapshot, SPACE_TO_BE)}
 
-        assert _repo_report(self_check_snapshot).epics == len(directories)
-
-
-#: Roots handed out by :func:`_tmp`, removed after each test by the fixture
-#: below. A factory rather than the ``tmp_path`` fixture because several helpers
-#: here are static and take no fixtures.
-_HANDED_OUT: list[Path] = []
+        assert repo_report(self_check_snapshot).epics == len(directories)
 
 
 def _tmp() -> Path:
     """A throwaway project root, removed when the test that asked for it ends."""
     path = Path(tempfile.mkdtemp(prefix="beadloom-s5-"))
-    _HANDED_OUT.append(path)
+    HANDED_OUT.append(path)
     return path
 
 
@@ -319,8 +260,8 @@ def _tmp() -> Path:
 def _remove_handed_out_roots() -> Iterator[None]:
     """Keep the tests independent of each other and of the machine's temp dir."""
     yield
-    while _HANDED_OUT:
-        shutil.rmtree(_HANDED_OUT.pop(), ignore_errors=True)
+    while HANDED_OUT:
+        shutil.rmtree(HANDED_OUT.pop(), ignore_errors=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -342,9 +283,11 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
     def test_an_epic_whose_beads_are_open_is_not_checked_and_that_is_correct(self) -> None:
         """The control: an open epic is genuinely not yet a finding."""
         root = _tmp()
-        _write(root, f"{_EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
 
-        report = _report(root, known={"billing"}, beads={"BDL-1": ("open", "in_progress")})
+        report = relation_report_of(
+            root, known={"billing"}, beads={"BDL-1": ("open", "in_progress")}
+        )
 
         assert report.findings == ()
         assert report.refs_checked == 0
@@ -352,9 +295,9 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
     def test_no_tracker_at_all_is_reported_rather_than_assumed(self) -> None:
         """The control for the other direction: a whole missing tracker is named."""
         root = _tmp()
-        _write(root, f"{_EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
 
-        report = _report(root, known={"billing"}, beads=None)
+        report = relation_report_of(root, known={"billing"}, beads=None)
 
         assert report.epics_without_bead_status == 1
 
@@ -370,9 +313,9 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
         now `None` with its reason, counted in `epics_without_bead_status`.
         """
         root = _tmp()
-        _write(root, f"{_EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
 
-        report = _report(root, known={"billing"}, beads={"BDL-OTHER": ("closed",)})
+        report = relation_report_of(root, known={"billing"}, beads={"BDL-OTHER": ("closed",)})
 
         assert report.epics_without_bead_status == 1
 
@@ -386,13 +329,13 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
         state its own channel and `.73` widened the population to every
         directory holding intent, which is why this leg needed both.
         """
-        beads = _repo_beads(self_check_snapshot)
+        beads = repo_beads(self_check_snapshot)
         directories = [
-            p.name for p in sorted((self_check_snapshot / _EPICS).iterdir()) if p.is_dir()
+            p.name for p in sorted((self_check_snapshot / EPICS).iterdir()) if p.is_dir()
         ]
         forgotten = [name for name in directories if name not in beads]
 
-        assert _repo_report(self_check_snapshot).epics_without_bead_status >= len(forgotten)
+        assert repo_report(self_check_snapshot).epics_without_bead_status >= len(forgotten)
 
     def test_deleting_an_epics_records_does_not_make_the_gate_quieter(self) -> None:
         """FINDING BDL-061.18-2 at the gate, closed by `beadloom-mr2l.74`.
@@ -406,11 +349,11 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
         as `epic_not_in_tracker`.
         """
         root = _tmp()
-        _write(root, f"{_EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
         # A second epic that declares nothing, so `not_verified` is already True
         # before the deletion — which is the state this repository is in, and the
         # reason the one honest signal carries no information about it.
-        _write(root, f"{_EPICS}/PROJ-9/CONTEXT.md", _context("nothing here"))
+        _write(root, f"{EPICS}/PROJ-9/CONTEXT.md", _context("nothing here"))
         _db(root, nodes={"billing": "src/billing.py"}, docs={})
         records = [
             {"title": "[PROJ-1.1][dev] ship it", "status": "closed"},
@@ -443,7 +386,7 @@ class TestTheCommandAndTheGateReadOneTracker:
     @staticmethod
     def _project() -> Path:
         root = _tmp()
-        _write(root, f"{_EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
         _db(root, nodes={"billing": "src/billing.py"}, docs={})
         _tracker(root, [{"title": "[PROJ-2.1][dev] elsewhere", "status": "closed"}])
         return root
@@ -536,7 +479,7 @@ class TestAWrongWorkingDeclarationIsDetectable:
         conn = self._stale_project(root, "ACTIVE.md")
 
         rows = check_sync(conn, root)
-        report = _report(root, declared={"docs/ACTIVE.md"}, beads={})
+        report = relation_report_of(root, declared={"docs/ACTIVE.md"}, beads={})
 
         assert [r["status"] for r in rows if r["doc_path"] == "ACTIVE.md"] == [STATUS_EXEMPT]
         assert [f.rule for f in report.findings] == [FINDING_WORKING_CONTRADICTED]
@@ -616,7 +559,7 @@ class TestAWrongWorkingDeclarationIsDetectable:
         conn = self._stale_project(root, "guides/ci.md")
 
         rows = check_sync(conn, root)
-        report = _report(root, declared={"docs/guides/ci.md"}, beads={})
+        report = relation_report_of(root, declared={"docs/guides/ci.md"}, beads={})
 
         assert [r["status"] for r in rows if r["doc_path"] == "guides/ci.md"] == [STATUS_EXEMPT]
         assert [f.rule for f in report.findings] == [FINDING_WORKING_CONTRADICTED]
@@ -741,16 +684,16 @@ class TestRepointingTheRootsDoesNotBuySilence:
     def test_the_relation_follows_the_configured_tree(self, adopter: Path) -> None:
         _write(adopter, "design/ORD-4/CONTEXT.md", _context("`checkout`"))
 
-        report = _report(adopter, known={"checkout"}, beads={"ORD-4": ("closed",)})
+        report = relation_report_of(adopter, known={"checkout"}, beads={"ORD-4": ("closed",)})
 
         assert [f.rule for f in report.findings] == [FINDING_NO_AS_IS]
         assert report.refs_checked == 1
 
     def test_a_decoy_at_the_shipped_default_is_not_read(self, adopter: Path) -> None:
         _write(adopter, "design/ORD-4/CONTEXT.md", _context("`checkout`"))
-        _write(adopter, f"{_EPICS}/DECOY/CONTEXT.md", _context("`checkout`"))
+        _write(adopter, f"{EPICS}/DECOY/CONTEXT.md", _context("`checkout`"))
 
-        report = _report(adopter, known={"checkout"}, beads={"ORD-4": ("closed",)})
+        report = relation_report_of(adopter, known={"checkout"}, beads={"ORD-4": ("closed",)})
 
         assert report.epics == 1
 
@@ -815,9 +758,9 @@ class TestATOBEDocumentWithNoAsIsCounterpart:
 
     def test_the_relation_alone_cannot_see_that_the_document_is_absent(self) -> None:
         root = _tmp()
-        _write(root, f"{_EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
+        _write(root, f"{EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
 
-        report = _report(
+        report = relation_report_of(
             root, known={"billing"}, documented={"billing"}, beads={"PROJ-1": ("closed",)}
         )
 
@@ -948,13 +891,13 @@ class TestTheVocabularyEdges:
         assert grouped["PROJ-1"] == ("",)
 
     def test_an_epic_key_with_no_documents_is_not_invented(self, tmp_path: Path) -> None:
-        report = _report(tmp_path, beads={"PROJ-9": ("closed",)})
+        report = relation_report_of(tmp_path, beads={"PROJ-9": ("closed",)})
 
         assert report.epics == 0
         assert report.relation_checked is False
 
     def test_reading_intents_needs_no_tracker_at_all(self, tmp_path: Path) -> None:
-        _write(tmp_path, f"{_EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
+        _write(tmp_path, f"{EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
 
         intents = read_epic_intents(
             tmp_path,

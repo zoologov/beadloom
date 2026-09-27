@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.application.doctor import (
@@ -16,8 +15,11 @@ from beadloom.application.doctor import (
     get_actual_version,
 )
 from beadloom.onboarding.scanner.project_facts import detect_source_packages
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pytest
 
 # ---------------------------------------------------------------------------
@@ -236,7 +238,7 @@ class TestDetectSourcePackages:
     def test_returns_packages_for_real_project(self) -> None:
         """Returns this project's own top-level packages."""
         # Arrange
-        project_root = Path(__file__).parent.parent
+        project_root = REPO_ROOT
 
         # Act
         result = detect_source_packages(project_root)

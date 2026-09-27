@@ -9,14 +9,11 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from beadloom.application.waves import (
     SHARED_MEDIA,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 #: The log every shared medium cites its evidence from.
 _UX_LOG = REPO_ROOT / ".claude" / "development" / "BDL-UX-Issues.md"

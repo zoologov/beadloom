@@ -10,10 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.test_s2_move_regression import (
-    _CI_YML,
-    _GITLAB_YML,
-)
+from tests.support.ci_workflows import GH_CI, GL_CI
 
 
 class TestCiConfigsModulePath:
@@ -27,11 +24,11 @@ class TestCiConfigsModulePath:
         ],
     )
     def test_root_github_ci_keeps_bdl049_050_markers(self, marker: str) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
+        text = GH_CI.read_text(encoding="utf-8")
         assert marker in text
 
     def test_root_github_ci_keeps_loop_guard_and_verdict(self) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
+        text = GH_CI.read_text(encoding="utf-8")
         # loop-guard: the workflow must not re-trigger itself on its own push.
         assert "loop-guard" in text or "loop guard" in text.lower()
         # verdict classification survives (ok/flagged/infra).
@@ -42,7 +39,7 @@ class TestCiConfigsModulePath:
         ["--target pr-branch", "merge-base", "--since", "AI_TW_PAT"],
     )
     def test_gitlab_ci_keeps_bdl049_050_markers(self, marker: str) -> None:
-        text = _GITLAB_YML.read_text(encoding="utf-8")
+        text = GL_CI.read_text(encoding="utf-8")
         assert marker in text
 
 
@@ -57,11 +54,11 @@ class TestCiConfigNoRetiredToolsPath:
     """
 
     def test_github_ci_does_not_lint_retired_tools_path(self) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
+        text = GH_CI.read_text(encoding="utf-8")
         assert "ruff check src/ tests/ tools/" not in text
         assert "mypy src/ tools/" not in text
 
     def test_gitlab_ci_does_not_lint_retired_tools_path(self) -> None:
-        text = _GITLAB_YML.read_text(encoding="utf-8")
+        text = GL_CI.read_text(encoding="utf-8")
         assert "ruff check src/ tests/ tools/" not in text
         assert "mypy src/ tools/" not in text

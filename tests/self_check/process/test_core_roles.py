@@ -23,15 +23,14 @@ test their STRUCTURE deterministically (no LLM, no network):
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from beadloom.onboarding.agentic_flow_setup import AGENT_FILES
 from beadloom.onboarding.flow_config import resolve_flow_config
 from beadloom.onboarding.role_composer import compose_all_roles
+from tests.support.repository_root import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 AGENTS_DIR = REPO_ROOT / ".claude" / "agents"
 
 # The marker BEAD-04 used to delimit CORE (above) from the Python STACK (below).

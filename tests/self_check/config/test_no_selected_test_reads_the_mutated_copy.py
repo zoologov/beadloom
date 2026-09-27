@@ -8,14 +8,14 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from tests.package_under_test import PACKAGE_ROOT
-from tests.self_check.config.test_mutation_runner_scope import toml_loads
-from tests.test_no_selected_test_reads_the_mutated_copy import (
-    _REPO_ROOT,
+from tests.support.package_under_test import PACKAGE_ROOT
+from tests.support.package_walks import (
     SELF_SCANNING_TESTS_OUTSIDE_THE_POOL,
     Scan,
     python_source_scans,
 )
+from tests.support.repository_root import REPO_ROOT
+from tests.support.toml_reader import toml_loads
 
 #: The files `beadloom-ey4m` moved onto the helper. Held here so the sweep has a
 #: floor: a scan that matched nothing because it stopped parsing would still
@@ -31,7 +31,7 @@ MOVED_ONTO_THE_HELPER = (
 
 def _pool() -> tuple[str, ...]:
     """The test files mutmut selects, read from where the runner reads them."""
-    config = toml_loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    config = toml_loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     tool = config["tool"]
     assert isinstance(tool, dict)
     mutmut = tool["mutmut"]
@@ -43,7 +43,7 @@ def _pool() -> tuple[str, ...]:
 
 def _scan_repository_file(relative: str) -> tuple[Scan, ...]:
     """Scan a file of this repository as it will be read under `mutmut run`."""
-    path = _REPO_ROOT / relative
+    path = REPO_ROOT / relative
     return python_source_scans(
         path.read_text(encoding="utf-8"), at=path, package_root=PACKAGE_ROOT
     )
@@ -70,7 +70,7 @@ class TestNoTestTheRunnerSelectsWalksThePackageItMutates:
         pool = _pool()
 
         assert len(pool) > 100, len(pool)
-        assert all((_REPO_ROOT / entry).is_file() for entry in pool)
+        assert all((REPO_ROOT / entry).is_file() for entry in pool)
 
     def test_the_files_the_defect_was_found_in_are_in_what_it_scans(self) -> None:
         """The floor under the green: the sweep covers the four moved files.
@@ -105,7 +105,7 @@ class TestNoTestTheRunnerSelectsWalksThePackageItMutates:
             f"`mutants/src/beadloom` and report its generated bodies as the "
             f"package's own — the failure that scored nine nightlies at 0 of "
             f"7187 mutants. Read the package through "
-            f"`tests/package_under_test.py`: {offenders}"
+            f"`tests/support/package_under_test.py`: {offenders}"
         )
 
 

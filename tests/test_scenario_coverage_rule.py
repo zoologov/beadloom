@@ -787,7 +787,7 @@ class TestEvaluateAllDispatch:
 class TestAnAdopterThatIsNotUs:
     def test_a_typescript_project_with_its_own_layout_is_read(self, tmp_path: Path) -> None:
         """S3b's lesson: a fixture that is not Beadloom, or the claim is local."""
-        from tests.adopter_project import beadloom_local_facts_in, typescript_project
+        from tests.support.adopter_project import beadloom_local_facts_in, typescript_project
 
         project = typescript_project(tmp_path / "orders-web")
         _feature(

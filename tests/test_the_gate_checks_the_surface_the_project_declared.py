@@ -31,7 +31,7 @@ from beadloom.services.commands.docsync import (
     _HOOK_TEMPLATE_WARN,
     _hook_type_check,
 )
-from tests.ambient_codec import AMBIENT_CODECS, under_ambient_codec
+from tests.support.ambient_codec import AMBIENT_CODECS, under_ambient_codec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -378,7 +378,7 @@ class HookLayout:
 
     A LAYOUT IS AN ARGUMENT, for the reason
     :class:`beadloom.application.guards.paths.PathFlavour` is one and
-    ``tests/room_simulation.py`` makes a CI leg one: a property that can only be
+    ``tests/support/room_simulation.py`` makes a CI leg one: a property that can only be
     exercised on the shape the author happens to have is a property nobody has
     measured. `beadloom-gsal` derived the typed surface from the project's own
     declaration and left the GATE in front of that derivation spelled
@@ -786,7 +786,7 @@ class TestTheRoomTheMatrixAboveDidNotVary:
     ``e2 80 94`` sequences, and the hook's own ``echo`` is ``/bin/sh`` moving those
     bytes with no encoder in the path. The defect is the reader's alone.
 
-    The rows below are :data:`tests.ambient_codec.AMBIENT_CODECS` for the reason
+    The rows below are :data:`tests.support.ambient_codec.AMBIENT_CODECS` for the reason
     that module exists: an ambient codec cannot be arranged inside a running
     process, so it is injected. Measured red before the fix, 7 of the 15 rows,
     and the split is the point rather than the count: the BLOCKING row fails

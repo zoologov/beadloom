@@ -8,20 +8,20 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from beadloom.doc_sync.audit import FactRegistry
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.support.repository_root import REPO_ROOT as BEADLOOM_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
 
 #: This repository's root — the one project whose own surfaces the audit reports.
-BEADLOOM_ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture()

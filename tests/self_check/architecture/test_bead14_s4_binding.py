@@ -8,16 +8,14 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.graph.rules import (
     ScenarioCoverageRule,
     load_rules,
 )
 from beadloom.onboarding.graph_files import each_graph_file
+from tests.support.repository_root import REPO_ROOT
 
 #: This repository, so the shipped configuration is read rather than restated.
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"

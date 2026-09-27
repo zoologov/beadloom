@@ -22,17 +22,12 @@ reindex.
 
 from __future__ import annotations
 
-import sqlite3
-from contextlib import closing
 from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.architecture_view import build_architecture_view_data
-from beadloom.graph.rules.layer_edges import flagged_layer_edges
-from beadloom.graph.rules.loader import load_rules
-from beadloom.graph.rules.types import LayerRule
-from tests.acceptance.steps.tiered_project import (
+from tests.support.layer_rule import rule_flags, view_flags, view_verdicts
+from tests.support.tiered_project import (
     graph_with_nested_parts,
     graph_with_peer_containers,
     write_tiered_project,
@@ -51,44 +46,6 @@ _EXCUSING_LEDGER_API = (
     '        reason: "the two read one ledger and the read seam is not built yet"\n'
     '        until: "2030-01-01"\n'
 )
-
-
-def _conn(project: Path) -> closing[sqlite3.Connection]:
-    """A row-keyed handle on the project's index that closes itself."""
-    conn = sqlite3.connect(project / ".beadloom" / "beadloom.db")
-    conn.row_factory = sqlite3.Row
-    return closing(conn)
-
-
-def _rule_of(project: Path) -> LayerRule:
-    """The layer rule the project declares, as the linter loads it."""
-    return next(
-        rule
-        for rule in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
-        if isinstance(rule, LayerRule)
-    )
-
-
-def _view_verdicts(project: Path) -> dict[tuple[str, str], object]:
-    """Each `depends_on` edge of the rendered view, with its `violation` value.
-
-    A missing flag comes back as ``None`` rather than being dropped, because
-    "the view said nothing about this edge" is one of the three answers and a
-    test that could not see it would read an omission as a pass.
-    """
-    with _conn(project) as conn:
-        data = build_architecture_view_data(conn, pages={})
-    edges = [e for e in data["edges"] if isinstance(e, dict) and e.get("kind") == "depends_on"]
-    return {(str(e["src"]), str(e["dst"])): e.get("violation") for e in edges}
-
-
-def _view_flags(project: Path) -> set[tuple[str, str]]:
-    return {edge for edge, verdict in _view_verdicts(project).items() if verdict is True}
-
-
-def _rule_flags(project: Path) -> set[tuple[str, str]]:
-    with _conn(project) as conn:
-        return set(flagged_layer_edges(conn, _rule_of(project)))
 
 
 @pytest.fixture()
@@ -126,17 +83,17 @@ class TestTheViewAsksTheRule:
         domain. It points nowhere through the layers, and the view flagged it
         for exactly that reason: it stayed inside one.
         """
-        assert _view_verdicts(peer_containers)[("ledger-api", "ledger-store")] is False
+        assert view_verdicts(peer_containers)[("ledger-api", "ledger-store")] is False
 
     def test_a_dependency_between_peers_in_one_layer_is_flagged(
         self, peer_containers: Path
     ) -> None:
         """Guard the guard: the agreement above is not the view flagging nothing."""
-        assert ("ledger-api", "postings-api") in _view_flags(peer_containers)
-        assert ("postings-api", "ledger-api") in _view_flags(peer_containers)
+        assert ("ledger-api", "postings-api") in view_flags(peer_containers)
+        assert ("postings-api", "ledger-api") in view_flags(peer_containers)
 
     def test_the_two_instruments_flag_the_same_edges(self, peer_containers: Path) -> None:
-        assert _view_flags(peer_containers) == _rule_flags(peer_containers)
+        assert view_flags(peer_containers) == rule_flags(peer_containers)
 
     def test_an_excused_crossing_is_not_flagged(
         self, peer_containers_with_an_exemption: Path
@@ -146,22 +103,22 @@ class TestTheViewAsksTheRule:
         The entry is carried to the view through the indexed rule, so this also
         asserts that reindex writes the exemptions a layer rule declares.
         """
-        flags = _view_flags(peer_containers_with_an_exemption)
+        flags = view_flags(peer_containers_with_an_exemption)
         assert ("ledger-api", "postings-api") not in flags
         assert ("postings-api", "ledger-api") in flags
 
     def test_the_two_instruments_agree_about_an_excused_crossing(
         self, peer_containers_with_an_exemption: Path
     ) -> None:
-        assert _view_flags(peer_containers_with_an_exemption) == _rule_flags(
+        assert view_flags(peer_containers_with_an_exemption) == rule_flags(
             peer_containers_with_an_exemption
         )
 
     def test_direction_is_still_judged_and_still_inherited(self, nested_parts: Path) -> None:
         """The half the two instruments already agreed on, held across the change."""
-        verdicts = _view_verdicts(nested_parts)
+        verdicts = view_verdicts(nested_parts)
         assert verdicts[("store-db", "web-api")] is True
         assert verdicts[("web-api", "store-db")] is False
-        assert _view_flags(nested_parts) == _rule_flags(nested_parts)
+        assert view_flags(nested_parts) == rule_flags(nested_parts)
 
 

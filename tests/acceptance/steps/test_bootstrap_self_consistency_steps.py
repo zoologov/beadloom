@@ -18,7 +18,7 @@ only: the real bootstrap runs, the real `generate_rules` writes
 names exists in this repository, so a fix that worked by recognising our own
 tree would fail these.
 
-The fixtures are built here rather than imported from `tests.adopter_project`,
+The fixtures are built here rather than imported from `tests.support.adopter_project`,
 which holds the same TypeScript shape. `tests/test_bead14_s4_binding.py` copies
 `tests/acceptance/` out of the repository and runs it standalone to prove a
 broken step binding reddens the suite, and in that copy the `tests` package is
@@ -114,7 +114,7 @@ def _flat_project(root: Path) -> Path:
     """One source file directly under `src/` — no code-bearing subdirectory.
 
     The shape BDL-UX #192 was reported against, and the same shape
-    `tests.adopter_project.typescript_project` builds: a Node manifest whose
+    `tests.support.adopter_project.typescript_project` builds: a Node manifest whose
     name the root node takes, and a single flat `src/index.ts`.
     """
     project = root / "orders-web"

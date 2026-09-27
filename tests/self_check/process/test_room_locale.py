@@ -11,16 +11,17 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.test_room_locale import (
-    _codec_of_a_child,
+from tests.support.locale_probes import (
+    codec_of_a_child,
 )
+from tests.support.repository_root import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: The codec the `C` leg is, so the bite arm can say what it is contrasted with.
 _C_CODEC = "ascii"
@@ -68,7 +69,7 @@ def _pytest_in_a_simulated_room(
             "-m",
             "pytest",
             "-p",
-            "tests.room_simulation",
+            "tests.support.room_simulation",
             str(module),
             "-p",
             "no:cacheprovider",
@@ -93,7 +94,7 @@ def _pytest_in_a_simulated_room(
 class TestTheLegIsEnterableFromADeveloperMachine:
     """The point of the dimension: the leg this project keeps tripping on.
 
-    `tests/room_simulation.py` fabricates the platform and the interpreter, and
+    `tests/support/room_simulation.py` fabricates the platform and the interpreter, and
     it carries the locale through UNCHANGED — the locale is the one dimension of
     a CI leg a developer machine can genuinely be in, so fabricating it would
     manufacture the coverage the census exists to refuse. Together they make
@@ -114,7 +115,7 @@ class TestTheLegIsEnterableFromADeveloperMachine:
         self, tmp_path: Path
     ) -> None:
         """The bite: the simulation carries the locale rather than assuming it."""
-        codec = _codec_of_a_child("en_US.UTF-8")
+        codec = codec_of_a_child("en_US.UTF-8")
         if codec == _C_CODEC:
             pytest.skip("this machine cannot leave the ASCII room, so there is no other arm")
 

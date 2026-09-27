@@ -8,17 +8,16 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.guards.paths import (
     NATIVE_PATHS,
     POSIX_PATHS,
     WINDOWS_PATHS,
     rejection_reason,
 )
+from tests.support.repository_root import REPO_ROOT
 
 _SPEC = (
-    Path(__file__).resolve().parents[3]
+    REPO_ROOT
     / "docs"
     / "domains"
     / "application"

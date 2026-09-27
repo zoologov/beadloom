@@ -15,6 +15,7 @@ from click.testing import CliRunner
 
 from beadloom.graph.rule_engine import LAYER_POPULATION_RULE_TYPE
 from beadloom.services.cli import main
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -131,12 +132,11 @@ class TestLintRecalibrationGuard:
         file under its path prefix, so the observed maximum fell from 284 to
         150 and 290 could never fire again.
         """
-        from pathlib import Path as _Path
 
         from beadloom.graph.rules import CardinalityRule, load_rules
 
         # Named from this file rather than the cwd (BDL-074 A1).
-        rules_path = _Path(__file__).resolve().parents[3] / ".beadloom" / "_graph" / "rules.yml"
+        rules_path = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
         rules = load_rules(rules_path)
         size_rules = [
             r

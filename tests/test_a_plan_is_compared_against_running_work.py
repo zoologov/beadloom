@@ -45,7 +45,7 @@ from beadloom.application.waves import (
 )
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.bd_seam import BdResult
-from tests.bd_rig import a_bd_rig, a_bead, bd_in
+from tests.support.bd_rig import a_bd_rig, a_bead, bd_in
 
 if TYPE_CHECKING:
     from pathlib import Path
