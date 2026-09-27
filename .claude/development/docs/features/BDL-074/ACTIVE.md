@@ -33,8 +33,8 @@
 | `beadloom-2mj3` | epic | ready | BDL-074 parent |
 | `beadloom-l67s` | A1 dev | ✓ done | chdir and contact guards; 115 tests in 20 files broke before the fix (measured); allowed list 44 entries |
 | `beadloom-kixx` | A2 dev | ✓ done | self-check snapshot replaces `live_repo_reindexed`; allowed list 44 → 20; live-index contacts 98 → 1 (the A3 probe), 0 writers; build ≈5.1 s/session |
-| `beadloom-2esy` | A3 dev | in progress | the self-check triage |
-| `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |
+| `beadloom-2esy` | A3 dev | ✓ done | 590 traced self-checks: 541 moved + 51 siblings = 592 in `tests/self_check/` (architecture 125, config 206, docs 68, process 193); 4 exact `lint`-leg duplicates removed; 45 kept in place with a reason; allowed list 20 → 0; live-index contacts 1 → 0, `beadloom-qq6m` closed; combined tree 10 959 passed, 0 failed, `beadloom ci` rc 0 |
+| `beadloom-51yx` | B1 dev | ready | tests/support and the root helper |
 | `beadloom-1bd6` | B2 dev | blocked | relocate the 227 clear-node files |
 | `beadloom-d0bp` | B3 dev | blocked | relocate acceptance |
 | `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding; 462 test files: 0 bound, 392 unplaced, 70 acceptance |
