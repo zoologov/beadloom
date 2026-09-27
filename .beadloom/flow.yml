@@ -65,7 +65,7 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-2esy, beadloom-3z94]
+  - beads: [beadloom-51yx, beadloom-vr0b]
     decision: parallel
-    reason: "BDL-074 wave 3. beadloom-2esy edits tests/ only - it sorts the self-checks (the snapshot users and the self_check-marked tests) into tests/self_check/ and removes Gate duplicates - which no graph node owns, hence ref_not_in_graph. beadloom-3z94 edits src/ (context-builder, debt-report) and the tests of those two, none of which is a self-check. Ownership rule handed to both prompts: every self_check-marked or snapshot-using test file is A3's; if C2 needs one changed, it reports that on its bead and lands after A3 instead of editing it."
+    reason: "BDL-074 wave 4. beadloom-51yx edits tests/ only - it gathers shared helpers into tests/support and gives every test one repository-root helper - which no graph node owns, hence ref_not_in_graph. beadloom-vr0b edits .github/workflows/mutation.yml, src/ (mutation-scope, cli-commands), pyproject.toml and the mutation self-checks. Ownership rule handed to both prompts: the tests/self_check/config/test_mutation_*.py files and pyproject.toml are D1's; B1 leaves them as they are and lists what they would need, and D1 lands its changes to them."
     until: "2026-11-15"

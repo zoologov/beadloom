@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 3 — `beadloom-2esy` (A3, the self-check triage) and `beadloom-3z94` (C2, ctx and debt-report read the binding), in parallel; then `beadloom-vr0b` (D1), which shares `cli-commands` with C2. PR 1 opens after A3.
-**Goal:** the 547 self-checks sorted by what they guard, Gate duplicates removed, the allowed list emptied; ctx and debt-report stop calling the name-guessing mapper.
-**Done when:** the allowed list is empty or each remaining entry names why; qq6m's tracer reads 0; ctx and debt-report read the binding with the four-key shape kept.
+**Bead:** Wave 4 — `beadloom-51yx` (B1, tests/support and one repository-root helper) and `beadloom-vr0b` (D1, mutation per change and the weekly sample), in parallel. PR 1 is open for phase A.
+**Goal:** test helpers live in one place and every test finds the repository root one way; mutation runs per change on pull requests and on a weekly sample, replacing the retired whole-scope nightly.
+**Done when:** no test finds the root by counting parents and no test module imports another test module; the per-change job selects mutants by the binding and the weekly sample runs within the runner's limit.
+
+**Wave 3 closed — phase A done (2026-09-27):** C2 `0dafac5d` (the name-guessing mapper retired); docs `2b42264c` (22 stale pairs → 0); A3 `18d6690d`, `9202e70f`. Gate owner A3 on the combined tree: 10 959 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. 592 self-checks in `tests/self_check/`; allowed list 0; tracer 0 live-index contacts — `beadloom-qq6m` closed. Moved test paths are still named in comments in `.github/workflows/*.yml`, `.beadloom/flow.yml`, two `src/` docstrings and two docs; left to W (`beadloom-7u77`), recorded on `beadloom-2esy`.
 
 **Wave 2 closed (2026-09-27):** docs `65a098bc` (36 stale pairs → 0); A2 `596401ab`, `4e6b9c20`. Gate owner A2 on the combined tree: 10 975 passed, 0 failed, 13 skipped, 13 xfailed; `beadloom ci` rc 0. Allowed list 44 → 20; live-index contacts 98 → 1 — the A3 probe that hashes the index bytes, so qq6m stays open until A3.
 
@@ -20,7 +22,7 @@
 - [x] Docs folder, the Explore axes (6 seeds, 15 nodes) and the measured suite map (`map/`, 2026-09-27)
 - [x] PRD, RFC, CONTEXT and PLAN approved (2026-09-28); kept nodes 9
 - [x] Beads created: epic `beadloom-2mj3` + 16, one plan, 20 edges confirmed against the titles; swarm valid, 11 waves
-- [ ] Phase A — isolation and the self-check triage (PR 1)
+- [x] Phase A — isolation and the self-check triage (PR 1 opened 2026-09-27)
 - [ ] Phase B — layout (PR 2)
 - [ ] Phases C, D, E — binding, rules, per-change mutation, pilot, standards (PR 3)
 
