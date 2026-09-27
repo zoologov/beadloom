@@ -10,11 +10,12 @@ without the report's own code being touched.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from beadloom.application.rooms import derive_declared_rooms
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _pyproject(root: Path, body: str) -> None:
@@ -246,34 +247,3 @@ class TestTheUnresolvedPopulationIsPartOfTheAnswer:
         assert any("unquoted" in u.why for u in declared.unresolved)
 
 
-class TestThisRepositorysOwnDeclaration:
-    """The derivation over the tree it ships in, so a leg change is felt here."""
-
-    @pytest.fixture()
-    def declared(self) -> object:
-        return derive_declared_rooms(Path(__file__).resolve().parents[1])
-
-    def test_every_supported_interpreter_has_a_leg(self, declared: object) -> None:
-        rooms = declared.rooms  # type: ignore[attr-defined]
-        legs = {r.dimensions.get("python") for r in rooms}
-        for version in declared.supported:  # type: ignore[attr-defined]
-            assert version in legs, f"{version} is supported and no CI leg enters it"
-
-    def test_every_hosted_leg_is_the_one_platform_this_project_declares(
-        self, declared: object
-    ) -> None:
-        """The platform dimension was priced and declined, so this is one value.
-
-        The assertion is not that Ubuntu is right. It is that the report reads
-        the declaration: if a second platform is ever added, this fails and the
-        room reporting is re-read rather than assumed. The self-hosted publisher
-        is excluded by its label naming no platform, not by being named here.
-        """
-        from beadloom.application.rooms import RUNNER_PLATFORMS
-
-        hosted = {
-            r.dimensions["os"]
-            for r in declared.rooms  # type: ignore[attr-defined]
-            if r.dimensions["os"].split("-", 1)[0] in RUNNER_PLATFORMS
-        }
-        assert hosted == {"ubuntu-latest"}, hosted

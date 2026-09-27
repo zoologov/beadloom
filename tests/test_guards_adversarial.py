@@ -42,9 +42,6 @@ from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import read_firings
 from beadloom.application.guards.models import GuardOutcome
 from beadloom.application.guards.paths import (
-    NATIVE_PATHS,
-    POSIX_PATHS,
-    WINDOWS_PATHS,
     PathScope,
     rejection_reason,
     resolve_edit_path,
@@ -54,16 +51,6 @@ from tests.filesystem_names import (
     UNENCODABLE_FRAGMENT,
     filesystem_can_name,
     unnameable_reason,
-)
-
-_SPEC = (
-    Path(__file__).resolve().parents[1]
-    / "docs"
-    / "domains"
-    / "application"
-    / "features"
-    / "flow-guards"
-    / "SPEC.md"
 )
 
 #: A guard declared blocking, with one ordinary exclusion over ``src/``.
@@ -359,35 +346,6 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
             return
         assert "\u202e" in verdict.why
 
-    def test_every_clause_of_the_spec_sentence_is_enforced_by_the_code(self) -> None:
-        """The SPEC's shape sentence and ``rejection_reason`` must not drift apart.
-
-        F6 was the SPEC quoting a matcher the code does not emit. This is the
-        same pairing for the sentence that now decides what a guard will look at:
-        each clause the document states is exercised against a string that
-        breaks only that clause.
-        """
-        sentence = " ".join(_SPEC.read_text(encoding="utf-8").split())
-        clauses = {
-            "no C0 control character and no `DEL`": ("a\x01b", NATIVE_PATHS),
-            "contains no directory separator this platform does not use": (
-                "a\\b",
-                POSIX_PATHS,
-            ),
-            "does not begin with `~`": ("~a", NATIVE_PATHS),
-            "contains no component this platform's own name layer would rewrite": (
-                "docs/CON.md",
-                WINDOWS_PATHS,
-            ),
-            "can be encoded for this filesystem": ("a\ud800b", NATIVE_PATHS),
-        }
-
-        for clause, (breaker, flavour) in clauses.items():
-            assert clause in sentence, f"the SPEC no longer states: {clause}"
-            assert rejection_reason(breaker, flavour=flavour) != "", (
-                f"unenforced clause: {clause}"
-            )
-
 
 class TestTheStripHappensBeforeTheShapeIsJudged:
     """CLOSED by BDL-061.29: nothing is removed before the shape is judged.
@@ -529,18 +487,6 @@ class TestAnEmptyTargetIsAbsentAndTheSpecNowSaysSo:
         assert resolved.scope is PathScope.ABSENT, resolved
         assert resolved.rejection == ""
 
-    def test_the_spec_no_longer_calls_an_empty_target_malformed(self) -> None:
-        """The two artifacts are read together, so they cannot drift apart again.
-
-        Whitespace-normalised before the search, as its sibling row below already
-        is: the document wraps at 95 columns, so a sentence that keeps saying the
-        same thing can move a line break into the middle of the phrase. That is a
-        false red about the prose rather than a finding about the code, and it
-        cost one on beadloom-0mdo.33.
-        """
-        spec = " ".join(_SPEC.read_text(encoding="utf-8").split())
-
-        assert "absent or empty target is not a refusal" in spec
 
     @pytest.mark.parametrize(
         ("raw", "scope"),

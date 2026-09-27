@@ -212,21 +212,6 @@ def test_the_step_runs_directly_after_issue_log(tmp_path: Path) -> None:
     assert names.index("readme-pair") == names.index("issue-log") + 1
 
 
-def test_this_repository_holds_its_own_readme_pair() -> None:
-    """The dogfood leg: the pair this project declares is compared on every run."""
-    from pathlib import Path as _Path
-
-    root = _Path(__file__).resolve().parents[1]
-    if not (root / ".beadloom" / "config.yml").is_file():
-        pytest.skip("not running from a checkout of this repository")
-    from beadloom.application.gate_document_pairs import step_readme_pair
-
-    step = step_readme_pair(root)
-    assert step.skipped is False, "this repository declares its README pair"
-    assert step.passed is True
-    assert "pair(s) held" in step.summary
-
-
 # ---------------------------------------------------------------------------
 # The line's own count — BDL-069, `beadloom-rqma.8`
 # ---------------------------------------------------------------------------

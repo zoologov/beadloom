@@ -151,6 +151,8 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node, and how many are `unplaced` — not yet under `tests/unit/` or `tests/integration/` — plus the `unowned` and "bound by other means" (acceptance, self-check) counts when non-zero. On this repository, measured 2026-09-27: `Tests:   462 files (0 bound to a node, 392 unplaced, 70 bound by other means)`. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
 **Reindex sets the freshness baseline.** `sync_state` is (re-)established from the tree being indexed, so a reindex into a fresh or deleted database makes every declared pair fresh by construction. That is why doc freshness must be checked after an *incremental* reindex on an existing index — see `beadloom sync-check`.
@@ -164,6 +166,19 @@ beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] 
 ```
 
 Outputs Markdown by default. `--json` for machine-readable format.
+
+The Markdown `Tests:` line counts the test files BOUND to the node by the
+[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). When any of the
+project's test files is unplaced — not under `tests/unit/` or `tests/integration/`, so bound
+to no node — one more line follows it (BDL-074 C2), so a count of 0 does not read as
+"nobody tested this":
+
+```
+Tests: pytest, 0 tests in 0 files (low coverage)
+  U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+```
+
+`--json` carries the same counts as `test_placements`, test files by placement.
 
 The bundle carries an **Intent (TO-BE)** section: the epics whose planning
 documents declared this node, with the document and line to read the reason at.
@@ -231,7 +246,7 @@ Shows Rich-formatted dashboard with: node count (broken down by kind), edges, do
 
 #### status --debt-report
 
-Architecture debt report mode. Aggregates health signals from lint, sync-check, doctor, git activity, and test mapper into a single 0-100 debt score with category breakdown and top offending nodes.
+Architecture debt report mode. Aggregates health signals from lint, sync-check, doctor, git activity, and the test binding into a single 0-100 debt score with category breakdown and top offending nodes.
 
 ```bash
 beadloom status --debt-report [--json] [--fail-if=EXPR] [--category=NAME] [--project DIR]
@@ -248,7 +263,12 @@ The debt score formula combines four categories:
 - **Rule Violations** -- weighted count of lint rule errors and warnings.
 - **Documentation Gaps** -- undocumented nodes, stale docs, untracked files.
 - **Complexity** -- oversized domains (by symbol count), high fan-out nodes, dormant domains.
-- **Test Gaps** -- untested domains/features.
+- **Test Gaps** -- nodes the test binding covers (those carrying `extra["tests"]`) with no
+  bound test file. While any test file is unplaced the count is withheld (0), because an
+  unplaced file binds to no node and a node with no bound test may still be tested by it
+  (BDL-074 C2). The Rich report prints the reason under Test Gaps, and `--json` carries it as
+  `test_population`: either what the count was taken over or `not counted: ...` with the
+  unplaced share.
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +14,8 @@ import pytest
 
 from beadloom.graph.rules import loader as rules_loader
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.contact_guard import ALLOWED_CONTACTS, OUTSIDE_ANY_TEST, ContactGuard
+from tests.self_check_snapshot import build_snapshot
 from tests.tracked_write_guard import TrackedWriteGuard
 
 if TYPE_CHECKING:
@@ -36,11 +41,47 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _GUARD: TrackedWriteGuard | None = None
 
+# --------------------------------------------------------------------------- #
+# The suite may not reach this repository's LIVE state either (BDL-074 A1): its
+# `.beadloom/beadloom.db`, its tracker, its git history. Every test starts in an
+# empty directory (the two `_…_in_an_empty_directory` fixtures below), so a
+# `Path.cwd()` fallback meets nothing; the contact guard fails the test that
+# reaches the live state anyway, except the nodes named in ALLOWED_CONTACTS,
+# which is printed at the top of every run. See tests/contact_guard.py.
+#
+# BEADLOOM_CONTACT_REPORT=<file> writes every contact of the run, allowed or
+# not, as JSON: the rerunnable form of the suite map's tracer measurement.
+# --------------------------------------------------------------------------- #
+
+_CONTACTS = ContactGuard(_REPO_ROOT, ALLOWED_CONTACTS)
+_CONTACT_REPORT_ENV = "BEADLOOM_CONTACT_REPORT"
+#: Every contact of the session, kept for the terminal summary and the report.
+_SESSION_CONTACTS: list[tuple[str, str, str, bool]] = []
+
+
+#: The ``self_check`` marker: set on every test under ``tests/self_check/`` and on
+#: every test that reads the self-check snapshot, by
+#: :func:`pytest_collection_modifyitems`, never by hand — one fact, stated once.
+#: The one exception is a parametrize row whose twin is a product test of the
+#: shipped template: that row carries the mark in its ``pytest.param`` (BDL-074 A3).
+_SELF_CHECK_FIXTURE = "self_check_snapshot"
+_SELF_CHECK_DIR = Path(__file__).resolve().parent / "self_check"
+_SELF_CHECK_MARKER = (
+    "self_check: asserts on this repository's own tree; set on tests/self_check/ "
+    "and on every reader of the session snapshot (`self_check_snapshot`)"
+)
+#: What the snapshot build did, for the terminal summary; empty until a test asks.
+_SNAPSHOT_BUILD: dict[str, object] = {}
+
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Install the tracked-write guard, or say why it cannot fire."""
+    """Install the tracked-write and contact guards, or say why one cannot fire."""
     global _GUARD
+    config.addinivalue_line("markers", _SELF_CHECK_MARKER)
     _GUARD = TrackedWriteGuard(_REPO_ROOT)
+    # Installed after the tracked-write guard's own `git ls-files`: that call is
+    # the guard infrastructure reading the tracked set, not a test's contact.
+    _CONTACTS.install()
     if _GUARD.inert:
         # A guard that cannot fire says so, rather than passing silently: a
         # clean-room extraction has no .git, so that run does not answer for
@@ -53,22 +94,131 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_unconfigure(config: pytest.Config) -> None:
     if _GUARD is not None:
         _GUARD.uninstall()
+    _CONTACTS.uninstall()
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark every self-check: by its folder, or by reading the snapshot through any fixture."""
+    for item in items:
+        in_folder = _SELF_CHECK_DIR in Path(str(item.path)).resolve().parents
+        if in_folder or _SELF_CHECK_FIXTURE in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.self_check)
+
+
+def pytest_report_header(config: pytest.Config) -> list[str]:
+    """Print the contact guard's allowed list, so an exemption is never silent."""
+    return _CONTACTS.listing()
+
+
+def _contact_refusal() -> str:
+    """Take the recorded contacts, keep them for the session; the refusal message, if any.
+
+    A contact is judged by the test it was MADE in (``PYTEST_CURRENT_TEST``), so
+    the allowed list is matched against that test's node id.
+    """
+    refused = []
+    for contact in _CONTACTS.take():
+        in_a_test = contact.nodeid != OUTSIDE_ANY_TEST
+        allowed = in_a_test and _CONTACTS.allows(contact.nodeid)
+        _SESSION_CONTACTS.append((contact.during, contact.kind, contact.detail, allowed))
+        if in_a_test and not allowed:
+            refused.append(contact)
+    return _CONTACTS.describe(refused) if refused else ""
 
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
-    """Fail the test that wrote to a tracked file, naming the file and the call.
+    """Fail the test that wrote to a tracked file or reached the live state.
 
-    Writes made by a fixture count toward the test the fixture set up; a write
-    made during teardown surfaces on the next test, which is stated here rather
-    than left to be discovered from a confusing message.
+    Writes and contacts made by a fixture count toward the test the fixture set
+    up; a tracked write made during teardown surfaces on the next test, which is
+    stated here rather than left to be discovered from a confusing message. A
+    contact made during teardown fails that test's teardown (see below).
     """
-    outcome = yield
+    try:
+        outcome = yield
+    finally:
+        # Judged even when the test raised: a test that reached the live state
+        # and then failed or skipped still reached it (measured in A1: without
+        # this, the contact surfaced as an ERROR in teardown instead).
+        refused = _contact_refusal()
+        if refused:
+            pytest.fail(refused, pytrace=False)
     if _GUARD is not None:
         written = _GUARD.take()
         if written:
             pytest.fail(_GUARD.describe(written), pytrace=False)
     return outcome
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
+    """A contact made while tearing a test down is that test's, reported as its ERROR."""
+    outcome = yield
+    refused = _contact_refusal()
+    if refused:
+        pytest.fail(refused, pytrace=False)
+    return outcome
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
+    """State what the contact guard saw: allowed contacts, contacts outside any test."""
+    for contact in _CONTACTS.take():
+        _SESSION_CONTACTS.append((contact.during, contact.kind, contact.detail, False))
+    allowed = sorted({during for during, _, _, ok in _SESSION_CONTACTS if ok})
+    outside = [row for row in _SESSION_CONTACTS if row[0] == OUTSIDE_ANY_TEST]
+    write = terminalreporter.write_line
+    write(
+        f"contact guard: {len(allowed)} allowed test phase(s) reached the live state; "
+        f"{len(outside)} contact(s) outside any test; "
+        f"{len(_CONTACTS.errors)} classification error(s)"
+    )
+    for _, kind, detail, _ in outside:
+        write(f"  outside any test: {kind}: {detail}")
+    write(_snapshot_summary())
+    for error in _CONTACTS.errors:
+        write(f"  guard error: {error}")
+    report = os.environ.get(_CONTACT_REPORT_ENV)
+    if report:
+        rows = [
+            {"during": d, "kind": k, "detail": t, "allowed": ok}
+            for d, k, t, ok in _SESSION_CONTACTS
+        ]
+        Path(report).write_text(json.dumps(rows, indent=1), encoding="utf-8")
+        write(f"contact guard: {len(rows)} contact(s) written to {report}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _the_session_starts_in_an_empty_directory(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """Session and module fixtures run in an empty directory, not in this repository."""
+    previous = Path.cwd()
+    os.chdir(tmp_path_factory.mktemp("session-cwd"))
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+@pytest.fixture(autouse=True)
+def _each_test_starts_in_an_empty_directory(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """Every test starts in its own EMPTY directory (BDL-074 A1).
+
+    Not ``tmp_path``: a test that builds its project there and leaves the root to
+    the ``Path.cwd()`` default would pass without ever naming its root. And not
+    ``monkeypatch.chdir``: requesting ``monkeypatch`` from an autouse fixture
+    sets it up before every module's own autouse fixtures, which moves its undo
+    after their teardown (measured: ten ERRORs in tests/test_room_extras.py).
+    """
+    previous = Path.cwd()
+    os.chdir(tmp_path_factory.mktemp("cwd"))
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 @pytest.fixture(autouse=True)
@@ -86,24 +236,53 @@ def _load_rules_forgets_between_tests() -> None:
     rules_loader.forget_parsed_rules()
 
 
-@pytest.fixture(scope="session")
-def live_repo_reindexed() -> Path:
-    """Reindex the live repo's shared DB once per session, returning the repo root.
+def _snapshot_summary() -> str:
+    """One line on the self-check snapshot: its population and its cost, or its absence."""
+    if not _SNAPSHOT_BUILD:
+        return "self-check snapshot: not built (no test in this run reads it)"
+    return (
+        f"self-check snapshot: {_SNAPSHOT_BUILD['files']} file(s) of the working tree "
+        f"copied {_SNAPSHOT_BUILD['history']} in {_SNAPSHOT_BUILD['copy_s']:.1f} s and "
+        f"indexed in {_SNAPSHOT_BUILD['index_s']:.1f} s, at {_SNAPSHOT_BUILD['root']}; "
+        "the copy is the one reader of the live tree, and the contact guard is "
+        "suspended while it runs"
+    )
 
-    A handful of tests assert against the *live* repo's graph (via ``beadloom
-    ctx`` subprocesses or ``lint --no-reindex --project <repo>``). They read the
-    shared on-disk ``.beadloom/beadloom.db``, so their result depends on its
-    ambient state — and ``pytest-randomly`` exposed that any test reindexing the
-    live DB into a divergent state (or a stale checkout in CI) breaks them under
-    a different order. This session-scoped fixture guarantees the on-disk live
-    DB reflects the current source tree before any such assertion runs, making
-    those tests order-independent. It runs at most once per session and is
-    idempotent on an unchanged source tree.
+
+@pytest.fixture(scope="session")
+def self_check_snapshot(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """This repository's working tree, copied once per session and indexed there.
+
+    Self-checks assert on this repository's own graph. They read THIS root, never
+    the live ``.beadloom/beadloom.db``: that file is shared with every other
+    writer on the machine (a hook, a concurrent ``lint``, another test), and a
+    reader of it was the ``beadloom-qq6m`` flake. The copy is taken from the
+    working tree at test time, so a concurrent edit is what the self-checks
+    judge; it carries the git history, so ``sync-check`` can corroborate the
+    fresh index against ``HEAD``. What it holds, and its limits, are stated in
+    tests/self_check_snapshot.py. Every test that requests it is marked
+    ``self_check``, so ``-m "not self_check"`` deselects them all.
+
+    It replaces ``live_repo_reindexed`` (BDL-074 A2). A test that WRITES the
+    index (``lint`` without ``--no-reindex``) writes this copy, which only the
+    session's own tests share.
     """
     from beadloom.application.reindex import reindex
 
-    reindex(_REPO_ROOT)
-    return _REPO_ROOT
+    root = tmp_path_factory.mktemp("self-check-snapshot") / _REPO_ROOT.name
+    started = time.monotonic()
+    with _CONTACTS.suspended():
+        files = build_snapshot(_REPO_ROOT, root)
+    copied = time.monotonic()
+    reindex(root)
+    _SNAPSHOT_BUILD.update(
+        files=len(files),
+        history="with its git history" if (root / ".git").is_dir() else "without history",
+        copy_s=copied - started,
+        index_s=time.monotonic() - copied,
+        root=root,
+    )
+    return root
 
 
 @pytest.fixture()

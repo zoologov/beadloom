@@ -21,6 +21,7 @@ from click.testing import CliRunner
 
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
+from tests.bd_rig import a_bd_rig, a_bead, bd_in
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -571,31 +572,28 @@ class TestWhatCanReachTheReviewer:
 
 
 class TestSeamShape:
-    def test_the_comment_shape_this_command_reads_is_the_one_bd_emits(self) -> None:
+    def test_the_comment_shape_this_command_reads_is_the_one_bd_emits(
+        self, tmp_path: Path
+    ) -> None:
         """`bd comments --json` answers a list of objects carrying `text`.
 
         Pinned against the real binary when it is installed, and skipped with the
         reason when it is not — a double alone would leave the command's only
-        assumption about the tracker unverified.
+        assumption about the tracker unverified. The tracker is a throwaway rig
+        rather than this repository's (BDL-074 A1), and its comment carries an em
+        dash, which is what made the decoding matter: JSON is UTF-8 by RFC 8259,
+        and left to the image this raised under `LC_ALL=C` (BDL-068 `.49`).
         """
-        pytest.importorskip("shutil")
         import shutil
 
         if shutil.which("bd") is None:
             pytest.skip("bd is not installed; the seam's shape cannot be observed")
-        proc = subprocess.run(
-            ["bd", "comments", "beadloom-mr2l.21", "--json"],  # noqa: S607
-            cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]),
-            capture_output=True,
-            # JSON is UTF-8 by RFC 8259, and these comments carry em dashes. Left
-            # to the image this raised under `LC_ALL=C` (BDL-068 `.49`). CI never
-            # saw it because `bd` is not installed on the runner and the row skips.
-            encoding="utf-8",
-            errors="strict",
-            check=False,
-        )
-        if proc.returncode != 0 or not proc.stdout.strip():
-            pytest.skip("this tracker has no answer for the pinned bead")
+        rig = a_bd_rig(tmp_path)
+        bead = a_bead(rig, "one")
+        if bd_in(rig, "comments", "add", bead, "a checkpoint \u2014 with an em dash").returncode:
+            pytest.skip("bd could not add a comment in a rig here")
+        proc = bd_in(rig, "comments", bead, "--json")
+        assert proc.returncode == 0, proc.stderr
         payload = json.loads(proc.stdout)
         assert isinstance(payload, list)
         assert {"text", "author"} <= set(payload[0])

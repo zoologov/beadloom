@@ -12,7 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from beadloom.application.guards import config as config_module
 from beadloom.application.guards.checks import BUILTIN_GUARDS
@@ -350,24 +349,9 @@ class TestEventRoutingIsNotDeclaredHere:
         assert not hasattr(spec, "events")
 
     def test_a_registered_guard_declares_no_default_events(self) -> None:
-        from beadloom.application.guards.checks import BUILTIN_GUARDS
 
         for guard in BUILTIN_GUARDS.values():
             assert not hasattr(guard, "default_events")
-
-    def test_the_shipped_dogfood_config_declares_no_events(self) -> None:
-        """Our own flow.yml must not teach an incantation that does nothing."""
-        repo_root = Path(__file__).resolve().parent.parent
-        body = yaml.safe_load((repo_root / ".beadloom" / "flow.yml").read_text(encoding="utf-8"))
-
-        for name, declared in (body.get("guards") or {}).items():
-            keys = set(declared or {})
-            assert "on" not in keys, name
-            # YAML 1.1 reads a bare `on` as the boolean True — the spelling that
-            # made the dead key invisible in the first place.
-            assert True not in keys, name
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -497,31 +481,6 @@ class TestNothingRoutesOnAnEvent:
 
         assert bare.outcome is not None
         assert bare.why
-
-    def test_the_spec_declares_no_on_key_in_its_schema_example(self) -> None:
-        """Parsed, not grepped: the prose says the words "no ``on:`` key"."""
-        spec_path = (
-            Path(__file__).resolve().parent.parent
-            / "docs"
-            / "domains"
-            / "application"
-            / "features"
-            / "flow-guards"
-            / "SPEC.md"
-        )
-        text = spec_path.read_text(encoding="utf-8")
-        blocks = [
-            block.split("```", 1)[0]
-            for block in text.split("```yaml")[1:]
-        ]
-
-        assert blocks, "the SPEC must still show a guards: schema example"
-        for block in blocks:
-            body = yaml.safe_load(block) or {}
-            for name, declared in (body.get("guards") or {}).items():
-                keys = set(declared or {})
-                assert "on" not in keys, name
-                assert True not in keys, name
 
 
 class TestAnUnknownKeyInAGuardBodyIsRejected:
@@ -664,20 +623,3 @@ class TestAnUnknownKeyInAGuardBodyIsRejected:
 
         assert read_keys == set(GUARD_BODY_KEYS)
 
-    def test_the_config_this_repository_ships_still_parses(self) -> None:
-        """No adopter's green project turns red on upgrade — starting with our own.
-
-        Guards shipped in 3.0.0, so an adopter's ``flow.yml`` can now carry a
-        ``guards:`` block — which is what makes this check load-bearing rather
-        than a note about our own file. Every guard this repository declares
-        must still be a built-in and must still parse, and it is checked here
-        rather than assumed. (Until 3.0.0 the reason given was that no
-        published ``flow.yml`` had the block at all; that sentence stopped being
-        true at the release and is replaced rather than left standing.)
-        """
-        repo_root = Path(__file__).resolve().parents[1]
-
-        config = load_guards_config(repo_root)
-
-        assert set(config.declared_names()) <= set(BUILTIN_GUARDS)
-        assert config.spec_for("working-branch").options["trunk"] == "main"

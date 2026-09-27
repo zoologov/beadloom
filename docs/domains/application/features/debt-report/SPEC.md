@@ -38,7 +38,7 @@ Default weights (configurable via `config.yml` `debt_report` section):
 | `oversized_domain` | 2.0 | Per oversized domain |
 | `high_fan_out` | 1.0 | Per high fan-out node |
 | `dormant_domain` | 0.5 | Per dormant domain |
-| `untested_domain` | 1.0 | Per untested domain |
+| `untested_domain` | 1.0 | Per untested node (the name predates the test binding) |
 
 Default thresholds:
 
@@ -74,7 +74,7 @@ Per-item weights and thresholds for debt score computation.
 | `oversized_domain` | `float` | 2.0 | Weight for oversized domains |
 | `high_fan_out` | `float` | 1.0 | Weight for high fan-out nodes |
 | `dormant_domain` | `float` | 0.5 | Weight for dormant domains |
-| `untested_domain` | `float` | 1.0 | Weight for untested domains |
+| `untested_domain` | `float` | 1.0 | Weight per untested node |
 | `oversized_symbols` | `int` | 200 | Oversized threshold |
 | `high_fan_out_threshold` | `int` | 10 | Fan-out threshold |
 | `dormant_months` | `int` | 3 | Dormant threshold (months) |
@@ -93,10 +93,11 @@ Raw counts aggregated from all data sources.
 | `oversized_count` | `int` | Oversized domains |
 | `high_fan_out_count` | `int` | High fan-out nodes |
 | `dormant_count` | `int` | Dormant domains |
-| `untested_count` | `int` | Untested domains |
+| `untested_count` | `int` | Nodes the test binding covers with no bound test file; 0 while it is withheld |
 | `node_issues` | `dict[str, list[str]]` | Per-node issue tracking for top offenders |
 | `meta_doc_stale_count` | `int` | Stale fact mentions in project documents |
 | `layer_populations` | `list[str]` | One clause per declared layer rule — how much of its edge set it judged |
+| `test_population` | `str` | What `untested_count` was counted over, or why it was withheld (BDL-074 C2); empty when not collected |
 
 #### CategoryScore (frozen dataclass)
 
@@ -133,6 +134,7 @@ Raw counts aggregated from all data sources.
 | `top_offenders` | `list[NodeDebt]` | Top 10 nodes ranked by debt contribution |
 | `trend` | `DebtTrend \| None` | Trend vs last snapshot, or `None` |
 | `layer_populations` | `list[str]` | Carried through from `DebtData`, unweighted |
+| `test_population` | `str` | Carried through from `DebtData`, unweighted |
 
 #### What the rule-violation count was counted over (BDL-070 A4)
 
@@ -186,7 +188,33 @@ exactly as BDL-070 A2 left it.
 | Complexity -- oversized | Symbol count per node vs threshold | `application/debt_report/collect.py` |
 | Complexity -- fan-out | Edge count per node vs threshold | `application/debt_report/collect.py` |
 | Complexity -- dormant | `analyze_git_activity()` with dormant level | `infrastructure/git_activity.py` |
-| Test gaps | `map_tests()` with coverage_estimate=none | `context_oracle/test_mapper.py` |
+| Test gaps | `nodes.extra["tests"]` with an empty `test_files`, from the test binding | `application/debt_report/collect.py` |
+
+#### What the untested count was counted over (BDL-074 C2)
+
+`_count_untested(conn)` returns `(count, ref_ids, population)`. It reads the binding the
+reindex wrote into each node's `extra["tests"]`
+([test mapping](../../../context-oracle/features/test-mapping/SPEC.md)): the population is
+every node that carries that key, and a node whose `test_files` is empty is untested. The
+name-guessing mapper it replaced (`test_mapper.map_tests`, deleted in the same change)
+counted a node only when its `coverage_estimate` was `none`.
+
+While any test file is unplaced — not under `tests/unit/` or `tests/integration/` — the count
+is WITHHELD: `untested_count` is 0 and no node is marked `untested`. An unplaced file binds
+to no node, so a node with no bound test may still be tested by one, and counting it would
+charge a project for its layout rather than its tests. The population then reads
+`not counted: <describe_unplaced sentence>, so a node with no bound test may still be tested`,
+the sentence `ctx` prints under its `Tests:` line. Once every test file is placed the count is
+live and the population reads `counted over N node(s) the test binding covers, all M test
+file(s) placed`. The placement counts come from
+`infrastructure.repository.count_test_files_by_placement`.
+
+Two cases score what the heuristic scored. A project whose tests are not laid out scores 0,
+as the heuristic did wherever it detected a framework (it estimated `low`, not `none`). A
+project with no test file has every covered node untested, before and after.
+
+The population is carried UNWEIGHTED, like `layer_populations`: under Test Gaps in the Rich
+report, and as `test_population` in `format_debt_json`.
 
 ### Top Offenders
 
@@ -256,14 +284,18 @@ Arguments:
 - `trend` (bool, default false): Include trend vs last snapshot.
 - `category` (string, optional): Filter to a specific category.
 
-Returns JSON with: `debt_score`, `severity`, `categories`, `top_offenders`, `trend`.
+Returns JSON with: `debt_score`, `severity`, `categories`, `top_offenders`, `trend`,
+`layer_populations`, `test_population`. With `trend` the MCP handler attaches the trend by
+`dataclasses.replace`, and `status --debt-report --category` narrows the categories the same
+way, so neither drops a field the report carries.
 
 ### Output Formats
 
 **Rich (human-readable)**:
 - Header panel: "Architecture Debt Report"
 - Score line with severity indicator and label
-- Category breakdown with per-item detail lines (tree-style prefixes)
+- Category breakdown with per-item detail lines (tree-style prefixes); the
+  `layer_populations` clauses under Rule Violations and `test_population` under Test Gaps
 - Top offenders table (rank, node, score, reasons)
 
 **JSON (machine-readable)**:
@@ -272,6 +304,8 @@ Returns JSON with: `debt_score`, `severity`, `categories`, `top_offenders`, `tre
 - `categories`: list of `{name, score, details}`
 - `top_offenders`: list of `{ref_id, score, reasons}`
 - `trend`: null or `{previous_snapshot, previous_score, delta, category_deltas}`
+- `layer_populations`: list of strings (additive, BDL-070 A4)
+- `test_population`: string (additive, BDL-074 C2)
 
 ## API
 
@@ -289,7 +323,7 @@ def collect_debt_data(
     weights: DebtWeights | None = None,
 ) -> DebtData
 ```
-Aggregate raw counts from all data sources (lint, sync, doctor, git activity, test mapper).
+Aggregate raw counts from all data sources (lint, sync, doctor, git activity, the test binding).
 
 ```python
 def compute_debt_score(
@@ -385,7 +419,10 @@ class DebtReport: ...
 
 ## Testing
 
-Test file: `tests/test_debt_report.py`
+Test files: `tests/test_debt_report.py`, `tests/test_ctx_and_debt_report_read_the_test_binding.py`
+(the untested count read from the binding, withheld while files are unplaced, and the
+`--category` report keeping its population clauses), and
+`tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.
 
 Tests should cover the following scenarios:
 

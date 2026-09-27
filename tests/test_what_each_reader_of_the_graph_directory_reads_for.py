@@ -38,7 +38,6 @@ import ast
 import re
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -64,12 +63,18 @@ from beadloom.graph.loader import load_graph, update_node_in_yaml
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
 from beadloom.services.commands.setup import _graph_files_now
+from tests.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Callable
+    from pathlib import Path
 
-_SRC = Path("src/beadloom")
+#: The package under test, resolved through the import rather than the working
+#: directory (BDL-074 A1) or this file's location (BDL-UX #289): under mutmut it
+#: is the mutated copy, which is what the derivation below must read.
+_SRC = PACKAGE_ROOT
+_SOURCE_ROOT = PACKAGE_ROOT.parent.parent
 _THE_POLICY = _SRC / "onboarding" / "graph_files.py"
 
 #: The nodes every experiment below is run over. Two of them, so an answer that
@@ -413,7 +418,8 @@ class TestTheRoutingFollowsTheClassification:
         ids=[r.name for r in NODE_READERS if r.routed],
     )
     def test_a_routed_reader_calls_the_policy(self, reader: AReaderOfTheGraphDirectory) -> None:
-        assert "each_graph_file" in _bodies_in(Path(reader.where))[reader.name], reader.name
+        bodies = _bodies_in(_SOURCE_ROOT / reader.where)
+        assert "each_graph_file" in bodies[reader.name], reader.name
 
     @pytest.mark.parametrize(
         "reader",
@@ -424,7 +430,8 @@ class TestTheRoutingFollowsTheClassification:
         self, reader: AReaderOfTheGraphDirectory
     ) -> None:
         """An exemption is a sentence in the body that holds it, or it is silence."""
-        assert "each_graph_file" in _docstrings_in(Path(reader.where))[reader.name], reader.name
+        docstrings = _docstrings_in(_SOURCE_ROOT / reader.where)
+        assert "each_graph_file" in docstrings[reader.name], reader.name
 
     @pytest.mark.parametrize(
         "reader",

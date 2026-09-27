@@ -1242,6 +1242,9 @@ class TestFormatDebtJson:
             "top_offenders",
             "trend",
             "layer_populations",
+            # BDL-074 C2: what the untested count was counted over, or why it
+            # was withheld while test files are unplaced.
+            "test_population",
         }
 
     def test_debt_score_and_severity(self) -> None:

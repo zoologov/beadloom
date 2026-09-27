@@ -41,6 +41,8 @@ nodes:
     lifecycle: active          # active|planned|deprecated|dead (optional, default active)
     docs:                      # Linked documents (optional)
       - docs/my-service.md
+    tests:                     # Test path prefixes bound to this node over the mirror (optional)
+      - tests/integration/my_service_smoke/
     # Any additional fields go into extra (JSON)
 
 edges:
@@ -50,6 +52,13 @@ edges:
     lifecycle: active          # active|planned|deprecated|dead (optional, default active)
   # A cross-repo edge endpoint uses @<repo>:<ref_id>, e.g. dst: @integration-service:plans
 ```
+
+`tests:` (BDL-074 C1) lists path prefixes, resolved like `source:` — a trailing `/` is a
+directory, anything else is one file. It binds the test files it covers to the node, and it
+wins over the binding derived from a test file's path. The reindex reads it into the
+`test_overrides` table, and a value that is not a list of path strings is reported as a reindex
+warning and binds nothing. See the
+[Test Mapping SPEC](../context-oracle/features/test-mapping/SPEC.md).
 
 ### Node Types (node kind)
 

@@ -11,7 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -31,11 +31,11 @@ from beadloom.onboarding.role_adapters import (
 )
 from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
-    compose_all_roles,
     compose_role,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_flow(root: Path, body: str) -> Path:
@@ -63,11 +63,6 @@ class TestFlowConfigLoad:
         assert cfg.stack == ("fastapi", "python")  # sorted/normalized
         assert cfg.quality == ("clean-code", "tdd")
 
-    def test_beadloom_own_config_is_claude_ddd_python(self) -> None:
-        cfg = load_flow_config(REPO_ROOT)
-        assert cfg.tools == ("claude",)
-        assert cfg.architecture == "ddd"
-        assert cfg.stack == ("python",)
 
     def test_missing_file_raises_filenotfound(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
@@ -292,16 +287,6 @@ class TestGenerateAdapters:
 
 
 class TestDriftGuard:
-    def test_live_claude_agents_reproduce_from_compose(self) -> None:
-        composed = compose_all_roles(load_flow_config(REPO_ROOT))
-        for role in ROLE_NAMES:
-            live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
-                encoding="utf-8"
-            )
-            assert live == composed[role], (
-                f"{role}: .claude/agents/{role}.md drifted from "
-                "compose_role(ddd, python) — re-run setup-agentic-flow"
-            )
 
     def test_guard_catches_hand_edited_adapter(self, tmp_path: Path) -> None:
         cfg = FlowConfig(tools=("claude",), architecture="ddd", stack=("python",))

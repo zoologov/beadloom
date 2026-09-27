@@ -1,0 +1,86 @@
+files 457 tests 10895 collected-files-with-0-tests 0
+sum per-test seconds (plain run) 511.4 under coverage 739.4
+file kinds {'acceptance': (69, 15.1), 'mixed': (133, 29.1), 'integration': (171, 37.4), 'unit': (71, 15.5), 'self-check': (13, 2.8)}
+test kinds {'acceptance': (510, 4.7), 'unit': (3795, 34.8), 'integration': (6043, 55.5), 'self-check': (547, 5.0)}
+seconds by test kind {'acceptance': 32.3, 'unit': 59.7, 'integration': 273.9, 'self-check': 145.5}
+seconds by file kind {'acceptance': 32.3, 'mixed': 290.1, 'integration': 119.1, 'unit': 25.8, 'self-check': 44.0}
+top20 files seconds sum 300.7
+     59.1   43 mixed        live=False tests/test_bead14_s4_binding.py
+     53.3  112 mixed        live=False tests/test_the_gate_checks_the_surface_the_project_declared.py
+     42.0  316 mixed        live=False tests/test_tui.py
+     20.4   15 self-check   live=False tests/test_room_dependent_assertions.py
+     20.1   20 mixed        live=False tests/test_s5_the_instruments_agree.py
+     16.7   10 self-check   live=False tests/test_mutation_runner_scope.py
+     12.9   24 integration  live=False tests/test_guards_cli.py
+      8.3   41 mixed        live=False tests/test_room_locale.py
+      7.4   34 mixed        live=True tests/test_locale_independent_io.py
+      7.2   12 integration  live=False tests/test_guard_firing_rotation.py
+      7.0  163 integration  live=False tests/test_guards_invocation.py
+      6.0   20 mixed        live=False tests/test_impact_derives_the_seed_it_answers_from.py
+      5.8   52 mixed        live=False tests/test_guards_parity.py
+      5.5   30 unit         live=False tests/test_init_branches_that_reach_the_bootstrap.py
+      5.2   27 integration  live=False tests/test_cli_review_brief.py
+      5.1   42 mixed        live=False tests/test_what_each_reader_of_the_graph_directory_reads_for.py
+      5.1  153 mixed        live=False tests/test_guards_adversarial.py
+      4.9   31 mixed        live=False tests/test_one_parent_post_condition_over_every_writer.py
+      4.4   14 mixed        live=True tests/test_cli_json_streams.py
+      4.4   63 unit         live=False tests/test_windows_dimension.py
+live files 19 tests 89 seconds of live files 31.8 writers ['tests/test_bead15_s3b_coverage.py', 'tests/test_cli_json_streams.py', 'tests/test_integration_v1.py', 'tests/test_s2_move_regression.py']
+live-fixture files 12
+self-check tests 547 files with >=1 self-check test 76
+ambient tests 117 files 32
+bd files ['tests/test_a_plan_is_compared_against_running_work.py', 'tests/test_cli_review_brief.py', 'tests/test_guards_parity.py'] git files 11
+name styles {'behaviour-topic': 345, 'behaviour-sentence': 80, 'process': 6, 'history': 26}
+history/process tests 963
+nodes/file median 5.0 mean 11.3 p90 33 max 60
+files with no node executed 29 clear 227 unclear (nodes but no dominant) 201
+tests executing no src in run phase 1351
+nodes 108 executed by 0 tests ['ai_agents', 'architecture-rules', 'beadloom', 'context-oracle', 'graph-reads', 'infrastructure', 'vitepress-site']
+nodes not primary(literal) of any file 13
+nodes not distinctive of any file 12 ['ai_agents', 'architecture-rules', 'beadloom', 'context-oracle', 'declared-scope', 'doc-templates', 'flow-config', 'graph-reads', 'infrastructure', 'planning-report', 'scan-paths', 'vitepress-site']
+nodes whose distinctive-of files are clear 72
+literal primary top [(None, 29), ('rule-engine', 27), ('console-streams', 21), ('flow-guards', 19), ('wave-plan', 16), ('agent-prime', 16), ('application', 13), ('verdict-room', 13)]
+test files per node median 27.5
+top nodes by test files [(198, 'db'), (166, 'cli-commands'), (160, 'console-streams'), (157, 'repository'), (137, 'doc-roots'), (132, 'sync-check'), (127, 'doc-sync'), (122, 'code-indexer'), (121, 'import-resolver'), (121, 'graph-loader')]
+FUNC fan-out top20
+   1640 171 src/beadloom/infrastructure/db.py open_db
+   1627 171 src/beadloom/infrastructure/db.py _ensure_foreign_edges_table
+   1627 171 src/beadloom/infrastructure/db.py _migrate_lifecycle_external
+   1627 171 src/beadloom/infrastructure/db.py _ddl_contains
+   1627 171 src/beadloom/infrastructure/db.py _migrate_drop_rule_type_check
+   1627 171 src/beadloom/infrastructure/db.py _migrate_drop_kind_checks
+   1627 171 src/beadloom/infrastructure/db.py _migrate_edges_contract_kinds
+   1627 171 src/beadloom/infrastructure/db.py _ensure_reference_state_table
+   1627 171 src/beadloom/infrastructure/db.py _migrate_sync_status_verdicts
+   1627 171 src/beadloom/infrastructure/db.py _ensure_declared_docs_table
+   1627 171 src/beadloom/infrastructure/db.py _migrate_file_symbols_hash
+   1627 171 src/beadloom/infrastructure/db.py ensure_schema_migrations
+   1627 171 src/beadloom/infrastructure/db.py _table_exists
+   1627 171 src/beadloom/infrastructure/db.py _table_columns
+   1625 171 src/beadloom/infrastructure/db.py _kind_has_check
+   1615 171 src/beadloom/infrastructure/db.py create_schema
+   1597 160 src/beadloom/infrastructure/console_streams.py tolerate_unencodable_output
+   1597 160 src/beadloom/infrastructure/console_streams.py _operator_named_a_handler
+   1560 157 src/beadloom/services/commands/_root.py TolerantOutputGroup.main
+   1557 155 src/beadloom/services/commands/_root.py main
+FILE fan-out top20
+   1985 src/beadloom/infrastructure/db.py db
+   1657 src/beadloom/infrastructure/repository.py repository
+   1597 src/beadloom/infrastructure/console_streams.py console-streams
+   1578 src/beadloom/infrastructure/doc_roots.py doc-roots
+   1560 src/beadloom/services/commands/_root.py cli-commands
+   1385 src/beadloom/doc_sync/engine.py sync-check
+   1324 src/beadloom/context_oracle/code_indexer.py code-indexer
+   1172 src/beadloom/graph/import_resolver.py import-resolver
+   1138 src/beadloom/graph/loader.py graph-loader
+   1106 src/beadloom/infrastructure/scan_paths.py scan-paths
+   1106 src/beadloom/onboarding/config_reader.py onboarding
+   1101 src/beadloom/onboarding/composer.py flow-composer
+   1026 src/beadloom/doc_sync/doc_indexer.py doc-indexer
+   1026 src/beadloom/infrastructure/health.py health
+   1020 src/beadloom/application/reindex/change_detection.py reindex
+   1018 src/beadloom/context_oracle/search.py search
+   1015 src/beadloom/application/reindex/indexing.py reindex
+   1009 src/beadloom/application/reindex/enrichment.py reindex
+   1008 src/beadloom/application/reindex/sync_state.py reindex
+   996 src/beadloom/application/reindex/full.py reindex

@@ -2938,17 +2938,3 @@ class TestScannerTypedDictShapes:
             assert all(isinstance(f, str) for f in files)
         assert isinstance(entry["source_dir"], str)
 
-    def test_live_repo_scan_has_typeddict_shape(
-        self, live_repo_reindexed: Path
-    ) -> None:
-        """A real-repo scan (read-only) still yields the exact ScanResult shape.
-
-        scan_project only reads the filesystem, so this does not mutate the
-        shared live DB; the fixture is reused per the bead's instruction.
-        """
-        result = scan_project(live_repo_reindexed)
-        assert set(result.keys()) == self._SCAN_KEYS
-        assert isinstance(result["file_count"], int)
-        assert result["file_count"] > 0
-        assert "src" in result["source_dirs"]
-        assert "pyproject.toml" in result["manifests"]

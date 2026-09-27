@@ -61,11 +61,9 @@ from beadloom.application.gate import _step_doc_spaces, _sync_summary
 from beadloom.doc_sync.engine import STATUS_EXEMPT, STATUS_OK, check_sync
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.infrastructure.doc_roots import (
-    DEFAULT_KINDS,
     DEFAULT_ROOTS,
     SPACE_AS_IS,
     SPACE_TO_BE,
-    SPACE_WORKING,
     default_doc_spaces,
     document_kind,
     path_matches,
@@ -76,8 +74,6 @@ from tests.adopter_project import typescript_project
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator, Mapping, Sequence
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Where the shipped flow writes an epic's planning documents.
 _EPICS = ".claude/development/docs/features"
@@ -167,30 +163,35 @@ def _tracker(root: Path, records: Sequence[Mapping[str, str]]) -> None:
     _write(root, ".beads/issues.jsonl", lines + "\n")
 
 
-def _repo_beads() -> dict[str, tuple[str, ...]]:
-    """This repository's own tracker export, grouped by epic key."""
-    text = (REPO_ROOT / ".beads" / "issues.jsonl").read_text(encoding="utf-8")
+def _repo_beads(root: Path) -> dict[str, tuple[str, ...]]:
+    """This repository's own tracker export, grouped by epic key.
+
+    *root* is the self-check snapshot (BDL-074 A2): the export is tracked, so the
+    copy carries it, and a concurrent ``bd`` write to the live file cannot land
+    between two reads of one test.
+    """
+    text = (root / ".beads" / "issues.jsonl").read_text(encoding="utf-8")
     records = [json.loads(line) for line in text.splitlines() if line.strip()]
     return beads_by_epic(records)
 
 
-def _repo_report() -> SpacesReport:
+def _repo_report(root: Path) -> SpacesReport:
     return _report(
-        REPO_ROOT,
-        known=_repo_known_refs(),
-        documented=_repo_known_refs(),
-        beads=_repo_beads(),
+        root,
+        known=_repo_known_refs(root),
+        documented=_repo_known_refs(root),
+        beads=_repo_beads(root),
     )
 
 
-def _repo_known_refs() -> set[str]:
+def _repo_known_refs(root: Path) -> set[str]:
     """Ref ids read from the committed graph YAML, not from an index.
 
     The database is a build artifact whose freshness is the thing under test
     elsewhere; the YAML is the declaration.
     """
     refs: set[str] = set()
-    for path in (REPO_ROOT / ".beadloom" / "_graph").glob("*.yml"):
+    for path in (root / ".beadloom" / "_graph").glob("*.yml"):
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for node in data.get("nodes", []) or []:
             if isinstance(node, dict) and isinstance(node.get("ref_id"), str):
@@ -198,110 +199,9 @@ def _repo_known_refs() -> set[str]:
     return refs
 
 
-def _independent_population(root: Path) -> dict[str, int]:
-    """Recount the three spaces without calling anything under test.
-
-    Kind first, then root, spelled out here rather than imported so a defect in
-    the classifier cannot agree with itself.
-    """
-    kinds = {kind.upper(): space for space, ks in DEFAULT_KINDS.items() for kind in ks}
-    found: dict[str, set[Path]] = {}
-    for declared, patterns in DEFAULT_ROOTS.items():
-        found[declared] = {p for pat in patterns for p in root.glob(pat) if p.is_file()}
-    counts = dict.fromkeys(DEFAULT_ROOTS, 0)
-    everything = {p for paths in found.values() for p in paths}
-    for path in everything:
-        stem = path.name.rpartition(".")[0].upper()
-        space: str | None = kinds.get(stem)
-        if space is None:
-            space = next((s for s, paths in found.items() if path in paths), None)
-        if space is not None:
-            counts[space] += 1
-    return counts
-
-
 # --------------------------------------------------------------------------- #
 # Is the population honest?
 # --------------------------------------------------------------------------- #
-
-
-class TestTheDenominatorsAreRecomputable:
-    """Every number the report prints, recounted by code that is not the code.
-
-    A relation check reports a clean result about the work it looked at; the
-    number that matters is how much work that was. `.17` reported these figures
-    and this class is the independent half of A GREEN COUNT IS NOT A CHECKED
-    COUNT — the count is not disputed, the denominator behind it is.
-    """
-
-    def test_the_three_populations_match_an_independent_count(self) -> None:
-        report = _repo_report()
-
-        assert dict(report.populations) == _independent_population(REPO_ROOT)
-
-    def test_the_populations_are_not_trivially_zero(self) -> None:
-        """The recount above is worthless if both sides are empty."""
-        counts = _independent_population(REPO_ROOT)
-
-        assert counts[SPACE_TO_BE] > 100
-        assert counts[SPACE_AS_IS] > 50
-        assert counts[SPACE_WORKING] > 10
-
-    def test_the_declaring_and_unresolved_buckets_partition_the_epics(self) -> None:
-        """No epic may be in neither bucket — that is where a denominator hides."""
-        report = _repo_report()
-
-        assert report.epics_declaring_nodes + report.epics_declaring_nothing == report.epics
-
-    def test_the_declarations_checked_are_recountable_from_the_documents(self) -> None:
-        """``refs_checked`` recounted from the CONTEXT sections and the export."""
-        beads = _repo_beads()
-        known = _repo_known_refs()
-        expected = 0
-        for directory in sorted((REPO_ROOT / _EPICS).iterdir()):
-            document = directory / "CONTEXT.md"
-            if not document.is_file():
-                document = directory / "BRIEF.md"
-            if not document.is_file():
-                continue
-            if not any(s == "closed" for s in beads.get(directory.name, ())):
-                continue
-            expected += len(_declared_in_section(document.read_text(encoding="utf-8"), known))
-
-        assert _repo_report().refs_checked == expected
-
-    def test_the_epics_with_closed_beads_are_recountable_from_the_export(self) -> None:
-        beads = _repo_beads()
-        report = _repo_report()
-        closed = [key for key, statuses in beads.items() if "closed" in statuses]
-
-        assert report.epics_with_closed_beads == sum(
-            1 for key in closed if (REPO_ROOT / _EPICS / key).is_dir()
-        )
-
-    def test_the_relation_reports_that_it_related_something(self) -> None:
-        """The premise of every count above: it is not a vacuous run."""
-        assert _repo_report().relation_checked is True
-
-
-def _declared_in_section(text: str, known: set[str]) -> list[str]:
-    """Backticked known refs under a related-files heading — recounted here."""
-    import re
-
-    refs: list[str] = []
-    inside = False
-    for line in text.splitlines():
-        heading = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
-        if heading is not None:
-            title = heading.group(1).lower()
-            inside = any(w in title for w in ("related file", "related code", "primary ref"))
-            continue
-        if not inside:
-            continue
-        for match in re.finditer(r"`([A-Za-z0-9][A-Za-z0-9._-]*)`", line):
-            if match.group(1) in known and match.group(1) not in refs:
-                refs.append(match.group(1))
-    return refs
 
 
 # --------------------------------------------------------------------------- #
@@ -386,7 +286,9 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
 
         assert report.epics == 1
 
-    def test_every_directory_holding_a_to_be_document_is_counted_here(self) -> None:
+    def test_every_directory_holding_a_to_be_document_is_counted_here(
+        self, self_check_snapshot: Path
+    ) -> None:
         """FINDING BDL-061.18-1 on the real tree, closed by `beadloom-mr2l.73`.
 
         61 directories contribute a document to the TO-BE population and 57 were
@@ -394,10 +296,10 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         report and in no line of the gate summary. The two sizes are one size
         now, and this test is the one that holds them together.
         """
-        spaces = resolve_doc_spaces(REPO_ROOT)
-        directories = {p.parent for p in spaces.documents_in(REPO_ROOT, SPACE_TO_BE)}
+        spaces = resolve_doc_spaces(self_check_snapshot)
+        directories = {p.parent for p in spaces.documents_in(self_check_snapshot, SPACE_TO_BE)}
 
-        assert _repo_report().epics == len(directories)
+        assert _repo_report(self_check_snapshot).epics == len(directories)
 
 
 #: Roots handed out by :func:`_tmp`, removed after each test by the fixture
@@ -474,7 +376,9 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
 
         assert report.epics_without_bead_status == 1
 
-    def test_this_repository_names_the_epics_its_export_forgot(self) -> None:
+    def test_this_repository_names_the_epics_its_export_forgot(
+        self, self_check_snapshot: Path
+    ) -> None:
         """FINDING BDL-061.18-2 on the real tree, closed by `.74` and `.73`.
 
         23 of the 60 directories under the feature root are absent from the
@@ -482,11 +386,13 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
         state its own channel and `.73` widened the population to every
         directory holding intent, which is why this leg needed both.
         """
-        beads = _repo_beads()
-        directories = [p.name for p in sorted((REPO_ROOT / _EPICS).iterdir()) if p.is_dir()]
+        beads = _repo_beads(self_check_snapshot)
+        directories = [
+            p.name for p in sorted((self_check_snapshot / _EPICS).iterdir()) if p.is_dir()
+        ]
         forgotten = [name for name in directories if name not in beads]
 
-        assert _repo_report().epics_without_bead_status >= len(forgotten)
+        assert _repo_report(self_check_snapshot).epics_without_bead_status >= len(forgotten)
 
     def test_deleting_an_epics_records_does_not_make_the_gate_quieter(self) -> None:
         """FINDING BDL-061.18-2 at the gate, closed by `beadloom-mr2l.74`.
@@ -807,29 +713,6 @@ class TestAnExcusedPairSaysSo:
         assert summary["total"] == sum(
             summary[key] for key in ("ok", "stale", "missing", "unverified", "unchecked", "exempt")
         )
-
-    def test_the_shipped_layout_excuses_no_pair_at_all(self) -> None:
-        """Measured, and it is why the omission has been invisible.
-
-        ``index_docs`` walks the docs directory alone, so a document outside it
-        never enters ``sync_state``. The shipped ``ACTIVE.md`` lives under the
-        planning tree, so the shipped exemption excuses nothing here: freshness
-        never looked at those files. The report nonetheless prints "55 WORKING
-        document(s) exempt", which counts documents rather than excused pairs —
-        a true sentence about a population that was never in the check.
-        """
-        report = _repo_report()
-        db_path = REPO_ROOT / ".beadloom" / "beadloom.db"
-        if not db_path.is_file():  # pragma: no cover - the index is a build artifact
-            pytest.skip("no index built; this leg reads the real sync_state")
-        conn = open_db(db_path)
-        pairs = conn.execute("SELECT doc_path FROM sync_state").fetchall()
-        spaces = resolve_doc_spaces(REPO_ROOT)
-        excused = [p for (p,) in pairs if spaces.space_of(str(p)) == SPACE_WORKING]
-        conn.close()
-
-        assert report.working_documents > 0
-        assert excused == []
 
 
 # --------------------------------------------------------------------------- #

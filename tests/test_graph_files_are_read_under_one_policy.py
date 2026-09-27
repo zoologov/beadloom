@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import traceback
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -41,14 +40,20 @@ from beadloom.onboarding.scanner.doc_classify import _existing_graph
 from beadloom.services.cli import main
 from beadloom.services.commands.setup import _graph_file_of_each_node
 from tests.adopter_project import typescript_project
+from tests.package_under_test import PACKAGE_ROOT
 
 # `init`'s own entry-point-by-mode table, imported rather than restated: BDL-067
 # `.19` derives it from the command's source and checks it there, so a fifth
 # branch or a third mode arrives in the cases below already carrying a run.
 from tests.test_init_one_table_over_every_axis import THE_TABLE, Cell, _answering
 
+#: The package under test, resolved through the import rather than the working
+#: directory (BDL-074 A1) or this file's location (BDL-UX #289).
+_PACKAGE = PACKAGE_ROOT
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from _pytest.tmpdir import TempPathFactory
 
@@ -280,10 +285,10 @@ class TestTheSkipPolicyLivesInOneBody:
     #: `rules.yml` by name and never walk the directory, so the derivation does
     #: not reach them and does not need to exempt them.
     SEARCHED = (
-        Path("src/beadloom/onboarding"),
-        Path("src/beadloom/services/commands/setup.py"),
+        _PACKAGE / "onboarding",
+        _PACKAGE / "services/commands/setup.py",
     )
-    THE_ONE_BODY = Path("src/beadloom/onboarding/graph_files.py")
+    THE_ONE_BODY = _PACKAGE / "onboarding/graph_files.py"
 
     def _readers_in_source(self, source: str, label: str) -> list[str]:
         """The derivation's answer, labelled with where it was asked."""

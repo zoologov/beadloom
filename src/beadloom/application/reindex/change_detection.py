@@ -110,6 +110,13 @@ def _scan_project_files(
     return files
 
 
+def code_paths(files: dict[str, tuple[str, str]]) -> frozenset[str]:
+    """The code files of a :func:`_scan_project_files` result, as POSIX paths."""
+    return frozenset(
+        path.replace("\\", "/") for path, (_hash, kind) in files.items() if kind == "code"
+    )
+
+
 def _get_stored_file_index(
     conn: sqlite3.Connection,
 ) -> dict[str, tuple[str, str]]:

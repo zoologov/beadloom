@@ -205,4 +205,5 @@ def compute_debt_score(
         top_offenders=top_offenders,
         trend=None,
         layer_populations=list(data.layer_populations),
+        test_population=data.test_population,
     )

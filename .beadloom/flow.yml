@@ -62,3 +62,10 @@ mutation:
   - src/beadloom/services/bd_seam/assumptions.py
   - src/beadloom/services/bd_seam/creation.py
   - src/beadloom/services/bd_seam/invocations.py
+
+waves:
+  overrides:
+  - beads: [beadloom-51yx, beadloom-vr0b]
+    decision: parallel
+    reason: "BDL-074 wave 4. beadloom-51yx edits tests/ only - it gathers shared helpers into tests/support and gives every test one repository-root helper - which no graph node owns, hence ref_not_in_graph. beadloom-vr0b edits .github/workflows/mutation.yml, src/ (mutation-scope, cli-commands), pyproject.toml and the mutation self-checks. Ownership rule handed to both prompts: the tests/self_check/config/test_mutation_*.py files and pyproject.toml are D1's; B1 leaves them as they are and lists what they would need, and D1 lands its changes to them."
+    until: "2026-11-15"

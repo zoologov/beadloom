@@ -22,6 +22,8 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     """Format a context bundle as human-readable Markdown."""
     from typing import cast
 
+    from beadloom.context_oracle.test_binding import describe_unplaced
+
     focus = cast("dict[str, str]", bundle["focus"])
     graph = cast("dict[str, list[dict[str, str]]]", bundle["graph"])
     text_chunks = cast("list[dict[str, str]]", bundle["text_chunks"])
@@ -53,6 +55,13 @@ def _format_markdown(bundle: dict[str, object]) -> str:
             f"{tests_info['test_count']} tests in {file_count} files "
             f"({tests_info['coverage_estimate']} coverage)"
         )
+        # The count above is a count of BOUND files. A repository whose tests are
+        # not laid out yet binds few of them, and saying so is what keeps "0 tests"
+        # from reading as "nobody tested this" (BDL-074 C2).
+        placements = cast("dict[str, int]", bundle.get("test_placements") or {})
+        unplaced = describe_unplaced(placements)
+        if unplaced is not None:
+            lines.append(f"  {unplaced}, so the count above can be short")
 
     # Activity.
     activity_info = cast("dict[str, Any] | None", focus.get("activity"))

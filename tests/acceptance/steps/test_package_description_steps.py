@@ -37,7 +37,7 @@ def _load_sweep() -> Any:
     second copy of a check about copies would be its own joke.
     """
     repo_root = Path(beadloom.__file__).resolve().parents[2]
-    module_path = repo_root / "tests" / "test_package_description.py"
+    module_path = repo_root / "tests" / "self_check" / "config" / "test_package_description.py"
     spec = importlib.util.spec_from_file_location("_beadloom_description_sweep", module_path)
     if spec is None or spec.loader is None:  # pragma: no cover - a broken checkout
         pytest.skip(f"the sweep module is not readable at {module_path}")

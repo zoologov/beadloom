@@ -3,12 +3,14 @@
 """Reindex node-extra enrichment: augment nodes.extra with derived data.
 
 This module owns merging derived, source-scanned data into each node's
-``extra`` JSON blob: test mappings (framework + counts), API routes scoped to
-the files under the node's source, and git activity. Each augmentation reads the current
-``extra``, merges its key, and writes it back. Routes are the one augmentation that
-also withdraws its key from a node that no longer holds any, because a route scan
-covers the whole project on every run. The other augmentations leave a node with no
-matching data untouched.
+``extra`` JSON blob: API routes scoped to the files under the node's source, and
+git activity. Each augmentation reads the current ``extra``, merges its key, and
+writes it back. Routes are the one augmentation that also withdraws its key from
+a node that no longer holds any, because a route scan covers the whole project on
+every run. The other augmentations leave a node with no matching data untouched.
+
+``extra["tests"]`` is not written here: since BDL-074 C1 it is rebuilt from the
+test binding by :mod:`.test_index`, and the heuristic mapper no longer writes it.
 """
 
 from __future__ import annotations
@@ -22,63 +24,6 @@ from beadloom.infrastructure.node_source import NodeSource
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
-
-
-def _store_test_mappings(
-    project_root: Path,
-    conn: sqlite3.Connection,
-) -> None:
-    """Run test mapper and merge results into ``nodes.extra["tests"]``.
-
-    Builds a ``source_dirs`` dict from nodes that have a non-null ``source``
-    field, calls :func:`~beadloom.context_oracle.test_mapper.map_tests`, and
-    updates each node's ``extra`` JSON blob with the test mapping data.
-    """
-    from beadloom.context_oracle.test_mapper import aggregate_parent_tests, map_tests
-
-    # Build source_dirs: {ref_id: source_path} for nodes with a source field.
-    rows = conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
-    source_dirs: dict[str, str] = {row["ref_id"]: row["source"] for row in rows}
-
-    if not source_dirs:
-        return
-
-    mappings = map_tests(project_root, source_dirs)
-
-    # Build parent->children hierarchy from part_of edges for aggregation.
-    parent_children: dict[str, list[str]] = {}
-    edge_rows = conn.execute(
-        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
-    ).fetchall()
-    for edge_row in edge_rows:
-        child_id = edge_row["src_ref_id"]
-        parent_id = edge_row["dst_ref_id"]
-        if parent_id not in parent_children:
-            parent_children[parent_id] = []
-        parent_children[parent_id].append(child_id)
-
-    # Aggregate child test counts up to parent (domain) nodes.
-    mappings = aggregate_parent_tests(mappings, parent_children)
-
-    for ref_id, mapping in mappings.items():
-        # Read existing extra JSON.
-        row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
-        if row is None:
-            continue
-
-        extra: dict[str, object] = json.loads(row["extra"]) if row["extra"] else {}
-        extra["tests"] = {
-            "framework": mapping.framework,
-            "test_files": mapping.test_files,
-            "test_count": mapping.test_count,
-            "coverage_estimate": mapping.coverage_estimate,
-        }
-        conn.execute(
-            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
-            (json.dumps(extra, ensure_ascii=False), ref_id),
-        )
-
-    conn.commit()
 
 
 def _update_node_extra(

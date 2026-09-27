@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import ast
 import inspect
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -47,6 +46,7 @@ from tests.package_under_test import PACKAGE_ROOT, module_tree, modules_under
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 #: The package under test, asked of the IMPORT and not of this file. Under
 #: `mutmut run` the suite is copied beside the mutated sources, so a root built
@@ -55,9 +55,6 @@ if TYPE_CHECKING:
 #: (BDL-UX #289). `tests/package_under_test.py` answers both halves: where the
 #: package is, and which of its names it actually declares.
 _SRC = PACKAGE_ROOT
-_PLANNING = (
-    Path(__file__).resolve().parent.parent / ".claude" / "development" / "docs" / "features"
-)
 
 #: Every place in the package that turns a line into cells by splitting on a
 #: pipe, as ``(module path, enclosing function)``, with what each one is. The
@@ -190,31 +187,6 @@ class TestThePackageHasTwoReadersOfOneRow:
         """The claim under test is the module's own, quoted from its docstring."""
         claim = " ".join((tables.__doc__ or "").split())
         assert "a third reader cannot be wrong about it a third time" in claim
-
-
-class TestTheTwoReadersOnThisRepositorysOwnDocuments:
-    """The control: on this arrangement the two readers agree, which is the point.
-
-    A divergence nobody can produce here is exactly the defect class BDL-UX #240
-    records, so the measurement is kept as a test rather than as a sentence.
-    """
-
-    def test_they_agree_on_every_line_of_every_planning_document(self) -> None:
-        documents = sorted(_PLANNING.glob("*/*.md"))
-        assert len(documents) > 50, f"only {len(documents)} planning documents found"
-        disagreements = [
-            (path.name, number, line)
-            for path in documents
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
-            if cells_of(line) != split_table_row(line)
-        ]
-        assert disagreements == []
-
-    def test_the_agreement_is_a_property_of_the_documents_and_not_of_the_readers(
-        self,
-    ) -> None:
-        """The same two readers, given a row this repository does not write."""
-        assert cells_of("|| a | b ||") != split_table_row("|| a | b ||")
 
 
 class TestWhereTheTwoReadersDisagree:

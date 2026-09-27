@@ -1,8 +1,8 @@
 nodes:
   - ref_id: test-mapping
     kind: feature
-    summary: "Test mapping — detect test frameworks and map test files to the source nodes they cover"
-    source: src/beadloom/context_oracle/test_mapper.py
+    summary: "Test binding — bind each test file to the node that owns the code its path mirrors, or to the node whose tests: list declares it"
+    source: src/beadloom/context_oracle/test_binding.py
     docs:
       - docs/domains/context-oracle/features/test-mapping/SPEC.md
 edges:

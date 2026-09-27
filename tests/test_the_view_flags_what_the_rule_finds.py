@@ -39,7 +39,6 @@ from tests.acceptance.steps.tiered_project import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from pathlib import Path
 
 #: One crossing of the peer-container fixture, excused by name, in one
@@ -166,28 +165,3 @@ class TestTheViewAsksTheRule:
         assert _view_flags(nested_parts) == _rule_flags(nested_parts)
 
 
-@pytest.fixture()
-def live(live_repo_reindexed: Path) -> Iterator[Path]:
-    yield live_repo_reindexed
-
-
-class TestOnThisRepository:
-    """The done-when, taken on the graph the bead names."""
-
-    def test_the_two_instruments_flag_the_same_edge_set(self, live: Path) -> None:
-        assert _view_flags(live) == _rule_flags(live)
-
-    def test_the_agreement_is_not_vacuous(self, live: Path) -> None:
-        """Both sets are empty here, and that has to be a measurement.
-
-        This repository's crossings were removed or excused by name in B2, so
-        the agreement above would also hold if the view had stopped flagging
-        anything at all. What makes it a measurement is the population: the view
-        renders a verdict on the edges the rule judges, and that is most of
-        them.
-        """
-        verdicts = _view_verdicts(live)
-        decided = [edge for edge, verdict in verdicts.items() if verdict is not None]
-        assert len(verdicts) > 300
-        assert len(decided) > len(verdicts) * 9 // 10
-        assert _view_flags(live) == set()

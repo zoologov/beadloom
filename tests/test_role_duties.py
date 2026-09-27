@@ -9,7 +9,7 @@ name on a clean run, and this repository's own duties.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -17,9 +17,10 @@ from beadloom.onboarding.agentic_flow_setup import COMMAND_FILES
 from beadloom.onboarding.role_composer import ROLE_NAMES
 from beadloom.onboarding.role_duties import duty_report
 
-_FLOW_YML = "tools:\n- claude\narchitecture:\n- ddd\nstack:\n- python\n"
+if TYPE_CHECKING:
+    from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_FLOW_YML = "tools:\n- claude\narchitecture:\n- ddd\nstack:\n- python\n"
 
 
 @pytest.fixture()
@@ -120,19 +121,6 @@ def test_the_inspected_corpus_is_every_agent_addressed_artifact(project: Path) -
 
     assert len(report.inspected) == len(ROLE_NAMES) + len(COMMAND_FILES) + 1
     assert set(report.inspected) >= {f"roles/{role}" for role in ROLE_NAMES}
-
-
-def test_every_duty_this_repository_declares_reaches_the_roles_it_names() -> None:
-    """Beadloom's own flow, checked against itself.
-
-    A self-fact rather than a fixture: it holds today because this repository
-    declares no duty yet, and it goes on holding when `beadloom-67t1` declares
-    the example-duty duty and writes it into the role cores. A regression there is
-    exactly the finding this check exists to make.
-    """
-    report = duty_report(_REPO_ROOT)
-
-    assert report.findings == ()
 
 
 def test_the_vendored_role_snapshot_is_not_reported_as_unreachable(

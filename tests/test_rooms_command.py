@@ -152,13 +152,3 @@ class TestAProjectThatDeclaresNothing:
         assert "declares no room" in outcome.stderr
 
 
-class TestTheCommandOverThisRepository:
-    def test_it_lists_the_interpreters_this_project_supports(self) -> None:
-        from pathlib import Path as _Path
-
-        root = _Path(__file__).resolve().parents[1]
-        outcome = CliRunner().invoke(
-            main, ["rooms", "--project", str(root), "--dimension", "python"]
-        )
-        assert outcome.exit_code == 0
-        assert outcome.stdout.split() == ["3.10", "3.11", "3.12", "3.13"]

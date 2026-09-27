@@ -79,6 +79,7 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo(f"Symbols: {result.symbols_indexed}")
         click.echo(f"Imports: {result.imports_indexed}")
         click.echo(f"Rules:   {result.rules_loaded}")
+    _echo_tests_line(project_root)
     if result.errors:
         click.echo("")
         for err in result.errors:
@@ -91,6 +92,26 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
     # Warn about missing language parsers when symbols == 0.
     if result.symbols_indexed == 0 and not result.nothing_changed:
         _warn_missing_parsers(project_root)
+
+
+def _echo_tests_line(project_root: Path) -> None:
+    """State the indexed test files and how they were placed (BDL-074 C1)."""
+    import sqlite3
+
+    from beadloom.application.reindex.test_index import describe_placements, placement_counts
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        counts = placement_counts(conn)
+    except sqlite3.OperationalError:
+        return  # an index without the test tables states nothing about tests
+    finally:
+        conn.close()
+    click.echo(f"Tests:   {describe_placements(counts)}")
 
 
 # beadloom:domain=doctor

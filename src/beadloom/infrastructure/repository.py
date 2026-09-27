@@ -20,12 +20,12 @@ the :mod:`beadloom.application.graph_reads` facade, never directly — the
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import sqlite3
-    from collections.abc import Collection
+    from collections.abc import Collection, Iterable
 
 
 @dataclass(frozen=True)
@@ -360,6 +360,44 @@ def source_covers(source: str, file_path: str) -> bool:
     return file_path == source
 
 
+def most_specific_owner(
+    sources: Iterable[tuple[str, str]], file_path: str
+) -> str | None:
+    """The ref_id among *sources* that owns *file_path*, or ``None``.
+
+    *sources* is ``(ref_id, source)`` pairs. Among the sources that cover the
+    file, the one with the longest covering prefix wins; on a tie the FIRST pair
+    wins, so a caller whose pairs can tie orders them. A blank source owns
+    nothing. Pure, so a path that is not in any index — a test file's mirrored
+    code path, a declared ``tests:`` prefix — is owned by the same rule
+    (BDL-074 C1).
+    """
+    best: tuple[int, str] | None = None
+    for ref_id, source in sources:
+        if not source or not source_covers(source, file_path):
+            continue
+        specificity = len(covering_prefix(source))
+        if best is None or specificity > best[0]:
+            best = (specificity, ref_id)
+    return best[1] if best is not None else None
+
+
+def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many indexed test files each placement holds, read from ``test_files``.
+
+    Empty for an index written before the test tables existed (BDL-074 C1): such
+    an index has recorded no placement, and ``ctx`` opens it without creating the
+    schema, so the absent table is a fact about the index, not an error.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT placement, count(*) AS n FROM test_files GROUP BY placement"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {str(row["placement"]): int(row["n"]) for row in rows}
+
+
 def get_owning_ref_id(
     conn: sqlite3.Connection, file_path: str
 ) -> str | None:
@@ -372,15 +410,9 @@ def get_owning_ref_id(
     rows = conn.execute(
         "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL AND source != ''"
     ).fetchall()
-    best: tuple[int, str] | None = None
-    for row in rows:
-        source = str(row["source"])
-        if not source_covers(source, file_path):
-            continue
-        specificity = len(covering_prefix(source))
-        if best is None or specificity > best[0]:
-            best = (specificity, str(row["ref_id"]))
-    return best[1] if best is not None else None
+    return most_specific_owner(
+        ((str(row["ref_id"]), str(row["source"])) for row in rows), file_path
+    )
 
 
 def owns_file(conn: sqlite3.Connection, ref_id: str, file_path: str) -> bool:

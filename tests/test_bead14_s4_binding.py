@@ -59,11 +59,9 @@ from beadloom.graph.rules import (
     NodeMatcher,
     ScenarioCoverageRule,
     evaluate_scenario_coverage_rules,
-    load_rules,
 )
-from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB, load_suite
+from beadloom.graph.scenarios import load_suite
 from beadloom.infrastructure.db import create_schema, open_db
-from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
@@ -73,7 +71,6 @@ if TYPE_CHECKING:
 
 #: This repository, so the shipped configuration is read rather than restated.
 REPO_ROOT = Path(__file__).resolve().parents[1]
-GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"
 
 SCENARIO_COVERAGE = "scenario_coverage"
 
@@ -116,39 +113,6 @@ def _messages(violations: list[Violation]) -> str:
     return "\n".join(f"{v.rule_type} {v.from_ref_id} {v.message}" for v in violations)
 
 
-def _shipped_scenario_coverage_rule() -> ScenarioCoverageRule:
-    """The rule THIS repository runs, read from the file it is configured in."""
-    rules = load_rules(GRAPH_DIR / "rules.yml")
-    matching = [r for r in rules if isinstance(r, ScenarioCoverageRule)]
-    assert len(matching) == 1, (
-        "expected exactly one scenario_coverage rule in the shipped rules.yml; "
-        f"found {len(matching)}"
-    )
-    return matching[0]
-
-
-def _declared_nodes() -> list[tuple[str, str]]:
-    """Every node the graph DIRECTORY declares, as ``(ref_id, kind)``.
-
-    Read from the tracked YAML rather than from `.beadloom/beadloom.db`: the index
-    is gitignored, so a check that read it would ERROR in a clean room instead of
-    measuring anything, and a shared tree may be reindexed mid-run by another
-    agent.
-
-    Read from the DIRECTORY rather than from `services.yml`, since BDL-UX #265
-    split this repository's graph into one file per node. The reader is
-    `each_graph_file`, which is the one policy every reader of that directory
-    holds, so this population cannot disagree with the loader's about which files
-    count.
-    """
-    return [
-        (str(node["ref_id"]), str(node.get("kind", "")))
-        for _path, data in each_graph_file(GRAPH_DIR)
-        for node in (data.get("nodes") or [])
-        if isinstance(node, dict) and node.get("ref_id")
-    ]
-
-
 # --------------------------------------------------------------------------- #
 # Is the population honest?
 # --------------------------------------------------------------------------- #
@@ -157,45 +121,6 @@ def _declared_nodes() -> list[tuple[str, str]]:
 class TestThePopulationIsHonest:
     """35 uncovered nodes is only a finding if the denominator was not chosen to fit."""
 
-    def test_the_population_is_a_graph_kind_and_not_a_hand_picked_list(self) -> None:
-        """The shipped matcher selects by KIND, with nothing carved out of it.
-
-        A `ref_id` matcher checks one node and an `exclude` list checks whatever is
-        left after the awkward ones are removed. Either reports a small number
-        honestly-looking, and neither is a statement about the system.
-        """
-        matcher = _shipped_scenario_coverage_rule().for_matcher
-
-        assert matcher.kind == "feature", matcher
-        assert matcher.ref_id is None, (
-            "the population is pinned to a single node — that is one check wearing "
-            "the name of a coverage rule"
-        )
-        assert not matcher.exclude, (
-            f"nodes are carved out of the population: {matcher.exclude}. An "
-            "exclusion here is invisible in the finding count; declare the node "
-            "non_behavioural with a reason instead, where a dead declaration is "
-            "itself reported"
-        )
-
-    def test_every_feature_node_the_graph_declares_is_in_the_population(self) -> None:
-        """The matcher's reach is measured against the file that declares the nodes.
-
-        Not "the matcher looks right": the two files are compared, so moving a node
-        out of the population requires changing its KIND in `services.yml`, which is
-        a visible architectural claim, rather than editing a list in `rules.yml`.
-        """
-        matcher = _shipped_scenario_coverage_rule().for_matcher
-        declared = _declared_nodes()
-        features = {ref_id for ref_id, kind in declared if kind == "feature"}
-        selected = {ref_id for ref_id, kind in declared if matcher.matches(ref_id, kind)}
-
-        assert selected == features
-        assert len(features) >= 30, (
-            f"only {len(features)} feature nodes are declared — the population this "
-            "rule reports a fraction OF has collapsed, and a small denominator makes "
-            "any coverage claim look better than it is"
-        )
 
     def test_a_hand_picked_population_would_report_almost_nothing(self, tmp_path: Path) -> None:
         """Why the row above is worth asserting, stated as a measurement.
@@ -669,39 +594,9 @@ def _numbered_with_the_line_above(path: Path) -> list[tuple[int, str, str]]:
     ]
 
 
-def _shipped_scenario_count() -> int:
-    """How many scenarios the shipped suite declares, READ from the suite.
-
-    Counted rather than written down (`beadloom-b0xl`): the number was 7 when
-    `.13` shipped and every later slice that adds a scenario would otherwise
-    redden two tests that have nothing to do with it. The count comes from the
-    project's own parser, which `.13` cross-checked against gherkin-official, so
-    a parser that started disagreeing with the runner still shows up here.
-    """
-    suite = load_suite(REPO_ROOT, DEFAULT_FEATURE_GLOB)
-    return len(suite.scenarios)
-
-
 class TestTheScenariosExecute:
     """A `.feature` file nothing runs is prose, and the rule would be checking text."""
 
-    def test_the_shipped_acceptance_suite_runs_every_scenario_and_skips_none(
-        self, tmp_path: Path
-    ) -> None:
-        """Every declared scenario RAN.
-
-        Collected-and-skipped would give the same reassuring green with nothing
-        executed, so the outcome of every row is read individually and a skip is a
-        failure of this test. The expected number is the number the suite declares.
-        """
-        code, outcomes = _run_pytest(
-            ["tests/acceptance"], cwd=REPO_ROOT, report=tmp_path / "report.xml"
-        )
-
-        assert code == 0, outcomes
-        assert [name for name, outcome in outcomes if outcome == "skipped"] == []
-        passed = [name for name, outcome in outcomes if outcome == "passed"]
-        assert len(passed) == _shipped_scenario_count(), outcomes
 
     def test_no_step_implementation_of_the_shipped_suite_steps_aside(self) -> None:
         """A step that skips is a scenario that stops running where it matters.
@@ -937,28 +832,6 @@ class TestTheReferenceLegsWidestSurface:
 
         assert found == expected, label
 
-    def test_the_shipped_reference_globs_read_more_than_the_document_that_added_them(
-        self,
-    ) -> None:
-        """The leg's own population, so it cannot quietly become one file.
-
-        33 missing references is a statement about intent only if the globs still
-        reach every document that states intent. Narrowing `references:` to the one
-        PRD that uses the convention would leave the number unchanged while making
-        the check unable to find a new document — the population failure of the
-        coverage leg, in the leg nobody would look at.
-        """
-        rule = _shipped_scenario_coverage_rule()
-        matched = [
-            path for glob in rule.references for path in REPO_ROOT.glob(glob) if path.is_file()
-        ]
-
-        assert rule.references, "the reference leg is switched off entirely"
-        assert len(matched) >= 20, (
-            f"the reference globs {rule.references} reach only {len(matched)} "
-            "documents — the leg is checking a hand-picked file rather than the "
-            "space where intent is written"
-        )
 
     def test_a_prose_paragraph_opening_with_example_is_not_a_reference(self) -> None:
         """FINDING BDL-061.14-1, fixed in `.62`.

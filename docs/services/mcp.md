@@ -92,7 +92,7 @@ Get a context bundle for a set of ref_id(s).
 }
 ```
 
-Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status, constraints, intent, routes, tests. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
+Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status, constraints, intent, routes, tests, test_placements. `test_placements` (BDL-074 C2, additive) counts the project's indexed test files by placement; a non-zero `unplaced` means the counts under `tests` can be short. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
 
 The `intent` field carries the epics whose planning documents declared the focus node, so an agent asking what a node IS also learns what it is FOR. It is filled when the server knows the project root, and reports `{"status": "not_checked", "reason": "intent_space_not_read"}` when it does not -- a different statement from "no epic declares this node", which is `{"status": "none_declared"}` and carries the number of epics that were read. See `docs/domains/context-oracle/components/node-intent/DOC.md`.
 
@@ -297,7 +297,7 @@ Get architecture debt report with score, categories, and top offenders.
 }
 ```
 
-`trend` (boolean, default false): include trend vs last snapshot. `category` (string, optional): filter to specific category -- accepts `rule_violations`, `doc_gaps`, `complexity`, `test_gaps` (or short names: `rules`, `docs`, `tests`). Returns: `debt_score` (0-100), `severity` (clean/low/medium/high/critical), `categories` list (each with `name`, `score`, `details`), `top_offenders` list (each with `ref_id`, `score`, `reasons`), and `trend` (null or object with `previous_snapshot`, `previous_score`, `delta`, `category_deltas`).
+`trend` (boolean, default false): include trend vs last snapshot. `category` (string, optional): filter to specific category -- accepts `rule_violations`, `doc_gaps`, `complexity`, `test_gaps` (or short names: `rules`, `docs`, `tests`). Returns: `debt_score` (0-100), `severity` (clean/low/medium/high/critical), `categories` list (each with `name`, `score`, `details`), `top_offenders` list (each with `ref_id`, `score`, `reasons`), `trend` (null or object with `previous_snapshot`, `previous_score`, `delta`, `category_deltas`), `layer_populations`, and `test_population` (BDL-074 C2): what the untested count was taken over, or `not counted: ...` while test files are unplaced. With `trend` the handler attaches the trend by `dataclasses.replace`, so both population keys survive; the hand-built copy it replaced dropped them.
 
 ### Process-tools (BDL-048)
 
@@ -402,7 +402,7 @@ Handler functions (sync, testable without MCP transport):
 - `handle_why(conn, *, ref_id, depth=3)` -- impact analysis with flattened upstream/downstream
 - `handle_diff(project_root, *, since="HEAD~1")` -- graph diff
 - `handle_lint(project_root, *, severity="all")` -- architecture lint. Its `summary` carries `layer_populations[]` — the same five keys `lint --format json` states per declared layer rule, `rule`, `edge_kind`, `evaluated`, `total` and `skipped_untagged` — so an agent reading the counts reads the population they were taken over: `357 of 365 live depends_on edge(s)`, measured on this repository on 2026-09-13, and `365 of 365` produce the same `errors`/`warnings` pair. Additive to the three keys that were there, and deliberately OUTSIDE the `severity` filter, because a population is not a finding and a finding filter must not be able to hide it (BDL-070 A4)
-- `handle_get_debt_report(conn, project_root, *, trend=False, category=None)` -- architecture debt report
+- `handle_get_debt_report(conn, project_root, *, trend=False, category=None)` -- architecture debt report; the trend is attached with `dataclasses.replace`, which keeps `layer_populations` and `test_population`
 
 Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the `services/bd_seam/client.py:run_bd` seam):
 - `handle_task_init(project_root, *, type_, key)` -- scaffold docs folder + per-type skeletons + the 4-role bead DAG (dev → test → review → tech-writer), created as one `bd_seam.creation` plan in ONE `bd create --graph` process whose edges name role keys; the ids are read from bd's JSON answer with `allocated_ids`, never scraped from `--silent` stdout. The argv is spelled as a literal at the call site rather than composed by a helper, because `bd_seam.invocations` resolves a list handed to `run_bd` and cannot follow a function call — a tidier builder would make this creation site invisible to the derivation that judges it

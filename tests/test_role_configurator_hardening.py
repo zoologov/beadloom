@@ -37,7 +37,6 @@ from beadloom.onboarding.flow_config import (
     FlowConfigError,
     build_flow_config,
     detect_stack,
-    load_flow_config,
     resolve_flow_config,
 )
 from beadloom.onboarding.role_adapters import (
@@ -53,7 +52,6 @@ from beadloom.onboarding.role_composer import (
 )
 from beadloom.services.cli import main
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _ddd_python(role: str) -> str:
     return compose_role(role, architecture="ddd", stack=["python"])
@@ -555,27 +553,3 @@ class TestCliScaffoldCursorFsd:
 # --------------------------------------------------------------------------- #
 
 
-class TestBeadloomSelfConsistency:
-    def test_own_flow_is_claude_ddd_python(self) -> None:
-        cfg = load_flow_config(REPO_ROOT)
-        assert cfg.tools == ("claude",)
-        assert cfg.architecture == "ddd"
-        assert cfg.stack == ("python",)
-
-    @pytest.mark.parametrize("role", ROLE_NAMES)
-    def test_live_adapter_has_expected_markers(self, role: str) -> None:
-        live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
-            encoding="utf-8"
-        )
-        # ddd architecture + python stack overlays present; FSD/vuejs absent.
-        assert "overlay:ddd" in live
-        assert "overlay:python" in live
-        assert "overlay:fsd" not in live
-        assert "Domain-Driven Design" in live
-
-    @pytest.mark.parametrize("role", ROLE_NAMES)
-    def test_live_adapter_byte_equals_compose(self, role: str) -> None:
-        live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
-            encoding="utf-8"
-        )
-        assert live == compose_role(role, architecture="ddd", stack=["python"])

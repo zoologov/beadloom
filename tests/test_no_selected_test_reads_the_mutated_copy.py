@@ -43,7 +43,6 @@ from pathlib import Path
 import pytest
 
 from tests.package_under_test import PACKAGE_ROOT
-from tests.test_mutation_runner_scope import toml_loads
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TESTS_DIR.parent
@@ -71,13 +70,11 @@ _PATH_ARITHMETIC = frozenset(
 #: never see `mutants/src`. Adding one to the pool without moving it onto
 #: ``tests/package_under_test.py`` fails the sweep above it.
 SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
-    "tests/test_bead15_s3b_coverage.py": (
-        "lists site*.py under application/; excluded from the pool by name, because "
-        "it runs sync-check over the tree it is in and every mutated module is stale there"
+    "tests/self_check/config/test_decode_handlers.py": (
+        "hands src/beadloom and tests/ to ruff under this repository's own rule selection"
     ),
-    "tests/test_ci_consolidated_structure.py": (
-        "reads two shipped workflow templates under onboarding/templates/, which "
-        "mutmut copies and does not mutate"
+    "tests/self_check/config/test_mutation_runner_scope.py": (
+        "walks src/ for modules importing the runner"
     ),
     "tests/test_ci_windows_dimension.py": (
         "reads one shipped workflow template under onboarding/templates/"
@@ -87,7 +84,6 @@ SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
         "reads three named modules of the guards seam and sabotages copies of them"
     ),
     "tests/test_locale_independent_io.py": "walks src/beadloom for ambient-encoding sites",
-    "tests/test_mutation_runner_scope.py": "walks src/ for modules importing the runner",
     "tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py": (
         "walks src/beadloom/graph/rules for the one part_of ancestry walk — the "
         "second instance of this shape, found 2026-09-12 on beadloom-ey4m"
@@ -98,17 +94,6 @@ SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
     ),
     "tests/test_tui_no_raw_sqlite.py": "walks src/beadloom/tui for raw sqlite3 use",
 }
-
-#: The files `beadloom-ey4m` moved onto the helper. Held here so the sweep has a
-#: floor: a scan that matched nothing because it stopped parsing would still
-#: report an empty offender list, and this says the population contains the very
-#: files the defect was found in.
-MOVED_ONTO_THE_HELPER = (
-    "tests/test_two_readers_of_one_markdown_table.py",
-    "tests/test_guards_invocation.py",
-    "tests/test_the_reference_docs_state_the_population_shapes.py",
-    "tests/test_s2_move_regression.py",
-)
 
 
 @dataclass(frozen=True)
@@ -289,39 +274,6 @@ def _name_of(node: ast.expr) -> str:
     if isinstance(node, ast.Attribute):
         return f"{_name_of(node.value)}.{node.attr}"
     return ast.dump(node)
-
-
-def _pool() -> tuple[str, ...]:
-    """The test files mutmut selects, read from where the runner reads them."""
-    config = toml_loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    tool = config["tool"]
-    assert isinstance(tool, dict)
-    mutmut = tool["mutmut"]
-    assert isinstance(mutmut, dict)
-    selection = mutmut["pytest_add_cli_args_test_selection"]
-    assert isinstance(selection, list)
-    return tuple(str(entry) for entry in selection)
-
-
-def _scan_repository_file(relative: str) -> tuple[Scan, ...]:
-    """Scan a file of this repository as it will be read under `mutmut run`."""
-    path = _REPO_ROOT / relative
-    return python_source_scans(
-        path.read_text(encoding="utf-8"), at=path, package_root=PACKAGE_ROOT
-    )
-
-
-def _offenders(entries: tuple[str, ...]) -> dict[str, list[str]]:
-    """Each file of *entries* that reads the package, with how it reads it."""
-    found = {entry: _scan_repository_file(entry) for entry in entries}
-    return {
-        entry: [
-            f"{scan.root} ({scan.pattern}) at line {scan.line} reaches {scan.reaches}"
-            for scan in scans
-        ]
-        for entry, scans in found.items()
-        if scans
-    }
 
 
 @pytest.fixture
@@ -519,53 +471,6 @@ class TestAFileThatDoesNotHaveTheShapeIsNotCaught:
         assert found == ()
 
 
-class TestNoTestTheRunnerSelectsWalksThePackageItMutates:
-    """The sweep, over the pool mutmut actually runs — tier one, no exceptions."""
-
-    def test_the_pool_it_scans_is_the_runners_own_and_is_not_empty(self) -> None:
-        """Stated because a sweep over an empty population passes silently."""
-        pool = _pool()
-
-        assert len(pool) > 100, len(pool)
-        assert all((_REPO_ROOT / entry).is_file() for entry in pool)
-
-    def test_the_files_the_defect_was_found_in_are_in_what_it_scans(self) -> None:
-        """The floor under the green: the sweep covers the four moved files.
-
-        Without this, a pool that stopped naming them would leave the sweep
-        green over tests that never had the shape.
-        """
-        pool = set(_pool())
-
-        assert set(MOVED_ONTO_THE_HELPER) <= pool, sorted(set(MOVED_ONTO_THE_HELPER) - pool)
-
-    def test_it_reports_a_carrier_that_is_selected(self) -> None:
-        """The sweep run over a pool that DOES hold one, so its green is readable.
-
-        A sweep whose collector had stopped matching would report an empty
-        offender list and read exactly like a clean repository. This hands it
-        the pool that the one remaining `pyproject.toml` line would create.
-        """
-        would_be_selected = "tests/test_tui_no_raw_sqlite.py"
-
-        offenders = _offenders((*_pool(), would_be_selected))
-
-        assert list(offenders) == [would_be_selected]
-        assert offenders[would_be_selected]
-
-    def test_no_selected_test_derives_a_python_scan_root_from_its_own_file(self) -> None:
-        offenders = _offenders(_pool())
-
-        assert offenders == {}, (
-            f"{len(offenders)} test file(s) mutmut SELECTS walk a root built from "
-            f"their own location, so under `mutmut run` they read "
-            f"`mutants/src/beadloom` and report its generated bodies as the "
-            f"package's own — the failure that scored nine nightlies at 0 of "
-            f"7187 mutants. Read the package through "
-            f"`tests/package_under_test.py`: {offenders}"
-        )
-
-
 class TestEveryOtherSelfScanningTestIsOnePyprojectLineAway:
     """Tier two: the shape outside the pool is declared, not ignored.
 
@@ -592,13 +497,3 @@ class TestEveryOtherSelfScanningTestIsOnePyprojectLineAway:
             f"gone {sorted(set(SELF_SCANNING_TESTS_OUTSIDE_THE_POOL) - carrying)}"
         )
 
-    def test_the_declared_set_is_not_empty_and_none_of_it_is_selected(self) -> None:
-        """Both halves in one place: the population is real, and it is unselected.
-
-        An empty declared set would make the test above pass by asserting that
-        nothing equals nothing.
-        """
-        pool = set(_pool())
-
-        assert SELF_SCANNING_TESTS_OUTSIDE_THE_POOL
-        assert set(SELF_SCANNING_TESTS_OUTSIDE_THE_POOL) & pool == set()

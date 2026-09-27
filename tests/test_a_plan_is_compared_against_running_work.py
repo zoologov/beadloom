@@ -17,8 +17,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -46,8 +45,10 @@ from beadloom.application.waves import (
 )
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.bd_seam import BdResult
+from tests.bd_rig import a_bd_rig, a_bead, bd_in
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: An epic holding one bead in progress, one ready, and one closed.
 CENSUS = TrackerCensus(
@@ -337,21 +338,29 @@ class TestTheTrackerAnswerItIsReadFrom:
         )
         assert _running_records(census, (), tmp_path) == []
 
-    def test_bd_spells_the_status_the_way_this_comparison_reads_it(self) -> None:
-        """The premise of the defect, read off the real tracker: a bead in
-        progress carries `in_progress` in `bd list` and is absent from `bd ready`."""
-        if shutil.which("bd") is None or not (_PROJECT_ROOT / ".beads").is_dir():
+    def test_bd_spells_the_status_the_way_this_comparison_reads_it(
+        self, tmp_path: Path
+    ) -> None:
+        """The premise of the defect, read off a real tracker: a bead in progress
+        carries `in_progress` in `bd list` and is absent from `bd ready`.
+
+        The tracker is a throwaway rig rather than this repository's (BDL-074 A1):
+        the claim is about how bd spells a status, and this repository's tracker
+        made it depend on whether anything happened to be in progress here.
+        """
+        if shutil.which("bd") is None:
             pytest.skip("bd is not installed here; its answer cannot be observed")
+        rig = _a_tracker_with_one_bead_in_progress(tmp_path)
         listed = subprocess.run(
             ["bd", "list", "--all", "--json"],  # noqa: S607
-            cwd=_PROJECT_ROOT,
+            cwd=rig,
             capture_output=True,
             encoding="utf-8",
             check=False,
         )
         ready = subprocess.run(
             ["bd", "ready", "--json", "--limit", "0"],  # noqa: S607
-            cwd=_PROJECT_ROOT,
+            cwd=rig,
             capture_output=True,
             encoding="utf-8",
             check=False,
@@ -362,4 +371,15 @@ class TestTheTrackerAnswerItIsReadFrom:
         assert all("status" in row for row in rows)
         running = {row["id"] for row in rows if row["status"] == TRACKER_IN_PROGRESS}
         ready_ids = {row["id"] for row in json.loads(ready.stdout)}
+        assert running, "the rig holds a bead in progress, so an empty set is a defect"
         assert not running & ready_ids
+
+
+
+def _a_tracker_with_one_bead_in_progress(tmp_path: Path) -> Path:
+    """A fresh bd rig holding one bead in progress."""
+    rig = a_bd_rig(tmp_path)
+    bead = a_bead(rig, "one")
+    if bd_in(rig, "update", bead, "--status", TRACKER_IN_PROGRESS).returncode != 0:
+        pytest.skip("bd could not move the rig's bead to in progress")
+    return rig

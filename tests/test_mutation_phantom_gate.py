@@ -29,7 +29,6 @@ is doubled: a report that passes against a double proves the double.
 from __future__ import annotations
 
 import json
-from pathlib import Path as _Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -54,10 +53,6 @@ from beadloom.services.cli import main
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
     from pathlib import Path
-
-
-#: This repository, whose own declaration must survive the join unchanged.
-REPO_ROOT = _Path(__file__).resolve().parents[1]
 
 
 def _project(root: Path, *targets: str) -> Path:
@@ -543,15 +538,3 @@ class TestTheCommandRefusesToPrintACleanVerdictOverAnEmptyPopulation:
         assert "80.0%" in result.stdout
 
 
-class TestThisRepositorysOwnDeclarationSurvivesTheJoin:
-    """The nightly job's own invocation must stay answerable, not become red."""
-
-    def test_every_declared_target_of_this_project_could_run_a_mutant(self) -> None:
-        # Arrange
-        project = REPO_ROOT
-
-        # Act
-        findings = check_mutation_scope(project)
-
-        # Assert
-        assert findings == []

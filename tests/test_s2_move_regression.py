@@ -36,20 +36,11 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from beadloom.graph.rule_engine import (
-    ImportBoundaryRule,
-    evaluate_import_boundary_rules,
-    load_rules,
-)
-from beadloom.infrastructure.db import create_schema, open_db
 from tests.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
-    import sqlite3
-    from collections.abc import Iterator
     from pathlib import Path
 
-    from beadloom.graph.rules import Violation
 
 _HARNESS_PKG = "beadloom.ai_agents.ai_techwriter"
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
@@ -236,10 +227,11 @@ class TestNoVendoringScaffold:
 # ---------------------------------------------------------------------------
 
 
-def _ci_configs() -> list[Path]:
+def _ci_configs() -> list[object]:
+    """This repository's two CI configs, marked self-checks, then the two shipped templates."""
     return [
-        _CI_YML,
-        _GITLAB_YML,
+        pytest.param(_CI_YML, marks=pytest.mark.self_check),
+        pytest.param(_GITLAB_YML, marks=pytest.mark.self_check),
         _TPL / "github-workflow.yml",
         _TPL / "gitlab-ci-job.yml",
     ]
@@ -260,261 +252,15 @@ class TestCiConfigsModulePath:
         loaded = yaml.safe_load(cfg.read_text(encoding="utf-8"))
         assert isinstance(loaded, dict)
 
-    @pytest.mark.parametrize(
-        "marker",
-        [
-            "--target pr-branch",
-            "merge-base",
-            "--since",
-            "AI_TW_PAT",
-        ],
-    )
-    def test_root_github_ci_keeps_bdl049_050_markers(self, marker: str) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
-        assert marker in text
-
-    def test_root_github_ci_keeps_loop_guard_and_verdict(self) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
-        # loop-guard: the workflow must not re-trigger itself on its own push.
-        assert "loop-guard" in text or "loop guard" in text.lower()
-        # verdict classification survives (ok/flagged/infra).
-        assert "verdict" in text.lower()
-
-    @pytest.mark.parametrize(
-        "marker",
-        ["--target pr-branch", "merge-base", "--since", "AI_TW_PAT"],
-    )
-    def test_gitlab_ci_keeps_bdl049_050_markers(self, marker: str) -> None:
-        text = _GITLAB_YML.read_text(encoding="utf-8")
-        assert marker in text
-
-
-class TestCiConfigNoRetiredToolsPath:
-    """REGRESSION pin for the BUG documented on beadloom-mukc.5: after the S2
-    move, repo-root ``tools/`` no longer exists, so the CI lint/type steps that
-    pass ``tools/`` to ruff + mypy fail hard (ruff E902 / mypy can't-read-file).
-    These tests pin that the retired path is dropped from the CI invocations.
-
-    Fixed in S2 (the coordinator dropped ``tools/`` from both CI invocations);
-    these are now live assertions that the retired path stays gone.
-    """
-
-    def test_github_ci_does_not_lint_retired_tools_path(self) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
-        assert "ruff check src/ tests/ tools/" not in text
-        assert "mypy src/ tools/" not in text
-
-    def test_gitlab_ci_does_not_lint_retired_tools_path(self) -> None:
-        text = _GITLAB_YML.read_text(encoding="utf-8")
-        assert "ruff check src/ tests/ tools/" not in text
-        assert "mypy src/ tools/" not in text
-
 
 # ---------------------------------------------------------------------------
 # Boundary rule — the fnmatch char-class hack (the riskiest part of S2)
 # ---------------------------------------------------------------------------
 
 
-def _insert_import(
-    conn: sqlite3.Connection, file_path: str, import_path: str
-) -> None:
-    conn.execute(
-        "INSERT INTO code_imports"
-        " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (file_path, 1, import_path, None, "h"),
-    )
-
-
-def _crossings(violations: list[Violation]) -> list[Violation]:
-    """Only the boundary breaches.
-
-    Since BDL-UX #150 the evaluator also reports a rule that CANNOT match anything
-    in the index (``rule_type == "rule_liveness"``, always ``warn``). In these
-    one-import fixtures the sibling char-class rule legitimately matches nothing, so
-    that advisory is expected noise here — the subject of these tests is which
-    crossings the two globs catch.
-    """
-    return [v for v in violations if v.rule_type == "forbid_import"]
-
-
-@pytest.fixture()
-def boundary_rules() -> list[ImportBoundaryRule]:
-    """Load the two real ai_agents char-class forbid_import rules from the live
-    project rules.yml so the test exercises the SHIPPED patterns, not a copy."""
-    rules = load_rules(_REPO_ROOT / ".beadloom" / "_graph" / "rules.yml")
-    ai = [
-        r
-        for r in rules
-        if isinstance(r, ImportBoundaryRule)
-        and r.name in {"core-no-import-ai-agents", "application-no-import-ai-agents"}
-    ]
-    assert len(ai) == 2, f"expected the 2 ai_agents boundary rules, got {ai}"
-    return ai
-
-
-# Every core source dir that the char-class globs are meant to cover.
-_CORE_DIRS = [
-    "application",
-    "context_oracle",
-    "doc_sync",
-    "graph",
-    "infrastructure",
-    "onboarding",
-    "services",
-    "tui",
-]
-
-
-class TestAiAgentsBoundaryRule:
-    @pytest.fixture()
-    def conn(self, tmp_path: Path) -> Iterator[sqlite3.Connection]:
-        db = open_db(tmp_path / "b.db")
-        create_schema(db)
-        yield db
-        db.close()
-
-    @pytest.mark.parametrize("core_dir", _CORE_DIRS)
-    def test_core_importing_ai_agents_is_forbidden(
-        self,
-        conn: sqlite3.Connection,
-        boundary_rules: list[ImportBoundaryRule],
-        core_dir: str,
-    ) -> None:
-        """Every core domain/service importing ai_agents IS flagged — the two
-        char-class globs together cover every core source dir."""
-        _insert_import(
-            conn,
-            f"src/beadloom/{core_dir}/foo.py",
-            "beadloom.ai_agents.ai_techwriter.runner",
-        )
-        conn.commit()
-        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
-        assert len(violations) >= 1, f"{core_dir} -> ai_agents not flagged"
-        assert violations[0].severity == "error"
-
-    def test_ai_agents_importing_itself_is_allowed(
-        self, conn: sqlite3.Connection, boundary_rules: list[ImportBoundaryRule]
-    ) -> None:
-        """ai_agents internal imports must NOT false-positive (the a[!i]* and
-        [!a]* classes both exclude the ``ai_agents`` dir)."""
-        _insert_import(
-            conn,
-            "src/beadloom/ai_agents/ai_techwriter/runner.py",
-            "beadloom.ai_agents.ai_techwriter.seams",
-        )
-        conn.commit()
-        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
-        assert violations == []
-
-    def test_ai_agents_importing_application_is_allowed(
-        self, conn: sqlite3.Connection, boundary_rules: list[ImportBoundaryRule]
-    ) -> None:
-        """ai_agents is a leaf CONSUMER — it MAY import the core read-APIs
-        (e.g. application). The rule only forbids the reverse direction."""
-        _insert_import(
-            conn,
-            "src/beadloom/ai_agents/ai_techwriter/packet.py",
-            "beadloom.application.reindex",
-        )
-        _insert_import(
-            conn,
-            "src/beadloom/ai_agents/ai_techwriter/scope.py",
-            "beadloom.context_oracle.builder",
-        )
-        conn.commit()
-        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
-        assert violations == []
-
-    def test_core_importing_core_is_not_flagged(
-        self, conn: sqlite3.Connection, boundary_rules: list[ImportBoundaryRule]
-    ) -> None:
-        """The rule only fires on a ``to`` of ai_agents — ordinary core->core
-        imports are untouched."""
-        _insert_import(
-            conn,
-            "src/beadloom/application/reindex.py",
-            "beadloom.graph.loader",
-        )
-        conn.commit()
-        assert _crossings(evaluate_import_boundary_rules(conn, boundary_rules)) == []
-
-    def test_exactly_one_rule_fires_per_core_dir(
-        self,
-        conn: sqlite3.Connection,
-        boundary_rules: list[ImportBoundaryRule],
-    ) -> None:
-        """The two char-class globs are DISJOINT (application matched only by
-        a[!i]*, everything-else only by [!a]*) — no core->ai_agents import is
-        double-counted."""
-        _insert_import(
-            conn,
-            "src/beadloom/application/reindex.py",
-            "beadloom.ai_agents.ai_techwriter.runner",
-        )
-        _insert_import(
-            conn,
-            "src/beadloom/graph/loader.py",
-            "beadloom.ai_agents.ai_techwriter.runner",
-        )
-        conn.commit()
-        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
-        # one per import, never doubled by overlapping patterns.
-        assert len(violations) == 2
-        by_file = {v.file_path for v in violations}
-        assert by_file == {
-            "src/beadloom/application/reindex.py",
-            "src/beadloom/graph/loader.py",
-        }
-
-
 # ---------------------------------------------------------------------------
 # Graph — ai_agents domain + ai-techwriter feature resolve
 # ---------------------------------------------------------------------------
-
-
-def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
-    """Resolve the ``beadloom`` console script to an absolute path (no partial
-    path -> no S607) and return the parsed ``ctx --json`` bundle."""
-    import json
-    import shutil
-
-    exe = shutil.which("beadloom")
-    assert exe is not None, "beadloom console script not on PATH"
-    proc = subprocess.run(  # noqa: S603 - resolved absolute path, fixed argv
-        [exe, "ctx", ref_id, "--json"],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    parsed: dict[str, object] = json.loads(proc.stdout)
-    return parsed
-
-
-class TestGraphResolution:
-    def test_ai_techwriter_feature_resolves(self, live_repo_reindexed: Path) -> None:
-        bundle = _beadloom_ctx_json("ai-techwriter")
-        focus = bundle["focus"]
-        assert isinstance(focus, dict)
-        assert focus["ref_id"] == "ai-techwriter"
-        graph = bundle["graph"]
-        assert isinstance(graph, dict)
-        node_ids = {n["ref_id"] for n in graph["nodes"]}
-        assert "ai_agents" in node_ids
-        assert "ai-techwriter" in node_ids
-
-    def test_feature_is_part_of_ai_agents_domain(self, live_repo_reindexed: Path) -> None:
-        graph = _beadloom_ctx_json("ai-techwriter")["graph"]
-        assert isinstance(graph, dict)
-        edges = graph["edges"]
-        assert any(
-            e["src"] == "ai-techwriter"
-            and e["dst"] == "ai_agents"
-            and e["kind"] == "part_of"
-            for e in edges
-        )
 
 
 # ---------------------------------------------------------------------------

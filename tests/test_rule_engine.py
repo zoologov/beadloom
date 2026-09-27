@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
-from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -35,6 +33,8 @@ from beadloom.graph.rule_engine import (
 from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
 
 
@@ -2841,56 +2841,6 @@ class TestEvaluateUnregisteredFeatureCandidateRules:
         assert violations[0].rule_type == "unregistered_feature_candidate"
 
 
-class TestUnregisteredFeatureCandidateRealRepo:
-    """Run the (retired) sprawl-lint against the real Beadloom index (BDL-051 dogfood).
-
-    Slice 1 saw the onboarding modules as domain-only sprawl candidates; Slice 3b
-    (BEAD-14) re-modeled them into features (config-check, branch-protection,
-    agentic-flow-setup, ai-techwriter-setup). So they must now carry a
-    ``# beadloom:feature=`` annotation and NO LONGER be flagged as candidates.
-    """
-
-    def test_remodeled_onboarding_modules_no_longer_candidates(self) -> None:
-        import pathlib
-
-        from beadloom.graph.rule_engine import (
-            UnregisteredFeatureCandidateRule,
-            evaluate_unregistered_feature_candidate_rules,
-        )
-        from beadloom.infrastructure.db import open_db
-
-        repo_root = pathlib.Path(__file__).resolve().parents[1]
-        db_path = repo_root / ".beadloom" / "beadloom.db"
-        if not db_path.is_file():
-            pytest.skip("real index db not present")
-
-        conn = open_db(db_path)
-        try:
-            rules = [
-                UnregisteredFeatureCandidateRule(
-                    name="unregistered-feature-candidate",
-                    description="domain-only modules",
-                    for_matcher=NodeMatcher(kind="domain"),
-                    min_symbols=5,
-                )
-            ]
-            violations = evaluate_unregistered_feature_candidate_rules(conn, rules)
-        finally:
-            conn.close()
-
-        flagged = {v.file_path for v in violations}
-        remodeled = {
-            "src/beadloom/onboarding/config_sync.py",
-            "src/beadloom/onboarding/branch_protection.py",
-            "src/beadloom/onboarding/agentic_flow_setup.py",
-            "src/beadloom/onboarding/ai_techwriter_setup.py",
-        }
-        # Post-S3b: each re-modeled module is a feature now, so it is NOT a candidate.
-        assert flagged.isdisjoint(remodeled), f"still flagged: {flagged & remodeled}"
-        # Whatever (if anything) remains is still advisory warn (never fails the build).
-        assert all(v.severity == "warn" for v in violations)
-
-
 # ---------------------------------------------------------------------------
 # UnregisteredFeatureCandidateRule — HARDENING edge cases (BDL-051 S1 / BEAD-02)
 # ---------------------------------------------------------------------------
@@ -3908,51 +3858,3 @@ class TestModuleCoverageSerializationRoundTrip:
         assert row[0] == "module_coverage"
 
 
-class TestTheSpecTableIsCheckedAgainstTheLoader:
-    """`rule-engine/SPEC.md` claims its rule-type table is checked against the
-    loader's own dispatch. Until BDL-062 `.4` nothing checked it, so the table
-    stated a check that did not exist — the defect class BDL-062 is about, in
-    the document that describes the rule engine.
-
-    The table went stale twice while claiming otherwise: `.2` added
-    `doc_area_coherence` and `.1` added `summary_facts`, and the count in
-    `.beadloom/AGENTS.md` read `(unknown)` for three rules at the same time.
-    """
-
-    SPEC = Path("docs/domains/graph/features/rule-engine/SPEC.md")
-
-    #: How the SPEC spells each cardinal it may use for the count. Written out
-    #: because a number spelled as a word is invisible to `docs audit`, which is
-    #: why this claim needed a test of its own (BDL-UX #196).
-    _CARDINALS: ClassVar[dict[int, str]] = {
-        9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
-        13: "Thirteen", 14: "Fourteen", 15: "Fifteen",
-    }
-
-    def _keywords_in_table(self) -> set[str]:
-        """The `Keyword` column of the rule-type table, read off the document."""
-        rows = re.findall(
-            r"^\|\s*\*\*[^|]+\*\*\s*\|\s*`([a-z_]+)`\s*\|",
-            self.SPEC.read_text(encoding="utf-8"),
-            flags=re.MULTILINE,
-        )
-        return set(rows)
-
-    def test_the_table_lists_every_authoring_key_and_no_other(self) -> None:
-        from beadloom.graph.rules.loader import AUTHORING_KEYS
-
-        listed = self._keywords_in_table()
-        assert listed == set(AUTHORING_KEYS), (
-            f"missing from the SPEC table: {sorted(set(AUTHORING_KEYS) - listed)}; "
-            f"listed but not accepted by the loader: {sorted(listed - set(AUTHORING_KEYS))}"
-        )
-
-    def test_the_stated_count_is_the_number_of_authoring_keys(self) -> None:
-        from beadloom.graph.rules.loader import AUTHORING_KEYS
-
-        expected = self._CARDINALS[len(AUTHORING_KEYS)]
-        text = self.SPEC.read_text(encoding="utf-8")
-        assert f"**{expected}** rule types exist" in text, (
-            f"the SPEC does not state {expected} rule types; the loader accepts "
-            f"{len(AUTHORING_KEYS)}"
-        )
