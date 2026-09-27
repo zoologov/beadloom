@@ -39,8 +39,8 @@
 | `beadloom-kixx` | A2 dev | ✓ done | self-check snapshot replaces `live_repo_reindexed`; allowed list 44 → 20; live-index contacts 98 → 1 (the A3 probe), 0 writers; build ≈5.1 s/session |
 | `beadloom-2esy` | A3 dev | ✓ done | 590 traced self-checks: 541 moved + 51 siblings = 592 in `tests/self_check/` (architecture 125, config 206, docs 68, process 193); 4 exact `lint`-leg duplicates removed; 45 kept in place with a reason; allowed list 20 → 0; live-index contacts 1 → 0, `beadloom-qq6m` closed; combined tree 10 959 passed, 0 failed, `beadloom ci` rc 0 |
 | `beadloom-51yx` | B1 dev | ✓ done | `tests/support/` 50 modules (18 moved, 31 extracted by subject, `repository_root`); files importing a `test_*.py` module 46 → 1, counting parents 106 → 5 (both remainders D1's, exempt by prefix); lock `self_check/architecture/test_the_suite_shares_helpers_through_support.py`; green in a clean room over 247 files; `2c2cd3d0` |
-| `beadloom-1bd6` | B2 dev | ready | relocate the 227 clear-node files |
-| `beadloom-d0bp` | B3 dev | ready | relocate acceptance |
+| `beadloom-1bd6` | B2 dev | in progress | relocate the 227 clear-node files |
+| `beadloom-d0bp` | B3 dev | ✓ done | 39 features → `tests/acceptance/<package>/`, 37 step files → `steps/<package>/` (6 packages; no `steps/common/`); 40 features listed, not moved (29 tag-executed-not-primary, 3 tag-not-executed, 5 sibling-matched, 3 not in the map); `rules.yml` glob `tests/acceptance/**/*.feature`; 524 → 524 scenarios, identical; 5 edits in B2's files needed (on the bead), green in a clean room with them (11 016 passed); `11c2fd22` |
 | `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding; 462 test files: 0 bound, 392 unplaced, 70 acceptance |
 | `beadloom-2mj3.1` | docs | ✓ done | 36 stale pairs → 0 over 10 refs; test-mapping SPEC rewritten for the binding; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-3z94` | C2 dev | ✓ done | ctx and debt-report read the binding; ctx states the unplaced share (393 of 464 here), debt-report withholds `untested` while files are unplaced; `test_mapper` retired; 22 stale pairs for the docs pass |
