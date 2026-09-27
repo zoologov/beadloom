@@ -9,7 +9,6 @@ plan and reads an answer, which is the half that is ours to get right.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -34,7 +33,6 @@ from beadloom.services.bd_seam.creation import (
     plan_is_required,
 )
 from beadloom.services.bd_seam.invocations import text_invocations
-from beadloom.services.bd_seam.population import project_report
 
 _ROLES = ("dev", "test", "review", "tech-writer")
 
@@ -167,23 +165,6 @@ class TestTheAnswerIsReadFromBdRatherThanScraped:
         assert created_id("proj-bbl\n") is None
         assert created_id(json.dumps({"title": "no id here"})) is None
 
-    def test_the_creation_site_is_visible_to_the_derivation_that_judges_it(self) -> None:
-        """The argv is spelled at the call, because a helper would hide it.
-
-        `bd_seam.invocations` resolves a list literal handed to ``run_bd`` and
-        cannot follow a function call, so an argv builder here would leave the
-        scaffold reporting NOTHING rather than reporting `secured`. This reddens
-        the day the literal is tidied into a helper.
-        """
-        report = project_report(Path(__file__).resolve().parents[1])
-        creates = [
-            site
-            for site in report.sites
-            if site.channel == "python" and site.subcommand == "create"
-        ]
-        assert creates, "the scaffold's `bd create` is invisible to the derivation"
-        assert all("--graph" in site.flags and "--json" in site.flags for site in creates)
-
 
 class TestTheThresholdIsAboutIdsAndNotAboutSpeed:
     def test_one_bead_is_created_directly_and_two_are_planned(self) -> None:
@@ -288,22 +269,3 @@ class TestTheEchoIsPreservedAndTheFormThatDiscardsItIsNamed:
         assert ASSUMPTION_ECHOED_TITLES in ASSUMPTIONS
 
 
-class TestThisProjectSOwnPopulation:
-    """What the derived report says about this repository after the fix."""
-
-    def test_no_python_call_site_of_ours_authors_a_bead_id(self) -> None:
-        """The two sites BDL-UX #171 named in our own code are settled.
-
-        This reddens the day a Python creation path goes back to scraping an id
-        out of ``--silent`` or wiring an edge from an id it authored.
-        """
-        report = project_report(Path(__file__).resolve().parents[1])
-        offending = [
-            f"{site.source}:{site.line} {site.subcommand}"
-            for site in report.sites
-            if site.channel == "python"
-            for entry in site.assumptions
-            if entry.name in (ASSUMPTION_ALLOCATED_ID, ASSUMPTION_INTENDED_ID)
-            and entry.verdict == VERDICT_UNSECURED
-        ]
-        assert offending == []

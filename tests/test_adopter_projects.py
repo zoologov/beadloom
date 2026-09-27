@@ -87,16 +87,6 @@ class TestTheAdoptersVersionIsTheAdoptersOwn:
 
         assert f"- **Current version:** {project.version}" in rendered
 
-    def test_this_repository_can_read_its_own_declared_version(self) -> None:
-        """The dogfood leg — and the one case where being right proves little."""
-        from pathlib import Path as _Path
-
-        from beadloom import __version__
-        from beadloom.onboarding.scanner.project_facts import detect_project_version
-
-        repo = _Path(__file__).resolve().parents[1]
-
-        assert detect_project_version(repo) == __version__
 
     def test_an_undeclared_version_renders_nothing_not_ours(
         self, tmp_path: Path

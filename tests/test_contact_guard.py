@@ -327,6 +327,12 @@ class TestWhoIsAllowed:
         # self-check snapshot; an entry still naming it is an exemption nothing retires.
         assert [e.target for e in ALLOWED_CONTACTS if "beadloom-kixx" in e.reason] == []
 
+    def test_no_test_of_the_suite_is_allowed_to_reach_the_live_state(self) -> None:
+        # A3 (beadloom-2esy) moved the last 20 entries onto the self-check snapshot
+        # or a tmp project, so the list is empty. A new entry is a regression of
+        # beadloom-qq6m's isolation and is decided in review, not appended here.
+        assert ALLOWED_CONTACTS == ()
+
     def test_the_printed_list_names_every_entry_and_its_reason(self, root: Path) -> None:
         entries = (AllowedContact("tests/test_x.py::TestA", "reads the live lint"),)
         guard = ContactGuard(root, entries)

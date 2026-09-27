@@ -59,12 +59,16 @@ _CONTACT_REPORT_ENV = "BEADLOOM_CONTACT_REPORT"
 _SESSION_CONTACTS: list[tuple[str, str, str, bool]] = []
 
 
-#: The ``self_check`` marker: set on every test that reads the self-check snapshot,
-#: by :func:`pytest_collection_modifyitems`, never by hand — one fact, stated once.
+#: The ``self_check`` marker: set on every test under ``tests/self_check/`` and on
+#: every test that reads the self-check snapshot, by
+#: :func:`pytest_collection_modifyitems`, never by hand — one fact, stated once.
+#: The one exception is a parametrize row whose twin is a product test of the
+#: shipped template: that row carries the mark in its ``pytest.param`` (BDL-074 A3).
 _SELF_CHECK_FIXTURE = "self_check_snapshot"
+_SELF_CHECK_DIR = Path(__file__).resolve().parent / "self_check"
 _SELF_CHECK_MARKER = (
-    "self_check: asserts on this repository's own tree, through the session "
-    "snapshot (`self_check_snapshot`); set automatically, never by hand"
+    "self_check: asserts on this repository's own tree; set on tests/self_check/ "
+    "and on every reader of the session snapshot (`self_check_snapshot`)"
 )
 #: What the snapshot build did, for the terminal summary; empty until a test asks.
 _SNAPSHOT_BUILD: dict[str, object] = {}
@@ -94,9 +98,10 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Mark every test that reads the snapshot, directly or through another fixture."""
+    """Mark every self-check: by its folder, or by reading the snapshot through any fixture."""
     for item in items:
-        if _SELF_CHECK_FIXTURE in getattr(item, "fixturenames", ()):
+        in_folder = _SELF_CHECK_DIR in Path(str(item.path)).resolve().parents
+        if in_folder or _SELF_CHECK_FIXTURE in getattr(item, "fixturenames", ()):
             item.add_marker(pytest.mark.self_check)
 
 

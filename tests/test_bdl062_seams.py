@@ -38,7 +38,6 @@ cleanly, a retired name beside the current one.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -58,11 +57,10 @@ from tests.adopter_project import IndexedProjectSpec, indexed_python_project
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from beadloom.graph.rules import Violation
 
-#: This repository's root — the only project whose real config is read here.
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The fact name BDL-UX #193 retired. Two unrelated meanings of "framework"
 #: collided under it: the web frameworks a parser supports, and the nodes that
@@ -313,60 +311,6 @@ class TestNoPathStillResolvesTheRetiredFactName:
 # --------------------------------------------------------------------------- #
 # a suppression that suppresses nothing (NO CALLER NO CAPABILITY)
 # --------------------------------------------------------------------------- #
-
-
-@pytest.fixture(scope="module")
-def repo_mentions() -> list[object]:
-    """Every fact mention in this repository's own documentation surface.
-
-    Module-scoped because the scan reads 59 documents and the three tests below
-    ask the same question of the same corpus. Measured at 0.42 s for the scan.
-    """
-    scanner = DocScanner()
-    surface = scanner.resolve_surface(REPO_ROOT, None)
-    return list(scanner.scan(list(surface.scanned)))
-
-
-class TestEverySuppressionStillSuppresses:
-    """Each ``docs_audit.ignore`` triple this repository declares still matches.
-
-    There is no production check for this. ``compare_facts`` drops a matching
-    mention and counts nothing, ``docs audit`` prints nothing about the rules it
-    was given, and no gate step reads them — so an ignore triple outlives the
-    prose it was written for in complete silence, and the config comment saying
-    it was "measured: 0 matching mentions" is the only record that anybody
-    looked. Measured at the time of writing: 10 declared triples, 59 documents,
-    41 mentions, every triple matching at least one.
-    """
-
-    def test_the_corpus_under_test_is_not_empty(self, repo_mentions: list[object]) -> None:
-        """A sweep over zero documents would call every suppression inert."""
-        assert len(repo_mentions) > 0
-
-    def test_every_declared_triple_matches_at_least_one_mention(
-        self, repo_mentions: list[object]
-    ) -> None:
-        rules = _load_ignore_from_config(REPO_ROOT)
-        assert rules, "this repository declares suppressions; the loader read none"
-
-        inert = [
-            f"{rule.path} {rule.fact}={rule.value}"
-            for rule in rules
-            if not any(rule.matches(m) for m in repo_mentions)  # type: ignore[arg-type]
-        ]
-
-        assert inert == [], (
-            "these suppressions match no mention in this repository — they "
-            "silence nothing and read as coverage they do not have: " + str(inert)
-        )
-
-    def test_the_sweep_would_notice_a_triple_that_matches_nothing(self) -> None:
-        """The guard's own bite, without editing the config it guards."""
-        page = REPO_ROOT / "README.md"
-        mentions = DocScanner().scan([page])
-        retired = IgnoreRule(path="README.md", fact=RETIRED_FACT, value="12")
-
-        assert [m for m in mentions if retired.matches(m)] == []
 
 
 class TestAConfigThatCannotBeReadSuppressesNothing:

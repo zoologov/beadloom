@@ -39,7 +39,6 @@ from __future__ import annotations
 import re
 import subprocess
 from datetime import date
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -77,11 +76,7 @@ from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-#: The log every shared medium cites its evidence from.
-_UX_LOG = REPO_ROOT / ".claude" / "development" / "BDL-UX-Issues.md"
+    from pathlib import Path
 
 
 def _node(conn: sqlite3.Connection, ref: str, source: str, kind: str = "feature") -> None:
@@ -378,22 +373,6 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
         assert {medium.name for medium in SHARED_MEDIA} == exported
         assert len(SHARED_MEDIA) == len(exported)
 
-    def test_every_medium_cites_an_issue_that_exists_in_the_log(self) -> None:
-        """TRUE HERE IS NOT TRUE — the evidence has to resolve to a real entry."""
-        log = _UX_LOG.read_text(encoding="utf-8")
-        # `~~` marks a CLOSED entry, which is still an entry: the citation
-        # resolves to a real observation whether or not the defect is fixed.
-        # Reading only the open form made closing a cited issue delete the
-        # evidence for a medium that is still shared (`beadloom-mr2l.78`).
-        numbered = set(re.findall(r"^(\d+)\. (?:~~)?\[", log, flags=re.MULTILINE))
-        historical = set(re.findall(r"Opened #(\d+)", log))
-        known = numbered | historical
-        assert known, "the UX log yielded no entries — the fixture, not the code, is wrong"
-        for medium in SHARED_MEDIA:
-            cited = re.findall(r"#(\d+)", medium.evidence)
-            assert cited, f"{medium.name} cites no issue"
-            for number in cited:
-                assert number in known, f"{medium.name} cites #{number}, absent from the log"
 
     def test_a_serialised_neighbour_does_not_silence_a_wave_that_holds_two(
         self, conn: sqlite3.Connection

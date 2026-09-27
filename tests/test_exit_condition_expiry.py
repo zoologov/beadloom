@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -49,7 +48,6 @@ from beadloom.graph.rule_engine import (
     ImportExemption,
     evaluate_import_boundary_rules,
     exit_condition_deadline,
-    load_rules,
     suppressed_crossings,
 )
 from beadloom.infrastructure.db import create_schema, open_db
@@ -57,6 +55,7 @@ from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from beadloom.graph.rules import Violation
 
@@ -558,20 +557,3 @@ class TestAGuardExclusionSharesTheGrammar:
 # ---------------------------------------------------------------------------
 
 
-class TestBeadloomsOwnExemptions:
-    """The suite reddens the day one of this project's own baselines outlives its date."""
-
-    def test_no_shipped_exemption_has_expired(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        rules = load_rules(root / ".beadloom" / "_graph" / "rules.yml")
-
-        expired = [
-            (rule.name, exemption.until)
-            for rule in rules
-            if isinstance(rule, ImportBoundaryRule)
-            for exemption in rule.exempt
-            if (deadline := exit_condition_deadline(exemption.until)) is not None
-            and deadline < date.today()
-        ]
-
-        assert expired == [], f"exit conditions that have passed: {expired}"

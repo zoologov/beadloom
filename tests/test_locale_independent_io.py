@@ -122,10 +122,10 @@ _LOCALE_BY_DESIGN: dict[tuple[str, int], str] = {}
 #: is reported as an UNUSED noqa, because ``PLW1514`` does not look at
 #: ``subprocess`` at all.
 _TESTS_LOCALE_BY_DESIGN: dict[tuple[str, int], str] = {
-    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 907): (
+    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 877): (
         "control: an unstated reader must take the double's codec and mangle"
     ),
-    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 926): (
+    ("tests/test_the_gate_checks_the_surface_the_project_declared.py", 896): (
         "control: an unstated reader must be refused by an ASCII double"
     ),
 }

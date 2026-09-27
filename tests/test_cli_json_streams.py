@@ -47,8 +47,6 @@ from beadloom.services.cli import main
 if TYPE_CHECKING:
     from click.testing import Result
 
-#: This repository's root — the live graph the self-lint tests read.
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The directory whose ``test_*.py`` the harness rule is read out of.
 TESTS_ROOT = Path(__file__).resolve().parent
@@ -179,20 +177,6 @@ class TestTheWarningNeverReachesTheMachineStream:
         """
         assert warning_lint.output != warning_lint.stdout
         assert warning_lint.stderr in warning_lint.output
-
-    def test_this_repository_lints_to_a_parsable_document_on_stdout(
-        self, self_check_snapshot: Path
-    ) -> None:
-        """The live-repo self-lint, which is where the fragility was measured."""
-        result = CliRunner().invoke(
-            main,
-            ["lint", "--format", "json", "--project", str(self_check_snapshot), "--no-reindex"],
-        )
-
-        payload = json.loads(result.stdout)
-
-        assert "violations" in payload
-        assert "summary" in payload
 
 
 # --------------------------------------------------------------------------- #

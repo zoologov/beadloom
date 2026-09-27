@@ -480,20 +480,6 @@ def test_generated_internal_links_resolve(
     assert not _dead_links(out), f"dead internal links: {_dead_links(out)}"
 
 
-def test_committed_site_tree_has_no_dead_links() -> None:
-    """The committed dogfood ``site/`` tree (if present) has no dead links.
-
-    Validates the real generated output `npm run docs:build` consumes, so the
-    VitePress dead-link regression is caught without needing node. Skipped on a
-    checkout where the dogfood site has not been generated.
-    """
-    repo_root = Path(__file__).resolve().parents[1]
-    site = repo_root / "site"
-    if not (site / "index.md").exists():
-        pytest.skip("dogfood site/ not generated in this checkout")
-    assert not _dead_links(site), f"dead internal links in committed site/: {_dead_links(site)}"
-
-
 # ---------------------------------------------------------------------------
 # Determinism + no source mutation
 # ---------------------------------------------------------------------------

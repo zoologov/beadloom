@@ -33,15 +33,22 @@ GITHUB_FILES = (GH_WORKFLOW, GH_TEMPLATE)
 GITLAB_FILES = (GL_PIPELINE, GL_TEMPLATE)
 ALL_FILES = GITHUB_FILES + GITLAB_FILES
 
+#: The rows the parametrized tests below run over. The live file's row is a
+#: self-check of this repository and carries the ``self_check`` marker; its twin
+#: row is the product test of the shipped template (BDL-074 A3).
+GITHUB_ROWS = (pytest.param(GH_WORKFLOW, marks=pytest.mark.self_check), GH_TEMPLATE)
+GITLAB_ROWS = (pytest.param(GL_PIPELINE, marks=pytest.mark.self_check), GL_TEMPLATE)
+ALL_ROWS = GITHUB_ROWS + GITLAB_ROWS
 
-@pytest.mark.parametrize("path", ALL_FILES, ids=lambda p: p.name)
+
+@pytest.mark.parametrize("path", ALL_ROWS, ids=lambda p: p.name)
 def test_ci_config_is_valid_yaml(path: Path) -> None:
     """Every CI artifact parses (no tabs / indentation breakage)."""
     loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_triggers_on_pull_request_not_push_main(path: Path) -> None:
     """on: pull_request -> main/master; push:main removed; dispatch kept."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -55,7 +62,7 @@ def test_github_triggers_on_pull_request_not_push_main(path: Path) -> None:
     assert "push" not in on
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_has_cancel_in_progress_concurrency(path: Path) -> None:
     """G8: cancel-in-progress, keyed per PR."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -64,7 +71,7 @@ def test_github_has_cancel_in_progress_concurrency(path: Path) -> None:
     assert "pull_request.number" in concurrency["group"]
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_uses_merge_base_since_and_pr_branch_target(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "git merge-base" in text
@@ -76,14 +83,14 @@ def test_github_uses_merge_base_since_and_pr_branch_target(path: Path) -> None:
     assert "pull_request.html_url" in text
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_checks_out_pr_head_branch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "pull_request.head.ref" in text
     assert "fetch-depth: 0" in text
 
 
-@pytest.mark.parametrize("path", GITLAB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITLAB_ROWS, ids=lambda p: p.name)
 def test_gitlab_triggers_on_merge_request_event(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in text
@@ -91,7 +98,7 @@ def test_gitlab_triggers_on_merge_request_event(path: Path) -> None:
     assert '$CI_COMMIT_BRANCH == "main"' not in text
 
 
-@pytest.mark.parametrize("path", GITLAB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITLAB_ROWS, ids=lambda p: p.name)
 def test_gitlab_uses_merge_base_since_and_pr_branch_target(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "git merge-base" in text
@@ -102,7 +109,7 @@ def test_gitlab_uses_merge_base_since_and_pr_branch_target(path: Path) -> None:
     assert "CI_MERGE_REQUEST_PROJECT_URL" in text
 
 
-@pytest.mark.parametrize("path", ALL_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", ALL_ROWS, ids=lambda p: p.name)
 def test_loop_guard_present(path: Path) -> None:
     """Belt-and-suspenders loop-guard: author + [skip ai-techwriter] subject."""
     text = path.read_text(encoding="utf-8")
@@ -132,7 +139,7 @@ def _inline_shell_blocks(doc: object) -> list[str]:
     return blocks
 
 
-@pytest.mark.parametrize("path", ALL_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", ALL_ROWS, ids=lambda p: p.name)
 def test_inline_shell_parses_with_bash_n(path: Path) -> None:
     """Every inline run:/script: block is syntactically valid bash."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -152,16 +159,6 @@ def test_inline_shell_parses_with_bash_n(path: Path) -> None:
         assert result.returncode == 0, f"{path.name}:\n{block}\n{result.stderr}"
 
 
-def test_live_and_template_github_share_trigger_model() -> None:
-    """The vendored GitHub template mirrors the live workflow's trigger model."""
-    live = yaml.safe_load(GH_WORKFLOW.read_text(encoding="utf-8"))
-    tmpl = yaml.safe_load(GH_TEMPLATE.read_text(encoding="utf-8"))
-    live_on = live.get("on", live.get(True))
-    tmpl_on = tmpl.get("on", tmpl.get(True))
-    assert "pull_request" in live_on and "pull_request" in tmpl_on
-    assert "push" not in live_on and "push" not in tmpl_on
-
-
 # --------------------------------------------------------------------------- #
 # BDL-049 hardening: AI_TW_SKIP gating + structural loop-guard guarantees
 # --------------------------------------------------------------------------- #
@@ -177,7 +174,7 @@ def _gh_steps(path: Path) -> list[dict[str, object]]:
     return [s for s in steps if isinstance(s, dict)]
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_loop_guard_sets_skip_flag_before_work(path: Path) -> None:
     """The loop-guard runs as an EARLY step and sets AI_TW_SKIP in the env file.
 
@@ -206,7 +203,7 @@ def test_github_loop_guard_sets_skip_flag_before_work(path: Path) -> None:
     assert guard_idx < harness_idx
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_every_post_guard_step_is_gated_on_skip(path: Path) -> None:
     """Every step that does work (after the guard) is gated by AI_TW_SKIP != '1'.
 
@@ -228,7 +225,7 @@ def test_github_every_post_guard_step_is_gated_on_skip(path: Path) -> None:
         assert "AI_TW_SKIP" in cond, f"step {step.get('name')} not gated on AI_TW_SKIP"
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_pr_path_and_dispatch_path_are_mutually_exclusive(path: Path) -> None:
     """The pr-branch harness step is PR-only; the branch-pr step is dispatch-only.
 
@@ -249,22 +246,14 @@ def test_github_pr_path_and_dispatch_path_are_mutually_exclusive(path: Path) -> 
     assert "workflow_dispatch" in str(dispatch_step.get("if"))
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_dispatch_path_keeps_branch_pr_target(path: Path) -> None:
     """workflow_dispatch (no PR context) keeps the original branch-PR publish."""
     text = path.read_text(encoding="utf-8")
     assert "--target branch-pr" in text
 
 
-def test_live_and_template_gitlab_share_trigger_model() -> None:
-    """The vendored GitLab template mirrors the live pipeline's MR trigger model."""
-    for path in GITLAB_FILES:
-        text = path.read_text(encoding="utf-8")
-        assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in text
-        assert "--target pr-branch" in text
-
-
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_grants_contents_and_pull_request_write(path: Path) -> None:
     """The pr-branch publisher needs contents:write (push) + pull-requests:write
     (comment) — both must be granted."""
@@ -285,7 +274,7 @@ PAT_FALLBACK_CHECKOUT = "secrets.AI_TW_PAT || github.token"
 PAT_FALLBACK_GH_TOKEN = "secrets.AI_TW_PAT || secrets.GITHUB_TOKEN"  # noqa: S105 - GH expression, not a secret
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_checkout_uses_pat_with_token_fallback(path: Path) -> None:
     """``actions/checkout`` persists the credential ``git push`` uses; it must be
     the PAT (so the agent's push triggers ``beadloom-gate``) with a fallback to
@@ -300,7 +289,7 @@ def test_github_checkout_uses_pat_with_token_fallback(path: Path) -> None:
     assert PAT_FALLBACK_CHECKOUT in token, token
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_pr_path_gh_token_uses_pat_with_token_fallback(path: Path) -> None:
     """The pr-branch harness step's ``GH_TOKEN`` must use the PAT (so ``gh`` push
     + ``gh pr comment`` authenticate as the PAT) with a fallback to GITHUB_TOKEN."""
@@ -316,7 +305,7 @@ def test_github_pr_path_gh_token_uses_pat_with_token_fallback(path: Path) -> Non
     assert PAT_FALLBACK_GH_TOKEN in gh_token, gh_token
 
 
-@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITHUB_ROWS, ids=lambda p: p.name)
 def test_github_dispatch_path_does_not_use_pat(path: Path) -> None:
     """The workflow_dispatch (branch-pr) path has no PR to re-gate, so it stays
     on the default token — the PAT wiring is PR-path-only."""
@@ -333,7 +322,7 @@ def test_github_dispatch_path_does_not_use_pat(path: Path) -> None:
     assert "secrets.GITHUB_TOKEN" in gh_token
 
 
-@pytest.mark.parametrize("path", GITLAB_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GITLAB_ROWS, ids=lambda p: p.name)
 def test_gitlab_pr_path_uses_pat_with_job_token_fallback(path: Path) -> None:
     """GitLab mirror: CI_JOB_TOKEN pushes also do not trigger pipelines, so the
     MR pr-branch push/comment authenticates with an access-token CI/CD variable
@@ -342,15 +331,6 @@ def test_gitlab_pr_path_uses_pat_with_job_token_fallback(path: Path) -> None:
     assert "AI_TW_PAT" in text
     # The fallback to the job token keeps PAT-less projects working.
     assert "CI_JOB_TOKEN" in text
-
-
-def test_live_github_pat_wiring_mirrored_in_template() -> None:
-    """The vendored GitHub template mirrors the live PAT||token wiring so a
-    scaffolded repo auto-gates the agent's commit the same way."""
-    for path in GITHUB_FILES:
-        text = path.read_text(encoding="utf-8")
-        assert PAT_FALLBACK_CHECKOUT in text
-        assert PAT_FALLBACK_GH_TOKEN in text
 
 
 def test_template_github_documents_pat_secret_for_adopters() -> None:

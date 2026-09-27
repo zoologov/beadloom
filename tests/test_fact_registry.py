@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,9 +12,7 @@ from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
-
-#: This repository's root — the one project whose own surfaces the audit reports.
-BEADLOOM_ROOT = Path(__file__).resolve().parents[1]
+    from pathlib import Path
 
 
 @pytest.fixture()
@@ -299,16 +296,6 @@ class TestMcpToolCount:
         assert "mcp_tool_count" not in fact_set.facts
         assert "mcp_tool_count" in fact_set.not_applicable
 
-    def test_beadloom_itself_still_reports_the_catalog_length(
-        self, conn: sqlite3.Connection
-    ) -> None:
-        from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
-
-        fact_set = FactRegistry().collect_set(BEADLOOM_ROOT, conn)
-        fact = fact_set.facts["mcp_tool_count"]
-        assert fact.value == len(MCP_TOOL_CATALOG)
-        assert fact.source == "MCP tool catalog"
-
 
 class TestCliCommandCount:
     """The CLI command count, likewise, describes the package that provides it."""
@@ -319,18 +306,6 @@ class TestCliCommandCount:
         fact_set = FactRegistry().collect_set(project, conn)
         assert "cli_command_count" not in fact_set.facts
         assert "cli_command_count" in fact_set.not_applicable
-
-    def test_beadloom_itself_still_reports_the_registered_commands(
-        self, conn: sqlite3.Connection
-    ) -> None:
-        import beadloom.services.cli  # noqa: F401  — registers the CLI surface
-        from beadloom.infrastructure.surface_registry import get_cli_group
-
-        group = get_cli_group()
-        assert group is not None, "the CLI surface must be live for this test"
-        fact = FactRegistry().collect_set(BEADLOOM_ROOT, conn).facts["cli_command_count"]
-        assert fact.value == FactRegistry._count_click_commands(group)
-        assert fact.source == "CLI"
 
 
 class TestExtraFacts:

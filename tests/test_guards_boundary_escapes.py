@@ -80,7 +80,6 @@ _SRC = _ROOT / "src" / "beadloom"
 _COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
 _BOUNDARY_MODULE = _SRC / "application" / "guards" / "invocation.py"
 _DISCOVERY_MODULE = _SRC / "application" / "guards" / "project_root.py"
-_SPEC = _ROOT / "docs" / "domains" / "application" / "features" / "flow-guards" / "SPEC.md"
 
 _BLOCKING = "guards:\n  bead-claimed:\n    strictness: { default: block }\n"
 
@@ -700,13 +699,6 @@ class TestADeclaredProjectMustBeAProject:
         assert "by ANY route, **including through ``--project``**" in prose
         assert "it does not create one where it was pointed" in prose
 
-    def test_the_spec_names_the_marker_requirement_in_its_residual_list(self) -> None:
-        """The list ``.29`` left this out of, now carrying it."""
-        spec = _SPEC.read_text(encoding="utf-8")
-
-        assert "--project" in spec
-        assert "must carry" in spec
-
 
 # ==========================================================================
 # 4. CLOSED — the rows this round added are enumerated
@@ -769,28 +761,6 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         assert "Traceback" not in result.output
         assert len(read_firings(root)) == 1
 
-    def test_a_context_key_supplied_twice_takes_the_last_and_the_spec_says_so(
-        self, tmp_path, stub_probes
-    ) -> None:
-        """Last-wins was an unstated rule. It is stated now, and read back here."""
-        root = _project(tmp_path)
-
-        result = _cli(
-            [
-                "guard",
-                "bead-claimed",
-                "--project",
-                str(root),
-                "--json",
-                "--context",
-                "path=src/a.py",
-                "--context",
-                "path=app.py",
-            ]
-        )
-
-        assert json.loads(result.stdout)["context"]["path"] == "app.py"
-        assert "the last occurrence wins" in _SPEC.read_text(encoding="utf-8")
 
     def test_a_closed_standard_input_states_a_cause_instead_of_an_internal_repr(
         self, tmp_path

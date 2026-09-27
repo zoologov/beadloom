@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 from click.testing import CliRunner, Result
 
 from beadloom.ai_agents.ai_techwriter import cli, commands, runner, scope
@@ -28,10 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-from pathlib import Path as _Path
 
-REPO_ROOT = _Path(__file__).resolve().parents[1]
-WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
 NOW = "2026-06-10T00:00:00+00:00"
 
@@ -387,31 +383,4 @@ def test_classify_verdict_matches_cli_exit(project: Path) -> None:
 # pypi-publish.yml: the (now-inlined) test job survives + parses (BDL-050)
 # --------------------------------------------------------------------------- #
 
-PYPI = WORKFLOWS / "pypi-publish.yml"
-GITLAB_CI = REPO_ROOT / ".gitlab-ci.yml"
 
-
-def test_pypi_publish_parses_clean() -> None:
-    """pypi-publish.yml still ``yaml.safe_load``s after tests.yml was folded away."""
-    doc = yaml.safe_load(PYPI.read_text(encoding="utf-8"))
-    assert isinstance(doc, dict)
-    assert isinstance(doc["jobs"], dict)
-
-
-def test_pypi_publish_has_inlined_test_job_not_workflow_call() -> None:
-    """tests.yml was deleted, so the release pipeline must run pytest INLINE (no
-    ``uses: ./.github/workflows/tests.yml`` workflow_call that would now 404)."""
-    text = PYPI.read_text(encoding="utf-8")
-    assert "workflows/tests.yml" not in text
-    jobs = yaml.safe_load(text)["jobs"]
-    assert "tests" in jobs
-    steps = jobs["tests"]["steps"]
-    runs = "\n".join(str(s.get("run", "")) for s in steps if isinstance(s, dict))
-    assert "pytest" in runs
-
-
-def test_gitlab_ci_parses_clean() -> None:
-    """The GitLab mirror ``yaml.safe_load``s clean (no YAML-anchor breakage)."""
-    doc = yaml.safe_load(GITLAB_CI.read_text(encoding="utf-8"))
-    assert isinstance(doc, dict)
-    assert doc["stages"] == ["verify", "docs"]

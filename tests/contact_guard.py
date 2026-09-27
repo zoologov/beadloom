@@ -106,131 +106,17 @@ class AllowedContact:
         )
 
 
-#: Why each entry below may reach the live state, and what retires it. Every
-#: reason names what the test asserts on THIS repository; every exit names the
-#: bead that removes the entry, so the list only ever shrinks. A1 printed 44
-#: entries; A2 (beadloom-kixx) moved the 24 it was the exit of — 20 on this
-#: repository's graph, 4 on its tracker export — onto the self-check snapshot
-#: (``self_check_snapshot`` in tests/conftest.py), leaving 20.
-_OWN_COMMITS = (
-    "judges this repository's own commits, so it reads its git history (its index "
-    "is the self-check snapshot's since A2, and that snapshot carries the history "
-    "too); exit: A3 (beadloom-2esy) triage"
-)
-_OWN_BD_CALL_SITES = (
-    "derives this repository's own bd call sites, and the derivation also reads the "
-    "git hooks installed in this checkout; exit: A3 (beadloom-2esy) triage"
-)
-_GATE_DUPLICATE_LINT = (
-    "lints this repository, which repeats the Gate's required `lint` leg; exit: "
-    "A3 (beadloom-2esy) removes it and names the leg"
-)
-_REAL_PROBES = (
-    "measures the real index and the real bd/git probes by design, and its tmp_path "
-    "twin is the test above it; exit: A3 (beadloom-2esy) decides whether it stays"
-)
-
-_BD_CALL_SITES = "tests/test_bd_call_sites.py"
-
-#: The tests allowed to reach this repository's live state. Printed at the top of
-#: every run. Nothing is added to it without a reason that says what the test
-#: asserts on this repository and which bead retires the entry.
-ALLOWED_CONTACTS: tuple[AllowedContact, ...] = (
-    # -- this repository's own commits ---------------------------------------
-    AllowedContact(
-        "tests/test_a_commit_is_judged_against_the_declared_axes.py"
-        "::TestTheCheckOnThisRepositorysOwnCommits",
-        _OWN_COMMITS,
-    ),
-    AllowedContact(
-        "tests/test_a_commit_is_judged_against_the_declared_axes.py"
-        "::TestTheRowsTheseCasesDependOn",
-        _OWN_COMMITS,
-    ),
-    AllowedContact(
-        "tests/test_the_commit_gate_states_what_it_compared.py"
-        "::TestTheExemptSetOnThisRepositorysOwnCommits",
-        _OWN_COMMITS,
-    ),
-    AllowedContact(
-        "tests/test_the_gate_checks_the_surface_the_project_declared.py"
-        "::TestThePopulationTheDecisionWasTakenOver",
-        _OWN_COMMITS,
-    ),
-    AllowedContact(
-        "tests/test_impact_derives_the_seed_it_answers_from.py"
-        "::TestTheAcceptanceTargetsAtTheBdl067Tree",
-        _OWN_COMMITS,
-    ),
-    AllowedContact(
-        "tests/test_the_seed_decides_what_impact_reports.py::TestTheMeasurementAtTheBdl067Tree",
-        _OWN_COMMITS,
-    ),
-    # -- this repository's own bd call sites, hooks included -----------------
-    AllowedContact(
-        f"{_BD_CALL_SITES}::test_no_python_call_site_of_ours_is_left_unsettled",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        f"{_BD_CALL_SITES}::test_every_python_list_call_names_the_population_it_asked_for",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        f"{_BD_CALL_SITES}::test_the_hook_channel_reaches_the_file_no_python_sweep_can_see",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        f"{_BD_CALL_SITES}"
-        "::test_the_most_relied_upon_assumption_in_this_flow_is_named_at_its_sites",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        f"{_BD_CALL_SITES}::test_the_derivation_names_what_it_did_not_reach",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_bd_answers.py"
-        "::test_no_artifact_of_ours_instructs_the_suggestion_without_its_confirmation",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_bd_answers.py"
-        "::test_the_project_asks_bd_ready_for_its_whole_answer_wherever_it_asks_at_all",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_bead_creation.py::TestTheAnswerIsReadFromBdRatherThanScraped"
-        "::test_the_creation_site_is_visible_to_the_derivation_that_judges_it",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_bead_creation.py::TestThisProjectSOwnPopulation"
-        "::test_no_python_call_site_of_ours_authors_a_bead_id",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_s5_the_instruments_agree.py"
-        "::test_the_two_command_families_the_coordinator_runs_are_still_unjudged",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_s5_the_instruments_agree.py"
-        "::test_no_instruction_of_ours_leaves_a_creation_or_wiring_assumption_unsettled",
-        _OWN_BD_CALL_SITES,
-    ),
-    AllowedContact(
-        "tests/test_s5_the_instruments_agree.py"
-        "::test_every_call_to_the_seam_in_this_package_is_visible_to_the_derivation",
-        _OWN_BD_CALL_SITES,
-    ),
-    # -- a Gate duplicate, and a probe of the real thing ---------------------
-    AllowedContact("tests/test_integration_v1.py::TestSelfLint", _GATE_DUPLICATE_LINT),
-    AllowedContact(
-        "tests/test_guards_parity.py::TestGuardsAreReadOnly"
-        "::test_the_live_repo_index_is_byte_identical_after_a_real_evaluation",
-        _REAL_PROBES,
-    ),
-)
+#: The tests allowed to reach this repository's live state: none. Printed at the
+#: top of every run. A1 printed 44 entries; A2 (beadloom-kixx) moved the 24 it
+#: was the exit of onto the self-check snapshot (``self_check_snapshot`` in
+#: tests/conftest.py); A3 (beadloom-2esy) moved the last 20 there too — the
+#: history readers read the snapshot's clone, the bd call-site derivations read
+#: the snapshot's tree (a clone carries no installed hooks, so the hook channel
+#: is held by a tmp-project test in tests/test_bd_call_sites.py), and the
+#: index-byte probe hashes the snapshot's index. An entry added here needs a
+#: reason naming what the test asserts on THIS repository and the bead that
+#: retires it, and tests/test_contact_guard.py fails until review accepts it.
+ALLOWED_CONTACTS: tuple[AllowedContact, ...] = ()
 
 
 def _normalise(raw: str, base: str | None = None) -> str:

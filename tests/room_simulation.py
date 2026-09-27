@@ -9,9 +9,10 @@ the same fabricated room the product sees. Patching it later leaves the tests an
 the product standing in different rooms, which produces failures that are
 artefacts of the simulation rather than findings.
 
-Used by `tests/test_room_dependent_assertions.py`, which runs the room suite in a
-room no local run can enter. The room is read from BEADLOOM_SIMULATED_ROOM as
-`<os>/<python>` so the caller names it, rather than this file carrying a list.
+Used by `tests/self_check/process/test_room_dependent_assertions.py`, which runs
+the room suite in a room no local run can enter. The room is read from
+BEADLOOM_SIMULATED_ROOM as `<os>/<python>` so the caller names it, rather than
+this file carrying a list.
 
 THE LOCALE IS CARRIED THROUGH, NEVER FABRICATED, and the grammar above has no
 third field on purpose (BDL-068 S6, BDL-UX #248). A developer machine cannot be

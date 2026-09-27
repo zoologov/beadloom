@@ -92,10 +92,10 @@ WHERE_A_KEY_OUTSIDE_THE_LATIN_ALPHABET_IS_STILL_READ = (
     "that can never fail: every UTF-8 filesystem runs it - macOS unconditionally, "
     "and the `tests`, `gate` and `site-build` legs of every pull request - and it "
     "steps aside only on the two `tests-locale` legs. That is the inverse of the "
-    "guard in tests/test_ci_locale_dimension.py, which runs on every CI leg and "
-    "nowhere else; this one runs everywhere except two of them. The reason is "
-    "spelled in ASCII on purpose: it is printed by `-ra` on precisely the legs "
-    "whose stdout cannot encode the name the case is about."
+    "guard in tests/self_check/config/test_ci_locale_dimension.py, which runs on "
+    "every CI leg and nowhere else; this one runs everywhere except two of them. "
+    "The reason is spelled in ASCII on purpose: it is printed by `-ra` on "
+    "precisely the legs whose stdout cannot encode the name the case is about."
 )
 
 

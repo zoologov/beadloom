@@ -399,22 +399,6 @@ class TestTheHonestyNoteAndTheCodeAgree:
     with the code, in every place that carries it.
     """
 
-    def test_the_spec_states_the_colon_and_the_opening_line(self) -> None:
-        from pathlib import Path as _Path
-
-        spec = (
-            _Path(__file__).resolve().parents[1]
-            / "docs"
-            / "domains"
-            / "application"
-            / "features"
-            / "review-brief"
-            / "SPEC.md"
-        ).read_text(encoding="utf-8")
-        recognised = spec.split("### How a verdict is recognised", 1)[1]
-        recognised = recognised.split("###", 1)[0]
-        assert "colon" in recognised
-        assert "first" in recognised
 
     def test_every_string_the_docstring_names_as_prevented_is_actually_prevented(
         self,

@@ -43,7 +43,6 @@ from beadloom.doc_sync.work_item_type import (
 )
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
-    composed_command,
     scaffold,
 )
 from beadloom.onboarding.composer import SHARED_ROLE_FRAGMENTS, compose
@@ -68,19 +67,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _FLOW_YML = "tools: [claude]\narchitecture: ddd\nstack: [python]\n"
-
-_REPO_ROOT_MARKER = "pyproject.toml"
-
-
-def _repo_root() -> Path:
-    from pathlib import Path as _Path
-
-    here = _Path(__file__).resolve().parent
-    for candidate in (here, *here.parents):
-        if (candidate / _REPO_ROOT_MARKER).is_file():
-            return candidate
-    msg = "the repository root was not found above this test file"
-    raise AssertionError(msg)
 
 
 def _adopter(tmp_path: Path) -> Path:
@@ -546,40 +532,4 @@ class TestTheReportCarriesTheTwoChecksAndTheirPopulation:
         assert report.documents == 3
         assert ROUTED_WITHOUT_AXES in {f.check for f in report.findings}
 
-    def test_this_repository_enters_the_population(self) -> None:
-        """A check that reads nothing here would be verified nowhere."""
-        # Arrange
-        from beadloom.application.doc_shape import planning_documents
 
-        root = _repo_root()
-
-        # Act
-        report = planning_report(planning_documents(root), project_root=root)
-
-        # Assert
-        assert report.applicable[ROUTED_WITHOUT_AXES] > 0
-        for finding in report.findings:
-            if finding.check in {ROUTED_WITHOUT_AXES, ROUTE_NOT_SUPPORTED_BY_THE_AXES}:
-                assert (root / finding.path).is_file(), finding.path
-
-
-class TestTheLiveFlowCarriesTheRole:
-    """This repository is the reference implementation; its own flow must hold."""
-
-    def test_the_live_adapter_equals_its_composition(self) -> None:
-        root = _repo_root()
-        live = (root / ".claude" / "agents" / f"{AXES_ROLE}.md").read_text(
-            encoding="utf-8"
-        )
-        assert live == compose_role(
-            AXES_ROLE, architecture="ddd", stack=("python",), project_root=root
-        )
-
-    def test_the_live_command_equals_its_composition(self) -> None:
-        root = _repo_root()
-        live = (root / ".claude" / "commands" / "task-init.md").read_text(
-            encoding="utf-8"
-        )
-        assert live == composed_command(
-            "task-init", load_flow_config(root), root
-        )
