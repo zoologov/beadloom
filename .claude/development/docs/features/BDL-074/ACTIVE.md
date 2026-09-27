@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 4 — `beadloom-51yx` (B1, tests/support and one repository-root helper) and `beadloom-vr0b` (D1, mutation per change and the weekly sample), in parallel. PR 1 is open for phase A.
-**Goal:** test helpers live in one place and every test finds the repository root one way; mutation runs per change on pull requests and on a weekly sample, replacing the retired whole-scope nightly.
-**Done when:** no test finds the root by counting parents and no test module imports another test module; the per-change job selects mutants by the binding and the weekly sample runs within the runner's limit.
+**Bead:** Wave 5 — `beadloom-1bd6` (B2, relocate the 227 clear-node files) and `beadloom-d0bp` (B3, relocate acceptance by feature node), in parallel. PR 2 opens after this wave.
+**Goal:** the test tree mirrors the code, so the binding finds the tests of a node by where they live.
+**Done when:** identical collected ids modulo path and identical results; 510 scenarios before and after; `ctx rule-engine` and the other clear nodes show bound tests; the mutation pool regenerated.
+
+**Wave 4 closed (2026-09-28):** PR #83 squash-merged as `4890f28c` (9/9 checks green; owner ruled `db`, `repository`, `mcp-server` into the axes, `f10e67de`); main merged back tree-identically as `7503f4b1`. B1 `2c2cd3d0`, `e7f2c6fb`, `7871c0eb` — `tests/support/` 50 modules; parent-counting files 106 → 0; test-module imports 105 → 1 (exempt with a reason). D1 `61f416cd` — `mutation-per-change`, weekly `mutation-sample` (150), `announce`; workflow still disabled; per-change ≈9 min locally, ≈15 projected, over the 10-minute budget until B2. Docs `e0a5983d` (15 stale → 0). Gate owner B1 on the combined tree: 11 061 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Filed outside the epic: `beadloom-xg0y` (clean-room ignores `uv.lock`).
 
 **Wave 3 closed — phase A done (2026-09-27):** C2 `0dafac5d` (the name-guessing mapper retired); docs `2b42264c` (22 stale pairs → 0); A3 `18d6690d`, `9202e70f`. Gate owner A3 on the combined tree: 10 959 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. 592 self-checks in `tests/self_check/`; allowed list 0; tracer 0 live-index contacts — `beadloom-qq6m` closed. Moved test paths are still named in comments in `.github/workflows/*.yml`, `.beadloom/flow.yml`, two `src/` docstrings and two docs; left to W (`beadloom-7u77`), recorded on `beadloom-2esy`.
 
@@ -23,7 +25,7 @@
 - [x] PRD, RFC, CONTEXT and PLAN approved (2026-09-28); kept nodes 9
 - [x] Beads created: epic `beadloom-2mj3` + 16, one plan, 20 edges confirmed against the titles; swarm valid, 11 waves
 - [x] Phase A — isolation and the self-check triage (PR 1 opened 2026-09-27)
-- [ ] Phase B — layout (PR 2)
+- [ ] Phase B — layout (PR 2); B1 done 2026-09-28
 - [ ] Phases C, D, E — binding, rules, per-change mutation, pilot, standards (PR 3)
 
 ## Results

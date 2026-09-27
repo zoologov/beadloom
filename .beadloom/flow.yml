@@ -74,7 +74,7 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-51yx, beadloom-vr0b]
+  - beads: [beadloom-1bd6, beadloom-d0bp]
     decision: parallel
-    reason: "BDL-074 wave 4. beadloom-51yx edits tests/ only - it gathers shared helpers into tests/support and gives every test one repository-root helper - which no graph node owns, hence ref_not_in_graph. beadloom-vr0b edits .github/workflows/mutation.yml, src/ (mutation-scope, cli-commands), pyproject.toml and the mutation self-checks. Ownership rule handed to both prompts: the tests/self_check/config/test_mutation_*.py files and pyproject.toml are D1's; B1 leaves them as they are and lists what they would need, and D1 lands its changes to them."
+    reason: "BDL-074 wave 5. Both beads edit tests/ only, which no graph node owns, hence ref_not_in_graph. beadloom-1bd6 moves test_*.py files from the tests/ root into tests/unit and tests/integration, and regenerates the pyproject.toml mutation pool. beadloom-d0bp moves tests/acceptance/features and tests/acceptance/steps within tests/acceptance, and updates rules.yml's scenario path. Ownership rule handed to both prompts: tests/acceptance/** is B3's; pyproject.toml and every file outside tests/acceptance are B2's; a file either needs from the other's set is listed on its bead, not edited."
     until: "2026-11-15"
