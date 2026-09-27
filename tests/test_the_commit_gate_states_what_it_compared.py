@@ -169,10 +169,10 @@ class TestTheExemptSetOnThisRepositorysOwnCommits:
     """
 
     @pytest.fixture
-    def project(self, live_repo_reindexed: Path) -> Path:
-        # Through `live_repo_reindexed` (BDL-074 A1): read as found on disk, the
-        # ownership answers depended on the last reindex, and without one it skipped.
-        return live_repo_reindexed
+    def project(self, self_check_snapshot: Path) -> Path:
+        # The self-check snapshot (BDL-074 A2): its index answers ownership, and
+        # it carries the git history, so `git diff-tree` below runs in the copy.
+        return self_check_snapshot
 
     @staticmethod
     def _verdict(project: Path, commit: str) -> ScopeVerdict:

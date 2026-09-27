@@ -71,10 +71,6 @@ _PATH_ARITHMETIC = frozenset(
 #: never see `mutants/src`. Adding one to the pool without moving it onto
 #: ``tests/package_under_test.py`` fails the sweep above it.
 SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
-    "tests/test_bead15_s3b_coverage.py": (
-        "lists site*.py under application/; excluded from the pool by name, because "
-        "it runs sync-check over the tree it is in and every mutated module is stale there"
-    ),
     "tests/test_ci_consolidated_structure.py": (
         "reads two shipped workflow templates under onboarding/templates/, which "
         "mutmut copies and does not mutate"

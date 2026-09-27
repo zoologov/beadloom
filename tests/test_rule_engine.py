@@ -2851,9 +2851,9 @@ class TestUnregisteredFeatureCandidateRealRepo:
     """
 
     def test_remodeled_onboarding_modules_no_longer_candidates(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
-        # The live index is reached through `live_repo_reindexed` (BDL-074 A1): read
+        # The self-check snapshot's index, never the live one (BDL-074 A1, A2): read
         # as it happened to be on disk, the answer depended on the last reindex.
         from beadloom.graph.rule_engine import (
             UnregisteredFeatureCandidateRule,
@@ -2861,7 +2861,7 @@ class TestUnregisteredFeatureCandidateRealRepo:
         )
         from beadloom.infrastructure.db import open_db
 
-        conn = open_db(live_repo_reindexed / ".beadloom" / "beadloom.db")
+        conn = open_db(self_check_snapshot / ".beadloom" / "beadloom.db")
         try:
             rules = [
                 UnregisteredFeatureCandidateRule(

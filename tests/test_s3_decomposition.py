@@ -41,8 +41,8 @@ class TestLintRecalibrationGuard:
     def _live_findings(self, repo_root: Path) -> list[dict[str, object]]:
         """Return the live repo's lint findings as parsed JSON.
 
-        Uses ``--no-reindex`` against the session ``live_repo_reindexed`` fixture
-        so the shared on-disk DB is NOT re-mutated (keeping order-independence
+        Uses ``--no-reindex`` against the session ``self_check_snapshot`` fixture
+        so the snapshot's index is NOT re-mutated (keeping order-independence
         under pytest-randomly, per the S1 lesson in conftest).
         """
         runner = CliRunner()
@@ -59,7 +59,7 @@ class TestLintRecalibrationGuard:
         return violations
 
     def test_live_repo_has_no_violation_outside_the_declared_scenario_debt(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The live repo lints clean apart from two findings it deliberately opted into.
 
@@ -79,7 +79,7 @@ class TestLintRecalibrationGuard:
         this epic exists to remove, so the debt is asserted in BOTH directions
         instead: nothing else may fire, and each of the two must still fire.
         """
-        findings = self._live_findings(live_repo_reindexed)
+        findings = self._live_findings(self_check_snapshot)
         other = [
             f
             for f in findings
@@ -89,7 +89,7 @@ class TestLintRecalibrationGuard:
         assert other == [], other
 
     def test_the_layer_rules_population_is_reported_and_blocks_nothing(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The other direction for the layer population: silence here is a regression.
 
@@ -98,14 +98,14 @@ class TestLintRecalibrationGuard:
         left to be inferred from a green line. A run that stopped stating it
         would read exactly like a run that had nothing to state.
         """
-        findings = self._live_findings(live_repo_reindexed)
+        findings = self._live_findings(self_check_snapshot)
         population = [f for f in findings if f.get("rule_type") == LAYER_POPULATION_RULE_TYPE]
         assert len(population) == 1, population
         assert population[0]["severity"] == "warn"
         assert population[0]["rule_name"] == "architecture-layers"
 
     def test_the_scenario_debt_is_reported_and_blocks_nothing(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The other direction: a rule that went silent here would be a regression.
 
@@ -113,13 +113,13 @@ class TestLintRecalibrationGuard:
         not) or that the rule stopped firing (which is what ``.48`` measured on
         four rule types at once). Either way it is a finding, not a pass.
         """
-        findings = self._live_findings(live_repo_reindexed)
+        findings = self._live_findings(self_check_snapshot)
         scenario = [f for f in findings if f.get("rule_name") == "scenario-coverage"]
         assert scenario, "scenario-coverage reported nothing — it is inert or mis-scoped"
         assert {f["severity"] for f in scenario} == {"warn"}
 
     def test_no_domain_size_limit_warning(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """No ``domain-size-limit`` finding — the 280 recalibration holds.
 
@@ -129,20 +129,20 @@ class TestLintRecalibrationGuard:
         regression (a domain crossing 280, or a botched recalibration revert)
         fails HERE rather than slipping past the green exit code.
         """
-        findings = self._live_findings(live_repo_reindexed)
+        findings = self._live_findings(self_check_snapshot)
         size_findings = [
             f for f in findings if f.get("rule_name") == "domain-size-limit"
         ]
         assert size_findings == [], size_findings
 
     def test_lint_strict_exit_zero_on_live_repo(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """``lint --strict`` exits 0 — no error-severity boundary violations."""
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["lint", "--strict", "--project", str(live_repo_reindexed), "--no-reindex"],
+            ["lint", "--strict", "--project", str(self_check_snapshot), "--no-reindex"],
         )
         assert result.exit_code == 0, result.output
 

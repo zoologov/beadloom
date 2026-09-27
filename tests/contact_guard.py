@@ -52,12 +52,13 @@ from __future__ import annotations
 import os
 import shlex
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
     from pathlib import Path
 
 LIVE_INDEX = "live index"
@@ -107,19 +108,14 @@ class AllowedContact:
 
 #: Why each entry below may reach the live state, and what retires it. Every
 #: reason names what the test asserts on THIS repository; every exit names the
-#: bead that removes the entry, so the list only ever shrinks.
-_LIVE_GRAPH = (
-    "asserts on this repository's own graph, through `live_repo_reindexed`; exit: "
-    "A2 (beadloom-kixx) moves it onto the self-check snapshot"
-)
+#: bead that removes the entry, so the list only ever shrinks. A1 printed 44
+#: entries; A2 (beadloom-kixx) moved the 24 it was the exit of — 20 on this
+#: repository's graph, 4 on its tracker export — onto the self-check snapshot
+#: (``self_check_snapshot`` in tests/conftest.py), leaving 20.
 _OWN_COMMITS = (
-    "judges this repository's own commits, so it reads its git history (and its "
-    "index, through `live_repo_reindexed`); exit: A3 (beadloom-2esy) triage, since "
-    "a snapshot of the tracked files carries no history"
-)
-_OWN_TRACKER = (
-    "relates this repository's work-item folders to its tracker export "
-    "`.beads/issues.jsonl`; exit: A2 (beadloom-kixx) snapshot, the export is tracked"
+    "judges this repository's own commits, so it reads its git history (its index "
+    "is the self-check snapshot's since A2, and that snapshot carries the history "
+    "too); exit: A3 (beadloom-2esy) triage"
 )
 _OWN_BD_CALL_SITES = (
     "derives this repository's own bd call sites, and the derivation also reads the "
@@ -134,69 +130,12 @@ _REAL_PROBES = (
     "twin is the test above it; exit: A3 (beadloom-2esy) decides whether it stays"
 )
 
-_BEAD15 = "tests/test_bead15_s3b_coverage.py"
-_BEAD18 = "tests/test_bead18_s5_relation.py"
 _BD_CALL_SITES = "tests/test_bd_call_sites.py"
 
 #: The tests allowed to reach this repository's live state. Printed at the top of
 #: every run. Nothing is added to it without a reason that says what the test
 #: asserts on this repository and which bead retires the entry.
 ALLOWED_CONTACTS: tuple[AllowedContact, ...] = (
-    # -- this repository's graph, through `live_repo_reindexed` ---------------
-    AllowedContact(
-        "tests/test_a_layer_the_declaration_names_and_no_node_is_in.py::TestThisRepository",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact(f"{_BEAD15}::TestSiteGenerationCluster", _LIVE_GRAPH),
-    AllowedContact(f"{_BEAD15}::TestNewNodesResolve", _LIVE_GRAPH),
-    AllowedContact(f"{_BEAD15}::TestAnnotationNodeConsistency", _LIVE_GRAPH),
-    AllowedContact(f"{_BEAD15}::TestSyncCheckNewPairs", _LIVE_GRAPH),
-    AllowedContact(
-        f"{_BEAD15}::TestTheFreshnessSkipIsDecidedByTheBaseline"
-        "::test_every_live_pair_reports_the_baseline_the_decision_reads",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact(
-        f"{_BEAD15}::TestExemptMinimal::test_the_shim_exemption_stays_true_to_its_reason",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact(
-        "tests/test_cli_json_streams.py::TestTheWarningNeverReachesTheMachineStream"
-        "::test_this_repository_lints_to_a_parsable_document_on_stdout",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact(
-        "tests/test_graph_summary_facts.py::TestThisRepositoryIsChecked", _LIVE_GRAPH
-    ),
-    AllowedContact(
-        "tests/test_module_coverage_hardening.py::TestRealRepoCoveragePromoted", _LIVE_GRAPH
-    ),
-    AllowedContact(
-        "tests/test_module_coverage_hardening.py::TestRealRepoCoverageGuard", _LIVE_GRAPH
-    ),
-    AllowedContact(
-        "tests/test_onboarding.py::TestScannerTypedDictShapes"
-        "::test_live_repo_scan_has_typeddict_shape",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact(
-        "tests/test_rule_engine.py::TestUnregisteredFeatureCandidateRealRepo", _LIVE_GRAPH
-    ),
-    AllowedContact("tests/test_s2_move_regression.py::TestGraphResolution", _LIVE_GRAPH),
-    AllowedContact("tests/test_s3_decomposition.py::TestLintRecalibrationGuard", _LIVE_GRAPH),
-    AllowedContact(
-        "tests/test_s4_the_instruments_agree.py::TestOneApprovalIsReadOnce"
-        "::test_a_resolved_approval_is_named_identically_by_both",
-        _LIVE_GRAPH,
-    ),
-    AllowedContact("tests/test_the_layer_rule_states_the_population_it_judged.py", _LIVE_GRAPH),
-    AllowedContact(
-        "tests/test_the_rule_decides_on_the_derived_layer.py::TestOnThisRepository", _LIVE_GRAPH
-    ),
-    AllowedContact("tests/test_the_same_layer_split_is_recomputed.py", _LIVE_GRAPH),
-    AllowedContact(
-        "tests/test_the_view_flags_what_the_rule_finds.py::TestOnThisRepository", _LIVE_GRAPH
-    ),
     # -- this repository's own commits ---------------------------------------
     AllowedContact(
         "tests/test_a_commit_is_judged_against_the_declared_axes.py"
@@ -226,22 +165,6 @@ ALLOWED_CONTACTS: tuple[AllowedContact, ...] = (
     AllowedContact(
         "tests/test_the_seed_decides_what_impact_reports.py::TestTheMeasurementAtTheBdl067Tree",
         _OWN_COMMITS,
-    ),
-    # -- this repository's tracker export ------------------------------------
-    AllowedContact(f"{_BEAD18}::TestTheDenominatorsAreRecomputable", _OWN_TRACKER),
-    AllowedContact(
-        f"{_BEAD18}::TestADirectoryThatHoldsIntentReachesTheDenominator"
-        "::test_every_directory_holding_a_to_be_document_is_counted_here",
-        _OWN_TRACKER,
-    ),
-    AllowedContact(
-        f"{_BEAD18}::TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads"
-        "::test_this_repository_names_the_epics_its_export_forgot",
-        _OWN_TRACKER,
-    ),
-    AllowedContact(
-        f"{_BEAD18}::TestAnExcusedPairSaysSo::test_the_shipped_layout_excuses_no_pair_at_all",
-        _OWN_TRACKER,
     ),
     # -- this repository's own bd call sites, hooks included -----------------
     AllowedContact(
@@ -375,6 +298,7 @@ class ContactGuard:
         #: Classification failures, reported rather than raised (see :meth:`observe`).
         self.errors: list[str] = []
         self._observing = False
+        self._suspended = False
 
     # -- classification -----------------------------------------------------
 
@@ -451,7 +375,7 @@ class ContactGuard:
 
     def observe(self, event: str, args: tuple[object, ...]) -> None:
         """The audit hook's body: record a contact the event makes, if it makes one."""
-        if event not in _OBSERVED_EVENTS or self._observing:
+        if event not in _OBSERVED_EVENTS or self._observing or self._suspended:
             return
         self._observing = True
         try:
@@ -493,6 +417,22 @@ class ContactGuard:
         contact = Contact(kind=found[0], detail=found[1], during=during)
         if contact not in self._contacts:
             self._contacts.append(contact)
+
+    @contextmanager
+    def suspended(self) -> Iterator[None]:
+        """Record nothing for the duration — for the one sanctioned reader of the live tree.
+
+        The self-check snapshot (tests/self_check_snapshot.py) copies the working
+        tree, the tracker export among it, and clones the git history: reading the
+        live tree is its whole job, done once per session, and it touches no index.
+        Nothing else suspends the guard; the conftest's terminal summary states
+        what the snapshot read.
+        """
+        previous, self._suspended = self._suspended, True
+        try:
+            yield
+        finally:
+            self._suspended = previous
 
     def take(self) -> list[Contact]:
         """Return and clear what has been recorded."""

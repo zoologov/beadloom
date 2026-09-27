@@ -58,15 +58,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 
 
-# The classes that run ``ctx``/``lint``/``sync-check --project REPO_ROOT`` against
-# the real repository request ``live_repo_reindexed``: a fresh CI checkout has no
-# graph DB (it is gitignored and the ``tests`` job does not reindex), so those
-# assertions need it built first. Until BDL-074 A1 a module-wide autouse fixture
-# did that for EVERY test here, the synthetic ones included, so each of them
-# reached the live index; they are named in tests/contact_guard.py instead.
-
-
-GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"
+# The classes that run ``ctx``/``lint``/``sync-check`` against this repository's
+# own graph take ``self_check_snapshot`` and pass it as ``--project``: a copy of
+# the working tree indexed once per session, never the live index (BDL-074 A2).
+# Until A1 a module-wide autouse fixture reindexed the LIVE index for every test
+# here, the synthetic ones included; until A2 the classes that assert on this
+# repository read it after reindexing it in place.
 
 
 # ---------------------------------------------------------------------------
@@ -113,15 +110,18 @@ def _mc_rule(
     )
 
 
-def _load_real_nodes() -> dict[str, dict[str, object]]:
-    """Load the live graph DIRECTORY's nodes into ``{ref_id: node_dict}`` (no DB).
+def _load_real_nodes(root: Path) -> dict[str, dict[str, object]]:
+    """Load *root*'s graph DIRECTORY's nodes into ``{ref_id: node_dict}`` (no DB).
+
+    *root* is the self-check snapshot, so the nodes are read from the same copy
+    whose index the caller reads (BDL-074 A2).
 
     The directory rather than one file since BDL-UX #265 split this repository's
     graph into one file per node. `each_graph_file` owns the codec and the skip
     policy, so neither is restated here.
     """
     nodes: dict[str, dict[str, object]] = {}
-    for _path, data in each_graph_file(GRAPH_DIR):
+    for _path, data in each_graph_file(root / ".beadloom" / "_graph"):
         for node in data.get("nodes") or []:
             if isinstance(node, dict) and node.get("ref_id"):
                 nodes[str(node["ref_id"])] = node
@@ -355,11 +355,10 @@ class TestDirSourceCoverageDepth:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("live_repo_reindexed")
 class TestSiteGenerationCluster:
     """The 9 application/site*.py modules are covered by the single site-generation node."""
 
-    def test_all_nine_site_modules_exist_on_disk(self) -> None:
+    def test_all_nine_site_modules_exist_on_disk(self, self_check_snapshot: Path) -> None:
         """Sanity: the expected site* cluster lives under application/.
 
         BDL-059 S4 decomposed the former ``site_dashboard.py`` into the
@@ -367,18 +366,19 @@ class TestSiteGenerationCluster:
         modules plus the ``site_dashboard/`` package directory — 9 members total,
         all covered by the single ``site-generation`` node.
         """
-        app_dir = REPO_ROOT / "src" / "beadloom" / "application"
+        app_dir = self_check_snapshot / "src" / "beadloom" / "application"
         site_files = sorted(app_dir.glob("site*.py"))
         names = {p.name for p in site_files}
         assert "site.py" in names
         assert len(site_files) == 8, names
         assert (app_dir / "site_dashboard").is_dir()
 
-    def test_no_site_module_is_flagged_by_coverage(self) -> None:
+    def test_no_site_module_is_flagged_by_coverage(self, self_check_snapshot: Path) -> None:
         """None of the 9 site*.py modules appear as a module-coverage finding (live repo)."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["lint", "--format", "json", "--project", str(REPO_ROOT), "--no-reindex"]
+            main,
+            ["lint", "--format", "json", "--project", str(self_check_snapshot), "--no-reindex"],
         )
         payload = json.loads(result.stdout)
         coverage_files = {
@@ -386,16 +386,16 @@ class TestSiteGenerationCluster:
             for v in payload["violations"]
             if v["rule_name"] == "module-coverage"
         }
-        site_files = (REPO_ROOT / "src" / "beadloom" / "application").glob("site*.py")
+        site_files = (self_check_snapshot / "src" / "beadloom" / "application").glob("site*.py")
         for path in site_files:
             rel = f"src/beadloom/application/{path.name}"
             assert rel not in coverage_files, rel
 
-    def test_site_generation_node_round_trips_reindex(self) -> None:
+    def test_site_generation_node_round_trips_reindex(self, self_check_snapshot: Path) -> None:
         """`ctx site-generation` resolves the node post-reindex (round-trip through DB)."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["ctx", "site-generation", "--project", str(REPO_ROOT), "--json"]
+            main, ["ctx", "site-generation", "--project", str(self_check_snapshot), "--json"]
         )
         assert result.exit_code == 0, result.output
         bundle = json.loads(result.stdout)
@@ -408,7 +408,6 @@ class TestSiteGenerationCluster:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("live_repo_reindexed")
 class TestNewNodesResolve:
     NEW_FEATURES = (
         "code-indexer",
@@ -437,30 +436,34 @@ class TestNewNodesResolve:
     )
 
     @pytest.mark.parametrize("ref_id", NEW_FEATURES)
-    def test_new_feature_node_ctx_resolves(self, ref_id: str) -> None:
+    def test_new_feature_node_ctx_resolves(self, ref_id: str, self_check_snapshot: Path) -> None:
         """Each new S3b feature node resolves through `ctx` to a feature bundle."""
         runner = CliRunner()
-        result = runner.invoke(main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"])
+        result = runner.invoke(
+            main, ["ctx", ref_id, "--project", str(self_check_snapshot), "--json"]
+        )
         assert result.exit_code == 0, result.output
         bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
         assert bundle["focus"]["kind"] == "feature"
 
     @pytest.mark.parametrize("ref_id", NEW_COMPONENTS)
-    def test_new_component_node_ctx_resolves(self, ref_id: str) -> None:
+    def test_new_component_node_ctx_resolves(self, ref_id: str, self_check_snapshot: Path) -> None:
         """Each new S3b component node resolves through `ctx` to a component bundle."""
         runner = CliRunner()
-        result = runner.invoke(main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"])
+        result = runner.invoke(
+            main, ["ctx", ref_id, "--project", str(self_check_snapshot), "--json"]
+        )
         assert result.exit_code == 0, result.output
         bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
         assert bundle["focus"]["kind"] == "component"
 
-    def test_component_nodes_part_of_a_parent(self) -> None:
+    def test_component_nodes_part_of_a_parent(self, self_check_snapshot: Path) -> None:
         """Every new component declares a part_of edge to a domain/service (validates)."""
         part_of_srcs = {
             str(edge["src"])
-            for _path, data in each_graph_file(GRAPH_DIR)
+            for _path, data in each_graph_file(self_check_snapshot / ".beadloom" / "_graph")
             for edge in (data.get("edges") or [])
             if isinstance(edge, dict) and edge.get("kind") == "part_of"
         }
@@ -473,7 +476,6 @@ class TestNewNodesResolve:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("live_repo_reindexed")
 class TestAnnotationNodeConsistency:
     """Annotations and nodes must agree: no dangling annotation, no unannotated source.
 
@@ -484,9 +486,9 @@ class TestAnnotationNodeConsistency:
     annotations, so this is the correct, behavior-aligned consistency check.
     """
 
-    def _annotation_values(self) -> dict[str, set[str]]:
+    def _annotation_values(self, root: Path) -> dict[str, set[str]]:
         """Read indexed feature/component annotation values from the live DB."""
-        db_path = REPO_ROOT / ".beadloom" / "beadloom.db"
+        db_path = root / ".beadloom" / "beadloom.db"
         assert db_path.is_file(), f"reindex first: {db_path} missing"
         conn = sqlite3.connect(str(db_path))
         try:
@@ -506,29 +508,31 @@ class TestAnnotationNodeConsistency:
                 components.add(str(data["component"]))
         return {"feature": features, "component": components}
 
-    def test_every_annotation_value_names_a_declared_node(self) -> None:
+    def test_every_annotation_value_names_a_declared_node(self, self_check_snapshot: Path) -> None:
         """No annotation points at a ref_id that is not a declared node (no dangling)."""
-        nodes = _load_real_nodes()
-        values = self._annotation_values()
+        nodes = _load_real_nodes(self_check_snapshot)
+        values = self._annotation_values(self_check_snapshot)
         all_annotated = values["feature"] | values["component"]
         missing = {v for v in all_annotated if v not in nodes}
         assert missing == set(), f"annotations point at non-existent nodes: {missing}"
 
-    def test_feature_annotations_match_feature_kind(self) -> None:
+    def test_feature_annotations_match_feature_kind(self, self_check_snapshot: Path) -> None:
         """A `feature=` annotation names a node of kind feature (not component/domain)."""
-        nodes = _load_real_nodes()
-        values = self._annotation_values()
+        nodes = _load_real_nodes(self_check_snapshot)
+        values = self._annotation_values(self_check_snapshot)
         for ref_id in values["feature"]:
             assert nodes[ref_id].get("kind") == "feature", ref_id
 
-    def test_component_annotations_match_component_kind(self) -> None:
+    def test_component_annotations_match_component_kind(self, self_check_snapshot: Path) -> None:
         """A `component=` annotation names a node of kind component."""
-        nodes = _load_real_nodes()
-        values = self._annotation_values()
+        nodes = _load_real_nodes(self_check_snapshot)
+        values = self._annotation_values(self_check_snapshot)
         for ref_id in values["component"]:
             assert nodes[ref_id].get("kind") == "component", ref_id
 
-    def test_file_source_nodes_have_matching_annotation_or_are_the_source(self) -> None:
+    def test_file_source_nodes_have_matching_annotation_or_are_the_source(
+        self, self_check_snapshot: Path
+    ) -> None:
         """Every new file-source node's file carries the matching annotation.
 
         For the S3b file-source feature/component nodes, the source module must
@@ -538,7 +542,7 @@ class TestAnnotationNodeConsistency:
         """
         import re
 
-        nodes = _load_real_nodes()
+        nodes = _load_real_nodes(self_check_snapshot)
         new_ids = set(TestNewNodesResolve.NEW_FEATURES) | set(TestNewNodesResolve.NEW_COMPONENTS)
         unannotated: list[str] = []
         for ref_id in new_ids:
@@ -546,7 +550,7 @@ class TestAnnotationNodeConsistency:
             source = str(node.get("source", ""))
             if not source or source.endswith("/"):
                 continue  # dir sources covered separately
-            src_path = REPO_ROOT / source
+            src_path = self_check_snapshot / source
             if not src_path.is_file():
                 unannotated.append(f"{ref_id}: source missing {source}")
                 continue
@@ -592,7 +596,7 @@ _FRESHNESS_SAMPLE = frozenset(
 
 
 @pytest.fixture(scope="module")
-def live_sync_pairs(live_repo_reindexed: Path) -> list[dict[str, object]]:
+def live_sync_pairs(self_check_snapshot: Path) -> list[dict[str, object]]:
     """Every pair ``sync-check`` reports for this checkout, read once per module.
 
     Module-scoped because the command walks 449 pairs over the real tree and
@@ -608,7 +612,7 @@ def live_sync_pairs(live_repo_reindexed: Path) -> list[dict[str, object]]:
     invalid ref, and there is no payload behind it.
     """
     result = CliRunner().invoke(
-        main, ["sync-check", "--json", "--project", str(live_repo_reindexed)]
+        main, ["sync-check", "--json", "--project", str(self_check_snapshot)]
     )
     assert result.exit_code in {0, 2}, (
         f"sync-check exited {result.exit_code}, which is neither clean (0) nor "
@@ -659,10 +663,10 @@ class TestSyncCheckNewPairs:
     """The new SPEC/DOC skeletons are tracked by sync-check and currently fresh."""
 
     def test_new_node_docs_are_tracked_pairs(
-        self, live_sync_pairs: list[dict[str, object]]
+        self, live_sync_pairs: list[dict[str, object]], self_check_snapshot: Path
     ) -> None:
         """Each new node's SPEC/DOC appears as a tracked sync-check pair."""
-        nodes = _load_real_nodes()
+        nodes = _load_real_nodes(self_check_snapshot)
         tracked_refs = {str(p["ref_id"]) for p in live_sync_pairs}
         sample = (
             "code-indexer",
@@ -849,7 +853,7 @@ class TestExemptMinimal:
             "**/graph/rule_engine.py",
         }, exempt
 
-    def test_the_shim_exemption_stays_true_to_its_reason(self, live_repo_reindexed: Path) -> None:
+    def test_the_shim_exemption_stays_true_to_its_reason(self, self_check_snapshot: Path) -> None:
         """`rule_engine.py` is exempt BECAUSE it is a pure re-export shim.
 
         The other named exemptions were argued on the seeded criterion (few
@@ -860,7 +864,7 @@ class TestExemptMinimal:
         """
         import sqlite3
 
-        conn = sqlite3.connect(live_repo_reindexed / ".beadloom" / "beadloom.db")
+        conn = sqlite3.connect(self_check_snapshot / ".beadloom" / "beadloom.db")
         try:
             count = conn.execute(
                 "SELECT count(*) FROM code_symbols WHERE file_path = ?",

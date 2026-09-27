@@ -322,6 +322,11 @@ class TestWhoIsAllowed:
             assert entry.reason.strip(), entry
             assert (_REPO_ROOT / entry.target.split("::", 1)[0]).is_file(), entry
 
+    def test_no_entry_is_left_for_the_snapshot_to_retire(self) -> None:
+        # A2 (beadloom-kixx) moved every entry it was named the exit of onto the
+        # self-check snapshot; an entry still naming it is an exemption nothing retires.
+        assert [e.target for e in ALLOWED_CONTACTS if "beadloom-kixx" in e.reason] == []
+
     def test_the_printed_list_names_every_entry_and_its_reason(self, root: Path) -> None:
         entries = (AllowedContact("tests/test_x.py::TestA", "reads the live lint"),)
         guard = ContactGuard(root, entries)
@@ -331,6 +336,37 @@ class TestWhoIsAllowed:
         assert "1 " in listing
         assert "tests/test_x.py::TestA" in listing
         assert "reads the live lint" in listing
+
+
+class TestTheSanctionedReader:
+    """The self-check snapshot reads the live tree once, and says so; nothing else may."""
+
+    def test_nothing_is_recorded_while_the_guard_is_suspended(self, root: Path) -> None:
+        guard = ContactGuard(root)
+
+        with guard.suspended():
+            guard.observe("open", (str(root / ".beads" / "issues.jsonl"), "r", 0))
+            _popen(guard, ["git", "ls-files"], cwd=str(root))
+
+        assert guard.take() == []
+
+    def test_recording_resumes_when_the_suspension_ends(self, root: Path) -> None:
+        guard = ContactGuard(root)
+
+        with guard.suspended():
+            pass
+        guard.observe("open", (str(root / ".beads" / "issues.jsonl"), "r", 0))
+
+        assert [c.kind for c in guard.take()] == ["tracker"]
+
+    def test_a_suspension_that_raised_still_ends(self, root: Path) -> None:
+        guard = ContactGuard(root)
+
+        with pytest.raises(RuntimeError), guard.suspended():
+            raise RuntimeError
+        guard.observe("open", (str(root / ".beads" / "issues.jsonl"), "r", 0))
+
+        assert [c.kind for c in guard.take()] == ["tracker"]
 
 
 class TestTheMessage:

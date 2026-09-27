@@ -522,11 +522,13 @@ _THIS_EPICS_BRANCH = "features/BDL-068"
 
 
 def _repository_root() -> Path:
-    """This checkout, or the reason it cannot answer an ownership question."""
-    root = Path(__file__).resolve().parent.parent
-    if not (root / ".beadloom" / "beadloom.db").is_file():
-        pytest.skip("no index in this checkout, so no path can be resolved to a node")
-    return root
+    """This checkout, whose git history the cases below judge.
+
+    Only its HISTORY is read here: ownership comes from the index of the
+    self-check snapshot (BDL-074 A2), so the live index is not required and not
+    read. A commit this checkout does not hold skips in :func:`_paths_of`.
+    """
+    return Path(__file__).resolve().parent.parent
 
 
 def _paths_of(root: Path, commit: str) -> list[str]:
@@ -570,7 +572,7 @@ def _verdict_over(index_root: Path, scope: DeclaredScope, commit: str) -> ScopeV
 
 
 @pytest.fixture(scope="module")
-def pinned_project(tmp_path_factory: pytest.TempPathFactory, live_repo_reindexed: Path) -> Path:
+def pinned_project(tmp_path_factory: pytest.TempPathFactory, self_check_snapshot: Path) -> Path:
     """A project root carrying the pinned table and this repository's index.
 
     The index is COPIED rather than rebuilt because these cases are about the
@@ -578,7 +580,7 @@ def pinned_project(tmp_path_factory: pytest.TempPathFactory, live_repo_reindexed
     same ones the live cases get. Nothing else of this repository is copied, so
     the only thing the pinned run reads from a document is the six rows.
     """
-    root = live_repo_reindexed  # the copied index reflects the source (BDL-074 A1)
+    root = self_check_snapshot  # the snapshot's index, never the live one (BDL-074 A2)
     project = tmp_path_factory.mktemp("pinned-axes")
     (project / ".beadloom").mkdir()
     shutil.copy2(root / ".beadloom" / "beadloom.db", project / ".beadloom" / "beadloom.db")
@@ -616,10 +618,10 @@ class TestTheCheckOnThisRepositorysOwnCommits:
     """
 
     @pytest.fixture
-    def project(self, live_repo_reindexed: Path) -> Path:
-        # Through `live_repo_reindexed` rather than whatever index is on disk: read
-        # as found, the ownership answers depended on the last reindex (BDL-074 A1).
-        return live_repo_reindexed
+    def project(self, self_check_snapshot: Path) -> Path:
+        # The snapshot's index rather than the live one: read as found, the
+        # ownership answers depended on the last reindex (BDL-074 A1, A2).
+        return self_check_snapshot
 
     @pytest.fixture
     def live_scope(self, project: Path) -> DeclaredScope:
@@ -748,7 +750,9 @@ class TestTheRowsTheseCasesDependOn:
         verdict = _verdict_over(pinned_project, pinned_scope, _A_FOREIGN_COMMIT)
         assert "`graph`" in verdict.findings[0].excerpt
 
-    def test_every_pinned_row_is_still_the_ruling_the_rfc_carries(self) -> None:
+    def test_every_pinned_row_is_still_the_ruling_the_rfc_carries(
+        self, self_check_snapshot: Path
+    ) -> None:
         """The guard on the excerpt, and the only case an appender can trip.
 
         Appending S5's or S6's rows leaves this green. It goes red when one of
@@ -756,7 +760,7 @@ class TestTheRowsTheseCasesDependOn:
         changes what the pinned cases are a test of, and the failure message is
         what tells the next person to come here.
         """
-        project = _repository_root()
+        project = self_check_snapshot  # resolving the branch reads an index (BDL-074 A2)
         scope, reason = scope_of_branch(project, branch=_THIS_EPICS_BRANCH)
         if scope is None:
             pytest.skip(f"BDL-068 declares no axes in this checkout: {reason}")

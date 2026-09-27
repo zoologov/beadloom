@@ -167,8 +167,8 @@ class TestTheViewAsksTheRule:
 
 
 @pytest.fixture()
-def live(live_repo_reindexed: Path) -> Iterator[Path]:
-    yield live_repo_reindexed
+def live(self_check_snapshot: Path) -> Iterator[Path]:
+    yield self_check_snapshot
 
 
 class TestOnThisRepository:

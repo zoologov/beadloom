@@ -181,12 +181,12 @@ class TestTheWarningNeverReachesTheMachineStream:
         assert warning_lint.stderr in warning_lint.output
 
     def test_this_repository_lints_to_a_parsable_document_on_stdout(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The live-repo self-lint, which is where the fragility was measured."""
         result = CliRunner().invoke(
             main,
-            ["lint", "--format", "json", "--project", str(live_repo_reindexed), "--no-reindex"],
+            ["lint", "--format", "json", "--project", str(self_check_snapshot), "--no-reindex"],
         )
 
         payload = json.loads(result.stdout)

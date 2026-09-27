@@ -97,22 +97,28 @@ class TestGraphCompleteness:
 
 
 class TestSelfLint:
-    """Run beadloom lint on its own codebase."""
+    """Run beadloom lint on its own codebase — on the self-check snapshot.
 
-    def test_self_lint_clean(self) -> None:
+    ``lint`` reindexes before it judges, so run against this repository it WROTE
+    the live index (BDL-074 A2); against the snapshot it writes the snapshot's.
+    """
+
+    def test_self_lint_clean(self, self_check_snapshot: Path) -> None:
         """Self-lint should produce 0 errors (warnings are acceptable)."""
         runner = CliRunner()
-        result = runner.invoke(main, ["lint", "--project", str(_PROJECT_ROOT), "--format", "json"])
+        result = runner.invoke(
+            main, ["lint", "--project", str(self_check_snapshot), "--format", "json"]
+        )
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.stdout)
         assert parsed["summary"]["error_count"] == 0
         assert parsed["summary"]["rules_evaluated"] >= 7
 
-    def test_self_lint_strict(self) -> None:
+    def test_self_lint_strict(self, self_check_snapshot: Path) -> None:
         """Self-lint with --strict should also exit 0 (no violations)."""
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["lint", "--project", str(_PROJECT_ROOT), "--strict", "--format", "json"],
+            ["lint", "--project", str(self_check_snapshot), "--strict", "--format", "json"],
         )
         assert result.exit_code == 0, result.output

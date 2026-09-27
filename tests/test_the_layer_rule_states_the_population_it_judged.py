@@ -233,9 +233,9 @@ def fully_tagged_graph(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture(scope="session")
-def live_graph(live_repo_reindexed: Path) -> Iterator[sqlite3.Connection]:
+def live_graph(self_check_snapshot: Path) -> Iterator[sqlite3.Connection]:
     """A read-only handle on this repository's own indexed graph."""
-    db_path = live_repo_reindexed / ".beadloom" / "beadloom.db"
+    db_path = self_check_snapshot / ".beadloom" / "beadloom.db"
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
@@ -245,9 +245,9 @@ def live_graph(live_repo_reindexed: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture(scope="session")
-def live_rules(live_repo_reindexed: Path) -> list[Rule]:
+def live_rules(self_check_snapshot: Path) -> list[Rule]:
     """This repository's declared rules, as the linter loads them."""
-    return load_rules(live_repo_reindexed / ".beadloom" / "_graph" / "rules.yml")
+    return load_rules(self_check_snapshot / ".beadloom" / "_graph" / "rules.yml")
 
 
 def _rule(
@@ -520,34 +520,34 @@ class TestTheWholeLintRunIsUnchanged:
         return lint(project_root).violations
 
     def test_the_findings_are_identical_apart_from_the_population_statement(
-        self, live_repo_reindexed: Path, monkeypatch: pytest.MonkeyPatch
+        self, self_check_snapshot: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        after = self._lint(live_repo_reindexed)
+        after = self._lint(self_check_snapshot)
         monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
         monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
-        before = self._lint(live_repo_reindexed)
+        before = self._lint(self_check_snapshot)
         assert comparable(before), "a comparison over an empty findings list proves nothing"
         assert decisions(after) == comparable(before)
 
     def test_the_one_addition_is_the_population_statement(
-        self, live_repo_reindexed: Path, monkeypatch: pytest.MonkeyPatch
+        self, self_check_snapshot: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Stated as a difference, so a second addition could not hide behind the first."""
-        after = self._lint(live_repo_reindexed)
+        after = self._lint(self_check_snapshot)
         monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
         monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
-        added = comparable(after) - comparable(self._lint(live_repo_reindexed))
+        added = comparable(after) - comparable(self._lint(self_check_snapshot))
         assert {entry[1] for entry in added} == {LAYER_POPULATION_RULE_TYPE}
         assert {entry[2] for entry in added} == {"warn"}
 
     def test_the_addition_moves_no_error_count(
-        self, live_repo_reindexed: Path, monkeypatch: pytest.MonkeyPatch
+        self, self_check_snapshot: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """What `lint --strict` and the Gate decide on is the error count alone."""
-        after = lint(live_repo_reindexed)
+        after = lint(self_check_snapshot)
         monkeypatch.setattr(rules, "evaluate_layer_rules", layer_findings_before_release_a)
         monkeypatch.setattr(evaluators, "node_tags", ClosureTags)
-        before = lint(live_repo_reindexed)
+        before = lint(self_check_snapshot)
         assert after.error_count == before.error_count
         assert after.has_errors is before.has_errors
         assert after.rules_inert == before.rules_inert

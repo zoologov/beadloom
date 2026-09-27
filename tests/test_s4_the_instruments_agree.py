@@ -173,7 +173,7 @@ class TestOneApprovalIsReadOnce:
         assert run.reason is not None, "the fixture must not carry an index"
 
     def test_a_resolved_approval_is_named_identically_by_both(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The positive case, on the one project that has an index.
 
@@ -181,7 +181,7 @@ class TestOneApprovalIsReadOnce:
         a work item needs a built index, and a fixture reindexed inside the test
         would be measuring the fixture's own graph.
 
-        It takes `live_repo_reindexed` rather than reading the ambient
+        It takes `self_check_snapshot` rather than reading the ambient
         `.beadloom/beadloom.db`, and it asserts over the APPROVAL rather than
         over the run's verdict. Both are corrections a clean room made to this
         test, in that order. Reading the ambient index, it passed on the tree
@@ -199,8 +199,8 @@ class TestOneApprovalIsReadOnce:
         pinning it is what made this assertion room-dependent twice (BDL-UX
         #236's class, inside a test about instruments that must not be).
         """
-        run = scope_check(live_repo_reindexed, branch=_OWN_BRANCH)
-        axes = work_item_axes(live_repo_reindexed, branch=_OWN_BRANCH)
+        run = scope_check(self_check_snapshot, branch=_OWN_BRANCH)
+        axes = work_item_axes(self_check_snapshot, branch=_OWN_BRANCH)
         assert axes.reason is None, axes.reason
         assert run.work_item == axes.work_item == _OWN_WORK_ITEM
         assert run.document == axes.document

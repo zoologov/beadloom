@@ -766,7 +766,7 @@ class TestThisRepositoryIsChecked:
     """The rule is live on Beadloom's own graph, whatever it currently reports."""
 
     def test_this_repository_s_summaries_state_checkable_facts(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """A rule that stood down here would prove nothing about the corrections.
 
@@ -774,14 +774,14 @@ class TestThisRepositoryIsChecked:
         currently carries are BDL-062 `.4`'s to correct, and pinning their number
         here would make this test fail on the commit that fixes them.
 
-        The root is named through ``live_repo_reindexed`` (BDL-074 A1): read from
-        the working directory, the index was absent under the empty directory the
+        The root is the self-check snapshot (BDL-074 A1, A2): read from the
+        working directory, the index was absent under the empty directory the
         suite now runs in, and the test SKIPPED instead of asserting.
         """
         from beadloom.infrastructure.db import open_db as open_index
 
-        conn = open_index(live_repo_reindexed / ".beadloom" / "beadloom.db")
+        conn = open_index(self_check_snapshot / ".beadloom" / "beadloom.db")
         try:
-            assert summary_facts_inert_reason(conn, live_repo_reindexed) is None
+            assert summary_facts_inert_reason(conn, self_check_snapshot) is None
         finally:
             conn.close()

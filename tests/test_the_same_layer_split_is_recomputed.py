@@ -28,8 +28,8 @@ numbers were published to support:
 - every crossing is accounted for — reported as a finding, or excused by a
   declared `exempt:` entry — so a crossing cannot be lost between the two.
 
-**The index lineage held is a full reindex of the working tree, taken once per
-session and read without a further reindex** (`live_repo_reindexed`). Both sides
+**The index lineage held is a full reindex of a copy of the working tree, taken
+once per session and read without a further reindex** (`self_check_snapshot`). Both sides
 of every comparison here read that one index, because a carried-forward index
 and a fresh one disagree on a population's denominator (BDL-UX #290) and a
 comparison whose halves counted two graphs measures the index.
@@ -174,10 +174,10 @@ def _read_only(project: Path) -> closing[sqlite3.Connection]:
 
 
 @pytest.fixture()
-def live_split(live_repo_reindexed: Path) -> Split:
+def live_split(self_check_snapshot: Path) -> Split:
     """This repository's split, recomputed from the index built for this session."""
-    with _read_only(live_repo_reindexed) as conn:
-        return split_of(conn, _rule_of(live_repo_reindexed))
+    with _read_only(self_check_snapshot) as conn:
+        return split_of(conn, _rule_of(self_check_snapshot))
 
 
 class TestTheSplitIsRecomputedOnThisRepository:
@@ -228,24 +228,24 @@ class TestTheSplitIsRecomputedOnThisRepository:
         assert len(live_split.internal) > len(live_split.crossings)
 
     def test_every_crossing_is_reported_or_excused_by_a_named_entry(
-        self, live_repo_reindexed: Path, live_split: Split
+        self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """No crossing falls between the rule and its exemptions.
 
         The counts come from the rule's own splitter, so a crossing silently
         dropped by neither path would leave the two sides short.
         """
-        rule = _rule_of(live_repo_reindexed)
+        rule = _rule_of(self_check_snapshot)
         reported, excused = excused_crossings(rule, list(live_split.crossings))
         assert len(reported) + sum(excused.values()) == len(live_split.crossings)
 
     def test_the_findings_the_rule_reports_are_the_crossings_it_did_not_excuse(
-        self, live_repo_reindexed: Path, live_split: Split
+        self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """The recomputation and `evaluate_layer_rules` agree on this graph."""
-        rule = _rule_of(live_repo_reindexed)
+        rule = _rule_of(self_check_snapshot)
         reported, _ = excused_crossings(rule, list(live_split.crossings))
-        with _read_only(live_repo_reindexed) as conn:
+        with _read_only(self_check_snapshot) as conn:
             findings = [
                 (v.from_ref_id, v.to_ref_id)
                 for v in evaluate_layer_rules(conn, [rule])
@@ -259,21 +259,21 @@ class TestThePublishedFigureCameFromAnotherPredicate:
     """The RFC's correction, as a measurement rather than as a paragraph."""
 
     def test_the_retired_predicate_reports_more_crossings_here(
-        self, live_repo_reindexed: Path, live_split: Split
+        self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """Strictly more, and the direction is why the planning figure was high."""
-        retired = _retired_crossings(live_repo_reindexed, live_split)
+        retired = _retired_crossings(self_check_snapshot, live_split)
         assert len(retired) > len(live_split.crossings)
 
     def test_the_shipped_predicate_calls_no_edge_a_crossing_that_the_retired_one_allows(
-        self, live_repo_reindexed: Path, live_split: Split
+        self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """One-directional: the shipped predicate is the more permissive of the two."""
-        retired = _retired_crossings(live_repo_reindexed, live_split)
+        retired = _retired_crossings(self_check_snapshot, live_split)
         assert set(live_split.crossings) <= retired
 
     def test_every_pair_they_disagree_on_has_the_shape_the_correction_names(
-        self, live_repo_reindexed: Path, live_split: Split
+        self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """Both ends carrying their own tag while sharing a tagged container.
 
@@ -282,11 +282,11 @@ class TestThePublishedFigureCameFromAnotherPredicate:
         the RFC's explanation of its own error into something that fails if the
         explanation is wrong.
         """
-        rule = _rule_of(live_repo_reindexed)
-        with _read_only(live_repo_reindexed) as conn:
+        rule = _rule_of(self_check_snapshot)
+        with _read_only(self_check_snapshot) as conn:
             parents = part_of_parents(conn)
             tags = node_tags(conn).as_mapping()
-        disputed = _retired_crossings(live_repo_reindexed, live_split) - set(
+        disputed = _retired_crossings(self_check_snapshot, live_split) - set(
             live_split.crossings
         )
         assert disputed, "the two predicates agree here, so the correction is unmeasured"

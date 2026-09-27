@@ -473,9 +473,12 @@ class TestAiAgentsBoundaryRule:
 # ---------------------------------------------------------------------------
 
 
-def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
+def _beadloom_ctx_json(ref_id: str, root: Path) -> dict[str, object]:
     """Resolve the ``beadloom`` console script to an absolute path (no partial
-    path -> no S607) and return the parsed ``ctx --json`` bundle."""
+    path -> no S607) and return the parsed ``ctx --json`` bundle.
+
+    Run in *root*, the self-check snapshot (BDL-074 A2): run in this repository,
+    ``ctx`` read — and could rebuild — the live index."""
     import json
     import shutil
 
@@ -483,7 +486,7 @@ def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
     assert exe is not None, "beadloom console script not on PATH"
     proc = subprocess.run(  # noqa: S603 - resolved absolute path, fixed argv
         [exe, "ctx", ref_id, "--json"],
-        cwd=_REPO_ROOT,
+        cwd=root,
         capture_output=True,
         encoding="utf-8",
         check=False,
@@ -494,8 +497,8 @@ def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
 
 
 class TestGraphResolution:
-    def test_ai_techwriter_feature_resolves(self, live_repo_reindexed: Path) -> None:
-        bundle = _beadloom_ctx_json("ai-techwriter")
+    def test_ai_techwriter_feature_resolves(self, self_check_snapshot: Path) -> None:
+        bundle = _beadloom_ctx_json("ai-techwriter", self_check_snapshot)
         focus = bundle["focus"]
         assert isinstance(focus, dict)
         assert focus["ref_id"] == "ai-techwriter"
@@ -505,8 +508,8 @@ class TestGraphResolution:
         assert "ai_agents" in node_ids
         assert "ai-techwriter" in node_ids
 
-    def test_feature_is_part_of_ai_agents_domain(self, live_repo_reindexed: Path) -> None:
-        graph = _beadloom_ctx_json("ai-techwriter")["graph"]
+    def test_feature_is_part_of_ai_agents_domain(self, self_check_snapshot: Path) -> None:
+        graph = _beadloom_ctx_json("ai-techwriter", self_check_snapshot)["graph"]
         assert isinstance(graph, dict)
         edges = graph["edges"]
         assert any(

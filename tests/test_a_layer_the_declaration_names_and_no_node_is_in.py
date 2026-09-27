@@ -324,15 +324,15 @@ class TestThisRepository:
         assert not hasattr(loader, "load_rules_with_tags")
 
     def test_every_declared_layer_is_populated_here(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """The neutrality claim for this repository, measured rather than argued."""
-        db_path = live_repo_reindexed / ".beadloom" / "beadloom.db"
+        db_path = self_check_snapshot / ".beadloom" / "beadloom.db"
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         try:
             declared = [
                 rule
-                for rule in load_rules(live_repo_reindexed / ".beadloom" / "_graph" / "rules.yml")
+                for rule in load_rules(self_check_snapshot / ".beadloom" / "_graph" / "rules.yml")
                 if isinstance(rule, LayerRule)
             ]
             tags = node_tags(conn).as_mapping()
@@ -341,7 +341,7 @@ class TestThisRepository:
         finally:
             conn.close()
 
-    def test_exactly_one_node_owns_the_rules_file(self, live_repo_reindexed: Path) -> None:
+    def test_exactly_one_node_owns_the_rules_file(self, self_check_snapshot: Path) -> None:
         """Measured over every node in the graph, not over one impact answer.
 
         `impact` derives the nodes it names from Python call sites, and this
@@ -349,8 +349,8 @@ class TestThisRepository:
         makes — one owner, not none and not two — is therefore held against the
         whole node population, which is the stronger measurement.
         """
-        boundary = open_boundary(live_repo_reindexed)
-        db_path = live_repo_reindexed / ".beadloom" / "beadloom.db"
+        boundary = open_boundary(self_check_snapshot)
+        db_path = self_check_snapshot / ".beadloom" / "beadloom.db"
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         try:
             every_node = [str(row[0]) for row in conn.execute("SELECT ref_id FROM nodes")]
@@ -358,19 +358,19 @@ class TestThisRepository:
             conn.close()
         owners = [
             owned.node
-            for owned in unread_ownership(boundary, every_node, live_repo_reindexed)
+            for owned in unread_ownership(boundary, every_node, self_check_snapshot)
             if THE_RULES_FILE in owned.files
         ]
         assert len(owners) == 1
 
     def test_the_owner_owns_the_rules_file_and_nothing_else(
-        self, live_repo_reindexed: Path
+        self, self_check_snapshot: Path
     ) -> None:
         """So the `Owns unread` cell reads `1 — .beadloom/_graph/rules.yml`.
 
         A node whose source were the whole `_graph/` directory would own a
         hundred files and the cell would lead with whichever sorted first.
         """
-        boundary = open_boundary(live_repo_reindexed)
-        owned = unread_ownership(boundary, ["architecture-rules"], live_repo_reindexed)
+        boundary = open_boundary(self_check_snapshot)
+        owned = unread_ownership(boundary, ["architecture-rules"], self_check_snapshot)
         assert [entry.files for entry in owned] == [(THE_RULES_FILE,)]

@@ -258,9 +258,9 @@ class TestThePopulationIsTheOneTheRuleDecidesOn:
 
 
 @pytest.fixture()
-def live(live_repo_reindexed: Path) -> Iterator[sqlite3.Connection]:
+def live(self_check_snapshot: Path) -> Iterator[sqlite3.Connection]:
     """A read-only handle on this repository's own indexed graph."""
-    db_path = live_repo_reindexed / ".beadloom" / "beadloom.db"
+    db_path = self_check_snapshot / ".beadloom" / "beadloom.db"
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         yield conn
@@ -272,24 +272,24 @@ class TestOnThisRepository:
     """The measurement the epic ordered its beads around, taken from the code."""
 
     def test_the_rule_now_judges_the_ancestry_population(
-        self, live: sqlite3.Connection, live_repo_reindexed: Path
+        self, live: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
         """16 of 365 by own tags before this bead; the ancestry figure is the claim now."""
-        reach = layer_rule_reach(live, _rule_of(live_repo_reindexed))
+        reach = layer_rule_reach(live, _rule_of(self_check_snapshot))
         assert reach.population.total > 300
         assert reach.population.evaluated > reach.population.total * 9 // 10
 
     def test_it_decides_nothing_new_here_because_b1_and_b2_ran_first(
-        self, live: sqlite3.Connection, live_repo_reindexed: Path
+        self, live: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
         """Not neutrality by construction: the one reverse edge was removed (B1) and
         every crossing left was excused by name with a reason (B2). This asserts
         that work held, on the graph, rather than on a report of it.
         """
-        rule = _rule_of(live_repo_reindexed)
+        rule = _rule_of(self_check_snapshot)
         assert [v for v in evaluate_layer_rules(live, [rule]) if v.rule_type == "layer"] == []
 
-    def test_lint_has_no_error_on_this_repository(self, live_repo_reindexed: Path) -> None:
+    def test_lint_has_no_error_on_this_repository(self, self_check_snapshot: Path) -> None:
         """What `lint --strict` and the Gate decide on is the error count alone."""
-        result = lint(live_repo_reindexed)
+        result = lint(self_check_snapshot)
         assert result.error_count == 0
