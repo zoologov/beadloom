@@ -65,7 +65,7 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-l67s, beadloom-5qgt]
+  - beads: [beadloom-2mj3.1, beadloom-kixx]
     decision: parallel
-    reason: "BDL-074 wave 1. beadloom-l67s edits tests/conftest.py, tests/tracked_write_guard and the tests its chdir guard breaks - tests/ only, which no graph node owns, hence ref_not_in_graph. beadloom-5qgt edits src/ (reindex, test-mapping, graph, context-builder) and adds its own new test files. The file sets are disjoint apart from .beads/issues.jsonl, ordered by the merge slot. One interaction is known and handed to both prompts: A1's chdir guard will apply to C1's new tests, so C1's tests must pass explicit roots and never rely on the working directory."
+    reason: "BDL-074 wave 2. beadloom-2mj3.1 edits docs/ only (the pairs C1 made stale). beadloom-kixx edits tests/ only - the self-check snapshot replacing live_repo_reindexed - which no graph node owns, hence ref_not_in_graph. The file sets are disjoint apart from .beads/issues.jsonl and the ACTIVE.md rows, ordered by the merge slot. Known interaction handed to both prompts: A2's self-checks read docs/, so the docs bead's edits land in what A2's snapshot copies; A2 builds its snapshot from the working tree at test time, never from a frozen copy."
     until: "2026-11-15"

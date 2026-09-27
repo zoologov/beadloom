@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 1 — `beadloom-l67s` (A1, the chdir and contact guards) and `beadloom-5qgt` (C1, the test index and the binding), in parallel.
-**Goal:** the suite stops reaching the repository's live state implicitly, and reindex records test files with a binding derived from where they live.
-**Done when:** A1's breakage is measured before its fix and the tracer finds no contact outside `live_repo_reindexed`; C1's `extra["tests"]` comes from the binding with no `mutants/` entry.
+**Bead:** Wave 2 — `beadloom-2mj3.1` (the doc pairs C1 made stale) and `beadloom-kixx` (A2, the self-check snapshot), in parallel; then `beadloom-3z94` (C2), then `beadloom-vr0b` (D1) — those two share `cli-commands`.
+**Goal:** the combined tree is green again before new work lands on it, and the 44-entry allowed list starts emptying into a snapshot.
+**Done when:** `beadloom ci` rc 0 and `test_all_new_node_pairs_are_fresh` green on the combined tree; A2's snapshot replaces `live_repo_reindexed` and qq6m's tracer shows 0 live-index contacts.
+
+**Wave 1 closed (2026-09-27):** A1 `8e17362e`, `12ad9f12`; C1 `90c04540`. Gate owner A1 on the combined tree: 10 958 passed, 1 failed (`test_all_new_node_pairs_are_fresh`), `beadloom ci` rc 1 on 36 stale doc pairs from C1's change — not planned for this point, so a docs bead `beadloom-2mj3.1` was added ahead of wave 2.
 
 ## Progress
 
@@ -33,7 +35,8 @@
 | `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |
 | `beadloom-1bd6` | B2 dev | blocked | relocate the 227 clear-node files |
 | `beadloom-d0bp` | B3 dev | blocked | relocate acceptance |
-| `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding |
+| `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding; 462 test files: 0 bound, 392 unplaced, 70 acceptance |
+| `beadloom-2mj3.1` | docs | ready | refresh the 36 doc pairs C1 made stale (added 2026-09-27) |
 | `beadloom-3z94` | C2 dev | ready | ctx and debt-report read the binding |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
 | `beadloom-vr0b` | D1 dev | ready | mutation per change and the weekly sample |
