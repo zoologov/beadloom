@@ -265,7 +265,7 @@ class TestAgreementWithTheRunner:
         from gherkin.token_scanner import TokenScanner
 
         root = REPO_ROOT
-        files = sorted((root / "tests" / "acceptance" / "features").glob("*.feature"))
+        files = sorted((root / "tests" / "acceptance").rglob("*.feature"))
         assert files, "the acceptance suite is empty — the cross-check would be vacuous"
         rules_seen = 0
         for path in files:

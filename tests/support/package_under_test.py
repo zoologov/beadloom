@@ -26,7 +26,7 @@ unmutated tree there is nothing to prune and the helper is a plain parse, which
 is asserted in ``test_the_suite_reads_the_package_under_test.py``.
 
 Copy-safe ROOT idioms already existed in four places
-(``tests/acceptance/steps/test_audit_self_facts_steps.py:32``,
+(``tests/acceptance/steps/doc_sync/test_audit_self_facts_steps.py:32``,
 ``test_ignore_block_drift_steps.py:39``, ``test_package_description_steps.py:39``,
 ``tests/test_rules_docstring_references.py:50``). None of them declines a
 generated name, which is why this module exists rather than a fifth copy of the

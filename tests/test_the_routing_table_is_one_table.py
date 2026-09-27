@@ -26,7 +26,7 @@ read where 5 exist, and ``shared_kinds`` falls from ``{ACTIVE}`` to the empty
 set — the document every bead of every work item writes stops being derivable.
 
 **Which of these were verified red, and which are guards.** Nine assertions here
-and in ``tests/acceptance/steps/test_work_item_routing_steps.py`` were run
+and in ``tests/acceptance/steps/application/test_work_item_routing_steps.py`` were run
 against the pre-fix reader and failed: the three scenarios, and the six tests in
 :class:`TestATableEndsWhereItsRowsStop` and
 :class:`TestARowTheTableStatesAndTheReaderCannotUse` that name a table boundary

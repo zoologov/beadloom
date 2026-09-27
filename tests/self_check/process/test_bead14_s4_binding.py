@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB, load_suite
+from beadloom.graph.scenarios import load_suite
 from tests.support.nested_pytest import (
     run_pytest,
 )
@@ -31,7 +31,7 @@ def _shipped_scenario_count() -> int:
     project's own parser, which `.13` cross-checked against gherkin-official, so
     a parser that started disagreeing with the runner still shows up here.
     """
-    suite = load_suite(REPO_ROOT, DEFAULT_FEATURE_GLOB)
+    suite = load_suite(REPO_ROOT, "tests/acceptance/**/*.feature")
     return len(suite.scenarios)
 
 

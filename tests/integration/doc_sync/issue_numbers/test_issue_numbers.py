@@ -1,6 +1,6 @@
 """BDL-068 S6, `beadloom-0mdo.66` — the issue log's number allocator.
 
-The acceptance scenarios in ``tests/acceptance/features/issue_numbers.feature``
+The acceptance scenarios in ``tests/acceptance/doc_sync/issue_numbers.feature``
 carry the behaviour. These are the edges underneath it: the entry grammar's
 boundaries, the states in which a leg reads nothing, and this repository's own
 log, which is the only corpus of 236 hand-written entries available to check the

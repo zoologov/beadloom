@@ -1,6 +1,6 @@
 """Boundary guards for `onboarding.role_map` (BDL-068 S6, BDL-UX #252).
 
-`tests/acceptance/features/role_map.feature` holds the behaviour. These are the
+`tests/acceptance/onboarding/role_map.feature` holds the behaviour. These are the
 shapes the derivation must NOT read as roles, and each one is a decision the
 module's docstring states rather than a case that happened to work: a check over
 a spelling is a check five other spellings walk past, and a check that reads

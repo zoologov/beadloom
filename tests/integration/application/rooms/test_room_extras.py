@@ -1,6 +1,6 @@
 """The extras dimension of a room (BDL-068 S6, BDL-UX #236).
 
-The acceptance scenarios in ``tests/acceptance/features/room_extras.feature``
+The acceptance scenarios in ``tests/acceptance/application/room_extras.feature``
 run against this interpreter's real metadata, which is the only way to prove the
 answer is about the environment and not about a fixture. These tests cover what
 that environment cannot show: a distribution whose backend does not flatten a

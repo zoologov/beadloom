@@ -8,7 +8,7 @@ is an ``error`` on ``.claude/agents/dev.md`` and exit 0 on
 
 These tests hold the DERIVATION -- its population, its provenance gate and its
 divergence flag. The findings the adopter sees are held by
-``tests/acceptance/features/orphaned_adapters.feature``.
+``tests/acceptance/onboarding/orphaned_adapters.feature``.
 """
 
 from __future__ import annotations

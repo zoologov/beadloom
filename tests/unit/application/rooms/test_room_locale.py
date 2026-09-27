@@ -1,6 +1,6 @@
 """The locale dimension of a room (BDL-068 S6, BDL-UX #248 and #249).
 
-The acceptance scenarios in ``tests/acceptance/features/room_locale.feature``
+The acceptance scenarios in ``tests/acceptance/application/room_locale.feature``
 run against this process's real locale, which is the only way to prove the
 answer is about the environment and not about a fixture. These tests cover what
 one environment cannot show: the locale names this machine does not have, the

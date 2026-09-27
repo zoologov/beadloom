@@ -1,6 +1,6 @@
 """The room builder's refusals and its record, at the application level.
 
-The behaviour is stated in `tests/acceptance/features/clean_room.feature`. What
+The behaviour is stated in `tests/acceptance/application/clean_room.feature`. What
 is covered here is the set of named refusals a scenario would only restate — a
 carried path that escapes the project, a directory named instead of a file, a
 repository with no commit — and the record the rebuild guard reads. Each is a
