@@ -4,14 +4,18 @@
 
 Queries the indexed graph (undocumented/stale/untracked/oversized/high-fan-out
 nodes) and the cross-domain signals (rule violations, git dormancy, test gaps)
-into the raw counts + per-node issue map the scorer consumes.
+into the raw counts + per-node issue map the scorer consumes. The test-gap
+signal is read from the test binding the reindex recorded, not guessed.
 """
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from beadloom.application.debt_report.models import DebtData, DebtWeights
+from beadloom.context_oracle.test_binding import describe_unplaced
+from beadloom.infrastructure.repository import count_test_files_by_placement
 
 if TYPE_CHECKING:
     import sqlite3
@@ -186,41 +190,53 @@ def _count_dormant(
     return len(dormant_refs), dormant_refs
 
 
-def _count_untested(
-    conn: sqlite3.Connection,
-    project_root: Path,
-) -> tuple[int, list[str]]:
-    """Count domains/features with no test coverage.
+def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
+    """Count the nodes the test binding covers that no test file binds to.
 
-    Returns (count, list_of_ref_ids).
+    Returns (count, list_of_ref_ids, population). The binding is what the reindex
+    wrote into each node's ``extra["tests"]`` (BDL-074 C1): the population is every
+    node carrying that key, and a node whose ``test_files`` is empty is untested.
+
+    While any test file is unplaced the count is WITHHELD — 0, with the reason as
+    the population — because an unplaced file binds to no node, so a node with no
+    bound test may still be tested by one. Counting it would charge a project for
+    its layout, not its tests. The name-guessing mapper this replaces counted a
+    node only when it detected no test framework anywhere, so a project whose
+    framework it detected and whose tests are not laid out scores what it scored
+    before (0), and a project with no test file at all has every covered node
+    untested, before and after.
     """
-    try:
-        from beadloom.context_oracle.test_mapper import map_tests
-    except ImportError:
-        return 0, []
+    placements = count_test_files_by_placement(conn)
+    unplaced = describe_unplaced(placements)
+    if unplaced is not None:
+        return 0, [], f"not counted: {unplaced}, so a node with no bound test may still be tested"
 
-    # Build source_dirs from nodes
-    nodes = conn.execute(
-        "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL"
-    ).fetchall()
-    source_dirs: dict[str, str] = {}
-    for node in nodes:
-        source_dirs[str(node[0])] = str(node[1])
-
-    if not source_dirs:
-        return 0, []
-
-    try:
-        mappings = map_tests(project_root, source_dirs)
-    except (OSError, ValueError):
-        return 0, []
-
+    covered = 0
     untested_refs: list[str] = []
-    for ref_id, mapping in mappings.items():
-        if mapping.coverage_estimate == "none":
-            untested_refs.append(ref_id)
+    for row in conn.execute("SELECT ref_id, extra FROM nodes ORDER BY ref_id").fetchall():
+        tests = _bound_tests(row["extra"])
+        if tests is None:
+            continue
+        covered += 1
+        if not tests.get("test_files"):
+            untested_refs.append(str(row["ref_id"]))
+    population = (
+        f"counted over {covered} node(s) the test binding covers, "
+        f"all {sum(placements.values())} test file(s) placed"
+    )
+    return len(untested_refs), untested_refs, population
 
-    return len(untested_refs), untested_refs
+
+def _bound_tests(raw_extra: object) -> dict[str, object] | None:
+    """A node's ``extra["tests"]`` when the binding covers it, else ``None``."""
+    if not isinstance(raw_extra, str) or not raw_extra:
+        return None
+    try:
+        extra = json.loads(raw_extra)
+    except json.JSONDecodeError:
+        return None
+    tests = extra.get("tests") if isinstance(extra, dict) else None
+    return tests if isinstance(tests, dict) else None
 
 
 def _count_violations(
@@ -306,7 +322,7 @@ def collect_debt_data(
     """Aggregate debt data from all data sources.
 
     Collects counts from rule engine, sync state, doctor, git activity,
-    and test mapper.
+    and the test binding.
     """
     if weights is None:
         weights = DebtWeights()
@@ -354,8 +370,8 @@ def collect_debt_data(
     for ref_id in dormant_refs:
         node_issues.setdefault(ref_id, []).append("dormant")
 
-    # 8. Untested domains
-    untested_count, untested_refs = _count_untested(conn, project_root)
+    # 8. Untested nodes, read from the test binding
+    untested_count, untested_refs, test_population = _count_untested(conn)
     for ref_id in untested_refs:
         node_issues.setdefault(ref_id, []).append("untested")
 
@@ -371,4 +387,5 @@ def collect_debt_data(
         untested_count=untested_count,
         node_issues=node_issues,
         layer_populations=layer_populations,
+        test_population=test_population,
     )

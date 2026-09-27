@@ -16,7 +16,8 @@ about that one file.
 Nothing is guessed. A test file outside the mirrored folders is ``unplaced`` —
 recorded and counted, so a node with no bound test reads differently from a
 repository whose tests are not laid out yet — and a mirror whose code no node
-owns is ``unowned``. The heuristic this replaces (``test_mapper``) matched names,
+owns is ``unowned``. The heuristic this replaced (``test_mapper``, retired by
+BDL-074 C2 once its last caller read the binding) matched names,
 folders and imports, gave 532 mutmut copies to nodes and the root node 882 files
 (measured on this repository, 2026-09-27).
 
@@ -248,6 +249,24 @@ def estimate_coverage(file_count: int, *, framework_detected: bool) -> str:
     if file_count >= 1:
         return "medium"
     return "low" if framework_detected else "none"
+
+
+def describe_unplaced(counts: Mapping[str, int]) -> str | None:
+    """The share of a project's test files that bind to nothing because of where they are.
+
+    *counts* are test files by placement. ``None`` when no file is unplaced: then a
+    node with no bound test has none, and there is nothing to qualify. Otherwise a
+    reader of any per-node count must be told the count can be short — which ``ctx``
+    and the debt report both say, in this one sentence.
+    """
+    unplaced = counts.get(PLACEMENT_UNPLACED, 0)
+    if not unplaced:
+        return None
+    folders = " or ".join(f"{TEST_ROOT}/{kind}/" for kind in sorted(MIRRORED_KINDS))
+    return (
+        f"{unplaced} of {sum(counts.values())} test file(s) are unplaced "
+        f"(not under {folders}) and bind to no node"
+    )
 
 
 def summarize_tests(

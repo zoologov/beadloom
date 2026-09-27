@@ -2,8 +2,8 @@
 # beadloom:feature=debt-report
 """Architecture debt report: score formula, data collection, and severity mapping.
 
-Aggregates health signals from lint, sync-check, doctor, git_activity, and
-test_mapper into a single 0-100 debt score with category breakdown and
+Aggregates health signals from lint, sync-check, doctor, git_activity, and the
+test binding into a single 0-100 debt score with category breakdown and
 per-node issue tracking.
 
 This package decomposes the debt-report feature by responsibility (BDL-059 S4):

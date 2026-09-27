@@ -20,11 +20,11 @@ the :mod:`beadloom.application.graph_reads` facade, never directly — the
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import sqlite3
     from collections.abc import Collection, Iterable
 
 
@@ -380,6 +380,22 @@ def most_specific_owner(
         if best is None or specificity > best[0]:
             best = (specificity, ref_id)
     return best[1] if best is not None else None
+
+
+def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many indexed test files each placement holds, read from ``test_files``.
+
+    Empty for an index written before the test tables existed (BDL-074 C1): such
+    an index has recorded no placement, and ``ctx`` opens it without creating the
+    schema, so the absent table is a fact about the index, not an error.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT placement, count(*) AS n FROM test_files GROUP BY placement"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {str(row["placement"]): int(row["n"]) for row in rows}
 
 
 def get_owning_ref_id(

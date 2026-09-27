@@ -40,6 +40,7 @@ from beadloom.context_oracle.test_binding import (
 from beadloom.context_oracle.test_file_reader import TestFileContents, read_test_file
 from beadloom.graph.import_resolver import resolve_import_to_node
 from beadloom.infrastructure.db import get_meta, set_meta
+from beadloom.infrastructure.repository import count_test_files_by_placement
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -294,13 +295,12 @@ def _extra(raw: object) -> dict[str, object]:
 
 
 def placement_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    """How many indexed test files each placement holds, read from ``test_files``."""
-    return {
-        str(row["placement"]): int(row["n"])
-        for row in conn.execute(
-            "SELECT placement, count(*) AS n FROM test_files GROUP BY placement"
-        ).fetchall()
-    }
+    """How many indexed test files each placement holds, read from ``test_files``.
+
+    The read itself lives in the repository, because ``ctx`` and the debt report
+    state the same counts and neither may import the reindex.
+    """
+    return count_test_files_by_placement(conn)
 
 
 def needs_full_test_reindex(conn: sqlite3.Connection) -> bool:

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from beadloom.context_oracle.intent import select_intent
 from beadloom.infrastructure.db import get_meta
+from beadloom.infrastructure.repository import count_test_files_by_placement
 
 if TYPE_CHECKING:
     import sqlite3
@@ -462,8 +463,11 @@ def build_context(
     # This module only checks meta; CLI layer handles mtime comparison.
     _ = last_reindex  # Used by CLI layer for mtime comparison.
 
-    # Step 10: Extract test mapping from focus node's extra.
+    # Step 10: The focus node's tests, from the binding the reindex wrote into its
+    # extra, and how the project's test files were placed: "0 tests" reads
+    # differently when most of the suite is not laid out yet (BDL-074 C2).
     tests_info: dict[str, Any] | None = focus_extra.get("tests")
+    test_placements = count_test_files_by_placement(conn)
 
     # Step 11: Extract git activity from focus node's extra.
     activity_info: dict[str, Any] | None = focus_extra.get("activity")
@@ -502,5 +506,6 @@ def build_context(
         "intent": select_intent(intent, ref_ids),
         "routes": routes_info,
         "tests": tests_info,
+        "test_placements": test_placements,
         "warning": warning,
     }

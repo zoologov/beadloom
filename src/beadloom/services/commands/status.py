@@ -108,17 +108,13 @@ def status(
         else:
             # For human output with category filter, rebuild report with filtered categories
             if category is not None:
-                from beadloom.application.debt_report import DebtReport
+                from dataclasses import replace
 
                 internal = _CATEGORY_SHORT_MAP.get(category, category)
                 filtered_cats = [c for c in report.categories if c.name == internal]
-                report = DebtReport(
-                    debt_score=report.debt_score,
-                    severity=report.severity,
-                    categories=filtered_cats,
-                    top_offenders=report.top_offenders,
-                    trend=report.trend,
-                )
+                # `replace`, not a hand-built report: a rebuild that names its fields
+                # drops every field added later — the population clauses did.
+                report = replace(report, categories=filtered_cats)
             click.echo(format_debt_report(report))
 
         # Evaluate --fail-if condition

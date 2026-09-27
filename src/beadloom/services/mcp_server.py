@@ -505,16 +505,11 @@ def handle_get_debt_report(
     if trend:
         trend_result = compute_debt_trend(conn, report, project_root, weights)
         if trend_result is not None:
-            # DebtReport is frozen; rebuild with trend attached
-            from beadloom.application.debt_report import DebtReport
+            # DebtReport is frozen; `replace` attaches the trend and keeps every
+            # other field, where a hand-built copy dropped the population clauses.
+            from dataclasses import replace
 
-            report = DebtReport(
-                debt_score=report.debt_score,
-                severity=report.severity,
-                categories=report.categories,
-                top_offenders=report.top_offenders,
-                trend=trend_result,
-            )
+            report = replace(report, trend=trend_result)
 
     return format_debt_json(report, category=category)
 

@@ -54,7 +54,8 @@ def format_debt_json(
 
     Returns:
         A dict with keys ``debt_score``, ``severity``, ``categories``,
-        ``top_offenders``, and ``trend`` (``None`` when no trend data).
+        ``top_offenders``, ``trend`` (``None`` when no trend data),
+        ``layer_populations`` and ``test_population``.
     """
     # Filter categories if requested
     cats = list(report.categories)
@@ -90,6 +91,9 @@ def format_debt_json(
         # above keeps its name and its meaning. Empty for a project that
         # declares no layer rule (BDL-070 A4).
         "layer_populations": list(report.layer_populations),
+        # What the untested count was counted over, or why it was withheld
+        # (BDL-074 C2). Additive, like the key above.
+        "test_population": report.test_population,
     }
 
 
@@ -195,6 +199,8 @@ def format_debt_report(report: DebtReport) -> str:
         if cat.name == "rule_violations":
             for phrase in report.layer_populations:
                 console.print(f"  [dim]counted over: {phrase}[/dim]")
+        if cat.name == "test_gaps" and report.test_population:
+            console.print(f"  [dim]{report.test_population}[/dim]")
         console.print()
 
     # -- Top Offenders --

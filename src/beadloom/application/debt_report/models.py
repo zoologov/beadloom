@@ -60,6 +60,10 @@ class DebtData:
     #: population reaches it or it reaches nobody (BDL-070 A4). Empty for a
     #: project that declares no layer rule.
     layer_populations: list[str] = field(default_factory=list)
+    #: What ``untested_count`` was counted over — the nodes the test binding
+    #: covers — or why it was withheld: while test files are unplaced, a node with
+    #: no bound test may still be tested (BDL-074 C2). Empty when not collected.
+    test_population: str = ""
 
 
 @dataclass(frozen=True)
@@ -104,3 +108,6 @@ class DebtReport:
     #: covers is not itself debt, and scoring it would put a number in the score
     #: that measures the check rather than the code.
     layer_populations: list[str] = field(default_factory=list)
+    #: The test-gap population clause from :class:`DebtData`, carried unweighted
+    #: for the same reason as ``layer_populations``.
+    test_population: str = ""
