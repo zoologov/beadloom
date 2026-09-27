@@ -30,8 +30,8 @@
 |---|---|---|---|
 | `beadloom-2mj3` | epic | ready | BDL-074 parent |
 | `beadloom-l67s` | A1 dev | ✓ done | chdir and contact guards; 115 tests in 20 files broke before the fix (measured); allowed list 44 entries |
-| `beadloom-kixx` | A2 dev | in progress | the self-check snapshot |
-| `beadloom-2esy` | A3 dev | blocked | the self-check triage |
+| `beadloom-kixx` | A2 dev | ✓ done | self-check snapshot replaces `live_repo_reindexed`; allowed list 44 → 20; live-index contacts 98 → 1 (the A3 probe), 0 writers; build ≈5.1 s/session |
+| `beadloom-2esy` | A3 dev | ready | the self-check triage |
 | `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |
 | `beadloom-1bd6` | B2 dev | blocked | relocate the 227 clear-node files |
 | `beadloom-d0bp` | B3 dev | blocked | relocate acceptance |
