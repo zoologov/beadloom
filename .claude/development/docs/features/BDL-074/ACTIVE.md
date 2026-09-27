@@ -30,13 +30,13 @@
 |---|---|---|---|
 | `beadloom-2mj3` | epic | ready | BDL-074 parent |
 | `beadloom-l67s` | A1 dev | ✓ done | chdir and contact guards; 115 tests in 20 files broke before the fix (measured); allowed list 44 entries |
-| `beadloom-kixx` | A2 dev | ready | the self-check snapshot |
+| `beadloom-kixx` | A2 dev | in progress | the self-check snapshot |
 | `beadloom-2esy` | A3 dev | blocked | the self-check triage |
 | `beadloom-51yx` | B1 dev | blocked | tests/support and the root helper |
 | `beadloom-1bd6` | B2 dev | blocked | relocate the 227 clear-node files |
 | `beadloom-d0bp` | B3 dev | blocked | relocate acceptance |
 | `beadloom-5qgt` | C1 dev | ✓ done | the test index and the binding; 462 test files: 0 bound, 392 unplaced, 70 acceptance |
-| `beadloom-2mj3.1` | docs | ready | refresh the 36 doc pairs C1 made stale (added 2026-09-27) |
+| `beadloom-2mj3.1` | docs | ✓ done | 36 stale pairs → 0 over 10 refs; test-mapping SPEC rewritten for the binding; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-3z94` | C2 dev | ready | ctx and debt-report read the binding |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
 | `beadloom-vr0b` | D1 dev | ready | mutation per change and the weekly sample |

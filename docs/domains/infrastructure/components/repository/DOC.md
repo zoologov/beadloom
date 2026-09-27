@@ -84,6 +84,12 @@ re-exports, so treating it as a lone file reported an empty node for a package
 full of code (BDL-UX #157).
 
 - `get_owning_ref_id(conn, file_path)` -> `str | None` — the node that owns a file
+- `most_specific_owner(sources, file_path)` -> `str | None` — the same answer over
+  `(ref_id, source)` pairs instead of the index: among the sources that cover the
+  path, the longest covering prefix wins, and on a tie the FIRST pair wins. A
+  blank source owns nothing. `get_owning_ref_id` delegates to it. It is pure so a
+  path that is in no index — a test file's mirrored code path, a declared
+  `tests:` prefix — is owned by the same rule (BDL-074 C1)
 - `owns_file(conn, ref_id, file_path)` -> `bool`
 - `count_symbols_owned_by_node(conn, ref_id)` -> `int` — what `max_symbols` measures
 - `count_files_owned_by_node(conn, ref_id)` -> `int` — what `max_files` measures
@@ -104,7 +110,8 @@ a file whose content can change under a doc.
 
 Consumers: the `max_symbols` / `max_files` cardinality rules, the architecture
 view's symbol badge, node-page symbol listings, `import_resolver`'s
-file-to-node attribution and the rule engine's `FileAttribution` — so no two
+file-to-node attribution, the rule engine's `FileAttribution` and the test binding
+(`context_oracle.test_binding`, through `most_specific_owner`) — so no two
 surfaces can report different numbers, or different owners, for the same node.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).

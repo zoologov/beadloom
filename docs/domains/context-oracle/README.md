@@ -8,7 +8,7 @@ Features (each with a `SPEC.md`):
 
 - **[Code Indexer](features/code-indexer/SPEC.md)** — tree-sitter symbol + `beadloom:` annotation extraction.
 - **[Route Extraction](features/route-extraction/SPEC.md)** — API route discovery across web frameworks.
-- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-source-node mapping + coverage.
+- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-node binding by the mirror of a test file's path, plus the name-guessing heuristic the debt report still reads.
 - **[Search](features/search/SPEC.md)** — FTS5 full-text search over nodes + docs.
 - **[Cache](features/cache/SPEC.md)** — two-tier context-bundle cache.
 - **[Why](features/why/SPEC.md)** — bidirectional impact analysis.
@@ -42,7 +42,9 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for every extension in `_EXTENSION_LOADERS` |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
 | `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
-| `test_mapper` | `test_mapper.py` | Test framework detection, test file to source node mapping, and parent aggregation |
+| `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under `tests/unit/` or `tests/integration/`; placements and the four-key `extra["tests"]` summary |
+| `test_file_reader` | `test_file_reader.py` | One `ast` parse of a test file: its test-function count and its absolute imports |
+| `test_mapper` | `test_mapper.py` | The name-guessing heuristic (framework detection, import and name/path proximity, parent aggregation). Since BDL-074 C1 only the debt report calls it |
 | `why` | `why.py` | Impact analysis via bidirectional BFS (upstream deps + downstream dependents) |
 
 ### BFS Algorithm
@@ -163,26 +165,30 @@ Extracts API routes from source files using regex pattern matching across 12 fra
 
 Each extracted route is a `Route` dataclass with fields: `method`, `path`, `handler`, `file_path`, `line`, `framework`. Routes are capped at 100 per file.
 
-### Test Mapper
+### Test Mapping
 
-Detects test frameworks and maps test files to source architecture nodes:
+Since BDL-074 C1 a test file binds to a node by where it lives
+(`test_binding.bind_test_file`). A node's `tests:` YAML declaration wins. Otherwise a file
+under `tests/unit/` or `tests/integration/` binds to the node that owns the code path its
+path mirrors (`tests/unit/<path>/test_<name>.py` names `<root><path>/<name>.py`), by the same
+most-specific-`source` rule as code ownership. Any other file binds to nothing and records a
+placement: `unowned`, `unplaced` or `other_kind`. The full rule is in the
+[Test Mapping SPEC](features/test-mapping/SPEC.md).
 
-| Framework | Detection | Test patterns |
-|-----------|-----------|---------------|
-| pytest | `conftest.py`, `test_*.py`, `*_test.py` | `def test_*` |
-| jest | `jest.config.*`, `*.test.ts`, `*.spec.ts`, `__tests__/` | `test(` / `it(` |
-| go_test | `*_test.go` | `func Test*` |
-| junit | `src/test/`, `*Test.java`, `*Test.kt` | `@Test` |
-| xctest | `*Tests.swift`, `*Tests/` | `func test*` |
+The reindex stores the binding in the `test_files` / `test_imports` / `test_overrides` tables
+and rebuilds `nodes.extra["tests"]` from it in the four-key shape (`framework`, `test_files`,
+`test_count`, `coverage_estimate`). A parent's `test_files` is the union of its own and every
+`part_of` descendant's. Coverage estimation is unchanged: more than 3 test files = high,
+1-3 = medium, 0 with a framework = low, no framework = none.
 
-Mapping strategies (in priority order):
-1. Import analysis (pytest only) -- parse `from`/`import` statements
-2. Naming convention -- `test_auth.py` maps to `auth` node
-3. Directory proximity -- `tests/auth/test_login.py` maps to `auth` node
+On this repository most test files are not under the mirrored folders yet, so they are
+`unplaced` and every node reads no bound test file until they are relocated. The measured
+placement counts are in the [Test Mapping SPEC](features/test-mapping/SPEC.md#the-transition),
+and `beadloom reindex` prints the current ones on its `Tests:` line.
 
-Parent aggregation: `aggregate_parent_tests()` rolls up child node test counts to parent domain nodes, so domain-level context bundles show accurate test coverage instead of "0 tests".
-
-Coverage estimation: >3 test files = high, 1-3 = medium, 0 with framework detected = low, no framework = none.
+`test_mapper.map_tests()` — the heuristic (framework detection for pytest, jest, go_test,
+junit, xctest; mapping by import analysis, then naming convention, then directory proximity)
+— no longer writes `extra["tests"]`. The debt report's collector is its one remaining caller.
 
 ### Cache
 
@@ -425,6 +431,71 @@ def format_routes_for_display(routes_data: list[dict[str, str]]) -> str
 
 Format route data for human-readable display. Separates HTTP routes from GraphQL routes (QUERY/MUTATION/SUBSCRIPTION), with wider path columns and distinct section formatting. Returns a formatted multi-line string.
 
+### test_binding.py -- Public Classes and Functions
+
+```python
+@dataclass(frozen=True)
+class BoundTestFile:
+    path: str
+    kind: str | None        # unit | integration | acceptance | self_check | None
+    ref_id: str | None
+    placement: str          # mirror | override | unowned | unplaced | other_kind
+```
+
+```python
+def bind_test_file(
+    path: str,
+    *,
+    code_files: Collection[str],
+    scan_paths: Iterable[str],
+    node_sources: Iterable[tuple[str, str]],
+    overrides: Iterable[tuple[str, str]],
+) -> BoundTestFile
+```
+
+Bind one test file (project-relative path) to a node. The declaration in *overrides* wins,
+then the mirror for a mirrored kind. Everything else binds to nothing and says why.
+
+```python
+def mirrored_code_path(
+    under_kind: str, *, code_files: Collection[str], scan_paths: Iterable[str]
+) -> str | None
+```
+
+The code path a path beneath a kind folder names. The roots are each scan path and each package
+directly beneath one. The deepest resolving root wins, and a tie between equally deep roots
+resolves to `None`.
+
+- `is_test_file(name: str) -> bool` -- whether pytest collects a file of that name by default
+  (`test_*.py`, `*_test.py`).
+- `union_over_descendants(direct, parent_children) -> dict[str, frozenset[str]]` -- each node's
+  files united with every descendant's, each file once.
+- `estimate_coverage(file_count: int, *, framework_detected: bool) -> str` -- `high` /
+  `medium` / `low` / `none`.
+- `summarize_tests(files, counts, *, framework: str) -> dict[str, object]` -- one node's
+  `extra["tests"]` in the four-key shape.
+- Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS`, `TEST_FILE_PATTERNS`, the five
+  `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`.
+
+### test_file_reader.py -- Public Classes and Functions
+
+```python
+@dataclass(frozen=True)
+class TestFileContents:
+    test_count: int
+    imports: tuple[tuple[int, str], ...]   # (line, module)
+```
+
+```python
+def read_test_file(text: str) -> TestFileContents
+def count_test_functions(text: str) -> int
+```
+
+One `ast` parse per file. Module-level `test*` functions and `test*` methods of `Test*`
+classes count, sync or async, and a parametrised function counts once. Imports use the code
+index's form, except that an aliased `import a.b as c` is recorded here. Text that does not
+parse holds nothing.
+
 ### test_mapper.py -- Public Classes and Functions
 
 ```python
@@ -454,7 +525,7 @@ def aggregate_parent_tests(
 ) -> dict[str, TestMapping]
 ```
 
-Aggregate child test counts up to parent nodes. For each parent in `parent_children` that has no direct test files, sums `test_count` and collects `test_files` from its children. Used by the reindex pipeline to show domain-level test coverage.
+Aggregate child test counts up to parent nodes. For each parent in `parent_children` that has no direct test files, sums `test_count` and collects `test_files` from its children. Since BDL-074 C1 the reindex no longer calls it: a parent's `extra["tests"]` is the union computed by `test_binding.union_over_descendants`.
 
 ### search.py -- Public Functions
 
@@ -570,6 +641,7 @@ Tests are located in:
 | `tests/test_cache.py` | `cache.py` | L1 get/put, mtime invalidation, clear, clear_ref, stats |
 | `tests/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
 | `tests/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
+| `tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py`, `test_file_reader.py` | Mirror, declaration, placements, deepest root, union over descendants, test counting and imports |
 | `tests/test_test_mapper.py` | `test_mapper.py` | Framework detection, test file discovery, mapping strategies, coverage estimation |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
 | `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |

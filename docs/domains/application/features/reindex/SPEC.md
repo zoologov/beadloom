@@ -2,7 +2,7 @@
 
 Full and incremental reindex pipeline for rebuilding the architecture graph database.
 
-Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in BDL-059 S4 into `models`, `rules_loader`, `indexing`, `enrichment`, `sync_state`, `change_detection`, `full`, `incremental`, with the package `__init__` re-exporting the stable public + back-compat surface)
+Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in BDL-059 S4 into `models`, `rules_loader`, `indexing`, `enrichment`, `sync_state`, `change_detection`, `full`, `incremental`; BDL-074 C1 added `test_index`; with the package `__init__` re-exporting the stable public + back-compat surface)
 
 ## Specification
 
@@ -23,6 +23,8 @@ The reindex module orchestrates the complete data pipeline that transforms YAML 
 | `symbols_indexed` | `int` | `0` | Number of code symbols extracted (full reindex) or live-DB total (incremental) |
 | `imports_indexed` | `int` | `0` | Number of code imports resolved |
 | `rules_loaded` | `int` | `0` | Number of architecture rules loaded from `rules.yml` |
+| `test_files_indexed` | `int` | `0` | Test files recorded in `test_files` (BDL-074 C1) |
+| `test_files_unplaced` | `int` | `0` | Of those, the files not under a kind folder, which bind to no node |
 | `nothing_changed` | `bool` | `False` | `True` when incremental reindex detects no file changes |
 | `errors` | `list[str]` | `[]` | Fatal errors encountered during reindex |
 | `warnings` | `list[str]` | `[]` | Non-fatal warnings (e.g., duplicate doc references) |
@@ -35,8 +37,9 @@ Ordered list of tables dropped during full reindex. Order matters for foreign ke
 
 ```python
 _TABLES_TO_DROP = [
-    "search_index", "sync_state", "code_imports", "rules",
-    "code_symbols", "chunks", "docs", "edges", "nodes", "meta",
+    "search_index", "test_imports", "test_files", "test_overrides",
+    "sync_state", "code_imports", "rules", "code_symbols", "chunks",
+    "docs", "declared_docs", "edges", "nodes", "meta",
 ]
 ```
 
@@ -82,6 +85,7 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 | 1 | Drop all tables (`_TABLES_TO_DROP`) | `_drop_all_tables` |
 | 2 | Create schema | `infrastructure.db.create_schema` |
 | 3 | Load YAML graph from `.beadloom/_graph/*.yml` | `graph.loader.load_graph` |
+| 3a | Copy each node's `tests:` declaration into `test_overrides`; a declaration that is not a list of path strings becomes a warning and binds nothing | `test_index.record_declared_test_overrides` |
 | 3b | Store deep config in root node's `extra` | `onboarding.config_reader.read_deep_config` |
 | 4 | Index Markdown documents from docs directory | `doc_sync.doc_indexer.index_docs` |
 | 4b | Cache the DECLARED doc surface (every `docs:` entry, existing or not) | `read_declared_docs` / `store_declared_docs` |
@@ -94,10 +98,10 @@ defect class this project has already paid for twice (BDL-UX #142, #146).
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
 | 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |
-| 5d | Map test files to source nodes and store in `nodes.extra` | `_store_test_mappings` |
 | 5e | Analyze git activity and store in `nodes.extra` | `_store_git_activity` |
 | 5f | Extract API routes and store in `nodes.extra` | `_extract_and_store_routes` |
 | 5g | Populate `file_index` — BEFORE anything derives ownership from it | `_populate_file_index` |
+| 5h | Index test files into `test_files` / `test_imports` and rebuild every node's `extra["tests"]` from the binding | `test_index.index_test_files` |
 | 6 | Build `sync_state` with preserved symbol hashes for drift detection | `_build_initial_sync_state` |
 | 7 | Populate FTS5 search index | `context_oracle.search.populate_search_index` |
 | 8 | Clear `bundle_cache`, set meta, take health snapshot | Multiple internal functions |
@@ -116,6 +120,38 @@ written without a trailing slash is normalised to carry one, and a `source` that
 names no path on disk becomes a `ReindexResult` warning naming the `ref_id` —
 see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.md).
 
+### Test Index
+
+`test_index.py` (BDL-074 C1) walks `tests/` only — never `scan_paths`, so a mutmut copy
+under `mutants/` is never indexed — and records every pytest-named file (`test_*.py`,
+`*_test.py`, `__pycache__` skipped). Tests never enter `code_symbols`, `code_imports` or
+`file_index`: they must not become code. Each file is bound by
+`context_oracle.test_binding.bind_test_file` (see the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md)) and stored as:
+
+- `test_files(path, kind, ref_id, placement, test_count, file_hash)`;
+- `test_imports(file_path, line_number, import_path, resolved_ref_id)`, each import resolved by
+  `graph.import_resolver.resolve_import_to_node`, memoised per import path.
+
+It runs after `file_index` is populated (step 5g), because a test's imports resolve through the
+same ownership as the code's. A file whose hash matches the recorded one is not parsed again.
+It then rebuilds `nodes.extra["tests"]` for every node with a `source` or a `tests:`
+declaration, in the four-key shape (`framework`, `test_files`, `test_count`,
+`coverage_estimate`). A parent's files are the union of its descendants' along `part_of`.
+The `tests:` declaration is read from the graph only at a full reindex (step 3a), because the
+rebuild overwrites the `extra["tests"]` it arrived in.
+
+`beadloom reindex` prints the placement counts after the other totals, on both the changed and
+the `nothing_changed` branch:
+
+```
+Tests:   462 files (0 bound to a node, 392 unplaced, 70 bound by other means)
+```
+
+The bound and unplaced counts are always printed. `W unowned` and `K bound by other means`
+(acceptance and self-check files) appear only when non-zero. An index without the test tables
+prints no `Tests:` line. The line above is this repository's, measured on 2026-09-27.
+
 ### Incremental Reindex Pipeline
 
 `incremental_reindex(project_root, *, docs_dir=None)` follows this decision tree:
@@ -126,8 +162,9 @@ see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.
    - `file_index` is empty (first run or post-upgrade).
    - Parser fingerprint changed (new tree-sitter grammar installed).
    - The index predates derived-edge provenance (`meta.import_edge_provenance` absent or older). One rebuild is required because a derived `depends_on` edge is otherwise indistinguishable from a graph-declared one, so refreshing the first would delete the second.
+   - The index predates the test tables (`meta.test_index_version` absent or not `1`, `needs_full_test_reindex`). Only a full rebuild reads the `tests:` declarations.
    - Any graph YAML file changed, detected via `_graph_yaml_changed()` which directly compares hashes for files with `kind == "graph"` (belt-and-suspenders check that catches changes even when `file_index` is stale).
-4. **Early return** if no files changed (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
+4. **Early return** if no files changed and the test index matches the test files on disk (`is_test_index_current`; test files are not in `file_index`, so a test-only change is detected by hashing `tests/`) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
 5. **True incremental path**:
    - Snapshot `symbols_hash` from `sync_state` before modifications for drift preservation.
    - Delete old data for changed and deleted files (from `docs`, `code_symbols`, `sync_state`).
@@ -138,6 +175,7 @@ see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.
    - Rebuild FTS5 search index.
    - Clear `bundle_cache` (conservative invalidation).
    - Update `file_index` incrementally.
+   - Rebuild the test index and `extra["tests"]` wholesale (`index_test_files`): a code file added or removed can change what a mirror names.
    - Update meta timestamps and take health snapshot.
    - **Backfill result counts**: Populate `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), matching the behavior of the `nothing_changed` path.
 
@@ -285,11 +323,30 @@ def _load_rules_into_db(
 
 Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence and summary-facts — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged.
 
-```python
-def _store_test_mappings(project_root: Path, conn: sqlite3.Connection) -> None
-```
+### Test Index Functions
 
-Run test mapper and merge results into `nodes.extra["tests"]`. Builds `source_dirs` from nodes with a `source` field.
+Module `src/beadloom/application/reindex/test_index.py`:
+
+- `record_declared_test_overrides(conn) -> list[str]` -- copy each node's `tests:` list into
+  `test_overrides`; returns one warning per declaration that is not a non-empty list of path
+  strings.
+- `discover_test_files(project_root) -> dict[str, str]` -- every pytest-named file under
+  `tests/`, by project-relative path, with its text.
+- `index_test_files(project_root, conn, *, code_files) -> IndexedTestFiles` -- rebuild
+  `test_files` / `test_imports` and every node's `extra["tests"]`; sets
+  `meta.test_index_version`. `IndexedTestFiles.by_placement` counts files per placement, with
+  `total` and `unplaced` properties.
+- `is_test_index_current(project_root, conn) -> bool` -- whether `test_files` holds exactly
+  the test files on disk, by hash.
+- `needs_full_test_reindex(conn) -> bool` -- whether the index predates the test tables.
+- `placement_counts(conn) -> dict[str, int]` -- files per placement, read from `test_files`.
+- `describe_placements(counts) -> str` -- the text after `Tests:` on the reindex output.
+
+`change_detection.code_paths(files) -> frozenset[str]` gives the code paths of a
+`_scan_project_files` result, as POSIX paths, which the mirror resolves against.
+
+`_store_test_mappings` was removed in BDL-074 C1, together with its entry in the package
+`__all__`: the heuristic mapper no longer writes `extra["tests"]`.
 
 ```python
 def _update_node_extra(conn: sqlite3.Connection, ref_id: str, key: str, value: object) -> None
@@ -402,6 +459,8 @@ class ReindexResult:
     symbols_indexed: int = 0
     imports_indexed: int = 0
     rules_loaded: int = 0
+    test_files_indexed: int = 0
+    test_files_unplaced: int = 0
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -424,6 +483,8 @@ class ReindexResult:
 - Incremental reindex backfills `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), ensuring accurate reporting even when the incremental path does not touch the graph or code symbols.
 - `file_index` is fully replaced after full reindex and incrementally updated after incremental reindex.
 - Meta key `last_reindex_at` is updated on every successful reindex (including no-change incremental runs).
+- Test files are never written to `code_symbols`, `code_imports` or `file_index`, and only `tests/` is walked for them.
+- Both reindex paths rebuild `extra["tests"]` from the binding, so every node with a `source` or a `tests:` declaration carries the four-key shape.
 - `_graph_yaml_changed()` performs a direct hash comparison on graph files by kind, independent of `_diff_files()`, to catch changes even when `file_index` is stale.
 
 ## Constraints
@@ -437,7 +498,7 @@ class ReindexResult:
 
 ## Testing
 
-Test files: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_cli_reindex.py`
+Test files: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_indexes_test_files_in_their_own_tables.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_cli_reindex.py`
 
 Tests should cover the following scenarios:
 
@@ -454,7 +515,7 @@ Tests should cover the following scenarios:
 - **Config resolution**: Verify `resolve_scan_paths` and `_resolve_docs_dir` correctly read from `config.yml` and fall back to defaults.
 - **Doc ref map conflicts**: Create YAML nodes referencing the same doc path, verify warnings are emitted and the first reference is kept.
 - **`_diff_files`**: Unit test with known current/stored dicts to verify correct changed/added/deleted sets.
-- **Test mapping**: Verify `_store_test_mappings()` populates `nodes.extra["tests"]`.
+- **Test index**: Verify `index_test_files()` records test files in `test_files` / `test_imports`, never in `code_symbols` or `file_index`, skips `mutants/`, rebuilds `nodes.extra["tests"]` in the four-key shape, and that a test-only change is picked up by an incremental reindex.
 - **Git activity**: Verify `_store_git_activity()` populates `nodes.extra["activity"]`.
 - **Route extraction**: Verify `_extract_and_store_routes()` populates `nodes.extra["routes"]`.
 - **Route attribution**: `tests/test_a_file_lies_under_a_source_by_one_rule.py` runs one table of source shapes against the route store, `docs polish` and git activity, and withdraws a stale route through a real incremental reindex. `tests/acceptance/features/routes_under_source.feature` runs `init`, `reindex` and `docs polish` end to end.
