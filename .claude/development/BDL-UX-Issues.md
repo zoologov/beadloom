@@ -54,6 +54,19 @@
     **Related:** #289 (the guard that made every night score zero — fixed by BDL-072), #293/#298 (`beadloom-qq6m`, the shared live index), #226 (`beadloom-jwfc`, the pre-push crash that trains `--no-verify`).
     **Tracker:** `beadloom-5isv` (P1). The number was allocated by `beadloom-e8m4`, the BDL-072 bead that measured both killed runs.
 
+    **AMENDED 2026-09-27 — CLOSED AS SUPERSEDED, the killer not identified.** Ten runs in all: nine of ten
+    died at queue positions 4125-4226 whether at four children (73-102 min) or two (153 min), and across a
+    refactor that removed 197 mutants from that region; one ran 262 min at two children and ended with
+    *the hosted runner lost communication with the server ... starves it for CPU/Memory*. Ruled out by
+    measurement or static search: the timeout, supersession, billing, the loader's memory (no child above
+    399 MiB) and any code signalling the runner's process group. Still live and unmeasured: `systemd-oomd`,
+    the kernel OOM killer, VM reclamation. The owner retired the whole-scope nightly instead (workflow
+    disabled, #79 closed not_planned) in favour of mutation scoped to each pull request plus a weekly
+    sample. The settling experiment — `auditctl` on kill syscalls with a PSI/`MemAvailable`/`dmesg`
+    sampler — is recorded on `beadloom-5isv` and deliberately not run. Side finding, external: mutmut
+    3.7.0's timeout thread catches only `ProcessLookupError`, so a `PermissionError` on Linux would stop
+    wall-clock timeouts silently.
+
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
     **Severity:** medium (no wrong code shipped; what is wrong is an instrument whose output describes a different change or no work item at all, with nothing on the command line that could correct it, so the only remedy is to rearrange the checkout around the tool)
