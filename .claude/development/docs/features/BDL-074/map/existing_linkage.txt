@@ -1,0 +1,23 @@
+amqp_body 2 ['mutants/tests/test_amqp_body.py', 'tests/test_amqp_body.py'] measured-primary overlap 1
+application 32 ['mutants/tests/acceptance/steps/test_impact_steps.py', 'mutants/tests/test_doctor.py', 'mutants/tests/test_doctor_drift.py', 'mutants/tests/test_doctor_instructions.py'] measured-primary overlap 0
+asyncapi 4 ['mutants/tests/test_asyncapi_fidelity.py', 'mutants/tests/test_asyncapi_ingest.py', 'tests/test_asyncapi_fidelity.py', 'tests/test_asyncapi_ingest.py'] measured-primary overlap 2
+beadloom 882 ['mutants/src/beadloom/context_oracle/test_mapper.py', 'mutants/tests/acceptance/steps/test_active_reconcile_steps.py', 'mutants/tests/acceptance/steps/test_adopter_first_five_minutes_steps.py', 'mutants/tests/acceptance/steps/test_attestation_scope_steps.py'] measured-primary overlap 0
+cache 2 ['mutants/tests/test_cache.py', 'tests/test_cache.py'] measured-primary overlap 1
+cli 54 ['mutants/tests/test_cli_active_sync.py', 'mutants/tests/test_cli_active_sync_hardening.py', 'mutants/tests/test_cli_axes.py', 'mutants/tests/test_cli_clean_room.py'] measured-primary overlap 0
+context-oracle 6 ['mutants/tests/test_cache.py', 'mutants/tests/test_search.py', 'mutants/tests/test_why.py', 'tests/test_cache.py'] measured-primary overlap 0
+db 2 ['mutants/tests/test_db.py', 'tests/test_db.py'] measured-primary overlap 1
+doctor 6 ['mutants/tests/test_doctor.py', 'mutants/tests/test_doctor_drift.py', 'mutants/tests/test_doctor_instructions.py', 'tests/test_doctor.py'] measured-primary overlap 3
+graph 16 ['mutants/tests/acceptance/steps/test_graph_summary_facts_steps.py', 'mutants/tests/test_graph_contracts.py', 'mutants/tests/test_graph_federation.py', 'mutants/tests/test_graph_files_are_read_under_one_policy.py'] measured-primary overlap 0
+graphql_surface 2 ['mutants/tests/test_graphql_surface.py', 'tests/test_graphql_surface.py'] measured-primary overlap 1
+health 2 ['mutants/tests/test_health.py', 'tests/test_health.py'] measured-primary overlap 1
+impact 12 ['mutants/tests/acceptance/steps/test_impact_steps.py', 'mutants/tests/test_impact_answers_about_a_file_it_cannot_parse.py', 'mutants/tests/test_impact_derives_the_seed_it_answers_from.py', 'mutants/tests/test_impact_names_what_a_row_owns_and_did_not_read.py'] measured-primary overlap 2
+infrastructure 6 ['mutants/tests/test_db.py', 'mutants/tests/test_health.py', 'mutants/tests/test_repository.py', 'tests/test_db.py'] measured-primary overlap 0
+onboarding 2 ['mutants/tests/test_onboarding.py', 'tests/test_onboarding.py'] measured-primary overlap 0
+reindex 12 ['mutants/tests/test_every_caller_of_the_skeleton_writer.py', 'mutants/tests/test_reindex.py', 'mutants/tests/test_reindex_activity.py', 'mutants/tests/test_reindex_config.py'] measured-primary overlap 1
+repository 2 ['mutants/tests/test_repository.py', 'tests/test_repository.py'] measured-primary overlap 1
+search 2 ['mutants/tests/test_search.py', 'tests/test_search.py'] measured-primary overlap 1
+snapshot 2 ['mutants/tests/test_snapshot.py', 'tests/test_snapshot.py'] measured-primary overlap 1
+tui 12 ['mutants/tests/test_tui.py', 'mutants/tests/test_tui_no_raw_sqlite.py', 'mutants/tests/tui/test_context_scroll.py', 'mutants/tests/tui/test_dashboard_action_bar.py'] measured-primary overlap 5
+watcher 2 ['mutants/tests/test_watcher.py', 'tests/test_watcher.py'] measured-primary overlap 1
+why 2 ['mutants/tests/test_why.py', 'tests/test_why.py'] measured-primary overlap 1
+nodes 108 with mapper test_files 22 distinct test files mapped 884 estimates {'low': 86, 'medium': 11, 'high': 11}
