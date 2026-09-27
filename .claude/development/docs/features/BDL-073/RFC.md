@@ -1,6 +1,6 @@
 # RFC: BDL-073 — The mutation duty becomes executable
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-20
 
 ---
