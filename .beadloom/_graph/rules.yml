@@ -169,8 +169,13 @@ rules:
         reason: >-
           The same `prime` call reads the populations the rules state
           (`scanner/prime.py:39`), from the same lint snapshot. One port
-          retires this entry and the one above together.
-        until: "a lint port under `onboarding/scanner/`, the shape `reindex_port.py` established"
+          retires this entry and the one above together. Since BDL-073 B3 the
+          edge carries a second import: `scanner/rules_gen.py` labels rules by
+          the loader's `AUTHORING_KEYS` instead of a twelve-key copy, because
+          the copy fell behind once and the generated AGENTS.md called three
+          rules `unknown` (BDL-062 `.4`). The port has to hand over that key
+          set as well, or this entry outlives it.
+        until: "a lint port under `onboarding/scanner/` that also supplies the authoring keys, the shape `reindex_port.py` established"
       - from: agent-prime
         to: import-resolver
         reason: >-

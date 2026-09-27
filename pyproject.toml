@@ -429,6 +429,8 @@ pytest_add_cli_args_test_selection = [
     "tests/test_landing_lock_sites.py",
     "tests/test_lifecycle_rules.py",
     "tests/test_linter.py",
+    "tests/test_load_rules_parses_once.py",
+    "tests/test_load_rules_pins_its_codec_and_messages.py",
     "tests/test_mcp_process_tools.py",
     "tests/test_missing_sections.py",
     "tests/test_module_coverage_hardening.py",

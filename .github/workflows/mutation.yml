@@ -155,6 +155,32 @@
 # be created, whether the issue appears, whether the mention notifies. No issue
 # has ever been opened by this workflow. Until a dispatched run opens one
 # (`beadloom-e8m4`), the branches are measured and the announcement is not.
+#
+# TWO CHILDREN, NOT FOUR (BDL-073). At `--max-children 4` a mutant of
+# `load_rules` was counted killed in 16 s by an IntegrityError from the live
+# index the children share (`beadloom-qq6m`), and survived in 49 s when run
+# alone — measured 2026-09-19. A false kill raises the score the floors are held
+# to, so every kill this job counted at four children is unverified.
+# `tests/test_mutation_ci_job.py` fails if an invocation asks for more than two.
+# Two is not measured free of false kills; it halves the concurrency that
+# produced one, and it roughly doubles the wall clock of the mutant phase.
+#
+# THE COVERING TESTS ARE ALREADY RUN CHEAPEST FIRST, and no ordering patch is
+# carried here. mutmut 3.7.0 sorts each mutant's covering tests by their recorded
+# durations inside the forked child (`__main__.py:1478-1479`) and hands them to
+# pytest with `-p no:randomly`, which keeps that order. MEASURED 2026-09-25 with
+# stock mutmut 3.7.0 in a clean room, one child: six `load_rules` mutants (50,
+# 68, 85, 217, 250, 333), each covered by 827 tests with a 60.5 s estimate, were
+# all killed in a mean of 1.16 s. The cost of this job's tail is the mutants that
+# SURVIVE and run all 827 tests, not the order the tests run in.
+#
+# WHAT THIS DOES NOT FIX: the runner that kills this job at queue positions
+# 4146-4226 (`beadloom-5isv`). Fewer children lowers the load on a 4-vCPU runner.
+# Whether that keeps the runner alive is measured only by a dispatched run.
+# Nor does it re-derive `timeout-minutes: 340` below, which was set from a
+# 171-minute projection taken at four children. Halving the children takes that
+# projection to about the cap itself, so the dispatched run (`beadloom-kj8t`)
+# is also what measures whether the cap trips first.
 name: Mutation
 
 on:
@@ -251,7 +277,7 @@ jobs:
       # the counters the run leaves behind.
       - name: Run the mutants of the rules slice
         run: >-
-          uv run mutmut run --max-children 4
+          uv run mutmut run --max-children 2
           'beadloom.graph.rules.*'
           || true
 
@@ -262,7 +288,7 @@ jobs:
 
       - name: Run the mutants of the remaining declared targets
         run: >-
-          uv run mutmut run --max-children 4
+          uv run mutmut run --max-children 2
           'beadloom.application.active_table.row_ids.*'
           'beadloom.application.active_table.staging.*'
           'beadloom.application.guards.shell_targets.*'

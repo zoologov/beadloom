@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.graph.rules.loader import AUTHORING_KEYS
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 
 if TYPE_CHECKING:
@@ -78,36 +79,30 @@ def generate_rules(
     return len(rules)
 
 
+#: The authoring keys whose label in the agent instructions is not the key
+#: itself, kept for the names the generated `.beadloom/AGENTS.md` has always
+#: printed: ``check`` reads as ``cardinality`` and ``forbid`` as ``forbid_edge``.
+_LABEL_FOR_KEY: dict[str, str] = {"check": "cardinality", "forbid": "forbid_edge"}
+
+
 def _detect_rule_type(rule: dict[str, object]) -> str:
-    """Detect the rule type from a rules.yml rule entry.
+    """Label a rules.yml rule entry by the authoring key that selects its type.
 
-    Maps YAML keys to canonical type strings used in DB and display. Three keys
-    differ from their type string for historical reasons (``check`` is stored as
-    ``cardinality``, ``forbid`` as ``forbid_edge``); the rest are their own name.
+    WHICH keys select a type is read from `graph.rules.loader.AUTHORING_KEYS`, the
+    keys of the loader's own dispatch table, rather than from a twelve-key copy
+    here: a copy fell behind the loader once, and the rules it did not know read
+    "unknown" in the generated `.beadloom/AGENTS.md` (BDL-062 `.4`). What the
+    label SAYS stays here, in `_LABEL_FOR_KEY`, because the loader has no display
+    names to share — its table maps a key to a parser, and the evaluators' own
+    ``rule_type`` strings (``cycle``, ``layer``) are a third vocabulary that the
+    agent instructions have never used.
 
-    Every key `graph.rules.loader.AUTHORING_KEYS` accepts must appear here, and
-    `test_every_authoring_key_the_loader_accepts_has_a_type` holds it to that.
-    A key missing from this map is not an error anywhere — it becomes the word
-    "unknown" in the generated `.beadloom/AGENTS.md`, which describes the rule to
-    every agent that reads it.
+    The rule's own keys are walked in the order its author wrote them, so a rule
+    naming two kinds — which the loader rejects — is labelled by the first.
     """
-    yaml_key_to_type: dict[str, str] = {
-        "require": "require",
-        "deny": "deny",
-        "forbid_cycles": "forbid_cycles",
-        "layers": "layers",
-        "check": "cardinality",
-        "forbid_import": "forbid_import",
-        "forbid": "forbid_edge",
-        "unregistered_feature_candidate": "unregistered_feature_candidate",
-        "module_coverage": "module_coverage",
-        "scenario_coverage": "scenario_coverage",
-        "doc_area_coherence": "doc_area_coherence",
-        "summary_facts": "summary_facts",
-    }
-    for key, rule_type in yaml_key_to_type.items():
-        if key in rule:
-            return rule_type
+    for key in rule:
+        if key in AUTHORING_KEYS:
+            return _LABEL_FOR_KEY.get(key, key)
     return "unknown"
 
 

@@ -7,7 +7,7 @@ Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, 
 The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`. The `until:` grammar is no longer here: `exit_condition_deadline` moved to `infrastructure/exit_condition.py` in BDL-070 B2, because `onboarding` declares an exit condition too and was importing this peer domain to read what one is. `beadloom.graph.rules.exit_condition_deadline` still answers — `rules/__init__.py` re-exports it.
-- `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation); `AUTHORING_KEYS`, derived from the one dispatch table; the memo that lets one `init` parse `rules.yml` once, and `forget_parsed_rules()`.
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
@@ -64,18 +64,34 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset({
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
 # Every key a rule may declare to select its type. A rule declares exactly one.
-AUTHORING_KEYS: frozenset[str] = frozenset({
-    "deny", "require", "forbid_cycles", "forbid_import", "forbid", "layers",
-    "check", "unregistered_feature_candidate", "module_coverage",
-    "scenario_coverage", "doc_area_coherence", "summary_facts",
-})
+# The keys of the dispatch table below, plus `layers`: twelve.
+AUTHORING_KEYS: frozenset[str] = frozenset({*_MAPPING_PARSERS, _KEY_READ_FROM_THE_RULE})
 ```
 
-`AUTHORING_KEYS` is the single definition of that set. The loader's own "must have exactly one
-of" message is built from it, the rule-type table above is asserted equal to it, and
-`onboarding.scanner.rules_gen._detect_rule_type` is held to it -- because a key the loader
-accepts and that map does not know becomes the word `unknown` in the generated
-`.beadloom/AGENTS.md`, and nothing failed when it did (BDL-062 `.4`, BDL-UX #179).
+`AUTHORING_KEYS` is the single definition of that set, and since BDL-073 B3 it is derived from
+the loader's dispatch table rather than listed beside it, so a rule type cannot be accepted by
+one and missing from the other. The dispatch is ONE table, `_MAPPING_PARSERS`, from authoring
+key to parser: the eleven keys whose value is a mapping, `forbid_cycles` among them. `layers`
+stays explicit (`_KEY_READ_FROM_THE_RULE`), because a layer rule's `layers` is a list and
+`enforce`, `allow_skip`, `edge_kind` and `exempt` sit beside it, so its parser is handed the
+whole rule. It is the one key the table cannot hold.
+
+Three readers use the set. The loader's own "must have exactly one of" message is built from
+`sorted(AUTHORING_KEYS)`. The rule-type table above is asserted equal to it. And
+`onboarding.scanner.rules_gen._detect_rule_type` reads it: until B3 that function kept a
+twelve-key map of its own, held to this set by a test, because a key the loader accepts and a
+copy does not know becomes the word `unknown` in the generated `.beadloom/AGENTS.md`, and
+nothing failed when it did (BDL-062 `.4`, BDL-UX #179). The display labels stay in
+`rules_gen` (`_LABEL_FOR_KEY`: `check` reads as `cardinality`, `forbid` as `forbid_edge`),
+because the table maps a key to a parser and holds no display names.
+
+`forbid_cycles` was the old chain's `else` arm. It is a table entry because that arm had the
+same mapping guard, the same message shape and the same parser signature as the other ten; it
+was last only because the exactly-one check above the chain left it the last key. The table has
+no `requires_mapping` column, because with `layers` explicit every entry requires a mapping.
+Both are B3's departures from the RFC, ruled on by review `beadloom-8cbm`, which compared
+`load_rules` on `main` and on the branch over 1904 generated rules files and found 0
+differences.
 
 ### Data Structures
 
@@ -598,7 +614,8 @@ rules:
       min_doc_coverage: 0.8                    # optional
 ```
 
-Each rule must contain exactly one of: `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`.
+Each rule must contain exactly one key of `AUTHORING_KEYS` — the `Keyword` column of the table
+under Purpose. The sample above shows seven of the twelve.
 
 ### Loading and Parsing
 
@@ -606,14 +623,59 @@ Each rule must contain exactly one of: `deny`, `require`, `forbid_cycles`, `forb
 def load_rules(rules_path: Path) -> list[Rule]
 ```
 
-1. Read and parse `rules_path` with `yaml.safe_load`.
-2. Validate top-level `version` field is in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Raise `ValueError` on mismatch or absence.
-3. Iterate `rules` list. For each entry:
-   a. Require a non-empty string `name` field.
+1. Read `rules_path` as text, decoded as UTF-8 whatever the locale. If the memo holds an entry
+   for the resolved path whose text equals the text just read, return a new list of the rules
+   parsed then, without parsing (see **One parse per `init`** below).
+2. Otherwise parse the text with `yaml.safe_load`. The document must be a mapping.
+3. Validate top-level `version` field is in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Raise `ValueError` on mismatch or absence.
+4. Read `rules`, defaulting to `[]` when the key is absent. Raise `ValueError` if it is not a list.
+5. For each entry:
+   a. Require a mapping, and in it a non-empty string `name` field.
    b. Enforce unique names (tracked via `seen_names` set). Raise `ValueError` on duplicate.
-   c. Require exactly one of `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`. Raise `ValueError` if none or multiple are present.
-   d. Parse the corresponding block into the appropriate rule dataclass.
-5. `NodeMatcher` parsing validates: for deny rules, at least one of `ref_id`, `kind`, or `tag` must be present. For require rules, `has_edge_to` accepts an empty dict `{}` (matches any node) via `allow_empty=True`. `kind` (if present) is validated against `VALID_NODE_KINDS`. `exclude` accepts a string or list, normalized to a tuple.
+   c. Resolve the severity BEFORE the rule type, so a rule wrong in both ways is reported for its
+      severity. An omitted `severity` is `warn` when the rule's key is in
+      `_KEYS_THAT_DEFAULT_TO_WARN` (`unregistered_feature_candidate`, `module_coverage`,
+      `scenario_coverage`, `doc_area_coherence`) and `error` otherwise.
+   d. Take `AUTHORING_KEYS.intersection(rule)`. None or several raise `ValueError`:
+      `rule '<name>' must have exactly one of <every authoring key, sorted>`.
+   e. `layers` is handed, with the whole rule, to `_parse_layer_rule`. Any other key's value must
+      be a mapping — one message for all eleven, `Rule '<name>': '<key>' must be a mapping` — and
+      is handed to `_MAPPING_PARSERS[key]`.
+6. Remember `(text, tuple(rules))` under the resolved path and return the list. A file that raises
+   is not remembered.
+7. `NodeMatcher` parsing validates: for deny rules, at least one of `ref_id`, `kind`, or `tag` must be present. For require rules, `has_edge_to` accepts an empty dict `{}` (matches any node) via `allow_empty=True`. `kind` (if present) is validated against `VALID_NODE_KINDS`. `exclude` accepts a string or list, normalized to a tuple.
+
+#### One parse per `init` — the memo (BDL-073 B4, F1)
+
+One `beadloom init` re-indexes and then lints, and both read the same `rules.yml`: the reindex
+through `application/reindex/rules_loader.py`, the Gate's lint step through `graph/linter.py`.
+`load_rules` therefore remembers, in the module-level `_PARSED`, the text it read and the rules
+it returned for each resolved path. `init --yes` and `init --bootstrap` each parse once where
+they parsed twice, measured by a counting stand-in for the loader's `yaml` in
+`tests/test_load_rules_parses_once.py`.
+
+- **An entry is trusted only while the file holds the same TEXT.** A path alone would serve old
+  rules to the TUI, which refreshes in one long process while its user edits the file.
+  `(st_mtime_ns, st_size)` would do the same for an edit that keeps the size and lands inside one
+  timestamp tick; that key was red in two tests. The owner accepted the text comparison in
+  place of the stat key recorded on 2026-09-20 (CONTEXT, 2026-09-25).
+- **The comparison costs microseconds against a parse of milliseconds.** Measured with `timeit`
+  on this repository's `rules.yml` (25 243 bytes), Darwin arm64, CPython 3.13.7: a hit — read,
+  resolve, compare — 50.5 µs, and a parse 15.94 ms (B4); a hit including the copy below
+  51.12 µs, and a parse 13.31 ms in that run (F1).
+- **Every call returns a list of its own.** The rules are stored as a tuple and a hit returns
+  `list(...)` of it, so one caller's `append` or `clear` cannot change what the next caller is
+  served; the copy measured 0.078 µs. The rules themselves are frozen dataclasses and are
+  shared.
+- **`forget_parsed_rules()` forgets every entry**, so the next call parses. `tests/conftest.py`
+  calls it before every test through an autouse fixture. mutmut 3.7.0 runs the clean suite in its
+  parent process and forks each mutant's child from it, so a memo the parent filled could
+  answer a child's test without executing the mutated body. B5 measured the fixture as
+  insurance rather than a load-bearing fix: with it disabled in the `mutants/` copy, all 136
+  `load_rules` verdicts of a serial run were identical, because every killable mutant is killed
+  first by a test on its own `tmp_path`.
+
+The memo lives as long as the process, so it applies to every caller in it, not only to `init`.
 
 ### Validation Against Database
 
@@ -1061,13 +1123,24 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 | `_parse_deny_rule`    | Parse a deny block into a `DenyRule` with validated matchers and `unless_edge`.                 |
 | `_parse_require_rule` | Parse a require block into a `RequireRule` with validated matchers and optional `edge_kind`.    |
 | `_parse_cycle_rule`   | Parse a forbid_cycles block into a `CycleRule` with edge_kind and optional max_depth.          |
-| `_parse_import_boundary_rule` | Parse a forbid_import block into an `ImportBoundaryRule` with from/to glob patterns.  |
-| `_parse_forbid_edge_rule`     | Parse a forbid block into a `ForbidEdgeRule` with from/to matchers and optional edge_kind. |
-| `_parse_layer_rule`   | Parse a layers block into a `LayerRule` with ordered `LayerDef` entries.                       |
-| `_parse_cardinality_rule`     | Parse a check block into a `CardinalityRule` with threshold fields.                      |
+| `_parse_forbid_import_rule` | Parse a forbid_import block into an `ImportBoundaryRule` with from/to glob patterns.  |
+| `_parse_forbid_rule`  | Parse a forbid block into a `ForbidEdgeRule` with from/to matchers and optional edge_kind.     |
+| `_parse_layer_rule`   | Parse a layer rule into a `LayerRule` with ordered `LayerDef` entries. Handed the whole rule, not a block. |
+| `_parse_check_rule`   | Parse a check block into a `CardinalityRule` with threshold fields.                            |
+| `_parse_unregistered_feature_candidate_rule` | Parse an unregistered_feature_candidate block into an `UnregisteredFeatureCandidateRule`. |
+| `_parse_module_coverage_rule` | Parse a module_coverage block into a `ModuleCoverageRule`.                             |
+| `_parse_scenario_coverage_rule` | Parse a scenario_coverage block into a `ScenarioCoverageRule`.                       |
+| `_parse_doc_area_coherence_rule` | Parse a doc_area_coherence block into a `DocAreaCoherenceRule`.                     |
+| `_parse_summary_facts_rule` | Parse a summary_facts block into a `SummaryFactsRule`.                                   |
 | `_first_matching_source` | The most specific candidate a deny rule applies to, or `None`.                              |
 | `_get_node`           | Return `(ref_id, kind)` tuple for a node, or `None`.                                          |
 | `_edge_exists`        | Return `True` if an edge of any of the specified kinds exists between two nodes.               |
+
+The dispatch in `load_rules` reads three module-level names in `rules/loader.py`, none of them
+public: `_MAPPING_PARSERS` (authoring key to parser, eleven entries; every parser takes
+`(name, description, block, *, severity)`), `_KEY_READ_FROM_THE_RULE` (`"layers"`) and
+`_KEYS_THAT_DEFAULT_TO_WARN` (the four advisory keys). The memo is `_PARSED`; nothing outside
+`rules/loader.py` reads it, and tests forget it through `forget_parsed_rules()`.
 
 ---
 
@@ -1077,6 +1150,7 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 
 ```python
 def load_rules(rules_path: Path) -> list[Rule]: ...
+def forget_parsed_rules() -> None: ...  # rules/loader.py only; not re-exported
 def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]: ...
 def evaluate_rule_liveness(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 def inert_rule_names(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> set[str]: ...
@@ -1217,7 +1291,9 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 ## Invariants
 
 - Rule names are unique within a single `rules.yml` file.
-- Each rule contains exactly one of `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check` (never multiple, never none).
+- Each rule contains exactly one key of `AUTHORING_KEYS` (never multiple, never none).
+- `AUTHORING_KEYS` is the keys of `_MAPPING_PARSERS` plus `layers`. `rules_gen._detect_rule_type` reads it and keeps no copy of it.
+- `load_rules` returns a new list on every call. For one path, an unchanged text is parsed once per process until `forget_parsed_rules()` is called, and a changed text is always parsed again, whatever its size or timestamp.
 - Self-references (`source_ref_id == target_ref_id`) are skipped during deny evaluation and never produce violations.
 - A deny rule sees every indexed file its node contains, whether or not that file carries an annotation; a file no node contains is counted in `files_unattributed` rather than passing silently.
 - `evaluate_all` output is deterministically sorted by `(rule_name, file_path or "")`.
@@ -1260,6 +1336,22 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - **Empty matcher detects violations.** Assert nodes without outgoing edges of the required kind produce violations.
 - **Empty matcher satisfied.** Assert adding any `part_of` edge satisfies the empty-matcher rule.
 - **Empty for-matcher rejected in deny.** Assert empty matchers are still rejected in deny rule positions.
+
+### Dispatch and Memo Tests
+
+- **Codec and messages** (`tests/test_load_rules_pins_its_codec_and_messages.py`, BDL-073 B1).
+  Written before the dispatch became a table, so the table was proven against them: the UTF-8
+  codec under a non-UTF-8 locale, a file with no `rules:` key loading as no rules, the two
+  top-level messages in full, and the per-rule "must be a mapping" message for every key but
+  `layers`. Each answered a `load_rules` mutant that survived the 2026-09-19 fan-out analysis.
+- **The table against the SPEC** (`tests/test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader`).
+  The `Keyword` column under Purpose equals `AUTHORING_KEYS`, and the stated count is its size.
+- **The memo** (`tests/test_load_rules_parses_once.py`). One `init --yes` and one `init
+  --bootstrap` parse once; an unchanged file is parsed once; an edited file, and an edit of the
+  same size inside one timestamp tick, are parsed again; a file that fails is not remembered;
+  two paths are remembered side by side; one caller's change to its list does not reach the
+  next caller; the TUI's `LintDataProvider.refresh()` sees a rule renamed between two
+  refreshes; every test starts with nothing remembered.
 
 ### Deny Evaluation Tests
 

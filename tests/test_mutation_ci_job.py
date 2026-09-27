@@ -17,6 +17,7 @@ These tests read the workflow as data. None of them proves the job runs.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -28,6 +29,10 @@ MUTATION = WORKFLOWS / "mutation.yml"
 #: PyYAML reads the workflow key `on` as the boolean True (the Norway problem's
 #: cousin). Named here so the tests read as the workflow does.
 _ON = True
+
+#: The most mutmut children one invocation may run; the reason is on the test
+#: that holds it.
+_MAX_CHILDREN = 2
 
 
 def _workflow() -> dict[object, object]:
@@ -65,6 +70,13 @@ def _run_steps() -> list[str]:
     steps = _job()["steps"]
     assert isinstance(steps, list)
     return [str(step.get("run", "")) for step in steps if step.get("run")]
+
+
+def _children(step: str) -> float:
+    """The children one `mutmut run` step asks for; unbounded when it names none,
+    because mutmut then runs one per CPU."""
+    found = re.search(r"--max-children\s+(\d+)", step)
+    return float("inf") if found is None else int(found.group(1))
 
 
 def _steps_text() -> str:
@@ -113,6 +125,23 @@ class TestTheVerdictIsTheProductsAndNotTheRunners:
         assert len(runs) >= 1
         undefended = [step for step in runs if "|| true" not in step]
         assert undefended == [], undefended
+
+    def test_no_runner_invocation_runs_more_than_two_children(self) -> None:
+        """At four children a mutant was counted killed by an IntegrityError from
+        the live index the children share (beadloom-qq6m), and survived when run
+        alone: 16 s "killed" against 49 s survived, measured on 2026-09-19. A
+        false kill inflates the score the floors are held to.
+
+        The ceiling is two, not one, because two is the owner's decision
+        (BDL-073) and one would double the wall clock again. Two is not measured
+        free of false kills; it halves the concurrency that produced one. An
+        invocation that omits the flag gets mutmut's default of one child per
+        CPU, so it fails here too.
+        """
+        runs = [step for step in _run_steps() if "mutmut run" in step]
+        assert len(runs) >= 1
+        too_many = [step for step in runs if _children(step) > _MAX_CHILDREN]
+        assert too_many == [], too_many
 
     def test_the_score_is_produced_by_the_command(self) -> None:
         text = _steps_text()
