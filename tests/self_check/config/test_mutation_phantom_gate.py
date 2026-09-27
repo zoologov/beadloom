@@ -8,14 +8,12 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path as _Path
-
 from beadloom.application.mutation_scope import (
     check_mutation_scope,
 )
+from tests.support.repository_root import REPO_ROOT
 
 #: This repository, whose own declaration must survive the join unchanged.
-REPO_ROOT = _Path(__file__).resolve().parents[3]
 
 
 class TestThisRepositorysOwnDeclarationSurvivesTheJoin:

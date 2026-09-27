@@ -37,29 +37,19 @@ _SUPPORT = "tests.support"
 #: copy and run the product over.
 _DATA_DIRS = frozenset({"fixtures", "__pycache__"})
 
-#: The wave-4 neighbour's files. ``beadloom-vr0b`` (D1) edits them while B1 runs,
-#: so B1 leaves them exactly as they are, and they are named by PREFIX: D1 renamed
-#: the nightly announcement to the weekly one during the wave, and a list of file
-#: names would have gone stale under it.
-_NEIGHBOUR = "tests/self_check/config/test_mutation_"
-
-#: Paths (by prefix) still allowed to count their own parents, with reason and exit.
-PARENT_COUNTING_EXEMPT: dict[str, str] = {
-    _NEIGHBOUR: (
-        "four files owned by beadloom-vr0b (D1) during wave 4, each with "
-        "REPO_ROOT = parents[3]; switched to tests.support.repository_root once D1 "
-        "has landed. Exit: beadloom-vr0b, or the coordinator right after it"
-    ),
-}
+#: Paths (by prefix) still allowed to count their own parents, with reason and
+#: exit. Empty since ``beadloom-vr0b`` landed and its five mutation self-checks
+#: moved onto the helper; an entry added here needs both, and fails when unused.
+PARENT_COUNTING_EXEMPT: dict[str, str] = {}
 
 #: Test modules (by path prefix) another module may import, with reason and exit.
 IMPORTABLE_TEST_MODULES: dict[str, str] = {
-    _NEIGHBOUR: (
+    "tests/self_check/config/test_mutation_weekly_announcement.py": (
         "the announcement's own tests are the SUBJECT of "
-        "test_the_*_announcement_tests_would_notice.py, which runs them against a "
-        "broken copy of the workflow and requires them to go red: the import is "
-        "the test, not a borrowed helper. D1 (beadloom-vr0b) owns both files in "
-        "wave 4. Exit: beadloom-vr0b, if it runs them in a child pytest instead"
+        "test_the_weekly_announcement_tests_would_notice.py, which runs them "
+        "against a broken copy of the workflow and requires them to go red: the "
+        "import is the test, not a borrowed helper. Exit: the day that check runs "
+        "them in a child pytest by path instead of importing them"
     ),
 }
 

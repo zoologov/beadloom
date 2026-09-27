@@ -17,11 +17,11 @@ verification bead (`beadloom-paze`) reads one real run of each.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
+
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 MUTATION = WORKFLOWS / "mutation.yml"
 ADAPTER = ".github/scripts/mutmut_adapter.py"

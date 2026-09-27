@@ -20,12 +20,16 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 MUTATION = REPO_ROOT / ".github" / "workflows" / "mutation.yml"
 
 #: The job the announcement speaks for.

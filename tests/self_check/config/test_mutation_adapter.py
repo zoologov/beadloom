@@ -21,12 +21,14 @@ import json
 import random
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
+from tests.support.repository_root import REPO_ROOT
+
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import ModuleType
 
 if sys.version_info >= (3, 11):
@@ -34,7 +36,6 @@ if sys.version_info >= (3, 11):
 else:
     from tomli import loads as toml_loads
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 ADAPTER = REPO_ROOT / ".github" / "scripts" / "mutmut_adapter.py"
 
 
