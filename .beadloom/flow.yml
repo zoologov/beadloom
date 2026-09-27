@@ -65,7 +65,7 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-2mj3.1, beadloom-kixx]
+  - beads: [beadloom-2esy, beadloom-3z94]
     decision: parallel
-    reason: "BDL-074 wave 2. beadloom-2mj3.1 edits docs/ only (the pairs C1 made stale). beadloom-kixx edits tests/ only - the self-check snapshot replacing live_repo_reindexed - which no graph node owns, hence ref_not_in_graph. The file sets are disjoint apart from .beads/issues.jsonl and the ACTIVE.md rows, ordered by the merge slot. Known interaction handed to both prompts: A2's self-checks read docs/, so the docs bead's edits land in what A2's snapshot copies; A2 builds its snapshot from the working tree at test time, never from a frozen copy."
+    reason: "BDL-074 wave 3. beadloom-2esy edits tests/ only - it sorts the self-checks (the snapshot users and the self_check-marked tests) into tests/self_check/ and removes Gate duplicates - which no graph node owns, hence ref_not_in_graph. beadloom-3z94 edits src/ (context-builder, debt-report) and the tests of those two, none of which is a self-check. Ownership rule handed to both prompts: every self_check-marked or snapshot-using test file is A3's; if C2 needs one changed, it reports that on its bead and lands after A3 instead of editing it."
     until: "2026-11-15"

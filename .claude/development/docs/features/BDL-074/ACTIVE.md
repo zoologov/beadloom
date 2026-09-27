@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 2 — `beadloom-2mj3.1` (the doc pairs C1 made stale) and `beadloom-kixx` (A2, the self-check snapshot), in parallel; then `beadloom-3z94` (C2), then `beadloom-vr0b` (D1) — those two share `cli-commands`.
-**Goal:** the combined tree is green again before new work lands on it, and the 44-entry allowed list starts emptying into a snapshot.
-**Done when:** `beadloom ci` rc 0 and `test_all_new_node_pairs_are_fresh` green on the combined tree; A2's snapshot replaces `live_repo_reindexed` and qq6m's tracer shows 0 live-index contacts.
+**Bead:** Wave 3 — `beadloom-2esy` (A3, the self-check triage) and `beadloom-3z94` (C2, ctx and debt-report read the binding), in parallel; then `beadloom-vr0b` (D1), which shares `cli-commands` with C2. PR 1 opens after A3.
+**Goal:** the 547 self-checks sorted by what they guard, Gate duplicates removed, the allowed list emptied; ctx and debt-report stop calling the name-guessing mapper.
+**Done when:** the allowed list is empty or each remaining entry names why; qq6m's tracer reads 0; ctx and debt-report read the binding with the four-key shape kept.
+
+**Wave 2 closed (2026-09-27):** docs `65a098bc` (36 stale pairs → 0); A2 `596401ab`, `4e6b9c20`. Gate owner A2 on the combined tree: 10 975 passed, 0 failed, 13 skipped, 13 xfailed; `beadloom ci` rc 0. Allowed list 44 → 20; live-index contacts 98 → 1 — the A3 probe that hashes the index bytes, so qq6m stays open until A3.
 
 **Wave 1 closed (2026-09-27):** A1 `8e17362e`, `12ad9f12`; C1 `90c04540`. Gate owner A1 on the combined tree: 10 958 passed, 1 failed (`test_all_new_node_pairs_are_fresh`), `beadloom ci` rc 1 on 36 stale doc pairs from C1's change — not planned for this point, so a docs bead `beadloom-2mj3.1` was added ahead of wave 2.
 
