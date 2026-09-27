@@ -18,7 +18,18 @@ Codes (the contract a caller may rely on):
   mutants, counters the score cannot be computed from, or a score under the
   declared floor.
 * ``2`` — the invocation cannot be answered: counters were named without the
-  scope they cover, so what the run measured is unstated.
+  scope they cover, so what the run measured is unstated; or a change, a
+  survivor list or a sample was named and cannot be read.
+
+**A run can cover a change or a sample instead of the declared scope**
+(BDL-074 D1). ``--changed-since REF`` states the population of a change — the
+functions it touched in the declared scope, the node owning each, and the tests
+the binding ties to that node — and, with ``--stats``, scores the run over it;
+the declared targets are then printed as not judged by this run, because a
+change covers functions, not targets. ``--sample-of N`` reads the counters as a
+random sample of N mutants and prints the interval the sample supports.
+``--survivors FILE`` lists the surviving mutants under the node owning their
+file. The last two read the index, and so does the first.
 
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
 the same score, the same room and the same findings, so a monitoring surface and
@@ -37,15 +48,24 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import click
 
 from beadloom.services.commands._root import main
 
 if TYPE_CHECKING:
-    from beadloom.application.mutation_scope import MutationReport
+    import sqlite3
+
+    from beadloom.application.mutation_scope import (
+        ChangePlan,
+        MutationReport,
+        SampleInterval,
+        Survivor,
+    )
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
 _EXIT_CLEAN = 0
@@ -93,6 +113,28 @@ _UNNAMED_TOOL = "an unnamed runner"
     default=None,
     help="Floor the score must clear, as a fraction (0.85 is 85%).",
 )
+@click.option(
+    "--changed-since",
+    "changed_since",
+    default=None,
+    help=(
+        "Cover the change since the merge base with this ref: the functions it "
+        "touched in the declared scope, by node, with the tests bound to each."
+    ),
+)
+@click.option(
+    "--survivors",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="JSON list of surviving mutants ({path, mutant}) to list by node.",
+)
+@click.option(
+    "--sample-of",
+    "sample_of",
+    type=click.IntRange(min=1),
+    default=None,
+    help="The counters are a random sample of this many mutants; print its interval.",
+)
 @click.option("--json", "output_json", is_flag=True, help="Structured JSON output.")
 def mutation(
     *,
@@ -102,6 +144,9 @@ def mutation(
     only: tuple[str, ...],
     tool: str | None,
     min_score: float | None,
+    changed_since: str | None,
+    survivors: Path | None,
+    sample_of: int | None,
     output_json: bool,
 ) -> None:
     """Report the mutation score a run produced over the declared scope.
@@ -119,48 +164,169 @@ def mutation(
     )
 
     project_root = project or Path.cwd()
-    if stats is not None and not targets:
-        click.echo(
-            "Error: --stats needs --target: a run that does not say what it "
-            "covered cannot be held against a declared scope.",
-            err=True,
+    if stats is not None and not targets and changed_since is None:
+        _unanswerable(
+            "--stats needs --target: a run that does not say what it "
+            "covered cannot be held against a declared scope."
         )
-        sys.exit(_EXIT_UNANSWERABLE)
+    if sample_of is not None and stats is None:
+        _unanswerable("--sample-of needs --stats: there is no sample without counters.")
 
+    change = _read_change(project_root, changed_since) if changed_since else None
     room = describe_room()
+    covered = targets or (change.mutated_files if change is not None else ())
     run = (
         MutationRun(
             tool=tool or _UNNAMED_TOOL,
             room=room,
-            covered=tuple(targets),
+            covered=tuple(covered),
             counters=read_run_counters(stats),
         )
         if stats is not None
         else None
     )
-    report = report_mutation_score(project_root, run, only=only or None)
-    below_floor = _below_floor(report.score, min_score)
+    judged_only = change.mutated_files if change is not None else (only or None)
+    report = report_mutation_score(project_root, run, only=judged_only)
+    extras = _Extras(
+        change=change,
+        survivors=_read_survivors(project_root, survivors) if survivors else None,
+        sample=_read_sample(report, sample_of),
+    )
+    below_floor = _below_floor(report.score, min_score, extras.sample)
 
     if output_json:
-        click.echo(json.dumps(_payload(report, room, min_score, below_floor), indent=2))
+        payload = _payload(report, room, min_score, below_floor)
+        payload.update(_extras_payload(extras))
+        click.echo(json.dumps(payload, indent=2))
     else:
-        _render(report, room, min_score, below_floor)
+        _render(report, room, min_score, below_floor, extras)
 
     if report.findings or below_floor:
         sys.exit(_EXIT_FINDINGS)
     sys.exit(_EXIT_CLEAN)
 
 
-def _below_floor(score: float | None, min_score: float | None) -> bool:
+@dataclass(frozen=True)
+class _Extras:
+    """What a run over a change or a sample adds to the report, when it is one."""
+
+    change: ChangePlan | None = None
+    survivors: dict[str | None, tuple[Survivor, ...]] | None = None
+    sample: SampleInterval | None = None
+
+
+def _unanswerable(message: str) -> NoReturn:
+    click.echo(f"Error: {message}", err=True)
+    sys.exit(_EXIT_UNANSWERABLE)
+
+
+def _index(project_root: Path, needed_for: str) -> sqlite3.Connection:
+    from beadloom.infrastructure.db import open_db_readonly
+
+    try:
+        return open_db_readonly(project_root / ".beadloom" / "beadloom.db")
+    except FileNotFoundError:
+        _unanswerable(
+            f"{needed_for} reads the index, and there is none — run `beadloom reindex`."
+        )
+
+
+def _read_change(project_root: Path, base: str) -> ChangePlan:
+    from beadloom.application.mutation_scope import (
+        MutationChangeError,
+        diff_since,
+        plan_change,
+    )
+
+    try:
+        diff = diff_since(project_root, base)
+    except MutationChangeError as error:
+        _unanswerable(f"--changed-since {base}: {error}")
+    with closing(_index(project_root, "--changed-since")) as conn:
+        return plan_change(project_root, conn, diff, base=base)
+
+
+def _read_survivors(
+    project_root: Path, path: Path
+) -> dict[str | None, tuple[Survivor, ...]]:
+    from beadloom.application.mutation_scope import read_survivors, survivors_by_node
+
+    listed = read_survivors(path)
+    if listed is None:
+        _unanswerable(
+            f"--survivors {path} holds no survivor list: a JSON list of "
+            f"{{path, mutant}} objects is expected."
+        )
+    with closing(_index(project_root, "--survivors")) as conn:
+        return survivors_by_node(conn, listed)
+
+
+def _read_sample(report: MutationReport, sample_of: int | None) -> SampleInterval | None:
+    from beadloom.application.mutation_scope import sample_interval
+
+    if sample_of is None or report.run is None:
+        return None
+    try:
+        return sample_interval(report.run.counters, population=sample_of)
+    except ValueError as error:
+        _unanswerable(f"--sample-of {sample_of}: {error}.")
+
+
+def _extras_payload(extras: _Extras) -> dict[str, object]:
+    from beadloom.application.mutation_scope import (
+        change_payload,
+        sample_payload,
+        survivors_payload,
+    )
+
+    return {
+        "change": change_payload(extras.change) if extras.change else None,
+        "survivors_by_node": (
+            survivors_payload(extras.survivors) if extras.survivors is not None else None
+        ),
+        "sample": sample_payload(extras.sample) if extras.sample else None,
+    }
+
+
+def _below_floor(
+    score: float | None, min_score: float | None, sample: SampleInterval | None = None
+) -> bool:
     """Whether a declared floor was missed.
 
     A floor declared against a score that does not exist is MISSED, not passed:
     an absent number clearing a threshold is how a run that measured nothing
     reports success.
+
+    A score measured on a sample misses the floor only when its WHOLE interval
+    lies under it (BDL-074 D1): a sample of 150 from a scope at 0.89 reads under
+    0.88 about a third of the time, and a floor that fails on that is a coin.
     """
     if min_score is None:
         return False
+    if sample is not None:
+        return sample.high < min_score
     return score is None or score < min_score
+
+
+def _score_line(report: MutationReport, extras: _Extras) -> str | None:
+    """The score, or why there is none; nothing for a change no run was given."""
+    run = report.run
+    if run is None and extras.change is not None:
+        return None
+    if report.score is None:
+        return "Score: none — see the findings below."
+    scored = run.counters.scored if run else 0
+    return f"Score: {report.score * 100:.1f}% of {scored} scored mutants"
+
+
+def _floor_verdict(below_floor: bool, sample: SampleInterval | None) -> str:
+    if sample is not None:
+        return (
+            "the sample's interval lies wholly under it."
+            if below_floor
+            else "the sample's interval reaches it."
+        )
+    return f"the score is {'under' if below_floor else 'at or over'} it."
 
 
 def _payload(
@@ -199,9 +365,19 @@ def _render(
     room: str,
     min_score: float | None,
     below_floor: bool,
+    extras: _Extras,
 ) -> None:
     """Print the score, the room it was measured in, and what was not measured."""
+    from beadloom.application.mutation_scope import (
+        describe_change,
+        describe_sample,
+        describe_survivors,
+    )
+
     click.echo(f"Room: {room}")
+    if extras.change is not None:
+        for line in describe_change(extras.change):
+            click.echo(line)
     if not report.declared:
         click.echo(
             "No mutation scope declared — `mutation.targets` in "
@@ -210,10 +386,17 @@ def _render(
         return
 
     click.echo(f"Declared scope: {', '.join(report.declared)}")
-    if report.not_judged:
+    if extras.change is not None:
+        click.echo(
+            "Judged by this run: the functions above — a change covers functions, "
+            "not declared targets"
+        )
+    elif report.not_judged:
         click.echo(f"Not judged by this run: {', '.join(report.not_judged)}")
     run = report.run
-    if run is None:
+    if run is None and extras.change is not None:
+        click.echo("No run was reported: the population above is what a runner is given.")
+    elif run is None:
         click.echo("No run was reported.")
     else:
         click.echo(f"Measured: {', '.join(run.covered)}")
@@ -222,14 +405,16 @@ def _render(
             f"{name} {value}" for name, value in sorted(run.counters.values.items())
         )
         click.echo(f"Counters: {counters or 'none'}")
-    if report.score is None:
-        click.echo("Score: none — see the findings below.")
-    else:
-        scored = run.counters.scored if run else 0
-        click.echo(f"Score: {report.score * 100:.1f}% of {scored} scored mutants")
+    score = _score_line(report, extras)
+    if score is not None:
+        click.echo(score)
+    if extras.sample is not None:
+        click.echo(describe_sample(extras.sample))
+    if extras.survivors is not None:
+        for line in describe_survivors(extras.survivors):
+            click.echo(line)
     if min_score is not None:
-        verdict = "under" if below_floor else "at or over"
-        click.echo(f"Floor: {min_score} — the score is {verdict} it.")
+        click.echo(f"Floor: {min_score} — {_floor_verdict(below_floor, extras.sample)}")
     for finding in report.findings:
         click.echo(
             f"{finding.severity.upper()} [{finding.check}] "

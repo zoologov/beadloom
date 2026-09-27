@@ -34,7 +34,16 @@ guards:
 # them could not be reached by any run of the nightly job however long it ran —
 # a name in the shipped declaration that nothing measures, which is the phantom
 # gate this epic exists to remove, sitting in the epic's own configuration.
-# `tests/test_mutation_runner_scope.py` now fails in BOTH directions.
+# `tests/self_check/config/test_mutation_runner_scope.py` now fails in BOTH
+# directions.
+#
+# NO RUN MUTATES THE WHOLE LIST ANY MORE, and each run says which part it did
+# (BDL-074 D1). The whole-scope nightly was retired on 2026-09-27 after ten runs
+# were killed by the runner mid-queue. A pull request mutates the functions it
+# touched inside these targets (`beadloom mutation --changed-since`), and a
+# weekly run mutates a seeded random sample of 150 drawn from all of them and
+# reports the score with its interval (`--sample-of`). The list is still the
+# scope both are drawn from, so the both-directions test above still holds it.
 #
 # THE SIZE IS MEASURED, not chosen. Mutant counts from mutmut 3.7's own
 # generator, the same method checked against the 3 989 RFC Q3 measured:

@@ -44,7 +44,7 @@
 | `beadloom-3z94` | C2 dev | ✓ done | ctx and debt-report read the binding; ctx states the unplaced share (393 of 464 here), debt-report withholds `untested` while files are unplaced; `test_mapper` retired; 22 stale pairs for the docs pass |
 | `beadloom-2mj3.2` | docs | ✓ done | 22 stale pairs → 0 over 12 refs; `test_mapper` gone from the docs; `test_placements`, the unplaced line, `test_population` and `count_test_files_by_placement` documented; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
-| `beadloom-vr0b` | D1 dev | in progress | mutation per change and the weekly sample |
+| `beadloom-vr0b` | D1 dev | ✓ done | `beadloom mutation --changed-since/--survivors/--sample-of`; `.github/scripts/mutmut_adapter.py`; `mutation.yml` = `mutation-per-change` (PR) + `mutation-sample` (weekly, 150, seeded) + `announce`; workflow still DISABLED; per-change fallback = the pool while tests are unplaced; one-function change measured ~9 min locally (496 s of it the stats pass), so the 10-min budget waits on B2; clean room 11 016 passed, 0 failed |
 | `beadloom-cs2o` | E1 dev | blocked | the rule-engine pilot |
 | `beadloom-kug7` | E2 dev | blocked | test standards |
 | `beadloom-75pl` | T test | blocked | the criteria, measured |

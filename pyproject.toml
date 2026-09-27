@@ -244,6 +244,14 @@ fail_under = 80
 #   pytest --cov=<the declared module> --cov-context=test
 #   select distinct context from arc join context ...   # the coverage database
 #
+# TWO RUNS READ THIS POOL SINCE BDL-074 D1, and one of them rewrites it per run.
+# The weekly sample runs against it as written. A pull request's run replaces it
+# in its own checkout (`.github/scripts/mutmut_adapter.py select`, never
+# committed) with the tests the binding ties to the changed nodes PLUS the
+# entries below that the binding places under no node -- the fallback, which is
+# every entry while tests are unplaced and none once each one is laid out under
+# `tests/{unit,integration}/`.
+#
 # 73 test files execute graph/rules/ (measured 2026-09-03 over 8 195 tests),
 # and a 74th imports the package at COLLECTION time, where a coverage context
 # does not reach -- it was added by the import check named below, on its first

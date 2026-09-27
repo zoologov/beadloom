@@ -1,24 +1,26 @@
-"""BDL-072 — the announcement's tests go red when the announcement is broken.
+"""BDL-072, BDL-074 D1 — the announcement's tests go red when the announcement is broken.
 
 `beadloom-95dm` states the seam plainly and it is the reason this file exists:
 no test reaches `gh` itself. What its tests DO reach is the workflow's own
-program — the reading step's Python, run over six counter shapes, and the
-announcement's shell, run against a stubbed `gh`. A test that runs a program and
+program — the announcement's shell, run against a stubbed `gh`. (The reading
+step's inline Python went with the nightly in BDL-074 D1; its successor is the
+adapter's `judge`, which `test_mutation_adapter.py` runs over its shapes
+directly, so there is no inline program left here to break.) A test that runs a program and
 reads its output can still pass over every input if what it asserts is weaker
 than what it claims, and that shape has a name in this repository: a phantom
 gate.
 
 So each break below edits `.github/workflows/mutation.yml` in a temporary copy,
-points `tests/self_check/config/test_mutation_nightly_announcement.py` at it and
+points `tests/self_check/config/test_mutation_weekly_announcement.py` at it and
 RUNS one of its tests. The test must fail. The control runs the same tests against an unedited
 copy of the same file through the same machinery, so a red here is the break and
 not the harness.
 
 **What this still does not measure**, restated so it is not read as closed: `gh`
 against a live repository — whether the label can be created, whether the issue
-appears, whether the mention notifies. Only the dispatched run of
-`beadloom-e8m4` measures that. This file measures that the tests which exist
-would notice their own mechanism dying.
+appears, whether the mention notifies. Only a dispatched run measures that, and
+the verification bead (`beadloom-paze`) reads one. This file measures that the
+tests which exist would notice their own mechanism dying.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-import tests.self_check.config.test_mutation_nightly_announcement as announcement
+import tests.self_check.config.test_mutation_weekly_announcement as announcement
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -55,7 +57,7 @@ class Break:
     spelling: type[Exception]
 
 
-#: The eight edits, each on a line the announcement's behaviour rests on. `old`
+#: The five edits, each on a line the announcement's behaviour rests on. `old`
 #: is required to occur EXACTLY once, so an edit that silently matched nothing —
 #: which would make every assertion below pass over an unchanged workflow — is a
 #: failure of this file rather than a pass of the suite.
@@ -66,50 +68,23 @@ class Break:
 #: picks the create call out of it first and so goes red as a `StopIteration`.
 BREAKS: tuple[Break, ...] = (
     Break(
-        name="the counters are read from the wrong directory",
-        old='path = pathlib.Path("mutants") / name',
-        new='path = pathlib.Path("nowhere") / name',
-        case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
-        "test_two_populations_that_differ_are_a_judged_run",
-        notices="a judged run would be reported as silent",
-        spelling=AssertionError,
-    ),
-    Break(
-        name="the two populations are no longer compared",
-        old="elif whole_total <= rules_total:",
-        new="elif whole_total < 0:",
-        case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
-        "test_a_whole_scope_export_equal_to_the_slice_is_silent",
-        notices="the green shape of silence would be reported as a verdict",
-        spelling=AssertionError,
-    ),
-    Break(
-        name="an interrupted run stops being one",
-        old='whole.get("check_was_interrupted_by_user")',
-        new="False",
-        case="TestTheReadingStepTellsAJudgedRunFromASilentOne::"
-        "test_an_interrupted_run_is_silent_even_with_a_full_population",
-        notices="a score over a truncated population would be reported as a verdict",
-        spelling=AssertionError,
-    ),
-    Break(
-        name="a failed night opens no issue",
+        name="a failed week opens no issue",
         old='gh issue create -R "$REPO" --label "$WATCH_LABEL"',
         new='gh issue view -R "$REPO" --label "$WATCH_LABEL"',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::test_a_red_job_opens_the_first_issue",
-        notices="the nine nights would repeat with nothing said",
+        notices="an outage like the nine nights would repeat with nothing said",
         spelling=AssertionError,
     ),
     Break(
         name="the owner is no longer mentioned",
-        old='"@$OWNER — the nightly mutation run reached no verdict." \\',
-        new='"The nightly mutation run reached no verdict." \\',
+        old='"@$OWNER — the weekly mutation sample reached no verdict',
+        new='"Nobody is told: the weekly mutation sample reached no verdict',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::test_a_red_job_opens_the_first_issue",
         notices="the issue would open and notify nobody",
         spelling=AssertionError,
     ),
     Break(
-        name="a night that judged nothing opens no issue either",
+        name="a week that judged nothing opens no issue either",
         old='gh issue create -R "$REPO" --label "$WATCH_LABEL"',
         new='gh issue view -R "$REPO" --label "$WATCH_LABEL"',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
@@ -118,16 +93,16 @@ BREAKS: tuple[Break, ...] = (
         spelling=StopIteration,
     ),
     Break(
-        name="a judged night reports its own step as failed",
+        name="a judged week reports its own step as failed",
         old="exit 0",
-        new="exit 1",
+        new="exit 7",
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
         "test_a_judged_run_with_nothing_open_says_nothing",
-        notices="a recovered nightly would go red in the announcement it recovered into",
+        notices="a recovered sample would go red in the announcement it recovered into",
         spelling=subprocess.CalledProcessError,
     ),
     Break(
-        name="a recovered nightly leaves its watch issue open",
+        name="a recovered sample leaves its watch issue open",
         old='gh issue close "$number" -R "$REPO" --reason completed',
         new='gh issue comment "$number" -R "$REPO" --body completed',
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
@@ -267,7 +242,7 @@ class TestTheAnnouncementsTestsGoRedWhenItIsBroken:
 
     def test_the_population_of_breaks_is_not_empty(self) -> None:
         """A parametrisation that collected nothing reports no tests and no red."""
-        assert len(BREAKS) >= 6
+        assert len(BREAKS) >= 5
         assert len(CASES) >= 4
         assert all(hasattr(announcement, item.case.partition("::")[0]) for item in BREAKS)
 

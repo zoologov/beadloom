@@ -94,6 +94,19 @@ def load_mutation_targets(project_root: Path) -> tuple[str, ...]:
     return ()
 
 
+def lies_within(path: str, entries: tuple[str, ...]) -> bool:
+    """Whether *path* is one of *entries* or lies under one of them.
+
+    One rule for two questions: whether a declared target lies inside what a run
+    covered, and whether a changed file lies inside the declared scope.
+    """
+    wanted = path.strip("/")
+    return any(
+        wanted == entry.strip("/") or wanted.startswith(f"{entry.strip('/')}/")
+        for entry in entries
+    )
+
+
 def _languages(project_root: Path) -> tuple[str, ...]:
     """File suffixes the project indexes, from ``.beadloom/config.yml``."""
     import yaml

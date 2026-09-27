@@ -1,26 +1,25 @@
-"""A dead or red nightly says so outside the Actions tab (BDL-072).
+"""A dead or red weekly sample says so outside the Actions tab (BDL-072, BDL-074 D1).
 
-The nightly `Mutation` workflow reached a verdict on 0 of 7 187 mutants every
-night from 2026-09-10 to 2026-09-18 and nobody saw it, because a scheduled
-workflow reports no check-run and its red is visible only to whoever opens the
-Actions tab. The workflow now carries an announcement, and these tests read it
-the way `test_mutation_ci_job.py` reads the job: as data.
+The retired nightly reached a verdict on 0 of 7 187 mutants every night from
+2026-09-10 to 2026-09-18 and nobody saw it, because a scheduled workflow reports
+no check-run and its red is visible only to whoever opens the Actions tab. The
+announcement was built for it, and the weekly sample that replaced it inherits
+it; these tests read it the way `test_mutation_ci_job.py` reads the jobs: as
+data.
 
-**What they measure, and what they cannot.** The verdict half — "did this run
-judge anything" — is a program, so it is RUN here over the four counter shapes
-it has to tell apart. The announcement half calls `gh` against a live
-repository, so it is read as text: the branch structure is pinned, its behaviour
-is not. No test here proves an issue was ever opened; only a dispatched run does
-that (`beadloom-e8m4`).
+**What they measure, and what they cannot.** The verdict — "did this run judge
+every mutant it drew" — is the adapter's `judge`, which is RUN over its shapes in
+`test_mutation_adapter.py`; here the wiring from that step to the announcement is
+pinned. The announcement calls `gh` against a live repository, so it is run
+against a stubbed `gh`: the branch it takes is measured, GitHub is not. Only a
+dispatched run proves an issue opens (`beadloom-paze`).
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -29,11 +28,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MUTATION = REPO_ROOT / ".github" / "workflows" / "mutation.yml"
 
-#: The mutant total mutmut 3.7 writes for the rules slice alone, rounded to the
-#: order of magnitude the comparison cares about rather than to the measurement:
-#: these fixtures test the relation between two populations, not either number.
-RULES_POPULATION = 3989
-WHOLE_POPULATION = 7187
+#: The job the announcement speaks for.
+SAMPLE = "mutation-sample"
 
 
 def _workflow() -> dict[str, object]:
@@ -65,56 +61,6 @@ def _step_with_id(job: str, step_id: str) -> dict[str, object]:
         if step.get("id") == step_id:
             return step
     raise AssertionError(f"{job} has no step with id {step_id!r}")
-
-
-def _reader_program() -> str:
-    """The Python the reading step feeds to the interpreter on stdin.
-
-    Taken out of the heredoc rather than kept as a second copy: a fixture
-    spelling the same logic would pass while the workflow drifted away from it,
-    which is the class this whole bead is about.
-    """
-    run = str(_step_with_id("mutation", "judged")["run"])
-    _, _, rest = run.partition("<<'PY'")
-    _, _, rest = rest.partition("\n")
-    body, sep, _ = rest.partition("\nPY")
-    assert sep, "the reading step no longer feeds its program on stdin"
-    return body
-
-
-def _run_reader(tmp_path: Path, files: dict[str, str]) -> dict[str, str]:
-    """Run the reading step's own program over a `mutants/` directory."""
-    mutants = tmp_path / "mutants"
-    mutants.mkdir()
-    for name, text in files.items():
-        (mutants / name).write_text(text, encoding="utf-8")
-    result = subprocess.run(
-        [sys.executable, "-"],
-        input=_reader_program(),
-        capture_output=True,
-        encoding="utf-8",
-        cwd=tmp_path,
-        check=True,
-    )
-    pairs = [line.partition("=") for line in result.stdout.splitlines() if line]
-    return {key: value for key, _, value in pairs}
-
-
-def _stats(total: int, *, interrupted: bool = False) -> str:
-    """An export in the shape mutmut 3.7 writes (`__main__.py:1177-1191`)."""
-    return json.dumps(
-        {
-            "killed": max(total - 1, 0),
-            "survived": 1 if total else 0,
-            "total": total,
-            "no_tests": 0,
-            "skipped": 0,
-            "suspicious": 0,
-            "timeout": 0,
-            "check_was_interrupted_by_user": interrupted,
-            "segfault": 0,
-        }
-    )
 
 
 def _announcement_script() -> str:
@@ -161,8 +107,8 @@ def _announce(
             "GH_TOKEN": "stub",
             "REPO": "owner/repo",
             "OWNER": "owner",
-            "WATCH_LABEL": "mutation-nightly",
-            "WATCH_TITLE": "Mutation nightly: no verdict",
+            "WATCH_LABEL": "mutation-weekly",
+            "WATCH_TITLE": "Mutation weekly sample: no verdict",
             "RUN_URL": "https://example.invalid/run/1",
             "RESULT": result,
             "VERDICT": verdict,
@@ -175,7 +121,7 @@ def _announce(
     # ON DISK, AND NOT IN THE ARGV. `encoding=` governs the child's streams;
     # an argv is encoded with `sys.getfilesystemencoding()`, which the locale
     # chooses — ascii under `LC_ALL=C`, iso8859-1 under `en_US.ISO-8859-1`.
-    # The announcement's owner mention carries an em dash (`mutation.yml:548`),
+    # The announcement's owner mention carries an em dash (the `announce` job's body),
     # so handing the script to bash as an argument raised UnicodeEncodeError on
     # both locale legs of run 35404835459 and on no UTF-8 tree. The script is
     # the workflow's text, so the encoding moves and the prose does not.
@@ -196,85 +142,22 @@ def _verbs(calls: list[str]) -> list[str]:
     return [" ".join(call.split()[:3]) for call in calls]
 
 
-class TestTheReadingStepTellsAJudgedRunFromASilentOne:
-    """The four shapes, run rather than reasoned about."""
-
-    def test_two_populations_that_differ_are_a_judged_run(self, tmp_path: Path) -> None:
-        output = _run_reader(
-            tmp_path,
-            {
-                "rules-cicd-stats.json": _stats(RULES_POPULATION),
-                "mutmut-cicd-stats.json": _stats(WHOLE_POPULATION),
-            },
-        )
-        assert output["verdict"] == "judged"
-        assert str(WHOLE_POPULATION) in output["detail"]
-
-    def test_a_whole_scope_export_equal_to_the_slice_is_silent(self, tmp_path: Path) -> None:
-        """The green shape: both runner invocations exit 0 because they carry
-        `|| true`, the second produced nothing, and the cumulative export
-        therefore carries the rules slice twice over."""
-        output = _run_reader(
-            tmp_path,
-            {
-                "rules-cicd-stats.json": _stats(RULES_POPULATION),
-                "mutmut-cicd-stats.json": _stats(RULES_POPULATION),
-            },
-        )
-        assert output["verdict"] == "silent"
-        assert str(RULES_POPULATION) in output["detail"]
-
-    def test_an_export_that_was_never_written_is_silent(self, tmp_path: Path) -> None:
-        """What the nine nights left behind: `export-cicd-stats` finds no
-        `.meta` file, prints its notice and returns 0 without writing."""
-        output = _run_reader(tmp_path, {})
-        assert output["verdict"] == "silent"
-        assert "never exported" in output["detail"]
-
-    def test_an_empty_population_is_silent(self, tmp_path: Path) -> None:
-        output = _run_reader(
-            tmp_path,
-            {
-                "rules-cicd-stats.json": _stats(0),
-                "mutmut-cicd-stats.json": _stats(0),
-            },
-        )
-        assert output["verdict"] == "silent"
-        assert "0 mutants" in output["detail"]
-
-    def test_an_interrupted_run_is_silent_even_with_a_full_population(
-        self, tmp_path: Path
-    ) -> None:
-        """A score over a truncated population is a ratio over the part."""
-        output = _run_reader(
-            tmp_path,
-            {
-                "rules-cicd-stats.json": _stats(RULES_POPULATION),
-                "mutmut-cicd-stats.json": _stats(WHOLE_POPULATION, interrupted=True),
-            },
-        )
-        assert output["verdict"] == "silent"
-        assert "interrupted" in output["detail"]
-
-    def test_an_unreadable_export_is_an_absence_and_not_a_zero(self, tmp_path: Path) -> None:
-        output = _run_reader(
-            tmp_path,
-            {
-                "rules-cicd-stats.json": _stats(RULES_POPULATION),
-                "mutmut-cicd-stats.json": "not json at all",
-            },
-        )
-        assert output["verdict"] == "silent"
-        assert "never exported" in output["detail"]
-
-
 class TestTheVerdictReachesTheAnnouncement:
     def test_the_reading_step_runs_after_a_failed_step(self) -> None:
         """Its interesting cases are the runs where something already went red."""
-        assert _step_with_id("mutation", "judged")["if"] == "always()"
+        assert _step_with_id(SAMPLE, "judged")["if"] == "always()"
+
+    def test_the_reading_step_is_the_adapters_judge_over_the_names_drawn(self) -> None:
+        """The verdict compares the counters with the names that were drawn, so a
+        run whose mutants mostly never ran is silent while every step exited 0."""
+        run = str(_step_with_id(SAMPLE, "judged")["run"])
+        assert "mutmut_adapter.py judge" in run
+        assert '--names "$RUNNER_TEMP/sample-names.txt"' in run
+        assert "--stats mutants/sample-stats.json" in run
+        assert '>> "$GITHUB_OUTPUT"' in run
 
     def test_the_job_publishes_what_the_step_read(self) -> None:
-        outputs = _job("mutation")["outputs"]
+        outputs = _job(SAMPLE)["outputs"]
         assert isinstance(outputs, dict)
         assert outputs["verdict"] == "${{ steps.judged.outputs.verdict }}"
         assert outputs["detail"] == "${{ steps.judged.outputs.detail }}"
@@ -286,21 +169,22 @@ class TestTheAnnouncementSpeaksForAJobThatCannotSpeak:
         step inside a killed job is not guaranteed to run. A dependent job reads
         `needs.mutation.result` and runs either way."""
         announce = _job("announce")
-        assert announce["needs"] == "mutation"
-        assert announce["if"] == "always()"
+        assert announce["needs"] == SAMPLE
+        assert announce["if"] == "always() && github.event_name != 'pull_request'"
 
     def test_it_is_the_only_job_holding_the_token_that_can_write(self) -> None:
         """The mutation job executes mutated source. The smallest job that needs
         `issues: write` is the one that carries it."""
         assert _workflow()["permissions"] == {"contents": "read"}
         assert _job("announce")["permissions"] == {"issues": "write"}
-        assert "permissions" not in _job("mutation")
+        assert "permissions" not in _job(SAMPLE)
+        assert "permissions" not in _job("mutation-per-change")
 
     def test_it_reads_both_shapes_of_silence(self) -> None:
         """`if: failure()` covers one shape. The announcement asks the job
         result AND the counters, so the green shape reaches it too."""
         script = "\n".join(str(step.get("run", "")) for step in _steps("announce"))
-        assert "needs.mutation.result" in str(_steps("announce"))
+        assert "needs.mutation-sample.result" in str(_steps("announce"))
         assert "$RESULT" in script
         assert "$VERDICT" in script
 
@@ -330,7 +214,7 @@ class TestTheAnnouncementSpeaksForAJobThatCannotSpeak:
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="the announcement is a bash step")
 class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
-    """The script, RUN, over the six states a nightly can hand it.
+    """The script, RUN, over the six states a weekly run can hand it.
 
     Six calls to a stubbed `gh`, so what is measured here is which branch the
     script takes and with what arguments. It is not measured against GitHub.
@@ -338,7 +222,7 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
 
     def test_a_judged_run_with_nothing_open_says_nothing(self, tmp_path: Path) -> None:
         calls = _announce(tmp_path, result="success", verdict="judged")
-        assert _verbs(calls) == ["label create mutation-nightly", "issue list -R"]
+        assert _verbs(calls) == ["label create mutation-weekly", "issue list -R"]
 
     def test_a_judged_run_closes_the_issue_the_outage_opened(self, tmp_path: Path) -> None:
         calls = _announce(tmp_path, result="success", verdict="judged", open_issue="12")
@@ -394,7 +278,7 @@ class TestWhichCancellationsCanReachTheAnnouncement:
     """A run cancelled because a newer one superseded it is not an outage.
 
     The announcement reads `cancelled` as an outage, deliberately: a timed-out
-    or killed nightly is exactly what it exists to report, and the job status is
+    or killed weekly run is exactly what it exists to report, and the job status is
     all it has to read from. GitHub tells nobody WHY a run was cancelled, so the
     only place the distinction can be made is where the cancellation is caused.
 
@@ -444,7 +328,7 @@ class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
     `subprocess` encodes an argv with the FILESYSTEM codec, and outside macOS
     the locale chooses it: ASCII under `LC_ALL=C`, iso8859-1 under
     `en_US.ISO-8859-1`, and neither holds the em dash the announcement's owner
-    mention carries (`mutation.yml:548`). So run 35404835459 was red on both
+    mention carries (the `announce` job's body). So run 35404835459 was red on both
     locale legs with `UnicodeEncodeError` and green on the UTF-8 tree, which is
     the difference those legs exist for.
 
