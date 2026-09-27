@@ -4,8 +4,7 @@ Test-to-node binding for the context-oracle domain: which graph node a test file
 belongs to, derived from where the file lives.
 
 **Source:** `src/beadloom/context_oracle/test_binding.py`,
-`src/beadloom/context_oracle/test_file_reader.py`,
-`src/beadloom/context_oracle/test_mapper.py`
+`src/beadloom/context_oracle/test_file_reader.py`
 
 ---
 
@@ -15,8 +14,9 @@ belongs to, derived from where the file lives.
 
 Bind each test file to the graph node whose code it tests, so the graph and the
 context bundles can report which nodes have tests and name them. Since BDL-074 C1
-the binding is derived from the test file's path. The earlier name-guessing
-heuristic (`test_mapper`) no longer writes `nodes.extra["tests"]`.
+the binding is derived from the test file's path. The name-guessing heuristic it
+replaced (`test_mapper.py`) was deleted in BDL-074 C2, once its last caller, the
+debt report, read the binding instead.
 
 ### The binding rule
 
@@ -108,16 +108,21 @@ A node with 0 bound tests is distinguishable from a repository whose tests are n
 laid out: `beadloom reindex` prints the placement counts on its `Tests:` line, and
 the `test_files` table records each file's placement.
 
-### The heuristic that remains
+### Readers of the binding
 
-`test_mapper.map_tests(project_root, source_dirs)` detects frameworks (pytest,
-jest, go_test, junit, xctest), collects and counts test files, and maps them by
-import analysis and name/path proximity. The reindex no longer calls it. Its one
-remaining caller is the debt report's collector
-(`application/debt_report/collect.py`), which reads `coverage_estimate` from it.
-The project tree is walked once per call, with dependency, VCS, cache and build
-directories pruned. `aggregate_parent_tests(mappings, parent_children)` rolls
-child test counts onto childless parents; nothing in the reindex calls it.
+- **`ctx`.** The context bundle carries the focus node's `extra["tests"]` under
+  `tests` and, since BDL-074 C2, the project's test files by placement under
+  `test_placements` (`{placement: count}`, read by
+  `infrastructure.repository.count_test_files_by_placement`; `{}` for an index
+  older than the test tables). When any file is unplaced, the Markdown output adds
+  one line under `Tests:` built from `describe_unplaced()`:
+  `U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/)
+  and bind to no node, so the count above can be short`.
+- **Debt report.** `_count_untested()` in `application/debt_report/collect.py`
+  counts a node as untested when it carries `extra["tests"]` with an empty
+  `test_files`. While any test file is unplaced the count is withheld (0), and the
+  report's `test_population` says why, in the same `describe_unplaced()` sentence.
+  See the [debt report](../../../application/features/debt-report/SPEC.md).
 
 ## Invariants
 
@@ -154,6 +159,9 @@ Module `src/beadloom/context_oracle/test_binding.py`:
 - `estimate_coverage(file_count, *, framework_detected) -> str`.
 - `summarize_tests(files, counts, *, framework) -> dict[str, object]` — one node's
   `extra["tests"]` in the four-key shape.
+- `describe_unplaced(counts: Mapping[str, int]) -> str | None` — the sentence that
+  says how many test files are unplaced and bind to no node; `None` when none is.
+  `ctx` and the debt report both print it.
 
 Module `src/beadloom/context_oracle/test_file_reader.py`:
 
@@ -161,17 +169,17 @@ Module `src/beadloom/context_oracle/test_file_reader.py`:
 - `read_test_file(text: str) -> TestFileContents`.
 - `count_test_functions(text: str) -> int`.
 
-Module `src/beadloom/context_oracle/test_mapper.py` (debt report only):
+Module `src/beadloom/infrastructure/repository.py`:
 
-- `TestMapping` — dataclass: `framework`, `test_files`, `test_count`,
-  `coverage_estimate`.
-- `map_tests(project_root: Path, source_dirs: dict[str, str]) -> dict[str, TestMapping]`.
-- `aggregate_parent_tests(mappings, parent_children) -> dict[str, TestMapping]`.
+- `count_test_files_by_placement(conn) -> dict[str, int]` — indexed test files per
+  placement; `{}` when the `test_files` table does not exist.
 
 ## Testing
 
 Tests: `tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py` (binding and
 reader), `tests/test_reindex_indexes_test_files_in_their_own_tables.py` (the
 tables and `extra["tests"]`), `tests/test_reindex_tests.py`,
-`tests/test_test_mapper.py` (the heuristic), and the acceptance scenarios in
-`tests/acceptance/features/test_files_bind_to_the_node_their_path_mirrors.feature`.
+`tests/test_ctx_and_debt_report_read_the_test_binding.py` (the `ctx` line and the
+debt report's count), and the acceptance scenarios in
+`tests/acceptance/features/test_files_bind_to_the_node_their_path_mirrors.feature` and
+`tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.

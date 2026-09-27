@@ -114,6 +114,15 @@ file-to-node attribution, the rule engine's `FileAttribution` and the test bindi
 (`context_oracle.test_binding`, through `most_specific_owner`) — so no two
 surfaces can report different numbers, or different owners, for the same node.
 
+**Test files by placement** — `count_test_files_by_placement(conn)` -> `dict[str, int]`:
+how many indexed test files each placement (`mirror`, `override`, `unowned`, `unplaced`,
+`other_kind`) holds, read from `test_files` (BDL-074 C2). It lives here because three readers
+state the same counts and two of them may not import the reindex: `reindex`'s `Tests:` line
+(through `test_index.placement_counts`), the `test_placements` key of a `ctx` bundle, and the
+debt report's untested count. An index written before the test tables has no `test_files`
+table; the `sqlite3.OperationalError` is caught and the answer is `{}`, because `ctx` opens
+such an index without creating the schema.
+
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 
 ## Collaborators

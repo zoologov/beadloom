@@ -8,7 +8,7 @@ Features (each with a `SPEC.md`):
 
 - **[Code Indexer](features/code-indexer/SPEC.md)** — tree-sitter symbol + `beadloom:` annotation extraction.
 - **[Route Extraction](features/route-extraction/SPEC.md)** — API route discovery across web frameworks.
-- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-node binding by the mirror of a test file's path, plus the name-guessing heuristic the debt report still reads.
+- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-node binding by the mirror of a test file's path; `ctx` and the debt report read it.
 - **[Search](features/search/SPEC.md)** — FTS5 full-text search over nodes + docs.
 - **[Cache](features/cache/SPEC.md)** — two-tier context-bundle cache.
 - **[Why](features/why/SPEC.md)** — bidirectional impact analysis.
@@ -42,9 +42,8 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for every extension in `_EXTENSION_LOADERS` |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
 | `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
-| `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under `tests/unit/` or `tests/integration/`; placements and the four-key `extra["tests"]` summary |
+| `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under `tests/unit/` or `tests/integration/`; placements, the four-key `extra["tests"]` summary, and the unplaced-files sentence `ctx` and the debt report print |
 | `test_file_reader` | `test_file_reader.py` | One `ast` parse of a test file: its test-function count and its absolute imports |
-| `test_mapper` | `test_mapper.py` | The name-guessing heuristic (framework detection, import and name/path proximity, parent aggregation). Since BDL-074 C1 only the debt report calls it |
 | `why` | `why.py` | Impact analysis via bidirectional BFS (upstream deps + downstream dependents) |
 
 ### BFS Algorithm
@@ -93,11 +92,15 @@ Parameters: `depth` (default 2), `max_nodes` (node limit, default 20).
     "test_count": 10,
     "coverage_estimate": "high|medium|low|none"
   },
+  "test_placements": { "unplaced": 3, "other_kind": 1, "mirror": 12 },
   "warning": null
 }
 ```
 
 The `focus.links` and `focus.activity` fields are optional and only present when the focus node's `extra` JSON contains them. The `constraints`, `routes`, and `tests` fields are always present (may be empty list/null).
+`test_placements` (BDL-074 C2) counts the project's indexed test files by placement, read by
+`infrastructure.repository.count_test_files_by_placement`; it is `{}` for an index older than
+the test tables. The key is additive and the bundle version stays `2`.
 
 ### Chunk Priority
 
@@ -186,9 +189,14 @@ On this repository most test files are not under the mirrored folders yet, so th
 placement counts are in the [Test Mapping SPEC](features/test-mapping/SPEC.md#the-transition),
 and `beadloom reindex` prints the current ones on its `Tests:` line.
 
-`test_mapper.map_tests()` — the heuristic (framework detection for pytest, jest, go_test,
-junit, xctest; mapping by import analysis, then naming convention, then directory proximity)
-— no longer writes `extra["tests"]`. The debt report's collector is its one remaining caller.
+The count on a node is a count of BOUND files, so it can be short while files are
+unplaced. `ctx` says so: when any test file is unplaced, its Markdown output prints the
+`test_binding.describe_unplaced()` sentence under the `Tests:` line, ending "so the count
+above can be short". The debt report withholds its untested count for the same reason.
+
+The name-guessing heuristic this replaced, `test_mapper.py` (framework detection, then
+import analysis, naming convention and directory proximity), was deleted in BDL-074 C2
+once its last caller, the debt report's collector, read the binding.
 
 ### Cache
 
@@ -474,6 +482,9 @@ resolves to `None`.
   `medium` / `low` / `none`.
 - `summarize_tests(files, counts, *, framework: str) -> dict[str, object]` -- one node's
   `extra["tests"]` in the four-key shape.
+- `describe_unplaced(counts: Mapping[str, int]) -> str | None` -- `"U of N test file(s) are
+  unplaced (not under tests/integration/ or tests/unit/) and bind to no node"`, or `None`
+  when no file is unplaced. The one wording `ctx` and the debt report share.
 - Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS`, `TEST_FILE_PATTERNS`, the five
   `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`.
 
@@ -495,37 +506,6 @@ One `ast` parse per file. Module-level `test*` functions and `test*` methods of 
 classes count, sync or async, and a parametrised function counts once. Imports use the code
 index's form, except that an aliased `import a.b as c` is recorded here. Text that does not
 parse holds nothing.
-
-### test_mapper.py -- Public Classes and Functions
-
-```python
-@dataclass(frozen=True)
-class TestMapping:
-    framework: str          # pytest, jest, go_test, junit, xctest
-    test_files: list[str]   # relative paths
-    test_count: int         # number of test functions/methods
-    coverage_estimate: str  # high | medium | low | none
-```
-
-```python
-def map_tests(
-    project_root: Path,
-    source_dirs: dict[str, str],
-) -> dict[str, TestMapping]
-```
-
-Map test files to source nodes. `source_dirs` maps `ref_id -> source_path` (relative). Returns a `TestMapping` for each source node.
-
-The project tree is walked once per call, skipping dependency trees, VCS metadata, tool caches and build output (`node_modules`, `.venv`, `vendor`, `.git`, `__pycache__`, `dist`, `build`, `target`, and similar). Those directories hold no first-party tests but otherwise dominate the walk — pruning them keeps `map_tests` fast enough to run interactively, which the TUI debt gauge relies on.
-
-```python
-def aggregate_parent_tests(
-    mappings: dict[str, TestMapping],
-    parent_children: dict[str, list[str]],
-) -> dict[str, TestMapping]
-```
-
-Aggregate child test counts up to parent nodes. For each parent in `parent_children` that has no direct test files, sums `test_count` and collects `test_files` from its children. Since BDL-074 C1 the reindex no longer calls it: a parent's `extra["tests"]` is the union computed by `test_binding.union_over_descendants`.
 
 ### search.py -- Public Functions
 
@@ -642,7 +622,7 @@ Tests are located in:
 | `tests/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
 | `tests/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
 | `tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py`, `test_file_reader.py` | Mirror, declaration, placements, deepest root, union over descendants, test counting and imports |
-| `tests/test_test_mapper.py` | `test_mapper.py` | Framework detection, test file discovery, mapping strategies, coverage estimation |
+| `tests/test_ctx_and_debt_report_read_the_test_binding.py` | `builder.py`, `test_binding.py` | `test_placements` in the bundle, the unplaced line under `Tests:`, the debt report's untested count |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
 | `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
 | `tests/test_cli_why.py` | `services/commands/query.py` (why) | CLI why command, --reverse flag, --format tree, --json output |

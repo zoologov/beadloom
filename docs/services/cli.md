@@ -167,6 +167,19 @@ beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] 
 
 Outputs Markdown by default. `--json` for machine-readable format.
 
+The Markdown `Tests:` line counts the test files BOUND to the node by the
+[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). When any of the
+project's test files is unplaced — not under `tests/unit/` or `tests/integration/`, so bound
+to no node — one more line follows it (BDL-074 C2), so a count of 0 does not read as
+"nobody tested this":
+
+```
+Tests: pytest, 0 tests in 0 files (low coverage)
+  U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+```
+
+`--json` carries the same counts as `test_placements`, test files by placement.
+
 The bundle carries an **Intent (TO-BE)** section: the epics whose planning
 documents declared this node, with the document and line to read the reason at.
 So the one command an agent is told to run before touching an area answers what
@@ -233,7 +246,7 @@ Shows Rich-formatted dashboard with: node count (broken down by kind), edges, do
 
 #### status --debt-report
 
-Architecture debt report mode. Aggregates health signals from lint, sync-check, doctor, git activity, and test mapper into a single 0-100 debt score with category breakdown and top offending nodes.
+Architecture debt report mode. Aggregates health signals from lint, sync-check, doctor, git activity, and the test binding into a single 0-100 debt score with category breakdown and top offending nodes.
 
 ```bash
 beadloom status --debt-report [--json] [--fail-if=EXPR] [--category=NAME] [--project DIR]
@@ -250,7 +263,12 @@ The debt score formula combines four categories:
 - **Rule Violations** -- weighted count of lint rule errors and warnings.
 - **Documentation Gaps** -- undocumented nodes, stale docs, untracked files.
 - **Complexity** -- oversized domains (by symbol count), high fan-out nodes, dormant domains.
-- **Test Gaps** -- untested domains/features.
+- **Test Gaps** -- nodes the test binding covers (those carrying `extra["tests"]`) with no
+  bound test file. While any test file is unplaced the count is withheld (0), because an
+  unplaced file binds to no node and a node with no bound test may still be tested by it
+  (BDL-074 C2). The Rich report prints the reason under Test Gaps, and `--json` carries it as
+  `test_population`: either what the count was taken over or `not counted: ...` with the
+  unplaced share.
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 

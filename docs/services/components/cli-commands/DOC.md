@@ -64,6 +64,10 @@ is what holds that line.
 
 `reindex` ends its output with a `Tests:` line (BDL-074 C1): `_echo_tests_line` opens the index read-only and prints `application.reindex.test_index.describe_placements` over `placement_counts`, so the bound and unplaced counts come from the `test_files` table. An index without that table prints no line.
 
+`ctx` prints the node's `Tests:` line from the bundle's `tests` key and, when any test file is unplaced, one line under it (BDL-074 C2): `_format_markdown` passes the bundle's `test_placements` to `context_oracle.test_binding.describe_unplaced` and appends ", so the count above can be short". A bundle with no unplaced file, or none of the key, prints no such line.
+
+`status --debt-report --category` narrows the Rich report with `dataclasses.replace(report, categories=...)`. The hand-built `DebtReport` it replaced named five fields and dropped every later one, `layer_populations` included; `replace` keeps `layer_populations` and `test_population`.
+
 `config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
 owns no runner to hang a step on); whenever a project declares at least one duty, the

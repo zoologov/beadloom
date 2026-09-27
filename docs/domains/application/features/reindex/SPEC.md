@@ -340,6 +340,8 @@ Module `src/beadloom/application/reindex/test_index.py`:
   the test files on disk, by hash.
 - `needs_full_test_reindex(conn) -> bool` -- whether the index predates the test tables.
 - `placement_counts(conn) -> dict[str, int]` -- files per placement, read from `test_files`.
+  Since BDL-074 C2 it delegates to `infrastructure.repository.count_test_files_by_placement`,
+  because `ctx` and the debt report state the same counts and neither may import the reindex.
 - `describe_placements(counts) -> str` -- the text after `Tests:` on the reindex output.
 
 `change_detection.code_paths(files) -> frozenset[str]` gives the code paths of a
