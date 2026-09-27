@@ -90,18 +90,21 @@ All measured on 2026-09-28 by the research agent unless marked inferred.
 | branches | mutation-scope | `score.py` — `report_mutation_score`, `read_run_counters`, the counters | none | **yes** | Per-change and sampled runs report through it. |
 | callers + branches | cli-commands | `commands/mutation.py:97` `mutation`, `_render`; `query.py:48-54` the `Tests:` line | none | **yes** | A per-change entry point; the `Tests:` line reads the binding. |
 | callers | ci-gate | `gate.py:266` `lint_step` | none | no | Runs `lint`; the rules arrive through the engine, not through this call. |
-| callers | mcp-server | `mcp_server.py:111`, `:399` | none | no | Consumes the `ctx` bundle, whose `tests` shape is kept. |
+| callers | mcp-server | `mcp_server.py:111`, `:399` | none | **yes** | First ruled no: it consumes the `ctx` bundle, whose `tests` shape is kept. C2 changed it: its hand-built copy of the debt report would have dropped the new `test_population` field, as it already dropped `layer_populations`; it now copies with `dataclasses.replace`. Ruled in by the owner after the pre-push scope warning. |
 | callers | tui | `data_providers.py:360` | 4 — `tui/styles/*.tcss` | no | Consumes the bundle; the four unread files are stylesheets, checked. |
 | callers | status, why, cache | `status.py:45`, `why.py:242`, `cache.py:289` | none | no | Consumers of `build_context`; shape kept. |
 | callers | ignore-block | `ignore_block.py:264` | none | no | Surfaced through a shared `_render` name; unrelated. |
 | — (not derived; G6) | onboarding | the shipped agentic-flow role templates the `test` role is composed from | — | **yes** | Ruled with the RFC's approval: G6 writes the test standards into the shipped `test` role. |
 | — (not derived; consumers) | docs-audit, doc-generator | `doc_sync/audit.py:941-975`, `onboarding/doc_generator.py:934-1045` | — | no | Read `extra["tests"]`, whose four-key shape this RFC keeps. |
+| — (not derived; C1) | db | `infrastructure/db.py` — the three test-file tables | — | **yes** | The test index needs its tables. Surfaced by PR #83's pre-push scope warning; ruled in by the owner on 2026-09-27. |
+| — (not derived; C1, C2) | repository | `infrastructure/repository.py` — `most_specific_owner`, `count_test_files_by_placement` | — | **yes** | `ctx` reads the placement count from the repository rather than importing the reindex. Surfaced by the same warning; ruled in by the owner on 2026-09-27. |
 
 **Not derivable, and to rule with this RFC's approval.** `beadloom impact` reads Python under `src/`,
 so no row can name `tests/`, `.github/workflows/`, `pyproject.toml`, `.beadloom/*.yml` — every site of
 isolation, relocation and the self-check triage lives there and is carried by the beads that name it.
-Two product sites surfaced after the first ruling and were ruled with this RFC's approval — the last
-two rows of the table.
+Two product sites surfaced after the first ruling and were ruled with this RFC's approval — the
+`onboarding` and consumers rows. Three more surfaced during phase A (`db`, `repository`, `mcp-server`)
+and were ruled in by the owner on 2026-09-27, after PR #83's pre-push scope warning.
 
 ## Proposed Solution
 
