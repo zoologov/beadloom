@@ -2,9 +2,10 @@
 
 A mark that is inert on this platform is invisible to pytest's collection, which
 is the property that let six of them sit unexamined; so the marks are parsed from
-the source. ``tests/test_windows_dimension.py`` holds the ledger that judges
-them, and ``tests/test_bead14_s4_binding.py`` proves the ledger's verdict bites.
-"""
+the source. ``tests/unit/application/guards/test_windows_dimension.py`` holds the ledger that
+judges
+them, and ``tests/integration/graph/scenarios/test_bead14_s4_binding.py`` proves the ledger's
+verdict bites. """
 
 from __future__ import annotations
 

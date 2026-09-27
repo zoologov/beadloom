@@ -77,7 +77,8 @@ SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
         "reads three named modules of the guards seam and sabotages copies of them"
     ),
     "tests/test_locale_independent_io.py": "walks src/beadloom for ambient-encoding sites",
-    "tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py": (
+    "tests/unit/application/source_derivation/"
+    "test_one_part_of_ancestry_walk_serves_the_rule_engine.py": (
         "walks src/beadloom/graph/rules for the one part_of ancestry walk — the "
         "second instance of this shape, found 2026-09-12 on beadloom-ey4m"
     ),

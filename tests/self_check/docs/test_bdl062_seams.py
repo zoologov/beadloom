@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_bdl062_seams.py``;
+Moved out of ``tests/integration/doc_sync/audit/test_bdl062_seams.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

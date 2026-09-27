@@ -23,8 +23,8 @@ from tests.support.toml_reader import toml_loads
 #: files the defect was found in.
 MOVED_ONTO_THE_HELPER = (
     "tests/test_two_readers_of_one_markdown_table.py",
-    "tests/test_guards_invocation.py",
-    "tests/test_the_reference_docs_state_the_population_shapes.py",
+    "tests/integration/application/guards/test_guards_invocation.py",
+    "tests/unit/graph/rules/test_the_reference_docs_state_the_population_shapes.py",
     "tests/test_s2_move_regression.py",
 )
 

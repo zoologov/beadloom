@@ -15,8 +15,8 @@ what stops them drifting apart: an eighth reader added to the derivation fails
 here, by name, before it can be silently left out of the claim.
 
 Until BDL-074 B1 the probes also had to live in the step module, because
-`tests/test_bead14_s4_binding.py` copied `tests/acceptance/` out alone and the
-`tests` package was not importable there. The copy now carries `tests/support/`
+`tests/integration/graph/scenarios/test_bead14_s4_binding.py` copied `tests/acceptance/` out alone
+and the `tests` package was not importable there. The copy now carries `tests/support/`
 beside it, so the probes live with the other shared helpers.
 """
 

@@ -1,6 +1,6 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_exit_condition_expiry.py``;
+Moved out of ``tests/integration/infrastructure/exit_condition/test_exit_condition_expiry.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

@@ -1,6 +1,7 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py``;
+Moved out of
+``tests/unit/application/source_derivation/test_one_part_of_ancestry_walk_serves_the_rule_engine.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

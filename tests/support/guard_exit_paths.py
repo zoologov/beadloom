@@ -82,7 +82,8 @@ EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
         # cannot translate the payload this binding sends — and the repair is an
         # edit to the binding, which the blocking code forbade. The hooked twin
         # of each 3-row is derived from this table in
-        # ``tests/test_guards_unresolved.py`` rather than written out again.
+        # ``tests/integration/application/guards/test_guards_unresolved.py`` rather than written
+        # out again.
         "a harness nobody supports",
         "bead-claimed",
         ["--hook", "no-such-harness"],

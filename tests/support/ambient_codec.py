@@ -12,8 +12,8 @@ Standing rule 4 ("a test on a fake proves the fake's contract") is answered, not
 argued around: every module that uses these rows also carries a row against the
 real ``git`` binary, driven by bytes that are undecodable under *any* codec.
 
-Extracted from ``tests/test_guard_probes_encoding.py`` when a second module
-(``tests/test_decoding_symmetry.py``) needed the identical double — one
+Extracted from ``tests/integration/services/guard_probes/test_guard_probes_encoding.py`` when a
+second module (``tests/test_decoding_symmetry.py``) needed the identical double — one
 definition, so the two modules cannot drift into disagreeing about what "the
 image decides" means.
 """

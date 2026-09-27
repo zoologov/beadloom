@@ -15,8 +15,8 @@ Two degrees of freedom survive that fix, and neither had a case:
   / "docs")` type-checks.
 - WHEN the call is made. `generate_skeletons` is a graph WRITER: it patches a
   `docs:` field into the graph YAML for every skeleton it creates
-  (`tests/test_doc_generator.py::TestPatchDocsField`, which is where that fact is
-  measured — it is cited here rather than re-measured). So a caller that
+  (`tests/integration/onboarding/doc_generator/test_doc_generator.py::TestPatchDocsField`, which is
+  where that fact is measured — it is cited here rather than re-measured). So a caller that
   re-indexes and then generates leaves the index describing a graph file that has
   changed since. `.18` moved the call for exactly that reason, and its own
   comment in `init_flow` states the rule; nothing bound the rule to the source.
@@ -43,8 +43,8 @@ branch is `statement_trail` in
 `src/beadloom/application/source_derivation/branches.py`, imported rather than
 written again: two derivations of one fact are two things that can disagree, and
 this epic has spent three waves on pairs that did. It lived in
-`tests/test_init_branches_that_reach_the_bootstrap.py` until BDL-068 `.1` lifted
-it, and this module is the third caller that made it worth lifting.
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py` until
+BDL-068 `.1` lifted it, and this module is the third caller that made it worth lifting.
 """
 
 from __future__ import annotations
@@ -200,8 +200,8 @@ def _calls_a_reindex(statement: ast.stmt, names: set[str]) -> bool:
     `if files_created > 0`, which is the guard that makes it correct rather than
     a reason to discount it. The instrument answers "could this branch
     re-index", not "does it on every path" — the same limit
-    `tests/test_init_branches_that_reach_the_bootstrap.py` declares for its
-    verdict walk, and stated here rather than left to be rediscovered.
+    `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+    declares for its verdict walk, and stated here rather than left to be rediscovered.
     """
     return any(
         isinstance(node, ast.Call) and callee_name(node) in names

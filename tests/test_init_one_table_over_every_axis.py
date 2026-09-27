@@ -26,8 +26,9 @@ bootstrapping-mode list are imported from the two sibling modules rather than
 written again, so a reword moves one place.
 
 THE AXES, AND WHY THEY ARE NOT A RAW CROSS. `init` has four branches that write a
-graph file, and `tests/test_init_branches_that_reach_the_bootstrap.py` finds them in
-the command's own source: `('non_interactive',)`, `('bootstrap',)`, `('import_path',)`
+graph file, and
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py` finds
+them in the command's own source: `('non_interactive',)`, `('bootstrap',)`, `('import_path',)`
 and the fallthrough wizard. Two of them take a `--mode`; the other two declare one
 mode each by which writers they call, and that claim is checked against the writers
 found under their guard rather than asserted. Eight cells, and a fifth branch or a

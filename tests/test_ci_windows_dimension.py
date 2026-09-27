@@ -19,7 +19,8 @@ to be unlearned.
 WHAT SURVIVES THE WITHDRAWAL, and it is most of what .39 was worth: the six
 guard tests that carried ``skipif(sys.platform == "win32")`` are gated on a
 MEASURED symlink capability and run on every runner that holds it (see
-:mod:`tests.support.symlink_capability` and :mod:`tests.test_windows_dimension`), which
+:mod:`tests.support.symlink_capability` and
+:mod:`tests.unit.application.guards.test_windows_dimension`), which
 is true with or without a Windows leg. This file keeps the withdrawal coherent
 across the three places the leg was declared — the workflow, the vendored
 template an adopter gets, and the required-context constant — because a required

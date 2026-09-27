@@ -1,6 +1,6 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_onboarding.py``;
+Moved out of ``tests/integration/onboarding/scanner/test_onboarding.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

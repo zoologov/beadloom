@@ -1,6 +1,7 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_a_layer_the_declaration_names_and_no_node_is_in.py``;
+Moved out of
+``tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

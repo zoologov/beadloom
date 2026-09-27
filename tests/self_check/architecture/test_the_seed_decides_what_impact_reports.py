@@ -1,6 +1,7 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_the_seed_decides_what_impact_reports.py``;
+Moved out of
+``tests/integration/application/source_derivation/test_the_seed_decides_what_impact_reports.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

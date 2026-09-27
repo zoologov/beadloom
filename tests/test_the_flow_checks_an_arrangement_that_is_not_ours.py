@@ -543,8 +543,8 @@ def _graph_input_of(project_root: Path) -> GraphInput:
     The graph half goes through :func:`each_graph_file`, which is the one policy
     every reader of that directory holds; the index half is supplied as the same
     population, so these rows measure the LAYOUT and not a database. The drift
-    branch, where the two populations differ, is ``tests/test_wave_media_checks.py``'s.
-    """
+    branch, where the two populations differ, is
+    ``tests/unit/application/waves/test_wave_media_checks.py``'s. """
     graph_dir = project_root / ".beadloom" / "_graph"
     files = tuple(
         GraphFile(

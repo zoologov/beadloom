@@ -3,8 +3,9 @@
 BDL-067 `.15`, covering `.14`. The measurement this module exists for: **112 tests
 across seven files of this epic were green while the defect `.14` fixed was live on
 two modes.** Every one of them pinned `--mode bootstrap`, and the defect lived in
-`--mode both`. `tests/test_init_branches_that_reach_the_bootstrap.py` read `init`'s
-source and confirmed that the branch took a verdict, which was true and not the
+`--mode both`.
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py` read
+`init`'s source and confirmed that the branch took a verdict, which was true and not the
 question: the verdict was there and it was BLIND, judging an index written before the
 run's last graph file. A syntactic check answers "could this branch report"; only
 running the command answers "does it report".
@@ -210,8 +211,9 @@ class Divergence:
 #: functions that write into `.beadloom/_graph/` and exactly two that create
 #: nodes; those two are the only ones that can leave an unparented domain, so
 #: those two are the ones sabotaged here. The enumeration is checked, not
-#: trusted: `tests/test_init_branches_that_reach_the_bootstrap.py` rediscovers
-#: the six from the source and fails on a seventh.
+#: trusted:
+#: `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+#: rediscovers the six from the source and fails on a seventh.
 THE_DIVERGENCES = (
     Divergence(
         "the bootstrap forgets the edge",
@@ -928,8 +930,8 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
 class TestWhatABlindVerdictWouldReport:
     """Anti-vacuity for this whole module, and the ceiling of the syntactic one.
 
-    `tests/test_init_branches_that_reach_the_bootstrap.py` asserts that a verdict
-    call follows every branch that writes a graph file. `--yes --mode both`
+    `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+    asserts that a verdict call follows every branch that writes a graph file. `--yes --mode both`
     satisfied that and was wrong anyway, because the verdict reads the INDEX:
     `gate.lint_step` does not re-index, by design, so a graph file written after
     the run's reindex is invisible to it.

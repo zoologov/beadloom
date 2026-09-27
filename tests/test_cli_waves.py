@@ -121,8 +121,8 @@ class _FakeBd:
     A double here proves the double's contract and nothing else (FAKES PROVE
     FAKES) — which is exactly the right scope for this test, because what it
     checks is the COMMAND's rendering and exit codes. The real seam is covered by
-    `tests/test_bd_seam.py`, and the shape of a real `bd show --json` record is
-    pinned by `test_the_record_shape_this_command_reads_is_the_one_bd_emits`.
+    `tests/integration/services/bd_seam/test_bd_seam.py`, and the shape of a real `bd show --json`
+    record is pinned by `test_the_record_shape_this_command_reads_is_the_one_bd_emits`.
     """
 
     def __init__(

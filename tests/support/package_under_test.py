@@ -49,7 +49,8 @@ PACKAGE_ROOT: Path = Path(beadloom.__file__).resolve().parent
 #: The checkout the package under test ships from: ``src/beadloom``'s grandparent.
 #: On the tree, in a clean room and under mutmut it is the same directory as
 #: :data:`tests.support.repository_root.REPO_ROOT`. It differs only where the
-#: SUITE is copied away from the package, which ``tests/test_bead14_s4_binding.py``
+#: SUITE is copied away from the package, which
+#: ``tests/integration/graph/scenarios/test_bead14_s4_binding.py``
 #: does to ``tests/acceptance/``: a step that reads this project's own files asks
 #: this, because there the suite's root is the copy.
 SHIPPED_FROM: Path = PACKAGE_ROOT.parents[1]

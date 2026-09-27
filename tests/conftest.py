@@ -211,8 +211,8 @@ def _each_test_starts_in_an_empty_directory(
     the ``Path.cwd()`` default would pass without ever naming its root. And not
     ``monkeypatch.chdir``: requesting ``monkeypatch`` from an autouse fixture
     sets it up before every module's own autouse fixtures, which moves its undo
-    after their teardown (measured: ten ERRORs in tests/test_room_extras.py).
-    """
+    after their teardown (measured: ten ERRORs in
+    tests/integration/application/rooms/test_room_extras.py). """
     previous = Path.cwd()
     os.chdir(tmp_path_factory.mktemp("cwd"))
     try:
@@ -231,7 +231,7 @@ def _load_rules_forgets_between_tests() -> None:
     repository's own ``rules.yml`` is one. And mutmut forks each mutant's run from
     a parent that already ran the clean suite in-process: an inherited memo answers
     the child without executing the mutated parse, which is a false survival.
-    tests/test_load_rules_parses_once.py holds this fixture to every test.
+    tests/integration/graph/rules/test_load_rules_parses_once.py holds this fixture to every test.
     """
     rules_loader.forget_parsed_rules()
 

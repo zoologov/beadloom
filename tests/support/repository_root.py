@@ -16,8 +16,8 @@ The search starts from this file and never from the working directory: every
 test runs in an empty directory (``tests/conftest.py``).
 
 One arrangement has no root, and importing this module there raises:
-``tests/test_bead14_s4_binding.py`` copies ``tests/acceptance/`` (with this
-package beside it) into a temporary directory and runs it. So what the
+``tests/integration/graph/scenarios/test_bead14_s4_binding.py`` copies ``tests/acceptance/`` (with
+this package beside it) into a temporary directory and runs it. So what the
 acceptance tree imports reads this project's files through
 :data:`tests.support.package_under_test.SHIPPED_FROM`, the checkout the package
 under test ships from, and never through this module.

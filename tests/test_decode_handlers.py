@@ -50,7 +50,8 @@ has now watched four times (a skip-list, a rule-liveness check, a pin table and
 an anti-vacuity guard, each narrower than its own sentence):
 
 1. **It keys on the CALL, never on the exception name.** Review ``.15`` M7
-   recorded how the ``sys.platform`` ledger in :mod:`tests.test_windows_dimension`
+   recorded how the ``sys.platform`` ledger in
+   :mod:`tests.unit.application.guards.test_windows_dimension`
    was evaded in one line: it looks for conditions that *name* ``sys.platform``,
    so anything spelled differently walks past. ``read_text`` cannot be renamed
    away, and the caught set is read as *evidence*, not as the key.

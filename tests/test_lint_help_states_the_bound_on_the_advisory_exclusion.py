@@ -4,7 +4,7 @@ BDL-070 `beadloom-5tcc.5`. `--fail-on-warn` does not exit 1 on the two BDL-070
 advisories, and `LintResult.fails_on_warn` bounds that exclusion by severity:
 ``any(v.severity == "error" or not is_advisory(v))``. The exclusion stops at
 ``error``, so the flag stays a superset of `--strict` whatever severity an
-advisory is ever emitted at. `tests/test_linter.py` holds that property in code.
+advisory is ever emitted at. `tests/unit/graph/test_linter.py` holds that property in code.
 
 Two copies of the exclusion are rendered into `beadloom lint --help` — the
 `--fail-on-warn` option's help and the command docstring's exit-code paragraph —

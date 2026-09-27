@@ -22,7 +22,7 @@ process in the ascii room for real -- so the locale arrives in `here.dimensions`
 already true, and a spelling that let a caller name one would manufacture the
 coverage the census exists to refuse. Together the two halves make
 `tests-locale (C)` enterable from a laptop, which BDL-061 S2, PR #61 and PR #62
-each needed and did not have; `tests/test_room_locale.py::
+each needed and did not have; `tests/unit/application/rooms/test_room_locale.py::
 TestTheLegIsEnterableFromADeveloperMachine` asserts both arms of it.
 """
 

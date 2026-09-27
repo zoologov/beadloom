@@ -112,7 +112,7 @@ class AllowedContact:
 #: tests/conftest.py); A3 (beadloom-2esy) moved the last 20 there too — the
 #: history readers read the snapshot's clone, the bd call-site derivations read
 #: the snapshot's tree (a clone carries no installed hooks, so the hook channel
-#: is held by a tmp-project test in tests/test_bd_call_sites.py), and the
+#: is held by a tmp-project test in tests/unit/services/bd_seam/test_bd_call_sites.py), and the
 #: index-byte probe hashes the snapshot's index. An entry added here needs a
 #: reason naming what the test asserts on THIS repository and the bead that
 #: retires it, and tests/test_contact_guard.py fails until review accepts it.

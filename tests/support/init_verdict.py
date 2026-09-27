@@ -52,8 +52,9 @@ class InitBranch:
     binding: str
     #: The `if` conditions in `init`'s body the branch sits under, as the source
     #: spells them, outermost first. Empty for the fallthrough wizard. This is
-    #: what `tests/test_init_branches_that_reach_the_bootstrap.py` matches the
-    #: tuple below against the command's own source, so a fourth branch fails a
+    #: what
+    #: `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+    #: matches the tuple below against the command's own source, so a fourth branch fails a
     #: test instead of merely going untested (BDL-067 `.7`).
     guard: tuple[str, ...]
     #: The wizard's answers, in order: init mode, then the graph review.
@@ -73,8 +74,9 @@ def _the_modes_the_flag_offers() -> tuple[str, ...]:
     """The `--mode` values, read off the command's own `click.Choice`.
 
     Not written out, for the reason `THE_BRANCHES` is checked against `init`'s
-    source in `tests/test_init_branches_that_reach_the_bootstrap.py`: a mode
-    added to the flag and not to a tuple here would be a mode with no case, and
+    source in
+    `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`: a
+    mode added to the flag and not to a tuple here would be a mode with no case, and
     a case that is not written is a case that does not fail.
 
     It lives in this module rather than in `tests/test_init_agrees_across_its_

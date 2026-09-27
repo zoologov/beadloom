@@ -51,7 +51,7 @@ MOVED_ONTO_THE_HELPER: dict[str, str] = {
     # share with a neighbour; the lock follows the constant, not the old file.
     "support/pipe_splits.py": "_SRC",
     "support/guard_boundary.py": "SRC",
-    "test_the_reference_docs_state_the_population_shapes.py": "TEMPLATES_ROOT",
+    "unit/graph/rules/test_the_reference_docs_state_the_population_shapes.py": "TEMPLATES_ROOT",
     "test_s2_move_regression.py": "_TPL",
 }
 

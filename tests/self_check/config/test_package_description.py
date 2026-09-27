@@ -65,7 +65,8 @@ if TYPE_CHECKING:
 # This module is read from the checkout the package ships from, not from the
 # suite's own root: `tests/acceptance/steps/test_package_description_steps.py`
 # loads it by path, and that step also runs from a copy of the acceptance tree
-# (`tests/test_bead14_s4_binding.py`), which has no repository root of its own.
+# (`tests/integration/graph/scenarios/test_bead14_s4_binding.py`), which has no repository root of
+# its own.
 
 #: The manifest's `description` line. Read by pattern rather than by a TOML
 #: parser because `tomllib` is 3.11+ and this project supports 3.10; the one

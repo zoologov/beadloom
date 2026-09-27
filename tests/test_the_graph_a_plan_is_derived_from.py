@@ -31,7 +31,7 @@ THE FIRST PIN FIRED, AND THE ANSWER IT UNLOCKED WAS STILL NO.
 one of this project's 100 nodes and would go red on a graph split across files.
 `beadloom-0mdo.80` (BDL-UX #265) split it, so it went red as designed. It is not
 restated here, because the answer that replaced it belongs with the layout that
-produced it: `tests/test_the_graph_is_one_file_per_node.py`
+produced it: `tests/integration/onboarding/graph_layout/test_the_graph_is_one_file_per_node.py`
 `TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` measures that one
 node per file makes the node-to-file map INJECTIVE, so the serialisation fires
 exactly when two beads declare the same node — which `conflict_between` already

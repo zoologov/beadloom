@@ -7,8 +7,8 @@ is a shape and not a file list: a test that derives a scan root from its own
 mutmut runs it, so it reports mutmut's generated bodies as the package's own.
 One such test scored nine nightlies at 0 of 7 187 mutants (BDL-UX #289), and a
 SECOND instance landed six days later in a file nobody had swept
-(`tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`, comment on
-`beadloom-ey4m`, 2026-09-12).
+(`tests/unit/application/source_derivation/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`,
+comment on `beadloom-ey4m`, 2026-09-12).
 
 **What the guard keys on, and why it resolves paths rather than matching text.**
 Three of the four moved files built their root through an intermediate
@@ -136,8 +136,8 @@ class TestANewlyAddedTestWithTheShapeIsCaught:
     ) -> None:
         """The shape of the SECOND instance, which spells no walk of its own.
 
-        `tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py` hands
-        its root to `beadloom.application.source_derivation.source_tree`'s
+        `tests/unit/application/source_derivation/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`
+        hands its root to `beadloom.application.source_derivation.source_tree`'s
         `python_files`, so a collector reading `rglob` calls alone reports the
         file the bead's own comment names as clean.
         """

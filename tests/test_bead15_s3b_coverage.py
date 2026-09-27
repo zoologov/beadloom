@@ -2,7 +2,8 @@
 """S3b verify/harden: full module classification + the PROMOTED (error) coverage-lint.
 
 BDL-051 Slice 3b / BEAD-15 (test). These tests harden the dev's S3b work
-(`tests/test_module_coverage_hardening.py`, `tests/test_rule_engine.py`) WITHOUT
+(`tests/integration/graph/rules/test_module_coverage_hardening.py`,
+`tests/integration/graph/rules/test_rule_engine.py`) WITHOUT
 duplicating its passing cases. The dev's tests already pin: rule-is-error, the
 live repo has zero coverage findings, dir-source-covers (tui), serialize
 round-trips, exempt-glob nuances. This file adds the gaps the bead calls out:

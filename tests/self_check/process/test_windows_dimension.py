@@ -1,6 +1,6 @@
 """Self-checks of this repository's agent roles, hooks, tracker and commits (BDL-074 A3).
 
-Moved out of ``tests/test_windows_dimension.py``;
+Moved out of ``tests/unit/application/guards/test_windows_dimension.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -20,17 +20,17 @@ from tests.support.repository_root import TESTS_ROOT as TESTS_DIR
 #: of BDL-061.39 — so what proves they RAN has to be as specific as they are.
 #: (Five marks, six rows: one is parametrised over two targets.)
 THE_SIX_CAPABILITY_GATED_ROWS = (
-    "tests/test_guards_paths.py::TestTraversalCannotBypassAnExclusion::"
+    "tests/integration/application/guards/test_guards_paths.py::TestTraversalCannotBypassAnExclusion::"
     "test_a_symlink_out_of_an_excluded_directory_is_guarded",
-    "tests/test_guards_paths.py::TestSymlinksInBothDirections::"
+    "tests/integration/application/guards/test_guards_paths.py::TestSymlinksInBothDirections::"
     "test_a_link_into_the_excluded_tree_is_excluded",
-    "tests/test_guards_paths.py::TestSymlinksInBothDirections::"
+    "tests/integration/application/guards/test_guards_paths.py::TestSymlinksInBothDirections::"
     "test_an_exclusion_stops_applying_when_its_directory_is_a_symlink",
-    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "tests/integration/application/guards/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
     "test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does[a]",
-    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "tests/integration/application/guards/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
     "test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does[a/x.py]",
-    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "tests/integration/application/guards/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
     "test_the_guard_reaches_a_verdict_through_a_real_loop",
 )
 

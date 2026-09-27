@@ -1,6 +1,6 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_room_locale.py``;
+Moved out of ``tests/unit/application/rooms/test_room_locale.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
