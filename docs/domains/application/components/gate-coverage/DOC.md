@@ -79,34 +79,46 @@ Four statements, one of which every run makes:
 
 ## What is deliberately outside it
 
-The nightly mutation run. It is a verification this project holds and no push gate could be
-mistaken for running it: BDL-068 measured 54 min 55 s over 3 989 mutants with six workers on
-a 10-core machine, against the ~16-28 runner-minute budget that withdrew `tests-windows`.
-Naming it on every gate run would add a line no reader can act on. `config-check` already
-reports the mutation **scope**, which is the part a gate can check in milliseconds.
+Mutation testing. It is a verification this project holds and no push gate could be mistaken
+for running it: BDL-068 measured 54 min 55 s over 3 989 mutants with six workers on a 10-core
+machine, against the ~16-28 runner-minute budget that withdrew `tests-windows`. Naming it on
+every gate run would add a line no reader can act on. `config-check` already reports the
+mutation **scope**, which is the part a gate can check in milliseconds.
 
-**Outside the gate is not the same as unwatched, as of BDL-072.** The nightly reached a verdict
-on 0 of 7 187 mutants for nine consecutive nights and the only place that was visible was the
-Actions tab. `mutation.yml` now carries a second job, `announce`, holding `issues: write`,
-which opens one issue labelled `mutation-nightly` when a night produces no verdict, comments on
-that issue each further failed night, and closes it on the first run that judges the declared
-scope. It does not cover a nightly that never starts, because a run that does not happen runs
-no job that could speak, and `gh` itself is unmeasured until a dispatched run opens the first
-issue (`beadloom-e8m4`). That channel reports on the nightly and never on a gate run, so
-nothing this component claims changes: it still names only the verifications a gate run
-declared and did not perform.
+**Since BDL-074 D1 (2026-09-27) mutation runs per change and on a weekly sample, not nightly.**
+`mutation.yml` has three jobs: `mutation-per-change` on pull requests, `mutation-sample` weekly
+and by hand, and `announce`. The workflow is disabled until the owner enables it, and neither
+job is a required status check — the sample reports no check-run on a pull request, and the
+per-change job has not met its 10-minute budget (≈15 minutes projected on the runner from a
+local measurement while the whole test pool is the fallback). `DUTIES` recognises no mutation
+runner, so neither job is named under `Not run by this gate`, and nothing this component
+reports changes.
 
-**And outside the gate is not the same as scored.** The runner kills the nightly before it
-prints a score, and the cause is open (`beadloom-5isv`): eight runs at four mutmut children died
-after 73-102 minutes, and the first at two died after 262.4 minutes with GitHub's annotation
-*"The hosted runner lost communication with the server. Anything in your workflow that
-terminates the runner process, starves it for CPU/Memory, or blocks its network access can
-cause this error."* BDL-073 runs two children rather than four, because a mutant was counted
-killed at four through the live index the children share and survived when run alone, and
-because fewer children put less load on a 4-vCPU runner. Two still produce false kills, measured
-over the `load_rules` mutants. mutmut 3.7.0 already runs each mutant's covering tests cheapest
-first, and a test pins that, so no ordering patch is carried. Whether the nightly now completes
-is measured only by a dispatched run (`beadloom-kj8t`); the detail and the numbers are in
+**Outside the gate is not the same as unwatched, as of BDL-072.** The retired nightly reached a
+verdict on 0 of 7 187 mutants for nine consecutive nights and the only place that was visible
+was the Actions tab. The job `announce` holds `issues: write`, opens one issue labelled
+`mutation-weekly` when a weekly sample produces no verdict or one under its floor, comments on that issue each further
+failed week, and closes it on the first run that judges its sample. It does not cover a
+scheduled run that never starts, because a run that does not happen runs no job that could
+speak. Under the nightly's label two of its paths were measured on GitHub (`beadloom-e8m4`):
+one killed run opened issue #79 and the next commented on it instead of opening another. That
+channel reports on the weekly sample and never on a gate run, so nothing this component claims
+changes: it still names only the verifications a gate run declared and did not perform.
+
+**And outside the gate was not the same as scored.** The runner killed the whole-scope nightly
+before it printed a score, and the killer was never identified (`beadloom-5isv`, closed as
+superseded when the nightly was retired): eight runs at four mutmut children died after 73-102
+minutes, the first at two died after 262.4 minutes with GitHub's annotation *"The hosted runner
+lost communication with the server. Anything in your workflow that terminates the runner
+process, starves it for CPU/Memory, or blocks its network access can cause this error."*, and
+the dispatched verification run (`beadloom-kj8t`) died at queue position 4 125 of 6 992 after
+153.6 minutes. BDL-073 runs two children rather than four, because a mutant was counted killed
+at four through the live index the children share and survived when run alone, and because
+fewer children put less load on a 4-vCPU runner. Two still produced false kills, measured over
+the `load_rules` mutants. mutmut 3.7.0 already runs each mutant's covering tests cheapest first,
+and a test pins that, so no ordering patch is carried. The weekly sample exists because the
+whole scope did not fit the runner; whether it completes on a runner is measured only by its
+first run there (`beadloom-paze`). The detail and the numbers are in
 [`beadloom mutation`](../../../../services/cli.md#beadloom-mutation). None of it changes what
 this component reports, which is still only what a gate run declared and did not perform.
 

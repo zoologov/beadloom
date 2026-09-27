@@ -45,6 +45,7 @@
 | `beadloom-2mj3.2` | docs | ✓ done | 22 stale pairs → 0 over 12 refs; `test_mapper` gone from the docs; `test_placements`, the unplaced line, `test_population` and `count_test_files_by_placement` documented; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
 | `beadloom-vr0b` | D1 dev | ✓ done | `beadloom mutation --changed-since/--survivors/--sample-of`; `.github/scripts/mutmut_adapter.py`; `mutation.yml` = `mutation-per-change` (PR) + `mutation-sample` (weekly, 150, seeded) + `announce`; workflow still DISABLED; per-change fallback = the pool while tests are unplaced; one-function change measured ~9 min locally (496 s of it the stats pass), so the 10-min budget waits on B2; clean room 11 016 passed, 0 failed |
+| `beadloom-2mj3.3` | docs | ✓ done | 15 stale pairs → 0 over 5 refs (mutation-scope, application, infrastructure, repository, cli-commands); D1's modules, `lies_within`, `get_test_file_bindings` and the three `mutation` options documented; the nightly rewritten as history in `cli.md` and gate-coverage, per-change budget stated as not met; sync-check rc 0 at the fixpoint |
 | `beadloom-cs2o` | E1 dev | blocked | the rule-engine pilot |
 | `beadloom-kug7` | E2 dev | blocked | test standards |
 | `beadloom-75pl` | T test | blocked | the criteria, measured |
