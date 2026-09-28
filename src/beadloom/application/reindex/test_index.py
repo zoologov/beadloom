@@ -137,29 +137,56 @@ def discover_test_files(
 ) -> dict[str, str]:
     """Every test file the layout reads, by project-relative path, with its text.
 
-    The files under the layout's roots whose names match a test pattern, and —
-    when it reads tests beside the code — each of *code_files* (the code scan's
-    paths) outside every root whose name matches one. *layout* defaults to the
-    one the project declares.
+    The files under the layout's roots and the build tools' test trees it
+    mirrors whose names match a test pattern, and — when it reads tests beside
+    the code — each of *code_files* (the code scan's paths) outside all of those
+    whose name matches one. *layout* defaults to the one the project declares.
     """
     layout = layout if layout is not None else load_test_layout(project_root)[0]
     found: dict[str, str] = {}
-    for root in layout.roots:
-        base = project_root / root
-        if not base.is_dir():
+    for root in (*layout.roots, *present_mirror_roots(project_root, layout)):
+        if not _is_folder_as_spelled(project_root, root):
             continue
-        for path in sorted(base.rglob("*")):
+        for path in sorted((project_root / root).rglob("*")):
             relative = path.relative_to(project_root).as_posix()
             if _is_test_path(relative, layout) and path.is_file():
                 found[relative] = _read(path)
     if layout.beside_code:
         for code_file in sorted(code_files):
-            if code_file in found or layout.locate(code_file) is not None:
+            if code_file in found or _under_a_test_root(code_file, layout):
                 continue
             path = project_root / code_file
             if _is_test_path(code_file, layout) and path.is_file():
                 found[code_file] = _read(path)
     return found
+
+
+def present_mirror_roots(project_root: Path, layout: TestLayout) -> tuple[str, ...]:
+    """The build tools' test trees of *layout* this project has, spelled as declared."""
+    return tuple(
+        test_root
+        for test_root, _ in layout.mirrors
+        if _is_folder_as_spelled(project_root, test_root)
+    )
+
+
+def _is_folder_as_spelled(project_root: Path, relative: str) -> bool:
+    """Whether *relative* is a folder under *project_root*, with exactly that spelling.
+
+    A case-insensitive disk (the macOS and Windows defaults) opens ``Tests/`` for
+    ``tests``, so a Swift package's test tree would be read twice, once under each
+    name, if existence were asked of the disk alone.
+    """
+    current = project_root
+    for part in PurePosixPath(relative).parts:
+        if not current.is_dir() or part not in {child.name for child in current.iterdir()}:
+            return False
+        current = current / part
+    return current.is_dir()
+
+
+def _under_a_test_root(path: str, layout: TestLayout) -> bool:
+    return layout.locate(path) is not None or layout.mirror_of(path) is not None
 
 
 def _is_test_path(relative: str, layout: TestLayout) -> bool:
@@ -183,7 +210,8 @@ def is_test_index_current(project_root: Path, conn: sqlite3.Connection) -> bool:
     compared by hash, and the recorded layout against the one the config declares.
     """
     layout = load_test_layout(project_root)[0]
-    if get_meta(conn, TEST_LAYOUT_KEY) != layout.recorded().encode():
+    recorded = layout.recorded(present_mirror_roots(project_root, layout))
+    if get_meta(conn, TEST_LAYOUT_KEY) != recorded.encode():
         return False
     on_disk = {
         path: _hash(text) for path, text in discover_test_files(project_root, layout).items()
@@ -191,7 +219,7 @@ def is_test_index_current(project_root: Path, conn: sqlite3.Connection) -> bool:
     stored = {
         str(row["path"]): str(row["file_hash"])
         for row in conn.execute("SELECT path, file_hash FROM test_files").fetchall()
-        if layout.locate(str(row["path"])) is not None
+        if _under_a_test_root(str(row["path"]), layout)
     }
     return on_disk == stored
 
@@ -264,7 +292,11 @@ def index_test_files(
     frameworks = {path: layout.framework_of(PurePosixPath(path).name) or "" for path in files}
     _rebuild_extra_tests(conn, bound, counts, frameworks)
     set_meta(conn, TEST_INDEX_VERSION_KEY, TEST_INDEX_VERSION)
-    set_meta(conn, TEST_LAYOUT_KEY, layout.recorded().encode())
+    set_meta(
+        conn,
+        TEST_LAYOUT_KEY,
+        layout.recorded(present_mirror_roots(project_root, layout)).encode(),
+    )
     conn.commit()
 
     by_placement: dict[str, int] = {}

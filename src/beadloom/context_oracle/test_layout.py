@@ -13,9 +13,26 @@ or beside the code.
   Default ``[tests]``. A declared list replaces the default.
 - ``patterns`` — file-name patterns grouped by the framework they name. A file
   is a test when its name matches one, and its framework is that group's name.
-  Default ``pytest`` (``test_*.py``, ``*_test.py``), ``go_test`` (``*_test.go``)
-  and ``jest`` (``*.test.*``, ``*.spec.*``). A declared mapping replaces all
-  three, because it states which frameworks the project has.
+  Default ``pytest`` (``test_*.py``, ``*_test.py``), ``go_test`` (``*_test.go``),
+  ``jest`` (``*.test.*``, ``*.spec.*``), ``junit`` and ``xctest`` (below). A
+  declared mapping replaces all five, because it states which frameworks the
+  project has.
+- ``mirrors`` — test trees a build tool keeps beside a code tree, each mapped to
+  the code tree it mirrors, with no kind folder between. Default the Maven and
+  Gradle trees (``src/test/java`` -> ``src/main/java``, ``src/test/kotlin`` ->
+  ``src/main/kotlin``) and SwiftPM's (``Tests`` -> ``Sources``, where a test target
+  ``<Target>Tests`` mirrors ``<Target>``). A declared mapping replaces them.
+
+The JVM and Swift defaults are each ecosystem's own convention (``beadloom-2mj3.13``,
+owner ruling 2026-09-28), and only that. Java: Maven Surefire's default includes
+``*Test.java``, ``*Tests.java``, ``*TestCase.java`` and Failsafe's ``*IT.java``,
+``*ITCase.java``; their prefix forms ``Test*.java`` and ``IT*.java`` are left out,
+because a prefix also names production classes (``TestDataBuilder``). Kotlin:
+``*Test.kt`` (the Kotlin and Android documentation) and ``*Tests.kt`` (what Spring
+Initializr generates); Gradle itself runs every class in the test tree and names
+no pattern. Swift: ``*Tests.swift``, the form the XCTest and Swift Testing
+templates generate. Java and Kotlin are one group, ``junit``, as the retired mapper
+named them.
 - ``kinds`` — the folder each kind is laid out in under a root. Default: each
   kind's own name. A declared entry replaces that one kind, so the population
   line can say which folder was declared and which is the default (review m4).
@@ -66,6 +83,25 @@ DEFAULT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("pytest", ("test_*.py", "*_test.py")),
     ("go_test", ("*_test.go",)),
     ("jest", ("*.test.*", "*.spec.*")),
+    (
+        "junit",
+        (
+            "*Test.java",
+            "*Tests.java",
+            "*TestCase.java",
+            "*IT.java",
+            "*ITCase.java",
+            "*Test.kt",
+            "*Tests.kt",
+        ),
+    ),
+    ("xctest", ("*Tests.swift",)),
+)
+#: The build tools' test trees and the code trees they mirror (see the docstring).
+DEFAULT_MIRRORS: tuple[tuple[str, str], ...] = (
+    ("src/test/java", "src/main/java"),
+    ("src/test/kotlin", "src/main/kotlin"),
+    ("Tests", "Sources"),
 )
 
 
@@ -80,6 +116,7 @@ class TestLayout:
     kind_folders: tuple[tuple[str, str], ...] = tuple((kind, kind) for kind in KINDS)
     declared_kinds: frozenset[str] = field(default_factory=frozenset)
     beside_code: bool = True
+    mirrors: tuple[tuple[str, str], ...] = DEFAULT_MIRRORS
 
     def framework_of(self, name: str) -> str | None:
         """The framework whose pattern the file NAME matches first, or ``None``."""
@@ -117,14 +154,27 @@ class TestLayout:
             return kinds[parts[0]], "/".join(parts[1:])
         return None
 
-    def recorded(self) -> RecordedTestLayout:
-        """The record the index keeps of this layout, for readers that may not import it."""
+    def mirror_of(self, path: str) -> tuple[str, str, str] | None:
+        """The test tree *path* sits in, the code tree it mirrors and the path below it."""
+        for test_root, code_root in self.mirrors:
+            prefix = f"{test_root}/"
+            if path.startswith(prefix):
+                return test_root, code_root, path[len(prefix) :]
+        return None
+
+    def recorded(self, present_mirror_roots: tuple[str, ...] = ()) -> RecordedTestLayout:
+        """The record the index keeps of this layout, for readers that may not import it.
+
+        *present_mirror_roots* are the test trees of :attr:`mirrors` the project
+        has: the record names what was read, not every tree a default could name.
+        """
         return RecordedTestLayout(
             kind_prefixes={kind: self.kind_prefixes(kind) for kind in KINDS},
             declared_kinds=self.declared_kinds,
             beside_code=self.beside_code,
             roots=self.roots,
             frameworks=tuple(framework for framework, _ in self.patterns),
+            mirror_roots=present_mirror_roots,
         )
 
 
@@ -157,6 +207,7 @@ def layout_from_config(config: Mapping[str, object]) -> tuple[TestLayout, list[s
         kind_folders=kind_folders,
         declared_kinds=declared,
         beside_code=_beside_code(block.get("beside_code"), problems),
+        mirrors=_mirrors(block.get("mirrors"), problems),
     )
     return layout, problems
 
@@ -193,7 +244,8 @@ def _patterns(value: object, problems: list[str]) -> tuple[tuple[str, tuple[str,
     ):
         problems.append(
             f"`{CONFIG_KEY}.patterns` in {CONFIG_PATH} must map each framework name to a "
-            "list of file-name patterns; the default (pytest, go_test, jest) is used"
+            "list of file-name patterns; the default "
+            f"({', '.join(name for name, _ in DEFAULT_PATTERNS)}) is used"
         )
         return DEFAULT_PATTERNS
     return tuple(
@@ -242,3 +294,19 @@ def _beside_code(value: object, problems: list[str]) -> bool:
         )
         return True
     return value
+
+
+def _mirrors(value: object, problems: list[str]) -> tuple[tuple[str, str], ...]:
+    if value is None:
+        return DEFAULT_MIRRORS
+    if not isinstance(value, dict) or not all(
+        isinstance(test, str) and isinstance(code, str) and test.strip("/ ") and code.strip("/ ")
+        for test, code in value.items()
+    ):
+        default = ", ".join(f"{test}: {code}" for test, code in DEFAULT_MIRRORS)
+        problems.append(
+            f"`{CONFIG_KEY}.mirrors` in {CONFIG_PATH} must map each test folder to the code "
+            f"folder it mirrors; the default ({default}) is used"
+        )
+        return DEFAULT_MIRRORS
+    return tuple((test.strip("/ "), code.strip("/ ")) for test, code in value.items())

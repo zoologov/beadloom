@@ -16,6 +16,14 @@ name: a Go test that names another package still belongs to the one it sits in.
 The roots, the kind folders and the file-name patterns are the project's
 :class:`~beadloom.context_oracle.test_layout.TestLayout`.
 
+A build tool's test tree mirrors its code tree the same way, with no kind folder
+between (BDL-074 G2b): ``src/test/java/<package>/BillingTest.java`` names
+``src/main/java/<package>/Billing.java``, and SwiftPM's
+``Tests/ShopTests/BillingTests.swift`` names ``Sources/Shop/Billing.swift`` — or
+the ``Sources/Shop/Billing/`` folder, when that is what holds the code. The
+language's test affix (``Test``, ``Tests``, ``TestCase``, ``IT``, ``ITCase``) is
+taken off the name, and a SwiftPM test target ``<Target>Tests`` names ``<Target>``.
+
 A node may also claim tests its path does not mirror, with a ``tests:`` list of
 path prefixes in its YAML, resolved by the same ownership rule over those
 prefixes. A declaration wins over the mirror: it is the statement a person made
@@ -80,6 +88,15 @@ _FRAMEWORK_JOIN = "+"
 _DEFAULT_LAYOUT = TestLayout()
 
 _PY_SUFFIX = ".py"
+#: The test affixes a language's convention puts on a class or file name, longest
+#: first so ``TestCase`` is taken off before ``Test``.
+_TEST_AFFIXES = {
+    ".java": ("TestCase", "ITCase", "Tests", "Test", "IT"),
+    ".kt": ("Tests", "Test"),
+    ".swift": ("Tests",),
+}
+#: SwiftPM names a test target after the target it tests, plus this suffix.
+_TEST_TARGET_SUFFIX = "Tests"
 _PACKAGE_MARKER = "__init__.py"
 _TEST_PREFIX = "test_"
 _TEST_SUFFIX = "_test"
@@ -132,6 +149,14 @@ def bind_test_file(
     declared = most_specific_owner(overrides, path)
     if declared is not None:
         return BoundTestFile(path, kind, declared, PLACEMENT_OVERRIDE)
+    tree = layout.mirror_of(path)
+    if tree is not None:
+        _, code_root, below = tree
+        target = tree_mirrored_code_path(code_root, below, code_files=code_files)
+        owner = most_specific_owner(node_sources, target) if target is not None else None
+        return BoundTestFile(
+            path, None, owner, PLACEMENT_MIRROR if owner is not None else PLACEMENT_UNOWNED
+        )
     if located is None:
         return _beside_code(path, node_sources, layout)
     if kind is None:
@@ -197,6 +222,42 @@ def _resolve_in_root(
         return f"{directory}{module}"
     as_module = f"{root}{folder.rstrip('/')}{_PY_SUFFIX}"
     return as_module if as_module in code_files else None
+
+
+def tree_mirrored_code_path(
+    code_root: str, below: str, *, code_files: Collection[str]
+) -> str | None:
+    """The code path a file *below* a build tool's test tree names in *code_root*.
+
+    The file names ``<code_root>/<folders>/<subject><suffix>`` when that file
+    exists, the ``<subject>/`` folder when that holds code instead, and the same
+    file path when only its folder holds code — the folder's owner owns it.
+    ``None`` when the mirrored folder holds no code.
+    """
+    posix = PurePosixPath(below)
+    folders = list(posix.parts[:-1])
+    code_dirs = _directories_holding(code_files)
+    if folders and folders[0].endswith(_TEST_TARGET_SUFFIX):
+        target = folders[0][: -len(_TEST_TARGET_SUFFIX)]
+        if target and f"{code_root}/{target}/" in code_dirs:
+            folders[0] = target
+    directory = f"{code_root}/{''.join(f'{folder}/' for folder in folders)}"
+    subject = _subject_stem(posix.name)
+    as_file = f"{directory}{subject}{posix.suffix}"
+    if as_file in code_files:
+        return as_file
+    if f"{directory}{subject}/" in code_dirs:
+        return f"{directory}{subject}/"
+    return as_file if directory in code_dirs else None
+
+
+def _subject_stem(file_name: str) -> str:
+    """``BillingTest.java`` and ``BillingTests.swift`` name ``Billing``."""
+    posix = PurePosixPath(file_name)
+    for affix in _TEST_AFFIXES.get(posix.suffix, ()):
+        if posix.stem.endswith(affix) and len(posix.stem) > len(affix):
+            return posix.stem[: -len(affix)]
+    return _module_stem(file_name)
 
 
 def _module_stem(file_name: str) -> str:
@@ -292,11 +353,17 @@ def describe_unplaced(
         prefixes = [f"{TEST_ROOT}/{kind}/" for kind in MIRRORED_KINDS]
     else:
         prefixes = [p for kind in MIRRORED_KINDS for p in layout.kind_prefixes.get(kind, ())]
+        prefixes += [f"{root}/" for root in layout.mirror_roots]
     beside = ", nor inside a node's source" if layout is not None and layout.beside_code else ""
     return (
         f"{unplaced} of {sum(counts.values())} test file(s) are unplaced "
-        f"(not under {' or '.join(sorted(prefixes))}{beside}) and bind to no node"
+        f"(not under {_either(sorted(prefixes))}{beside}) and bind to no node"
     )
+
+
+def _either(items: list[str]) -> str:
+    """``a``, ``a or b``, ``a, b or c``."""
+    return " or ".join(items) if len(items) < 3 else f"{', '.join(items[:-1])} or {items[-1]}"
 
 
 def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
@@ -306,14 +373,10 @@ def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
     a file no pattern matches, or one outside every root and every node's source,
     is not read at all (review ``beadloom-b9ll`` M3).
     """
-    frameworks = sorted(layout.frameworks)
-    named = (
-        f"{', '.join(frameworks[:-1])} or {frameworks[-1]}"
-        if len(frameworks) > 1
-        else "".join(frameworks)
-    )
-    roots = ", ".join(layout.roots)
-    where = f"the root {roots}" if len(layout.roots) == 1 else f"the roots {roots}"
+    named = _either(sorted(layout.frameworks))
+    all_roots = (*layout.roots, *layout.mirror_roots)
+    roots = ", ".join(all_roots)
+    where = f"the root {roots}" if len(all_roots) == 1 else f"the roots {roots}"
     beside = " or beside a node's code" if layout.beside_code else ""
     return f"a test file is read when its name matches a pattern of {named} under {where}{beside}"
 

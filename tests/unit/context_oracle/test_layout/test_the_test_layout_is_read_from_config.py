@@ -56,11 +56,21 @@ class TestTheDefaults:
         assert layout.framework_of("conftest.py") is None
         assert not layout.is_test_file("cart.ts")
 
-    def test_the_default_patterns_are_the_three_the_owner_named(self) -> None:
+    def test_the_default_patterns_are_the_five_the_owner_named(self) -> None:
         assert dict(DEFAULT_PATTERNS) == {
             "pytest": ("test_*.py", "*_test.py"),
             "go_test": ("*_test.go",),
             "jest": ("*.test.*", "*.spec.*"),
+            "junit": (
+                "*Test.java",
+                "*Tests.java",
+                "*TestCase.java",
+                "*IT.java",
+                "*ITCase.java",
+                "*Test.kt",
+                "*Tests.kt",
+            ),
+            "xctest": ("*Tests.swift",),
         }
 
     def test_each_kind_is_the_folder_of_its_own_name_and_none_is_declared(self) -> None:

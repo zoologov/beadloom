@@ -49,3 +49,20 @@ class TestByLanguage:
     def test_python_is_still_the_default(self) -> None:
         assert read_test_file("def test_a():\n    pass\n").test_count == 1
         assert read_test_file("def test_a():\n    pass\n", suffix=".py").test_count == 1
+
+
+class TestSwift:
+    """XCTest names a test `func test...()`; Swift Testing marks it `@Test`."""
+
+    def test_xctest_methods_and_swift_testing_functions_are_each_counted_once(self) -> None:
+        text = (
+            "final class BillingTests: XCTestCase {\n"
+            "    func testAdds() {}\n"
+            "    func helper() {}\n"
+            "}\n"
+            "@Test func addsZero() {}\n"
+            '@Test("a named case")\n'
+            "func addsNegatives() {}\n"
+            "@Test func testBoth() {}\n"
+        )
+        assert read_test_file(text, suffix=".swift").test_count == 4

@@ -19,8 +19,11 @@ from beadloom.application.reindex import reindex
 from beadloom.infrastructure.db import open_db
 from tests.support.adopter_test_layouts import (
     go_module,
+    gradle_kotlin_project,
+    maven_project,
     python_beside_the_code,
     python_with_a_test_root,
+    swift_package,
     write,
 )
 
@@ -71,6 +74,19 @@ class TestNoWorseThanMain:
         )
 
 
+class TestJavaKotlinAndSwiftNoWorseThanMain:
+    """``beadloom-2mj3.13``: main read junit or xctest in each and counted 0 untested."""
+
+    def test_the_maven_project_counts_every_package_tested(self, tmp_path: Path) -> None:
+        assert _untested(maven_project(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
+
+    def test_the_gradle_kotlin_project_counts_every_package_tested(self, tmp_path: Path) -> None:
+        assert _untested(gradle_kotlin_project(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
+
+    def test_the_swift_package_counts_every_target_folder_tested(self, tmp_path: Path) -> None:
+        assert _untested(swift_package(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
+
+
 class TestWhatTheCountStillSays:
     def test_a_package_without_a_test_is_counted_once_every_file_is_placed(
         self, tmp_path: Path
@@ -90,8 +106,8 @@ class TestWhatTheCountStillSays:
         assert count == 3
         assert population == (
             "counted over 3 node(s) the test binding covers, all 0 test file(s) placed; "
-            "a test file is read when its name matches a pattern of go_test, jest or pytest "
-            "under the root tests or beside a node's code"
+            "a test file is read when its name matches a pattern of go_test, jest, junit, "
+            "pytest or xctest under the root tests or beside a node's code"
         )
 
     def test_a_framework_no_pattern_names_is_stated_as_not_read(self, tmp_path: Path) -> None:

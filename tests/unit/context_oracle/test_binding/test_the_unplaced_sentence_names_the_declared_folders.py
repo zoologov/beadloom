@@ -44,8 +44,8 @@ class TestWhatATestFileIsReadBy:
     def test_names_every_framework_and_where_it_is_looked_for(self) -> None:
         layout, _ = layout_from_config({})
         assert describe_test_file_recognition(layout.recorded()) == (
-            "a test file is read when its name matches a pattern of go_test, jest or pytest "
-            "under the root tests or beside a node's code"
+            "a test file is read when its name matches a pattern of go_test, jest, junit, "
+            "pytest or xctest under the root tests or beside a node's code"
         )
 
     def test_several_roots_and_no_tests_beside_the_code(self) -> None:
@@ -53,6 +53,19 @@ class TestWhatATestFileIsReadBy:
             {"tests": {"roots": ["test", "spec"], "beside_code": False}}
         )
         assert describe_test_file_recognition(layout.recorded()) == (
-            "a test file is read when its name matches a pattern of go_test, jest or pytest "
-            "under the roots test, spec"
+            "a test file is read when its name matches a pattern of go_test, jest, junit, "
+            "pytest or xctest under the roots test, spec"
+        )
+
+
+class TestATestTreeTheProjectHas:
+    def test_a_present_mirror_root_is_named_among_the_folders(self) -> None:
+        layout, _ = layout_from_config({"tests": {"beside_code": False}})
+        recorded = layout.recorded(present_mirror_roots=("src/test/java",))
+        assert describe_unplaced({PLACEMENT_UNPLACED: 1}, recorded) == (
+            "1 of 1 test file(s) are unplaced (not under src/test/java/, tests/integration/ "
+            "or tests/unit/) and bind to no node"
+        )
+        assert describe_test_file_recognition(recorded).endswith(
+            "under the roots tests, src/test/java"
         )

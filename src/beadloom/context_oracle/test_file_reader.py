@@ -4,8 +4,10 @@ A Python file is parsed; a file in another language is counted by the one line
 its tests are written in (BDL-074 G2), and its imports are not read. The forms
 are the retired mapper's, so a Go or JS/TS count reads what it read on main:
 ``func Test...(`` for Go, an ``it(`` or ``test(`` call for JS/TS, ``@Test`` for
-JUnit and ``func test...(`` for XCTest. A suffix with no form counts zero — a
-count this reader cannot take is not guessed.
+JUnit and ``func test...(`` for XCTest. Swift also counts a function Swift Testing
+marks ``@Test`` (the form the Xcode 16 templates generate), once, whatever it is
+named (``beadloom-2mj3.13``). A suffix with no form counts zero — a count this
+reader cannot take is not guessed.
 
 One ``ast`` parse answers both questions. Measured on this repository's 462 test
 files on 2026-09-28: the tree-sitter import extractor the code index uses took
@@ -42,7 +44,9 @@ _PYTHON_SUFFIX = ".py"
 _GO_TEST = re.compile(r"^\s*func\s+Test\w*\s*\(", re.MULTILINE)
 _JS_TEST = re.compile(r"(?:^|\s)(?:test|it)\s*\(", re.MULTILINE)
 _JUNIT_TEST = re.compile(r"@Test\b")
-_XCTEST_TEST = re.compile(r"^\s*func\s+test\w*\s*\(", re.MULTILINE)
+_XCTEST_TEST = re.compile(
+    r"(?:@Test\b[^\n]*\n?\s*func\s+\w+|^\s*func\s+test\w*)\s*\(", re.MULTILINE
+)
 _TEST_FORMS: dict[str, re.Pattern[str]] = {
     ".go": _GO_TEST,
     **dict.fromkeys((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"), _JS_TEST),
