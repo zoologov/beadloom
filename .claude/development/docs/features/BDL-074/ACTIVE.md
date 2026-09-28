@@ -47,12 +47,12 @@
 | `beadloom-2mj3.1` | docs | ✓ done | 36 stale pairs → 0 over 10 refs; test-mapping SPEC rewritten for the binding; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-3z94` | C2 dev | ✓ done | ctx and debt-report read the binding; ctx states the unplaced share (393 of 464 here), debt-report withholds `untested` while files are unplaced; `test_mapper` retired; 22 stale pairs for the docs pass |
 | `beadloom-2mj3.2` | docs | ✓ done | 22 stale pairs → 0 over 12 refs; `test_mapper` gone from the docs; `test_placements`, the unplaced line, `test_population` and `count_test_files_by_placement` documented; sync-check rc 0, `beadloom ci` rc 0 on the tree |
-| `beadloom-2mj3.4` | dev | ready | acceptance one folder per node (owner ruling 2026-09-28) |
+| `beadloom-2mj3.4` | dev | in progress | acceptance one folder per node (owner ruling 2026-09-28) |
 | `beadloom-kag9` | C3 dev | blocked | the three rules |
 | `beadloom-vr0b` | D1 dev | ✓ done | `beadloom mutation --changed-since/--survivors/--sample-of`; `.github/scripts/mutmut_adapter.py`; `mutation.yml` = `mutation-per-change` (PR) + `mutation-sample` (weekly, 150, seeded) + `announce`; workflow still DISABLED; per-change fallback = the pool while tests are unplaced; one-function change measured ~9 min locally (496 s of it the stats pass), so the 10-min budget waits on B2; clean room 11 016 passed, 0 failed |
 | `beadloom-2mj3.3` | docs | ✓ done | 15 stale pairs → 0 over 5 refs (mutation-scope, application, infrastructure, repository, cli-commands); D1's modules, `lies_within`, `get_test_file_bindings` and the three `mutation` options documented; the nightly rewritten as history in `cli.md` and gate-coverage, per-change budget stated as not met; sync-check rc 0 at the fixpoint |
 | `beadloom-cs2o` | E1 dev | blocked | the rule-engine pilot |
-| `beadloom-kug7` | E2 dev | ready | test standards |
+| `beadloom-kug7` | E2 dev | ✓ done | test role core states 8 standards (stack-neutral), Python overlay the layout, project layer `.beadloom/flow/roles/test.md`; recomposed, config-check rc 0; B1's lock green on the relocated tree; new lock `self_check/architecture/test_a_test_file_is_named_by_its_behaviour.py`: 45 of 819 names carried an id (0 in acceptance), 22 renamed, 23 exempt with reason and exit; renamed set 302 ids identical; green in a clean room over 36 files (11 036 passed, 0 failed); `55ccf52f` |
 | `beadloom-75pl` | T test | blocked | the criteria, measured |
 | `beadloom-b9ll` | R review | blocked | review |
 | `beadloom-7u77` | W tech-writer | blocked | docs and the testing guide |
