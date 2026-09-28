@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 8 — `beadloom-2mj3.5` (the doc pairs C3 made stale) and `beadloom-cs2o` (E1, the rule-engine pilot), in parallel.
-**Goal:** the tree is green again after C3; the rule engine's tests become the model the rest of the suite follows.
-**Done when:** `beadloom ci` rc 0 and the suite green on the combined tree; E1's test count, per-node line coverage and kill rate on a fixed sample have not fallen.
+**Bead:** Wave 9 — `beadloom-75pl` (T, the PRD's criteria measured end to end), alone.
+**Goal:** every acceptance criterion of the PRD measured on the combined tree, with the number and where it was taken.
+**Done when:** each criterion has a measured value on the bead, and those that fall short are named as such.
+
+**Wave 8 closed (2026-09-28):** docs `9b996662` (43 stale → 0). E1 `1f7b8a34`, `20104798`, `6054c3f4` — the rule-engine pilot: tests 765 → 886, line coverage of `graph/rules/` 95.1% → 96.0%, kill rate on a fixed 600-mutant sample (seed 74) 79.3% [75.9, 82.4] → 82.0% [78.7, 84.9], no kill lost; of the weekly sample's 15 rule-engine survivors 11 killed, 4 equivalent with a reason each. Gate owner E1 on the combined tree: 11 198 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Owner decisions: floor 0.88 kept, the other 12 survivors in `beadloom-inmv`; scenario counts show both numbers, `beadloom-fi8m`.
 
 **Wave 7 closed (2026-09-28):** PR #84 squash-merged as `7cbc1874` (9/9 green); main merged back tree-identically; the mutation workflow enabled by the owner and one sample dispatched (run 36373061140). C3 `52e2c8de`, `9d9d99be` — four rules over the suite, each stating its population: test files 386 judged, 184 unbound all exempt by path; features 51 judged, 20 without a bound test (warn); domain unit tests 27 judged, 4 exempt; scenarios 528 judged, 211 in the 40 listed files exempt. The "steps execute the node" half of `scenario_binding` is not implemented (a static stand-in found 59 of 81 pairs; not good enough to be a rule). Gate owner C3 on the tree: 11 149 passed, 2 failed (the rule-engine SPEC table), `beadloom ci` rc 1 (43 stale pairs, docs-audit on `architecture.md`) → docs bead `beadloom-2mj3.5`. PLAN's bead table brought up to the tracker (`27ba08de`); `beadloom-10er` filed to drop PLAN's status column (owner).
 

@@ -62,12 +62,12 @@ nine green checks.
 | C2 | `beadloom-3z94` | `ctx` and `debt-report` read the binding, shape kept | P1 | C1 | Done |
 | C3 | `beadloom-kag9` | the rules: `test_binding`, `test_import_boundary`, `scenario_binding` | P1 | C1, B2, B3, B4 | Done |
 | D1 | `beadloom-vr0b` | mutation per change and the weekly sample | P1 | C1 | Done |
-| E1 | `beadloom-cs2o` | the rule-engine pilot, invariants before and after | P1 | C3, B3, B4 | Pending |
+| E1 | `beadloom-cs2o` | the rule-engine pilot, invariants before and after; the 15 rule-engine survivors (added 2026-09-28, owner) | P1 | C3, B3, B4 | Done |
 | E2 | `beadloom-kug7` | test standards in the `test` role, and the checkable ones checked | P2 | B2 | Done |
 | W1 | `beadloom-2mj3.1` | docs: the pairs C1 made stale (added 2026-09-27) | P1 | C1 | Done |
 | W2 | `beadloom-2mj3.2` | docs: the pairs C2 made stale (added 2026-09-27) | P1 | C2 | Done |
 | W3 | `beadloom-2mj3.3` | docs: the pairs D1 made stale (added 2026-09-28) | P1 | D1 | Done |
-| W4 | `beadloom-2mj3.5` | docs: the pairs C3 made stale (added 2026-09-28) | P1 | C3 | Pending |
+| W4 | `beadloom-2mj3.5` | docs: the pairs C3 made stale (added 2026-09-28) | P1 | C3 | Done |
 | T | `beadloom-75pl` | test: the invariants, measured | P1 | C2, D1, E1, E2 | Pending |
 | R | `beadloom-b9ll` | review | P1 | T | Pending |
 | W | `beadloom-7u77` | tech-writer | P2 | R | Pending |
