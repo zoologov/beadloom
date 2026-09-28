@@ -320,9 +320,13 @@ class TestDescribeChange:
         assert "Population: empty" in text
         assert "2 file(s) changed, 0 of them in the declared scope" in text
 
-    def test_unbound_tests_are_stated_as_a_share(self) -> None:
-        text = "\n".join(describe_change(self._plan(unbound_tests=("a", "b", "c"))))
-        assert "3 of 4 test file(s)" in text
+    def test_unplaced_tests_are_stated_as_a_share(self) -> None:
+        """The share is counted by placement, as `ctx` counts it (BDL-074 F1)."""
+        plan = self._plan(
+            unbound_tests=("a", "b", "c"), test_placements={"mirror": 1, "unplaced": 3}
+        )
+        text = "\n".join(describe_change(plan))
+        assert "3 of 4 test file(s) are unplaced" in text
 
     def test_changed_lines_outside_any_function_are_stated(self) -> None:
         text = "\n".join(describe_change(self._plan(outside_lines=3)))

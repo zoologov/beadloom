@@ -293,7 +293,11 @@ def evaluate_all(
         + evaluate_summary_facts_rules(
             conn, summary_facts_rules, project_root=project_root
         )
-        + evaluate_test_binding_rules(conn, test_binding_rules)
+        + evaluate_test_binding_rules(
+            conn,
+            test_binding_rules,
+            scenario_rules=tuple(rule.name for rule in scenario_binding_rules),
+        )
         + evaluate_test_import_boundary_rules(conn, test_import_rules)
         + evaluate_scenario_binding_rules(
             conn, scenario_binding_rules, project_root=project_root

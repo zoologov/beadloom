@@ -397,6 +397,25 @@ PLACEMENT_UNPLACED = "unplaced"
 #: Under a kind folder whose binding is not the mirror.
 PLACEMENT_OTHER_KIND = "other_kind"
 
+#: The ``kind`` values an ``other_kind`` file carries, beside the placement vocabulary
+#: for the same reason (BDL-074 F1): the binding assigns them and the rule engine names
+#: them, so a count by kind is read from the index rather than inferred from a folder.
+#: An acceptance step file runs scenarios, which bind to a node by their ``@node:`` tag.
+KIND_ACCEPTANCE = "acceptance"
+#: A self-check tests the project's own files and configuration, and binds to no node
+#: by design: a sanctioned kind, not a file the layout has yet to reach.
+KIND_SELF_CHECK = "self_check"
+
+#: How a kind is named in a sentence; a kind without an entry is named as recorded.
+_KIND_LABELS = {KIND_ACCEPTANCE: "acceptance step", KIND_SELF_CHECK: "self-check"}
+#: The kind stated for an ``other_kind`` row that recorded none.
+KIND_UNRECORDED = "unrecorded"
+
+
+def label_test_kind(kind: str) -> str:
+    """The words a count of *kind* files is stated in: ``3 self-check file(s)``."""
+    return _KIND_LABELS.get(kind, kind)
+
 
 def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     """How many indexed test files each placement holds, read from ``test_files``.
@@ -412,6 +431,24 @@ def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     except sqlite3.OperationalError:
         return {}
     return {str(row["placement"]): int(row["n"]) for row in rows}
+
+
+def count_other_kind_test_files(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many ``other_kind`` test files each recorded kind holds, from ``test_files``.
+
+    The files no mirror binds, by what they are: an acceptance step file and a
+    self-check bind to no node for different reasons, and a count that merged them
+    would state neither. Empty for an index without the test tables, as
+    :func:`count_test_files_by_placement` is.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT kind, count(*) FROM test_files WHERE placement = ? GROUP BY kind",
+            (PLACEMENT_OTHER_KIND,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {KIND_UNRECORDED if row[0] is None else str(row[0]): int(row[1]) for row in rows}
 
 
 def get_test_file_bindings(

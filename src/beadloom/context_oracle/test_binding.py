@@ -38,12 +38,17 @@ from typing import TYPE_CHECKING
 # The placement vocabulary is defined below both of its readers — this module, which
 # assigns a placement, and the rule engine's `test_binding`, which judges it — and
 # re-exported here under its old names (BDL-074 C3).
+from beadloom.infrastructure.repository import (
+    KIND_ACCEPTANCE,
+    KIND_SELF_CHECK,
+    label_test_kind,
+    most_specific_owner,
+)
 from beadloom.infrastructure.repository import PLACEMENT_MIRROR as PLACEMENT_MIRROR
 from beadloom.infrastructure.repository import PLACEMENT_OTHER_KIND as PLACEMENT_OTHER_KIND
 from beadloom.infrastructure.repository import PLACEMENT_OVERRIDE as PLACEMENT_OVERRIDE
 from beadloom.infrastructure.repository import PLACEMENT_UNOWNED as PLACEMENT_UNOWNED
 from beadloom.infrastructure.repository import PLACEMENT_UNPLACED as PLACEMENT_UNPLACED
-from beadloom.infrastructure.repository import most_specific_owner
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Mapping
@@ -56,7 +61,7 @@ MIRRORED_KINDS = frozenset({"unit", "integration"})
 
 #: Kinds laid out by folder whose binding is not the mirror: acceptance scenarios
 #: bind by their ``@node:`` tag and self-checks test the repository itself.
-OTHER_KINDS = frozenset({"acceptance", "self_check"})
+OTHER_KINDS = frozenset({KIND_ACCEPTANCE, KIND_SELF_CHECK})
 
 #: The file names pytest collects by default.
 TEST_FILE_PATTERNS = ("test_*.py", "*_test.py")
@@ -265,6 +270,27 @@ def describe_unplaced(counts: Mapping[str, int]) -> str | None:
         f"{unplaced} of {sum(counts.values())} test file(s) are unplaced "
         f"(not under {folders}) and bind to no node"
     )
+
+
+def describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None:
+    """Every test file bound to no node, stated by why — ``None`` when there is none.
+
+    *counts* are test files by placement, *kinds* the ``other_kind`` files by their
+    recorded kind. The unplaced share is :func:`describe_unplaced`'s sentence, the
+    one ``ctx`` and the debt report state, so a surface that also shows the other
+    reasons states the same number for "unplaced" (BDL-074 F1): the unowned files
+    and each kind are named beside it by their own count, never folded into it.
+    """
+    parts = [part for part in (describe_unplaced(counts),) if part is not None]
+    unowned = counts.get(PLACEMENT_UNOWNED, 0)
+    if unowned:
+        parts.append(f"{unowned} unowned (under a mirrored folder whose code no node owns)")
+    if kinds:
+        named = " and ".join(
+            f"{count} {label_test_kind(kind)}" for kind, count in sorted(kinds.items())
+        )
+        parts.append(f"{named} file(s) bind to no node by their kind")
+    return "; ".join(parts) or None
 
 
 def summarize_tests(

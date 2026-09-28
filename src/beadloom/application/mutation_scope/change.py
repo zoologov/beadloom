@@ -26,17 +26,26 @@ uncommitted edits are measured locally. Untracked files are not in a git diff.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.application.mutation_scope.scope import lies_within, load_mutation_targets
 from beadloom.application.mutation_scope.touched import changed_lines, touched_functions
-from beadloom.context_oracle.test_binding import PLACEMENT_MIRROR, PLACEMENT_OVERRIDE
-from beadloom.infrastructure.repository import get_owning_ref_id, get_test_file_bindings
+from beadloom.context_oracle.test_binding import (
+    PLACEMENT_MIRROR,
+    PLACEMENT_OVERRIDE,
+    describe_unbound,
+)
+from beadloom.infrastructure.repository import (
+    count_other_kind_test_files,
+    count_test_files_by_placement,
+    get_owning_ref_id,
+    get_test_file_bindings,
+)
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
     from pathlib import Path
 
 #: The placements under which a test file is bound to a node by the binding.
@@ -70,7 +79,13 @@ class NodeSelection:
 
 @dataclass(frozen=True)
 class ChangePlan:
-    """The population of a change, over the declared scope, the graph and the binding."""
+    """The population of a change, over the declared scope, the graph and the binding.
+
+    ``unbound_tests`` lists every test file bound to no node, whatever the reason:
+    it is the runner's fallback selection. What the plan STATES about them is
+    counted by reason from ``test_placements`` and ``other_kinds``, so its unplaced
+    count is the one ``ctx`` and the debt report state (BDL-074 F1).
+    """
 
     base: str
     files_changed: int
@@ -81,6 +96,8 @@ class ChangePlan:
     nodes: tuple[NodeSelection, ...]
     unbound_tests: tuple[str, ...]
     test_files: int
+    test_placements: Mapping[str, int] = field(default_factory=dict)
+    other_kinds: Mapping[str, int] = field(default_factory=dict)
 
     @property
     def empty(self) -> bool:
@@ -163,6 +180,8 @@ def plan_change(
             path for path, ref_id, placement in bindings if not _is_bound(ref_id, placement)
         ),
         test_files=len(bindings),
+        test_placements=count_test_files_by_placement(conn),
+        other_kinds=count_other_kind_test_files(conn),
     )
 
 
@@ -230,11 +249,11 @@ def describe_change(plan: ChangePlan) -> list[str]:
             f"Not read: {', '.join(plan.unread)} — only Python source that parses "
             f"is read, so the functions these files hold are not counted"
         )
-    if plan.unbound_tests:
+    unbound = describe_unbound(plan.test_placements, plan.other_kinds)
+    if unbound is not None:
         lines.append(
-            f"Binding: {len(plan.unbound_tests)} of {plan.test_files} test file(s) "
-            f"are placed under no node, so the tests bound to a node can be short "
-            f"of the tests that exercise it"
+            f"Binding: {unbound} — so the tests bound to a node can be short of the "
+            f"tests that exercise it"
         )
     return lines
 
@@ -270,5 +289,7 @@ def change_payload(plan: ChangePlan) -> dict[str, object]:
         ],
         "test_files": plan.test_files,
         "unbound_tests": list(plan.unbound_tests),
+        "test_placements": dict(plan.test_placements),
+        "other_kinds": dict(plan.other_kinds),
         "empty": plan.empty,
     }

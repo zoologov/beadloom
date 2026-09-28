@@ -26,7 +26,6 @@ from beadloom.context_oracle.test_binding import (
     FRAMEWORK_NONE,
     FRAMEWORK_PYTEST,
     PLACEMENT_MIRROR,
-    PLACEMENT_OTHER_KIND,
     PLACEMENT_OVERRIDE,
     PLACEMENT_UNOWNED,
     PLACEMENT_UNPLACED,
@@ -40,7 +39,11 @@ from beadloom.context_oracle.test_binding import (
 from beadloom.context_oracle.test_file_reader import TestFileContents, read_test_file
 from beadloom.graph.import_resolver import resolve_import_to_node
 from beadloom.infrastructure.db import get_meta, set_meta
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.infrastructure.repository import (
+    count_other_kind_test_files,
+    count_test_files_by_placement,
+    label_test_kind,
+)
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -303,21 +306,28 @@ def placement_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return count_test_files_by_placement(conn)
 
 
+def kind_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many ``other_kind`` test files each recorded kind holds (BDL-074 F1)."""
+    return count_other_kind_test_files(conn)
+
+
 def needs_full_test_reindex(conn: sqlite3.Connection) -> bool:
     """Whether this index predates the test tables and must be rebuilt in full."""
     return get_meta(conn, TEST_INDEX_VERSION_KEY) != TEST_INDEX_VERSION
 
 
-def describe_placements(counts: dict[str, int]) -> str:
+def describe_placements(counts: dict[str, int], kinds: dict[str, int]) -> str:
     """One line stating how many test files there are and how each was placed.
 
     The bound and unplaced counts are always stated, so a repository whose tests
     are not laid out yet reads differently from one whose tests bind to nothing.
+    The ``other_kind`` files are named by their recorded kind (*kinds*), each with
+    its count: an acceptance step file and a self-check bind differently, and one
+    phrase over both was true of neither (BDL-074 F1).
     """
     bound = counts.get(PLACEMENT_MIRROR, 0) + counts.get(PLACEMENT_OVERRIDE, 0)
     parts = [f"{bound} bound to a node", f"{counts.get(PLACEMENT_UNPLACED, 0)} unplaced"]
     if counts.get(PLACEMENT_UNOWNED):
         parts.append(f"{counts[PLACEMENT_UNOWNED]} unowned")
-    if counts.get(PLACEMENT_OTHER_KIND):
-        parts.append(f"{counts[PLACEMENT_OTHER_KIND]} bound by other means")
+    parts.extend(f"{count} {label_test_kind(kind)}" for kind, count in sorted(kinds.items()))
     return f"{sum(counts.values())} files ({', '.join(parts)})"

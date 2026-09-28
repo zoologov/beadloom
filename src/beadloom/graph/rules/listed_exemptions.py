@@ -69,6 +69,11 @@ class ExemptionLedger:
         """How many subjects the entries excused in this run."""
         return sum(self._used.values())
 
+    @property
+    def exemptions_used(self) -> int:
+        """How many exemptions excused at least one subject in this run."""
+        return len({index for index, _ in self._used})
+
     def stale_findings(
         self,
         *,

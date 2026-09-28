@@ -530,9 +530,10 @@ class TestBindingRule:
     Two legs, each run only when declared:
 
     - ``files`` (a path glob) — every indexed test file it matches that binds to
-      no node is reported. A file bound by other means (an acceptance step file,
-      whose scenarios bind by tag; a self-check, which tests the repository) is
-      outside the population and counted as such.
+      no node is reported. A file a kind folder places is outside the judged
+      population and counted by its recorded kind: an acceptance step file, whose
+      scenarios bind by their ``@node:`` tags, and a self-check, which tests the
+      project's own files and binds to no node by design.
     - ``for`` (a node matcher) — every matched node with no bound test file, its
       own or a ``part_of`` descendant's, is reported.
 

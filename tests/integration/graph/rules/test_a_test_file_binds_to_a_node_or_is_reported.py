@@ -102,14 +102,16 @@ class TestATestFileBoundToNoNode:
         assert "unplaced" in messages["tests/test_loose.py"]
         assert "unowned" in messages["tests/unit/vault/test_vault.py"]
 
-    def test_a_file_bound_by_other_means_is_outside_the_population(self, tmp_path: Path) -> None:
+    def test_an_acceptance_step_file_is_outside_the_judged_population(
+        self, tmp_path: Path
+    ) -> None:
         """An acceptance step file binds through its scenarios' tags, not its path."""
         violations = _evaluate(tmp_path, _rule())
 
         paths = {v.file_path for v in violations}
         assert "tests/acceptance/steps/test_billing_steps.py" not in paths
         assert "4 of 5 indexed test file(s)" in _population(violations)
-        assert "1 bind by other means" in _population(violations)
+        assert "1 acceptance step file(s)" in _population(violations)
 
     def test_the_files_glob_narrows_the_population(self, tmp_path: Path) -> None:
         violations = _evaluate(tmp_path, _rule(files="tests/unit/**"))
@@ -121,6 +123,165 @@ class TestATestFileBoundToNoNode:
         violations = _evaluate(tmp_path, _rule(severity="error"))
 
         assert {v.severity for v in _of_type(violations, TEST_BINDING_RULE_TYPE)} == {"error"}
+
+
+def _suite_of_every_kind(*extra: SuiteFile) -> SuiteIndex:
+    """One file of each placement, two acceptance step files and three self-checks."""
+    return SuiteIndex(
+        nodes=[SuiteNode("ledger", kind="domain"), SuiteNode("billing", part_of=("ledger",))],
+        files=[
+            SuiteFile("tests/unit/ledger/test_billing.py", ref_id="billing"),
+            SuiteFile("tests/test_loose.py", placement="unplaced", kind=None),
+            *(
+                SuiteFile(
+                    f"tests/acceptance/steps/test_{name}_steps.py",
+                    placement="other_kind",
+                    kind="acceptance",
+                )
+                for name in ("billing", "refunds")
+            ),
+            *(
+                SuiteFile(
+                    f"tests/self_check/docs/test_{name}.py",
+                    placement="other_kind",
+                    kind="self_check",
+                )
+                for name in ("readme", "spec", "changelog")
+            ),
+            *extra,
+        ],
+    )
+
+
+class TestThePopulationNamesEveryKindItDoesNotJudge:
+    """BDL-074 F1: no file is filed under a phrase that is true of only some of them.
+
+    The rule once said "174 bind by other means" of 73 acceptance step files and
+    101 self-checks. The first bind through their scenarios' tags; the second bind
+    to nothing, by design. One phrase over both was true of neither.
+    """
+
+    def test_acceptance_and_self_check_are_each_counted_by_their_kind(
+        self, tmp_path: Path
+    ) -> None:
+        # Act
+        population = _population(_evaluate(tmp_path, _rule(), _suite_of_every_kind()))
+
+        # Assert
+        assert "judged 2 of 7 indexed test file(s)" in population
+        assert "2 acceptance step file(s)" in population
+        assert "3 self-check file(s)" in population
+        assert "by other means" not in population
+
+    def test_a_self_check_is_stated_as_bound_to_no_node_by_design(self, tmp_path: Path) -> None:
+        population = _population(_evaluate(tmp_path, _rule(), _suite_of_every_kind()))
+
+        assert (
+            "3 self-check file(s) — the project's checks of its own files and "
+            "configuration, bound to no node by design: a sanctioned outcome, not a gap"
+        ) in population
+
+    def test_acceptance_names_the_scenario_rule_that_judges_its_tags(
+        self, tmp_path: Path
+    ) -> None:
+        conn = _suite_of_every_kind().build(tmp_path)
+        try:
+            violations = evaluate_test_binding_rules(
+                conn, [_rule()], scenario_rules=("scenarios-in-their-folder",)
+            )
+        finally:
+            conn.close()
+
+        assert (
+            "2 acceptance step file(s) — the scenarios they run bind through their "
+            "@node: tags, judged by `scenarios-in-their-folder`"
+        ) in _population(violations)
+
+    def test_acceptance_says_so_when_no_scenario_rule_judges_its_tags(
+        self, tmp_path: Path
+    ) -> None:
+        population = _population(_evaluate(tmp_path, _rule(), _suite_of_every_kind()))
+
+        assert "judged by no `scenario_binding` rule of this project" in population
+
+    def test_the_scenario_rule_is_named_when_both_are_declared_together(
+        self, tmp_path: Path
+    ) -> None:
+        """The name reaches the line through the one dispatch lint runs, not by hand."""
+        rules = load_rules(
+            write_rules(
+                tmp_path,
+                "  - name: tb\n"
+                "    test_binding: { files: 'tests/**' }\n"
+                "  - name: scenarios-in-their-folder\n"
+                "    scenario_binding: { features: 'tests/acceptance/**/*.feature' }\n",
+            )
+        )
+        conn = _suite_of_every_kind().build(tmp_path)
+        try:
+            violations = evaluate_all(conn, rules, project_root=tmp_path)
+        finally:
+            conn.close()
+
+        stated = [
+            v.message
+            for v in _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+            if v.rule_name == "tb"
+        ]
+        assert len(stated) == 1
+        assert "judged by `scenarios-in-their-folder`" in stated[0]
+
+    def test_the_kind_is_the_one_the_index_recorded_not_the_folder(
+        self, tmp_path: Path
+    ) -> None:
+        """A file's kind is read from the index, so no folder name is assumed here."""
+        index = _suite_of_every_kind(
+            SuiteFile(
+                "tests/self_check/docs/test_recorded_as_acceptance.py",
+                placement="other_kind",
+                kind="acceptance",
+            )
+        )
+
+        population = _population(_evaluate(tmp_path, _rule(), index))
+
+        assert "3 acceptance step file(s)" in population
+        assert "3 self-check file(s)" in population
+
+    def test_a_kind_the_rule_has_no_statement_for_is_still_named(
+        self, tmp_path: Path
+    ) -> None:
+        index = _suite_of_every_kind(
+            SuiteFile("tests/smoke/test_boot.py", placement="other_kind", kind="smoke")
+        )
+
+        population = _population(_evaluate(tmp_path, _rule(), index))
+
+        assert "1 smoke file(s) — bound to no node, and not judged by this rule" in population
+
+    def test_a_kind_the_suite_does_not_hold_is_not_mentioned(self, tmp_path: Path) -> None:
+        population = _population(_evaluate(tmp_path, _rule()))
+
+        assert "self-check" not in population
+
+    def test_the_excuses_are_counted_by_the_exemptions_that_made_them(
+        self, tmp_path: Path
+    ) -> None:
+        index = _suite_of_every_kind(
+            SuiteFile("tests/test_other_loose.py", placement="unplaced", kind=None)
+        )
+        rule = _rule(
+            exempt_files=(
+                ListedExemption(entries=("tests/test_loose.py",), reason="mixed", until="split"),
+                ListedExemption(
+                    entries=("tests/test_other_loose.py",), reason="written late", until="placed"
+                ),
+            )
+        )
+
+        population = _population(_evaluate(tmp_path, rule, index))
+
+        assert "2 bound to none — 2 excused by 2 exemption(s), 0 reported" in population
 
 
 class TestANodeWithNoBoundTestFile:
@@ -182,7 +343,7 @@ class TestExemptions:
 
         reported = [v.file_path for v in _of_type(violations, TEST_BINDING_RULE_TYPE)]
         assert reported == ["tests/unit/vault/test_vault.py"]
-        assert "1 excused by an exemption" in _population(violations)
+        assert "1 excused by 1 exemption(s)" in _population(violations)
 
     def test_an_exempt_node_is_not_reported(self, tmp_path: Path) -> None:
         index = _index()

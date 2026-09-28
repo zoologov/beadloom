@@ -6,10 +6,14 @@
 both directions, and state how much of the suite and the graph it judged.
 
 - The FILE leg judges every indexed test file the ``files`` glob matches, except
-  the ones bound by other means (placement ``other_kind``: an acceptance step
-  file, whose scenarios bind by tag, and a self-check, which tests the
-  repository). A judged file whose ``ref_id`` is empty is a finding, and the
-  finding names the placement that left it empty.
+  the ones a kind folder places (placement ``other_kind``), and names those BY
+  KIND and count, never under one phrase (BDL-074 F1): an acceptance step file
+  runs scenarios that bind through their ``@node:`` tags, judged by the
+  project's ``scenario_binding`` rules, and a self-check tests the project's own
+  files and binds to no node by design. The two bind differently, so one phrase
+  over both is true of neither. The kind is the one the index recorded. A judged
+  file whose ``ref_id`` is empty is a finding, and the finding names the
+  placement that left it empty.
 - The NODE leg judges every node the ``for`` matcher selects. A node is bound
   when a test file is bound to it or to one of its ``part_of`` descendants — the
   union ``ctx`` counts. Acceptance scenarios are not counted here; that binding
@@ -28,6 +32,7 @@ the test tables existed.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
@@ -39,10 +44,17 @@ from beadloom.graph.rules.types import (
     liveness_finding,
     population_finding,
 )
-from beadloom.infrastructure.repository import PLACEMENT_OTHER_KIND
+from beadloom.infrastructure.repository import (
+    KIND_ACCEPTANCE,
+    KIND_SELF_CHECK,
+    KIND_UNRECORDED,
+    PLACEMENT_OTHER_KIND,
+    label_test_kind,
+)
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
 
     from beadloom.graph.rules.suite_tables import IndexedTestFile
     from beadloom.graph.rules.types import NodeMatcher, TestBindingRule
@@ -80,7 +92,12 @@ def _finding(rule: TestBindingRule, message: str, remediation: str, **where: str
     )
 
 
-def _file_leg(rule: TestBindingRule, glob: str, files: list[IndexedTestFile]) -> _Leg:
+def _file_leg(
+    rule: TestBindingRule,
+    glob: str,
+    files: list[IndexedTestFile],
+    scenario_rules: Sequence[str],
+) -> _Leg:
     matched = [f for f in files if fnmatchcase(f.path, glob)]
     other = [f for f in matched if f.placement == PLACEMENT_OTHER_KIND]
     judged = [f for f in matched if f.placement != PLACEMENT_OTHER_KIND]
@@ -106,13 +123,41 @@ def _file_leg(rule: TestBindingRule, glob: str, files: list[IndexedTestFile]) ->
     )
     statement = (
         f"test files: judged {len(judged)} of {len(files)} indexed test file(s) matching "
-        f"`{glob}` ({len(other)} bind by other means, "
-        f"{len(files) - len(matched)} outside the glob): {len(judged) - len(unbound)} bound "
-        f"to a node, {len(unbound)} bound to none — {ledger.excused} excused by an "
-        f"exemption, {len(unbound) - ledger.excused} reported"
+        f"`{glob}` ({len(files) - len(matched)} outside the glob): "
+        f"{len(judged) - len(unbound)} bound to a node, {len(unbound)} bound to none — "
+        f"{ledger.excused} excused by {ledger.exemptions_used} exemption(s), "
+        f"{len(unbound) - ledger.excused} reported"
+        f"{_kinds_not_judged(other, scenario_rules)}"
     )
     dead = None if judged else f"its `files` glob `{glob}` matches no indexed test file it judges"
     return _Leg(findings, statement, dead)
+
+
+def _kinds_not_judged(other: list[IndexedTestFile], scenario_rules: Sequence[str]) -> str:
+    """The files a kind folder places, by recorded kind and count, each with how it binds."""
+    counts = Counter(f.kind or KIND_UNRECORDED for f in other)
+    if not counts:
+        return ""
+    judged_by = (
+        f"judged by {', '.join(f'`{name}`' for name in scenario_rules)}"
+        if scenario_rules
+        else "judged by no `scenario_binding` rule of this project"
+    )
+    statements = {
+        KIND_ACCEPTANCE: (
+            f"the scenarios they run bind through their @node: tags, {judged_by}"
+        ),
+        KIND_SELF_CHECK: (
+            "the project's checks of its own files and configuration, bound to no node "
+            "by design: a sanctioned outcome, not a gap"
+        ),
+    }
+    stated = [
+        f"{count} {label_test_kind(kind)} file(s) — "
+        f"{statements.get(kind, 'bound to no node, and not judged by this rule')}"
+        for kind, count in sorted(counts.items())
+    ]
+    return f"; not judged by their path, by kind: {'; '.join(stated)}"
 
 
 def _node_leg(
@@ -157,13 +202,15 @@ def _node_leg(
     return _Leg(findings, statement, dead)
 
 
-def _legs(conn: sqlite3.Connection, rule: TestBindingRule) -> list[_Leg] | None:
+def _legs(
+    conn: sqlite3.Connection, rule: TestBindingRule, scenario_rules: Sequence[str] = ()
+) -> list[_Leg] | None:
     files = read_test_files(conn)
     if files is None:
         return None
     legs: list[_Leg] = []
     if rule.files is not None:
-        legs.append(_file_leg(rule, rule.files, files))
+        legs.append(_file_leg(rule, rule.files, files, scenario_rules))
     if rule.for_matcher is not None:
         legs.append(_node_leg(conn, rule, rule.for_matcher, files))
     return legs
@@ -184,8 +231,10 @@ def test_binding_inert_reason(conn: sqlite3.Connection, rule: TestBindingRule) -
     return None
 
 
-def _evaluate_one(conn: sqlite3.Connection, rule: TestBindingRule) -> list[Violation]:
-    legs = _legs(conn, rule)
+def _evaluate_one(
+    conn: sqlite3.Connection, rule: TestBindingRule, scenario_rules: Sequence[str]
+) -> list[Violation]:
+    legs = _legs(conn, rule, scenario_rules)
     if legs is None:
         return [_liveness(rule, _NO_TEST_TABLE)]
     findings: list[Violation] = []
@@ -217,10 +266,18 @@ def _liveness(rule: TestBindingRule, reason: str) -> Violation:
 
 
 def evaluate_test_binding_rules(
-    conn: sqlite3.Connection, rules: list[TestBindingRule]
+    conn: sqlite3.Connection,
+    rules: list[TestBindingRule],
+    *,
+    scenario_rules: Sequence[str] = (),
 ) -> list[Violation]:
-    """Evaluate every ``test_binding`` rule against the recorded binding."""
+    """Evaluate every ``test_binding`` rule against the recorded binding.
+
+    *scenario_rules* names the project's ``scenario_binding`` rules, which judge
+    the tags an acceptance step file's scenarios bind through; the population
+    line names them, or says that none is declared.
+    """
     findings: list[Violation] = []
     for rule in rules:
-        findings.extend(_evaluate_one(conn, rule))
+        findings.extend(_evaluate_one(conn, rule, scenario_rules))
     return findings

@@ -33,13 +33,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class IndexedTestFile:
-    """One test file as the reindex recorded it: its path, its node and its placement."""
+    """One test file as the reindex recorded it: its path, its node, its placement, its kind."""
 
     __test__ = False  # a product type, not a pytest test class
 
     path: str
     ref_id: str | None
     placement: str
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ def read_test_files(conn: sqlite3.Connection) -> list[IndexedTestFile] | None:
     """Every indexed test file, by path — ``None`` for an index without the table."""
     try:
         rows = conn.execute(
-            "SELECT path, ref_id, placement FROM test_files ORDER BY path"
+            "SELECT path, ref_id, placement, kind FROM test_files ORDER BY path"
         ).fetchall()
     except sqlite3.OperationalError:
         return None
@@ -66,6 +67,7 @@ def read_test_files(conn: sqlite3.Connection) -> list[IndexedTestFile] | None:
             path=str(row[0]),
             ref_id=None if row[1] is None else str(row[1]),
             placement=str(row[2]),
+            kind=None if row[3] is None else str(row[3]),
         )
         for row in rows
     ]

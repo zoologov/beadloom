@@ -468,6 +468,11 @@ rules:
   # to its node's folder is reported the next run as an entry to delete.
   # RE-MEASURED after E1 (`beadloom-cs2o`) split the rule engine's 8 of them by
   # node: 578 indexed, 228 bound, 176 unplaced (all listed), 174 by other means.
+  # CORRECTED by F1 (`beadloom-2mj3.6`): "by other means" was true of the 73
+  # acceptance step files (their scenarios bind by @node: tag) and false of the 101
+  # self-checks (they bind to no node, by design); the rule now names each kind by
+  # its count. Six files the map measured as executing no src/ line moved out of
+  # the mixed group, whose reason was false for them, into a fourth group.
   - name: test-files-bind-to-a-node
     description: "Every test file binds to a graph node, by the mirror of its path or a node's tests: list"
     severity: error
@@ -565,11 +570,9 @@ rules:
             - "tests/test_issue_number_gate.py"
             - "tests/test_landing_lock_sites.py"
             - "tests/test_landscape_view.py"
-            - "tests/test_lint_help_states_the_bound_on_the_advisory_exclusion.py"
             - "tests/test_locale_independent_io.py"
             - "tests/test_mutation_command.py"
             - "tests/test_mutation_phantom_gate.py"
-            - "tests/test_mutmut_runs_covering_tests_cheapest_first.py"
             - "tests/test_no_domain_package_imports_application.py"
             - "tests/test_no_selected_test_reads_the_mutated_copy.py"
             - "tests/test_node_intent.py"
@@ -594,7 +597,6 @@ rules:
             - "tests/test_s2_seam_crosscutting.py"
             - "tests/test_s3_config_check_residual.py"
             - "tests/test_s4_cli_decomposition.py"
-            - "tests/test_s4_decomposition.py"
             - "tests/test_s4_the_instruments_agree.py"
             - "tests/test_scaffold_findings_are_printed.py"
             - "tests/test_service_needs_parent.py"
@@ -612,7 +614,6 @@ rules:
             - "tests/test_sync_unverifiable.py"
             - "tests/test_sync_update_check_does_not_write.py"
             - "tests/test_sync_update_names_what_it_did_not_clear.py"
-            - "tests/test_the_acceptance_asks_every_graph_reader.py"
             - "tests/test_the_axes_section_is_required_by_the_template.py"
             - "tests/test_the_commit_gate_states_what_it_compared.py"
             - "tests/test_the_derivations_hold_as_shapes.py"
@@ -628,8 +629,6 @@ rules:
             - "tests/test_the_routing_table_is_one_table.py"
             - "tests/test_the_stale_pair_count_is_derived_in_one_place.py"
             - "tests/test_the_suite_reads_the_package_under_test.py"
-            - "tests/test_tracked_write_guard.py"
-            - "tests/test_tui_no_raw_sqlite.py"
             - "tests/test_two_readers_of_one_markdown_table.py"
             - "tests/test_verdict_room_population.py"
             - "tests/test_virgin_scaffold_is_green.py"
@@ -675,6 +674,24 @@ rules:
             matches its name.
           until: >-
             the helper is renamed so no test-file pattern matches it
+        - files:
+            - "tests/test_lint_help_states_the_bound_on_the_advisory_exclusion.py"
+            - "tests/test_mutmut_runs_covering_tests_cheapest_first.py"
+            - "tests/test_s4_decomposition.py"
+            - "tests/test_the_acceptance_asks_every_graph_reader.py"
+            - "tests/test_tracked_write_guard.py"
+            - "tests/test_tui_no_raw_sqlite.py"
+          reason: >-
+            The suite map measured each of these as one kind whose tests execute no
+            line of src/ in their run phase, so it named no node for them: they read
+            source or package text, check the test harness itself, or assert on text
+            built at import. No mirrored path names such a file, and a node chosen by
+            its name would be the guess C2 retired. (Listed with the mixed files until
+            BDL-074 F1, whose reason was false for these six.)
+          until: >-
+            the file is named in the `tests:` list of the node whose code or text it
+            checks, or moved under tests/self_check/ where it checks this repository
+            rather than a node's behaviour -- follow-up slices of BDL-074
 
   # The node leg, held apart so it can be `warn` while the file leg is `error`.
   # WARN, AND WHY: measured 2026-09-28, 20 of the 51 features have no bound test
