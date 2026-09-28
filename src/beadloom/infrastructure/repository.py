@@ -382,6 +382,22 @@ def most_specific_owner(
     return best[1] if best is not None else None
 
 
+#: The ``placement`` values ``test_files`` holds (BDL-074 C1). Defined here, below
+#: both domains that read them: ``context_oracle.test_binding`` assigns a placement
+#: and ``graph.rules.test_binding`` judges it, and a vocabulary two peers share
+#: belongs below both rather than in whichever wrote it down first (C3).
+#: Bound by the mirror of its path.
+PLACEMENT_MIRROR = "mirror"
+#: Bound by a node's ``tests:`` declaration.
+PLACEMENT_OVERRIDE = "override"
+#: Under a mirrored kind folder, and no node owns the code its path names.
+PLACEMENT_UNOWNED = "unowned"
+#: Not under a kind folder: the layout has not reached it, so it binds to nothing.
+PLACEMENT_UNPLACED = "unplaced"
+#: Under a kind folder whose binding is not the mirror.
+PLACEMENT_OTHER_KIND = "other_kind"
+
+
 def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     """How many indexed test files each placement holds, read from ``test_files``.
 

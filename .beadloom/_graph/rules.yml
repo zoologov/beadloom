@@ -450,3 +450,353 @@ rules:
     description: "A number or version stated in a node summary agrees with the project"
     severity: error
     summary_facts: {}
+
+  # THE TEST SUITE, JUDGED AGAINST THE GRAPH (BDL-074 C3). Three rules over the
+  # binding the reindex records: a test file to the node whose code its path
+  # mirrors (or whose `tests:` list names it), an acceptance scenario to the node
+  # its folder names. Each prints what it judged and what it could not on every
+  # run (`suite_population`, an advisory: it decides nothing and `--fail-on-warn`
+  # does not exit on it).
+  #
+  # MEASURED ON THIS TREE, 2026-09-28, after a full reindex: 560 indexed test
+  # files -- 202 bound to a node, 184 unplaced, 174 bound by other means
+  # (acceptance step files and self-checks). Every one of the 184 is listed
+  # below by path, in three groups with their reason: 169 files the suite map
+  # measured as exercising several nodes (or both kinds), 14 written or renamed
+  # after the map, and 1 helper the `*_test.py` pattern matches. A path, not a
+  # glob, so a NEW file placed nowhere is an error, and a listed file that moves
+  # to its node's folder is reported the next run as an entry to delete.
+  - name: test-files-bind-to-a-node
+    description: "Every test file binds to a graph node, by the mirror of its path or a node's tests: list"
+    severity: error
+    test_binding:
+      files: "tests/**"
+      exempt:
+        - files:
+            - "tests/test_a_commit_is_judged_against_the_declared_axes.py"
+            - "tests/test_a_duplicate_ref_id_is_reported_by_the_reader_that_meets_it.py"
+            - "tests/test_a_generated_graph_hands_out_no_ref_id_twice.py"
+            - "tests/test_a_layer_rule_that_fired_is_not_reported_inert.py"
+            - "tests/test_a_remediation_can_be_followed.py"
+            - "tests/test_a_stale_line_names_its_pair.py"
+            - "tests/test_adopter_projects.py"
+            - "tests/test_amqp_body_federation.py"
+            - "tests/test_amqp_body_verdict.py"
+            - "tests/test_attestation_scope.py"
+            - "tests/test_auto_link_docs.py"
+            - "tests/test_axes_section_reads_unread_ownership.py"
+            - "tests/test_axes_section_table_boundary.py"
+            - "tests/test_bead15_s3b_coverage.py"
+            - "tests/test_bead18_s5_relation.py"
+            - "tests/test_bootstrap_clean_lint.py"
+            - "tests/test_bootstrap_domain_parent_invariant.py"
+            - "tests/test_ci_consolidated_structure.py"
+            - "tests/test_ci_locale_dimension.py"
+            - "tests/test_ci_pr_trigger.py"
+            - "tests/test_ci_windows_dimension.py"
+            - "tests/test_cli_active_sync.py"
+            - "tests/test_cli_active_sync_hardening.py"
+            - "tests/test_cli_clean_room.py"
+            - "tests/test_cli_config_check.py"
+            - "tests/test_cli_ctx.py"
+            - "tests/test_cli_graph.py"
+            - "tests/test_cli_hooks.py"
+            - "tests/test_cli_impact.py"
+            - "tests/test_cli_json_streams.py"
+            - "tests/test_cli_link.py"
+            - "tests/test_cli_lint.py"
+            - "tests/test_cli_mcp.py"
+            - "tests/test_cli_reference_drift.py"
+            - "tests/test_cli_reindex.py"
+            - "tests/test_cli_review_brief.py"
+            - "tests/test_cli_setup_agentic_flow.py"
+            - "tests/test_cli_sync_check.py"
+            - "tests/test_cli_sync_update.py"
+            - "tests/test_cli_watch.py"
+            - "tests/test_cli_waves.py"
+            - "tests/test_config_sync.py"
+            - "tests/test_constraints.py"
+            - "tests/test_cost_metrics.py"
+            - "tests/test_decode_handlers.py"
+            - "tests/test_decoding_symmetry.py"
+            - "tests/test_doc_coverage.py"
+            - "tests/test_doc_templates.py"
+            - "tests/test_docs_audit_coverage.py"
+            - "tests/test_e2e_sync_honest.py"
+            - "tests/test_e2e_wave3.py"
+            - "tests/test_every_caller_of_the_skeleton_writer.py"
+            - "tests/test_every_lint_rendering_states_the_population.py"
+            - "tests/test_every_surface_past_lint_states_the_population.py"
+            - "tests/test_every_wizard_answer_is_judged.py"
+            - "tests/test_f3_gate_coverage.py"
+            - "tests/test_federate_gate.py"
+            - "tests/test_federate_roundtrip_db.py"
+            - "tests/test_flow_composition.py"
+            - "tests/test_gate.py"
+            - "tests/test_gate_finding_owner.py"
+            - "tests/test_gate_not_run.py"
+            - "tests/test_gate_three_states.py"
+            - "tests/test_gate_verdict_room.py"
+            - "tests/test_grammar_guard.py"
+            - "tests/test_graph_files_are_read_under_one_policy.py"
+            - "tests/test_graph_loader.py"
+            - "tests/test_graphql_federation_determinism.py"
+            - "tests/test_graphql_typed_verdict.py"
+            - "tests/test_guards_boundary_escapes.py"
+            - "tests/test_hook_commit_scope.py"
+            - "tests/test_impact_answers_about_a_file_it_cannot_parse.py"
+            - "tests/test_impact_derives_the_seed_it_answers_from.py"
+            - "tests/test_impact_names_what_a_row_owns_and_did_not_read.py"
+            - "tests/test_impact_over_every_source_layout.py"
+            - "tests/test_impact_says_how_wide_it_swept.py"
+            - "tests/test_import_docs_parents_what_it_writes.py"
+            - "tests/test_import_resolver.py"
+            - "tests/test_init_agrees_across_its_modes.py"
+            - "tests/test_init_doc_generation.py"
+            - "tests/test_init_one_table_over_every_axis.py"
+            - "tests/test_init_report_says_whose_failure_it_is.py"
+            - "tests/test_init_takes_its_reindex_from_the_caller.py"
+            - "tests/test_init_verdict_over_its_own_rules.py"
+            - "tests/test_integration.py"
+            - "tests/test_integration_onboarding.py"
+            - "tests/test_integration_reference_freshness.py"
+            - "tests/test_integration_v1.py"
+            - "tests/test_interpreter_launch.py"
+            - "tests/test_issue_number_command.py"
+            - "tests/test_issue_number_gate.py"
+            - "tests/test_landing_lock_sites.py"
+            - "tests/test_landscape_view.py"
+            - "tests/test_lint_help_states_the_bound_on_the_advisory_exclusion.py"
+            - "tests/test_locale_independent_io.py"
+            - "tests/test_mutation_command.py"
+            - "tests/test_mutation_phantom_gate.py"
+            - "tests/test_mutmut_runs_covering_tests_cheapest_first.py"
+            - "tests/test_no_domain_package_imports_application.py"
+            - "tests/test_no_selected_test_reads_the_mutated_copy.py"
+            - "tests/test_node_intent.py"
+            - "tests/test_one_parent_post_condition_over_every_writer.py"
+            - "tests/test_orphaned_adapters.py"
+            - "tests/test_paradigm_roundtrip.py"
+            - "tests/test_readme_pair_gate.py"
+            - "tests/test_reference_drift.py"
+            - "tests/test_reindex.py"
+            - "tests/test_reindex_activity.py"
+            - "tests/test_reindex_config.py"
+            - "tests/test_reindex_routes.py"
+            - "tests/test_reindex_tests.py"
+            - "tests/test_release_a_is_neutral_on_a_project_that_is_not_ours.py"
+            - "tests/test_role_bdd_mutation_duties.py"
+            - "tests/test_role_configurator.py"
+            - "tests/test_role_configurator_hardening.py"
+            - "tests/test_role_core_names_the_room.py"
+            - "tests/test_role_duties.py"
+            - "tests/test_room_environment.py"
+            - "tests/test_rules_docstring_references.py"
+            - "tests/test_s2_false_green_residue.py"
+            - "tests/test_s2_lying_checks.py"
+            - "tests/test_s2_move_regression.py"
+            - "tests/test_s2_seam_crosscutting.py"
+            - "tests/test_s3_config_check_residual.py"
+            - "tests/test_s3_decomposition.py"
+            - "tests/test_s4_cli_decomposition.py"
+            - "tests/test_s4_decomposition.py"
+            - "tests/test_s4_the_instruments_agree.py"
+            - "tests/test_scaffold_findings_are_printed.py"
+            - "tests/test_service_needs_parent.py"
+            - "tests/test_shared_writing_standard.py"
+            - "tests/test_sibling_symbol_baseline.py"
+            - "tests/test_site_coverage_edges.py"
+            - "tests/test_site_dashboard.py"
+            - "tests/test_site_generator.py"
+            - "tests/test_site_published_docs.py"
+            - "tests/test_site_viz_data_guards.py"
+            - "tests/test_source_coverage.py"
+            - "tests/test_source_coverage_n1_parity.py"
+            - "tests/test_sync_engine.py"
+            - "tests/test_sync_since.py"
+            - "tests/test_sync_unverifiable.py"
+            - "tests/test_sync_update_check_does_not_write.py"
+            - "tests/test_sync_update_names_what_it_did_not_clear.py"
+            - "tests/test_the_acceptance_asks_every_graph_reader.py"
+            - "tests/test_the_axes_section_is_required_by_the_template.py"
+            - "tests/test_the_commit_gate_states_what_it_compared.py"
+            - "tests/test_the_derivations_hold_as_shapes.py"
+            - "tests/test_the_document_every_bead_writes.py"
+            - "tests/test_the_exit_condition_vocabulary_lives_below_both_declarers.py"
+            - "tests/test_the_explore_role_is_composed_like_the_others.py"
+            - "tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py"
+            - "tests/test_the_gate_checks_the_surface_the_project_declared.py"
+            - "tests/test_the_graph_a_plan_is_derived_from.py"
+            - "tests/test_the_init_skeleton_carries_its_public_api.py"
+            - "tests/test_the_init_skeleton_names_its_modules.py"
+            - "tests/test_the_room_and_the_claim_it_supports.py"
+            - "tests/test_the_routing_table_is_one_table.py"
+            - "tests/test_the_stale_pair_count_is_derived_in_one_place.py"
+            - "tests/test_the_suite_reads_the_package_under_test.py"
+            - "tests/test_the_view_and_the_rule_engine_read_one_layer_declaration.py"
+            - "tests/test_tracked_write_guard.py"
+            - "tests/test_tui_no_raw_sqlite.py"
+            - "tests/test_two_readers_of_one_markdown_table.py"
+            - "tests/test_verdict_room_population.py"
+            - "tests/test_virgin_scaffold_is_green.py"
+            - "tests/test_what_each_reader_of_the_graph_directory_reads_for.py"
+            - "tests/tui/test_dashboard_action_bar.py"
+            - "tests/tui/test_screen_descriptions.py"
+          reason: >-
+            The suite map (BDL-074 `map/test-map.json`, 2026-09-27) measured each of
+            these as exercising several nodes, or as mixing unit and integration
+            tests, so no single mirrored path can hold it. B2 relocated only the
+            clear-node files; a mixed file binds to no node until it is split.
+          until: >-
+            the file is split by node and each part placed under tests/unit/ or
+            tests/integration/ by the mirror -- E1 (`beadloom-cs2o`) for the rule
+            engine's, follow-up slices of BDL-074 for the rest
+        - files:
+            - "tests/test_a_declaration_that_owns_nothing_is_reported.py"
+            - "tests/test_a_document_path_has_one_spelling.py"
+            - "tests/test_a_kind_and_root_disagreement_is_reported.py"
+            - "tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py"
+            - "tests/test_an_excused_pair_says_so.py"
+            - "tests/test_config_check_names_what_it_could_not_verify.py"
+            - "tests/test_contact_guard.py"
+            - "tests/test_ctx_and_debt_report_read_the_test_binding.py"
+            - "tests/test_each_decision_fails_in_its_stated_direction.py"
+            - "tests/test_mutation_runs_on_a_change_or_on_a_sample.py"
+            - "tests/test_reindex_indexes_test_files_in_their_own_tables.py"
+            - "tests/test_self_check_snapshot.py"
+            - "tests/test_the_gate_blocks_each_break_class.py"
+            - "tests/test_the_suite_finds_the_repository_root_one_way.py"
+          reason: >-
+            Written or renamed after the suite map was taken (C1, C2, D1, A1, A2
+            and E2's renames), so no measured node exists to place it by, and
+            placing it by its name would be the guess C2 retired.
+          until: >-
+            its node is measured and it is placed by the mirror, in the follow-up
+            slices of BDL-074
+        - files:
+            - "tests/support/package_under_test.py"
+          reason: >-
+            A support helper, not a test: it holds no test function, and the
+            reindex indexes it only because pytest's `*_test.py` file pattern
+            matches its name.
+          until: >-
+            the helper is renamed so no test-file pattern matches it
+
+  # The node leg, held apart so it can be `warn` while the file leg is `error`.
+  # WARN, AND WHY: measured 2026-09-28, 20 of the 51 features have no bound test
+  # file of their own or of a part of them. While 184 files are unplaced, any of
+  # them may test such a node, so "no bound test" is not "untested" and cannot be
+  # an error. Nor can it be exempted honestly: an exemption would claim to know
+  # the node is untested for a reason, and nobody knows that yet. Each finding
+  # says how many files bind to no node. Acceptance scenarios are not counted
+  # here -- they are `scenario-coverage`'s population.
+  - name: features-have-bound-tests
+    description: "A feature node has a bound test file, its own or a part's"
+    severity: warn
+    test_binding:
+      for: { kind: feature }
+
+  # A unit test of a node in the domain layer (the node, or a container of it,
+  # tagged `layer-domain`) does not import the infrastructure layer: testing
+  # through an index is what an integration test does. `forbid_import`'s own
+  # evaluator, run over the imports C1 records for test files -- which keep an
+  # aliased `import a as b` that the code-import index drops. Measured
+  # 2026-09-28: 27 of the 47 unit test files are bound to a domain-layer node, 4
+  # of them import `beadloom.infrastructure.db`, listed below.
+  - name: domain-unit-tests-import-no-infrastructure
+    description: "A unit test of a domain-layer node does not import the infrastructure layer"
+    severity: error
+    test_import_boundary:
+      from: "tests/unit/**"
+      to: "beadloom/infrastructure/**"
+      of: { tag: layer-domain }
+      exempt:
+        - from: "tests/unit/doc_sync/audit/test_tolerance.py"
+          to: "beadloom/infrastructure/db"
+          reason: &unit-test-opens-an-index >-
+            Builds its fixture in a SQLite index through `infrastructure.db`, which is
+            what an integration test does; B2 placed it under unit/ by the kind the
+            suite map measured for it, and the map could not see the index it opens.
+          until: &unit-test-opens-an-index-exit >-
+            the file (or the part of it that opens an index) moves to
+            tests/integration/ by the mirror, or its fixture is built without an index
+        - from: "tests/unit/graph/contracts/test_federate_f2_gate.py"
+          to: "beadloom/infrastructure/db"
+          reason: *unit-test-opens-an-index
+          until: *unit-test-opens-an-index-exit
+        - from: "tests/unit/graph/test_linter.py"
+          to: "beadloom/infrastructure/db"
+          reason: *unit-test-opens-an-index
+          until: *unit-test-opens-an-index-exit
+        - from: "tests/unit/onboarding/scanner/test_a_stale_count_names_its_population.py"
+          to: "beadloom/infrastructure/db"
+          reason: *unit-test-opens-an-index
+          until: *unit-test-opens-an-index-exit
+
+  # A scenario lives in the folder of the node it binds to:
+  # tests/acceptance/<domain>/<node>/, spelled as that node's docs/ folder (owner
+  # ruling 2026-09-28, `beadloom-2mj3.4`). Measured 2026-09-28: 524 scenarios in
+  # 79 files; the 39 files in node folders all agree with their folder, and every
+  # enclosing folder that names a node names a container of it. The 40 files in
+  # tests/acceptance/features/ are listed below: B3 (`beadloom-d0bp`) left them
+  # there because moving them by their tag would put them in the folder of a node
+  # their steps do not test. Whether a scenario's steps EXECUTE its node is not
+  # judged -- that needs a runtime trace (see the rule module's docstring).
+  - name: scenarios-live-in-their-node-folder
+    description: "A scenario's @node: tag names the node folder its feature file sits in"
+    severity: error
+    scenario_binding:
+      features: "tests/acceptance/**/*.feature"
+      exempt:
+        - files:
+            - "tests/acceptance/features/adopter_first_five_minutes.feature"
+            - "tests/acceptance/features/attestation_scope.feature"
+            - "tests/acceptance/features/axes_ruling.feature"
+            - "tests/acceptance/features/bootstrap_self_consistency.feature"
+            - "tests/acceptance/features/commit_scope.feature"
+            - "tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature"
+            - "tests/acceptance/features/doc_templates.feature"
+            - "tests/acceptance/features/document_shape.feature"
+            - "tests/acceptance/features/duplicate_ref_id_every_reader.feature"
+            - "tests/acceptance/features/explore_role.feature"
+            - "tests/acceptance/features/fact_names_what_it_counts.feature"
+            - "tests/acceptance/features/gate_finding_owner.feature"
+            - "tests/acceptance/features/gate_not_run.feature"
+            - "tests/acceptance/features/graph_summary_facts.feature"
+            - "tests/acceptance/features/ignore_block_drift.feature"
+            - "tests/acceptance/features/impact.feature"
+            - "tests/acceptance/features/init_skeleton_carries_public_api.feature"
+            - "tests/acceptance/features/init_skeleton_names_modules.feature"
+            - "tests/acceptance/features/layer_declaration.feature"
+            - "tests/acceptance/features/layer_exemptions.feature"
+            - "tests/acceptance/features/layer_inheritance.feature"
+            - "tests/acceptance/features/layer_population.feature"
+            - "tests/acceptance/features/layer_view_verdict.feature"
+            - "tests/acceptance/features/mutation_runs_on_a_change_or_on_a_sample.feature"
+            - "tests/acceptance/features/mutation_scope.feature"
+            - "tests/acceptance/features/package_description.feature"
+            - "tests/acceptance/features/polish_symbols_under_source.feature"
+            - "tests/acceptance/features/readme_pair_gate.feature"
+            - "tests/acceptance/features/remediation_that_can_be_followed.feature"
+            - "tests/acceptance/features/room_environment.feature"
+            - "tests/acceptance/features/routes_under_source.feature"
+            - "tests/acceptance/features/rule_population.feature"
+            - "tests/acceptance/features/scaffold_edit_policy.feature"
+            - "tests/acceptance/features/scenario_coverage.feature"
+            - "tests/acceptance/features/sibling_baseline.feature"
+            - "tests/acceptance/features/stale_pairs_on_every_surface.feature"
+            - "tests/acceptance/features/test_files_bind_to_the_node_their_path_mirrors.feature"
+            - "tests/acceptance/features/verdict_room.feature"
+            - "tests/acceptance/features/version_subject.feature"
+            - "tests/acceptance/features/wave_running_work.feature"
+          reason: >-
+            B3 measured each of these against the suite map's coverage run and did
+            not move it: its tag names a node its steps execute but not as the
+            primary one (29), a node they never execute (3), a tag the map did not
+            measure because a sibling feature matched the step file (5), or it was
+            written after the map (3). Placing it by its tag would move a
+            disagreement into a folder instead of resolving it.
+          until: >-
+            the feature is rewritten against the node its steps execute and moved
+            to that node's folder -- E1 (`beadloom-cs2o`) for the rule engine's,
+            follow-up slices of BDL-074 for the rest

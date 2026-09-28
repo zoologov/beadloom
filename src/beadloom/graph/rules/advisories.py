@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
+from beadloom.graph.rules.types import SUITE_POPULATION_RULE_TYPE
 
 if TYPE_CHECKING:
     from beadloom.graph.rules.types import Violation
@@ -57,7 +58,15 @@ if TYPE_CHECKING:
 #: so an entry needs the same justification the two above carry: the finding must
 #: decide nothing about the graph, and must be capable of appearing on a project
 #: that changed nothing.
-ADVISORY_RULE_TYPES = frozenset({LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE})
+#:
+#: The suite rules' population statement (BDL-074 C3) is the third: it is printed
+#: on every run of ``test_binding``, ``test_import_boundary`` and
+#: ``scenario_binding``, clean or not, and says only how much of the suite each
+#: judged. Without this entry a project declaring any of them could never pass
+#: ``--fail-on-warn`` again.
+ADVISORY_RULE_TYPES = frozenset(
+    {LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE, SUITE_POPULATION_RULE_TYPE}
+)
 
 
 def is_advisory(violation: Violation) -> bool:

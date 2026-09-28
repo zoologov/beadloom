@@ -65,16 +65,7 @@ BEAD_NOT_VERIFIED = (
 
 def _matcher_description(matcher: NodeMatcher) -> str:
     """How a matcher reads in a finding, so an author can see what selected nothing."""
-    parts = [
-        f"{field}={value}"
-        for field, value in (
-            ("ref_id", matcher.ref_id),
-            ("kind", matcher.kind),
-            ("tag", matcher.tag),
-        )
-        if value is not None
-    ]
-    return ", ".join(parts) if parts else "everything"
+    return matcher.describe()
 
 
 def _matched_nodes(conn: sqlite3.Connection, matcher: NodeMatcher) -> list[str]:

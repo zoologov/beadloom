@@ -35,6 +35,14 @@ from fnmatch import fnmatch
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
+# The placement vocabulary is defined below both of its readers — this module, which
+# assigns a placement, and the rule engine's `test_binding`, which judges it — and
+# re-exported here under its old names (BDL-074 C3).
+from beadloom.infrastructure.repository import PLACEMENT_MIRROR as PLACEMENT_MIRROR
+from beadloom.infrastructure.repository import PLACEMENT_OTHER_KIND as PLACEMENT_OTHER_KIND
+from beadloom.infrastructure.repository import PLACEMENT_OVERRIDE as PLACEMENT_OVERRIDE
+from beadloom.infrastructure.repository import PLACEMENT_UNOWNED as PLACEMENT_UNOWNED
+from beadloom.infrastructure.repository import PLACEMENT_UNPLACED as PLACEMENT_UNPLACED
 from beadloom.infrastructure.repository import most_specific_owner
 
 if TYPE_CHECKING:
@@ -53,16 +61,6 @@ OTHER_KINDS = frozenset({"acceptance", "self_check"})
 #: The file names pytest collects by default.
 TEST_FILE_PATTERNS = ("test_*.py", "*_test.py")
 
-#: Bound by the mirror of its path.
-PLACEMENT_MIRROR = "mirror"
-#: Bound by a node's ``tests:`` declaration.
-PLACEMENT_OVERRIDE = "override"
-#: Under a mirrored kind folder, and no node owns the code its path names.
-PLACEMENT_UNOWNED = "unowned"
-#: Not under a kind folder: the layout has not reached it, so it binds to nothing.
-PLACEMENT_UNPLACED = "unplaced"
-#: Under a kind folder whose binding is not the mirror.
-PLACEMENT_OTHER_KIND = "other_kind"
 
 #: The framework every indexed test file is written for.
 FRAMEWORK_PYTEST = "pytest"

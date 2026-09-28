@@ -73,6 +73,10 @@ from beadloom.graph.rules.loader import (
     validate_rules,
 )
 from beadloom.graph.rules.node_tags import NodeTags, node_tags
+from beadloom.graph.rules.scenario_binding import (
+    SCENARIO_BINDING_RULE_TYPE,
+    evaluate_scenario_binding_rules,
+)
 from beadloom.graph.rules.scenario_coverage import (
     BEAD_NOT_VERIFIED,
     SCENARIO_COVERAGE_RULE_TYPE,
@@ -82,12 +86,21 @@ from beadloom.graph.rules.summary_facts import (
     SUMMARY_FACTS_RULE_TYPE,
     evaluate_summary_facts_rules,
 )
+from beadloom.graph.rules.test_binding import (
+    TEST_BINDING_RULE_TYPE,
+    evaluate_test_binding_rules,
+)
+from beadloom.graph.rules.test_import_boundary import (
+    TEST_IMPORT_BOUNDARY_RULE_TYPE,
+    evaluate_test_import_boundary_rules,
+)
 from beadloom.graph.rules.types import (
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
+    SUITE_POPULATION_RULE_TYPE,
     SUPPORTED_SCHEMA_VERSIONS,
     VALID_EDGE_KINDS,
     VALID_NODE_KINDS,
@@ -102,13 +115,17 @@ from beadloom.graph.rules.types import (
     LayerDef,
     LayerExemption,
     LayerRule,
+    ListedExemption,
     ModuleCoverageRule,
     NodeMatcher,
     NonBehaviouralNode,
     RequireRule,
     Rule,
+    ScenarioBindingRule,
     ScenarioCoverageRule,
     SummaryFactsRule,
+    TestBindingRule,
+    TestImportBoundaryRule,
     UnregisteredFeatureCandidateRule,
     Violation,
 )
@@ -135,7 +152,7 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
     """
     src = violation.from_ref_id or "<source>"
     dst = violation.to_ref_id or "<target>"
-    if rule_type in {"deny", "forbid_import"}:
+    if rule_type in {"deny", "forbid_import", TEST_IMPORT_BOUNDARY_RULE_TYPE}:
         loc = violation.file_path or src
         return (
             f"remove the import `{src} -> {dst}` in `{loc}`, "
@@ -223,6 +240,9 @@ def evaluate_all(
     scenario_coverage_rules: list[ScenarioCoverageRule] = []
     doc_area_rules: list[DocAreaCoherenceRule] = []
     summary_facts_rules: list[SummaryFactsRule] = []
+    test_binding_rules: list[TestBindingRule] = []
+    test_import_rules: list[TestImportBoundaryRule] = []
+    scenario_binding_rules: list[ScenarioBindingRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -249,6 +269,12 @@ def evaluate_all(
             doc_area_rules.append(rule)
         elif isinstance(rule, SummaryFactsRule):
             summary_facts_rules.append(rule)
+        elif isinstance(rule, TestBindingRule):
+            test_binding_rules.append(rule)
+        elif isinstance(rule, TestImportBoundaryRule):
+            test_import_rules.append(rule)
+        elif isinstance(rule, ScenarioBindingRule):
+            scenario_binding_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -266,6 +292,11 @@ def evaluate_all(
         + evaluate_doc_area_coherence_rules(conn, doc_area_rules)
         + evaluate_summary_facts_rules(
             conn, summary_facts_rules, project_root=project_root
+        )
+        + evaluate_test_binding_rules(conn, test_binding_rules)
+        + evaluate_test_import_boundary_rules(conn, test_import_rules)
+        + evaluate_scenario_binding_rules(
+            conn, scenario_binding_rules, project_root=project_root
         )
         # Last: what the rules above could NOT look at. A rule with an empty
         # candidate set contributes 0 violations and 1 to `N rules evaluated`,
@@ -294,9 +325,13 @@ __all__ = [
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
+    "SCENARIO_BINDING_RULE_TYPE",
     "SCENARIO_COVERAGE_RULE_TYPE",
+    "SUITE_POPULATION_RULE_TYPE",
     "SUMMARY_FACTS_RULE_TYPE",
     "SUPPORTED_SCHEMA_VERSIONS",
+    "TEST_BINDING_RULE_TYPE",
+    "TEST_IMPORT_BOUNDARY_RULE_TYPE",
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
     "VALID_RULE_SEVERITIES",
@@ -313,15 +348,19 @@ __all__ = [
     "LayerPopulation",
     "LayerReach",
     "LayerRule",
+    "ListedExemption",
     "ModuleCoverageRule",
     "NodeMatcher",
     "NodeTags",
     "NonBehaviouralNode",
     "RequireRule",
     "Rule",
+    "ScenarioBindingRule",
     "ScenarioCoverageRule",
     "SummaryFactsRule",
     "SuppressedCrossing",
+    "TestBindingRule",
+    "TestImportBoundaryRule",
     "UnregisteredFeatureCandidateRule",
     "Violation",
     "count_unattributed_import_files",
@@ -336,8 +375,11 @@ __all__ = [
     "evaluate_module_coverage_rules",
     "evaluate_require_rules",
     "evaluate_rule_liveness",
+    "evaluate_scenario_binding_rules",
     "evaluate_scenario_coverage_rules",
     "evaluate_summary_facts_rules",
+    "evaluate_test_binding_rules",
+    "evaluate_test_import_boundary_rules",
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "flagged_layer_edges",

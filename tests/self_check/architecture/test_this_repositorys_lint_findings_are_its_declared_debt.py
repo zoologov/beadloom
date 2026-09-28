@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from click.testing import CliRunner
 
 from beadloom.graph.rule_engine import LAYER_POPULATION_RULE_TYPE
+from beadloom.graph.rules import SUITE_POPULATION_RULE_TYPE, TEST_BINDING_RULE_TYPE
 from beadloom.services.cli import main
 from tests.support.repository_root import REPO_ROOT
 
@@ -64,15 +65,55 @@ class TestLintRecalibrationGuard:
         Weakening the assertion to "ignore these rules" would be the false green
         this epic exists to remove, so the debt is asserted in BOTH directions
         instead: nothing else may fire, and each of the two must still fire.
+
+        BDL-074 C3 added two more, the same two shapes. The suite rules state
+        their population (``suite_population``, an advisory keyed on its TYPE, as
+        the layer population is), and ``features-have-bound-tests`` reports the
+        features no test file is bound to — measured debt at ``warn``, keyed on
+        rule AND type, so an exemption that went dead (``rule_liveness``) or a
+        file leg that fired would still fail here.
         """
         findings = self._live_findings(self_check_snapshot)
         other = [
             f
             for f in findings
             if f.get("rule_name") != "scenario-coverage"
-            and f.get("rule_type") != LAYER_POPULATION_RULE_TYPE
+            and f.get("rule_type") not in {LAYER_POPULATION_RULE_TYPE, SUITE_POPULATION_RULE_TYPE}
+            and not (
+                f.get("rule_name") == "features-have-bound-tests"
+                and f.get("rule_type") == TEST_BINDING_RULE_TYPE
+            )
         ]
         assert other == [], other
+
+    def test_each_suite_rule_states_its_population(self, self_check_snapshot: Path) -> None:
+        """The other direction for the suite rules: each says what it judged, every run."""
+        findings = self._live_findings(self_check_snapshot)
+        stated = sorted(
+            str(f["rule_name"])
+            for f in findings
+            if f.get("rule_type") == SUITE_POPULATION_RULE_TYPE
+        )
+        assert stated == [
+            "domain-unit-tests-import-no-infrastructure",
+            "features-have-bound-tests",
+            "scenarios-live-in-their-node-folder",
+            "test-files-bind-to-a-node",
+        ]
+
+    def test_the_feature_test_debt_is_reported_and_blocks_nothing(
+        self, self_check_snapshot: Path
+    ) -> None:
+        """Silence here would mean every feature gained a bound test, or the leg died."""
+        findings = self._live_findings(self_check_snapshot)
+        debt = [
+            f
+            for f in findings
+            if f.get("rule_name") == "features-have-bound-tests"
+            and f.get("rule_type") == TEST_BINDING_RULE_TYPE
+        ]
+        assert debt, "features-have-bound-tests reported nothing — it is inert or mis-scoped"
+        assert {f["severity"] for f in debt} == {"warn"}
 
     def test_the_layer_rules_population_is_reported_and_blocks_nothing(
         self, self_check_snapshot: Path

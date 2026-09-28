@@ -64,6 +64,10 @@
 - **scenario-coverage** (scenario_coverage): Behaviour-bearing nodes carry an executable scenario; a scenario names its bead
 - **doc-area-coherence** (doc_area_coherence): A node is documented where this graph documents nodes from its source area
 - **graph-summary-facts** (summary_facts): A number or version stated in a node summary agrees with the project
+- **test-files-bind-to-a-node** (test_binding): Every test file binds to a graph node, by the mirror of its path or a node's tests: list
+- **features-have-bound-tests** (test_binding): A feature node has a bound test file, its own or a part's
+- **domain-unit-tests-import-no-infrastructure** (test_import_boundary): A unit test of a domain-layer node does not import the infrastructure layer
+- **scenarios-live-in-their-node-folder** (scenario_binding): A scenario's @node: tag names the node folder its feature file sits in
 
 ## Custom
 
