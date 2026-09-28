@@ -81,6 +81,7 @@ the rule engine in full; every other file with a clear node relocated.
 | 2026-09-28 | Kind first, then the mirrored source path | RFC; common Python layout, CI selects a kind by path, the binding follows from the mirror. |
 | 2026-09-28 | The binding is derived from the mirror, with an optional `tests:` override in node YAML | RFC; one fact, stated once, resolved by the ownership rule the graph already uses. |
 | 2026-09-28 | Kept nodes: test-mapping, context-builder, rule-engine, graph, reindex, debt-report, mutation-scope, cli-commands, onboarding | Owner ruling on the RFC's axes. |
+| 2026-09-28 | Acceptance: one folder per node, `tests/acceptance/<domain>/<node>/*.feature`, mirroring `docs/domains/…` | Owner ruling after B3 stopped at package level (`tests/acceptance/<package>/`) because seven nodes have several feature files. A folder per node needs no merge and lets the tag-folder agreement rule check to the node. Bead `beadloom-2mj3.4`; C3 and E1 wait for it. |
 
 ## Related Files
 

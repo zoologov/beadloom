@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 5 — `beadloom-1bd6` (B2, relocate the 227 clear-node files) and `beadloom-d0bp` (B3, relocate acceptance by feature node), in parallel. PR 2 opens after this wave.
-**Goal:** the test tree mirrors the code, so the binding finds the tests of a node by where they live.
-**Done when:** identical collected ids modulo path and identical results; 510 scenarios before and after; `ctx rule-engine` and the other clear nodes show bound tests; the mutation pool regenerated.
+**Bead:** Wave 6 — `beadloom-2mj3.4` (acceptance one folder per node, the owner's ruling) and `beadloom-kug7` (E2, test standards in the shipped `test` role), in parallel. PR 2 opens after `beadloom-2mj3.4`; C3 and E1 wait for it.
+**Goal:** acceptance mirrors `docs/domains/<domain>/features/<node>/`; the `test` role carries the standards this epic established.
+**Done when:** 524 scenarios before and after with identical results, every moved feature under the folder of the node its `@node` names; E2's checkable standards checked.
+
+**Wave 5 closed (2026-09-28):** B3 `11c2fd22`, `989f26a4` — 39 features, 37 step files to `tests/acceptance/<package>/`, 40 mismatches listed; 524 scenarios before and after. B2 `1ecd4f9e`, `c17ebec9`, `d9db4704` — 198 of 227 relocated (46 unit, 152 integration), all bound to the map's node; 554 test files: 198 bound, 184 unplaced, 172 acceptance or self-check; `ctx rule-engine` 605 tests in 21 files (was 0); per-change selection 202 → 162 files, ≈5.6 min locally (≈9 projected on the runner, under the 10-minute budget, not yet run on CI). Gate owner B2 on the combined tree: 11 061 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Owner ruled B3's package level short of the approved layout → `beadloom-2mj3.4`.
 
 **Wave 4 closed (2026-09-28):** PR #83 squash-merged as `4890f28c` (9/9 checks green; owner ruled `db`, `repository`, `mcp-server` into the axes, `f10e67de`); main merged back tree-identically as `7503f4b1`. B1 `2c2cd3d0`, `e7f2c6fb`, `7871c0eb` — `tests/support/` 50 modules; parent-counting files 106 → 0; test-module imports 105 → 1 (exempt with a reason). D1 `61f416cd` — `mutation-per-change`, weekly `mutation-sample` (150), `announce`; workflow still disabled; per-change ≈9 min locally, ≈15 projected, over the 10-minute budget until B2. Docs `e0a5983d` (15 stale → 0). Gate owner B1 on the combined tree: 11 061 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Filed outside the epic: `beadloom-xg0y` (clean-room ignores `uv.lock`).
 
@@ -45,7 +47,8 @@
 | `beadloom-2mj3.1` | docs | ✓ done | 36 stale pairs → 0 over 10 refs; test-mapping SPEC rewritten for the binding; sync-check rc 0, `beadloom ci` rc 0 on the tree |
 | `beadloom-3z94` | C2 dev | ✓ done | ctx and debt-report read the binding; ctx states the unplaced share (393 of 464 here), debt-report withholds `untested` while files are unplaced; `test_mapper` retired; 22 stale pairs for the docs pass |
 | `beadloom-2mj3.2` | docs | ✓ done | 22 stale pairs → 0 over 12 refs; `test_mapper` gone from the docs; `test_placements`, the unplaced line, `test_population` and `count_test_files_by_placement` documented; sync-check rc 0, `beadloom ci` rc 0 on the tree |
-| `beadloom-kag9` | C3 dev | ready | the three rules |
+| `beadloom-2mj3.4` | dev | ready | acceptance one folder per node (owner ruling 2026-09-28) |
+| `beadloom-kag9` | C3 dev | blocked | the three rules |
 | `beadloom-vr0b` | D1 dev | ✓ done | `beadloom mutation --changed-since/--survivors/--sample-of`; `.github/scripts/mutmut_adapter.py`; `mutation.yml` = `mutation-per-change` (PR) + `mutation-sample` (weekly, 150, seeded) + `announce`; workflow still DISABLED; per-change fallback = the pool while tests are unplaced; one-function change measured ~9 min locally (496 s of it the stats pass), so the 10-min budget waits on B2; clean room 11 016 passed, 0 failed |
 | `beadloom-2mj3.3` | docs | ✓ done | 15 stale pairs → 0 over 5 refs (mutation-scope, application, infrastructure, repository, cli-commands); D1's modules, `lies_within`, `get_test_file_bindings` and the three `mutation` options documented; the nightly rewritten as history in `cli.md` and gate-coverage, per-change budget stated as not met; sync-check rc 0 at the fixpoint |
 | `beadloom-cs2o` | E1 dev | blocked | the rule-engine pilot |
