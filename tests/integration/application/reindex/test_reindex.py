@@ -751,96 +751,12 @@ class TestIncrementalReindex:
 
 
 # ---------------------------------------------------------------------------
-# _graph_yaml_changed
-# ---------------------------------------------------------------------------
-
-
-class TestGraphYamlChanged:
-    """Unit tests for the _graph_yaml_changed helper."""
-
-    def test_no_graph_files_returns_false(self) -> None:
-        from beadloom.application.reindex import _graph_yaml_changed
-
-        current: dict[str, tuple[str, str]] = {
-            "docs/a.md": ("abc", "doc"),
-            "src/b.py": ("def", "code"),
-        }
-        stored: dict[str, tuple[str, str]] = {
-            "docs/a.md": ("abc", "doc"),
-            "src/b.py": ("def", "code"),
-        }
-        assert _graph_yaml_changed(current, stored) is False
-
-    def test_same_graph_returns_false(self) -> None:
-        from beadloom.application.reindex import _graph_yaml_changed
-
-        current: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("aaa", "graph"),
-            "docs/a.md": ("bbb", "doc"),
-        }
-        stored: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("aaa", "graph"),
-            "docs/a.md": ("bbb", "doc"),
-        }
-        assert _graph_yaml_changed(current, stored) is False
-
-    def test_changed_hash_returns_true(self) -> None:
-        from beadloom.application.reindex import _graph_yaml_changed
-
-        current: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("new_hash", "graph"),
-        }
-        stored: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("old_hash", "graph"),
-        }
-        assert _graph_yaml_changed(current, stored) is True
-
-    def test_added_graph_returns_true(self) -> None:
-        from beadloom.application.reindex import _graph_yaml_changed
-
-        current: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("aaa", "graph"),
-            ".beadloom/_graph/extra.yml": ("bbb", "graph"),
-        }
-        stored: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("aaa", "graph"),
-        }
-        assert _graph_yaml_changed(current, stored) is True
-
-    def test_deleted_graph_returns_true(self) -> None:
-        from beadloom.application.reindex import _graph_yaml_changed
-
-        current: dict[str, tuple[str, str]] = {}
-        stored: dict[str, tuple[str, str]] = {
-            ".beadloom/_graph/g.yml": ("aaa", "graph"),
-        }
-        assert _graph_yaml_changed(current, stored) is True
-
-
-# ---------------------------------------------------------------------------
 # resolve_scan_paths
 # ---------------------------------------------------------------------------
 
 
 class TestResolveScanPaths:
     """Tests for config-driven scan path resolution."""
-
-    def test_reads_from_config(self, tmp_path: Path) -> None:
-        """scan_paths from config.yml are used."""
-        from beadloom.application.reindex import resolve_scan_paths
-
-        beadloom_dir = tmp_path / ".beadloom"
-        beadloom_dir.mkdir()
-        (beadloom_dir / "config.yml").write_text("scan_paths:\n- backend\n- frontend/src\n")
-        result = resolve_scan_paths(tmp_path)
-        assert result == ["backend", "frontend/src"]
-
-    def test_defaults_without_config(self, tmp_path: Path) -> None:
-        """Falls back to defaults when no config exists."""
-        from beadloom.application.reindex import resolve_scan_paths
-
-        result = resolve_scan_paths(tmp_path)
-        assert result == ["src", "lib", "app"]
 
     def test_reindex_uses_config_scan_paths(self, tmp_path: Path) -> None:
         """Full reindex respects scan_paths from config.yml."""

@@ -3,10 +3,15 @@
 The binding is pure: it reads a test file's path, the code files the index holds,
 the scan paths and the nodes' sources, and answers which node the test belongs to
 and how it was placed. Nothing here touches a disk or an index, so every case is
-stated as data.
+stated as data. The ownership rule the binding calls and the reader that counts a
+test file's tests are tested beside their own code, under
+``tests/unit/infrastructure/repository/`` and ``tests/unit/context_oracle/test_file_reader/``
+(split by node, BDL-074 ``beadloom-2mj3.7``).
 """
 
 from __future__ import annotations
+
+import importlib.util
 
 import pytest
 
@@ -21,8 +26,6 @@ from beadloom.context_oracle.test_binding import (
     summarize_tests,
     union_over_descendants,
 )
-from beadloom.context_oracle.test_file_reader import count_test_functions, read_test_file
-from beadloom.infrastructure.repository import most_specific_owner
 
 #: A src-layout project: one package, a domain directory, a feature package and
 #: a single-file component.
@@ -161,19 +164,6 @@ class TestTheOverride:
         assert _bind("tests/stories/cli/test_a.py", overrides)[1] == "cli"
 
 
-class TestOwnership:
-    """The one ownership rule, as a pure function over (ref_id, source) pairs."""
-
-    def test_the_longest_covering_prefix_owns_the_file(self) -> None:
-        assert most_specific_owner(NODE_SOURCES, "src/app/graph/rules/engine.py") == "rule-engine"
-
-    def test_a_file_source_owns_only_itself(self) -> None:
-        assert most_specific_owner(NODE_SOURCES, "src/app/graph/loader_edges.py") == "graph"
-
-    def test_a_blank_source_owns_nothing(self) -> None:
-        assert most_specific_owner((("root", ""),), "src/app/cli.py") is None
-
-
 class TestWhatCountsAsATest:
     @pytest.mark.parametrize(
         ("name", "expected"),
@@ -187,46 +177,6 @@ class TestWhatCountsAsATest:
     )
     def test_the_pytest_file_names(self, name: str, expected: bool) -> None:
         assert is_test_file(name) is expected
-
-    def test_the_test_functions_pytest_collects_are_counted(self) -> None:
-        text = (
-            "def test_a():\n    pass\n\n"
-            "async def test_b():\n    pass\n\n"
-            "def helper():\n    pass\n\n"
-            "class TestThing:\n"
-            "    def test_c(self):\n        pass\n"
-            "    def not_a_test(self):\n        pass\n\n"
-            "class Helper:\n"
-            "    def test_d(self):\n        pass\n"
-        )
-        assert count_test_functions(text) == 3
-
-    def test_a_file_that_does_not_parse_counts_zero(self) -> None:
-        assert count_test_functions("def test_a(:\n") == 0
-
-    def test_imports_are_read_in_the_code_index_form(self) -> None:
-        text = (
-            "import os\n"
-            "import beadloom.graph.loader as loader\n"
-            "from beadloom.graph import diff\n"
-            "from . import sibling\n"
-            "from .helpers import build\n"
-            "def test_a():\n"
-            "    from beadloom.infrastructure.db import open_db\n"
-            "class TestB:\n"
-            "    def test_b(self):\n"
-            "        try:\n"
-            "            pass\n"
-            "        except ImportError:\n"
-            "            import yaml\n"
-        )
-        assert read_test_file(text).imports == (
-            (1, "os"),
-            (2, "beadloom.graph.loader"),
-            (3, "beadloom.graph"),
-            (7, "beadloom.infrastructure.db"),
-            (13, "yaml"),
-        )
 
 
 class TestTheParentUnion:
@@ -265,3 +215,7 @@ class TestTheParentUnion:
             "test_count": 0,
             "coverage_estimate": "none",
         }
+
+
+def test_the_name_guessing_mapper_is_retired() -> None:
+    assert importlib.util.find_spec("beadloom.context_oracle.test_mapper") is None
