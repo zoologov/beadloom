@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 6 — `beadloom-2mj3.4` (acceptance one folder per node, the owner's ruling) and `beadloom-kug7` (E2, test standards in the shipped `test` role), in parallel. PR 2 opens after `beadloom-2mj3.4`; C3 and E1 wait for it.
-**Goal:** acceptance mirrors `docs/domains/<domain>/features/<node>/`; the `test` role carries the standards this epic established.
-**Done when:** 524 scenarios before and after with identical results, every moved feature under the folder of the node its `@node` names; E2's checkable standards checked.
+**Bead:** Wave 7 — `beadloom-kag9` (C3, the rules `test_binding`, `test_import_boundary`, `scenario_binding`), alone. PR 2 is open for phase B.
+**Goal:** the binding, the import boundary of tests and the `@node`-folder agreement are checked by lint rules, over a population the rules state.
+**Done when:** each rule reports its population; the 40 listed acceptance mismatches and the unplaced files are named by the rules, not hidden.
+
+**Wave 6 closed — phase B done (2026-09-28):** `beadloom-2mj3.4` `68631e77`, `4e7fde6a` — 39 features in 27 node folders `tests/acceptance/<domain>/<node>/`, 33 step files by node and 4 in `steps/common/`; 524 scenarios before and after. E2 `55ccf52f`, `c88a8dcc` — the shipped `test` role states what a test is; 45 file names carried a work-item id: 22 renamed, 23 exempt with an exit; the project layer gained `.beadloom/flow/roles/test.md`. Gate owner `beadloom-2mj3.4` on the combined tree: 11 081 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0.
 
 **Wave 5 closed (2026-09-28):** B3 `11c2fd22`, `989f26a4` — 39 features, 37 step files to `tests/acceptance/<package>/`, 40 mismatches listed; 524 scenarios before and after. B2 `1ecd4f9e`, `c17ebec9`, `d9db4704` — 198 of 227 relocated (46 unit, 152 integration), all bound to the map's node; 554 test files: 198 bound, 184 unplaced, 172 acceptance or self-check; `ctx rule-engine` 605 tests in 21 files (was 0); per-change selection 202 → 162 files, ≈5.6 min locally (≈9 projected on the runner, under the 10-minute budget, not yet run on CI). Gate owner B2 on the combined tree: 11 061 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Owner ruled B3's package level short of the approved layout → `beadloom-2mj3.4`.
 
@@ -27,7 +29,7 @@
 - [x] PRD, RFC, CONTEXT and PLAN approved (2026-09-28); kept nodes 9
 - [x] Beads created: epic `beadloom-2mj3` + 16, one plan, 20 edges confirmed against the titles; swarm valid, 11 waves
 - [x] Phase A — isolation and the self-check triage (PR 1 opened 2026-09-27)
-- [ ] Phase B — layout (PR 2); B1 done 2026-09-28
+- [x] Phase B — layout (PR 2 opened 2026-09-28)
 - [ ] Phases C, D, E — binding, rules, per-change mutation, pilot, standards (PR 3)
 
 ## Results
