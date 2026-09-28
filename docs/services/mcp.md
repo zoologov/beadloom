@@ -92,7 +92,7 @@ Get a context bundle for a set of ref_id(s).
 }
 ```
 
-Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status, constraints, intent, routes, tests, test_placements. `test_placements` (BDL-074 C2, additive) counts the project's indexed test files by placement; a non-zero `unplaced` means the counts under `tests` can be short. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
+Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status, constraints, intent, routes, tests, test_placements, test_unplaced, test_recognition. `test_placements` (BDL-074 C2, additive) counts the project's indexed test files by placement; a non-zero `unplaced` means the counts under `tests` can be short. `test_unplaced` (BDL-074 G2) states that share in one sentence, `null` when no file is unplaced. `test_recognition` (`beadloom-2mj3.15`, additive) states which paths a test file is read under, `null` for an index with no recorded test layout. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
 
 The `intent` field carries the epics whose planning documents declared the focus node, so an agent asking what a node IS also learns what it is FOR. It is filled when the server knows the project root, and reports `{"status": "not_checked", "reason": "intent_space_not_read"}` when it does not -- a different statement from "no epic declares this node", which is `{"status": "none_declared"}` and carries the number of epics that were read. See `docs/domains/context-oracle/components/node-intent/DOC.md`.
 

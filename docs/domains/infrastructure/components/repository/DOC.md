@@ -152,15 +152,19 @@ kinds bind to no node for different reasons, and a count that merged them would 
 key the reindex records the test layout it read under. `RecordedTestLayout` is that record:
 `kind_prefixes` (each kind's folders under every root, `tests/unit/`), `declared_kinds` (the
 kinds whose folder `.beadloom/config.yml` declares rather than defaults), `beside_code`,
-`roots`, `frameworks` (the names of the pattern groups a file name is matched against) and
-`mirror_roots` (the build tools' test trees the project has, `src/test/java`; BDL-074 G2b).
-`encode()` gives the JSON the `meta` table holds. `read_test_layout(conn)` ->
+`roots`, `frameworks` (the names of the pattern groups a file path is matched against),
+`mirror_roots` (the build tools' test trees the project has, `src/test/java`; BDL-074 G2b) and
+`patterns` (each group's patterns in the order they are matched, `beadloom-2mj3.15`; `()` in a
+record written before it, which named the groups alone). `encode()` gives the JSON the `meta`
+table holds, `patterns` as `[[name, [pattern, ...]], ...]`, and a changed record forces one test
+re-index. `read_test_layout(conn)` ->
 `RecordedTestLayout | None` reads it back, `None` for an index written before G2 or a record
 that does not parse, so a reader states that the layout is unknown rather than a default. It
 sits beside the placement vocabulary for the same reason: `context_oracle.test_layout` writes
 it and the rule engine states it, and neither may import the other. Its readers are the
-builder's `test_unplaced` sentence, the debt report's population and the `test_binding` rule's
-recognition clause.
+builder's `test_unplaced` sentence and `test_recognition` clause, the debt report's population,
+the `test_binding` rule's recognition clause and, since `beadloom-2mj3.15`,
+`ChangePlan.test_layout` in `beadloom mutation --changed-since`.
 
 **Test files with their binding** — `get_test_file_bindings(conn)`, added in BDL-074 D1 to
 give `beadloom mutation --changed-since` every indexed test file as `(path, ref_id, placement)`,

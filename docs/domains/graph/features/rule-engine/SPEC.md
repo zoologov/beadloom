@@ -628,7 +628,10 @@ neither `files` nor `for` is refused at load time.
 and matches them in the same two vocabularies. It adds `of`, a node matcher that keeps only the
 test files whose bound node it selects or is `part_of` a node it selects: "a unit test OF a
 domain node". Under `of`, a file bound to no node cannot be the test of a matched node, so it is
-not judged and it is counted.
+not judged and it is counted. The `from` glob is matched against a test file's path with
+`fnmatchcase`, case-sensitively on every platform, as `test_binding` and the exemptions match
+(`beadloom-2mj3.15`): `fnmatch` folds case where the platform's `normcase` does, so a
+`Tests/Unit/**` glob would judge `tests/unit/...` on Windows and not on Linux.
 
 - The judging is `forbid_import`'s own `evaluate_one_import_rule`, over the chosen imports. A
   crossing, an exemption that excuses nothing and an exemption past its date mean what they
@@ -647,7 +650,9 @@ not judged and it is counted.
 before its first wildcard, and no folder name is configured.
 
 - A feature file in the suite root, or in a folder that names no node, is one finding for the
-  whole file.
+  whole file. A feature file that declares no scenario is judged by its place alone
+  (`beadloom-2mj3.15`): it is counted among the files the population statement names, so a
+  misplaced empty file is a finding like any other.
 - A folder between the suite root and the node folder that names a node must name a `part_of`
   container of the node folder. A folder that names no node there (`services/` on a graph with
   no `services` node) is not judged.

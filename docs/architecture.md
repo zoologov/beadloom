@@ -403,5 +403,5 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 | `scan_paths` | `["src", "lib", "app"]` | Source directories to scan |
 | `docs_dir` | `docs/` | Documentation root directory |
 | `doc_roots` | see the [Document Kinds guide](guides/document-kinds.md) | Per-space roots, kinds, intent documents and the WORKING freshness exemption |
-| `tests` | see [Getting Started](getting-started.md#configuration) | The test layout: roots, kind folders, file-name patterns by framework, build-tool test trees, `beside_code` |
+| `tests` | see [Getting Started](getting-started.md#configuration) | The test layout: roots (default `tests`, `test`, `spec`, each where it exists), kind folders, patterns by framework (a file name, or the end of a path such as `__tests__/**`), build-tool test trees, `beside_code` |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |

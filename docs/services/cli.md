@@ -151,7 +151,7 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
-On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28: `Tests:   615 files (271 bound to a node, 167 unplaced, 74 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28 at `909a0098`: `Tests:   620 files (275 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
@@ -174,15 +174,21 @@ named from the patterns the node's bound files matched (`pytest`, `go_test`, `je
 beside the code and no `tests:` declaration, so bound to no node — one more line follows it
 (BDL-074 C2), so a count of 0 does not read as "nobody tested this". The folders it names
 are those of the test layout the index recorded (BDL-074 G2), and `, nor inside a node's
-source` follows them when tests beside the code are read:
+source` follows them when tests beside the code are read. A last line follows every time
+(`beadloom-2mj3.15`): which paths a test file is read under, the patterns of each framework
+group and the roots, because a file outside every root, test tree and node source is not read
+at all and a count of bound files is a count of the files those patterns matched. On this
+repository, measured on 2026-09-28 at `909a0098`:
 
 ```
-Tests: pytest, 0 tests in 0 files (low coverage)
-  U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+Tests: pytest, 100 tests in 10 files (high coverage)
+  167 of 620 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+  A test file is read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests
 ```
 
-`--json` carries the same counts as `test_placements`, test files by placement, and the
-sentence itself as `test_unplaced` (`null` when no file is unplaced).
+`--json` carries the same counts as `test_placements`, test files by placement, the
+sentence itself as `test_unplaced` (`null` when no file is unplaced) and the last line's
+clause as `test_recognition` (`null` for an index with no recorded test layout).
 
 The bundle carries an **Intent (TO-BE)** section: the epics whose planning
 documents declared this node, with the document and line to read the reason at.
@@ -272,10 +278,11 @@ The debt score formula combines four categories:
   unplaced file binds to no node and a node with no bound test may still be tested by it
   (BDL-074 C2). The Rich report prints the reason under Test Gaps, and `--json` carries it as
   `test_population`: either what the count was taken over or `not counted: ...` with the
-  unplaced share. When the index holds no test file at all, the population adds what a test
-  file is read by (BDL-074 G2), under the default layout `a test file is read when its name
-  matches a pattern of go_test, jest, junit, pytest or xctest under the root tests or beside a
-  node's code`.
+  unplaced share. Whenever the index recorded a test layout, the population ends with what a
+  test file is read by (BDL-074 G2; every time since `beadloom-2mj3.15`): under the default
+  layout `a test file is read when its path matches a pattern of go_test (*_test.go), jest
+  (...), junit (...), pytest (test_*.py, *_test.py) or xctest (...) under the roots tests,
+  test, spec or beside a node's code`, where each `(...)` names that group's patterns.
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 
@@ -2042,7 +2049,8 @@ is how a slice with no tests scores 100%.
   node whatever placement bound them, the acceptance step files whose loaded scenarios carry
   that node's `@node:` tag (BDL-074 G1, printed as `, N acceptance step file(s) by tag` on the
   node's line), and the test files bound to no node stated by why (BDL-074 F1): the unplaced
-  count `ctx` and the debt report state, then the unowned files, then each other kind by its
+  count `ctx` and the debt report state, over the folders of the test layout the index
+  recorded (`beadloom-2mj3.15`), then the unowned files, then each other kind by its
   count. That `Binding:` line is printed only when some test file is bound to no node, and
   `--json` carries the counts as the change's `test_placements` and `other_kinds`, each node's
   `acceptance_tests`, and the `unplaced_tests` list the runner falls back to. `unplaced_tests`
@@ -2253,8 +2261,12 @@ so the job result cannot tell them apart: the score step names its floor verdict
 output `floor` (`held`, `under` or `unscored`) and hands on its whole report as `report`. While
 that issue is open each further failed week adds a comment to it instead of a new issue, and
 retitles it to that week's state, so the comment count is the length of the outage. The first
-run whose sample is judged and scores at or above its floor comments and closes it, with the
-comment worded by the state it ends. A pull request's run is not announced, because its red is on the pull
+run whose sample is judged and HOLDS its floor comments and closes it, with the comment worded
+by the state it ends. Held means the sample's interval reaches the floor, since the command
+fails only when the whole interval lies under it, so a held week can still show a score under
+the floor (84.0% [77.4, 88.9] holds 0.88). The close comment, the log line and the issue footer
+therefore say that the interval reaches the floor, never that the score is at or above it
+(`beadloom-2mj3.15`). A pull request's run is not announced, because its red is on the pull
 request. The job reads three things rather than the job status alone, because a dead run can
 be green and a judged run can be red: `needs.mutation-sample.result` for the shape where a step
 exits non-zero, the `verdict` output of the adapter's `judge` step for the shape where every
@@ -2279,7 +2291,8 @@ because no nightly ever scored. #79 was closed as not planned when the nightly w
 Under the new label the announcement opened issue #85 on 2026-09-28, titled `Mutation weekly
 sample: no verdict` for a sample whose verdict was under its floor: that misnaming is what
 BDL-074 G1 corrected. The issue is still open under that title. The next failing run
-retitles it when its week's state differs, and the next run over its floor closes it.
+retitles it when its week's state differs, and the next run whose interval reaches its floor
+closes it.
 
 **The whole-scope nightly, BDL-068 S3.1 to 2026-09-27.** What follows is its record, in the
 past tense, because the floor, the runner factor and the sample size above were derived from

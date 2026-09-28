@@ -209,10 +209,15 @@ the sentence `ctx` prints under its `Tests:` line. Since BDL-074 G2 that sentenc
 against the test layout the reindex recorded (`infrastructure.repository.read_test_layout`), so
 it names the project's own folders. Once every test file is placed the count is live and the
 population reads `counted over N node(s) the test binding covers, all M test file(s) placed`.
-When the index holds no test file at all and a layout is recorded, the population adds what a
-test file is read by, from `describe_test_file_recognition()`: `; a test file is read when its
-name matches a pattern of go_test, jest, junit, pytest or xctest under the root tests or beside
-a node's code` under the default layout. So a project whose tests match no declared pattern is
+Whenever a layout is recorded, withheld and counted alike, the population ENDS with `; ` and
+what a test file is read by, from `describe_test_file_recognition()` (`beadloom-2mj3.15`; before
+it, only when the index held no test file). A file outside every root, test tree and node source
+is not read, so "all M test file(s) placed" means all M files those patterns matched. On this
+repository: `not counted: 167 of 620 test file(s) are unplaced (not under tests/integration/ or
+tests/unit/) and bind to no node, so a node with no bound test may still be tested; a test file
+is read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests`.
+Under the default layout the clause names each group with its patterns and ends `under the
+roots tests, test, spec or beside a node's code`. So a project whose tests match no pattern is
 charged for every covered node and the report says why. The placement counts come from
 `infrastructure.repository.count_test_files_by_placement`.
 
@@ -224,11 +229,19 @@ Measured by `beadloom-2mj3.11` and `beadloom-2mj3.13` on 2026-09-28, against `ma
 `db5c3f28`: a Go module with a test beside each package scores `untested: 0` as on main, where
 the binding before G2 read 3; a Python project whose tests are mirrored under a declared
 `test/` root, or sit beside the code, scores as on main; a Maven, a Gradle-Kotlin and a SwiftPM
-project score `untested: 0` as on main. A Python project whose tests sit flat under `test/` has
-them unplaced, so its count is withheld, and its score is unchanged.
+project score `untested: 0` as on main. `beadloom-2mj3.15` added the conventions that were
+still worse than main — a Jest project with `__tests__/` folders, and JVM and SwiftPM test-tree
+files whose names carry no test affix — each now scoring as on main. A Python project whose
+tests sit flat under `test/`, or a TypeScript project with flat `spec/*.spec.ts` files, has them
+read under the default roots and unplaced, so its count is withheld (0, as on main).
 `tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py`
-runs those layouts. A project with no test file has every covered node untested, before and
-after.
+runs those layouts, one project per convention. Three conventions of the retired mapper are
+non-goals and score differently from main by design, each stated in the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#what-is-not-bound-the-non-goals):
+an Xcode `ShopTests/` target is not read until `tests.mirrors` declares it, so every covered node
+counts untested. A test bound on main only by its imports or a folder named after a node is
+unplaced, so the count is withheld. A marker file without a test file names no framework,
+so a project with no test file has every covered node untested.
 
 The population is carried UNWEIGHTED, like `layer_populations`: under Test Gaps in the Rich
 report, and as `test_population` in `format_debt_json`.

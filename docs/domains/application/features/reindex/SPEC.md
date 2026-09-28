@@ -124,13 +124,17 @@ see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.
 
 `test_index.py` (BDL-074 C1) reads the project's test layout from the `tests:` block of
 `.beadloom/config.yml` (`context_oracle.test_layout.load_test_layout`, BDL-074 G2) and records
-every file whose name matches one of its patterns (default `pytest`, `go_test`, `jest`,
-`junit`, `xctest`) in three places: under each declared root (default `tests/`), under each
+every file whose project-relative PATH matches one of its patterns (default `pytest`,
+`go_test`, `jest`, `junit`, `xctest`; a pattern with a `/` matches the end of the path, so
+`__tests__/**` reads a whole folder, `beadloom-2mj3.15`) in three places: under each declared
+root (default `tests/`, `test/` and `spec/`, each where it exists), under each
 build tool's test tree the project has (default `src/test/java/`, `src/test/kotlin/`,
 SwiftPM's `Tests/`), and — when the layout has `beside_code: true`, the default — among the
 code scan's files outside all of those. A test beside the code is taken from the code scan
 rather than a second walk. A root or test tree is read only when a folder of exactly that
-spelling exists, so a case-insensitive disk does not read `Tests/` for `tests`.
+spelling exists, so a case-insensitive disk does not read `Tests/` for `tests` or `Spec/` for
+`spec`. A file anywhere else is not read, whatever its path: binding it would take a guess at
+its node, so `ctx` and the debt report say where a test file is read instead.
 `__pycache__/`, `__snapshots__/` and `node_modules/` are skipped. A walked folder is never a
 scan path, so a mutmut copy under `mutants/` is never indexed unless a scan path covers it.
 Files under a root never enter `code_symbols`, `code_imports` or `file_index`: they must not
@@ -154,7 +158,7 @@ bound file states the project's. The `tests:` declaration is read from the graph
 full reindex (step 3a), because the rebuild overwrites the `extra["tests"]` it arrived in.
 
 The layout is recorded in the index as `meta.test_layout` (`TestLayout.recorded()`, stored by
-`RecordedTestLayout.encode()`), so `ctx`, the debt report and the rule engine can state their
+`RecordedTestLayout.encode()`, each group's patterns included since `beadloom-2mj3.15`), so `ctx`, the debt report and the rule engine can state their
 counts against it without importing `context_oracle`. `IndexedTestFiles.warnings` carries a
 sentence for each unusable part of the `tests:` config block and one for each node's `tests:`
 prefix that covers no indexed test file, and both reindex paths add them to
@@ -361,9 +365,9 @@ Module `src/beadloom/application/reindex/test_index.py`:
   strings.
 - `discover_test_files(project_root, layout=None, *, code_files=()) -> dict[str, str]` --
   every test file the layout reads, by project-relative path, with its text: the files under
-  the roots and the present test trees whose names match a pattern and, when the layout reads
-  tests beside the code, each of *code_files* outside those whose name matches one. *layout*
-  defaults to the one the project declares.
+  the roots and the present test trees whose paths match a pattern and, when the layout reads
+  tests beside the code, each of *code_files* outside those whose path matches one. A file
+  anywhere else is not read. *layout* defaults to the one the project declares.
 - `present_mirror_roots(project_root, layout) -> tuple[str, ...]` -- the build tools' test
   trees of the layout that exist, spelled exactly as declared (BDL-074 G2b).
 - `index_test_files(project_root, conn, *, code_files) -> IndexedTestFiles` -- rebuild

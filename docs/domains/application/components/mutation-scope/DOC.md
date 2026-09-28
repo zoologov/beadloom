@@ -203,7 +203,9 @@ Since BDL-074 F1 the plan also carries `test_placements` (test files by placemen
 `other_kinds` (the `other_kind` files by recorded kind), both defaulting to empty, and what it
 STATES about the files bound to no node is counted from those by reason. `describe_change`
 prints a `Binding:` line built by `context_oracle.test_binding.describe_unbound`: the unplaced
-sentence `ctx` and the debt report state, then the unowned files, then each kind by its own
+sentence `ctx` and the debt report state, over the folders of `ChangePlan.test_layout` — the
+`RecordedTestLayout` the index recorded, read by `infrastructure.repository.read_test_layout`,
+`None` for an index with no record (`beadloom-2mj3.15`) — then the unowned files, then each kind by its own
 count, so the three surfaces state one number for "unplaced". The line is printed only when
 some test file is bound to no node. A node's line adds `, N acceptance step file(s) by tag`
 when N is non-zero. `change_payload` carries `unplaced_tests`, each node's `bound_tests` and
