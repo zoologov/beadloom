@@ -46,7 +46,8 @@ READ_BY_DEFAULT = (
     "jest (*.test.*, *.spec.*, __tests__/**/*.[jt]s, __tests__/**/*.[jt]sx), "
     "junit (*Test.java, *Tests.java, *TestCase.java, *IT.java, *ITCase.java, *Test.kt, "
     "*Tests.kt, src/test/**/*.java, src/test/**/*.kt), pytest (test_*.py, *_test.py) or "
-    "xctest (*Tests.swift, *Tests/**/*.swift) under the root tests or beside a node's code"
+    "xctest (*Tests.swift, *Tests/**/*.swift) under the roots tests, test, spec or beside a "
+    "node's code"
 )
 
 
@@ -87,7 +88,9 @@ class TestNoWorseThanMain:
             "not counted: 2 of 2 test file(s) are unplaced (not under test/integration/ "
             "or test/unit/, nor inside a node's source)"
         )
-        assert population.endswith(READ_BY_DEFAULT.replace("the root tests", "the root test"))
+        assert population.endswith(
+            READ_BY_DEFAULT.replace("the roots tests, test, spec", "the root test")
+        )
 
 
 class TestJavaKotlinAndSwiftNoWorseThanMain:
@@ -145,5 +148,5 @@ class TestWhatTheCountStillSays:
         _, _, population = _untested(root)
         assert population.endswith(
             "a test file is read when its path matches a pattern of junit (*Test.java) "
-            "under the root tests or beside a node's code"
+            "under the roots tests, test, spec or beside a node's code"
         )

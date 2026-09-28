@@ -99,6 +99,6 @@ class TestARootThatNamesTheWholeProjectIsRefused:
     @pytest.mark.parametrize("root", [".", "/", "./", "a/../b", ".."])
     def test_the_default_stands_and_the_reason_is_given(self, root: str) -> None:
         layout, problems = layout_from_config({"tests": {"roots": [root]}})
-        assert layout.roots == ("tests",)
+        assert layout.roots == ("tests", "test", "spec")
         assert len(problems) == 1
         assert "`tests.roots`" in problems[0]

@@ -20,10 +20,13 @@ import pytest
 
 from beadloom.application.debt_report import _count_untested
 from beadloom.application.reindex import reindex
+from beadloom.context_oracle.builder import build_context
 from beadloom.infrastructure.db import open_db
 from tests.support.adopter_test_layouts import (
+    PACKAGES,
     declare_config,
     declare_tests,
+    jest_flat_spec,
     jest_top_level_tests_folder,
     python_flat_under,
     python_tests_by_node_folder,
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
 
 #: Where the binding reads a test file under Beadloom's defaults, as the debt
 #: report and ``ctx`` end their statement of it.
-_READ_WHERE = "under the root tests or beside a node's code"
+_READ_WHERE = "under the roots tests, test, spec or beside a node's code"
 
 
 def _tests_of(root: Path, ref_id: str) -> dict[str, Any]:
@@ -57,12 +60,11 @@ def _untested(root: Path) -> tuple[int, list[str], str]:
 
 
 class TestAFileOutsideEveryRootTreeAndSourceIsNotRead:
-    """Main: ``pytest``/``jest``/``xctest``, 1 file, 2 tests for billing; ``untested: 0``."""
+    """Main: ``jest``/``xctest``, 1 file, 2 tests for billing; ``untested: 0``."""
 
     @pytest.mark.parametrize(
         "build",
         [
-            pytest.param(lambda root: python_flat_under(root, "test"), id="flat test/"),
             pytest.param(jest_top_level_tests_folder, id="top-level __tests__/"),
             pytest.param(xcode_project, id="Xcode ShopTests/"),
         ],
@@ -110,6 +112,69 @@ class TestAFileOutsideEveryRootTreeAndSourceIsNotRead:
             "coverage_estimate": "medium",
         }
         assert _untested(root)[0] == 0
+
+
+def _unplaced_sentence(root: Path) -> object:
+    conn = open_db(root / ".beadloom" / "beadloom.db")
+    try:
+        return build_context(conn, ["billing"], depth=0, max_nodes=5, max_chunks=5)[
+            "test_unplaced"
+        ]
+    finally:
+        conn.close()
+
+
+class TestTheDefaultRootsTestAndSpecAreReadWhereTheyExist:
+    """The owner's ruling on NG1 (2026-09-28): ``test/`` and ``spec/`` are default roots
+    beside ``tests/``, each read only when a folder of exactly that spelling exists.
+    Main bound these files by their names and counted ``untested: 0`` (measured);
+    the binding reads them, counts them unplaced and withholds the count."""
+
+    @pytest.mark.parametrize(
+        ("build", "folder"),
+        [
+            pytest.param(lambda root: python_flat_under(root, "test"), "test", id="flat test/"),
+            pytest.param(jest_flat_spec, "spec", id="flat spec/"),
+        ],
+    )
+    def test_a_flat_file_is_read_unplaced_and_the_count_withheld_as_on_main(
+        self, tmp_path: Path, build: Callable[[Path], Path], folder: str
+    ) -> None:
+        root = build(tmp_path)
+        assert reindex(root).test_files_unplaced == 2
+        assert _tests_of(root, "billing")["test_files"] == []
+        count, _, population = _untested(root)
+        assert count == 0
+        assert population.startswith("not counted: 2 of 2 test file(s) are unplaced")
+        sentence = str(_unplaced_sentence(root))
+        assert sentence.startswith("2 of 2 test file(s) are unplaced (not under ")
+        assert f"{folder}/unit/" in sentence
+
+    def test_a_file_mirrored_under_test_binds_without_a_declaration_as_on_main(
+        self, tmp_path: Path
+    ) -> None:
+        root = python_flat_under(tmp_path, "test")
+        for package in PACKAGES:
+            flat = root / f"test/test_{package}.py"
+            mirrored = root / f"test/unit/{package}/test_{package}.py"
+            mirrored.parent.mkdir(parents=True)
+            flat.rename(mirrored)
+        reindex(root)
+        assert _tests_of(root, "billing") == {
+            "framework": "pytest",
+            "test_files": ["test/unit/billing/test_billing.py"],
+            "test_count": 2,
+            "coverage_estimate": "medium",
+        }
+        assert _untested(root)[0] == 0
+
+    def test_a_folder_spelled_otherwise_is_not_read_as_a_default_root(
+        self, tmp_path: Path
+    ) -> None:
+        """A case-insensitive disk (macOS, Windows) opens ``Spec/`` for ``spec``;
+        the root is read only under its own spelling, as ``tests`` is."""
+        root = jest_flat_spec(tmp_path, "Spec")
+        assert reindex(root).test_files_indexed == 0
 
 
 class TestANameAFolderOrAnImportUnderARootIsNotAGuessAtItsNode:

@@ -11,7 +11,13 @@ package read ``none, 0 tests`` where the name-guessing mapper had read ``go_test
 or beside the code.
 
 - ``roots`` — the folders tests are laid out in by kind, ``<root>/<kind>/...``.
-  Default ``[tests]``. A declared list replaces the default.
+  Default ``[tests, test, spec]``, each read only where a folder of exactly that
+  spelling exists. A file under a root binds by the mirror, or by a node's
+  ``tests:`` list, or not at all — then it is read and counted unplaced, which
+  withholds the debt report's untested count, as the retired mapper's name guess
+  scored such a project on main. ``test/`` and ``spec/`` were added by the owner's
+  ruling of 2026-09-28 (``beadloom-2mj3.15``, NG1) in place of a project-wide walk.
+  A declared list replaces the default.
 - ``patterns`` — file patterns grouped by the framework they name. A file is a
   test when its path matches one, and its framework is that group's name. A
   pattern matches the END of a path: one without a ``/`` matches the file name,
@@ -88,7 +94,9 @@ MIRRORED_KINDS = frozenset({KIND_UNIT, KIND_INTEGRATION})
 #: Every kind a folder can hold, in the order they are stated.
 KINDS = (KIND_ACCEPTANCE, KIND_INTEGRATION, KIND_SELF_CHECK, KIND_UNIT)
 
-DEFAULT_ROOTS = ("tests",)
+#: ``tests/`` (pytest, Go), ``test/`` (Mocha, Node, Maven-less Java, Python) and
+#: ``spec/`` (RSpec, Jasmine): see the module docstring.
+DEFAULT_ROOTS = ("tests", "test", "spec")
 #: Each ecosystem's own convention, named for the framework its patterns belong
 #: to (see the module docstring).
 DEFAULT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (

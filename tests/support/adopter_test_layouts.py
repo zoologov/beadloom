@@ -485,3 +485,18 @@ def declare_config(root: Path, tests: dict[str, object]) -> None:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     config["tests"] = tests
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+
+def jest_flat_spec(root: Path, folder: str = "spec") -> Path:
+    """A TypeScript project whose Jasmine-style tests sit flat in *folder*: `spec/<p>.spec.ts`."""
+    write(root, "package.json", '{"name": "shop", "devDependencies": {"jest": "29"}}\n')
+    for package in PACKAGES:
+        write(root, f"src/{package}/{package}.ts", _TS_CODE.format())
+        write(
+            root,
+            f"{folder}/{package}.spec.ts",
+            _JS_TEST.format(module=f"../src/{package}/{package}"),
+        )
+    _config(root, language=".ts", scan_path="src")
+    _graph(root, {package: f"src/{package}/" for package in PACKAGES})
+    return root

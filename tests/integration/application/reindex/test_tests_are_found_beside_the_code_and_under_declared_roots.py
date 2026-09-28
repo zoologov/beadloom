@@ -132,7 +132,12 @@ class TestAPythonProject:
     def test_a_changed_layout_is_rebuilt_by_the_incremental_rebuild(self, tmp_path: Path) -> None:
         root = python_with_a_test_root(tmp_path, mirrored=True)
         reindex(root)
-        write(root, ".beadloom/config.yml", "languages: [.py]\nscan_paths: [src]\n")
+        # ``test/`` is a default root (NG1), so the layout changes by declaring ``tests``.
+        write(
+            root,
+            ".beadloom/config.yml",
+            "languages: [.py]\nscan_paths: [src]\ntests:\n  roots: [tests]\n",
+        )
         incremental_reindex(root)
         assert _rows(root) == []
 

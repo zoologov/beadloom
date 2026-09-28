@@ -38,7 +38,8 @@ class TestTheFoldersNamed:
         layout, _ = layout_from_config({})
         counts = {PLACEMENT_UNPLACED: 1, PLACEMENT_BESIDE_CODE: 2}
         assert describe_unplaced(counts, layout.recorded()) == (
-            "1 of 3 test file(s) are unplaced (not under tests/integration/ or tests/unit/, "
+            "1 of 3 test file(s) are unplaced (not under spec/integration/, spec/unit/, "
+            "test/integration/, test/unit/, tests/integration/ or tests/unit/, "
             "nor inside a node's source) and bind to no node"
         )
 
@@ -61,7 +62,7 @@ class TestWhatATestFileIsReadBy:
         layout, _ = layout_from_config({})
         assert describe_test_file_recognition(layout.recorded()) == (
             f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
-            "under the root tests or beside a node's code"
+            "under the roots tests, test, spec or beside a node's code"
         )
 
     def test_several_roots_and_no_tests_beside_the_code(self) -> None:
@@ -79,7 +80,7 @@ class TestWhatATestFileIsReadBy:
         )
         assert describe_test_file_recognition(layout.recorded()) == (
             "a test file is read when its path matches a pattern of pytest (test_*.py) "
-            "under the root tests"
+            "under the roots tests, test, spec"
         )
 
     def test_a_record_written_before_the_patterns_were_recorded_names_the_groups(
@@ -89,7 +90,7 @@ class TestWhatATestFileIsReadBy:
         recorded = replace(layout.recorded(), patterns=())
         assert describe_test_file_recognition(recorded) == (
             "a test file is read when its path matches a pattern of go_test, jest, junit, "
-            "pytest or xctest under the root tests"
+            "pytest or xctest under the roots tests, test, spec"
         )
 
 
@@ -98,11 +99,12 @@ class TestATestTreeTheProjectHas:
         layout, _ = layout_from_config({"tests": {"beside_code": False}})
         recorded = layout.recorded(present_mirror_roots=("src/test/java",))
         assert describe_unplaced({PLACEMENT_UNPLACED: 1}, recorded) == (
-            "1 of 1 test file(s) are unplaced (not under src/test/java/, tests/integration/ "
+            "1 of 1 test file(s) are unplaced (not under spec/integration/, spec/unit/, "
+            "src/test/java/, test/integration/, test/unit/, tests/integration/ "
             "or tests/unit/) and bind to no node"
         )
         assert describe_test_file_recognition(recorded).endswith(
-            "under the roots tests, src/test/java"
+            "under the roots tests, test, spec, src/test/java"
         )
 
 
