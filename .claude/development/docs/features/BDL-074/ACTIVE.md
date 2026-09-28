@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 10 — the owner's fixes after T, in parallel: `beadloom-2mj3.6` (truthful suite numbers), `beadloom-2mj3.7` (reindex and test-mapping get bound tests), `beadloom-2mj3.8` (the three never-executed tags; self-checks and scenarios outside the outcomes). R waits for all three.
-**Goal:** the criteria T found unmet are met, or corrected in the PRD by the owner with the reason.
-**Done when:** the three beads closed; the combined tree green; T's rows 3a, 7 (tags) and 8a re-measured by R.
+**Bead:** Wave 11 — `beadloom-b9ll` (R, review), alone, read-only.
+**Goal:** an independent review of the binding, the rules, the moves and the triage, with the authors' accounts withheld.
+**Done when:** a verdict on the bead; each finding either fixed by a bead or ruled by the owner.
+
+**Wave 10 closed (2026-09-28):** F1 `56d00bde`, `9cb9cf83` — each test-file kind named in the population line (252 bound, 170 unplaced and excused by 4 exemptions, 72 acceptance step, 103 self-check as a sanctioned outcome); six false reasons moved to a fourth exemption with a true one; one unplaced count (170 of 597) on ctx, debt-report and mutation. F2 `ca757f6e`, `d8b1790d` — reindex 0 → 92 bound tests in 10 files, test-mapping 0 → 27 in 2; 11 files split, collected set identical. F3 `4676937c`, `25d91b1e`, `5f955076` — `layer_view_verdict` rewritten to execute site-generation, `axes_ruling` retagged to flow-composer, `adopter_first_five_minutes` kept (both nodes run in the wheel subprocess, measured); self-checks marked outside the folder 38 → 2 (the recorded findings); 4 Gherkin duplicates removed; 3 tests ruled not self-checks (for R). Docs `e438c9e9`, `64808918` (22 stale → 0). Gate owner F1 on the combined tree: 11 217 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0.
 
 **Wave 9 closed (2026-09-28):** T `04cb0e4f` — every PRD criterion re-measured on the combined tree: 10 met, 4 not met (3a self-check files neither bound nor exempt; 6 216 of 227 in place; 7 the execution half unchecked and three never-executed tags; 8a 36 self-checks and 7 scenarios outside the outcomes), 2 not measurable before PR 3 (4a per-change job on the runner — locally 394 s, at risk; 9b). Suite 11 198 passed, 0 failed; `beadloom ci` rc 0. Owner rulings recorded in PRD "Corrections (2026-09-28)"; the execution half moved to `beadloom-o9rl`.
 
