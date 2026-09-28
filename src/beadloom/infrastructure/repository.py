@@ -522,30 +522,6 @@ def count_other_kind_test_files(conn: sqlite3.Connection) -> dict[str, int]:
     return {KIND_UNRECORDED if row[0] is None else str(row[0]): int(row[1]) for row in rows}
 
 
-def get_test_file_bindings(
-    conn: sqlite3.Connection,
-) -> list[tuple[str, str | None, str]]:
-    """Every indexed test file as ``(path, bound ref_id or None, placement)``, by path.
-
-    Empty for an index written before the test tables existed, for the reason
-    :func:`count_test_files_by_placement` gives.
-    """
-    try:
-        rows = conn.execute(
-            "SELECT path, ref_id, placement FROM test_files ORDER BY path"
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return []
-    return [
-        (
-            str(row["path"]),
-            None if row["ref_id"] is None else str(row["ref_id"]),
-            str(row["placement"]),
-        )
-        for row in rows
-    ]
-
-
 def get_owning_ref_id(
     conn: sqlite3.Connection, file_path: str
 ) -> str | None:
