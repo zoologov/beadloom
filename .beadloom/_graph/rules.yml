@@ -732,8 +732,10 @@ rules:
   # tests/acceptance/<domain>/<node>/, spelled as that node's docs/ folder (owner
   # ruling 2026-09-28, `beadloom-2mj3.4`). Measured 2026-09-28: 524 scenarios in
   # 79 files; the 39 files in node folders all agree with their folder, and every
-  # enclosing folder that names a node names a container of it. The 40 files in
-  # tests/acceptance/features/ are listed below: B3 (`beadloom-d0bp`) left them
+  # enclosing folder that names a node names a container of it. E1 (`beadloom-cs2o`)
+  # rewrote and moved the rule engine's 7, so 33 files in
+  # tests/acceptance/features/ are listed below (522 scenarios counted with an
+  # Outline as one, 350 agreeing, 172 excused). B3 (`beadloom-d0bp`) left them
   # there because moving them by their tag would put them in the folder of a node
   # their steps do not test. Whether a scenario's steps EXECUTE its node is not
   # judged -- that needs a runtime trace (see the rule module's docstring).
@@ -757,15 +759,10 @@ rules:
             - "tests/acceptance/features/fact_names_what_it_counts.feature"
             - "tests/acceptance/features/gate_finding_owner.feature"
             - "tests/acceptance/features/gate_not_run.feature"
-            - "tests/acceptance/features/graph_summary_facts.feature"
             - "tests/acceptance/features/ignore_block_drift.feature"
             - "tests/acceptance/features/impact.feature"
             - "tests/acceptance/features/init_skeleton_carries_public_api.feature"
             - "tests/acceptance/features/init_skeleton_names_modules.feature"
-            - "tests/acceptance/features/layer_declaration.feature"
-            - "tests/acceptance/features/layer_exemptions.feature"
-            - "tests/acceptance/features/layer_inheritance.feature"
-            - "tests/acceptance/features/layer_population.feature"
             - "tests/acceptance/features/layer_view_verdict.feature"
             - "tests/acceptance/features/mutation_runs_on_a_change_or_on_a_sample.feature"
             - "tests/acceptance/features/mutation_scope.feature"
@@ -775,9 +772,7 @@ rules:
             - "tests/acceptance/features/remediation_that_can_be_followed.feature"
             - "tests/acceptance/features/room_environment.feature"
             - "tests/acceptance/features/routes_under_source.feature"
-            - "tests/acceptance/features/rule_population.feature"
             - "tests/acceptance/features/scaffold_edit_policy.feature"
-            - "tests/acceptance/features/scenario_coverage.feature"
             - "tests/acceptance/features/sibling_baseline.feature"
             - "tests/acceptance/features/stale_pairs_on_every_surface.feature"
             - "tests/acceptance/features/test_files_bind_to_the_node_their_path_mirrors.feature"

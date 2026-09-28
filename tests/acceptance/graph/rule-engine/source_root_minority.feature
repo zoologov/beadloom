@@ -21,42 +21,36 @@
 @bead:beadloom-viaj.9 @node:rule-engine
 Feature: a minority source root does not veto the graph's convention
 
-  Scenario: one node outside the main source tree does not stop the derivation
-    Given a graph whose sources all sit under one root except a single outlier
-    And the outlier is documented under a directory named after the outlier
-    When the doc-area-coherence rule is evaluated
-    Then no node is reported
-    And the rule does not report that it checked nothing
+  Rule: one node outside the main source tree neither stops nor bends the derivation
 
-  Scenario: the pairs outside the source root are counted, not dropped in silence
-    Given a graph whose sources all sit under one root except a single outlier
-    And the outlier is documented under a directory named after the outlier
-    When the doc-area-coherence rule is evaluated
-    Then the population it states accounts for the outlier
+    Scenario Outline: an outlier outside the source root invents no finding and blanks nothing
+      Given a graph whose sources all sit under one root except a single outlier
+      And the outlier is documented under a directory <where>
+      When the doc-area-coherence rule is evaluated
+      Then no node is reported
+      And the rule does not report that it checked nothing
 
-  Scenario: an outlier whose document names its own area invents no findings
-    Given a graph whose sources all sit under one root except a single outlier
-    And the outlier is documented under a directory named after the outlier
-    When the doc-area-coherence rule is evaluated
-    Then no node is reported
+      Examples:
+        | where                      |
+        | named after the outlier    |
+        | that names no source area  |
 
-  Scenario: an outlier whose document names no source area blanks nothing
-    Given a graph whose sources all sit under one root except a single outlier
-    And the outlier is documented under a directory that names no source area
-    When the doc-area-coherence rule is evaluated
-    Then no node is reported
-    And the rule does not report that it checked nothing
+    Scenario: the pairs outside the source root are counted, not dropped in silence
+      Given a graph whose sources all sit under one root except a single outlier
+      And the outlier is documented under a directory named after the outlier
+      When the doc-area-coherence rule is evaluated
+      Then the population it states accounts for the outlier
 
-  Scenario: a rule the project declared blocking does not stand down quietly
-    Given a graph no convention can be read from
-    And the project declared the doc-area-coherence rule blocking
-    When the doc-area-coherence rule is evaluated
-    Then the rule reports that it checked nothing
-    And that report carries the severity the project declared
+  Rule: a rule that stands down says so at the severity the project gave it
 
-  Scenario: a rule left at its shipped severity still stands down quietly
-    Given a graph no convention can be read from
-    And the project left the doc-area-coherence rule at its shipped severity
-    When the doc-area-coherence rule is evaluated
-    Then the rule reports that it checked nothing
-    And that report is advisory
+    Scenario Outline: a rule that checked nothing reports it at the severity the project left it at
+      Given a graph no convention can be read from
+      And the project <declaration>
+      When the doc-area-coherence rule is evaluated
+      Then the rule reports that it checked nothing
+      And that report carries the severity "<severity>"
+
+      Examples:
+        | declaration                                              | severity |
+        | declared the doc-area-coherence rule blocking            | error    |
+        | left the doc-area-coherence rule at its shipped severity | warn     |

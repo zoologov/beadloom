@@ -35,6 +35,21 @@ def _shipped_scenario_count() -> int:
     return len(suite.scenarios)
 
 
+def _scenarios_behind(test_names: list[str]) -> int:
+    """How many SCENARIOS the runner's test names come from.
+
+    ``pytest-bdd`` runs a ``Scenario Outline`` once per ``Examples`` row, naming each
+    run ``<scenario>[<row>]``, while the project's parser counts the outline once, as
+    the file declares it. So every name carrying a row is folded onto its scenario,
+    and a plain name counts as itself (BDL-074 E1 brought the first outlines into the
+    suite). The two counts are still compared exactly: an outline whose rows never
+    ran leaves no name to fold, and a scenario the parser misses is one too few.
+    """
+    plain = [name for name in test_names if "[" not in name]
+    outlines = {name.split("[", 1)[0] for name in test_names if "[" in name}
+    return len(plain) + len(outlines)
+
+
 class TestTheScenariosExecute:
     """A `.feature` file nothing runs is prose, and the rule would be checking text."""
 
@@ -54,4 +69,4 @@ class TestTheScenariosExecute:
         assert code == 0, outcomes
         assert [name for name, outcome in outcomes if outcome == "skipped"] == []
         passed = [name for name, outcome in outcomes if outcome == "passed"]
-        assert len(passed) == _shipped_scenario_count(), outcomes
+        assert _scenarios_behind(passed) == _shipped_scenario_count(), outcomes

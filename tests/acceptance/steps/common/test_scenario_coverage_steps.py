@@ -1,4 +1,4 @@
-"""Step implementations for `features/scenario_coverage.feature` (BDL-061 S4).
+"""Steps for `scenario_coverage.feature` (rule-engine) and `scenario_binding.feature` (BDL-061 S4).
 
 The steps are deliberately thin: they arrange a graph and a suite on disk and run
 the real rule. Nothing is mocked, because a scenario that passes against a double
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 import pytest
 
-scenarios("../../features/scenario_coverage.feature")
+scenarios("../../graph/rule-engine/scenario_coverage.feature")
 scenarios("../../graph/scenario-binding/scenario_binding.feature")
 
 FEATURE_DIR = "tests/acceptance/features"
