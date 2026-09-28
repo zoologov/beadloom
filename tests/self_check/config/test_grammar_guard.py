@@ -8,6 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
+from tests.support.repository_root import REPO_ROOT
+
 
 def _declared_tree_sitter_specifier() -> str:
     """Return the version specifier pyproject declares for the tree-sitter core.
@@ -16,9 +18,8 @@ def _declared_tree_sitter_specifier() -> str:
     3.11+, and this guard has to run on every supported interpreter.
     """
     import re
-    from pathlib import Path
 
-    pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    pyproject = REPO_ROOT / "pyproject.toml"
     text = pyproject.read_text(encoding="utf-8")
     # Matches "tree-sitter<spec>" but not "tree-sitter-python..." — anything
     # after the name must be a specifier character or the closing quote.

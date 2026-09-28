@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import yaml
 
-from tests.test_ci_pr_trigger import (
+from tests.support.ci_workflows import (
+    GH_CI,
     GH_TEMPLATE,
-    GH_WORKFLOW,
     GITHUB_FILES,
     GITLAB_FILES,
     PAT_FALLBACK_CHECKOUT,
@@ -22,7 +22,7 @@ from tests.test_ci_pr_trigger import (
 
 def test_live_and_template_github_share_trigger_model() -> None:
     """The vendored GitHub template mirrors the live workflow's trigger model."""
-    live = yaml.safe_load(GH_WORKFLOW.read_text(encoding="utf-8"))
+    live = yaml.safe_load(GH_CI.read_text(encoding="utf-8"))
     tmpl = yaml.safe_load(GH_TEMPLATE.read_text(encoding="utf-8"))
     live_on = live.get("on", live.get(True))
     tmpl_on = tmpl.get("on", tmpl.get(True))

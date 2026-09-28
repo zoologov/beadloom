@@ -9,7 +9,7 @@ role files, so a project extends a document the same way it extends a role.
 Two properties are pinned here because both have been broken elsewhere in this
 epic: the extraction is **behaviour-preserving** (the bytes a skeleton gets are
 the bytes the literals produced), and the composition works for a project that
-is **not Beadloom** (``tests/adopter_project.py``, the axis S3b added after four
+is **not Beadloom** (``tests/support/adopter_project.py``, the axis S3b added after four
 slices of measuring ourselves).
 """
 
@@ -30,7 +30,7 @@ from beadloom.onboarding.doc_templates import (
     required_sections,
 )
 from beadloom.onboarding.flow_config import FlowConfig
-from tests.adopter_project import beadloom_local_facts_in, typescript_project
+from tests.support.adopter_project import beadloom_local_facts_in, typescript_project
 
 if TYPE_CHECKING:
     from pathlib import Path

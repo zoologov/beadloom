@@ -26,6 +26,11 @@ claiming one: four beads in BDL-067 each reported "mutation checking" by a diffe
 every result prose in a bead comment, and one of them — sent to audit another — found a reported
 "all twenty assertions red before the fix" was eleven guards that cannot fail.
 
+BDL-074 D1 added a third question: **what a run covers when it covers less than the whole
+scope.** A run over one change or over a random sample is scored like any other run, and
+four modules state the part it covered — see
+[A run over a change, or over a sample](#a-run-over-a-change-or-over-a-sample).
+
 ## The three findings
 
 | Check | Condition | Why it matters |
@@ -133,6 +138,69 @@ process, so it is stated wherever the process states anything.
 Exit codes: `0` clean or nothing declared, `1` findings or a score under `--min-score`, `2` the
 invocation cannot be answered.
 
+## A run over a change, or over a sample
+
+BDL-074 D1. The whole declared scope did not fit a CI runner: this repository's nightly was
+killed mid-queue on ten runs, and was retired on 2026-09-27. A run now covers either the
+functions one change touched or a random sample of the whole scope, and each shape says what
+it covered. The runner-specific half — turning a function into a runner's mutant names —
+stays out of the product (CONTEXT Q5); this repository keeps it in its own repository tooling.
+
+| Module | Answers | Public API |
+|--------|---------|------------|
+| `touched.py` | which new-side lines a unified diff touched, and which functions they fall in | `changed_lines(diff_text)`, `touched_functions(source, lines)`, `TouchedFunctions` |
+| `change.py` | the population of a change: touched functions in the declared scope, each one's owning node, the tests the binding ties to that node | `diff_since(project_root, base)`, `plan_change(project_root, conn, diff_text, *, base)`, `describe_change`, `change_payload`, `ChangePlan`, `ChangedFunction`, `NodeSelection`, `MutationChangeError` |
+| `survivors.py` | the survivors of a run, under the node owning their file | `read_survivors(path)`, `survivors_by_node(conn, survivors)`, `describe_survivors`, `survivors_payload`, `Survivor` |
+| `sample.py` | the interval a score measured on a random sample supports | `wilson_interval(successes, trials)`, `sample_interval(counters, *, population)`, `describe_sample`, `sample_payload`, `SampleInterval` |
+
+`scope.lies_within(path, entries)` is the one rule for "is this path one of these entries or
+under one". It was `score._is_covered` until D1 and now answers two questions: whether a
+declared target lies inside what a run covered, and whether a changed file lies inside the
+declared scope.
+
+**A function is what a runner mutates as a unit.** `touched_functions` names top-level
+functions and `Class.method` for methods of a top-level class. A nested function belongs to
+the outer one, and a decorator belongs to the function it decorates. A touched line inside no
+function — a module constant, a class attribute — is COUNTED as `outside` rather than
+dropped, because no mutant of it exists. Only Python is read. A source that does not parse
+raises `SyntaxError`, and `plan_change` lists the file under `unread` instead of guessing its
+functions.
+
+**The diff is taken against the merge base.** `diff_since` runs
+`git diff --unified=0 --no-renames --relative <merge-base>` against the working tree, so CI
+measures a pull request's own commits and a local run measures uncommitted edits as well.
+Untracked files are not in a git diff. A missing `git` or a base that names no commit raises
+`MutationChangeError`.
+
+**Every part of the population says what it covered.** `ChangePlan` carries the number of
+files the change touched, the ones inside the declared scope, the unread ones, the touched
+functions, the lines outside any function, one `NodeSelection` per node reached (its
+functions and its bound test files), and every test file the binding places under no node.
+A test file counts as bound only under the `mirror` or `override` placement, read through
+`infrastructure.repository.get_test_file_bindings`. While unplaced test files exist, a node's
+bound tests can be short of the tests that exercise it, and `describe_change` prints that
+count on its own line. An empty population is a statement too: a change touching no function
+of the declared scope has nothing to mutate and no score.
+
+**Survivors are placed by the graph's ownership rule.** The survivor list is a JSON list of
+`{path, mutant}` objects — names, not a tool. `survivors_by_node` asks
+`get_owning_ref_id` for each file, so a survivor lands under the node `ctx` shows its file
+under, and a file no node owns is listed under `(no node)` rather than dropped. An empty list
+is a run in which nothing survived. An absent file, non-JSON, or an entry without a string
+`path` and `mutant` is no list at all, and `read_survivors` returns `None`.
+
+**A sampled score carries its interval.** `sample_interval` reads the counters as a sample
+of `population` mutants and returns the Wilson interval at 95%, with timeouts counted as
+killed as in the score. Wilson because it stays inside [0, 1] at the edges where a kill rate
+lives. No finite-population correction, because the correction only narrows the interval and
+leaving it out errs wide. `None` when no mutant was scored. A sample larger than its
+population raises `ValueError`. The randomness itself is the runner's claim, which this
+module cannot check.
+
+`beadloom mutation` exposes the three as `--changed-since REF`, `--survivors FILE` and
+`--sample-of N`; the options, the floor held against the interval and the exit codes are in
+the [CLI reference](../../../../services/cli.md#beadloom-mutation).
+
 ## Where it is called
 
 `beadloom config-check` prints the scope findings among its warnings, and the `config-check` gate step
@@ -150,3 +218,9 @@ two sources: `flow.yml`'s declaration and `config.yml`'s scan paths, the second 
 infrastructure seam that `onboarding` may not import (`onboarding-no-direct-infra`). Reading
 `flow.yml` directly here follows the precedent of `application.guards.config`, which owns the
 `guards:` block the same way.
+
+Since BDL-074 D1 the change and survivor halves also read the index: `change.py` and
+`survivors.py` ask `infrastructure.repository` for a file's owning node and for the test
+binding, and `change.py` takes the `mirror` and `override` placement names from
+`context_oracle.test_binding`. `change.py` runs `git` as a subprocess; nothing here imports a
+mutation runner.

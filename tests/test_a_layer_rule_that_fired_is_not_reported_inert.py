@@ -41,7 +41,7 @@ from beadloom.graph.linter import lint
 from beadloom.graph.rules.liveness import inert_rules
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.types import LayerRule
-from tests.acceptance.steps.tiered_project import (
+from tests.support.tiered_project import (
     graph_with_nested_parts,
     graph_with_peer_containers,
     write_tiered_project,

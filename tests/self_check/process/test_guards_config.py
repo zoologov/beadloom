@@ -1,6 +1,6 @@
 """Self-checks of this repository's agent roles, hooks, tracker and commits (BDL-074 A3).
 
-Moved out of ``tests/test_guards_config.py``;
+Moved out of ``tests/integration/application/guards/test_guards_config.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,14 +8,13 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import yaml
 
 from beadloom.application.guards.checks import BUILTIN_GUARDS
 from beadloom.application.guards.config import (
     load_guards_config,
 )
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestEventRoutingIsNotDeclaredHere:
@@ -34,7 +33,7 @@ class TestEventRoutingIsNotDeclaredHere:
 
     def test_the_shipped_dogfood_config_declares_no_events(self) -> None:
         """Our own flow.yml must not teach an incantation that does nothing."""
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = REPO_ROOT
         body = yaml.safe_load((repo_root / ".beadloom" / "flow.yml").read_text(encoding="utf-8"))
 
         for name, declared in (body.get("guards") or {}).items():
@@ -78,7 +77,7 @@ class TestAnUnknownKeyInAGuardBodyIsRejected:
         published ``flow.yml`` had the block at all; that sentence stopped being
         true at the release and is replaced rather than left standing.)
         """
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = REPO_ROOT
 
         config = load_guards_config(repo_root)
 

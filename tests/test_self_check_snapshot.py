@@ -20,13 +20,15 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.self_check_snapshot import build_snapshot, working_tree_files
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+from tests.support.self_check_snapshot import build_snapshot, working_tree_files
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _git(cwd: Path, *args: str) -> str:

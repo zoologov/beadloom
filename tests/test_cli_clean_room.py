@@ -2,7 +2,7 @@
 
 What is exercised here is the COMMAND: the path it derives, the exit code it
 returns and the two shapes it prints. The build itself is covered by the
-acceptance scenarios in `tests/acceptance/features/clean_room.feature`, and the
+acceptance scenarios in `tests/acceptance/application/wave-plan/clean_room.feature`, and the
 tracker arrives through a double — a double proves the double's contract, and
 what these tests are about is what the command does with the answer.
 """

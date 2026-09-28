@@ -1,6 +1,6 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_version_surface.py``;
+Moved out of ``tests/integration/doc_sync/version_surface/test_version_surface.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -21,11 +21,10 @@ from beadloom.doc_sync.version_surface import (
     VersionSurface,
     read_version_surface,
 )
-from tests.test_version_surface import (
-    _place,
+from tests.support.repository_root import REPO_ROOT
+from tests.support.version_surface import (
+    places_at,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture(scope="module")
@@ -75,7 +74,7 @@ class TestThisRepositoryIsFoundByDerivation:
     def test_each_of_the_nine_is_found_with_its_checker(
         self, surface: VersionSurface, relative: str, checkers: tuple[str, ...]
     ) -> None:
-        found = _place(surface, relative)
+        found = places_at(surface, relative)
 
         assert found, f"{relative} was not derived"
         assert checkers in {place.checkers for place in found}

@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_reference_leg_syntax.py``;
+Moved out of ``tests/integration/graph/scenarios/test_reference_leg_syntax.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,16 +8,12 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.graph.scenarios import (
     ScenarioReference,
     load_references,
     parse_scenario_references,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 SHIPPED_REFERENCE_GLOBS = (
     ".claude/development/docs/features/**/PRD.md",
@@ -30,7 +26,7 @@ def _documents_this_project_ships() -> list[str]:
 
     The loader's own iteration is what the cases below are about, so the list
     they judge it against is recomputed from the globs — the shape
-    `test_bead77_kind_and_root_disagree._found_by_any_root` uses one module over,
+    `test_a_kind_and_root_disagreement_is_reported._found_by_any_root` uses one module over,
     and for the same reason: a reader that agrees with itself proves nothing
     about whether it lost a file.
 

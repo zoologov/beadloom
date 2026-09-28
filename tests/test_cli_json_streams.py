@@ -43,13 +43,13 @@ import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
+from tests.support.repository_root import TESTS_ROOT
 
 if TYPE_CHECKING:
     from click.testing import Result
 
 
 #: The directory whose ``test_*.py`` the harness rule is read out of.
-TESTS_ROOT = Path(__file__).resolve().parent
 
 #: The exact sentence the CLI writes to stderr when errors were found without
 #: ``--strict``. Spelled here so a reword that moved it to stdout fails loudly.

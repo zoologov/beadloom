@@ -50,7 +50,8 @@ has now watched four times (a skip-list, a rule-liveness check, a pin table and
 an anti-vacuity guard, each narrower than its own sentence):
 
 1. **It keys on the CALL, never on the exception name.** Review ``.15`` M7
-   recorded how the ``sys.platform`` ledger in :mod:`tests.test_windows_dimension`
+   recorded how the ``sys.platform`` ledger in
+   :mod:`tests.unit.application.guards.test_windows_dimension`
    was evaded in one line: it looks for conditions that *name* ``sys.platform``,
    so anything spelled differently walks past. ``read_text`` cannot be renamed
    away, and the caught set is read as *evidence*, not as the key.
@@ -90,16 +91,15 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from pathlib import Path
 
-from tests.decoding_calls import (
+from tests.support.decoding_calls import (
     called_name,
     decoding_can_raise,
     is_text_open,
     is_text_subprocess,
 )
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
 _SRC_ROOT = _REPO_ROOT / "src" / "beadloom"
 
 
@@ -654,7 +654,7 @@ def test_the_scan_reads_a_live_population() -> None:
     assert modules > 100, f"only {modules} modules parsed under {_SRC_ROOT}"
     assert blocks, (
         "no try/suppress block in the package decodes text. Either the package "
-        "stopped reading files, or the call set in tests/decoding_calls.py no "
+        "stopped reading files, or the call set in tests/support/decoding_calls.py no "
         "longer recognises the calls it did — check before trusting the ledger."
     )
 

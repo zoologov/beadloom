@@ -1,6 +1,6 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_fact_registry.py``;
+Moved out of ``tests/integration/doc_sync/audit/test_fact_registry.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,20 +8,20 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from beadloom.doc_sync.audit import FactRegistry
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.support.repository_root import REPO_ROOT as BEADLOOM_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
 
 #: This repository's root — the one project whose own surfaces the audit reports.
-BEADLOOM_ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture()

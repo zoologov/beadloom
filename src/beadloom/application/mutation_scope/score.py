@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 from beadloom.application.mutation_scope.scope import (
     MutationScopeFinding,
     check_mutation_scope,
+    lies_within,
     load_mutation_targets,
 )
 
@@ -187,13 +188,13 @@ def report_mutation_score(
     :attr:`MutationReport.not_judged` and printed.
     """
     declared = load_mutation_targets(project_root)
-    judged = tuple(t for t in declared if only is None or _is_covered(t, only))
+    judged = tuple(t for t in declared if only is None or lies_within(t, only))
     not_judged = tuple(t for t in declared if t not in judged)
     findings: list[MutationScopeFinding] = []
 
     covered = run.covered if run else ()
     for target in judged:
-        if not _is_covered(target, covered):
+        if not lies_within(target, covered):
             findings.append(_unmeasured(target, covered))
 
     findings.extend(f for f in check_mutation_scope(project_root) if f.target in judged)
@@ -280,15 +281,6 @@ def _unmeasured(target: str, covered: tuple[str, ...]) -> MutationScopeFinding:
             "run the project's mutation tool over the target and report the "
             "counters it wrote, or drop the target from `mutation.targets`"
         ),
-    )
-
-
-def _is_covered(target: str, covered: tuple[str, ...]) -> bool:
-    """Whether one declared target lies inside anything the run covered."""
-    wanted = target.strip("/")
-    return any(
-        wanted == entry.strip("/") or wanted.startswith(f"{entry.strip('/')}/")
-        for entry in covered
     )
 
 

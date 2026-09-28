@@ -39,19 +39,12 @@ import re
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from tests.test_ci_locale_dimension import (
-    LOCALE_JOB,
-)
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-
+from tests.support.ci_workflows import GH_CI, LOCALE_JOB
 
 #: The two knobs that make a C-locale leg non-vacuous. Without BOTH, CPython
 #: quietly puts the leg back on UTF-8 (PEP 538 coercion / PEP 540 UTF-8 Mode)
@@ -65,7 +58,7 @@ _UTF8_VALUE = re.compile(r"utf-?8", re.IGNORECASE)
 
 
 def _ci() -> dict[str, Any]:
-    doc = yaml.safe_load(CI.read_text(encoding="utf-8"))
+    doc = yaml.safe_load(GH_CI.read_text(encoding="utf-8"))
     assert isinstance(doc, dict)
     return doc
 

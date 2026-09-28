@@ -21,7 +21,7 @@ from click.testing import CliRunner
 
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
-from tests.bd_rig import a_bd_rig, a_bead, bd_in
+from tests.support.bd_rig import a_bd_rig, a_bead, bd_in
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -108,8 +108,8 @@ class _FakeBd:
     """A stand-in for the `bd` binary: `show` and `comments` for one bead.
 
     Scoped deliberately: it proves the COMMAND's wiring and rendering, not the
-    seam. The real seam is covered by `tests/test_bd_seam.py`, and the shape of a
-    real `bd comments --json` record is pinned by the shape test below.
+    seam. The real seam is covered by `tests/integration/services/bd_seam/test_bd_seam.py`, and the
+    shape of a real `bd comments --json` record is pinned by the shape test below.
     """
 
     def __init__(self, record: dict[str, Any], comments: list[dict[str, Any]]) -> None:
@@ -479,7 +479,7 @@ class TestWhatCanReachTheReviewer:
     itself: the commit bodies of the reviewed range are read out of a real
     repository, the branch is read off it, and both output shapes carry the same
     channels. The derivation of the channels is the application's, and is pinned
-    beside it in `tests/test_review_brief_reachability.py`.
+    beside it in `tests/integration/application/review_brief/test_review_brief_reachability.py`.
     """
 
     def test_the_commit_bodies_of_the_range_are_counted_without_being_quoted(

@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_surface_watches_declaration.py``;
+Moved out of ``tests/unit/doc_sync/test_surface_watches_declaration.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,11 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.doc_sync.surface import parse_watches
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestADemonstrationIsNotADeclaration:

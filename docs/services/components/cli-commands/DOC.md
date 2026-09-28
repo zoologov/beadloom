@@ -126,6 +126,19 @@ tool (BDL-068 S3.1). It prints the ROOM on every report, including the one carry
 at all: such a report exits 1, so it is a verdict, and it named no room until BDL-068 S3.3
 (BDL-UX #181).
 
+Since BDL-074 D1 `mutation.py` also takes three additive options. `--changed-since REF` reads
+the change through `diff_since` and `plan_change` and prints its population before the
+declared scope. With it, `--target` is no longer required beside `--stats`, the run covers the
+changed files, and the declared targets print as `Judged by this run: the functions above — a
+change covers functions, not declared targets`. `--survivors FILE` prints `Survivors: N over K
+node(s)` and one line per node. `--sample-of N` prints the Wilson interval, and with
+`--min-score` the floor is missed only when the interval's upper bound is under it
+(`_below_floor`), so a sample whose point estimate falls under the floor while its interval
+reaches it exits 0. The index is opened read-only for the change and the survivors. Exit 2
+also covers an unreadable change or survivor list, `--sample-of` without `--stats`, a sample
+larger than its population, and a missing index. `--json` gains `change`,
+`survivors_by_node` and `sample`, each `null` when unused.
+
 `waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads six things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, every instruction of the landing lock in the composed flow artifacts, the rows of the document every route of the composed `/task-init` writes, and the node population of the graph itself -- from the files through `each_graph_file` and from the index through `get_all_nodes`, held apart so that a difference between the plan's own two inputs is a verdict the application layer takes rather than one this edge takes for it (BDL-UX #261). The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
 wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
 each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate

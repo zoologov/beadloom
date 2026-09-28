@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
-from tests import stale_pair_project as project
+from tests.support import stale_pair_project as project
 
 if TYPE_CHECKING:
     from pathlib import Path

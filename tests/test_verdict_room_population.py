@@ -43,7 +43,8 @@ from beadloom.application.rooms import (
 )
 from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.cli import main
-from tests.acceptance.steps.room_judgement import (
+from tests.support.repository_root import REPO_ROOT
+from tests.support.room_judgement import (
     legs_entered_that_do_not_match,
     legs_not_entered_naming_no_difference,
 )
@@ -499,9 +500,8 @@ def _declared_rooms_of_this_repository() -> tuple[Room, ...]:
     The parametrisation below is this population, so a leg added to `ci.yml` is
     judged by the act that adds it and not by anyone remembering this file.
     """
-    from pathlib import Path as _Path
 
-    return derive_declared_rooms(_Path(__file__).resolve().parents[1]).rooms
+    return derive_declared_rooms(REPO_ROOT).rooms
 
 
 def _a_run_standing_in(leg: Room) -> Room:

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import ast
 import io
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -33,13 +32,15 @@ from beadloom.application.graph_reads import (
     stale_node_refs,
 )
 from beadloom.infrastructure.db import open_db
-from tests import stale_pair_project as project
+from tests.support import stale_pair_project as project
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator
+    from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "beadloom"
+SRC = REPO_ROOT / "src" / "beadloom"
 
 
 @pytest.fixture()

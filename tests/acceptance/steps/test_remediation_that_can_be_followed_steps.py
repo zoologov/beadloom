@@ -18,7 +18,13 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
-from .package_lacking_a_module import DOC_PATH, MODULE_REMOVED, build, run, stale_pairs
+from tests.support.package_lacking_a_module import (
+    DOC_PATH,
+    MODULE_REMOVED,
+    build,
+    run,
+    stale_pairs,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

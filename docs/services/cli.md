@@ -1990,7 +1990,8 @@ The score a run produced, held against the mutation scope the project declared
 
 ```bash
 beadloom mutation [--project DIR] [--stats FILE] [--target PATH]... [--only PATH]...
-                  [--tool NAME] [--min-score FRACTION] [--json]
+                  [--tool NAME] [--min-score FRACTION] [--changed-since REF]
+                  [--survivors FILE] [--sample-of N] [--json]
 ```
 
 **Beadloom ships no mutation runner, and this command needs none installed.** The tool
@@ -2014,8 +2015,8 @@ is how a slice with no tests scores 100%.
 - `--stats FILE` — the counters a run wrote. Without it the command still reports: every
   declared target is then measured by no run, which is a finding rather than silence.
 - `--target PATH` — a path the run covered. Repeatable, and **required whenever `--stats`
-  is given**: a run that does not say what it covered exits `2` rather than being assumed
-  to cover the declared scope.
+  is given without `--changed-since`**: a run that does not say what it covered exits `2`
+  rather than being assumed to cover the declared scope.
 - `--only PATH` — judge only these declared targets; the rest print as `Not judged by this
   run`. A first slice measures one target of several, and both obvious alternatives are
   wrong. Reporting the rest as findings makes a scheduled job permanently red, which is how
@@ -2026,14 +2027,67 @@ is how a slice with no tests scores 100%.
   one.
 - `--min-score FRACTION` — the floor the score must clear (`0.95` is 95%). A floor declared
   against a score that does not exist is **missed**, not passed.
+- `--changed-since REF` — cover one change instead of the declared scope (BDL-074 D1). The
+  change is the diff between the merge base of `REF` and the working tree, so uncommitted
+  edits count and untracked files do not. The report states its POPULATION: the files
+  changed, those inside the declared scope, the functions touched there (a top-level
+  function or `Class.method`), the node owning each, the test files the binding ties to that
+  node, and how many test files the binding places under no node. Changed lines outside any
+  function are counted, and a file that is not parseable Python is named as not read. With
+  `--stats` the run is taken to cover the changed files, `--target` is not needed, and the
+  declared targets print as `Judged by this run: the functions above — a change covers
+  functions, not declared targets`. Without `--stats` it prints the population a runner is
+  given. It reads the index.
+- `--survivors FILE` — a JSON list of `{path, mutant}` objects, printed as `Survivors: N over
+  K node(s)` and one line per node, each file placed under the node that owns it. An empty
+  list prints `Survivors: none`. It reads the index.
+- `--sample-of N` — the counters are a random sample of `N` mutants. Prints `Sample: a random
+  sample of S of N mutants; 95% interval L% to H% (Wilson)`. With `--min-score` the floor is
+  missed only when the WHOLE interval lies under it: a sample of 150 from a scope at 0.89
+  reads under 0.88 about a third of the time, and a floor that fails on that is a coin.
+  Requires `--stats`.
 - `--json` — the same facts as the human report: `declared`, `not_judged`, `covered`,
   `tool`, `room`, `score`, `counters`, `missing_counters`, `min_score`, `below_floor` and
-  `findings`.
+  `findings`, plus `change`, `survivors_by_node` and `sample`, each `null` when its option
+  was not given.
 
 Exit `0` when every judged target was measured by a run that produced mutants and the score
 clears the floor — and also when the project declares no mutation scope at all, because not
 opting in is not a violation. Exit `1` on findings or a missed floor. Exit `2` when the
-invocation cannot be answered (`--stats` without `--target`).
+invocation cannot be answered: `--stats` without `--target` or `--changed-since`, a change
+`git` cannot read, a survivor list that is not one, `--sample-of` without `--stats`, a sample
+larger than its population, or no index for an option that reads it.
+
+**A change's population, and a sample's interval, measured on this tree** (2026-09-27,
+features/BDL-074 at `61f416cd`). The branch changes no function of the declared scope, so
+its population is empty and says so. The binding line is the state before the test files are
+laid out under nodes:
+
+```
+$ beadloom mutation --changed-since main
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores · locale utf-8
+Change since main: 371 file(s) changed, 0 of them in the declared scope
+Population: empty — the change touches no function of the declared scope, so there is nothing to mutate and no score
+Binding: 554 of 554 test file(s) are placed under no node, so the tests bound to a node can be short of the tests that exercise it
+Declared scope: …
+Judged by this run: the functions above — a change covers functions, not declared targets
+No run was reported: the population above is what a runner is given.
+```
+
+Over hand-written counters of 130 killed and 20 survived, read as a sample of 6 992, the
+point estimate is under the floor and the interval is not, so the command exits 0:
+
+```
+$ beadloom mutation --stats counters.json --target src/beadloom/graph/rules/ \
+    --only src/beadloom/graph/rules/ --sample-of 6992 --survivors survivors.json \
+    --tool 'mutmut 3.7' --min-score 0.88
+…
+Score: 86.7% of 150 scored mutants
+Sample: a random sample of 150 of 6992 mutants; 95% interval 80.3% to 91.2% (Wilson)
+Survivors: 1 over 1 node(s)
+  rule-engine: 1 survivor(s) — x__cycle_reasons__mutmut_4
+Floor: 0.88 — the sample's interval reaches it.
+```
 
 **Every report names its room, including one carrying no run.** A report over declared
 targets nothing covered exits 1, so it is a verdict, and until BDL-068 S3.3 it printed no
@@ -2076,8 +2130,8 @@ three scope checks `config-check` has raised since BDL-061 S4b —
 first line names. The runner's own release is whatever `--tool` was handed and is printed
 back verbatim: this document does not restate it, because a third-party version quoted here
 goes stale in a way that says nothing about the command. The `Declared scope` line is the one
-that run read; the scope has since grown to fourteen targets, and the paragraphs after the
-sample state it.
+that run read; the scope has since grown to fifteen targets, and the paragraphs after the
+sample state how.
 
 ```
 $ beadloom mutation --stats mutants/mutmut-cicd-stats.json \
@@ -2094,53 +2148,112 @@ Floor: 0.95 — the score is at or over it.
 ```
 
 That 96.2% is one room's figure and was not taken on a CI runner.
-`.github/workflows/mutation.yml` runs the same command nightly and is deliberately NOT a
-required status check: the run is two to three times the ~16-28 runner-minute budget that
-withdrew this project's Windows leg, and a scheduled workflow produces no check-run on a pull
-request, so requiring its context would make `main` unmergeable.
 
-**A nightly nobody opens is the same silence as a check that never reports, so since BDL-072
-the workflow speaks outside the Actions tab.** Between 2026-09-10 and 2026-09-18 the run
-reached a verdict on 0 of 7 187 mutants nine nights in a row and nothing said so. 643 mutants
-entered the declared scope while it was dead. `mutation.yml` now carries a second job,
-`announce`, which holds `issues: write` and opens ONE issue labelled `mutation-nightly` when a
-night produces no verdict. While that issue is open each further failed night adds a comment to
-it instead of a new issue, so the comment count is the length of the outage, and the first run
-that judges the declared scope comments and closes it. The job reads two things rather than the
-job status alone, because a dead run can be green: `needs.mutation.result` for the shape where
-a step exits non-zero, and the `verdict` output of the step that reads the run's own counters
-for the shape where every step succeeds over a verdict that covers almost nothing.
+**This repository runs the command per change and on a weekly sample** (BDL-074 D1, which
+retired the whole-scope nightly on 2026-09-27). `.github/workflows/mutation.yml` has three
+jobs:
+
+- `mutation-per-change` runs on every pull request. `--changed-since origin/<base>` states the
+  population, repository tooling that is never shipped (`.github/scripts/mutmut_adapter.py`)
+  turns the touched functions into mutmut's exact mutant names and a per-run test selection,
+  and the command scores the run with `--survivors` at `--min-score 0.88`.
+- `mutation-sample` runs weekly (cron `17 3 * * 1`, Monday 03:17 UTC) and by hand. It draws
+  150 mutants from the whole declared scope, seeded by the ISO week (`2026-W40`) so a week's
+  sample is reproducible from the commit and the seed, and scores them over every declared
+  target with `--sample-of`, the floor `0.88` held against the interval.
+- `announce` speaks for the sample, and is described below.
+
+**The workflow is disabled.** Its state is `disabled_manually` since 2026-09-27, so neither
+job runs on any event. Enabling it is the owner's decision, after the verification bead
+(`beadloom-paze`, open) has read one run of each job: `gh workflow enable mutation.yml`, then
+`gh workflow run mutation.yml` for one sample by hand.
+
+**Neither job is a required status check.** The sample is scheduled and produces no check-run
+on a pull request, so requiring its context would make `main` unmergeable. The per-change job
+does report on a pull request once the workflow is enabled, and it is still not required: a
+disabled workflow reports nothing, and its budget is not met.
+`tests/self_check/config/test_mutation_ci_job.py` fails if a job of this workflow becomes one
+of the contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names.
+
+**What a per-change run selects, and the fallback.** The tests a change is run against are the
+test files the binding ties to the changed nodes, PLUS the files of the coverage-derived pool
+in `pyproject.toml` that the binding places under no node. The second part is the fallback,
+and today it is the whole selection: when D1 landed, the binding bound none of the 464 files
+in the test index to a node, so every changed function runs against the whole pool of 202 files. It shrinks only as test
+files are laid out under the nodes they test, which is later BDL-074 work and has not landed.
+
+**The per-change budget is 10 minutes on `ubuntu-latest`, and it is NOT met.** Measured on
+2026-09-27 on a one-function change to the rule engine (`liveness._cycle_reasons`; Darwin
+arm64, 10 cores, CPython 3.13.7, mutmut 3.7.0): selecting took 496 s, nearly all of it
+mutmut's stats pass over the 202-file pool, and the four exact mutants then ran in 37 s
+(3 killed, 1 survived). That is about 9 minutes locally and a projected ~15 on the runner at
+the 1.63 factor below, before install. The projection is not a runner measurement. The job
+prints its own time against the 600 s budget and warns when it is over; its
+`timeout-minutes: 30` is above the budget so that an over-budget run still ends with its
+numbers.
+
+**The sample size is derived, not chosen** (2026-09-27, the same local room). The job should
+end by about 50 minutes, under a `timeout-minutes: 70` that is itself under the 73 minutes at
+which the nightly was first killed. About 28 minutes of it are fixed: the stats pass took
+469 s and 496 s in two local runs, the clean run over the sampled mutants' covering tests is
+about the whole pool (471 s), both scaled by 1.63, plus about 2 minutes of install and
+reindex. The mean worst-case cost of a mutant is 18.5 s, from the last full stats pass
+(2026-09-26, 4 888 pytest items timed). (50 − 28) × 60 × 2 children / 18.5 = 143, so the sample is 150,
+which gives a 95% Wilson interval of about ±4.8 points at a 90% kill rate. A sample of 6 run
+locally (seed `2026-W40`) killed 4, left 2 survivors under `bd-seam` and `rule-engine`, and
+stated an interval of 30.0% to 90.3%. No sample has run on a runner yet.
+
+**A scheduled run nobody opens is the same silence as a check that never reports, so since
+BDL-072 the workflow speaks outside the Actions tab.** Between 2026-09-10 and 2026-09-18 the
+retired nightly reached a verdict on 0 of 7 187 mutants nine nights in a row and nothing said
+so. 643 mutants entered the declared scope while it was dead. The job `announce` holds
+`issues: write` and opens ONE issue labelled `mutation-weekly`, titled `Mutation weekly
+sample: no verdict`, when a weekly sample produces no verdict or one under its floor. While
+that issue is open each further failed week adds a comment to it instead of a new issue, so
+the comment count is the length of the outage, and the first run that judges its sample
+comments and closes it. A pull request's run is not announced, because its red is on the pull
+request. The job reads two things rather than the job status alone, because a dead run can be
+green: `needs.mutation-sample.result` for the shape where a step exits non-zero, and the
+`verdict` output of the adapter's `judge` step for the shape where every step succeeds. `judge`
+compares the counters with the names that were drawn: every drawn mutant must carry a verdict,
+or the run is silent and says how many never ran.
 
 **What the announcement does not cover is stated in the workflow rather than discovered
 later**, and each shape named there is declined for a stated reason rather than missed. One of
-them is a nightly that never starts: GitHub disables a scheduled workflow after 60 days without
-repository activity, and a run that does not happen runs no job that could speak. The workflow
-header is the list, and this page does not keep a second copy of it. What is measured about the
-announcement itself is one half of it. `tests/test_mutation_nightly_announcement.py` runs the
-reading step's program over six counter shapes and the announcement's shell over six run states
-against a stubbed `gh` that records the calls. No test reaches `gh` itself — whether the label
-can be created, whether the issue appears, whether the mention notifies — and no issue has ever
-been opened by this workflow, so the branches are measured and the announcement is not until a
-dispatched run opens one (`beadloom-e8m4`).
+them is a scheduled run that never starts: GitHub disables a scheduled workflow after 60 days
+without repository activity, and a run that does not happen runs no job that could speak. The
+workflow header is the list, and this page does not keep a second copy of it.
+`tests/self_check/config/test_mutation_weekly_announcement.py` runs the announcement's shell
+over six run states against a stubbed `gh` that records the calls, and
+`tests/self_check/config/test_mutation_adapter.py` runs `judge` over its counter shapes. No
+test reaches `gh` itself. Two of its three paths were measured on GitHub by the nightly's last
+two killed runs (`beadloom-e8m4`): the first opened issue #79, and the second commented on #79
+instead of opening another. The close path — a run that judges its scope — has never run,
+because no nightly ever scored. #79 was closed as not planned when the nightly was retired;
+under the new label the announcement has opened nothing yet.
 
-**The workflow has since run on a GitHub runner, and the numbers moved two decisions**
+**The whole-scope nightly, BDL-068 S3.1 to 2026-09-27.** What follows is its record, in the
+past tense, because the floor, the runner factor and the sample size above were derived from
+it.
+
+**The nightly ran on a GitHub runner, and the numbers moved two decisions**
 (BDL-068 S4, run 33851288658, 2026-09-04, the first in this project's history). Over identical
 mutants it measured 95.56% against the 96.19% taken on the macOS machine — 25 more survivors,
-which is the room and not a regression — so the `graph/rules/` floor is recalibrated from
-`0.95` to `0.94` in the room the job actually enters. It took 1 h 29 min 18 s against
-54 min 55 s locally, a factor of 1.63, so `timeout-minutes` moves 180 → 240. The workflow now
-**runs the runner twice and scores twice**: `graph/rules/` keeps its own floor, and the whole
-declared scope is judged separately at `--min-score 0.88` in a step marked `if: always()`. One
-aggregate floor would have let the rules slice fall from 96.19% to 94.1% before tripping. What
-the aggregate floor does not guard is stated in the workflow rather than implied, because one
-set of counters cannot attribute a loss to a file, and a per-target floor needs per-target
-counters this runner's export does not write.
+which is the room and not a regression — so the `graph/rules/` floor was recalibrated from
+`0.95` to `0.94` in the room the job actually entered. It took 1 h 29 min 18 s against
+54 min 55 s locally, a factor of 1.63, so `timeout-minutes` moved 180 → 240. The nightly then
+**ran the runner twice and scored twice**: `graph/rules/` kept its own floor, and the whole
+declared scope was judged separately at `--min-score 0.88`. One aggregate floor would have let
+the rules slice fall from 96.19% to 94.1% before tripping. The rules slice's own floor did not
+outlive the nightly: neither job that replaced it scores `graph/rules/` separately, and both
+hold their mutants to `0.88`.
 
-**The declared scope is fourteen targets** (BDL-068 S5, `beadloom-0mdo.62`). S5 added seven
+**BDL-068 S5 took the declared scope to fourteen targets** (`beadloom-0mdo.62`). S5 added seven
 pure cores — `bd_seam/assumptions.py`, `bd_seam/invocations.py`, `bd_seam/answers.py`,
 `bd_seam/creation.py`, `active_table/row_ids.py`, `active_table/staging.py` and
 `waves/landing.py` — and every one of them was RUN rather than counted: 764 mutants, 639
-killed, 125 survived, 0 unrun, 83.64%, in 36 min 35 s.
+killed, 125 survived, 0 unrun, 83.64%, in 36 min 35 s. The scope is fifteen targets on
+2026-09-27.
 
 ```
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · mutmut 3.7.0 · six workers
@@ -2149,8 +2262,8 @@ Room: Darwin arm64 · CPython 3.13.7 · 10 cores · mutmut 3.7.0 · six workers
 Per file, because an aggregate cannot say which target lost:
 `waves/landing.py` 96.55%, `active_table/row_ids.py` 94.26%, `bd_seam/answers.py` 88.79%,
 `bd_seam/creation.py` 88.71%, `bd_seam/invocations.py` 82.32%, `bd_seam/assumptions.py`
-79.23%, `active_table/staging.py` 65.00%. The scope goes from 5 700 to 6 464 mutants, which
-the runner's own denominator confirms.
+79.23%, `active_table/staging.py` 65.00%. The scope went from 5 700 to 6 464 mutants, which
+the runner's own denominator confirmed.
 
 **A target's cost is its mutant count multiplied by the cost of reaching a killing test.** The
 seven are 13.4% more mutants than the six file targets already declared and eight times the
@@ -2159,42 +2272,47 @@ reason is the covering tests and not the cores: `invocations.py` and `assumption
 covering test files each, and those ten walk this repository's harness and template files. No
 target is excluded on that cost. Scaled by the 1.63 the runner measured against this machine
 the seven cost about 60 minutes, taking the nightly from a projected 110 to 171, so
-`timeout-minutes` moves 240 → 340 by the method already in the workflow. Not 360, because that
-is GitHub's own ceiling for a hosted job, where a `timeout-minutes` equal to it can never be
-the thing that trips.
+`timeout-minutes` moved 240 → 340 by the method the nightly stated. Not 360, because that is
+GitHub's own ceiling for a hosted job, where a `timeout-minutes` equal to it can never be the
+thing that trips.
 
-**The aggregate floor was re-derived and does not move.** The workflow states the rule itself —
+**The aggregate floor was re-derived and did not move.** The nightly stated the rule itself —
 the number is a property of the scope and is re-derived whenever the scope changes — and the
 previous pass widened the scope and left the floor where a scope of 5 700 had put it.
 Re-derived over 6 464 the aggregate falls from 89.98% to 89.23%, so `0.88` keeps 1.23 points of
-headroom where it had 2.00, which is 79 mutants against the 62-mutant margin at which the floor
-in the step above was called adequate. Two of its three components are macOS figures applied to a floor enforced on
-`ubuntu-latest`. Drop both by the 0.63 points the rules slice actually fell between those two
-rooms and the aggregate is 88.99%, still above the floor. It survives its own worst case, so it
-stays at 0.88, re-derived and stated rather than left standing.
+headroom where it had 2.00, which is 79 mutants against the 62-mutant margin at which the
+rules-slice floor was called adequate. Two of its three components are macOS figures applied
+to a floor enforced on `ubuntu-latest`. Drop both by the 0.63 points the rules slice actually
+fell between those two rooms and the aggregate is 88.99%, still above the floor. It survives
+its own worst case, so it stayed at 0.88, and both jobs that replaced the nightly inherit it.
 
-The 83.64% is a macOS figure feeding a floor enforced on `ubuntu-latest`. The next nightly run
-is the first measurement of these seven in the room that judges them, and it should replace the
-scaled component of the floor's composition with a measured one.
-<!-- TODO: verify against the first nightly run that covers the seven S5 cores. -->
+The 83.64% is a macOS figure feeding a floor enforced on `ubuntu-latest`. No nightly ever
+completed, so these seven were never measured per file in the room that judges them. The
+weekly sample measures the whole scope on the runner, as one interval, and does not attribute
+a loss to a file.
+<!-- TODO: verify the 0.88 composition against the first weekly sample on the runner (beadloom-paze). -->
 
-**The runner kills the nightly, and that is still open (`beadloom-5isv`).** Eight runs at
-`--max-children 4` died after 73-102 minutes, far under `timeout-minutes: 340`: seven at queue
-positions 4146-4226, where the `load_rules` mutants sit, and one at 3281. None printed a score.
-What follows shrinks the job and lowers its load. It does not show that the job now survives,
-and this page does not claim it: only a dispatched run (`beadloom-kj8t`) measures that.
+**The runner killed the nightly, and the killer was never identified** (`beadloom-5isv`,
+closed as superseded on 2026-09-27). Eight runs at `--max-children 4` died after 73-102
+minutes, far under `timeout-minutes: 340`: seven at queue positions 4146-4226, where the
+`load_rules` mutants sit, and one at 3281. None printed a score. The first run at two children
+died after 262.4 minutes, described below. The dispatched verification run (`beadloom-kj8t`, two children) died at position 4 125 of 6 992
+after 153.6 minutes, having classified 4 125 mutants without a harness error — 3 856 killed,
+268 survived, 1 timeout. The death position moved neither with the number of children nor with
+the `load_rules` shrink below.
 
-**The nightly runs two mutmut children, not four (BDL-073).** Two measurements decided it.
+**Mutation runs two mutmut children, not four (BDL-073).** Both jobs that replaced the nightly
+keep it. Two measurements decided it.
 
 - **A false kill through the shared live index.** At four children a `load_rules` mutant was
   counted killed in 16 s by an `IntegrityError` from the index the children share
   (`beadloom-qq6m`), and survived in 49 s when run alone — measured 2026-09-19. A false kill
-  raises the score the floors are held to. Two children reduce that class and do not remove
+  raises the score the floors are held to. Two children reduced that class and did not remove
   it: over the 136 `load_rules` mutants, two runs at two children counted 128 and 126 kills and a
   serial run counted 123, and every disagreement was a kill that disappears when the mutant runs
-  alone — two of them on loader lines no test executes (B5, Darwin arm64, CPython 3.13.7). The
-  nightly's kill count at two children therefore still holds false kills, in a number nobody has
-  measured.
+  alone — two of them on loader lines no test executes (B5, Darwin arm64, CPython 3.13.7).
+  BDL-074 A3 then took every test off the live index (`beadloom-qq6m` closed, 0 contacts
+  traced). Whether that removes the false kills under mutmut has not been measured.
 - **GitHub's own diagnosis of a killed run.** The first run at two children (run 36101121952,
   2026-09-25, before the dispatch table and the memo below) lasted 262.4 minutes against 73-102
   for the eight at four, then failed with its log gone and this annotation on the job: *"The
@@ -2214,8 +2332,8 @@ in a clean room (2026-09-25). `tests/test_mutmut_runs_covering_tests_cheapest_fi
 both facts by reading the installed package's source, green on mutmut 3.7.0 and on
 mutmut 3.8.0, where the sort moved to `workers/isolation.py`. Its two cases that read the installed runner run only
 where the `mutation` extra is installed; no CI test leg installs it, so on CI only the matcher
-cases run. `tests/test_mutation_ci_job.py` fails if an invocation asks for more than two
-children.
+cases run. `tests/self_check/config/test_mutation_ci_job.py` fails if an invocation asks for
+more than two children.
 
 **The cost of the tail is its survivors.** A killed mutant stops at its first failing test; a
 survivor runs its whole covering set — 855 tests and about 57 s for a `load_rules` mutant,
@@ -2223,8 +2341,8 @@ serially. BDL-073 attacked that count rather than the order: `load_rules` went f
 to 136, counted with mutmut 3.7.0's own generator after its dispatch became one table and the
 memo landed, and B1's tests killed five of its survivors. The serial run still leaves 13
 survivors, 2 of them equivalent. `timeout-minutes: 340` was derived from a 171-minute
-projection at four children, and halving the children takes that projection to about the cap
-itself, so the dispatched run also measures whether the cap trips first.
+projection at four children, and halving the children took that projection to about the cap
+itself; the dispatched run died at 153.6 minutes, before either.
 
 `beadloom ci` asks whether a mutant COULD run at a declared path and never whether one DID, and
 `beadloom mutation --only` prints "this run did not cover it" and "no run has ever covered it"
@@ -2297,14 +2415,16 @@ code base at one commit gave **0 mypy errors under `.[all,dev]` and 82 under `.[
 whole `tui` suite left the run under the second, three modules skipping and one erroring. A verdict that does not
 state its extras cannot be reproduced from what it prints.
 
-A local run is in **0 of the 22 rooms this project declares** — measured 2026-09-19 — and that
+A local run is in **0 of the 23 rooms this project declares** — measured 2026-09-27 — and that
 is the point rather than a caveat: nine "green on the tree" reports across BDL-067 were taken
 in exactly this room. The `mutation` leg above was added by the slice that added it and
 appeared in the census with no edit to the census's own code, which is the property the
 required-contexts tuple lacks.
 
-**The count was 21 until 2026-09-18, when `mutation.yml` gained its `announce` job.** A job is
-a declared room, so a workflow that grows a job grows the census by the same act, and the
+**The count was 21 until 2026-09-18, when `mutation.yml` gained its `announce` job, and 22
+until 2026-09-27, when BDL-074 D1 replaced the job `mutation` with `mutation-per-change` and
+`mutation-sample`.** The `mutation.yml: mutation` row in the block above names a job that no
+longer exists. A job is a declared room, so a workflow that grows a job grows the census by the same act, and the
 number a document states in the present tense goes stale without anything in the census being
 wrong. `beadloom sync-check` read `[ok]` over that change on a fresh index, and that is the
 machinery answering the question it was asked rather than a failure of it: this page declares

@@ -13,12 +13,13 @@ ADDS caching. These structural checks parse ``.github/workflows/ci.yml`` and pin
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, cast
 
 import yaml
 
-_CI = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "ci.yml"
+from tests.support.repository_root import REPO_ROOT
+
+_CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _ai_techwriter_steps() -> list[dict[str, Any]]:

@@ -31,7 +31,6 @@ so where it matters.
 
 from __future__ import annotations
 
-import ast
 import inspect
 from typing import TYPE_CHECKING
 
@@ -41,32 +40,15 @@ from beadloom.application.active_table.table import is_separator_cells, split_ta
 from beadloom.doc_sync import tables
 from beadloom.doc_sync.axes_section import read_axes_section
 from beadloom.doc_sync.tables import cells_of, is_separator
-from tests.mutmut_copy import DECLARED_SITES_IN_THE_MIMIC, write_mutmut_copy
-from tests.package_under_test import PACKAGE_ROOT, module_tree, modules_under
+from tests.support.mutmut_copy import DECLARED_SITES_IN_THE_MIMIC, write_mutmut_copy
+from tests.support.pipe_splits import (
+    DECLARED_PIPE_SPLITS,
+    pipe_split_sites,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from pathlib import Path
 
-#: The package under test, asked of the IMPORT and not of this file. Under
-#: `mutmut run` the suite is copied beside the mutated sources, so a root built
-#: from `__file__` pointed at the copy and this guard read mutmut's generated
-#: bodies as undeclared pipe splits — nine nightlies scored 0 of 7187 mutants
-#: (BDL-UX #289). `tests/package_under_test.py` answers both halves: where the
-#: package is, and which of its names it actually declares.
-_SRC = PACKAGE_ROOT
-
-#: Every place in the package that turns a line into cells by splitting on a
-#: pipe, as ``(module path, enclosing function)``, with what each one is. The
-#: derivation below finds these from the source; this list is what a reader has
-#: DECIDED about them, so a fourth site fails the guard rather than joining a
-#: population nobody looked at.
-DECLARED_PIPE_SPLITS: dict[tuple[str, str], str] = {
-    ("doc_sync/tables.py", "cells_of"): "row-reader",
-    ("application/active_table/table.py", "split_table_row"): "row-reader",
-    ("application/guards/surface.py", "named_but_not_granted"): "not-a-table",
-    ("application/guards/surface.py", "_bound"): "not-a-table",
-}
 
 #: Rows the two readers answer differently. Each is a valid line a document can
 #: hold, and each was measured rather than imagined.
@@ -95,50 +77,6 @@ SINGLE_HYPHEN_ROW = "|-|-|"
 EMPTY_CELLED_ROW = "| |"
 
 
-def _pipe_split_sites(root: Path = _SRC) -> list[tuple[str, str]]:
-    """Every ``<expr>.split("|")`` under *root*, with the function holding it.
-
-    A SHAPE and not a spelling: the call is found in the parsed tree, so a body
-    that writes ``line.split('|')``, ``stripped.strip('|').split("|")`` or
-    ``match.group(1).split(SEP)`` where ``SEP`` is the literal is found the same
-    way. What it cannot see is a split through a variable holding the pipe, which
-    is stated here rather than left for a reader to discover.
-
-    Each module is read through ``module_tree``, so mutmut's generated bodies do
-    not enter the population when this runs inside a mutation run. *root* is a
-    parameter so the mimic in ``tests/mutmut_copy.py`` can be walked by the same
-    code the guard uses.
-    """
-    sites: list[tuple[str, str]] = []
-    for path in modules_under(root):
-        tree = module_tree(path)
-        for holder, call in _calls_with_owner(tree):
-            func = call.func
-            if not isinstance(func, ast.Attribute) or func.attr != "split":
-                continue
-            if len(call.args) != 1:
-                continue
-            arg = call.args[0]
-            if not (isinstance(arg, ast.Constant) and arg.value == "|"):
-                continue
-            sites.append((path.relative_to(root).as_posix(), holder))
-    return sites
-
-
-def _calls_with_owner(tree: ast.AST) -> Iterator[tuple[str, ast.Call]]:
-    """Every call in *tree*, paired with the name of the function holding it."""
-    stack: list[tuple[str, ast.AST]] = [("<module>", tree)]
-    while stack:
-        owner, node = stack.pop()
-        for child in ast.iter_child_nodes(node):
-            name = owner
-            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                name = child.name
-            if isinstance(child, ast.Call):
-                yield owner, child
-            stack.append((name, child))
-
-
 class TestThePackageHasTwoReadersOfOneRow:
     """The component was lifted so a third reader could not be wrong; there is one.
 
@@ -148,7 +86,7 @@ class TestThePackageHasTwoReadersOfOneRow:
     """
 
     def test_every_pipe_split_in_the_package_is_declared(self) -> None:
-        found = set(_pipe_split_sites())
+        found = set(pipe_split_sites())
         assert found == set(DECLARED_PIPE_SPLITS), (
             "a body splits a line on a pipe and no reader has classified it — "
             f"undeclared {sorted(found - set(DECLARED_PIPE_SPLITS))}, "
@@ -172,7 +110,7 @@ class TestThePackageHasTwoReadersOfOneRow:
         """
         package = write_mutmut_copy(tmp_path)
 
-        assert tuple(sorted(_pipe_split_sites(package))) == DECLARED_SITES_IN_THE_MIMIC
+        assert tuple(sorted(pipe_split_sites(package))) == DECLARED_SITES_IN_THE_MIMIC
 
     def test_two_of_them_read_a_table_row_and_neither_calls_the_other(self) -> None:
         readers = [site for site, kind in DECLARED_PIPE_SPLITS.items() if kind == "row-reader"]

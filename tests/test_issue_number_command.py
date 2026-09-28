@@ -1,7 +1,8 @@
 """BDL-068 S6, `beadloom-0mdo.66` — the `issue-number` command surface.
 
 Presentation and exit codes only. The allocation and the three legs are covered
-by ``tests/test_issue_numbers.py`` and by the acceptance feature; what is tested
+by ``tests/integration/doc_sync/issue_numbers/test_issue_numbers.py`` and by the acceptance
+feature; what is tested
 here is the contract a caller reads: the number on stdout, and an exit code that
 distinguishes a finding from a refusal.
 """

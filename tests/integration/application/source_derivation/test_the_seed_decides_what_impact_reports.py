@@ -1,0 +1,212 @@
+"""The derivations answer about their SEED, not about the tree they are pointed at.
+
+BDL-068 `.3`, and the reason it was sequenced ahead of `beadloom impact`. The epic's
+case for being ranked first is that an axes artifact would have prevented BDL-067,
+and that claim was unmeasured. This module is the measurement, kept as a check
+rather than as a paragraph.
+
+**What was measured.** The lifted derivations were run against the tree as it stood
+at BDL-067's first dev bead — `af26750d`, the parent of `acf4066`, 2026-08-31 22:29
++0300 — and asked whether they would have listed BOTH writers of graph nodes and
+FOUR entry points of `init`. Neither fact was known that day: the second writer was
+first answered in BDL-067's fourth fix cycle, the fourth entry point by its ninth
+review, and "three entry points" was said throughout the epic.
+
+**The answer, and it is partial.** Seeded with the commit point every graph YAML
+routes through, the derivations list both writers and all four branches on that
+tree. Seeded with the function the first dev bead was actually changing, they list
+no writers and three branches — the wrong number, delivered as a clean list. So the
+facts were within reach on the day and the seed that reaches them is not the seed
+that day had: BDL-067's own instrument was seeded narrowly until its fifteenth bead.
+
+That makes seed derivation the load-bearing part of `beadloom impact` rather than an
+implementation detail of it, which is what S1.2's acceptance was rewritten to say.
+
+Two cases, because they answer different questions and one of them can vanish:
+
+- :class:`TestTheSeedDecidesTheAnswer` reproduces the shape on a tree this module
+  builds, so it runs on every leg of every job and cannot skip.
+- :class:`TestTheMeasurementAtTheBdl067Tree` re-runs the original measurement
+  against the real commit. It SKIPS where the commit is not in the checkout, which
+  is CI's `tests` job: it uses `actions/checkout@v5` at the default depth of one.
+  The skip is declared here rather than discovered later, and it is why the
+  synthetic case exists beside it rather than instead of it.
+"""
+
+from __future__ import annotations
+
+import inspect
+from pathlib import Path
+
+import pytest
+
+import beadloom
+from beadloom.application.source_derivation import (
+    PUTS_BYTES_ON_DISK,
+    functions_that_serialise_yaml_to_disk,
+    functions_to_their_calls,
+)
+from tests.support.impact_seed import (
+    THE_COMMIT_POINT,
+    THE_NARROW_SEED_ANSWER,
+    THE_WIDE_SEED_ANSWER,
+    _branches_of,
+    seed_answer,
+)
+
+A_TREE_SHAPED_LIKE_THE_ONE_MEASURED = {
+    "atomic.py": """
+import yaml
+
+
+def commit_point(path, data):
+    text = yaml.dump(data)
+    path.write_text(text)
+""",
+    "writer_a.py": """
+from atomic import commit_point
+
+
+def writer_a(root):
+    payload = {"nodes": [], "edges": []}
+    commit_point(root / "a.yml", payload)
+""",
+    "writer_b.py": """
+from atomic import commit_point
+
+
+def writer_b(root):
+    payload = {"nodes": []}
+    commit_point(root / "b.yml", payload)
+""",
+    "flows.py": """
+from writer_a import writer_a
+
+
+def first_flow(root):
+    writer_a(root)
+
+
+def second_flow(root):
+    writer_a(root)
+
+
+def wizard(root):
+    writer_a(root)
+""",
+    "command.py": """
+import sys
+
+
+def run(*, first, second, third, root):
+    if first:
+        first_flow(root)
+        return
+    if second:
+        second_flow(root)
+        return
+    if third:
+        writer_b(root)
+        return
+    result = wizard(root)
+    if result is None:
+        sys.exit(0)
+""",
+}
+
+
+@pytest.fixture
+def a_tree_like_the_one_measured(tmp_path: Path) -> Path:
+    """A tree with the shape `af26750d` had, and nothing else.
+
+    Four branches of one command. Three of them reach the first writer through a
+    helper or directly; the fourth reaches a SECOND writer that the first one
+    never calls. That last branch is `--import`, and it is the branch a narrow
+    seed cannot see.
+    """
+    root = tmp_path / "package"
+    root.mkdir()
+    for name, source in A_TREE_SHAPED_LIKE_THE_ONE_MEASURED.items():
+        (root / name).write_text(source, encoding="utf-8")
+    return root
+
+
+class TestTheSeedDecidesTheAnswer:
+    """The finding, on a tree this module builds, so it runs everywhere."""
+
+    def test_the_commit_point_finds_both_writers_and_every_branch(
+        self, a_tree_like_the_one_measured: Path
+    ) -> None:
+        source = (a_tree_like_the_one_measured / "command.py").read_text(encoding="utf-8")
+
+        assert (
+            seed_answer(source, a_tree_like_the_one_measured, "commit_point", "run")
+            == THE_WIDE_SEED_ANSWER
+        )
+
+    def test_the_function_under_change_finds_neither(
+        self, a_tree_like_the_one_measured: Path
+    ) -> None:
+        """The same tree, the same derivation, the wrong seed, a clean answer.
+
+        Three branches and no writers, reported with no sign that a fourth branch
+        and a second writer exist. A clean list is trusted and stopped at, and
+        that is how BDL-067 spent an epic saying "three entry points".
+        """
+        source = (a_tree_like_the_one_measured / "command.py").read_text(encoding="utf-8")
+
+        assert (
+            seed_answer(source, a_tree_like_the_one_measured, "writer_a", "run")
+            == THE_NARROW_SEED_ANSWER
+        )
+
+    def test_the_branch_the_narrow_seed_cannot_see_is_the_second_writers(
+        self, a_tree_like_the_one_measured: Path
+    ) -> None:
+        """Which branch is lost, not merely how many — a count hides which one."""
+        source = (a_tree_like_the_one_measured / "command.py").read_text(encoding="utf-8")
+
+        wide = _branches_of(source, a_tree_like_the_one_measured, "commit_point", "run")
+        narrow = _branches_of(source, a_tree_like_the_one_measured, "writer_a", "run")
+
+        assert wide - narrow == {("third",)}
+
+
+class TestTheDiskWriteShapeWalksPastTheCommitPoint:
+    """A second measurement from `.3`, recorded because it bounds the seed rule.
+
+    A seed rule stated over *reaches a body that puts bytes on disk* cannot find
+    this product's own commit point: `write_yaml_atomic` puts its bytes down
+    through `os.fdopen(...).write` and `Path.replace`, and the shape spells
+    `write_text`, `write_bytes` and `open`. Measured at `af26750d`: 268 names reach
+    a body in that set and the commit point is not one of them.
+
+    This pins a GAP, not a property. When it goes red the gap has closed and this
+    class is deleted rather than repaired — closing it is `.7`'s, which already
+    owns the same shape's other half (narrowing the set to `{write_text}` survives
+    the whole suite). Repairing it here would have meant measuring the repair.
+    """
+
+    def test_the_commit_points_own_body_names_none_of_the_three_spellings(self) -> None:
+        """The direct cause: `fdopen`, `write` and `replace` are not in the set."""
+        package = Path(inspect.getfile(beadloom)).parent
+        calls = functions_to_their_calls(package)
+
+        assert calls[THE_COMMIT_POINT] & PUTS_BYTES_ON_DISK == set(), (
+            f"{THE_COMMIT_POINT} now names one of {sorted(PUTS_BYTES_ON_DISK)}; the "
+            "gap this class records may have closed — re-measure and delete it"
+        )
+
+    def test_the_shipped_sweep_does_not_name_the_commit_point(self) -> None:
+        """The consequence, in the derivation `.1` lifted.
+
+        `functions_that_serialise_yaml_to_disk` is the check that the commit point
+        is the only way a graph file reaches disk. It does not name the commit
+        point itself, whose stated purpose is to serialise YAML to disk — so the
+        sweep is narrower than the sentence it is described by.
+        """
+        package = Path(inspect.getfile(beadloom)).parent
+
+        assert THE_COMMIT_POINT not in functions_that_serialise_yaml_to_disk(package)
+
+

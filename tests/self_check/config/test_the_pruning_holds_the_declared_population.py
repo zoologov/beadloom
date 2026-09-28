@@ -17,7 +17,7 @@ than a filter:
 
 This file holds both directions over the real package. The mutated copy is
 built here rather than by the runner — `mutate_like_mutmut` applies the shapes
-`tests/mutmut_copy.py` records from real output to every module of the declared
+`tests/support/mutmut_copy.py` records from real output to every module of the declared
 scope — so what is measured is this repository's own code, at the size the
 nightly reads it, without a three-hour run. It is a PROXY and says so: the
 verdict BDL-072 accepts is a dispatched `Mutation` run (`beadloom-e8m4`).
@@ -32,16 +32,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.mutmut_copy import TRAMPOLINE_IMPORT
-from tests.package_under_test import PACKAGE_ROOT, is_generated_name, modules_under
-from tests.self_check.config.test_mutation_runner_scope import toml_loads
-from tests.test_two_readers_of_one_markdown_table import (
+from tests.support.mutmut_copy import TRAMPOLINE_IMPORT
+from tests.support.package_under_test import PACKAGE_ROOT, is_generated_name, modules_under
+from tests.support.pipe_splits import (
     DECLARED_PIPE_SPLITS,
-    _calls_with_owner,
-    _pipe_split_sites,
+    calls_with_owner,
+    pipe_split_sites,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+from tests.support.toml_reader import toml_loads
 
 #: The separator mutmut mangles a METHOD with, where a function gets ``_``
 #: (`mutmut/mutation/trampoline_templates.py:1`).
@@ -163,7 +162,7 @@ def _pipe_split_sites_without_pruning(root: Path) -> list[tuple[str, str]]:
     sites: list[tuple[str, str]] = []
     for path in modules_under(root):
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for holder, call in _calls_with_owner(tree):
+        for holder, call in calls_with_owner(tree):
             func = call.func
             if not isinstance(func, ast.Attribute) or func.attr != "split":
                 continue
@@ -257,7 +256,7 @@ class TestWhatTheGuardReadsInThatRoom:
         output. It is held as an equality, so a pruning that widened into real
         code fails here as loudly as one that stopped declining generated names.
         """
-        pruned = _pipe_split_sites(mutated_package)
+        pruned = pipe_split_sites(mutated_package)
 
         assert set(pruned) == set(DECLARED_PIPE_SPLITS)
         assert len(pruned) == len(DECLARED_PIPE_SPLITS) == 4
@@ -275,7 +274,7 @@ class TestWhatTheGuardReadsInThatRoom:
         twins = _generated_function_names(tables)
 
         assert [name for name in twins if name.startswith("x_cells_of__mutmut")]
-        assert ("doc_sync/tables.py", "cells_of") in _pipe_split_sites(mutated_package)
+        assert ("doc_sync/tables.py", "cells_of") in pipe_split_sites(mutated_package)
 
     def test_a_module_outside_the_declared_scope_reads_as_it_does_on_the_tree(
         self, mutated_package: Path

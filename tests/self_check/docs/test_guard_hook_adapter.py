@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_guard_hook_adapter.py``;
+Moved out of ``tests/integration/onboarding/guard_hooks/test_guard_hook_adapter.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,7 +8,7 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
@@ -40,7 +40,7 @@ class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
         from beadloom.onboarding.guard_hooks import EDIT_MATCHER
 
         spec = (
-            Path(__file__).resolve().parents[3]
+            REPO_ROOT
             / "docs"
             / "domains"
             / "application"

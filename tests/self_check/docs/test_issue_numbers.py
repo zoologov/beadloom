@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_issue_numbers.py``;
+Moved out of ``tests/integration/doc_sync/issue_numbers/test_issue_numbers.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,17 +8,13 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.doc_sync.issue_numbers import (
     DUPLICATE_NUMBER,
     UNCLAIMED_NUMBER,
     UNWRITTEN_CLAIM,
     check_issue_numbers,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+from tests.support.repository_root import REPO_ROOT
 
 CHECKS = (DUPLICATE_NUMBER, UNWRITTEN_CLAIM, UNCLAIMED_NUMBER)
 

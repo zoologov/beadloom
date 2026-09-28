@@ -1,6 +1,6 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_verdict_room_derivation.py``;
+Moved out of ``tests/integration/application/rooms/test_verdict_room_derivation.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,11 +8,10 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from beadloom.application.rooms import derive_declared_rooms
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestThisRepositorysOwnDeclaration:
@@ -20,7 +19,7 @@ class TestThisRepositorysOwnDeclaration:
 
     @pytest.fixture()
     def declared(self) -> object:
-        return derive_declared_rooms(Path(__file__).resolve().parents[3])
+        return derive_declared_rooms(REPO_ROOT)
 
     def test_every_supported_interpreter_has_a_leg(self, declared: object) -> None:
         rooms = declared.rooms  # type: ignore[attr-defined]

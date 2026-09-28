@@ -1,6 +1,7 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_the_version_report_names_what_checks_each_place.py``;
+Moved out of
+``tests/integration/doc_sync/version_surface/test_the_version_report_names_what_checks_each_place.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,27 +9,24 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.test_the_version_report_names_what_checks_each_place import (
-    _block,
-    _run,
+from tests.support.repository_root import REPO_ROOT
+from tests.support.version_surface import (
+    block_under,
+    run_version_surface,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
 @pytest.fixture(scope="module")
 def repository_report() -> Iterator[str]:
     """One sweep of this repository, shared — it reads over a thousand files."""
-    _, output = _run(REPO_ROOT)
+    _, output = run_version_surface(REPO_ROOT)
     yield output
 
 
@@ -54,7 +52,7 @@ class TestTheNinePlacesTheReleaseHadToEdit:
     def test_a_place_an_instrument_holds_is_reported_under_that_instrument(
         self, repository_report: str, relative: str, checker: str
     ) -> None:
-        checked = _block(repository_report, "Checked (")
+        checked = block_under(repository_report, "Checked (")
 
         assert relative in checked, checked
         group = next(line for line in checked.splitlines() if relative in line)
@@ -71,7 +69,7 @@ class TestTheNinePlacesTheReleaseHadToEdit:
     def test_a_place_the_release_met_one_at_a_time_is_reported_as_checked_by_nothing(
         self, repository_report: str, relative: str
     ) -> None:
-        assert relative in _block(repository_report, "Checked by nothing"), repository_report
+        assert relative in block_under(repository_report, "Checked by nothing"), repository_report
 
     def test_the_tracker_export_is_not_a_place_because_no_release_edits_it(
         self, repository_report: str

@@ -13,9 +13,9 @@ Allowed: ``{{ ... }}`` inside a fenced code block (e.g. a GitHub Actions
 
 from __future__ import annotations
 
-from pathlib import Path
+from tests.support.repository_root import REPO_ROOT
 
-DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
+DOCS_ROOT = REPO_ROOT / "docs"
 
 
 def _strip_fenced_code(text: str) -> str:

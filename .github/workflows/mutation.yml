@@ -1,204 +1,123 @@
-# Mutation testing over the declared scope (BDL-068 S3.1, widened S4.x).
+# Mutation testing per change, and on a weekly sample of the declared scope (BDL-074 D1).
 #
-# THE SCOPE IS EVERY NAME IN `mutation.targets`, and that is the point rather
-# than a detail. Between S3 and 2026-09-04 this job mutated one of the three
-# declared targets and told `beadloom mutation` to judge only that one, so the
-# other two were unreachable by any run AND unreported as unreachable.
-# `.beadloom/flow.yml`, `[tool.mutmut] only_mutate` and the `--target` list below
-# now name the same fifteen targets, and two tests fail when they stop agreeing.
+# THIS FILE REPLACED A WHOLE-SCOPE NIGHTLY, and the reason is a measurement. From
+# BDL-068 S3.1 to 2026-09-27 one scheduled job mutated every name in
+# `mutation.targets` — 6 990 mutants — against a static test pool. Ten runs were
+# killed by the runner mid-queue, nine of them at queue positions 4 125-4 226, at
+# 73-153 minutes depending on concurrency; the killer was never identified and the
+# question was closed as superseded (`beadloom-5isv`). The whole scope does not
+# fit the room, so two narrower runs replace it, and each says what it covered:
 #
-#   MEASURED 2026-09-04, mutant counts from mutmut's own generator:
-#   3 989 graph/rules/ + 657 doc_quality.py + 350 doc_shape.py + 324
-#   role_duties.py + 146 shell_targets.py + 136 guards/surface.py + 98
-#   waves/derivation.py = 5 700, which is 42.9% more than the 3 989 the S3
-#   measurement below timed.
+#   mutation-per-change (pull_request) — the functions a pull request touched in
+#   the declared scope, run against the tests the binding ties to their node.
+#   mutation-sample (weekly schedule, and by hand) — a seeded random sample of the
+#   whole declared scope, scored with the interval the sample supports.
 #
-#   MEASURED 2026-09-08, the seven pure cores S5 added, counted the same way and
-#   then RUN rather than projected:
-#   183 bd_seam/assumptions.py + 181 bd_seam/invocations.py + 122
-#   active_table/row_ids.py + 107 bd_seam/answers.py + 80 active_table/staging.py
-#   + 62 bd_seam/creation.py + 29 waves/landing.py = 764, taking the declared
-#   scope to 6 464. The runner's own denominator reads 6 464, which is the count
-#   confirmed by the tool that has to execute it rather than by the generator
-#   alone.
+# THE WORKFLOW IS DISABLED, and was left so on purpose. The nightly was disabled
+# through the API on 2026-09-27 (state `disabled_manually`); a disabled workflow
+# runs neither job, on any event. Enabling it is the owner's decision, after the
+# verification bead has read one run of each job:
 #
-#   MEASURED 2026-09-08, the fifteenth target: `doc_sync/tables.py`, 26 mutants,
-#   declared because code MOVED out of two targets rather than because a new
-#   surface appeared. The table-boundary rule was lifted out of `doc_quality.py`
-#   (738 -> 717 mutants) and the row grammar out of `doc_shape.py` (350 -> 340),
-#   so 31 mutants left the declared scope and 26 arrived in a file nothing
-#   declared. Leaving it undeclared would have shrunk the measured scope by a
-#   refactor, which is the hole the note above says something walked through.
-#   The declared scope reads 6 459 — five fewer than before, and those five are
-#   the deduplication itself: two copies of the table-row regex became one.
-#   The aggregate floor of 0.88 survives the worst case without being moved, and
-#   the worst case was computed rather than assumed: if all 31 departing mutants
-#   had been killed and all 26 arriving ones survive, the aggregate falls from
-#   89.23% to (5 768 - 31) / 6 459 = 88.82%, which keeps 0.82 points of headroom.
-#   The real number will be higher — the file is four pure functions covered by
-#   every test that reads a planning document — and the next nightly measures it.
+#     gh workflow enable mutation.yml
+#     gh workflow run mutation.yml            # one weekly sample, by hand
 #
-# WHY THIS IS NIGHTLY AND NOT A PR LEG — the number decided it, not a preference.
-# CONTEXT's Q3 stated the rule before the measurement: the job runs per PR if it
-# fits under the budget that withdrew `tests-windows` (~16-28 runner-minutes),
-# and nightly otherwise.
+# NEITHER JOB IS A REQUIRED STATUS CHECK, and this is the sentence to read before
+# adding one. The sample is scheduled and reports no check-run on a pull request,
+# so a required context naming it never reports and `main` becomes unmergeable
+# under `strict: true`. The per-change job does report on a pull request, and it
+# is still not required: a disabled workflow reports nothing either, and its
+# budget is not yet met on this repository (see below). No job name here is one
+# of the nine contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names, and
+# `tests/self_check/config/test_mutation_ci_job.py` fails if one ever becomes one.
 #
-#   MEASURED 2026-09-03, and the room is part of the measurement: 3 989 mutants
-#   over `src/beadloom/graph/rules/`, 54 min 55 s wall clock at 1.42 mutations
-#   per second, with 6 workers on a 10-core Apple-silicon machine (Darwin arm64,
-#   CPython 3.13.7). Score 96.2%: 3 836 killed, 1 timeout, 152 survived, 0 with
-#   no covering test.
+# PER CHANGE — WHAT IS SELECTED, AND THE FALLBACK. `beadloom mutation
+# --changed-since` names the change's population: the functions touched in the
+# declared scope, the node owning each, the test files the binding ties to that
+# node, and how many test files the binding places under no node. The adapter
+# (`.github/scripts/mutmut_adapter.py`) turns those functions into mutmut's EXACT
+# mutant names — a glob ending `__mutmut_*` makes mutmut's clean run fall back to
+# the whole selection (BDL-073) — and writes the per-run
+# `pytest_add_cli_args_test_selection`: the bound tests, PLUS the old pool's files
+# the binding places under no node. That second part is the fallback, and it is
+# the whole selection today: when D1 landed, 0 of 464 test files were bound and
+# 393 were unplaced, so every changed function runs against the coverage-derived
+# pool in `pyproject.toml`. It shrinks as tests are laid out under
+# `tests/{unit,integration}/` and is empty once every pool file is bound.
 #
-# 55 minutes is two to three times the budget that already declined a dimension,
-# and this runner is FASTER than `ubuntu-latest` (4 vCPU) rather than slower, so
-# the CI figure can only be worse. The second half of the `tests-windows`
-# reasoning applies with more force than it did there: the ubuntu legs finish in
-# ~4 minutes, so a leg of this length would not cost minutes so much as become
-# the pipeline's whole critical path. Nightly.
+# PER CHANGE — THE BUDGET, and what is known about it. The PRD's budget is 10
+# minutes on `ubuntu-latest`, and it does NOT hold while the fallback is the
+# whole pool. MEASURED 2026-09-27 on a one-function change to the rule engine
+# (`liveness._cycle_reasons`, Darwin arm64, 10 cores, mutmut 3.7.0): selecting
+# took 496 s, nearly all of it mutmut's stats pass over the 202-file pool; the
+# four exact mutants then ran in 37 s (3 killed, 1 survived); reindex, population,
+# counters and score took under 10 s together. About 9 minutes locally, so about
+# 15 on the runner at the nightly's measured 1.63 factor, before install. The
+# stats pass shrinks with the selection, so the budget is met by laying tests
+# out, not by this file. The job states its own time against the budget and warns
+# when it is over; the timeout is well above the budget so that an over-budget
+# run still ends with its numbers rather than being cut off.
 #
-# NOT A REQUIRED STATUS CHECK, and this is the sentence to read before adding it
-# to one. A scheduled workflow produces no check-run on a pull request, so a
-# required context naming it never reports and `main` becomes unmergeable under
-# `strict: true` — the same trap `DEFAULT_STATUS_CHECK_CONTEXTS` documents for
-# the withdrawn Windows leg. `tests/test_mutation_ci_job.py` fails if this job's
-# name ever appears in that tuple.
+# WEEKLY SAMPLE — THE SIZE IS DERIVED, not chosen, and was re-derived once it
+# had been run (2026-09-27, Darwin arm64, 10 cores, mutmut 3.7.0):
 #
-# IT HAS NOW RUN ON A RUNNER, and the run moved two numbers in this file. Run
-# 33851288658 on 2026-09-04, the first ever: 1 h 29 min 18 s for the 3 989 rules
-# mutants on `ubuntu-latest` (Linux x86_64, CPython 3.13.15, 4 cores), against
-# 54 min 55 s on the 10-core Darwin machine — a factor of 1.63, and the reason
-# the timeout below moved. Score 95.56% there against 96.19% here: 3 811 killed
-# and 177 survived, where the macOS run killed 3 836 and left 152. Same suite,
-# same mutants, 25 more survivors, which is the room and not a regression.
+#   budget     the job ends by about 50 minutes, under a 70-minute timeout that is
+#              itself under the 73 minutes at which the nightly's runner first
+#              killed it
+#   fixed      ~28 minutes on the runner before the first mutant: the stats pass
+#              over the pool took 469 s and 496 s in two local runs, the clean
+#              run over the sampled mutants' covering tests is about the whole
+#              pool (471 s run directly), both times the 1.63 runner factor the
+#              nightly's first run measured (1 h 29 min against 54 min 55 s), plus
+#              ~2 minutes of install and reindex; generation is 6.1 s
+#   cost       18.5 s mean worst-case per mutant: the sum of the recorded durations
+#              of the tests covering its function, over all 6 990 mutants, from the
+#              last full stats pass (4 888 tests, 2026-09-26)
+#   calibration  the nightly's queue at position 4 125 predicts 94 minutes at four
+#              children from those same numbers, and the runner was killed there at
+#              73-102 minutes, so runner time ~ sum(worst case) / children
+#   size       (50 - 28) min x 60 s x 2 children / 18.5 s = 143, so 150 mutants
 #
-# THAT IS WHY THE FLOORS ARE CALIBRATED IN THE ROOM THE JOB RUNS IN. S3 set 0.95
-# to sit ~1.2 points under a macOS measurement; in the room this job actually
-# enters it sat 0.56 points under, which is 22 mutants — tight enough that a
-# handful of new survivors in a legitimately-changed rule would trip it, the
-# exact outcome the original comment said it was avoiding.
+# At a 90% kill rate a sample of 150 gives a 95% Wilson interval of about +/-4.8
+# points (200 would give +/-4.2 and does not fit the budget). The seed defaults to
+# the ISO week (`2026-W40`), so a week's sample is reproducible from the commit
+# and the seed alone.
 #
-# THE SCHEDULE IS NOT PUNCTUAL, and a nightly should not be read as one. The
-# first cron firing was created at 07:57 UTC against a `17 3 * * *` schedule —
-# 4 h 40 m late. GitHub documents scheduled workflows as delayable under load;
-# nothing here is wrong, and a reader expecting an 03:17 artifact should not
-# conclude the job failed.
+# THE FLOOR IS HELD AGAINST THE INTERVAL for the sample: the job fails when the
+# whole interval lies under 0.88, not when a point estimate does, because a sample
+# of 150 from a scope at 0.89 reads under 0.88 about a third of the time. 0.88 is
+# the aggregate floor calibrated on the runner in BDL-068 (95.56% there against
+# 96.19% on Darwin for the same rules mutants). The per-change run is held to the
+# same floor over its own mutants, where one survivor in eight is under it: that is
+# the signal a per-change run exists to give.
 #
-# NINE NIGHTS OF SILENCE, AND WHY THIS FILE GAINED A SECOND JOB. Between
-# 2026-09-10 and 2026-09-18 this job reached a verdict on 0 of 7 187 mutants
-# every night and nobody saw it. The last scored run is `e17c2258`, 2026-09-09;
-# five of the nine failures ran on the same commit, `2f744c4a`, so nothing about
-# the work of those days caused it. A scheduled workflow reports no check-run on
-# a pull request — the same fact the paragraph above forbids putting into
-# `DEFAULT_STATUS_CHECK_CONTEXTS` — so its red is visible to whoever opens the
-# Actions tab and to nobody else. Nine nights is how long that took to notice,
-# and 643 mutants entered the declared scope while it was dead.
+# THE SILENCE HAS TWO SHAPES, and both are detected from the counters rather than
+# from a status. The red shape — a step exits non-zero — reaches `needs.*.result`.
+# The green shape — every step exits 0 and most mutants never ran — is invisible to
+# a status, because every runner invocation carries `|| true` (mutmut exits
+# non-zero whenever a mutant survives, which is a normal outcome). The adapter's
+# `judge` therefore compares the counters with the names that were selected: every
+# selected mutant must carry a verdict, or the run is silent and says how many
+# never ran.
 #
-# THE SILENCE HAS TWO SHAPES AND THEY NEED DIFFERENT DETECTORS, which is why
-# `if: failure()` is not the answer: it covers one of them.
-#
-#   THE RED SHAPE — a step exits non-zero. `needs.mutation.result` reads it, and
-#   this is the shape the nine nights actually took. MEASURED in the run's own
-#   log and in the runner's source: the pool's selected tests fail before
-#   scoring, so `mutmut` aborts at the stats phase (`failed to collect stats.
-#   runner returned 1`); `mutmut export-cicd-stats` then finds no `.meta` file,
-#   prints `No previous mutation data found` AND RETURNS 0 WITHOUT WRITING THE
-#   FILE (mutmut 3.7.0, `__main__.py:1213-1218`); and the scoring steps go red on
-#   `mutation-run-zero-mutants` over counters that were never written. So the job
-#   was red every night, and being red is not the same as being seen.
-#
-#   THE GREEN SHAPE — every step succeeds and the verdict still covers almost
-#   nothing. Both runner invocations carry `|| true`, and have to: the runner
-#   exits non-zero whenever a mutant survives, which is a normal outcome. That
-#   makes an invocation which dies in its first second indistinguishable from one
-#   that worked. `export-cicd-stats` recomputes over every mutant that HAS a
-#   result, so a dead second invocation still leaves an export carrying the rules
-#   slice's counters; the scoring step names all fifteen targets on its command
-#   line and scores ~95% over one of them; and the job is green with thirteen
-#   targets unjudged. No job status can see this, because `--target` says what a
-#   run was ASKED to cover and the counters say nothing about what it did.
-#
-# So the reading step below compares the two exports rather than trusting either
-# status: the whole-scope population must EXCEED the rules-slice population it
-# contains, because the second export is cumulative over the first — the fact the
-# two-runs-two-verdicts comment above already rests on. That comparison keeps no
-# number of its own to maintain. It holds one measurement against another taken
-# in the same run, so a scope change moves both sides together.
-#
-# WHAT THE ANNOUNCEMENT DOES NOT COVER, stated here rather than discovered
-# later. Two shapes, and neither is built.
-#
-#   A nightly that never starts. GitHub disables a scheduled workflow after 60
-#   days without repository activity, and a run that does not happen runs no job
-#   that could speak. Detecting that needs a second trigger on another schedule;
-#   this repository commits daily, so the shape is named and not built.
-#
-#   A cancellation the run did not suffer. The announcement reads `cancelled` as
-#   an outage, which is right for a job killed by `timeout-minutes: 340` or
-#   stopped by hand, and wrong for a run SUPERSEDED by a newer one of the same
-#   kind — a second dispatch started while the first is running would comment on
-#   the watch issue about a supersession. The concurrency group above removes the
-#   collision this work item would itself have caused, between a dispatch and the
-#   schedule; what is left needs a human at the keyboard, and that human is
-#   watching the run they just replaced.
-#
-#   Telling the two apart INSIDE the run was considered and not built. GitHub
-#   publishes no cancellation reason, so it takes an `actions: read` grant on the
-#   announcing job and a `gh run list` query about sibling runs: a second
-#   unmeasured `gh` call — on the one surface no test here reaches, as the next
-#   paragraph says — to remove a case that only happens while someone is looking.
-#
-# WHAT IS MEASURED AND WHAT IS NOT, because a notifier nobody has seen fire is
-# the same silence in a new place. `tests/test_mutation_nightly_announcement.py`
-# RUNS both halves: the reading step's program over six counter shapes, and the
-# announcement's shell over the six run states, against a stubbed `gh` that
-# records the calls. What no test reaches is `gh` itself — whether the label can
-# be created, whether the issue appears, whether the mention notifies. No issue
-# has ever been opened by this workflow. Until a dispatched run opens one
-# (`beadloom-e8m4`), the branches are measured and the announcement is not.
-#
-# TWO CHILDREN, NOT FOUR (BDL-073). At `--max-children 4` a mutant of
-# `load_rules` was counted killed in 16 s by an IntegrityError from the live
-# index the children share (`beadloom-qq6m`), and survived in 49 s when run
-# alone — measured 2026-09-19. A false kill raises the score the floors are held
-# to, so every kill this job counted at four children is unverified.
-# `tests/test_mutation_ci_job.py` fails if an invocation asks for more than two.
-# Two is not measured free of false kills; it halves the concurrency that
-# produced one, and it roughly doubles the wall clock of the mutant phase.
-#
-# THE COVERING TESTS ARE ALREADY RUN CHEAPEST FIRST, and no ordering patch is
-# carried here. mutmut 3.7.0 sorts each mutant's covering tests by their recorded
-# durations inside the forked child (`__main__.py:1478-1479`) and hands them to
-# pytest with `-p no:randomly`, which keeps that order. MEASURED 2026-09-25 with
-# stock mutmut 3.7.0 in a clean room, one child: six `load_rules` mutants (50,
-# 68, 85, 217, 250, 333), each covered by 827 tests with a 60.5 s estimate, were
-# all killed in a mean of 1.16 s. The cost of this job's tail is the mutants that
-# SURVIVE and run all 827 tests, not the order the tests run in.
-#
-# WHAT THIS DOES NOT FIX: the runner that kills this job at queue positions
-# 4146-4226 (`beadloom-5isv`). Fewer children lowers the load on a 4-vCPU runner.
-# Whether that keeps the runner alive is measured only by a dispatched run.
-# Nor does it re-derive `timeout-minutes: 340` below, which was set from a
-# 171-minute projection taken at four children. Halving the children takes that
-# projection to about the cap itself, so the dispatched run (`beadloom-kj8t`)
-# is also what measures whether the cap trips first.
+# THE SCHEDULE IS NOT PUNCTUAL. The nightly's first cron firing was created 4 h 40 m
+# late; GitHub documents scheduled workflows as delayable under load.
 name: Mutation
 
 on:
+  pull_request:
   schedule:
-    # 03:17 UTC — off the hour, so it does not queue behind everything else
-    # scheduled at midnight.
-    - cron: "17 3 * * *"
+    - cron: "17 3 * * 1"
   workflow_dispatch:
+    inputs:
+      size:
+        description: "Mutants in the sample (derived: 150, see the header)"
+        required: false
+        default: "150"
+      seed:
+        description: "Seed of the sample (default: the ISO week, e.g. 2026-W40)"
+        required: false
+        default: ""
 
-# ONE RUN PER KIND, rather than one per branch, and the difference is the
-# announcement below. `cancel-in-progress` is here so two nightlies of the same
-# shape never run the declared scope twice over, and that is kept. What the group
-# gains is `github.event_name`: a hand `workflow_dispatch` and the schedule are
-# then two groups, so dispatching a run — which is how the first real verdict is
-# taken, `beadloom-e8m4` — can no longer cancel the scheduled one and have the
-# announcement report a supersession as an outage. The two can now overlap; the
-# price is two runners for the hours they share, against a watch issue opened
-# about the verification itself.
 concurrency:
   group: mutation-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
@@ -207,40 +126,136 @@ permissions:
   contents: read
 
 jobs:
-  mutation:
+  mutation-per-change:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # A timeout that trips is a run that reports nothing at all, so this is set
-    # from the measurement with room to spare rather than from a round number.
-    # Projected for the widened scope on `ubuntu-latest`: 89 min for the rules
-    # slice (measured), plus 16 min for the 1 711 other mutants and 6 min for the
-    # second run's clean-test phase (both the macOS figures scaled by the 1.63
-    # this runner measured) — about 110 minutes.
-    #
-    # RE-DERIVED 2026-09-08 for the seven S5 cores, and their cost is NOT
-    # proportional to their mutant count. 764 mutants is 13.4% more mutants and
-    # 36 min 35 s of wall clock — measured, six workers on a 10-core Darwin arm64
-    # machine — against 9 min 34 s for the 1 711 mutants of the six file targets
-    # on the same machine. Eight times the cost per mutant, because these targets'
-    # covering tests are the derived-population ones that walk this repository's
-    # harness and template files: `invocations.py` and `assumptions.py` have ten
-    # covering test files each where `creation.py` has two. Scaled by the same
-    # 1.63, that is 60 min on this runner and a job of about 171 minutes.
-    #
-    # 340 keeps the proportion the two settings above were chosen by — 180 over
-    # 89 is 2.02 and 240 over 110 is 2.18 — and 171 x 2 is 342. It is not 360
-    # because that is GitHub's own six-hour ceiling for a hosted job, where a
-    # `timeout-minutes` equal to it can never be the thing that trips. A nightly
-    # with no dependent job pays nothing for a cap it never reaches, and a cap
-    # that DOES trip reports nothing at all, which is the asymmetry this number
-    # is set from.
-    timeout-minutes: 340
-    # What the announcement below reads. A job status answers "did a step exit
-    # non-zero"; these answer "was anything judged", which is the question the
-    # nine nights turned out to need.
+    timeout-minutes: 30
+    env:
+      BASE: origin/${{ github.base_ref }}
+      BUDGET_SECONDS: "600"
+    steps:
+      - name: Start the clock
+        run: echo "STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: >-
+          uv sync --extra dev --extra languages --extra tui --extra watch
+          --extra graphql --extra mutation
+
+      - name: Build the index the binding is read from
+        run: uv run beadloom reindex
+
+      - name: State the change's population
+        run: |
+          uv run beadloom mutation --changed-since "$BASE" > "$RUNNER_TEMP/population.txt"
+          uv run beadloom mutation --changed-since "$BASE" --json > "$RUNNER_TEMP/plan.json"
+          cat "$RUNNER_TEMP/population.txt"
+          cat "$RUNNER_TEMP/population.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Select the mutants and the tests
+        id: select
+        run: >-
+          uv run python .github/scripts/mutmut_adapter.py select
+          --plan "$RUNNER_TEMP/plan.json"
+          --names-out "$RUNNER_TEMP/names.txt"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Run the selected mutants
+        if: steps.select.outputs.mutants != '0'
+        run: |
+          mapfile -t names < "$RUNNER_TEMP/names.txt"
+          if [ "${#names[@]}" -eq 0 ]; then
+            echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
+            exit 1
+          fi
+          uv run mutmut run --max-children 2 "${names[@]}" || true
+
+      - name: Count exactly the mutants that were selected
+        if: steps.select.outputs.mutants != '0'
+        run: >-
+          uv run python .github/scripts/mutmut_adapter.py counters
+          --names "$RUNNER_TEMP/names.txt"
+          --stats-out mutants/change-stats.json
+          --survivors-out mutants/change-survivors.json
+
+      - name: Restore the committed pyproject.toml
+        # The per-run selection is generated configuration for mutmut alone. The
+        # score step reads the change from git again, and would count the rewrite
+        # as a file the pull request changed.
+        if: steps.select.outputs.mutants != '0'
+        run: git checkout -- pyproject.toml
+
+      - name: Score the change, with its survivors by node
+        if: steps.select.outputs.mutants != '0'
+        run: |
+          set +e
+          uv run beadloom mutation --changed-since "$BASE" \
+            --stats mutants/change-stats.json \
+            --survivors mutants/change-survivors.json \
+            --tool "mutmut 3.7" \
+            --min-score 0.88 > "$RUNNER_TEMP/score.txt"
+          code=$?
+          cat "$RUNNER_TEMP/score.txt"
+          cat "$RUNNER_TEMP/score.txt" >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Read what the run judged
+        if: always() && steps.select.outputs.mutants != '0' && steps.select.outcome == 'success'
+        run: |
+          uv run python .github/scripts/mutmut_adapter.py judge \
+            --names "$RUNNER_TEMP/names.txt" \
+            --stats mutants/change-stats.json > "$RUNNER_TEMP/verdict.txt"
+          cat "$RUNNER_TEMP/verdict.txt"
+          grep -qx "verdict=judged" "$RUNNER_TEMP/verdict.txt"
+
+      - name: State the time against the budget
+        if: always()
+        run: |
+          elapsed=$(( $(date +%s) - STARTED ))
+          line="The job took ${elapsed} s from its first step; the budget is ${BUDGET_SECONDS} s on ubuntu-latest."
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$BUDGET_SECONDS" ]; then
+            echo "::warning::per-change mutation took ${elapsed} s, over its ${BUDGET_SECONDS} s budget"
+          fi
+
+      - name: Keep the population, the counters and the survivors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-per-change-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/plan.json
+            ${{ runner.temp }}/names.txt
+            mutants/change-stats.json
+            mutants/change-survivors.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  mutation-sample:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
     outputs:
       verdict: ${{ steps.judged.outputs.verdict }}
       detail: ${{ steps.judged.outputs.detail }}
+    env:
+      SAMPLE_SIZE: ${{ inputs.size || '150' }}
+      SAMPLE_SEED: ${{ inputs.seed }}
     steps:
+      - name: Start the clock
+        run: echo "STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
 
       - name: Install uv
@@ -250,133 +265,45 @@ jobs:
         run: uv python install 3.13
 
       - name: Install dependencies
-        # `mutation` is the extra that carries the runner. It is deliberately
-        # absent from `dev` and from `all`, so no other leg installs it.
         run: >-
           uv sync --extra dev --extra languages --extra tui --extra watch
           --extra graphql --extra mutation
 
-      - name: Build the index the copied room reads
-        # mutmut copies `.beadloom/` into `mutants/` and runs the pool there.
-        # The index database is gitignored, so without this step the copy would
-        # carry a graph and no index, and the pool's tests would fail in a room
-        # they pass in — which aborts the run at the stats phase rather than
-        # scoring anything.
+      - name: Build the index the survivors are placed by
         run: uv run beadloom reindex
 
-      # TWO RUNS, TWO VERDICTS, and the order is what makes both readable.
-      # `mutmut export-cicd-stats` recomputes over every mutant that HAS a
-      # result, so exporting between the runs gives one file about the rules
-      # slice alone and a second about the whole declared scope. One run and one
-      # aggregate floor would dissolve the guard S3 measured: with the six file
-      # targets pinned at their measured 77.0%, an aggregate floor of 0.89 lets
-      # `graph/rules/` fall from 96.2% to 94.1% before anything trips.
-      #
-      # `mutmut run` exits non-zero whenever a mutant survives, which is a normal
-      # outcome and not this job's verdict. The verdict is the scoring step, over
-      # the counters the run leaves behind.
-      - name: Run the mutants of the rules slice
-        run: >-
-          uv run mutmut run --max-children 2
-          'beadloom.graph.rules.*'
-          || true
-
-      - name: Export the rules slice's counters
+      - name: Draw the sample
+        id: sample
         run: |
-          uv run mutmut export-cicd-stats
-          cp -f mutants/mutmut-cicd-stats.json mutants/rules-cicd-stats.json
+          seed="${SAMPLE_SEED:-$(date -u +%G-W%V)}"
+          uv run python .github/scripts/mutmut_adapter.py sample \
+            --size "$SAMPLE_SIZE" \
+            --seed "$seed" \
+            --names-out "$RUNNER_TEMP/sample-names.txt" \
+            --github-output "$GITHUB_OUTPUT"
 
-      - name: Run the mutants of the remaining declared targets
+      - name: Run the sampled mutants
+        run: |
+          mapfile -t names < "$RUNNER_TEMP/sample-names.txt"
+          if [ "${#names[@]}" -eq 0 ]; then
+            echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
+            exit 1
+          fi
+          uv run mutmut run --max-children 2 "${names[@]}" || true
+
+      - name: Count exactly the mutants that were sampled
         run: >-
-          uv run mutmut run --max-children 2
-          'beadloom.application.active_table.row_ids.*'
-          'beadloom.application.active_table.staging.*'
-          'beadloom.application.guards.shell_targets.*'
-          'beadloom.application.guards.surface.*'
-          'beadloom.application.waves.derivation.*'
-          'beadloom.application.waves.landing.*'
-          'beadloom.doc_sync.doc_quality.*'
-          'beadloom.doc_sync.doc_shape.*'
-          'beadloom.doc_sync.tables.*'
-          'beadloom.onboarding.role_duties.*'
-          'beadloom.services.bd_seam.answers.*'
-          'beadloom.services.bd_seam.assumptions.*'
-          'beadloom.services.bd_seam.creation.*'
-          'beadloom.services.bd_seam.invocations.*'
-          || true
+          uv run python .github/scripts/mutmut_adapter.py counters
+          --names "$RUNNER_TEMP/sample-names.txt"
+          --stats-out mutants/sample-stats.json
+          --survivors-out mutants/sample-survivors.json
 
-      - name: Export the counters of the whole declared scope
-        run: uv run mutmut export-cicd-stats
-
-      - name: Score the rules slice
-        # 0.94, RECALIBRATED IN THE ROOM AND NOT LOWERED TO FIT: the slice scores
-        # 95.56% on `ubuntu-latest` and 96.19% on macOS, and this job only ever
-        # runs on the former. S3's 0.95 was set to leave ~1.2 points of headroom
-        # under a number taken in the other room, and left 0.56 — 22 mutants.
-        # 0.94 leaves 1.56 points, or 62 mutants, which is what the original
-        # comment meant by "a handful of new survivors in a legitimately-changed
-        # rule".
-        #
-        # `--only` is honest here and was not honest before: this run genuinely
-        # covered one target, and the next step judges the other thirteen.
+      - name: Score the sample over the whole declared scope
+        env:
+          POPULATION: ${{ steps.sample.outputs.population }}
         run: >-
           uv run beadloom mutation
-          --stats mutants/rules-cicd-stats.json
-          --target src/beadloom/graph/rules/
-          --only src/beadloom/graph/rules/
-          --tool "mutmut 3.7"
-          --min-score 0.94
-
-      - name: Score the whole declared scope
-        # `if: always()` so a breach of the slice floor above still leaves this
-        # verdict on the record. A job that stops at its first red reports less
-        # than it measured.
-        if: always()
-        # EVERY DECLARED TARGET IS NAMED HERE and no `--only` narrows it.
-        # `--only` prints the targets a run did not cover as "not judged by this
-        # run" instead of as `mutation-target-unmeasured`, so a subset in the
-        # step that is supposed to judge everything suppresses the finding at the
-        # only place that raises it — which is what it did for `doc_quality.py`
-        # and `doc_shape.py` from S3 until 2026-09-04.
-        # `tests/test_mutation_ci_job.py` derives this list from
-        # `.beadloom/flow.yml` and fails when the two differ.
-        #
-        # THE FLOOR IS 0.88 AND IT IS COMPOSED FROM THREE MEASUREMENTS, which
-        # is said because it is weaker than a single one. mutmut's CI/CD stats
-        # file holds one set of counters for the whole run rather than one per
-        # file, so this number is a property of the scope and is re-derived
-        # whenever the scope changes.
-        #
-        #   the six file targets   77.03%  (1 711 mutants, 1 314 killed, 4
-        #                                   timeout, 393 survived, 0 with no
-        #                                   covering test; 9 min 34 s, six
-        #                                   workers, Darwin arm64, CPython 3.13.7)
-        #   graph/rules/           95.56%  (measured on this runner, 2026-09-04)
-        #   the seven S5 cores     83.64%  (764 mutants, 639 killed, 125
-        #                                   survived, 0 unrun; 36 min 35 s, same
-        #                                   machine, 2026-09-08)
-        #   together              ~89.23%  (5 768 of 6 464)
-        #
-        # RE-DERIVED 2026-09-08 AND IT DOES NOT MOVE, which is a decision and not
-        # an omission. The aggregate falls from 89.98% to 89.23% because the
-        # seven score below the scope's mean, so 0.88 keeps 1.23 points of
-        # headroom where it had 2.00 — 79 mutants, against the 62 the rules floor
-        # above was called adequate at. Two of the three components are macOS
-        # numbers applied to a floor enforced on `ubuntu-latest`; drop both by
-        # the 0.63 points the rules slice actually fell between those rooms and
-        # the aggregate is 88.99%, still above the floor with 63 mutants to
-        # spare. The floor survives its own worst case, so it stays.
-        #
-        # WHAT THIS FLOOR DOES NOT GUARD, stated so it is not read as tighter
-        # than it is: at 0.88 the six could fall from 77.0% to 72.4% before
-        # anything trips, because they are 1 711 of 6 464, and the seven could
-        # fall from 83.6% to 73.2% — each figure assuming the other components
-        # hold, since one set of counters cannot attribute a loss to a file. Per-target floors need per-target counters,
-        # which this runner's export does not write. The rules slice has its own
-        # floor in the step above and does not depend on this one.
-        run: >-
-          uv run beadloom mutation
-          --stats mutants/mutmut-cicd-stats.json
+          --stats mutants/sample-stats.json
           --target src/beadloom/application/active_table/row_ids.py
           --target src/beadloom/application/active_table/staging.py
           --target src/beadloom/application/guards/shell_targets.py
@@ -392,163 +319,96 @@ jobs:
           --target src/beadloom/services/bd_seam/assumptions.py
           --target src/beadloom/services/bd_seam/creation.py
           --target src/beadloom/services/bd_seam/invocations.py
+          --sample-of "$POPULATION"
+          --survivors mutants/sample-survivors.json
           --tool "mutmut 3.7"
           --min-score 0.88
 
       - name: Read what the run judged
-        # THE GREEN SHAPE OF SILENCE, detected from the counters rather than from
-        # a status. Two facts make this necessary and neither is visible to
-        # `if: failure()`: the runner's invocations carry `|| true`, so one that
-        # dies immediately exits 0, and `export-cicd-stats` is CUMULATIVE over
-        # every mutant that has a result, so the whole-scope export still carries
-        # the rules slice when the second invocation produced nothing.
-        #
-        # The comparison is therefore between the two exports of this same run.
-        # The whole-scope population must exceed the rules-slice population it
-        # contains — 7 187 against 3 989 when both invocations work — and no
-        # number is authored here, so a scope change moves both sides together.
-        #
-        # `if: always()` because the interesting cases are the ones where an
-        # earlier step went red. `total` is the key mutmut 3.7 writes for the
-        # population (`__main__.py:1177-1191`), and a file it declined to write
-        # is read as an absence rather than as a zero.
         id: judged
         if: always()
+        run: >-
+          uv run python .github/scripts/mutmut_adapter.py judge
+          --names "$RUNNER_TEMP/sample-names.txt"
+          --stats mutants/sample-stats.json
+          >> "$GITHUB_OUTPUT"
+
+      - name: State the time
+        if: always()
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import pathlib
+          elapsed=$(( $(date +%s) - STARTED ))
+          line="The job took ${elapsed} s for a sample of ${SAMPLE_SIZE}."
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
 
-
-          def counters(name):
-              """The counters a run exported, or None if it exported none."""
-              path = pathlib.Path("mutants") / name
-              if not path.is_file():
-                  return None
-              try:
-                  data = json.loads(path.read_text(encoding="utf-8"))
-              except (OSError, ValueError):
-                  return None
-              return data if isinstance(data, dict) else None
-
-
-          def population(data):
-              """The mutant total, and None when the export does not carry one."""
-              if data is None:
-                  return None
-              value = data.get("total")
-              return value if isinstance(value, int) else None
-
-
-          rules = counters("rules-cicd-stats.json")
-          whole = counters("mutmut-cicd-stats.json")
-          rules_total = population(rules)
-          whole_total = population(whole)
-
-          reasons = []
-          if whole is None:
-              reasons.append(
-                  "the whole-scope counters were never exported, so this run "
-                  "judged nothing at all"
-              )
-          elif whole_total is None:
-              reasons.append("the whole-scope export carries no mutant total")
-          elif whole_total == 0:
-              reasons.append("the whole-scope export counts 0 mutants")
-          elif rules_total is None:
-              reasons.append(
-                  "the rules-slice counters were never exported, so the two runs "
-                  "cannot be told apart and the score may cover one of them"
-              )
-          elif whole_total <= rules_total:
-              reasons.append(
-                  f"the second run added no mutants to the first: the whole scope "
-                  f"counts {whole_total} and the rules slice alone counts "
-                  f"{rules_total}, so thirteen declared targets went unjudged "
-                  f"while every step exited 0"
-              )
-          if whole is not None and whole.get("check_was_interrupted_by_user"):
-              reasons.append(
-                  "the run was interrupted, so its counters cover part of the "
-                  "population and the score is a ratio over the part"
-              )
-
-          print("verdict=" + ("silent" if reasons else "judged"))
-          print(
-              "detail="
-              + (
-                  "; ".join(reasons)
-                  if reasons
-                  else f"{whole_total} mutants scored, {rules_total} of them the "
-                  f"rules slice"
-              )
-          )
-          PY
-
-      - name: Keep the counters and the surviving mutants
+      - name: Keep the sample, the counters and the survivors
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-${{ github.run_id }}
+          name: mutation-sample-${{ github.run_id }}
           path: |
-            mutants/mutmut-cicd-stats.json
-            mutants/rules-cicd-stats.json
+            ${{ runner.temp }}/sample-names.txt
+            mutants/sample-stats.json
+            mutants/sample-survivors.json
             mutants/**/*.meta
+          if-no-files-found: ignore
           retention-days: 14
 
   # THE ANNOUNCEMENT. A separate job rather than a final step, for two reasons
-  # that are both about what it can still do when the first job cannot.
+  # that are both about what it can still do when the sample job cannot.
   #
-  #   A step cannot speak for a job that was killed. `timeout-minutes: 340` and
-  #   the `concurrency` block above both END the job; a step guarded by
+  #   A step cannot speak for a job that was killed. `timeout-minutes` and the
+  #   `concurrency` block above both END the job; a step guarded by
   #   `if: always()` is not guaranteed to run through either. A dependent job
-  #   reads `needs.mutation.result` as `failure` or `cancelled` and runs anyway,
-  #   which covers the two shapes where the run reports the least.
+  #   reads `needs.mutation-sample.result` as `failure` or `cancelled` and runs
+  #   anyway, which covers the two shapes where the run reports the least.
   #
   #   And `issues: write` stays off the job that executes mutated code. The
   #   runner imports `mutants/src/beadloom`, whose bodies were rewritten by a
   #   generator; the smallest job that needs the token is the one that should
   #   carry it. The file's top-level grant stays `contents: read`.
+  #
+  # A pull request's run is not announced here: its red is on the pull request.
   announce:
-    needs: mutation
-    if: always()
+    needs: mutation-sample
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       issues: write
     steps:
-      - name: Say it where it is seen, once per outage and not once per night
+      - name: Say it where it is seen, once per outage and not once per week
         # NINE IDENTICAL ISSUES ARE THE SAME SILENCE IN A LOUDER FORM, so there
         # is one issue and it is found by LABEL. The label survives a retitling,
         # where a marker in the title does not, and `gh label create --force` is
         # idempotent — the label need not exist before the first failure. While
-        # an issue carrying it is open, each further night adds a comment naming
-        # that night's cause and its run; the comment count is then the length of
-        # the outage, which nine separate issues would have stated as nine.
+        # an issue carrying it is open, each further week adds a comment naming
+        # that week's cause and its run; the comment count is then the length of
+        # the outage.
         #
         # The owner is @-mentioned rather than assigned: a mention notifies
         # whether or not they watch all activity, and an invalid assignee would
         # fail this step under `set -e` and take the announcement with it.
         #
-        # A run that judges its scope CLOSES the open issue instead of staying
+        # A run that judges its sample CLOSES the open issue instead of staying
         # quiet. A watch issue left open after the thing it watches recovered is
         # a second silence, of the kind that gets muted.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
-          WATCH_LABEL: mutation-nightly
-          WATCH_TITLE: "Mutation nightly: no verdict"
-          RESULT: ${{ needs.mutation.result }}
-          VERDICT: ${{ needs.mutation.outputs.verdict }}
-          DETAIL: ${{ needs.mutation.outputs.detail }}
+          WATCH_LABEL: mutation-weekly
+          WATCH_TITLE: "Mutation weekly sample: no verdict"
+          RESULT: ${{ needs.mutation-sample.result }}
+          VERDICT: ${{ needs.mutation-sample.outputs.verdict }}
+          DETAIL: ${{ needs.mutation-sample.outputs.detail }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
           gh label create "$WATCH_LABEL" -R "$REPO" --force \
             --color "B60205" \
-            --description "The nightly mutation run reached no verdict"
+            --description "The weekly mutation sample reached no verdict"
 
           number="$(gh issue list -R "$REPO" --state open \
             --label "$WATCH_LABEL" --limit 50 --json number \
@@ -557,10 +417,10 @@ jobs:
           if [ "$RESULT" = "success" ] && [ "$VERDICT" = "judged" ]; then
             if [ -n "$number" ]; then
               gh issue comment "$number" -R "$REPO" --body \
-                "The nightly reached a verdict again: ${DETAIL:-no detail}. Run: $RUN_URL"
+                "The weekly sample reached a verdict again: ${DETAIL:-no detail}. Run: $RUN_URL"
               gh issue close "$number" -R "$REPO" --reason completed
             fi
-            echo "the nightly judged its declared scope; nothing to announce"
+            echo "the weekly sample judged every mutant it drew; nothing to announce"
             exit 0
           fi
 
@@ -571,15 +431,15 @@ jobs:
           fi
 
           body="$(printf '%s\n' \
-            "@$OWNER — the nightly mutation run reached no verdict." \
+            "@$OWNER — the weekly mutation sample reached no verdict, or one under its floor." \
             "" \
             "- **Job result:** \`$RESULT\`" \
             "- **What the counters say:** $cause" \
             "- **Run:** $RUN_URL" \
             "" \
-            "This issue is the one place the nightly speaks through: while it is" \
-            "open, each further failed night adds a comment here instead of a new" \
-            "issue, and the first run that judges the declared scope closes it.")"
+            "This issue is the one place the weekly sample speaks through: while it" \
+            "is open, each further failed week adds a comment here instead of a new" \
+            "issue, and the first run that judges its sample closes it.")"
 
           if [ -n "$number" ]; then
             gh issue comment "$number" -R "$REPO" --body "$body"

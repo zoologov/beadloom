@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_guards_config.py``;
+Moved out of ``tests/integration/application/guards/test_guards_config.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,9 +8,9 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import yaml
+
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestNothingRoutesOnAnEvent:
@@ -26,7 +26,7 @@ class TestNothingRoutesOnAnEvent:
     def test_the_spec_declares_no_on_key_in_its_schema_example(self) -> None:
         """Parsed, not grepped: the prose says the words "no ``on:`` key"."""
         spec_path = (
-            Path(__file__).resolve().parents[3]
+            REPO_ROOT
             / "docs"
             / "domains"
             / "application"

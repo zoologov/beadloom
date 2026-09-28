@@ -20,8 +20,8 @@ a list of the two writers we happen to have:
   copy;
 - and the package is asserted to hold exactly one definition of it.
 
-`tests/test_init_branches_that_reach_the_bootstrap.py` derives the same commit
-point for a different question — which branches of `init` reach a writer — and
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py` derives
+the same commit point for a different question — which branches of `init` reach a writer — and
 is the module to read next; this one asks what a writer must DO once reached.
 
 The last class here is the smaller finding in the same major, made checkable:
@@ -235,8 +235,8 @@ class TestTheWriterScanReportsAThirdWriter:
     day one arrived — the equality case only fails if the new writer is found —
     and nothing established that it can. That is the same gap one level down as
     the one this epic keeps meeting, and it is closed the way
-    `tests/test_init_branches_that_reach_the_bootstrap.py` closes it for a fourth
-    branch of `init`: by mutants of the real shape, read by the real scan.
+    `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+    closes it for a fourth branch of `init`: by mutants of the real shape, read by the real scan.
 
     The synthetic modules are written into a directory of their own, so what the
     scan says about each one is a difference that module makes and nothing else.
@@ -277,7 +277,8 @@ class TestTheWriterScanReportsAThirdWriter:
         builds the payload and delegates the commit is invisible here. It is not
         invisible to the suite: the helper becomes a seventh direct caller of the
         commit point and fails `test_the_writer_seed_finds_the_writers_the_sweep
-        _found_by_hand` in `tests/test_init_branches_that_reach_the_bootstrap.py`,
+        _found_by_hand` in
+        `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`,
         whose failure text asks whether the new writer creates nodes. The cost of
         the ceiling is therefore a worse question, not a missed one — and if that
         other case is ever relaxed to containment, this one is the record of what

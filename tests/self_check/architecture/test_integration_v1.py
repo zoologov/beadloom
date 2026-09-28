@@ -9,16 +9,17 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from click.testing import CliRunner
 
 from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
+from tests.support.repository_root import REPO_ROOT as _PROJECT_ROOT
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _GRAPH_DIR = _PROJECT_ROOT / ".beadloom" / "_graph"
 

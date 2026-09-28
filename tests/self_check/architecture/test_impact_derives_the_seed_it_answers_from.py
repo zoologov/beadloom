@@ -18,9 +18,7 @@ import pytest
 from beadloom.application.impact import (
     impact_of,
 )
-from tests.test_impact_derives_the_seed_it_answers_from import (
-    THE_COMMIT_POINT,
-)
+from tests.support.impact_seed import THE_COMMIT_POINT
 
 if TYPE_CHECKING:
     from pathlib import Path

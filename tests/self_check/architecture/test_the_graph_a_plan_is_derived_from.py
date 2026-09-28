@@ -8,15 +8,15 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+
 #: This repository's own graph, read the way every reader of that directory
 #: reads it. The pins below are measurements OF this project, so they take it
 #: from the tree rather than from a fixture.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 _GRAPH_DIR = _REPO_ROOT / ".beadloom" / "_graph"

@@ -13,7 +13,7 @@ retires, so each step records the files it laid out and the assertions read that
 rebuild writes and the incremental one loses — the fate of a `tests:` key the old
 reindex overwrote — would pass a scenario that rebuilt once.
 
-The project is built here rather than imported from `tests.adopter_project`, for
+The project is built here rather than imported from `tests.support.adopter_project`, for
 the reason `test_bootstrap_self_consistency_steps` records: the acceptance suite is
 copied out of the repository and run standalone, where the `tests` package is not
 importable.

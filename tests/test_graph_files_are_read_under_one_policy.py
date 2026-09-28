@@ -39,13 +39,13 @@ from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.onboarding.scanner.doc_classify import _existing_graph
 from beadloom.services.cli import main
 from beadloom.services.commands.setup import _graph_file_of_each_node
-from tests.adopter_project import typescript_project
-from tests.package_under_test import PACKAGE_ROOT
+from tests.support.adopter_project import typescript_project
 
 # `init`'s own entry-point-by-mode table, imported rather than restated: BDL-067
 # `.19` derives it from the command's source and checks it there, so a fifth
 # branch or a third mode arrives in the cases below already carrying a run.
-from tests.test_init_one_table_over_every_axis import THE_TABLE, Cell, _answering
+from tests.support.init_table import THE_TABLE, Cell, answering_cell
+from tests.support.package_under_test import PACKAGE_ROOT
 
 #: The package under test, resolved through the import rather than the working
 #: directory (BDL-074 A1) or this file's location (BDL-UX #289).
@@ -503,7 +503,7 @@ class BranchOutcome:
 
 
 def _perform(project_root: Path, cell: Cell, shape: AGraphFileInitMeets) -> BranchOutcome:
-    with _answering(cell, reinit=True):
+    with answering_cell(cell, reinit=True):
         result = CliRunner().invoke(
             main,
             ["init", *cell.entry.argv(cell.mode, project_root), "--project", str(project_root)],

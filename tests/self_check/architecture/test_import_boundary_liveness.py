@@ -1,6 +1,6 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_import_boundary_liveness.py``;
+Moved out of ``tests/integration/graph/rules/test_import_boundary_liveness.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,7 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -19,14 +18,15 @@ from beadloom.graph.rule_engine import (
     load_rules,
 )
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.test_import_boundary_liveness import (
-    _forbidden,
-    _liveness,
+from tests.support.repository_root import REPO_ROOT
+from tests.support.violation_kinds import (
+    forbidden_of,
+    liveness_of,
 )
 
 if TYPE_CHECKING:
     import sqlite3
-
+    from pathlib import Path
 
 
 @pytest.fixture()
@@ -47,7 +47,7 @@ class TestBeadloomsOwnRules:
     """
 
     def _project_rules(self) -> list[ImportBoundaryRule]:
-        root = Path(__file__).resolve().parents[3]
+        root = REPO_ROOT
         rules = load_rules(root / ".beadloom" / "_graph" / "rules.yml")
         return [r for r in rules if isinstance(r, ImportBoundaryRule)]
 
@@ -56,14 +56,14 @@ class TestBeadloomsOwnRules:
 
         db = open_db(tmp_path / "own.db")
         create_schema(db)
-        index_imports(Path(__file__).resolve().parents[3], db)
+        index_imports(REPO_ROOT, db)
         return db
 
     def test_every_import_rule_can_fire(self, tmp_path: Path) -> None:
         """Both globs of every ``forbid_import`` rule match something that exists."""
         conn = self._index(tmp_path)
         try:
-            findings = _liveness(evaluate_import_boundary_rules(conn, self._project_rules()))
+            findings = liveness_of(evaluate_import_boundary_rules(conn, self._project_rules()))
         finally:
             conn.close()
 
@@ -94,7 +94,7 @@ class TestBeadloomsOwnRules:
         """Green because no boundary is crossed — not because nothing was checked."""
         conn = self._index(tmp_path)
         try:
-            violations = _forbidden(evaluate_import_boundary_rules(conn, self._project_rules()))
+            violations = forbidden_of(evaluate_import_boundary_rules(conn, self._project_rules()))
         finally:
             conn.close()
 

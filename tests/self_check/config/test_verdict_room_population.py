@@ -11,6 +11,7 @@ from __future__ import annotations
 from beadloom.application.rooms import (
     take_census,
 )
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestThisRepositorysOwnRoomsStayDerived:
@@ -18,9 +19,8 @@ class TestThisRepositorysOwnRoomsStayDerived:
 
     def test_the_declared_legs_come_from_files_that_exist(self) -> None:
         # Arrange
-        from pathlib import Path as _Path
 
-        repo = _Path(__file__).resolve().parents[3]
+        repo = REPO_ROOT
 
         # Act
         census = take_census(repo)
@@ -41,9 +41,8 @@ class TestThisRepositorysOwnRoomsStayDerived:
         only in the arrangement that anticipated it.
         """
         # Arrange
-        from pathlib import Path as _Path
 
-        repo = _Path(__file__).resolve().parents[3]
+        repo = REPO_ROOT
 
         # Act
         census = take_census(repo)

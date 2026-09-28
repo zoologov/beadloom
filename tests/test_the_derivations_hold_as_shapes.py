@@ -217,8 +217,8 @@ class TestEveryDiskWriteVerbIsExercisedByACase:
             f"{THE_COMMIT_POINT} commits through. That re-answers every `beadloom "
             "impact` target at once: re-run BDL-068 `.2`'s two acceptance targets "
             "at af26750d before accepting the new set, and delete the gap class in "
-            "tests/test_the_seed_decides_what_impact_reports.py rather than "
-            "repairing it."
+            "tests/integration/application/source_derivation/"
+            "test_the_seed_decides_what_impact_reports.py rather than repairing it."
         )
 
     def test_the_widened_vocabulary_does_name_the_commit_point(self) -> None:

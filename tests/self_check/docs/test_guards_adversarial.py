@@ -1,6 +1,6 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_guards_adversarial.py``;
+Moved out of ``tests/integration/application/guards/test_guards_adversarial.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,17 +8,16 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.guards.paths import (
     NATIVE_PATHS,
     POSIX_PATHS,
     WINDOWS_PATHS,
     rejection_reason,
 )
+from tests.support.repository_root import REPO_ROOT
 
 _SPEC = (
-    Path(__file__).resolve().parents[3]
+    REPO_ROOT
     / "docs"
     / "domains"
     / "application"
@@ -39,8 +38,8 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
 
     Two of those clauses are platform-conditional since beadloom-0mdo.33, so the
     rows below assert the answer for THIS platform and
-    :mod:`tests.test_windows_dimension` asserts the other platform's by passing
-    its flavour in. The two files divide the same sentence, they do not repeat it.
+    :mod:`tests.unit.application.guards.test_windows_dimension` asserts the other platform's by
+    passing its flavour in. The two files divide the same sentence, they do not repeat it.
     """
 
     def test_every_clause_of_the_spec_sentence_is_enforced_by_the_code(self) -> None:

@@ -37,58 +37,17 @@ defect `.3` was written for, and this is the assertion that it does not.
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
-from tests.adopter_project import IndexedProjectSpec, indexed_python_project
+from tests.support.adopter_project import IndexedProjectSpec, indexed_python_project
+from tests.support.gate_states import STATES, gate_over_state, names_after
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-#: ``rules.yml`` declaring `.1`'s rule alone, so the four Gate outputs differ in
-#: the state of ONE rule and in nothing else.
-SUMMARY_FACTS_ONLY = (
-    "version: 3\n"
-    "rules:\n"
-    "  - name: graph-summary-facts\n"
-    "    description: a number in a node summary matches what the project computes\n"
-    "    summary_facts: {}\n"
-)
-
-#: The four states, as ``(id, kwargs)``. Each differs from ``agrees`` in one
-#: field, so a difference in the Gate's output has one possible cause.
-STATES: dict[str, IndexedProjectSpec] = {
-    "agrees": {"summaries": {"billing-m0": "The billing module of release v3.7.0"}},
-    "disagrees": {"summaries": {"billing-m0": "The billing module of release v9.9.9"}},
-    "unverifiable": {
-        "version": None,
-        "summaries": {"billing-m0": "The billing module of release v3.7.0"},
-    },
-    "no-claim": {},
-}
-
-
-def _gate(tmp_path: Path, state: str) -> tuple[str, dict[str, object]]:
-    """``beadloom ci`` over one state: the text a reader sees, and the payload.
-
-    The two are taken from separate invocations because they are separate
-    formats, and both are asserted: the annotation stream is what a person
-    reads in CI, the JSON is what a machine consumer reads, and a distinction
-    that survives in one and not the other has still been lost.
-    """
-    spec: IndexedProjectSpec = {"rules": SUMMARY_FACTS_ONLY}
-    spec.update(STATES[state])
-    project = indexed_python_project(tmp_path / state, **spec)
-    runner = CliRunner()
-    human = runner.invoke(main, ["ci", "--project", str(project.root)])
-    machine = runner.invoke(main, ["ci", "--project", str(project.root), "--format", "json"])
-    payload = json.loads(machine.stdout)
-    assert isinstance(payload, dict)
-    return human.stdout, payload
 
 
 def _lint_findings(payload: dict[str, object]) -> list[dict[str, str]]:
@@ -122,7 +81,7 @@ class TestTheFourStatesReachTheReaderAsFourTexts:
         """
         seen: dict[str, str] = {}
         for state in STATES:
-            human, _ = _gate(tmp_path, state)
+            human, _ = gate_over_state(tmp_path, state)
             rule_lines = "\n".join(
                 line for line in human.splitlines() if "graph-summary-facts" in line
             )
@@ -137,13 +96,13 @@ class TestTheFourStatesReachTheReaderAsFourTexts:
         assert collisions == [], f"these states print the same words: {collisions}\n{seen}"
 
     def test_a_clean_check_says_nothing_about_the_rule(self, tmp_path: Path) -> None:
-        human, payload = _gate(tmp_path, "agrees")
+        human, payload = gate_over_state(tmp_path, "agrees")
 
         assert "graph-summary-facts" not in human
         assert _lint_findings(payload) == []
 
     def test_a_contradiction_names_the_node_and_both_values(self, tmp_path: Path) -> None:
-        human, payload = _gate(tmp_path, "disagrees")
+        human, payload = gate_over_state(tmp_path, "disagrees")
 
         assert "billing-m0" in human
         assert "v9.9.9" in human and "3.7.0" in human
@@ -159,7 +118,7 @@ class TestTheFourStatesReachTheReaderAsFourTexts:
         rewording the verdict to "checked nothing for `<node>`" leaves the loose
         form green and turns this one red.
         """
-        human, payload = _gate(tmp_path, "unverifiable")
+        human, payload = gate_over_state(tmp_path, "unverifiable")
 
         assert "could not be verified for `billing-m0`" in human
         why = " ".join(str(f["why"]) for f in _lint_findings(payload))
@@ -173,7 +132,7 @@ class TestTheFourStatesReachTheReaderAsFourTexts:
         can check" are different facts about the project, and a reader who is
         told the wrong one will look in the wrong place.
         """
-        human, payload = _gate(tmp_path, "no-claim")
+        human, payload = gate_over_state(tmp_path, "no-claim")
 
         assert "checked nothing:" in human
         assert "could not be verified for" not in human
@@ -186,7 +145,7 @@ class TestTheFourStatesReachTheReaderAsFourTexts:
         self, tmp_path: Path, state: str
     ) -> None:
         """UNCHECKED IS NOT CLEAN: the Gate must say something, whatever it exits."""
-        human, payload = _gate(tmp_path, state)
+        human, payload = gate_over_state(tmp_path, state)
 
         assert _lint_findings(payload), "the Gate reported no finding at all"
         assert "graph-summary-facts" in human
@@ -201,7 +160,7 @@ class TestTheThreePopulationsStayApartInTheGateLine:
     """``verified`` / ``declared but unverified`` / ``not applicable``, disjoint."""
 
     def _audit_line(self, tmp_path: Path, state: str) -> str:
-        _, payload = _gate(tmp_path, state)
+        _, payload = gate_over_state(tmp_path, state)
         steps = payload["steps"]
         assert isinstance(steps, list)
         for step in steps:
@@ -219,8 +178,8 @@ class TestTheThreePopulationsStayApartInTheGateLine:
     def test_no_fact_is_named_in_two_populations(self, tmp_path: Path) -> None:
         line = self._audit_line(tmp_path, "agrees")
 
-        unverified = _names_after(line, "NOT VERIFIED:")
-        declined = _names_after(line, "NOT APPLICABLE to this project:")
+        unverified = names_after(line, "NOT VERIFIED:")
+        declined = names_after(line, "NOT APPLICABLE to this project:")
 
         assert unverified and declined
         assert unverified.isdisjoint(declined), unverified & declined
@@ -237,25 +196,11 @@ class TestTheThreePopulationsStayApartInTheGateLine:
         resolvable = self._audit_line(tmp_path, "agrees")
         unresolvable = self._audit_line(tmp_path, "unverifiable")
 
-        assert "version" in _names_after(resolvable, "NOT VERIFIED:")
-        assert "version" not in _names_after(resolvable, "NOT APPLICABLE to this project:")
-        assert "version" in _names_after(unresolvable, "NOT APPLICABLE to this project:")
-        assert "version" not in _names_after(unresolvable, "NOT VERIFIED:")
+        assert "version" in names_after(resolvable, "NOT VERIFIED:")
+        assert "version" not in names_after(resolvable, "NOT APPLICABLE to this project:")
+        assert "version" in names_after(unresolvable, "NOT APPLICABLE to this project:")
+        assert "version" not in names_after(unresolvable, "NOT VERIFIED:")
         assert _denominator(resolvable) - _denominator(unresolvable) == 1
-
-
-def _names_after(line: str, marker: str) -> set[str]:
-    """The comma-separated fact names a Gate-line clause lists.
-
-    The clauses are appended in a fixed order, so a clause ends at the next
-    clause's marker or at the parenthetical that closes the line.
-    """
-    if marker not in line:
-        return set()
-    tail = line.split(marker, 1)[1]
-    for stop in (", NOT VERIFIED:", ", NOT APPLICABLE to this project:", " ("):
-        tail = tail.split(stop, 1)[0]
-    return {name.strip() for name in tail.split(",") if name.strip()}
 
 
 def _denominator(line: str) -> int:

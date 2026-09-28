@@ -1,6 +1,7 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_a_layer_the_declaration_names_and_no_node_is_in.py``;
+Moved out of
+``tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -9,7 +10,7 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -21,9 +22,10 @@ from beadloom.graph.rules.layer_declaration import (
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import LayerRule
+from tests.support.repository_root import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 #: The file this bead gives an owner, relative to the project root.
 THE_RULES_FILE = ".beadloom/_graph/rules.yml"

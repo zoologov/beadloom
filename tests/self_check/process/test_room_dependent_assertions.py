@@ -9,7 +9,7 @@ same shape the slice was opened to remove, at the level of the assertion instead
 of the level of the skip.
 
 A run cannot enter another room, so the ROOM is replaced and the suite is asked
-again. `tests/room_simulation.py` does it in `pytest_configure`, before the test
+again. `tests/support/room_simulation.py` does it in `pytest_configure`, before the test
 modules import, so a module holding `from ... import current_room` stands in the
 same room the product does.
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 #: The room the bite test fabricates: inside the sabotage module's OWN declared
 #: legs, which are interpreters nothing can be running. It is not "a room this
@@ -104,7 +104,7 @@ def _run_in_a_room(modules: list[Path], room: str | None, report: Path) -> list[
     is the whole question.
     """
     environment = {"PYTHONPATH": str(REPO_ROOT)}
-    plugin = ["-p", "tests.room_simulation"] if room else []
+    plugin = ["-p", "tests.support.room_simulation"] if room else []
     if room:
         environment["BEADLOOM_SIMULATED_ROOM"] = room
     completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
@@ -279,7 +279,7 @@ class TestTheRoomTheCallerNames:
                 "-m",
                 "pytest",
                 "-p",
-                "tests.room_simulation",
+                "tests.support.room_simulation",
                 str(module),
                 "-p",
                 "no:cacheprovider",

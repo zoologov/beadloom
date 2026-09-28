@@ -13,31 +13,29 @@ from __future__ import annotations
 
 import importlib.util
 import re
-from pathlib import Path
 from typing import Any
 
 import pytest
 from click.testing import CliRunner
 from pytest_bdd import given, scenarios, then, when
 
-import beadloom
 from beadloom.services.commands._root import main
+from tests.support.package_under_test import SHIPPED_FROM
 
 
 def _load_sweep() -> Any:
     """The sweep module, loaded by PATH rather than by ``tests.`` import.
 
     ``test_bead14_s4_binding`` copies this suite out of the repository and runs
-    it from another directory, where a ``tests.`` import does not resolve and the
-    copy fails at COLLECTION — which would redden that test for a reason that has
-    nothing to do with a step binding. `.3` hit the same wall and stated the rule:
-    find the repository from the INSTALLED PACKAGE, not from this file's parents.
+    it from another directory. The copy carries ``tests/support/`` (BDL-074 B1)
+    and not the self-checks, so the sweep is read from the checkout the package
+    under test ships from (``SHIPPED_FROM``), never from this file's parents —
+    the rule `.3` stated when it hit the same wall.
 
     Loading by path rather than copying the sweep in keeps one home for it. A
     second copy of a check about copies would be its own joke.
     """
-    repo_root = Path(beadloom.__file__).resolve().parents[2]
-    module_path = repo_root / "tests" / "self_check" / "config" / "test_package_description.py"
+    module_path = SHIPPED_FROM / "tests" / "self_check" / "config" / "test_package_description.py"
     spec = importlib.util.spec_from_file_location("_beadloom_description_sweep", module_path)
     if spec is None or spec.loader is None:  # pragma: no cover - a broken checkout
         pytest.skip(f"the sweep module is not readable at {module_path}")

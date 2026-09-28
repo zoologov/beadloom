@@ -19,6 +19,7 @@ from beadloom.graph.rule_engine import (
     load_rules,
 )
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
@@ -26,9 +27,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.graph.rules import Violation
-
-
-_REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
 
 
 def _insert_import(

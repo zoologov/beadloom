@@ -1,6 +1,6 @@
 """Self-checks of this repository's agent roles, hooks, tracker and commits (BDL-074 A3).
 
-Moved out of ``tests/test_guard_surface.py``;
+Moved out of ``tests/integration/application/guards/test_guard_surface.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -9,7 +9,6 @@ Everything here asserts on this repository's own tree, so it carries the
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -17,8 +16,7 @@ from beadloom.application.guards.surface import (
     build_surface,
 )
 from beadloom.services.cli import main
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 
 class TestThisRepositoryRunsWhatItShips:

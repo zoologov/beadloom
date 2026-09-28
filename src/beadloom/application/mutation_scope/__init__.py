@@ -34,6 +34,23 @@ owns the ``guards:`` block the same way.
 
 from __future__ import annotations
 
+from beadloom.application.mutation_scope.change import (
+    ChangedFunction,
+    ChangePlan,
+    MutationChangeError,
+    NodeSelection,
+    change_payload,
+    describe_change,
+    diff_since,
+    plan_change,
+)
+from beadloom.application.mutation_scope.sample import (
+    SampleInterval,
+    describe_sample,
+    sample_interval,
+    sample_payload,
+    wilson_interval,
+)
 from beadloom.application.mutation_scope.scope import (
     MUTATION_KEY,
     MUTATION_OUTSIDE_SOURCE,
@@ -41,6 +58,7 @@ from beadloom.application.mutation_scope.scope import (
     MUTATION_ZERO_MUTANTS,
     MutationScopeFinding,
     check_mutation_scope,
+    lies_within,
     load_mutation_targets,
 )
 from beadloom.application.mutation_scope.score import (
@@ -54,6 +72,18 @@ from beadloom.application.mutation_scope.score import (
     read_run_counters,
     report_mutation_score,
 )
+from beadloom.application.mutation_scope.survivors import (
+    Survivor,
+    describe_survivors,
+    read_survivors,
+    survivors_by_node,
+    survivors_payload,
+)
+from beadloom.application.mutation_scope.touched import (
+    TouchedFunctions,
+    changed_lines,
+    touched_functions,
+)
 
 __all__ = [
     "MUTATION_COUNTERS_MISSING",
@@ -63,13 +93,35 @@ __all__ = [
     "MUTATION_TARGET_MISSING",
     "MUTATION_TARGET_UNMEASURED",
     "MUTATION_ZERO_MUTANTS",
+    "ChangePlan",
+    "ChangedFunction",
+    "MutationChangeError",
     "MutationCounters",
     "MutationReport",
     "MutationRun",
     "MutationScopeFinding",
+    "NodeSelection",
+    "SampleInterval",
+    "Survivor",
+    "TouchedFunctions",
+    "change_payload",
+    "changed_lines",
     "check_mutation_scope",
+    "describe_change",
     "describe_room",
+    "describe_sample",
+    "describe_survivors",
+    "diff_since",
+    "lies_within",
     "load_mutation_targets",
+    "plan_change",
     "read_run_counters",
+    "read_survivors",
     "report_mutation_score",
+    "sample_interval",
+    "sample_payload",
+    "survivors_by_node",
+    "survivors_payload",
+    "touched_functions",
+    "wilson_interval",
 ]

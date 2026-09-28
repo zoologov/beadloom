@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tests.test_ci_consolidated_structure import (
+from tests.support.ci_workflows import (
     GH_CI,
     GH_TEMPLATE,
     GL_CI,
     GL_TEMPLATE,
     VERIFY_JOBS,
-    _load,
+    load_yaml,
 )
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ def _derive_required_check_names(ci_path: Path) -> set[str]:
     matrix legs are derived dynamically from the file, so adding python 3.14
     (and the matching context) stays consistent and forgetting one fails.
     """
-    jobs = _load(ci_path)["jobs"]
+    jobs = load_yaml(ci_path)["jobs"]
     assert isinstance(jobs, dict)
 
     names: set[str] = set()
@@ -61,16 +61,16 @@ def _derive_required_check_names(ci_path: Path) -> set[str]:
 
 def test_github_template_mirrors_live_consolidated_jobs() -> None:
     """The vendored GitHub template declares the same consolidated job set."""
-    live = set(_load(GH_CI)["jobs"])  # type: ignore[arg-type]
-    tmpl = set(_load(GH_TEMPLATE)["jobs"])  # type: ignore[arg-type]
+    live = set(load_yaml(GH_CI)["jobs"])  # type: ignore[arg-type]
+    tmpl = set(load_yaml(GH_TEMPLATE)["jobs"])  # type: ignore[arg-type]
     assert {*VERIFY_JOBS, "ai-techwriter"} <= live
     assert {*VERIFY_JOBS, "ai-techwriter"} <= tmpl
 
 
 def test_gitlab_template_mirrors_live_consolidated_stages() -> None:
     """The vendored GitLab template declares the same verify -> docs stages."""
-    assert _load(GL_CI)["stages"] == ["verify", "docs"]
-    assert _load(GL_TEMPLATE)["stages"] == ["verify", "docs"]
+    assert load_yaml(GL_CI)["stages"] == ["verify", "docs"]
+    assert load_yaml(GL_TEMPLATE)["stages"] == ["verify", "docs"]
 
 
 def test_required_contexts_match_ci_yml_check_runs() -> None:

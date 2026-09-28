@@ -1,7 +1,7 @@
 """Boundary guards for the duty check (BDL-068 S4, `beadloom-0mdo.27`).
 
 The two directions and the limit are stated as scenarios in
-`tests/acceptance/features/role_duties.feature`. What is here is the edge each
+`tests/acceptance/onboarding/role-duties/role_duties.feature`. What is here is the edge each
 scenario would make unreadable if it were written as one: a marker that declares
 nothing, a duty text living outside a role file, the population the report must
 name on a clean run, and this repository's own duties.

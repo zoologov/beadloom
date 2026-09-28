@@ -8,8 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from beadloom.application.planning_report import planning_report
 from beadloom.application.work_item_routing import (
     AXES_ROLE,
@@ -27,23 +25,7 @@ from beadloom.onboarding.flow_config import (
 from beadloom.onboarding.role_composer import (
     compose_role,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
-_REPO_ROOT_MARKER = "pyproject.toml"
-
-
-def _repo_root() -> Path:
-    from pathlib import Path as _Path
-
-    here = _Path(__file__).resolve().parent
-    for candidate in (here, *here.parents):
-        if (candidate / _REPO_ROOT_MARKER).is_file():
-            return candidate
-    msg = "the repository root was not found above this test file"
-    raise AssertionError(msg)
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheReportCarriesTheTwoChecksAndTheirPopulation:
@@ -54,7 +36,7 @@ class TestTheReportCarriesTheTwoChecksAndTheirPopulation:
         # Arrange
         from beadloom.application.doc_shape import planning_documents
 
-        root = _repo_root()
+        root = REPO_ROOT
 
         # Act
         report = planning_report(planning_documents(root), project_root=root)
@@ -70,7 +52,7 @@ class TestTheLiveFlowCarriesTheRole:
     """This repository is the reference implementation; its own flow must hold."""
 
     def test_the_live_adapter_equals_its_composition(self) -> None:
-        root = _repo_root()
+        root = REPO_ROOT
         live = (root / ".claude" / "agents" / f"{AXES_ROLE}.md").read_text(
             encoding="utf-8"
         )
@@ -79,7 +61,7 @@ class TestTheLiveFlowCarriesTheRole:
         )
 
     def test_the_live_command_equals_its_composition(self) -> None:
-        root = _repo_root()
+        root = REPO_ROOT
         live = (root / ".claude" / "commands" / "task-init.md").read_text(
             encoding="utf-8"
         )

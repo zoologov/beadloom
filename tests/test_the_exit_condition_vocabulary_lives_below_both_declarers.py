@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import ast
 from datetime import date
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -29,8 +29,12 @@ from beadloom.infrastructure.exit_condition import (
     deadline_passed,
     exit_condition_deadline,
 )
+from tests.support.repository_root import REPO_ROOT
 
-_ONBOARDING = Path(__file__).resolve().parents[1] / "src" / "beadloom" / "onboarding"
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_ONBOARDING = REPO_ROOT / "src" / "beadloom" / "onboarding"
 
 #: The two ``onboarding`` modules that read an exit condition. Named rather than
 #: derived, because the property is about these files and not about the package:

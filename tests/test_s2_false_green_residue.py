@@ -16,7 +16,7 @@ Every gap here was **measured** on a clean-room copy of this repo at
   covered ``forbid_import`` **only**. CLOSED by ``beadloom-mr2l.48``, which
   extended liveness to all nine rule types; the assertions below are kept as
   live regression tests rather than deleted, and
-  ``tests/test_rule_liveness_all_types.py`` owns the per-type pairs.
+  ``tests/integration/graph/rules/test_rule_liveness_all_types.py`` owns the per-type pairs.
 * A ``forbid_import`` ``exempt`` entry written ``from: "*" / to: "*"`` with an
   ``until:`` date already in the past swallowed a real error-severity crossing:
   ``12 rules, 0 violations``, exit 0, and nothing in the output said a crossing
@@ -24,7 +24,8 @@ Every gap here was **measured** on a clean-room copy of this repo at
   is counted on every run, and an ``until:`` leading with an ISO date that has
   passed is a finding while the entry still suppresses something. The
   assertions below are kept as live regression tests;
-  ``tests/test_exit_condition_expiry.py`` owns the grammar and both surfaces.
+  ``tests/integration/infrastructure/exit_condition/test_exit_condition_expiry.py`` owns the
+  grammar and both surfaces.
 * ``sync-check`` reports ``status: ok`` for a pair whose code file — or whose
   doc — no longer exists, because ``_file_hash`` returns ``None`` for a missing
   file and both comparisons are guarded by the truthiness of that hash. Deleting

@@ -8,13 +8,12 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.active_table.table import split_table_row
 from beadloom.doc_sync.tables import cells_of
+from tests.support.repository_root import REPO_ROOT
 
 _PLANNING = (
-    Path(__file__).resolve().parents[3] / ".claude" / "development" / "docs" / "features"
+    REPO_ROOT / ".claude" / "development" / "docs" / "features"
 )
 
 

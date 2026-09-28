@@ -3,8 +3,9 @@
 BDL-067 `.15`, covering `.14`. The measurement this module exists for: **112 tests
 across seven files of this epic were green while the defect `.14` fixed was live on
 two modes.** Every one of them pinned `--mode bootstrap`, and the defect lived in
-`--mode both`. `tests/test_init_branches_that_reach_the_bootstrap.py` read `init`'s
-source and confirmed that the branch took a verdict, which was true and not the
+`--mode both`.
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py` read
+`init`'s source and confirmed that the branch took a verdict, which was true and not the
 question: the verdict was there and it was BLIND, judging an index written before the
 run's last graph file. A syntactic check answers "could this branch report"; only
 running the command answers "does it report".
@@ -70,34 +71,29 @@ from click.testing import CliRunner
 from beadloom.application.gate import lint_step
 from beadloom.onboarding.scanner import init_flow
 from beadloom.services.cli import main
-from tests.adopter_project import typescript_project
 
 # The divergences are the sibling module's, imported rather than re-written: two
 # copies of a sabotage drift, and the point of these cases is that the same
 # divergence is met by every mode and both entry points.
-from tests.test_init_verdict_over_its_own_rules import (
+from tests.support.init_verdict import (
     INIT_FLOW_BINDING,
     THE_ADDED_ORPHAN,
+    THE_BOOTSTRAP_FILE,
     THE_MODES,
+    THE_MODES_THAT_BOOTSTRAP,
     THE_RULE,
-    _a_bootstrap_that_forgets_the_edge,
-    _an_import_that_adds_an_orphan,
-    _lint_strict,
+    UNCLASSIFIABLE_DOCS,
+    a_bootstrap_that_forgets_the_edge,
+    a_project_with_code_and_docs,
+    an_import_that_adds_an_orphan,
+    graph_on_disk,
+    lint_strict,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-#: Documents whose text matches none of `classify_doc`'s patterns, so each falls
-#: through to the `other` branch and is written as a `domain` node in
-#: `imported.yml` — the second writer, and the one `--mode bootstrap` never runs.
-UNCLASSIFIABLE_DOCS = {
-    "payments.md": "# Payments\n\nHow money moves through the shop.\n",
-    "billing.md": "# Billing\n\nWho is charged, and when.\n",
-}
 
-#: The two graph files `init` can write, by the name each writer gives it.
-THE_BOOTSTRAP_FILE = "services.yml"
 THE_IMPORT_FILE = "imported.yml"
 
 
@@ -139,11 +135,6 @@ def _the_modes_the_wizard_offers() -> frozenset[str]:
 #: the same axis and this module already imports from it; two derivations of one
 #: fact are two things that can disagree.
 
-#: The modes that run the bootstrap, and therefore the modes in which `init`
-#: writes `rules.yml` and takes a verdict. Written here and bound to behaviour by
-#: `test_the_modes_that_write_the_bootstrap_file_are_the_ones_declared`, so the
-#: constant cannot quietly fall behind `init_flow`'s `mode in (...)` conditions.
-THE_MODES_THAT_BOOTSTRAP = ("bootstrap", "both")
 
 #: The modes that run `import_docs` — the second writer of `domain` nodes.
 THE_MODES_THAT_IMPORT = ("import", "both")
@@ -192,7 +183,7 @@ THE_FLAG, THE_WIZARD = THE_ENTRY_POINTS
 
 def _the_bootstrap_forgets_the_edge(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both entry points reach the bootstrap through the one `init_flow` binding."""
-    _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+    a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
 
 
 @dataclass(frozen=True)
@@ -220,8 +211,9 @@ class Divergence:
 #: functions that write into `.beadloom/_graph/` and exactly two that create
 #: nodes; those two are the only ones that can leave an unparented domain, so
 #: those two are the ones sabotaged here. The enumeration is checked, not
-#: trusted: `tests/test_init_branches_that_reach_the_bootstrap.py` rediscovers
-#: the six from the source and fails on a seventh.
+#: trusted:
+#: `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+#: rediscovers the six from the source and fails on a seventh.
 THE_DIVERGENCES = (
     Divergence(
         "the bootstrap forgets the edge",
@@ -231,26 +223,11 @@ THE_DIVERGENCES = (
     ),
     Divergence(
         "the import adds an orphan",
-        apply=_an_import_that_adds_an_orphan,
+        apply=an_import_that_adds_an_orphan,
         modes=THE_MODES_THAT_IMPORT,
         orphan_is_named=True,
     ),
 )
-
-
-def _a_project_with_code_and_docs(tmp_path: Path, name: str = "orders-web") -> Path:
-    """A flat `src/index.ts` plus documents the classifier reads as domains.
-
-    Both writers have something to write here, which is what makes one fixture
-    usable for all three modes: `--mode bootstrap` ignores the docs, `--mode
-    import` ignores the code, and `--mode both` writes two graph files.
-    """
-    project = typescript_project(tmp_path / name).root
-    docs = project / "docs"
-    docs.mkdir(parents=True, exist_ok=True)
-    for filename, text in UNCLASSIFIABLE_DOCS.items():
-        (docs / filename).write_text(text, encoding="utf-8")
-    return project
 
 
 def _a_project_whose_skeletons_would_collide(tmp_path: Path) -> Path:
@@ -342,28 +319,8 @@ def _init(
         )
 
 
-def _graph_on_disk(project_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Every node and edge under `.beadloom/_graph/`, whichever file wrote it.
-
-    Read off the files rather than off a writer's return value: the finding this
-    module covers is that one writer's post-condition said nothing about the
-    other's output, and a fixture that asked one writer what it wrote would
-    repeat that mistake.
-    """
-    graph_dir = project_root / ".beadloom" / "_graph"
-    nodes: list[dict[str, Any]] = []
-    edges: list[dict[str, Any]] = []
-    for path in sorted(graph_dir.glob("*.yml")):
-        if path.name == "rules.yml":
-            continue
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        nodes.extend(data.get("nodes") or [])
-        edges.extend(data.get("edges") or [])
-    return nodes, edges
-
-
 def _unparented_domains(project_root: Path) -> list[str]:
-    nodes, edges = _graph_on_disk(project_root)
+    nodes, edges = graph_on_disk(project_root)
     parented = {edge["src"] for edge in edges if edge["kind"] == "part_of"}
     return [
         node["ref_id"]
@@ -467,7 +424,7 @@ class TestTheParametrisationCoversWhatTheCommandOffers:
         written-down claim it would go stale the way the branch count in this
         epic's first four waves did.
         """
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         _init(project, THE_FLAG, mode)
 
@@ -478,7 +435,7 @@ class TestTheParametrisationCoversWhatTheCommandOffers:
     def test_the_modes_that_write_the_import_file_are_the_ones_declared(
         self, tmp_path: Path, mode: str
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         _init(project, THE_FLAG, mode)
 
@@ -499,7 +456,7 @@ class TestEveryModeAgreesWithTheLintTheAdopterRunsNext:
     def test_the_run_reports_success(
         self, tmp_path: Path, entry: InitEntryPoint, mode: str
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         result = _init(project, entry, mode)
 
@@ -514,12 +471,11 @@ class TestEveryModeAgreesWithTheLintTheAdopterRunsNext:
         the honest answer is red: what must never happen is one of the two
         reporting clean while the other does not.
         """
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         init_rc = _init(project, entry, mode).exit_code
 
-        assert (init_rc != 0) == (_lint_strict(project) != 0)
-
+        assert (init_rc != 0) == (lint_strict(project) != 0)
 
 
 THE_COMBINATIONS_THAT_BOOTSTRAP = [
@@ -552,14 +508,14 @@ class TestEveryDomainAnyWriterWroteCarriesAParent:
     def test_no_domain_is_left_without_a_part_of_edge(
         self, tmp_path: Path, entry: InitEntryPoint, mode: str
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         _init(project, entry, mode)
 
         assert _unparented_domains(project) == []
         # Anti-vacuity: a graph with no domain satisfies the claim above without
         # either writer having been exercised.
-        nodes, _ = _graph_on_disk(project)
+        nodes, _ = graph_on_disk(project)
         assert [n for n in nodes if n.get("kind") == "domain"], nodes
 
 
@@ -579,8 +535,8 @@ class TestTheWizardAndTheFlagAgree:
     """
 
     def _two_runs(self, tmp_path: Path, mode: str) -> tuple[Any, Path, Any, Path]:
-        by_flag = _a_project_with_code_and_docs(tmp_path / "flag")
-        by_wizard = _a_project_with_code_and_docs(tmp_path / "wizard")
+        by_flag = a_project_with_code_and_docs(tmp_path / "flag")
+        by_wizard = a_project_with_code_and_docs(tmp_path / "wizard")
         return (
             _init(by_flag, THE_FLAG, mode),
             by_flag,
@@ -608,7 +564,7 @@ class TestTheWizardAndTheFlagAgree:
         """
         _, by_flag, _, by_wizard = self._two_runs(tmp_path, mode)
 
-        assert (_lint_strict(by_flag) != 0) == (_lint_strict(by_wizard) != 0)
+        assert (lint_strict(by_flag) != 0) == (lint_strict(by_wizard) != 0)
 
     def test_they_leave_the_same_domains_unparented(
         self, tmp_path: Path, mode: str
@@ -759,9 +715,9 @@ class TestTheWizardAndTheFlagAgreeOverAGraphTheRulesReject:
     def test_they_report_the_same_verdict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
     ) -> None:
-        by_flag = _a_project_with_code_and_docs(tmp_path / "flag")
-        by_wizard = _a_project_with_code_and_docs(tmp_path / "wizard")
-        _an_import_that_adds_an_orphan(monkeypatch)
+        by_flag = a_project_with_code_and_docs(tmp_path / "flag")
+        by_wizard = a_project_with_code_and_docs(tmp_path / "wizard")
+        an_import_that_adds_an_orphan(monkeypatch)
 
         flag_result = _init(by_flag, THE_FLAG, mode)
         wizard_result = _init(by_wizard, THE_WIZARD, mode)
@@ -775,15 +731,15 @@ class TestTheWizardAndTheFlagAgreeOverAGraphTheRulesReject:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
     ) -> None:
         """Agreement between the two is not enough if both are blind together."""
-        by_flag = _a_project_with_code_and_docs(tmp_path / "flag")
-        by_wizard = _a_project_with_code_and_docs(tmp_path / "wizard")
-        _an_import_that_adds_an_orphan(monkeypatch)
+        by_flag = a_project_with_code_and_docs(tmp_path / "flag")
+        by_wizard = a_project_with_code_and_docs(tmp_path / "wizard")
+        an_import_that_adds_an_orphan(monkeypatch)
 
         flag_rc = _init(by_flag, THE_FLAG, mode).exit_code
         wizard_rc = _init(by_wizard, THE_WIZARD, mode).exit_code
 
-        assert (flag_rc != 0) == (_lint_strict(by_flag) != 0)
-        assert (wizard_rc != 0) == (_lint_strict(by_wizard) != 0)
+        assert (flag_rc != 0) == (lint_strict(by_flag) != 0)
+        assert (wizard_rc != 0) == (lint_strict(by_wizard) != 0)
 
 
 @pytest.mark.parametrize(
@@ -807,12 +763,12 @@ class TestAViolationTheRunIntroducedIsReportedInEveryModeItCanReach:
         mode: str,
         divergence: Divergence,
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         divergence.apply(monkeypatch)
 
         init_rc = _init(project, entry, mode).exit_code
 
-        assert (init_rc != 0) == (_lint_strict(project) != 0)
+        assert (init_rc != 0) == (lint_strict(project) != 0)
 
 
 @pytest.mark.parametrize(
@@ -837,7 +793,7 @@ class TestARunThatWroteItsOwnRulesReportsTheGraphThatFailsThem:
         mode: str,
         divergence: Divergence,
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         divergence.apply(monkeypatch)
 
         result = _init(project, entry, mode)
@@ -853,7 +809,7 @@ class TestARunThatWroteItsOwnRulesReportsTheGraphThatFailsThem:
         divergence: Divergence,
     ) -> None:
         """Not "something is wrong" — the string the adopter will read again."""
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         divergence.apply(monkeypatch)
 
         result = _init(project, entry, mode)
@@ -882,7 +838,7 @@ class TestTheReportNamesTheNodeTheSecondWriterLeftUnparented:
         mode: str,
         divergence: Divergence,
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         divergence.apply(monkeypatch)
 
         result = _init(project, entry, mode)
@@ -909,7 +865,7 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
     """
 
     def test_an_import_only_run_writes_no_rules_file(self, tmp_path: Path) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         result = _init(project, THE_FLAG, "import")
 
@@ -942,11 +898,11 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
         into an import-only run, fails a case instead of quietly re-opening
         BDL-UX #192 on the mode that has no bootstrap.
         """
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
 
         _init(project, THE_FLAG, "import")
 
-        nodes, _ = _graph_on_disk(project)
+        nodes, _ = graph_on_disk(project)
         assert [n for n in nodes if n.get("kind") == "service"] == [], nodes
         assert sorted(_unparented_domains(project)) == sorted(
             node["ref_id"] for node in nodes if node.get("kind") == "domain"
@@ -962,7 +918,7 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
         from beadloom.application.reindex import incremental_reindex
         from beadloom.graph.linter import lint
 
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         _init(project, THE_FLAG, "import")
 
         result = lint(project, reindex=incremental_reindex)
@@ -974,8 +930,8 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
 class TestWhatABlindVerdictWouldReport:
     """Anti-vacuity for this whole module, and the ceiling of the syntactic one.
 
-    `tests/test_init_branches_that_reach_the_bootstrap.py` asserts that a verdict
-    call follows every branch that writes a graph file. `--yes --mode both`
+    `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+    asserts that a verdict call follows every branch that writes a graph file. `--yes --mode both`
     satisfied that and was wrong anyway, because the verdict reads the INDEX:
     `gate.lint_step` does not re-index, by design, so a graph file written after
     the run's reindex is invisible to it.
@@ -996,7 +952,7 @@ class TestWhatABlindVerdictWouldReport:
     def test_a_graph_file_written_after_the_reindex_is_invisible_to_the_verdict(
         self, tmp_path: Path
     ) -> None:
-        project = _a_project_with_code_and_docs(tmp_path)
+        project = a_project_with_code_and_docs(tmp_path)
         assert _init(project, THE_FLAG, "both").exit_code == 0
         imported = project / ".beadloom" / "_graph" / THE_IMPORT_FILE
         data = yaml.safe_load(imported.read_text(encoding="utf-8"))
@@ -1016,7 +972,7 @@ class TestWhatABlindVerdictWouldReport:
             "characterises is gone — retire it rather than weakening it: "
             f"{judged_from_the_index.summary}"
         )
-        assert _lint_strict(project) != 0, (
+        assert lint_strict(project) != 0, (
             "the tree the verdict called clean is not red, so this fixture no "
             "longer distinguishes a stale index from a fresh one and the "
             "agreement cases above would hold vacuously"

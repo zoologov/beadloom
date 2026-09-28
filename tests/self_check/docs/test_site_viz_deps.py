@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+
 _SITE = _REPO_ROOT / "site"
 _THEME = _SITE / ".vitepress" / "theme"
 

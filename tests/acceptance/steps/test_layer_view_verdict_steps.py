@@ -20,8 +20,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.application.architecture_view import build_architecture_view_data
 from beadloom.graph.linter import lint
 from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE
-
-from .tiered_project import TIERS, graph_with_peer_containers, write_tiered_project
+from tests.support.tiered_project import TIERS, graph_with_peer_containers, write_tiered_project
 
 if TYPE_CHECKING:
     from pathlib import Path

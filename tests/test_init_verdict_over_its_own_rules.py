@@ -8,7 +8,7 @@ no longer contradicts the `domain-needs-parent` rule it writes one step later.
 That is exactly why the divergence here is **constructed rather than awaited**. A
 test that waited for the bootstrap to forget an edge again would pass today for the
 reason `.1` landed and would say nothing about what `init` does when a *future*
-divergence appears. So `_a_bootstrap_that_forgets_the_edge` wraps the real
+divergence appears. So `a_bootstrap_that_forgets_the_edge` wraps the real
 `bootstrap_project`, lets it write the real graph and the real rules, and then
 strips the `part_of` edges back out of `services.yml` — re-creating the exact shape
 #192 was reported against (`Graph: 2 nodes, 0 edges`, then `domain-needs-parent` at
@@ -29,17 +29,14 @@ verdict that worked by recognising Beadloom's own tree would fail these.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.cli import main
-from beadloom.services.commands import setup as init_command
 
 #: The line the wizard prints to withdraw its completion claim, imported rather
 #: than spelled again here: a reword should not leave this module asserting the
@@ -47,60 +44,29 @@ from beadloom.services.commands import setup as init_command
 from beadloom.services.commands.setup import (
     WITHDRAWN_COMPLETION_CLAIM as THE_WITHDRAWAL,
 )
-from tests.adopter_project import typescript_project
+from tests.support.adopter_project import typescript_project
+from tests.support.init_verdict import (
+    A_RULES_FILE_THE_ADOPTER_WROTE,
+    INIT_FLOW_BINDING,
+    PACKAGE_BINDING,
+    THE_ADDED_ORPHAN,
+    THE_ADOPTERS_RULE,
+    THE_BRANCHES,
+    THE_BUG_REPORT_REQUEST,
+    THE_FAILURE_REPORT,
+    THE_GATE_FORMATS,
+    THE_MODES,
+    THE_RULE,
+    InitBranch,
+    a_bootstrap_that_forgets_the_edge,
+    an_import_that_adds_an_orphan,
+    lint_strict,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-#: The rule `generate_rules` writes for every graph that holds a domain, and the
-#: rule BDL-UX #192's reporter read out of `lint --strict` after a green `init`.
-THE_RULE = "domain-needs-parent"
-
-#: The two BINDINGS of `bootstrap_project`, which are not the branches and must
-#: not be counted as though they were. `init --yes` and the default wizard both
-#: run inside `init_flow`, which binds the function at import time, so ONE patch
-#: sabotages both; `init --bootstrap` imports it from the package inside the
-#: command body and has to be sabotaged separately.
-INIT_FLOW_BINDING = "beadloom.onboarding.scanner.init_flow.bootstrap_project"
-PACKAGE_BINDING = "beadloom.onboarding.bootstrap_project"
-
-
-@dataclass(frozen=True)
-class InitBranch:
-    """One branch of `init` that writes a bootstrap graph, and how to reach it.
-
-    A branch is a path through the `init` command body; a binding is a name
-    `bootstrap_project` is reachable under. Two branches can share one binding,
-    and two of these three do — which is why this type carries both and why the
-    parametrisation is over branches.
-    """
-
-    #: How the branch is spelled on the command line, for the test id.
-    name: str
-    #: The arguments that select it. Empty for the default wizard.
-    argv: tuple[str, ...]
-    #: The name of `bootstrap_project` this branch calls.
-    binding: str
-    #: The `if` conditions in `init`'s body the branch sits under, as the source
-    #: spells them, outermost first. Empty for the fallthrough wizard. This is
-    #: what `tests/test_init_branches_that_reach_the_bootstrap.py` matches the
-    #: tuple below against the command's own source, so a fourth branch fails a
-    #: test instead of merely going untested (BDL-067 `.7`).
-    guard: tuple[str, ...]
-    #: The wizard's answers, in order: init mode, then the graph review.
-    prompts: tuple[str, ...] = field(default_factory=tuple)
-
-
-#: Every branch of `init` that reaches `bootstrap_project`. Three branches, two
-#: bindings. A fourth branch belongs in this tuple on the day it is written.
-THE_BRANCHES = (
-    InitBranch(
-        "--yes", ("--yes", "--mode", "bootstrap"), INIT_FLOW_BINDING, ("non_interactive",)
-    ),
-    InitBranch("--bootstrap", ("--bootstrap",), PACKAGE_BINDING, ("bootstrap",)),
-    InitBranch("wizard", (), INIT_FLOW_BINDING, (), prompts=("bootstrap", "yes")),
-)
 
 #: The same branch as `wizard`, answering the graph review with `edit` — the one
 #: bootstrap path `init` deliberately takes no verdict on. It is not in
@@ -113,27 +79,6 @@ THE_WIZARD_THAT_EDITS = InitBranch(
 BRANCH_IDS = [branch.name for branch in THE_BRANCHES]
 
 
-def _the_modes_the_flag_offers() -> tuple[str, ...]:
-    """The `--mode` values, read off the command's own `click.Choice`.
-
-    Not written out, for the reason `THE_BRANCHES` is checked against `init`'s
-    source in `tests/test_init_branches_that_reach_the_bootstrap.py`: a mode
-    added to the flag and not to a tuple here would be a mode with no case, and
-    a case that is not written is a case that does not fail.
-
-    It lives in this module rather than in `tests/test_init_agrees_across_its_
-    modes.py`, which is where BDL-067 `.15` wrote it, because `.17` needs the
-    same axis here and that module already imports from this one. One derivation
-    of one fact, in the module the other imports.
-    """
-    option = next(p for p in init_command.init.params if p.name == "init_mode")
-    choices = getattr(option.type, "choices", ())
-    return tuple(str(choice) for choice in choices)
-
-
-#: Every mode `init` accepts, derived once at import.
-THE_MODES = _the_modes_the_flag_offers()
-
 #: A `rules.yml` the loader refuses: no `version` key. This is what a hand edit
 #: leaves behind, and `bootstrap_project` never rewrites a rules file that is
 #: already there, so `init` can meet it.
@@ -142,31 +87,12 @@ UNLOADABLE_RULES = "rules:\n  - name: hand-edited\n    require:\n      match: {}
 #: The part of the loader's complaint an adopter needs to see.
 THE_PARSE_ERROR = "missing required 'version' field"
 
-#: A `rules.yml` the ADOPTER wrote: valid, loadable, and failed by any graph the
-#: bootstrap writes. `generate_rules` dropped `service-needs-parent` for exactly
-#: the reason it fails here — the root service node has no parent by definition
-#: — so a project carrying a hand-written rule of that name is a project whose
-#: red verdict is its own. This is the review's reproduction of BDL-067 `.9`,
-#: moved into the suite.
-THE_ADOPTERS_RULE = "service-needs-parent"
-A_RULES_FILE_THE_ADOPTER_WROTE = """\
-version: 1
-rules:
-  - name: service-needs-parent
-    description: Every service must have a part_of edge
-    require:
-      for:
-        kind: service
-      has_edge_to: {}
-      edge_kind: part_of
-"""
 
 #: The sentence that is true only when the bootstrap authored `rules.yml`, and
 #: the request that follows it. Both are asserted present in one class and absent
 #: in another, so the fix has to DISTINGUISH the two cases rather than delete the
 #: sentence.
 THE_BLAME = "defect in Beadloom's bootstrap"
-THE_BUG_REPORT_REQUEST = "please report it"
 
 #: What the adopter is told instead: the file was already there, so the rule is
 #: theirs. The path is named because it is the file they have to open.
@@ -177,8 +103,6 @@ THE_FILE_WAS_ALREADY_THERE = "did not write"
 #: the verdict, and therefore printed even when the verdict is red.
 THE_COMPLETION_CLAIM = "Initialization complete!"
 
-#: The first word of the failure report, used to place the withdrawal line.
-THE_FAILURE_REPORT = "Error:"
 
 #: The branches that can meet a `rules.yml` this command did not write. `--yes`
 #: is not one of them and cannot be made into one: `non_interactive_init` returns
@@ -211,41 +135,6 @@ def _a_rules_file_the_adopter_wrote(project_root: Path) -> None:
     (graph_dir / "rules.yml").write_text(
         A_RULES_FILE_THE_ADOPTER_WROTE, encoding="utf-8"
     )
-
-
-def _strip_part_of_edges(project_root: Path) -> None:
-    """Remove every `part_of` edge from the graph the bootstrap just wrote."""
-    services = project_root / ".beadloom" / "_graph" / "services.yml"
-    data = yaml.safe_load(services.read_text(encoding="utf-8"))
-    kept = [e for e in data.get("edges", []) if e.get("kind") != "part_of"]
-    if kept:
-        data["edges"] = kept
-    else:
-        # `bootstrap_project` writes no `edges:` key at all when there are none,
-        # so the sabotaged file keeps the shape #192 was reported against.
-        data.pop("edges", None)
-    services.write_text(
-        yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
-    )
-
-
-def _a_bootstrap_that_forgets_the_edge(monkeypatch: pytest.MonkeyPatch, binding: str) -> None:
-    """Patch one binding of `bootstrap_project` into a self-contradicting one.
-
-    The rules half is untouched: the real `generate_rules` still writes
-    `domain-needs-parent`. Only the graph half loses the edge that rule requires.
-    """
-    real = bootstrap_project
-
-    def forgetful(project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        result = real(project_root, **kwargs)
-        _strip_part_of_edges(project_root)
-        result["edges"] = [e for e in result["edges"] if e["kind"] != "part_of"]
-        result["edges_generated"] = len(result["edges"])
-        return result
-
-    monkeypatch.setattr(binding, forgetful)
 
 
 def _a_bootstrap_whose_rules_file_will_not_load(
@@ -307,12 +196,6 @@ def _the_branch_reported(result: Any) -> Any:
     return result
 
 
-def _lint_strict(project_root: Path) -> int:
-    return CliRunner().invoke(
-        main, ["lint", "--strict", "--project", str(project_root)]
-    ).exit_code
-
-
 @pytest.mark.parametrize("branch", THE_BRANCHES, ids=BRANCH_IDS)
 class TestInitOverAGraphThatFailsItsOwnRules:
     """The graph on disk contradicts the rules on disk, in every init branch."""
@@ -321,7 +204,7 @@ class TestInitOverAGraphThatFailsItsOwnRules:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
         result = _init(project.root, branch)
 
@@ -332,7 +215,7 @@ class TestInitOverAGraphThatFailsItsOwnRules:
     ) -> None:
         """Not "something is wrong" — the string the adopter will read again."""
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
         result = _init(project.root, branch)
 
@@ -343,18 +226,18 @@ class TestInitOverAGraphThatFailsItsOwnRules:
     ) -> None:
         """The claim is agreement with the Gate, not merely a non-zero number."""
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
         init_rc = _init(project.root, branch).exit_code
 
-        assert (init_rc != 0) == (_lint_strict(project.root) != 0)
+        assert (init_rc != 0) == (lint_strict(project.root) != 0)
 
     def test_the_graph_is_still_on_disk_to_be_repaired(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
         """A non-zero rc reports the defect; it does not withdraw the scaffold."""
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
         _the_branch_reported(_init(project.root, branch))
 
@@ -391,7 +274,7 @@ class TestInitOverAGraphThatPassesItsOwnRules:
 
         init_rc = _init(project.root, branch).exit_code
 
-        assert (init_rc != 0) == (_lint_strict(project.root) != 0)
+        assert (init_rc != 0) == (lint_strict(project.root) != 0)
 
 
 @pytest.mark.parametrize("branch", THE_BRANCHES, ids=BRANCH_IDS)
@@ -470,7 +353,7 @@ class TestTheOneBootstrapPathThatTakesNoVerdict:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
 
         result = _init(project.root, THE_WIZARD_THAT_EDITS)
 
@@ -484,7 +367,7 @@ class TestTheOneBootstrapPathThatTakesNoVerdict:
     ) -> None:
         """The carve-out is the answer, not the wizard: `yes` still gets a verdict."""
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
 
         result = _init(project.root, THE_BRANCHES[-1])
 
@@ -590,7 +473,7 @@ class TestInitOverRulesTheBootstrapItselfWrote:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
         result = _the_branch_reported(_init(project.root, branch))
 
@@ -628,7 +511,7 @@ class TestEveryBranchWithdrawsTheClaimItHasAlreadyMade:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> Any:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
         return _the_branch_reported(_init(project.root, branch))
 
     def test_the_branch_claims_something_before_the_withdrawal(
@@ -722,7 +605,7 @@ class TestTheWizardsOwnCompletionClaimIsTheOneItWithdraws:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
 
         result = _the_branch_reported(_init(project.root, THE_BRANCHES[-1]))
 
@@ -818,43 +701,11 @@ AN_UNCLASSIFIABLE_DOCUMENT = "# Payments\n\nHow money moves through the shop.\n"
 THE_IMPORT_FILE = ".beadloom/_graph/imported.yml"
 THE_BOOTSTRAP_FILE = ".beadloom/_graph/services.yml"
 
-#: The orphan the import sabotage adds. Added rather than carved out of what
-#: `import_docs` writes, so the instrument says the same thing before and after
-#: the post-condition landed.
-THE_ADDED_ORPHAN = "ledger"
-
 
 def _docs_the_classifier_cannot_place(project_root: Path) -> None:
     docs = project_root / "docs"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "payments.md").write_text(AN_UNCLASSIFIABLE_DOCUMENT, encoding="utf-8")
-
-
-def _an_import_that_adds_an_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Append one parentless `domain` to `imported.yml` after the real import.
-
-    `init` writes `domain-needs-parent` at error severity in the same run, so a
-    verdict that reads everything `init` wrote must exit 1. The reindex used to
-    sit inside the bootstrap block, ahead of the file this writes, so the verdict
-    judged an index that predated it and reported clean.
-    """
-    from beadloom.onboarding.scanner.doc_classify import import_docs as real
-
-    def adds_an_orphan(project_root: Path, docs_dir: Path) -> list[dict[str, str]]:
-        results = real(project_root, docs_dir)
-        imported = project_root / ".beadloom" / "_graph" / "imported.yml"
-        data = yaml.safe_load(imported.read_text(encoding="utf-8")) if imported.exists() else {}
-        data = data or {"nodes": []}
-        data.setdefault("nodes", []).append(
-            {"ref_id": THE_ADDED_ORPHAN, "kind": "domain", "summary": "No parent."}
-        )
-        imported.write_text(
-            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
-        return results
-
-    monkeypatch.setattr("beadloom.onboarding.scanner.init_flow.import_docs", adds_an_orphan)
 
 
 def _the_nodes_the_index_holds(project_root: Path) -> set[str]:
@@ -892,7 +743,7 @@ class TestTheVerdictSeesEveryGraphFileTheCommandWrote:
     ) -> None:
         project = typescript_project(tmp_path / "orders-web").root
         _docs_the_classifier_cannot_place(project)
-        _an_import_that_adds_an_orphan(monkeypatch)
+        an_import_that_adds_an_orphan(monkeypatch)
 
         result = _init_over_code_and_docs(project)
 
@@ -905,12 +756,12 @@ class TestTheVerdictSeesEveryGraphFileTheCommandWrote:
         """The adopter's next command, which is where the disagreement showed."""
         project = typescript_project(tmp_path / "orders-web").root
         _docs_the_classifier_cannot_place(project)
-        _an_import_that_adds_an_orphan(monkeypatch)
+        an_import_that_adds_an_orphan(monkeypatch)
 
         verdict = _init_over_code_and_docs(project).exit_code
 
         assert verdict != 0
-        assert _lint_strict(project) != 0
+        assert lint_strict(project) != 0
 
     def test_an_unsabotaged_run_over_code_and_docs_is_green_both_ways(
         self, tmp_path: Path
@@ -923,7 +774,7 @@ class TestTheVerdictSeesEveryGraphFileTheCommandWrote:
 
         assert result.exit_code == 0, result.output
         assert "Imported:" in result.output, result.output
-        assert _lint_strict(project) == 0
+        assert lint_strict(project) == 0
 
 
 class TestEveryRunThatWroteAGraphFileIsJudged:
@@ -1048,7 +899,7 @@ class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
     ) -> None:
         project = typescript_project(tmp_path / "orders-web").root
         _docs_the_classifier_cannot_place(project)
-        _an_import_that_adds_an_orphan(monkeypatch)
+        an_import_that_adds_an_orphan(monkeypatch)
 
         result = _the_branch_reported(_init_over_code_and_docs(project))
 
@@ -1063,7 +914,7 @@ class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
     ) -> None:
         """The other file, so the claim is about attribution and not a constant."""
         project = typescript_project(tmp_path / "orders-web").root
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
 
         result = _the_branch_reported(
             _init(project, THE_BRANCHES[0])
@@ -1072,24 +923,6 @@ class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
         named = [line for line in result.output.splitlines() if THE_RULE in line]
         assert named, result.output
         assert any(THE_BOOTSTRAP_FILE in line for line in named), named
-
-
-def _the_formats_ci_offers() -> tuple[str, ...]:
-    """The `--format` values, read off `ci`'s own `click.Choice`.
-
-    Derived for the reason `THE_MODES` is: a fourth renderer added to the flag
-    and not to a list here would be a renderer with no case, and `init`'s promise
-    about what `beadloom ci` prints is a promise about whichever one runs.
-    """
-    from beadloom.services.commands.federation import ci
-
-    option = next(p for p in ci.params if p.name == "fmt")
-    choices = getattr(option.type, "choices", ())
-    return tuple(str(choice) for choice in choices)
-
-
-#: Every rendering `beadloom ci` can produce, derived once at import.
-THE_GATE_FORMATS = _the_formats_ci_offers()
 
 
 class TestTheReportPromisesWhatEveryRendererPrints:
@@ -1121,7 +954,7 @@ class TestTheReportPromisesWhatEveryRendererPrints:
 
     def _the_report(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
         return project.root, _the_branch_reported(_init(project.root, THE_BRANCHES[0]))
 
     def test_the_format_axis_is_not_empty(self) -> None:

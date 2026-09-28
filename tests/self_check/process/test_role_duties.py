@@ -8,11 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.onboarding.role_duties import duty_report
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 
 def test_every_duty_this_repository_declares_reaches_the_roles_it_names() -> None:

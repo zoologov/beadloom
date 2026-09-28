@@ -1,6 +1,6 @@
 """Self-checks of this repository's agent roles, hooks, tracker and commits (BDL-074 A3).
 
-Moved out of ``tests/test_guard_hook_adapter.py``;
+Moved out of ``tests/integration/onboarding/guard_hooks/test_guard_hook_adapter.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -10,16 +10,15 @@ from __future__ import annotations
 
 import json
 import stat
-from pathlib import Path
 
 from beadloom.onboarding.guard_hooks import (
     GUARD_HOOK_RELPATH,
     SETTINGS_RELPATH,
     scaffold_guard_hooks,
 )
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
 #: This repository, used where the claim under test is about the dogfood itself.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class TestThisRepositoryRunsWhatItShips:

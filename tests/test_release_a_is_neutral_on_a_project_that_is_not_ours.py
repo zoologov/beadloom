@@ -14,7 +14,7 @@ proof about this repository's four tags, and the epic's whole premise is that
 the declaration is the adopter's.
 
 **How "before" is reconstructed.** Not from a recorded baseline — the pre-change
-code path is transcribed in `tests/the_lint_path_before_release_a.py` and run in
+code path is transcribed in `tests/support/the_lint_path_before_release_a.py` and run in
 the same process against the same index, so both sides always see the same
 project. The index is built ONCE per fixture and neither side reindexes, which
 is what holds the lineage constant: a carried-forward and a fresh index disagree
@@ -35,19 +35,19 @@ from beadloom.graph.rules import evaluators
 from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.services.cli import main
-from tests.acceptance.steps.tiered_project import (
+from tests.support.the_lint_path_before_release_a import (
+    ClosureTags,
+    comparable,
+    decisions,
+    layer_findings_before_release_a,
+)
+from tests.support.tiered_project import (
     OUR_LAYER_PREFIX,
     TIERS,
     Edge,
     Node,
     graph_with,
     write_tiered_project,
-)
-from tests.the_lint_path_before_release_a import (
-    ClosureTags,
-    comparable,
-    decisions,
-    layer_findings_before_release_a,
 )
 
 if TYPE_CHECKING:

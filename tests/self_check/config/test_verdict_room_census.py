@@ -1,6 +1,6 @@
 """Self-checks of this repository's manifest, CI workflows and configuration (BDL-074 A3).
 
-Moved out of ``tests/test_verdict_room_census.py``;
+Moved out of ``tests/unit/application/rooms/test_verdict_room_census.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -8,9 +8,8 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.application.rooms import take_census
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestTheCensusOverARealDeclaration:
@@ -26,7 +25,7 @@ class TestTheCensusOverARealDeclaration:
         accounted for as entered or not in either room, and an entered leg
         carries no reason, which is the half a developer machine cannot reach.
         """
-        census = take_census(Path(__file__).resolve().parents[3])
+        census = take_census(REPO_ROOT)
         assert census.comparisons != ()
         assert len(census.entered) + len(census.not_entered) == len(census.comparisons)
         assert census.not_entered, "no run is inside every leg this project declares"

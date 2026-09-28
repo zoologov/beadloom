@@ -8,8 +8,6 @@ Everything here asserts on this repository's own tree, so it carries the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from beadloom.onboarding.flow_config import (
     load_flow_config,
 )
@@ -17,8 +15,7 @@ from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
     compose_all_roles,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.support.repository_root import REPO_ROOT
 
 
 class TestFlowConfigLoad:
@@ -31,7 +28,9 @@ class TestFlowConfigLoad:
 
 class TestDriftGuard:
     def test_live_claude_agents_reproduce_from_compose(self) -> None:
-        composed = compose_all_roles(load_flow_config(REPO_ROOT))
+        # With this repository's project layer: that is what setup-agentic-flow
+        # writes here, and what the live adapters must reproduce.
+        composed = compose_all_roles(load_flow_config(REPO_ROOT), project_root=REPO_ROOT)
         for role in ROLE_NAMES:
             live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
                 encoding="utf-8"

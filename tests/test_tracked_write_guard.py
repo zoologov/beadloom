@@ -22,7 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.tracked_write_guard import TrackedWriteGuard, tracked_files
+from tests.support import tracked_write_guard
+from tests.support.tracked_write_guard import TrackedWriteGuard, tracked_files
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -257,7 +258,8 @@ class TestTheGuardFailsTheRunItGuards:
         # Arrange — a real suite, outside this one, guarding the temp repo
         suite = tmp_path / "suite"
         suite.mkdir()
-        guard_dir = str(Path(__file__).resolve().parent)
+        # The directory the guard module lives in, asked of the module itself.
+        guard_dir = str(Path(tracked_write_guard.__file__).resolve().parent)
         (suite / "conftest.py").write_text(
             _SUBPROCESS_CONFTEST.format(guard_dir=guard_dir, repo=str(git_repo)),
             encoding="utf-8",

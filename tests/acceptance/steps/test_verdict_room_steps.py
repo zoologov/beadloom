@@ -19,8 +19,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.cli import main
-
-from .room_judgement import (
+from tests.support.room_judgement import (
     legs_entered_that_do_not_match,
     legs_not_entered_naming_no_difference,
 )

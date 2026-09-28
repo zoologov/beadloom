@@ -14,7 +14,7 @@ assertions read that declaration.
 names only its own routes is indistinguishable from a correct one when the sibling's
 route never reached the index, so the index is asked for it first.
 
-The fixtures are built here rather than imported from `tests.adopter_project`, for
+The fixtures are built here rather than imported from `tests.support.adopter_project`, for
 the reason `test_bootstrap_self_consistency_steps` records: the acceptance suite is
 copied out of the repository and run standalone, where the `tests` package is not
 importable.

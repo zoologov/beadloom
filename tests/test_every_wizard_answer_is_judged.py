@@ -12,8 +12,8 @@ overwrite/bootstrap/CANCEL exited 0, and `beadloom lint --strict` on the same
 tree exited 1. Answering `yes` on that same tree exited 1 with the full report.
 
 WHY THE OTHER INSTRUMENTS DID NOT SEE IT, which is the finding rather than a
-detail. `tests/test_init_branches_that_reach_the_bootstrap.py` reads `init`'s
-source and walks what runs after each writing call, stopping at `Return` and
+detail. `tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`
+reads `init`'s source and walks what runs after each writing call, stopping at `Return` and
 `Raise`; the cancelled path left through `sys.exit(0)`, which is neither, so the
 walk stepped over it and found the verdict below. The identical defect read
 guarded when the terminator was `sys.exit` and unguarded when it was `return`.
@@ -46,8 +46,8 @@ from beadloom.services.cli import main
 from beadloom.services.commands.setup import (
     WITHDRAWN_COMPLETION_CLAIM as THE_WITHDRAWAL,
 )
-from tests.adopter_project import typescript_project
-from tests.test_init_verdict_over_its_own_rules import (
+from tests.support.adopter_project import typescript_project
+from tests.support.init_verdict import (
     A_RULES_FILE_THE_ADOPTER_WROTE,
     THE_ADOPTERS_RULE,
 )

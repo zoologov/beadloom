@@ -1,14 +1,14 @@
 """BDL-072 — the CLASS: no test mutmut selects may walk the package it mutates.
 
-`beadloom-ey4m` moved four files onto `tests/package_under_test.py` and locked
+`beadloom-ey4m` moved four files onto `tests/support/package_under_test.py` and locked
 those four by name. This file locks the class they belong to, because the defect
 is a shape and not a file list: a test that derives a scan root from its own
 `__file__` and walks it for Python sources reads `mutants/src/beadloom` when
 mutmut runs it, so it reports mutmut's generated bodies as the package's own.
 One such test scored nine nightlies at 0 of 7 187 mutants (BDL-UX #289), and a
 SECOND instance landed six days later in a file nobody had swept
-(`tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`, comment on
-`beadloom-ey4m`, 2026-09-12).
+(`tests/unit/application/source_derivation/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`,
+comment on `beadloom-ey4m`, 2026-09-12).
 
 **What the guard keys on, and why it resolves paths rather than matching text.**
 Three of the four moved files built their root through an intermediate
@@ -36,244 +36,18 @@ files of the day passes on the day a fifth file arrives.
 
 from __future__ import annotations
 
-import ast
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from tests.package_under_test import PACKAGE_ROOT
-
-_TESTS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _TESTS_DIR.parent
-
-#: Calls that re-express a path instead of reading what it points at. Named so
-#: the collector below can say what it passes over: without this, every
-#: ``path.relative_to(SRC)`` in the suite is reported as a read of the package.
-_PATH_ARITHMETIC = frozenset(
-    {
-        "Path",
-        "as_posix",
-        "fspath",
-        "is_relative_to",
-        "joinpath",
-        "relative_to",
-        "resolve",
-        "str",
-        "with_suffix",
-    }
+from tests.support import repository_root
+from tests.support.package_under_test import PACKAGE_ROOT
+from tests.support.package_walks import (
+    SELF_SCANNING_TESTS_OUTSIDE_THE_POOL,
+    Scan,
+    python_source_scans,
 )
-
-#: Test files that read the package from a root built from their own location,
-#: with what each one reads. None of them is selected for the mutation pool,
-#: which is the only reason each is survivable: mutmut never runs them, so they
-#: never see `mutants/src`. Adding one to the pool without moving it onto
-#: ``tests/package_under_test.py`` fails the sweep above it.
-SELF_SCANNING_TESTS_OUTSIDE_THE_POOL: dict[str, str] = {
-    "tests/self_check/config/test_decode_handlers.py": (
-        "hands src/beadloom and tests/ to ruff under this repository's own rule selection"
-    ),
-    "tests/self_check/config/test_mutation_runner_scope.py": (
-        "walks src/ for modules importing the runner"
-    ),
-    "tests/test_ci_windows_dimension.py": (
-        "reads one shipped workflow template under onboarding/templates/"
-    ),
-    "tests/test_decode_handlers.py": "walks src/beadloom for decode call sites",
-    "tests/test_guards_boundary_escapes.py": (
-        "reads three named modules of the guards seam and sabotages copies of them"
-    ),
-    "tests/test_locale_independent_io.py": "walks src/beadloom for ambient-encoding sites",
-    "tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py": (
-        "walks src/beadloom/graph/rules for the one part_of ancestry walk — the "
-        "second instance of this shape, found 2026-09-12 on beadloom-ey4m"
-    ),
-    "tests/test_s2_seam_crosscutting.py": "reads src/beadloom/tui for seam crossings",
-    "tests/test_the_stale_pair_count_is_derived_in_one_place.py": (
-        "walks src/beadloom for stale-pair derivations"
-    ),
-    "tests/test_tui_no_raw_sqlite.py": "walks src/beadloom/tui for raw sqlite3 use",
-}
-
-
-@dataclass(frozen=True)
-class Scan:
-    """One walk for Python sources over a root derived from a test's own file."""
-
-    root: str
-    line: int
-    pattern: str
-    reaches: str
-
-
-def python_source_scans(source: str, *, at: Path, package_root: Path) -> tuple[Scan, ...]:
-    """Every walk in *source* that reads the package under test's own modules.
-
-    *at* is where the file claims to live, so a synthetic file can be judged the
-    same way a real one is, and *package_root* is the package it would reach
-    from there. A walk enters the population when its root resolves from
-    ``__file__`` and its pattern names Python sources; it is reported when that
-    root is inside the package, or contains the package and is walked
-    recursively.
-    """
-    tree = ast.parse(source)
-    roots = _roots_derived_from_own_file(tree, at=at)
-    found: list[Scan] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        scan = _walked_here(node, roots, package_root) or _handed_on_here(
-            node, roots, package_root
-        )
-        if scan is not None:
-            found.append(scan)
-    return tuple(found)
-
-
-def _walked_here(node: ast.Call, roots: dict[str, Path], package_root: Path) -> Scan | None:
-    """*node* as a ``glob``/``rglob`` for Python sources over a derived root."""
-    if not (isinstance(node.func, ast.Attribute) and node.func.attr in {"glob", "rglob"}):
-        return None
-    root = _resolve(node.func.value, roots)
-    if root is None or not node.args:
-        return None
-    pattern = node.args[0]
-    if not (isinstance(pattern, ast.Constant) and isinstance(pattern.value, str)):
-        return None
-    if not pattern.value.endswith(".py"):
-        return None
-    recursive = node.func.attr == "rglob" or "**" in pattern.value
-    reaches = _reach(root, package_root, recursive=recursive)
-    if reaches is None:
-        return None
-    return Scan(
-        root=_name_of(node.func.value),
-        line=node.lineno,
-        pattern=pattern.value,
-        reaches=reaches,
-    )
-
-
-def _handed_on_here(node: ast.Call, roots: dict[str, Path], package_root: Path) -> Scan | None:
-    """*node* as a call handed a derived root that IS the package's own tree.
-
-    The walk need not be spelled in the test. The second instance of this defect
-    passes its root to ``beadloom.application.source_derivation.source_tree``'s
-    ``python_files``, so a collector reading only ``rglob`` calls reports the
-    file that the bead's own comment named as clean.
-
-    Only a root that is the package, a directory inside it, or the ``src``
-    directory holding it counts here. A repository root handed to a call is
-    every `--project` argument in this suite and says nothing about modules.
-
-    Path arithmetic is not a read: ``path.relative_to(SRC)`` and ``str(SRC)``
-    re-express the root and open nothing, so the names in
-    :data:`_PATH_ARITHMETIC` are passed over. Every other callee is treated as a
-    reader, because the reading happens wherever the root ends up and a list of
-    approved reader names is the thing this whole bead distrusts.
-    """
-    if _name_of(node.func).rpartition(".")[2] in _PATH_ARITHMETIC:
-        return None
-    for argument in node.args:
-        root = _resolve(argument, roots)
-        if root is None:
-            continue
-        if root == package_root or package_root in root.parents or root == package_root.parent:
-            return Scan(
-                root=_name_of(argument),
-                line=node.lineno,
-                pattern=f"handed to {_name_of(node.func)}()",
-                reaches="inside the package under test",
-            )
-    return None
-
-
-def _reach(root: Path, package_root: Path, *, recursive: bool) -> str | None:
-    """How *root* reaches *package_root*, or ``None`` when it does not."""
-    if root == package_root or package_root in root.parents:
-        return "inside the package under test"
-    if recursive and root in package_root.parents:
-        return "a tree containing the package under test, walked recursively"
-    return None
-
-
-def _roots_derived_from_own_file(tree: ast.Module, *, at: Path) -> dict[str, Path]:
-    """Each assigned name whose value resolves to a path built from ``__file__``.
-
-    Followed transitively to a fixpoint: three of the four files this bead's
-    predecessor moved bound an intermediate repository root first, and a reader
-    of the single statement would have reported them clean.
-    """
-    bound: dict[str, list[ast.expr]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    bound.setdefault(target.id, []).append(node.value)
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.value is not None
-        ):
-            bound.setdefault(node.target.id, []).append(node.value)
-
-    resolved: dict[str, Path] = {}
-    changed = True
-    while changed:
-        changed = False
-        for name, values in bound.items():
-            if name in resolved:
-                continue
-            for value in values:
-                path = _resolve(value, resolved, own_file=at)
-                if path is not None:
-                    resolved[name] = path
-                    changed = True
-                    break
-    return resolved
-
-
-def _resolve(
-    node: ast.expr, roots: dict[str, Path], *, own_file: Path | None = None
-) -> Path | None:
-    """*node* as the path it builds, or ``None`` when it builds none from here."""
-    if isinstance(node, ast.Name):
-        if node.id == "__file__":
-            return own_file
-        return roots.get(node.id)
-    if isinstance(node, ast.Attribute) and node.attr == "parent":
-        base = _resolve(node.value, roots, own_file=own_file)
-        return base.parent if base is not None else None
-    if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute):
-        if node.value.attr != "parents" or not isinstance(node.slice, ast.Constant):
-            return None
-        base = _resolve(node.value.value, roots, own_file=own_file)
-        index = node.slice.value
-        if base is None or not isinstance(index, int):
-            return None
-        return base.parents[index] if index < len(base.parents) else None
-    if isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "resolve":
-            return _resolve(node.func.value, roots, own_file=own_file)
-        if isinstance(node.func, ast.Name) and node.func.id == "Path" and node.args:
-            return _resolve(node.args[0], roots, own_file=own_file)
-        return None
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-        base = _resolve(node.left, roots, own_file=own_file)
-        if base is None or not isinstance(node.right, ast.Constant):
-            return None
-        part = node.right.value
-        return base / part if isinstance(part, str) else None
-    return None
-
-
-def _name_of(node: ast.expr) -> str:
-    """The name a walked expression is spelled with, for the failure message."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return f"{_name_of(node.value)}.{node.attr}"
-    return ast.dump(node)
+from tests.support.repository_root import REPO_ROOT
 
 
 @pytest.fixture
@@ -285,7 +59,11 @@ def suite(tmp_path: Path) -> Path:
     """
     (tmp_path / "src" / "beadloom").mkdir(parents=True)
     (tmp_path / "src" / "beadloom" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+    support = tmp_path / "tests" / "support"
+    support.mkdir(parents=True)
+    helper = Path(repository_root.__file__)
+    (support / helper.name).write_text(helper.read_text(encoding="utf-8"), encoding="utf-8")
     return tmp_path
 
 
@@ -358,8 +136,8 @@ class TestANewlyAddedTestWithTheShapeIsCaught:
     ) -> None:
         """The shape of the SECOND instance, which spells no walk of its own.
 
-        `tests/test_one_part_of_ancestry_walk_serves_the_rule_engine.py` hands
-        its root to `beadloom.application.source_derivation.source_tree`'s
+        `tests/unit/application/source_derivation/test_one_part_of_ancestry_walk_serves_the_rule_engine.py`
+        hands its root to `beadloom.application.source_derivation.source_tree`'s
         `python_files`, so a collector reading `rglob` calls alone reports the
         file the bead's own comment names as clean.
         """
@@ -384,6 +162,50 @@ class TestANewlyAddedTestWithTheShapeIsCaught:
         assert [scan.root for scan in found] == ["_TUI"]
 
 
+    def test_a_root_taken_from_the_suites_root_helper_is_caught(self, suite: Path) -> None:
+        """BDL-074 B1: the root is found one way now, and it reaches the copy too.
+
+        Under `mutmut run` the helper finds `mutants/pyproject.toml` first, so a
+        walk of its `src` reads the mutated package exactly as `parents[1]` did.
+        """
+        found = _scan_new_test(
+            suite,
+            "from tests.support.repository_root import REPO_ROOT\n"
+            'MODULES = sorted((REPO_ROOT / "src").rglob("*.py"))\n',
+        )
+
+        assert [scan.reaches for scan in found] == [
+            "a tree containing the package under test, walked recursively"
+        ]
+
+    def test_a_root_a_support_module_builds_and_a_test_imports_is_caught(
+        self, suite: Path
+    ) -> None:
+        """The walk is in the test, the root is built one import away."""
+        (suite / "tests" / "support" / "paths.py").write_text(
+            "from tests.support.repository_root import REPO_ROOT as ROOT\n"
+            'PACKAGE = ROOT / "src" / "beadloom"\n',
+            encoding="utf-8",
+        )
+        found = _scan_new_test(
+            suite,
+            "from tests.support.paths import PACKAGE as TREE\n"
+            'MODULES = list(TREE.rglob("*.py"))\n',
+        )
+
+        assert [scan.root for scan in found] == ["TREE"]
+
+    def test_a_root_imported_from_a_support_module_that_is_not_there_is_no_root(
+        self, suite: Path
+    ) -> None:
+        found = _scan_new_test(
+            suite,
+            'from tests.support.absent import PACKAGE\nMODULES = list(PACKAGE.rglob("*.py"))\n',
+        )
+
+        assert found == ()
+
+
 class TestAFileThatDoesNotHaveTheShapeIsNotCaught:
     """The other direction: a predicate that widened would empty the sweep.
 
@@ -398,7 +220,7 @@ class TestAFileThatDoesNotHaveTheShapeIsNotCaught:
         """The shape `beadloom-ey4m` moved the four files to: no `__file__`."""
         found = _scan_new_test(
             suite,
-            "from tests.package_under_test import PACKAGE_ROOT, modules_under\n"
+            "from tests.support.package_under_test import PACKAGE_ROOT, modules_under\n"
             "MODULES = modules_under(PACKAGE_ROOT)\n",
         )
 
@@ -482,8 +304,8 @@ class TestEveryOtherSelfScanningTestIsOnePyprojectLineAway:
 
     def test_the_declared_set_is_what_the_repository_carries(self) -> None:
         carrying = {
-            str(path.relative_to(_REPO_ROOT))
-            for path in sorted(_REPO_ROOT.joinpath("tests").rglob("test_*.py"))
+            str(path.relative_to(REPO_ROOT))
+            for path in sorted(REPO_ROOT.joinpath("tests").rglob("test_*.py"))
             if python_source_scans(
                 path.read_text(encoding="utf-8"), at=path, package_root=PACKAGE_ROOT
             )
@@ -491,7 +313,7 @@ class TestEveryOtherSelfScanningTestIsOnePyprojectLineAway:
 
         assert carrying == set(SELF_SCANNING_TESTS_OUTSIDE_THE_POOL), (
             "a test walks the package from a root built from its own file and "
-            "nobody has classified it. Move it onto `tests/package_under_test.py`, "
+            "nobody has classified it. Move it onto `tests/support/package_under_test.py`, "
             "or declare here what it walks and why selecting it would be safe — "
             f"undeclared {sorted(carrying - set(SELF_SCANNING_TESTS_OUTSIDE_THE_POOL))}, "
             f"gone {sorted(set(SELF_SCANNING_TESTS_OUTSIDE_THE_POOL) - carrying)}"

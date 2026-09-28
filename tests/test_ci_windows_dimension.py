@@ -19,7 +19,8 @@ to be unlearned.
 WHAT SURVIVES THE WITHDRAWAL, and it is most of what .39 was worth: the six
 guard tests that carried ``skipif(sys.platform == "win32")`` are gated on a
 MEASURED symlink capability and run on every runner that holds it (see
-:mod:`tests.symlink_capability` and :mod:`tests.test_windows_dimension`), which
+:mod:`tests.support.symlink_capability` and
+:mod:`tests.unit.application.guards.test_windows_dimension`), which
 is true with or without a Windows leg. This file keeps the withdrawal coherent
 across the three places the leg was declared — the workflow, the vendored
 template an adopter gets, and the required-context constant — because a required
@@ -39,52 +40,10 @@ flip.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
-import yaml
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = (
-    REPO_ROOT
-    / "src"
-    / "beadloom"
-    / "onboarding"
-    / "templates"
-    / "ai_techwriter"
-    / "github-workflow.yml"
-)
+from tests.support.ci_workflows import GH_TEMPLATE, windows_jobs
 
 #: The job name the withdrawn leg carried, and the check-run name it produced.
 WINDOWS_JOB = "tests-windows"
-
-
-def _jobs(path: Path) -> dict[str, Any]:
-    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert isinstance(doc, dict)
-    jobs = doc["jobs"]
-    assert isinstance(jobs, dict)
-    return jobs
-
-
-def _windows_jobs(path: Path) -> list[str]:
-    """Job keys that would run on a Windows image, by ``runs-on`` and not by name.
-
-    Reading ``runs-on`` rather than the key is the difference between a check of
-    the decision and a check of a string: a leg re-added as ``tests-platform``
-    or as a matrix row costs the same runner-minutes and would slip a name test.
-    """
-    found: list[str] = []
-    for key, job in _jobs(path).items():
-        if not isinstance(job, dict):
-            continue
-        if "windows" in yaml.safe_dump(job.get("runs-on", "")).lower():
-            found.append(str(key))
-        strategy = job.get("strategy")
-        matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-        if isinstance(matrix, dict) and "windows" in yaml.safe_dump(matrix).lower():
-            found.append(str(key))
-    return sorted(set(found))
 
 
 # --------------------------------------------------------------------------- #
@@ -101,7 +60,7 @@ def test_the_vendored_template_runs_no_windows_leg() -> None:
     container is. Shipping the leg there while this repository declines it would
     charge an adopter for a decision the owner took the other way.
     """
-    assert _windows_jobs(TEMPLATE) == []
+    assert windows_jobs(GH_TEMPLATE) == []
 
 
 def test_no_required_context_names_the_withdrawn_leg() -> None:

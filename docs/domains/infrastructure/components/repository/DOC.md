@@ -123,6 +123,14 @@ debt report's untested count. An index written before the test tables has no `te
 table; the `sqlite3.OperationalError` is caught and the answer is `{}`, because `ctx` opens
 such an index without creating the schema.
 
+**Test files with their binding** — `get_test_file_bindings(conn)` ->
+`list[tuple[str, str | None, str]]`: every indexed test file as `(path, ref_id, placement)`,
+ordered by path, with `ref_id` `None` where the file is bound to no node (BDL-074 D1). Its
+reader is `application.mutation_scope.change.plan_change`, which counts a file as bound only
+under the `mirror` or `override` placement: the files bound to a changed node are the tests a
+per-change mutation run selects, and the rest are the files the binding places under no node.
+The absent-table case answers `[]`, for the reason given above.
+
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 
 ## Collaborators

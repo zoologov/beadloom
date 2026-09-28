@@ -14,14 +14,14 @@ import pytest
 
 from beadloom.graph.rules import loader as rules_loader
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.contact_guard import ALLOWED_CONTACTS, OUTSIDE_ANY_TEST, ContactGuard
-from tests.self_check_snapshot import build_snapshot
-from tests.tracked_write_guard import TrackedWriteGuard
+from tests.support.contact_guard import ALLOWED_CONTACTS, OUTSIDE_ANY_TEST, ContactGuard
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+from tests.support.repository_root import TESTS_ROOT
+from tests.support.self_check_snapshot import build_snapshot
+from tests.support.tracked_write_guard import TrackedWriteGuard
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 # --------------------------------------------------------------------------- #
@@ -35,7 +35,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 #
 # Enforced as a hook rather than a fixture so the verdict lands in the CALL
 # phase: a teardown-phase failure is reported as ERROR, and ERROR is not FAILED
-# (this epic's TESTS MUST BITE rule). See tests/tracked_write_guard.py for the
+# (this epic's TESTS MUST BITE rule). See tests/support/tracked_write_guard.py for the
 # reach of the check and its honest limits.
 # --------------------------------------------------------------------------- #
 
@@ -47,7 +47,7 @@ _GUARD: TrackedWriteGuard | None = None
 # empty directory (the two `_…_in_an_empty_directory` fixtures below), so a
 # `Path.cwd()` fallback meets nothing; the contact guard fails the test that
 # reaches the live state anyway, except the nodes named in ALLOWED_CONTACTS,
-# which is printed at the top of every run. See tests/contact_guard.py.
+# which is printed at the top of every run. See tests/support/contact_guard.py.
 #
 # BEADLOOM_CONTACT_REPORT=<file> writes every contact of the run, allowed or
 # not, as JSON: the rerunnable form of the suite map's tracer measurement.
@@ -65,7 +65,7 @@ _SESSION_CONTACTS: list[tuple[str, str, str, bool]] = []
 #: The one exception is a parametrize row whose twin is a product test of the
 #: shipped template: that row carries the mark in its ``pytest.param`` (BDL-074 A3).
 _SELF_CHECK_FIXTURE = "self_check_snapshot"
-_SELF_CHECK_DIR = Path(__file__).resolve().parent / "self_check"
+_SELF_CHECK_DIR = TESTS_ROOT / "self_check"
 _SELF_CHECK_MARKER = (
     "self_check: asserts on this repository's own tree; set on tests/self_check/ "
     "and on every reader of the session snapshot (`self_check_snapshot`)"
@@ -211,8 +211,8 @@ def _each_test_starts_in_an_empty_directory(
     the ``Path.cwd()`` default would pass without ever naming its root. And not
     ``monkeypatch.chdir``: requesting ``monkeypatch`` from an autouse fixture
     sets it up before every module's own autouse fixtures, which moves its undo
-    after their teardown (measured: ten ERRORs in tests/test_room_extras.py).
-    """
+    after their teardown (measured: ten ERRORs in
+    tests/integration/application/rooms/test_room_extras.py). """
     previous = Path.cwd()
     os.chdir(tmp_path_factory.mktemp("cwd"))
     try:
@@ -231,7 +231,7 @@ def _load_rules_forgets_between_tests() -> None:
     repository's own ``rules.yml`` is one. And mutmut forks each mutant's run from
     a parent that already ran the clean suite in-process: an inherited memo answers
     the child without executing the mutated parse, which is a false survival.
-    tests/test_load_rules_parses_once.py holds this fixture to every test.
+    tests/integration/graph/rules/test_load_rules_parses_once.py holds this fixture to every test.
     """
     rules_loader.forget_parsed_rules()
 
@@ -260,7 +260,7 @@ def self_check_snapshot(tmp_path_factory: pytest.TempPathFactory) -> Path:
     working tree at test time, so a concurrent edit is what the self-checks
     judge; it carries the git history, so ``sync-check`` can corroborate the
     fresh index against ``HEAD``. What it holds, and its limits, are stated in
-    tests/self_check_snapshot.py. Every test that requests it is marked
+    tests/support/self_check_snapshot.py. Every test that requests it is marked
     ``self_check``, so ``-m "not self_check"`` deselects them all.
 
     It replaces ``live_repo_reindexed`` (BDL-074 A2). A test that WRITES the

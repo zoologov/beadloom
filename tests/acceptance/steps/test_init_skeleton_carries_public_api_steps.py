@@ -11,7 +11,7 @@ against what the parser returns would agree with any parser, including one that
 returned nothing, so each package declares the public and private names it holds
 and the assertion reads them from this module.
 
-The fixtures are built here rather than imported from `tests.adopter_project`,
+The fixtures are built here rather than imported from `tests.support.adopter_project`,
 for the reason `test_bootstrap_self_consistency_steps` records: the acceptance
 suite is copied out of the repository and run standalone, where the `tests`
 package is not importable.

@@ -14,30 +14,16 @@ dependency and an adopter needs none: what these tests read is configuration.
 from __future__ import annotations
 
 import ast
-import sys
 from fnmatch import fnmatch
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
-# The reader is selected on the VERSION and not by catching an ImportError, so
-# mypy analyses exactly one branch per `--python-version` (BDL-UX #227: a
-# `type: ignore` needed on 3.10 is an unused-ignore error on 3.11+, and a
-# try/except form is both at once). 3.10 has no `tomllib`; pytest requires
-# `tomli` there, so the else branch resolves on every leg that runs this file.
-if sys.version_info >= (3, 11):
-    from tomllib import loads as _toml_loads
-else:
-    from tomli import loads as _toml_loads
+from tests.support.repository_root import REPO_ROOT
+from tests.support.toml_reader import toml_loads
 
-
-def toml_loads(text: str) -> dict[str, object]:
-    """The TOML reader, with a stated return type at the untyped boundary."""
-    data = _toml_loads(text)
-    assert isinstance(data, dict)
-    return data
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _pyproject() -> dict[str, object]:

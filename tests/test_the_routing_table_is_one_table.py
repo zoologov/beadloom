@@ -25,9 +25,9 @@ before the fix on the shipped command with one extra table appended: 7 routes
 read where 5 exist, and ``shared_kinds`` falls from ``{ACTIVE}`` to the empty
 set — the document every bead of every work item writes stops being derivable.
 
-**Which of these were verified red, and which are guards.** Nine assertions here
-and in ``tests/acceptance/steps/test_work_item_routing_steps.py`` were run
-against the pre-fix reader and failed: the three scenarios, and the six tests in
+**Which of these were verified red, and which are guards.** Nine assertions here and
+in ``tests/acceptance/steps/application/work-item-routing/test_work_item_routing_steps.py``
+were run against the pre-fix reader and failed: the three scenarios, and the six tests in
 :class:`TestATableEndsWhereItsRowsStop` and
 :class:`TestARowTheTableStatesAndTheReaderCannotUse` that name a table boundary
 or an unread row. The rest are green in BOTH directions and are stated as

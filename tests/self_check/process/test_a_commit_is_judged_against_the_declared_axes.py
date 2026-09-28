@@ -25,9 +25,9 @@ from beadloom.doc_sync.scope_check import (
     ScopeVerdict,
     check_commit_scope,
 )
-from tests.test_a_commit_is_judged_against_the_declared_axes import (
-    _HEADER,
-    _ROWS_THESE_CASES_DEPEND_ON,
+from tests.support.axes_table import (
+    HEADER,
+    ROWS_THESE_CASES_DEPEND_ON,
 )
 
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ def pinned_project(tmp_path_factory: pytest.TempPathFactory, self_check_snapshot
         "# RFC\n\n## Axes\n\n"
         "> **Derived by:** excerpted from BDL-068's own table, never re-derived here\n"
         "> **Seed:** `none`\n"
-        "> **Unresolved:** none\n\n" + _HEADER + _ROWS_THESE_CASES_DEPEND_ON,
+        "> **Unresolved:** none\n\n" + HEADER + ROWS_THESE_CASES_DEPEND_ON,
         encoding="utf-8",
     )
     return project
@@ -146,7 +146,7 @@ class TestTheCheckOnThisRepositorysOwnCommits:
     not. A red here is a FINDING — the epic committed outside its own approval,
     or its approval has grown wide enough to swallow somebody else's work — and
     not a maintenance chore. Nothing here enumerates paths, so appending a
-    slice's rows cannot make it red; see :data:`_ROWS_THESE_CASES_DEPEND_ON` for
+    slice's rows cannot make it red; see :data:`ROWS_THESE_CASES_DEPEND_ON` for
     the split and for what an appender does have to know.
 
     Skipped where the history is absent — CI's tests job checks out at depth 1 —
@@ -219,7 +219,7 @@ class TestTheRowsTheseCasesDependOn:
 
     Everything about this run is real except the table: real commit, real paths,
     the real index resolving each path to its owning node and bounded context.
-    Only the six rows in :data:`_ROWS_THESE_CASES_DEPEND_ON` are frozen, and
+    Only the six rows in :data:`ROWS_THESE_CASES_DEPEND_ON` are frozen, and
     freezing them is what lets a case name the exact paths that fall outside
     without breaking on a document the RFC obliges to grow every slice.
 
@@ -318,7 +318,7 @@ class TestTheRowsTheseCasesDependOn:
             f"{scope.document} no longer carries these rulings: {missing}. "
             "Appending rows is free and does not reach this case. Changing one "
             "of the rows tests/test_a_commit_is_judged_against_the_declared_axes.py "
-            "pins does: update `_ROWS_THESE_CASES_DEPEND_ON`, `_PINNED_RULINGS` "
+            "pins does: update `ROWS_THESE_CASES_DEPEND_ON`, `_PINNED_RULINGS` "
             "and the expected finding list in `TestTheRowsTheseCasesDependOn` "
             "together, and re-measure rather than re-spell."
         )

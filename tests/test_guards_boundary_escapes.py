@@ -33,7 +33,7 @@ was the deliverable's own guarantee:
 
 :class:`TestTheRowsThisRoundAddedAreNowEnumerated` closes the enumeration gap:
 the four argv-reachable rows ``.30`` derived are now in the shipped table, and
-the fifth — the interrupt — is a row of ``_INJECTED_FAILURES``.
+the fifth — the interrupt — is a row of ``INJECTED_FAILURES``.
 
 Standing rule 4 — where a test proves a seam rather than the tool it says so:
 the interrupt is injected at the probe seam (a real SIGINT lands wherever the
@@ -53,18 +53,16 @@ import shlex
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 import pytest
-from click.testing import CliRunner
 
 from beadloom.application.guards.checks import BUILTIN_GUARDS
 from beadloom.application.guards.contract import Guard, GuardProbes
 from beadloom.application.guards.firing import FIRINGS_RELPATH, read_firings
 from beadloom.application.guards.invocation import GuardInvocation, run_invocation
-from beadloom.services.cli import main
-from tests.test_guards_invocation import (
+from tests.support.guard_boundary import (
     THE_ONE_WAY_OUT,
     boundary_path_modules,
     click_refuses,
@@ -74,32 +72,16 @@ from tests.test_guards_invocation import (
     record_firing_sites,
     terminators_on_the_boundary_path,
 )
+from tests.support.guard_project import NoBeads, guarded_project, invoke_cli
+from tests.support.repository_root import REPO_ROOT as _ROOT
 
-_ROOT = Path(__file__).resolve().parents[1]
-_SRC = _ROOT / "src" / "beadloom"
-_COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
-_BOUNDARY_MODULE = _SRC / "application" / "guards" / "invocation.py"
-_DISCOVERY_MODULE = _SRC / "application" / "guards" / "project_root.py"
+if TYPE_CHECKING:
+    from pathlib import Path
 
-_BLOCKING = "guards:\n  bead-claimed:\n    strictness: { default: block }\n"
-
-
-class _NoBeads:
-    """A tracker that answers, and answers "nothing is claimed"."""
-
-    @staticmethod
-    def claimed_beads() -> tuple[()]:
-        return ()
-
-
-def _project(tmp_path: Path, flow: str = _BLOCKING) -> Path:
-    (tmp_path / ".beadloom").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".beadloom" / "flow.yml").write_text(flow, encoding="utf-8")
-    return tmp_path
-
-
-def _cli(args: list[str], *, stdin: str = ""):
-    return CliRunner().invoke(main, args, input=stdin)
+SRC = _ROOT / "src" / "beadloom"
+COMMAND_MODULE = SRC / "services" / "commands" / "guard.py"
+_BOUNDARY_MODULE = SRC / "application" / "guards" / "invocation.py"
+_DISCOVERY_MODULE = SRC / "application" / "guards" / "project_root.py"
 
 
 def _must_not_escape(call):
@@ -122,7 +104,7 @@ def stub_probes(monkeypatch):
     from beadloom.services.commands import guard as guard_cmd
 
     monkeypatch.setattr(
-        guard_cmd, "_probes", lambda _root: GuardProbes(tracker=_NoBeads())
+        guard_cmd, "_probes", lambda _root: GuardProbes(tracker=NoBeads())
     )
 
 
@@ -165,7 +147,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             name="bead-claimed",
             declared_project=root,
             context_pairs=("path=app.py",),
-            probes_for=lambda _root: GuardProbes(tracker=_NoBeads()),
+            probes_for=lambda _root: GuardProbes(tracker=NoBeads()),
         )
 
     def test_a_keyboard_interrupt_in_a_check_is_turned_into_a_recorded_verdict(
@@ -177,7 +159,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             raise KeyboardInterrupt
 
         self._install(monkeypatch, interrupted)
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
         result = _must_not_escape(lambda: run_invocation(self._invocation(root)))
 
@@ -200,7 +182,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             raise RuntimeError(msg)
 
         self._install(monkeypatch, exploded)
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
         result = run_invocation(self._invocation(root))
 
@@ -233,7 +215,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             raise failure()
 
         self._install(monkeypatch, fail)
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
         result = _must_not_escape(lambda: run_invocation(self._invocation(root)))
 
@@ -269,10 +251,10 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
             raise KeyboardInterrupt
 
         monkeypatch.setattr(boundary, "record_firing", interrupted)
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
         result = _must_not_escape(
-            lambda: _cli(["guard", "bead-claimed", "--project", str(root)])
+            lambda: invoke_cli(["guard", "bead-claimed", "--project", str(root)])
         )
 
         assert result.exit_code == 2, result.output
@@ -288,7 +270,7 @@ class TestAnInterruptIsARecordedVerdictLikeAnyOtherFailure:
         dispatch the console script uses, and it is where ``KeyboardInterrupt``
         used to become ``Abort`` and then exit 1.
         """
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         script = tmp_path / "dispatch.py"
         script.write_text(
             textwrap.dedent(
@@ -506,7 +488,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
 
         assert _BOUNDARY_MODULE in scope
         assert _DISCOVERY_MODULE in scope
-        assert _SRC / "application" / "guards" / "firing.py" in scope
+        assert SRC / "application" / "guards" / "firing.py" in scope
         assert terminators_on_the_boundary_path() == [THE_ONE_WAY_OUT]
 
     def test_the_retired_pin_is_blind_to_the_validator_a_later_option_would_use(
@@ -532,7 +514,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         read ``[["path_type"]]`` and was satisfied (BDL-061.32).
         """
         sabotaged = _sabotaged(
-            _COMMAND_MODULE,
+            COMMAND_MODULE,
             '@click.option("--json", "output_json", is_flag=True',
             '@click.option("--work-kind", type=click.Choice(["feature", "bugfix"]))\n'
             '@click.option("--json", "output_json", is_flag=True',
@@ -543,7 +525,7 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         )
 
         assert _retired_click_path_pin(ast.unparse(sabotaged)) == _retired_click_path_pin(
-            _COMMAND_MODULE.read_text(encoding="utf-8")
+            COMMAND_MODULE.read_text(encoding="utf-8")
         )
         assert declared_conversion(work_kind) == "Choice(['feature', 'bugfix'])"
         assert declared_conversion(work_kind) not in declared_conversions().values()
@@ -600,7 +582,7 @@ class TestADeclaredProjectMustBeAProject:
 
     def _roots(self, tmp_path: Path, kind: str) -> tuple[Path, list[str]]:
         """``(cwd-ish start, argv tail)`` for one row of the table above."""
-        project = _project(tmp_path / "project")
+        project = guarded_project(tmp_path / "project")
         plain = tmp_path / "plain"
         plain.mkdir()
         (tmp_path / "a-file").write_text("x", encoding="utf-8")
@@ -635,7 +617,7 @@ class TestADeclaredProjectMustBeAProject:
         start, tail = self._roots(tmp_path, kind)
         monkeypatch.chdir(start)
 
-        result = _cli(["guard", "bead-claimed", "--context", "path=app.py", *tail])
+        result = invoke_cli(["guard", "bead-claimed", "--context", "path=app.py", *tail])
 
         assert result.exit_code == exit_code, f"{label}: {result.output}"
         marked = {
@@ -651,7 +633,7 @@ class TestADeclaredProjectMustBeAProject:
         not_a_project = tmp_path / "elsewhere"
         not_a_project.mkdir()
 
-        result = _cli(
+        result = invoke_cli(
             [
                 "guard",
                 "bead-claimed",
@@ -670,13 +652,13 @@ class TestADeclaredProjectMustBeAProject:
         self, tmp_path, stub_probes
     ) -> None:
         """Same argv, same edit, two roots — and the wrong one no longer answers."""
-        real = _project(tmp_path / "real")
+        real = guarded_project(tmp_path / "real")
         not_a_project = tmp_path / "elsewhere"
         not_a_project.mkdir()
         argv = ["guard", "bead-claimed", "--context", "path=app.py", "--json"]
 
-        blocked = _cli([*argv, "--project", str(real)])
-        wandered = _cli([*argv, "--project", str(not_a_project)])
+        blocked = invoke_cli([*argv, "--project", str(real)])
+        wandered = invoke_cli([*argv, "--project", str(not_a_project)])
 
         assert blocked.exit_code == 2, blocked.output
         assert json.loads(blocked.stdout)["outcome"] == "block"
@@ -720,15 +702,15 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
 
     A table that enumerates itself proves nothing, so these rows were derived
     from the code and the CLI surface first and compared afterwards. Four are
-    argv-reachable and are now rows of ``_EXIT_PATHS``; the fifth is injected
-    and is a row of ``_INJECTED_FAILURES``.
+    argv-reachable and are now rows of ``EXIT_PATHS``; the fifth is injected
+    and is a row of ``INJECTED_FAILURES``.
     """
 
     def test_every_added_row_is_present_in_a_shipped_enumeration(self) -> None:
         """The comparison, machine-checked rather than asserted in prose."""
-        from tests.test_guards_invocation import _EXIT_PATHS, _INJECTED_FAILURES
+        from tests.support.guard_exit_paths import EXIT_PATHS, INJECTED_FAILURES
 
-        shipped = {row[0] for row in _EXIT_PATHS} | {row[0] for row in _INJECTED_FAILURES}
+        shipped = {row[0] for row in EXIT_PATHS} | {row[0] for row in INJECTED_FAILURES}
 
         assert set(_ROWS_ADDED_THIS_ROUND) <= shipped, (
             set(_ROWS_ADDED_THIS_ROUND) - shipped
@@ -738,9 +720,9 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         self, tmp_path, stub_probes
     ) -> None:
         """``name or UNNAMED_GUARD`` swallowed ``""`` and quoted a guard nobody typed."""
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
-        result = _cli(["guard", "", "--project", str(root), "--json"])
+        result = invoke_cli(["guard", "", "--project", str(root), "--json"])
 
         assert result.exit_code == 3, result.output
         assert json.loads(result.stdout)["guard"] == ""
@@ -751,9 +733,9 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         self, tmp_path, stub_probes
     ) -> None:
         """Empty stdin reads as ``{}``: no path, so the guard says what it did not check."""
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
 
-        result = _cli(
+        result = invoke_cli(
             ["guard", "bead-claimed", "--project", str(root), "--hook", "claude-code"],
             stdin="",
         )
@@ -775,7 +757,7 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         ``sys.stdin`` is undone by that installation, so neither can reproduce
         the condition CPython creates at interpreter start-up.
         """
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         argv = shlex.join(
             [
                 sys.executable,
@@ -830,21 +812,23 @@ class TestTheRenderStepCannotChangeTheVerdict:
     def test_a_failure_while_rendering_does_not_change_the_exit_code(
         self, tmp_path, monkeypatch, stub_probes
     ) -> None:
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         self._explode(monkeypatch)
 
-        result = _cli(["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"])
+        result = invoke_cli(
+            ["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"]
+        )
 
         assert result.exit_code == 2, result.output
 
     def test_an_interrupt_while_rendering_does_not_change_it_either(
         self, tmp_path, monkeypatch, stub_probes
     ) -> None:
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         self._explode(monkeypatch, failure=lambda _message: KeyboardInterrupt())
 
         result = _must_not_escape(
-            lambda: _cli(
+            lambda: invoke_cli(
                 ["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"]
             )
         )
@@ -854,10 +838,12 @@ class TestTheRenderStepCannotChangeTheVerdict:
     def test_a_failure_while_rendering_is_stated_rather_than_swallowed(
         self, tmp_path, monkeypatch, stub_probes
     ) -> None:
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         self._explode(monkeypatch)
 
-        result = _cli(["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"])
+        result = invoke_cli(
+            ["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"]
+        )
 
         assert "could not be printed" in result.output, result.output
 
@@ -865,9 +851,9 @@ class TestTheRenderStepCannotChangeTheVerdict:
         self, tmp_path, monkeypatch, stub_probes
     ) -> None:
         """The recording step runs inside the boundary, so it precedes any of this."""
-        root = _project(tmp_path)
+        root = guarded_project(tmp_path)
         self._explode(monkeypatch)
 
-        _cli(["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"])
+        invoke_cli(["guard", "bead-claimed", "--project", str(root), "--context", "path=a.py"])
 
         assert [record.outcome for record in read_firings(root)] == ["block"]

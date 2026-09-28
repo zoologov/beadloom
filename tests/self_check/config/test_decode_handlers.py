@@ -15,12 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_decode_handlers import (
-    _SRC_ROOT,
-)
+from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-
+_SRC_ROOT = _REPO_ROOT / "src" / "beadloom"
 
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 

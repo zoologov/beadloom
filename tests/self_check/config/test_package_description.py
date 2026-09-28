@@ -54,11 +54,19 @@ Three checks, three different failures, stated apart:
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import beadloom
+from tests.support.package_under_test import SHIPPED_FROM
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+if TYPE_CHECKING:
+    from pathlib import Path
+
+# This module is read from the checkout the package ships from, not from the
+# suite's own root: `tests/acceptance/steps/test_package_description_steps.py`
+# loads it by path, and that step also runs from a copy of the acceptance tree
+# (`tests/integration/graph/scenarios/test_bead14_s4_binding.py`), which has no repository root of
+# its own.
 
 #: The manifest's `description` line. Read by pattern rather than by a TOML
 #: parser because `tomllib` is 3.11+ and this project supports 3.10; the one
@@ -70,7 +78,7 @@ _DESCRIPTION_RE = re.compile(r'^description\s*=\s*"([^"]*)"', re.MULTILINE)
 
 
 def _manifest_description() -> str:
-    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    text = (SHIPPED_FROM / "pyproject.toml").read_text(encoding="utf-8")
     matches = _DESCRIPTION_RE.findall(text)
     assert len(matches) == 1, f"expected one top-level description, found {len(matches)}"
     description: str = matches[0]
@@ -135,7 +143,7 @@ def _swept_files() -> list[Path]:
     """
     found: list[Path] = []
     for root in _SWEPT_ROOTS:
-        target = REPO_ROOT / root
+        target = SHIPPED_FROM / root
         if target.is_file():
             found.append(target)
             continue
@@ -144,7 +152,7 @@ def _swept_files() -> list[Path]:
         for path in sorted(target.rglob("*")):
             if not path.is_file() or path.suffix not in _SWEPT_SUFFIXES:
                 continue
-            if any(part in _SWEEP_EXCLUDED_PARTS for part in path.relative_to(REPO_ROOT).parts):
+            if any(part in _SWEEP_EXCLUDED_PARTS for part in path.relative_to(SHIPPED_FROM).parts):
                 continue
             found.append(path)
     return found
@@ -205,7 +213,7 @@ def _sweep_for(needle: str) -> list[tuple[str, int]]:
         collapsed = raw.casefold()
         start = collapsed.find(wanted)
         while start != -1:
-            hits.append((path.relative_to(REPO_ROOT).as_posix(), line_of[start]))
+            hits.append((path.relative_to(SHIPPED_FROM).as_posix(), line_of[start]))
             start = collapsed.find(wanted, start + 1)
     return hits
 

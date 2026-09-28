@@ -12,7 +12,7 @@ the skeleton's own headings (`## Source`, `## Features`) and pass without the
 skeleton naming a single module. `core`, `journal` and `invoice` appear in no
 line the templates write, which is what lets these scenarios go red.
 
-The fixtures are built here rather than imported from `tests.adopter_project`,
+The fixtures are built here rather than imported from `tests.support.adopter_project`,
 for the reason `test_bootstrap_self_consistency_steps` records: the acceptance
 suite is copied out of the repository and run standalone, where the `tests`
 package is not importable.

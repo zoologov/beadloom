@@ -32,7 +32,7 @@ graph/federation/export.py       ascii      UnicodeDecodeError, uncaught
 Two instruments, because one alone would prove too little (standing rule 4):
 
 * the **ambient codec** rows drive the real module through
-  :class:`tests.ambient_codec.AmbientTextMode`, which re-implements CPython's
+  :class:`tests.support.ambient_codec.AmbientTextMode`, which re-implements CPython's
   documented text-mode rule with the codec as a parameter — an ambient non-UTF-8
   codec cannot be arranged on this machine (PEP 538/540 coercion);
 * the **undecodable bytes** rows use no double at all: real ``git``, real bytes
@@ -60,8 +60,8 @@ from beadloom.graph.diff import compute_diff
 from beadloom.graph.federation import export as federation_export
 from beadloom.infrastructure import git_activity
 from beadloom.infrastructure.db import open_db
-from tests.ambient_codec import AMBIENT_CODECS, under_ambient_codec
-from tests.filesystem_names import as_the_process_receives
+from tests.support.ambient_codec import AMBIENT_CODECS, under_ambient_codec
+from tests.support.filesystem_names import as_the_process_receives
 
 if TYPE_CHECKING:
     from pathlib import Path

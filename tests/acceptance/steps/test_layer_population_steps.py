@@ -23,8 +23,7 @@ from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE, layer_r
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.types import LayerRule
 from beadloom.services.cli import main
-
-from .tiered_project import TIERS, graph_with, write_tiered_project
+from tests.support.tiered_project import TIERS, graph_with, write_tiered_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

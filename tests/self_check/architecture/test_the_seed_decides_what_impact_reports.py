@@ -1,6 +1,7 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_the_seed_decides_what_impact_reports.py``;
+Moved out of
+``tests/integration/application/source_derivation/test_the_seed_decides_what_impact_reports.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -18,11 +19,11 @@ import pytest
 from beadloom.application.source_derivation import (
     writers_that_build,
 )
-from tests.test_the_seed_decides_what_impact_reports import (
+from tests.support.impact_seed import (
     THE_COMMIT_POINT,
     THE_NARROW_SEED_ANSWER,
     THE_WIDE_SEED_ANSWER,
-    _counted,
+    seed_answer,
 )
 
 if TYPE_CHECKING:
@@ -101,7 +102,7 @@ class TestTheMeasurementAtTheBdl067Tree:
         )
 
         assert (
-            _counted(source, the_tree, THE_COMMIT_POINT, "init") == THE_WIDE_SEED_ANSWER
+            seed_answer(source, the_tree, THE_COMMIT_POINT, "init") == THE_WIDE_SEED_ANSWER
         )
 
     def test_the_function_under_change_lists_no_writer_and_three(
@@ -112,7 +113,7 @@ class TestTheMeasurementAtTheBdl067Tree:
         )
 
         assert (
-            _counted(source, the_tree, THE_FUNCTION_UNDER_CHANGE, "init")
+            seed_answer(source, the_tree, THE_FUNCTION_UNDER_CHANGE, "init")
             == THE_NARROW_SEED_ANSWER
         )
 

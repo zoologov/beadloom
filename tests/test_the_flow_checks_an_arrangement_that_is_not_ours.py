@@ -6,7 +6,7 @@ BDL-UX #240 is the measured precedent: a defect in the typed leg's path filter w
 invisible here because Beadloom is src-layout, and it survived the bead that built
 the surface.
 
-``tests/adopter_flow.py`` is the substitutable input, the way ``.33`` made the
+``tests/support/adopter_flow.py`` is the substitutable input, the way ``.33`` made the
 platform one (``PathFlavour``), S3 made the CI room one (``room_simulation``) and
 ``.42`` made the project layout one. Each arrangement it holds is a choice the
 shipped flow permits: which tools a project composes adapters for, where its
@@ -52,7 +52,7 @@ from beadloom.onboarding.graph_layout import layout_of
 from beadloom.onboarding.role_composer import ROLE_NAMES
 from beadloom.onboarding.role_map import role_map_report
 from beadloom.services.commands.waves import _focus_documents
-from tests.adopter_flow import (
+from tests.support.adopter_flow import (
     BEAD_IN_THE_SECOND_COLUMN,
     CURSOR_ONLY,
     DOCS_ELSEWHERE,
@@ -543,8 +543,8 @@ def _graph_input_of(project_root: Path) -> GraphInput:
     The graph half goes through :func:`each_graph_file`, which is the one policy
     every reader of that directory holds; the index half is supplied as the same
     population, so these rows measure the LAYOUT and not a database. The drift
-    branch, where the two populations differ, is ``tests/test_wave_media_checks.py``'s.
-    """
+    branch, where the two populations differ, is
+    ``tests/unit/application/waves/test_wave_media_checks.py``'s. """
     graph_dir = project_root / ".beadloom" / "_graph"
     files = tuple(
         GraphFile(

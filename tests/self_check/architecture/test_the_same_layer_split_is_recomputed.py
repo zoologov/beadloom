@@ -1,6 +1,6 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
-Moved out of ``tests/test_the_same_layer_split_is_recomputed.py``;
+Moved out of ``tests/integration/graph/rules/test_the_same_layer_split_is_recomputed.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
@@ -23,16 +23,16 @@ from beadloom.graph.rules.layers import (
 )
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE
-from tests.acceptance.steps.tiered_project import (
+from tests.support.layer_rule import (
+    Split,
+    read_only_index,
+    retired_crossings,
+    rule_of,
+    split_of,
+)
+from tests.support.tiered_project import (
     graph_with_peer_containers,
     write_tiered_project,
-)
-from tests.test_the_same_layer_split_is_recomputed import (
-    Split,
-    _read_only,
-    _retired_crossings,
-    _rule_of,
-    split_of,
 )
 
 if TYPE_CHECKING:
@@ -43,8 +43,8 @@ if TYPE_CHECKING:
 @pytest.fixture()
 def live_split(self_check_snapshot: Path) -> Split:
     """This repository's split, recomputed from the index built for this session."""
-    with _read_only(self_check_snapshot) as conn:
-        return split_of(conn, _rule_of(self_check_snapshot))
+    with read_only_index(self_check_snapshot) as conn:
+        return split_of(conn, rule_of(self_check_snapshot))
 
 
 @pytest.fixture()
@@ -113,7 +113,7 @@ class TestTheSplitIsRecomputedOnThisRepository:
         The counts come from the rule's own splitter, so a crossing silently
         dropped by neither path would leave the two sides short.
         """
-        rule = _rule_of(self_check_snapshot)
+        rule = rule_of(self_check_snapshot)
         reported, excused = excused_crossings(rule, list(live_split.crossings))
         assert len(reported) + sum(excused.values()) == len(live_split.crossings)
 
@@ -121,9 +121,9 @@ class TestTheSplitIsRecomputedOnThisRepository:
         self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """The recomputation and `evaluate_layer_rules` agree on this graph."""
-        rule = _rule_of(self_check_snapshot)
+        rule = rule_of(self_check_snapshot)
         reported, _ = excused_crossings(rule, list(live_split.crossings))
-        with _read_only(self_check_snapshot) as conn:
+        with read_only_index(self_check_snapshot) as conn:
             findings = [
                 (v.from_ref_id, v.to_ref_id)
                 for v in evaluate_layer_rules(conn, [rule])
@@ -140,14 +140,14 @@ class TestThePublishedFigureCameFromAnotherPredicate:
         self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """Strictly more, and the direction is why the planning figure was high."""
-        retired = _retired_crossings(self_check_snapshot, live_split)
+        retired = retired_crossings(self_check_snapshot, live_split)
         assert len(retired) > len(live_split.crossings)
 
     def test_the_shipped_predicate_calls_no_edge_a_crossing_that_the_retired_one_allows(
         self, self_check_snapshot: Path, live_split: Split
     ) -> None:
         """One-directional: the shipped predicate is the more permissive of the two."""
-        retired = _retired_crossings(self_check_snapshot, live_split)
+        retired = retired_crossings(self_check_snapshot, live_split)
         assert set(live_split.crossings) <= retired
 
     def test_every_pair_they_disagree_on_has_the_shape_the_correction_names(
@@ -160,11 +160,11 @@ class TestThePublishedFigureCameFromAnotherPredicate:
         the RFC's explanation of its own error into something that fails if the
         explanation is wrong.
         """
-        rule = _rule_of(self_check_snapshot)
-        with _read_only(self_check_snapshot) as conn:
+        rule = rule_of(self_check_snapshot)
+        with read_only_index(self_check_snapshot) as conn:
             parents = part_of_parents(conn)
             tags = node_tags(conn).as_mapping()
-        disputed = _retired_crossings(self_check_snapshot, live_split) - set(
+        disputed = retired_crossings(self_check_snapshot, live_split) - set(
             live_split.crossings
         )
         assert disputed, "the two predicates agree here, so the correction is unmeasured"
