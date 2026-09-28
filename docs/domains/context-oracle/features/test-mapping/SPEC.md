@@ -123,6 +123,12 @@ the `test_files` table records each file's placement.
   `test_files`. While any test file is unplaced the count is withheld (0), and the
   report's `test_population` says why, in the same `describe_unplaced()` sentence.
   See the [debt report](../../../application/features/debt-report/SPEC.md).
+- **Lint.** Since BDL-074 C3 the rule engine judges the binding: `test_binding` reports a
+  test file bound to no node and a node with no bound test file, and
+  `test_import_boundary` narrows an import boundary to the tests of matching nodes. Both
+  read `test_files` and `test_imports`, and `test_binding` counts placement `other_kind`
+  as bound by other means rather than judging it. See the
+  [rule-engine SPEC](../../../graph/features/rule-engine/SPEC.md).
 
 ## Invariants
 
@@ -145,7 +151,12 @@ Module `src/beadloom/context_oracle/test_binding.py`:
 - `TEST_ROOT` (`"tests"`), `MIRRORED_KINDS` (`unit`, `integration`),
   `OTHER_KINDS` (`acceptance`, `self_check`), `TEST_FILE_PATTERNS`.
 - `PLACEMENT_MIRROR`, `PLACEMENT_OVERRIDE`, `PLACEMENT_UNOWNED`,
-  `PLACEMENT_UNPLACED`, `PLACEMENT_OTHER_KIND` — the placement values.
+  `PLACEMENT_UNPLACED`, `PLACEMENT_OTHER_KIND` — the placement values. Defined in
+  `infrastructure/repository.py` since BDL-074 C3 and re-exported here under the same
+  names, so an import from this module still answers. The vocabulary sits below both of
+  its readers: this module assigns a placement and the rule engine's `test_binding` judges
+  it, and a vocabulary two peer domains share belongs below both rather than in the one that
+  wrote it down first.
 - `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`.
 - `BoundTestFile` — frozen dataclass: `path`, `kind`, `ref_id`, `placement`.
 - `is_test_file(name: str) -> bool` — whether pytest collects a file of that name
@@ -171,6 +182,9 @@ Module `src/beadloom/context_oracle/test_file_reader.py`:
 
 Module `src/beadloom/infrastructure/repository.py`:
 
+- `PLACEMENT_MIRROR` (`"mirror"`), `PLACEMENT_OVERRIDE` (`"override"`),
+  `PLACEMENT_UNOWNED` (`"unowned"`), `PLACEMENT_UNPLACED` (`"unplaced"`),
+  `PLACEMENT_OTHER_KIND` (`"other_kind"`) — where the placement values are defined.
 - `count_test_files_by_placement(conn) -> dict[str, int]` — indexed test files per
   placement; `{}` when the `test_files` table does not exist.
 

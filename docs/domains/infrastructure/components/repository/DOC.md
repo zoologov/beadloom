@@ -123,6 +123,15 @@ debt report's untested count. An index written before the test tables has no `te
 table; the `sqlite3.OperationalError` is caught and the answer is `{}`, because `ctx` opens
 such an index without creating the schema.
 
+**The placement vocabulary** — `PLACEMENT_MIRROR` (`"mirror"`, bound by the mirror of its
+path), `PLACEMENT_OVERRIDE` (`"override"`, bound by a node's `tests:` declaration),
+`PLACEMENT_UNOWNED` (`"unowned"`, under a mirrored kind folder and no node owns the code its
+path names), `PLACEMENT_UNPLACED` (`"unplaced"`, not under a kind folder) and
+`PLACEMENT_OTHER_KIND` (`"other_kind"`, under a kind folder whose binding is not the mirror).
+They are the values `test_files.placement` holds. Defined here since BDL-074 C3, because two
+peer domains share them: `context_oracle.test_binding` assigns a placement and re-exports the
+names under its old import path, and `graph.rules.test_binding` judges it.
+
 **Test files with their binding** — `get_test_file_bindings(conn)` ->
 `list[tuple[str, str | None, str]]`: every indexed test file as `(path, ref_id, placement)`,
 ordered by path, with `ref_id` `None` where the file is bound to no node (BDL-074 D1). Its

@@ -486,7 +486,10 @@ resolves to `None`.
   unplaced (not under tests/integration/ or tests/unit/) and bind to no node"`, or `None`
   when no file is unplaced. The one wording `ctx` and the debt report share.
 - Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS`, `TEST_FILE_PATTERNS`, the five
-  `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`.
+  `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`. The `PLACEMENT_*` values are
+  defined in `infrastructure/repository.py` since BDL-074 C3 and re-exported here under the
+  same names: the rule engine's `test_binding` rule judges the placement this module assigns,
+  and the vocabulary sits below both domains rather than in one of them.
 
 ### test_file_reader.py -- Public Classes and Functions
 
