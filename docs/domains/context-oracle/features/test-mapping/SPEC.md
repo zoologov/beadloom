@@ -58,7 +58,13 @@ mirrored path.
 | `override` | yes | A node's `tests:` declaration covers the file |
 | `unowned` | no | Under `unit`/`integration`, and no node owns the mirrored code path |
 | `unplaced` | no | Not under a kind folder: the layout has not reached the file |
-| `other_kind` | no | Under `acceptance` or `self_check`, which bind by other means |
+| `other_kind` | no | Under `acceptance` or `self_check`; the file's recorded `kind` says which (BDL-074 F1) |
+
+An `other_kind` file carries its kind folder as `kind`, and the two kinds bind differently. An
+acceptance step file runs scenarios that bind to a node through their `@node:` tags, which the
+`scenario_binding` rules judge. A self-check tests the project's own files and configuration and
+binds to no node by design. Every surface that counts them names each kind by its own count,
+never under one phrase.
 
 ### What a test file holds
 
@@ -126,8 +132,9 @@ the `test_files` table records each file's placement.
 - **Lint.** Since BDL-074 C3 the rule engine judges the binding: `test_binding` reports a
   test file bound to no node and a node with no bound test file, and
   `test_import_boundary` narrows an import boundary to the tests of matching nodes. Both
-  read `test_files` and `test_imports`, and `test_binding` counts placement `other_kind`
-  as bound by other means rather than judging it. See the
+  read `test_files` and `test_imports`. `test_binding` does not judge placement
+  `other_kind`, and its population statement names those files by recorded kind and count
+  (BDL-074 F1). See the
   [rule-engine SPEC](../../../graph/features/rule-engine/SPEC.md).
 
 ## Invariants
@@ -173,6 +180,12 @@ Module `src/beadloom/context_oracle/test_binding.py`:
 - `describe_unplaced(counts: Mapping[str, int]) -> str | None` — the sentence that
   says how many test files are unplaced and bind to no node; `None` when none is.
   `ctx` and the debt report both print it.
+- `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None`
+  (BDL-074 F1) — every test file bound to no node, stated by why: `describe_unplaced()`'s
+  sentence, then `W unowned (under a mirrored folder whose code no node owns)` when non-zero,
+  then `A acceptance step and S self-check file(s) bind to no node by their kind`, joined by
+  `; `. `None` when no file is bound to no node. `beadloom mutation --changed-since` prints it
+  on its `Binding:` line, so its unplaced count is the one `ctx` and the debt report state.
 
 Module `src/beadloom/context_oracle/test_file_reader.py`:
 
@@ -185,15 +198,30 @@ Module `src/beadloom/infrastructure/repository.py`:
 - `PLACEMENT_MIRROR` (`"mirror"`), `PLACEMENT_OVERRIDE` (`"override"`),
   `PLACEMENT_UNOWNED` (`"unowned"`), `PLACEMENT_UNPLACED` (`"unplaced"`),
   `PLACEMENT_OTHER_KIND` (`"other_kind"`) — where the placement values are defined.
+- `KIND_ACCEPTANCE` (`"acceptance"`), `KIND_SELF_CHECK` (`"self_check"`),
+  `KIND_UNRECORDED` (`"unrecorded"`, stated for an `other_kind` row that recorded no kind)
+  and `label_test_kind(kind) -> str` (`acceptance step`, `self-check`, otherwise the kind as
+  recorded) — BDL-074 F1. `OTHER_KINDS` is built from the first two.
 - `count_test_files_by_placement(conn) -> dict[str, int]` — indexed test files per
   placement; `{}` when the `test_files` table does not exist.
+- `count_other_kind_test_files(conn) -> dict[str, int]` — `other_kind` files per recorded
+  kind; `{}` when the `test_files` table does not exist.
 
 ## Testing
 
-Tests: `tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py` (binding and
-reader), `tests/test_reindex_indexes_test_files_in_their_own_tables.py` (the
-tables and `extra["tests"]`), `tests/test_reindex_tests.py`,
-`tests/test_ctx_and_debt_report_read_the_test_binding.py` (the `ctx` line and the
-debt report's count), and the acceptance scenarios in
+Tests bound to `test-mapping` (BDL-074 F2: 27 tests in 2 files, measured by `beadloom reindex`
+on 2026-09-28), both under `tests/unit/context_oracle/test_binding/`:
+`test_a_test_file_binds_to_the_node_its_path_mirrors.py` (the binding) and
+`test_the_unplaced_share_is_one_sentence.py` (`describe_unplaced`). Beside them:
+`tests/unit/context_oracle/test_file_reader/test_a_test_file_is_read_for_its_tests_and_imports.py`
+(the reader, bound to `context-oracle`),
+`tests/integration/application/reindex/test_reindex_indexes_test_files_in_their_own_tables.py`
+and `tests/integration/application/reindex/test_reindex_tests.py` (the tables and
+`extra["tests"]`, bound to `reindex`),
+`tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py` (the `ctx` line),
+`tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py`
+(the debt report's count),
+`tests/integration/infrastructure/repository/test_test_files_are_counted_by_their_kind.py`
+(the counts by kind), and the acceptance scenarios in
 `tests/acceptance/features/test_files_bind_to_the_node_their_path_mirrors.feature` and
 `tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.

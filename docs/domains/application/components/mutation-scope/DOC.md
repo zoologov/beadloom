@@ -175,11 +175,18 @@ Untracked files are not in a git diff. A missing `git` or a base that names no c
 **Every part of the population says what it covered.** `ChangePlan` carries the number of
 files the change touched, the ones inside the declared scope, the unread ones, the touched
 functions, the lines outside any function, one `NodeSelection` per node reached (its
-functions and its bound test files), and every test file the binding places under no node.
-A test file counts as bound only under the `mirror` or `override` placement, read through
-`infrastructure.repository.get_test_file_bindings`. While unplaced test files exist, a node's
-bound tests can be short of the tests that exercise it, and `describe_change` prints that
-count on its own line. An empty population is a statement too: a change touching no function
+functions and its bound test files), and every test file the binding places under no node
+(`unbound_tests`, whatever the reason: the runner's fallback selection). A test file counts as
+bound only under the `mirror` or `override` placement, read through
+`infrastructure.repository.get_test_file_bindings`. Since BDL-074 F1 the plan also carries
+`test_placements` (test files by placement) and `other_kinds` (the `other_kind` files by
+recorded kind), both defaulting to empty, and what it STATES about the unbound files is counted
+from those by reason. `describe_change` prints a `Binding:` line built by
+`context_oracle.test_binding.describe_unbound`: the unplaced sentence `ctx` and the debt report
+state, then the unowned files, then each kind by its own count, so the three surfaces state one
+number for "unplaced". The line is printed only when some test file is bound to no node.
+`change_payload` carries `unbound_tests` unchanged, plus `test_placements` and `other_kinds`
+as `{name: count}` objects. An empty population is a statement too: a change touching no function
 of the declared scope has nothing to mutate and no score.
 
 **Survivors are placed by the graph's ownership rule.** The survivor list is a JSON list of

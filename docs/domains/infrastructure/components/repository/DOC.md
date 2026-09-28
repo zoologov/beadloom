@@ -132,12 +132,27 @@ They are the values `test_files.placement` holds. Defined here since BDL-074 C3,
 peer domains share them: `context_oracle.test_binding` assigns a placement and re-exports the
 names under its old import path, and `graph.rules.test_binding` judges it.
 
+**The kind vocabulary, and the count by kind** (BDL-074 F1) — `KIND_ACCEPTANCE`
+(`"acceptance"`, an acceptance step file whose scenarios bind by their `@node:` tag) and
+`KIND_SELF_CHECK` (`"self_check"`, a test of the project's own files and configuration, bound
+to no node by design) are the `test_files.kind` values an `other_kind` file carries.
+`KIND_UNRECORDED` (`"unrecorded"`) is stated for an `other_kind` row that recorded no kind.
+`label_test_kind(kind)` gives the words a count is stated in (`acceptance step`, `self-check`,
+otherwise the kind as recorded). `count_other_kind_test_files(conn)` -> `dict[str, int]` reads
+how many `other_kind` files each kind holds from `test_files`, `{}` for an index without the
+table. They sit beside the placement vocabulary for the same reason: `test_binding` assigns a
+kind, and the rule engine, the reindex `Tests:` line and `beadloom mutation --changed-since`
+name it, so a count by kind is read from the index rather than inferred from a folder. The two
+kinds bind to no node for different reasons, and a count that merged them would state neither.
+
 **Test files with their binding** — `get_test_file_bindings(conn)` ->
 `list[tuple[str, str | None, str]]`: every indexed test file as `(path, ref_id, placement)`,
 ordered by path, with `ref_id` `None` where the file is bound to no node (BDL-074 D1). Its
 reader is `application.mutation_scope.change.plan_change`, which counts a file as bound only
 under the `mirror` or `override` placement: the files bound to a changed node are the tests a
 per-change mutation run selects, and the rest are the files the binding places under no node.
+What the plan states about those files is counted by reason, from
+`count_test_files_by_placement` and `count_other_kind_test_files` (BDL-074 F1).
 The absent-table case answers `[]`, for the reason given above.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).

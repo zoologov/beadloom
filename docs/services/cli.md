@@ -151,7 +151,7 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
-On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node, and how many are `unplaced` — not yet under `tests/unit/` or `tests/integration/` — plus the `unowned` and "bound by other means" (acceptance, self-check) counts when non-zero. On this repository, measured 2026-09-27: `Tests:   462 files (0 bound to a node, 392 unplaced, 70 bound by other means)`. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node, and how many are `unplaced` — not yet under `tests/unit/` or `tests/integration/` — plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28: `Tests:   597 files (252 bound to a node, 170 unplaced, 72 acceptance step, 103 self-check)`. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
@@ -2032,7 +2032,11 @@ is how a slice with no tests scores 100%.
   edits count and untracked files do not. The report states its POPULATION: the files
   changed, those inside the declared scope, the functions touched there (a top-level
   function or `Class.method`), the node owning each, the test files the binding ties to that
-  node, and how many test files the binding places under no node. Changed lines outside any
+  node, and the test files bound to no node stated by why (BDL-074 F1): the unplaced count
+  `ctx` and the debt report state, then the unowned files, then each other kind by its count.
+  That `Binding:` line is printed only when some test file is bound to no node, and `--json`
+  carries the counts as the change's `test_placements` and `other_kinds`, beside the
+  unchanged `unbound_tests` list the runner falls back to. Changed lines outside any
   function are counted, and a file that is not parseable Python is named as not read. With
   `--stats` the run is taken to cover the changed files, `--target` is not needed, and the
   declared targets print as `Judged by this run: the functions above — a change covers
@@ -2058,17 +2062,21 @@ invocation cannot be answered: `--stats` without `--target` or `--changed-since`
 `git` cannot read, a survivor list that is not one, `--sample-of` without `--stats`, a sample
 larger than its population, or no index for an option that reads it.
 
-**A change's population, and a sample's interval, measured on this tree** (2026-09-27,
-features/BDL-074 at `61f416cd`). The branch changes no function of the declared scope, so
-its population is empty and says so. The binding line is the state before the test files are
-laid out under nodes:
+**A change's population, and a sample's interval, measured on this tree** (2026-09-28,
+features/BDL-074 at `d8b1790d`). The branch changes 56 functions of the declared scope, all
+owned by `rule-engine`; the function list is elided below. A change that touches no function of
+the scope prints `Population: empty — the change touches no function of the declared scope, so
+there is nothing to mutate and no score` instead. The binding line states the unplaced count
+`ctx` states, and names the acceptance step files and self-checks beside it by their own count:
 
 ```
 $ beadloom mutation --changed-since main
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · locale utf-8
-Change since main: 371 file(s) changed, 0 of them in the declared scope
-Population: empty — the change touches no function of the declared scope, so there is nothing to mutate and no score
-Binding: 554 of 554 test file(s) are placed under no node, so the tests bound to a node can be short of the tests that exercise it
+Change since main: 704 file(s) changed, 12 of them in the declared scope
+Population: 56 function(s) in 11 file(s) of the declared scope, over 1 node(s): rule-engine
+  rule-engine: _remediation_for, evaluate_all, … ; 36 test file(s) bound
+600 changed line(s) in the declared scope lie outside any function, where no mutant exists
+Binding: 170 of 597 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node; 72 acceptance step and 103 self-check file(s) bind to no node by their kind — so the tests bound to a node can be short of the tests that exercise it
 Declared scope: …
 Judged by this run: the functions above — a change covers functions, not declared targets
 No run was reported: the population above is what a runner is given.

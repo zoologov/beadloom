@@ -48,7 +48,7 @@ with no job is a check-run that never reports.
   under `strict`, stalling PRs).
 - Every declared context is produced by a job that exists, and every job that
   exists is a declared context. Both directions are enforced against the real
-  `ci.yml` by `tests/test_ci_consolidated_structure.py::test_required_contexts_
+  `ci.yml` by `tests/self_check/config/test_ci_consolidated_structure.py::test_required_contexts_
   match_ci_yml_check_runs`; the second direction is what the withdrawal above
   exercised.
 - `enforce_admins: true` with zero required reviews — strict trunk-based, but

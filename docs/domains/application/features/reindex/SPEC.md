@@ -145,12 +145,15 @@ rebuild overwrites the `extra["tests"]` it arrived in.
 the `nothing_changed` branch:
 
 ```
-Tests:   462 files (0 bound to a node, 392 unplaced, 70 bound by other means)
+Tests:   597 files (252 bound to a node, 170 unplaced, 72 acceptance step, 103 self-check)
 ```
 
-The bound and unplaced counts are always printed. `W unowned` and `K bound by other means`
-(acceptance and self-check files) appear only when non-zero. An index without the test tables
-prints no `Tests:` line. The line above is this repository's, measured on 2026-09-27.
+The bound and unplaced counts are always printed. `W unowned` appears only when non-zero. The
+`other_kind` files are named by their recorded kind, one entry per kind with its count
+(`A acceptance step`, `S self-check`; a kind without a label is named as recorded), because
+the two bind differently and one phrase over both was true of neither (BDL-074 F1). An index
+without the test tables prints no `Tests:` line. The line above is this repository's, measured
+by `beadloom reindex` on 2026-09-28.
 
 ### Incremental Reindex Pipeline
 
@@ -342,7 +345,10 @@ Module `src/beadloom/application/reindex/test_index.py`:
 - `placement_counts(conn) -> dict[str, int]` -- files per placement, read from `test_files`.
   Since BDL-074 C2 it delegates to `infrastructure.repository.count_test_files_by_placement`,
   because `ctx` and the debt report state the same counts and neither may import the reindex.
-- `describe_placements(counts) -> str` -- the text after `Tests:` on the reindex output.
+- `kind_counts(conn) -> dict[str, int]` -- `other_kind` files per recorded kind (BDL-074 F1),
+  delegating to `infrastructure.repository.count_other_kind_test_files`.
+- `describe_placements(counts, kinds) -> str` -- the text after `Tests:` on the reindex output;
+  *kinds* is `kind_counts`, each named through `infrastructure.repository.label_test_kind`.
 
 `change_detection.code_paths(files) -> frozenset[str]` gives the code paths of a
 `_scan_project_files` result, as POSIX paths, which the mirror resolves against.
@@ -500,7 +506,18 @@ class ReindexResult:
 
 ## Testing
 
-Test files: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_indexes_test_files_in_their_own_tables.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_cli_reindex.py`
+Test files bound to `reindex` (BDL-074 F2: 92 tests in 10 files, measured by `beadloom reindex`
+on 2026-09-28): `tests/integration/application/reindex/` (`test_reindex.py`,
+`test_reindex_config.py`, `test_reindex_tests.py`,
+`test_reindex_indexes_test_files_in_their_own_tables.py`, `test_reindex_activity.py`,
+`test_reindex_routes.py`, `test_an_incremental_reindex_refreshes_the_imports.py`,
+`test_the_sync_baseline_is_rebuilt_with_one_provenance.py`) and `tests/unit/application/reindex/`
+(`test_a_graph_change_is_detected_by_its_hashes.py`,
+`test_the_reindex_hub_keeps_its_exports.py`). The CLI surface is tested in
+`tests/test_cli_reindex.py`, which binds to no node yet (placement `unplaced`). The `Tests:`
+line's kinds are tested in
+`tests/integration/services/commands/index_ops/test_the_tests_line_names_each_kind.py`, bound
+to `cli-commands`.
 
 Tests should cover the following scenarios:
 

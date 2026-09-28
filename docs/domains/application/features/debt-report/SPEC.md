@@ -419,7 +419,7 @@ class DebtReport: ...
 
 ## Testing
 
-Test files: `tests/test_debt_report.py`, `tests/test_ctx_and_debt_report_read_the_test_binding.py`
+Test files: `tests/test_debt_report.py`, `tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py`
 (the untested count read from the binding, withheld while files are unplaced, and the
 `--category` report keeping its population clauses), and
 `tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.

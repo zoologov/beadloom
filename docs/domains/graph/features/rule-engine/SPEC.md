@@ -28,8 +28,8 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/test_binding.py` — `test_binding`: a test file bound to no node (the `files` leg) and a node with no bound test file, its own or a `part_of` descendant's (the `for` leg), over the binding the reindex records in `test_files` (BDL-074 C3).
 - `rules/test_import_boundary.py` — `test_import_boundary`: chooses which recorded TEST imports a boundary judges, then hands them to `forbid_import`'s own evaluator (BDL-074 C3).
 - `rules/scenario_binding.py` — `scenario_binding`: a scenario's `@node:` tag against the node folder its feature file sits in. Whether the scenario's steps execute that node is NOT judged (see below) (BDL-074 C3).
-- `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules, and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
-- `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
+- `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules (`IndexedTestFile` carries each file's `path`, `ref_id`, `placement` and, since BDL-074 F1, its recorded `kind`), and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
+- `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). `excused` counts the subjects the entries excused in a run, and `exemptions_used` (BDL-074 F1) how many exemptions excused at least one, which the `files` leg states as `excused by K exemption(s)`. The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
@@ -591,9 +591,13 @@ itself.
 **`test_binding`** has two legs, and each runs only when it is declared. A block that names
 neither `files` nor `for` is refused at load time.
 
-- **The `files` leg** judges every indexed test file the glob matches, except those bound by
-  other means: placement `other_kind`, which is an acceptance step file (its scenarios bind by
-  tag) or a self-check (it tests the repository). Those are counted, not judged. A judged
+- **The `files` leg** judges every indexed test file the glob matches, except those a kind
+  folder places (placement `other_kind`). Those are not judged, and the population statement
+  names them BY their recorded kind and count, never under one phrase (BDL-074 F1): an
+  acceptance step file runs scenarios that bind through their `@node:` tags, judged by the
+  project's `scenario_binding` rules, which the statement names; a self-check tests the
+  project's own files and binds to no node by design, a sanctioned outcome rather than a gap.
+  Any other recorded kind is named as bound to no node and not judged by this rule. A judged
   file with no node is a finding that names its placement.
 - **The `for` leg** judges every node the matcher selects. A node is bound when a test file
   is bound to it or to one of its `part_of` descendants. Acceptance scenarios are not counted
@@ -652,8 +656,8 @@ placements to find 4 real ones. Every population statement of this rule ends wit
 
 Every run of each suite rule, clean or not, adds one `warn` finding of `rule_type:
 suite_population`, built by `types.population_finding()`. It states how much the rule judged
-and why the rest was not judged: files matched, bound by other means, outside the glob, bound
-and unbound, excused and reported. A count of findings is then readable as a fraction of a
+and why the rest was not judged: files matched, outside the glob, bound and unbound, excused
+and by how many exemptions, reported, and the files a kind folder places, by kind. A count of findings is then readable as a fraction of a
 population. The type is in `advisories.ADVISORY_RULE_TYPES`, so `lint --fail-on-warn` does not
 exit 1 on it. Without that entry a project declaring any suite rule could never pass
 `--fail-on-warn` again.
@@ -1313,7 +1317,7 @@ def evaluate_forbid_edge_rules(conn: sqlite3.Connection, rules: list[ForbidEdgeR
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]: ...
 def evaluate_cardinality_rules(conn: sqlite3.Connection, rules: list[CardinalityRule]) -> list[Violation]: ...
 def evaluate_one_import_rule(rule: ImportBoundaryRule, imports: list[tuple[str, int, str]], *, file_count: int, target_count: int) -> list[Violation]: ...  # rules/evaluators.py
-def evaluate_test_binding_rules(conn: sqlite3.Connection, rules: list[TestBindingRule]) -> list[Violation]: ...
+def evaluate_test_binding_rules(conn: sqlite3.Connection, rules: list[TestBindingRule], *, scenario_rules: Sequence[str] = ()) -> list[Violation]: ...  # evaluate_all passes the scenario_binding rules' names
 def evaluate_test_import_boundary_rules(conn: sqlite3.Connection, rules: list[TestImportBoundaryRule]) -> list[Violation]: ...
 def evaluate_scenario_binding_rules(conn: sqlite3.Connection, rules: list[ScenarioBindingRule], *, project_root: Path | None = None) -> list[Violation]: ...
 def population_finding(*, rule_name: str, rule_description: str, message: str) -> Violation: ...  # rules/types.py; always warn

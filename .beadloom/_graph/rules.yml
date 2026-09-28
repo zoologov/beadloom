@@ -689,8 +689,10 @@ rules:
 
   # The node leg, held apart so it can be `warn` while the file leg is `error`.
   # WARN, AND WHY: measured 2026-09-28, 20 of the 51 features have no bound test
-  # file of their own or of a part of them (19 after E1 bound tests to ci-gate).
-  # While 176 files are unplaced, any of
+  # file of their own or of a part of them (19 after E1 bound tests to ci-gate;
+  # 17 after F2 bound tests to reindex and test-mapping, measured by
+  # `lint --strict --format json` on 2026-09-28).
+  # While 170 files are unplaced, any of
   # them may test such a node, so "no bound test" is not "untested" and cannot be
   # an error. Nor can it be exempted honestly: an exemption would claim to know
   # the node is untested for a reason, and nobody knows that yet. Each finding

@@ -485,7 +485,14 @@ resolves to `None`.
 - `describe_unplaced(counts: Mapping[str, int]) -> str | None` -- `"U of N test file(s) are
   unplaced (not under tests/integration/ or tests/unit/) and bind to no node"`, or `None`
   when no file is unplaced. The one wording `ctx` and the debt report share.
-- Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS`, `TEST_FILE_PATTERNS`, the five
+- `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None`
+  (BDL-074 F1) -- every test file bound to no node, stated by why: `describe_unplaced()`'s
+  sentence, then the unowned files, then each `other_kind` kind by its count (`A acceptance
+  step and S self-check file(s) bind to no node by their kind`). `beadloom mutation
+  --changed-since` prints it, so its unplaced count is the one `ctx` and the debt report state.
+- Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS` (built from
+  `infrastructure.repository`'s `KIND_ACCEPTANCE` and `KIND_SELF_CHECK` since BDL-074 F1),
+  `TEST_FILE_PATTERNS`, the five
   `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`. The `PLACEMENT_*` values are
   defined in `infrastructure/repository.py` since BDL-074 C3 and re-exported here under the
   same names: the rule engine's `test_binding` rule judges the placement this module assigns,
@@ -624,8 +631,13 @@ Tests are located in:
 | `tests/test_cache.py` | `cache.py` | L1 get/put, mtime invalidation, clear, clear_ref, stats |
 | `tests/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
 | `tests/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
-| `tests/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py`, `test_file_reader.py` | Mirror, declaration, placements, deepest root, union over descendants, test counting and imports |
-| `tests/test_ctx_and_debt_report_read_the_test_binding.py` | `builder.py`, `test_binding.py` | `test_placements` in the bundle, the unplaced line under `Tests:`, the debt report's untested count |
+| `tests/unit/context_oracle/test_binding/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py` | Mirror, declaration, placements, deepest root, union over descendants |
+| `tests/unit/context_oracle/test_binding/test_the_unplaced_share_is_one_sentence.py` | `test_binding.py` | `describe_unplaced()` |
+| `tests/unit/context_oracle/test_file_reader/test_a_test_file_is_read_for_its_tests_and_imports.py` | `test_file_reader.py` | Test counting and imports |
+| `tests/integration/context_oracle/builder/test_the_context_bundle_carries_the_test_placements.py` | `builder.py` | `test_placements` in the bundle |
+| `tests/integration/context_oracle/builder/test_the_context_bundle_carries_a_nodes_tests.py` | `builder.py` | The focus node's `tests` in the bundle |
+| `tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py` | `services/commands` (ctx) | The unplaced line under `Tests:` |
+| `tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py` | `application/debt_report` | The debt report's untested count |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
 | `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
 | `tests/test_cli_why.py` | `services/commands/query.py` (why) | CLI why command, --reverse flag, --format tree, --json output |
