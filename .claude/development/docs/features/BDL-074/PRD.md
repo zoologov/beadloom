@@ -98,6 +98,19 @@ tests → the strength of those tests**.
 - Removing the self-check tests. They are how this project dogfoods its own gates; they become an
   isolated, named category rather than a hidden side effect.
 - Settling what killed the whole-scope nightly's runner. That question was closed as superseded.
+- **Binding a test by a guess** (owner, 2026-09-28, after the second review; `beadloom-2mj3.15`
+  enumerated 32 conventions of the retired mapper, proved 23 no worse than main and ruled out 9).
+  A test binds by the mirror, by its place beside the code, or through `tests:` — nothing else:
+  - *NG2* — an Xcode sibling test target (`ShopTests/` beside `Shop/`) is not paired by default,
+    because the pairing depends on the project's own name; one line of `tests.mirrors` restores
+    main's figures.
+  - *NG3* — a test is not bound by what it imports, nor by a folder named after a node: an import
+    names fixtures, helpers and collaborators as well as the subject. Such a file is read and counted
+    unplaced, and the untested count is withheld, so the debt score does not move.
+  - *NG4* — a framework is not named from a marker file without a test file (`conftest.py`,
+    `jest.config.*`, an empty test folder). A project with no test says so and scores that.
+  - NG1 was **not** accepted as a non-goal: `test/` and `spec/` join `tests/` as default roots, read
+    only when present, so a flat test folder is read (unplaced) without a declaration.
 
 ## User Stories
 
