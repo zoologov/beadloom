@@ -28,7 +28,7 @@ is asserted in ``test_the_suite_reads_the_package_under_test.py``.
 Copy-safe ROOT idioms already existed in four places
 (``tests/acceptance/steps/doc-sync/docs-audit/test_audit_self_facts_steps.py:32``,
 ``test_ignore_block_drift_steps.py:39``, ``test_package_description_steps.py:39``,
-``tests/test_rules_docstring_references.py:50``). None of them declines a
+``tests/unit/graph/rules/test_rules_docstring_references.py:50``). None of them declines a
 generated name, which is why this module exists rather than a fifth copy of the
 first half.
 """

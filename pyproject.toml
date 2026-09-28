@@ -271,15 +271,16 @@ fail_under = 80
 # exists, or if a test file that imports the rules package directly is missing
 # from the pool.
 #
-# ONE DERIVED ENTRY IS EXCLUDED, and the reason is the room rather than taste:
-# tests/test_bead15_s3b_coverage.py runs `sync-check` over the tree it is in, and
+# ONE DERIVED ENTRY WAS EXCLUDED, and the reason was the room rather than taste:
+# tests/test_bead15_s3b_coverage.py ran `sync-check` over the tree it is in, and
 # in `mutants/` that tree is a MUTATED copy — every mutated module has a different
 # hash, so the pairs are stale by construction and the test cannot pass there.
-# It executes graph/rules/ and doc_shape.py, so dropping it costs whatever
-# mutants it would have killed, in the under-claiming direction. The 2026-09-04
-# derivation returned it a second time, through doc_shape.py, and it is still the
-# only entry excluded: the other 42 new entries were run in a room with no `.git`
-# and reported 1 failed, 971 passed, 17 skipped -- the one failure being this file.
+# The 2026-09-04 derivation returned it a second time, through doc_shape.py; the
+# other 42 new entries were run in a room with no `.git` and reported 1 failed,
+# 971 passed, 17 skipped -- the one failure being this file. BDL-074 A3 moved its
+# tree-reading checks to tests/self_check/, and E1 split the synthetic rest by
+# node: the two rule-engine parts and the freshness-skip part are in the pool
+# above, and nothing of the file is excluded any more.
 #
 # A SECOND ENTRY IS EXCLUDED, found by running the derived pool in `mutants/`
 # rather than by reasoning about it: tests/test_bead18_s5_relation.py reads
@@ -364,10 +365,10 @@ pytest_add_cli_args_test_selection = [
     "tests/acceptance/steps/application/wave-plan/test_wave_plan_steps.py",
     "tests/test_a_commit_is_judged_against_the_declared_axes.py",
     "tests/self_check/process/test_a_commit_is_judged_against_the_declared_axes.py",
-    "tests/test_a_layer_rule_that_fired_is_not_reported_inert.py",
+    "tests/integration/graph/rules/test_a_layer_rule_that_fired_is_not_reported_inert.py",
     "tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py",
     "tests/self_check/architecture/test_a_layer_the_declaration_names_and_no_node_is_in.py",
-    "tests/integration/graph/rules/test_a_same_layer_crossing_is_excused_by_name_or_not_at_all.py",
+    "tests/unit/graph/rules/test_a_same_layer_crossing_is_excused_by_name_or_not_at_all.py",
     "tests/integration/graph/rules/test_a_scenario_lives_in_the_folder_of_its_node.py",
     "tests/integration/graph/rules/test_a_test_file_binds_to_a_node_or_is_reported.py",
     "tests/integration/graph/rules/test_a_unit_test_of_a_domain_node_imports_no_infrastructure.py",
@@ -418,7 +419,13 @@ pytest_add_cli_args_test_selection = [
     "tests/test_docs_audit_coverage.py",
     "tests/test_e2e_wave3.py",
     "tests/test_every_lint_rendering_states_the_population.py",
-    "tests/test_every_surface_past_lint_states_the_population.py",
+    "tests/integration/graph/rules/test_one_phrase_states_a_layer_rules_population.py",
+    "tests/unit/graph/rules/test_every_caller_of_the_evaluator_is_named.py",
+    "tests/integration/application/gate/test_the_gate_line_states_the_layer_population.py",
+    "tests/integration/services/mcp_server/test_the_lint_tool_states_the_layer_population.py",
+    "tests/integration/tui/test_the_lint_panel_states_the_layer_population.py",
+    "tests/integration/application/debt_report/test_the_debt_report_states_the_layer_population.py",
+    "tests/integration/onboarding/scanner/test_prime_states_the_layer_population.py",
     "tests/test_every_wizard_answer_is_judged.py",
     "tests/integration/infrastructure/exit_condition/test_exit_condition_expiry.py",
     "tests/self_check/architecture/test_exit_condition_expiry.py",
@@ -467,7 +474,13 @@ pytest_add_cli_args_test_selection = [
     "tests/integration/graph/rules/test_lifecycle_rules.py",
     "tests/unit/graph/test_linter.py",
     "tests/integration/graph/rules/test_load_rules_parses_once.py",
-    "tests/integration/graph/rules/test_load_rules_pins_its_codec_and_messages.py",
+    "tests/unit/graph/rules/test_load_rules_pins_its_codec_and_messages.py",
+    "tests/unit/graph/rules/test_a_rules_file_is_read_into_the_rules_it_declares.py",
+    "tests/unit/graph/rules/test_a_layer_rules_reach_is_counted_on_a_shape.py",
+    "tests/unit/graph/rules/test_node_tags_are_read_once_and_a_bad_row_has_none.py",
+    "tests/integration/graph/rules/test_an_uncovered_module_fails_strict_lint_at_error_severity.py",
+    "tests/integration/graph/rules/test_a_directory_source_covers_its_whole_subtree.py",
+    "tests/unit/doc_sync/engine/test_a_freshness_skip_needs_a_missing_baseline.py",
     "tests/integration/services/mcp_server/test_mcp_process_tools.py",
     "tests/integration/infrastructure/doc_roots/test_missing_sections.py",
     "tests/integration/graph/rules/test_module_coverage_hardening.py",
@@ -478,7 +491,7 @@ pytest_add_cli_args_test_selection = [
     "tests/integration/graph/scenarios/test_reference_leg_syntax.py",
     "tests/self_check/docs/test_reference_leg_syntax.py",
     "tests/test_reindex.py",
-    "tests/test_release_a_is_neutral_on_a_project_that_is_not_ours.py",
+    "tests/integration/graph/rules/test_release_a_is_neutral_on_a_project_that_is_not_ours.py",
     "tests/test_role_configurator_hardening.py",
     "tests/self_check/process/test_role_configurator_hardening.py",
     "tests/test_role_core_names_the_room.py",
@@ -489,14 +502,20 @@ pytest_add_cli_args_test_selection = [
     "tests/self_check/docs/test_rule_engine.py",
     "tests/integration/graph/rules/test_rule_liveness_all_types.py",
     "tests/integration/graph/rules/test_rule_severity.py",
-    "tests/test_rules_docstring_references.py",
-    "tests/test_s2_false_green_residue.py",
+    "tests/unit/graph/rules/test_rules_docstring_references.py",
+    "tests/integration/graph/rules/test_a_rule_that_checks_nothing_is_not_read_as_clean.py",
+    "tests/integration/doc_sync/engine/test_sync_check_over_a_file_it_could_not_read.py",
+    "tests/integration/application/gate/test_the_gate_over_a_declared_doc_that_is_gone.py",
+    "tests/integration/application/gate/test_the_gate_doctor_line_does_not_call_a_warning_clean.py",
+    "tests/integration/services/commands/test_read_only_lint_over_a_stale_index.py",
+    "tests/integration/doc_sync/audit/test_docs_audit_names_what_it_verified_nothing_for.py",
     "tests/test_s2_lying_checks.py",
     "tests/test_s2_move_regression.py",
     "tests/self_check/architecture/test_s2_move_regression.py",
     "tests/self_check/config/test_the_ci_configurations_survive_the_harness_move.py",
     "tests/test_s3_config_check_residual.py",
-    "tests/test_s3_decomposition.py",
+    "tests/unit/graph/federation/test_the_federation_package_keeps_its_import_path.py",
+    "tests/unit/graph/rule_engine/test_the_shim_reexports_the_rules_package.py",
     "tests/self_check/architecture/test_this_repositorys_lint_findings_are_its_declared_debt.py",
     "tests/test_a_declaration_that_owns_nothing_is_reported.py",
     "tests/test_s4_the_instruments_agree.py",
@@ -524,7 +543,8 @@ pytest_add_cli_args_test_selection = [
     "tests/self_check/architecture/test_the_rule_decides_on_the_derived_layer.py",
     "tests/integration/graph/rules/test_the_same_layer_split_is_recomputed.py",
     "tests/self_check/architecture/test_the_same_layer_split_is_recomputed.py",
-    "tests/test_the_view_and_the_rule_engine_read_one_layer_declaration.py",
+    "tests/integration/application/architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py",
+    "tests/integration/graph/rules/test_liveness_reads_the_layer_the_rule_decides_on.py",
     "tests/integration/application/test_the_view_flags_what_the_rule_finds.py",
     "tests/self_check/architecture/test_the_view_flags_what_the_rule_finds.py",
     "tests/integration/tui/test_tui.py",

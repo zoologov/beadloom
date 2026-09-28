@@ -162,6 +162,20 @@ class TestAnExemptionThatHasStoppedEarningItsPlace:
         assert "excuses nothing" in findings[0].message
         assert findings[0].severity == "warn"
 
+    def test_the_dead_entry_finding_carries_the_description_of_its_rule(self) -> None:
+        # Arrange
+        rule = _rule(
+            LayerExemption(
+                from_glob="ledger-api", to_glob="postings-api", reason="r", until="2030-01-01"
+            )
+        )
+
+        # Act
+        findings = stale_layer_exemption_findings(rule, {}, today=date(2026, 1, 1))
+
+        # Assert
+        assert [f.rule_description for f in findings] == [rule.description]
+
     def test_an_exemption_still_excusing_a_crossing_is_not_reported(self) -> None:
         rule = _rule(
             LayerExemption(

@@ -318,6 +318,31 @@ class TestEvaluateCycleRulesMaxDepth:
         violations = evaluate_cycle_rules(db_conn, rules)
         assert len(violations) == 1
 
+    def test_a_cycle_one_node_longer_than_max_depth_is_not_detected(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """The bound is exact: a path stops growing at ``max_depth`` nodes.
+
+        A 4-cycle under ``max_depth=3`` needs a 4-node path to close, one node past
+        the bound. The 5-cycle above leaves room to be off by one and still pass.
+        """
+        # Arrange: N0 -> N1 -> N2 -> N3 -> N0
+        for i in range(4):
+            _insert_node(db_conn, f"N{i}")
+        for i in range(3):
+            _insert_edge(db_conn, f"N{i}", f"N{i+1}", "uses")
+        _insert_edge(db_conn, "N3", "N0", "uses")
+        db_conn.commit()
+        rule = CycleRule(
+            name="no-cycles", description="No circular deps", edge_kind="uses", max_depth=3
+        )
+
+        # Act
+        violations = evaluate_cycle_rules(db_conn, [rule])
+
+        # Assert
+        assert violations == []
+
 
 # ---------------------------------------------------------------------------
 # TestEvaluateCycleRulesEdgeKind

@@ -116,6 +116,20 @@ class TestDisagreement:
         assert "14" in found[0].message
         assert "18" in found[0].message
 
+    def test_a_disagreement_carries_the_description_of_its_rule(self, tmp_path: Path) -> None:
+        # Arrange
+        conn = _graph(tmp_path, {"gateway": "MCP stdio server with 14 tools for agents"})
+        rule = _rule()
+
+        # Act
+        found = _findings(
+            evaluate_summary_facts_rules(conn, [rule], fact_set=_facts(mcp_tool_count=18)),
+            SUMMARY_FACTS_RULE_TYPE,
+        )
+
+        # Assert
+        assert [v.rule_description for v in found] == [rule.description]
+
     def test_a_stale_version_is_reported_though_the_claim_carries_a_v(
         self, tmp_path: Path
     ) -> None:

@@ -460,12 +460,14 @@ rules:
   #
   # MEASURED ON THIS TREE, 2026-09-28, after a full reindex: 560 indexed test
   # files -- 202 bound to a node, 184 unplaced, 174 bound by other means
-  # (acceptance step files and self-checks). Every one of the 184 is listed
+  # (acceptance step files and self-checks). Every one of the 184 was listed
   # below by path, in three groups with their reason: 169 files the suite map
   # measured as exercising several nodes (or both kinds), 14 written or renamed
   # after the map, and 1 helper the `*_test.py` pattern matches. A path, not a
   # glob, so a NEW file placed nowhere is an error, and a listed file that moves
   # to its node's folder is reported the next run as an entry to delete.
+  # RE-MEASURED after E1 (`beadloom-cs2o`) split the rule engine's 8 of them by
+  # node: 578 indexed, 228 bound, 176 unplaced (all listed), 174 by other means.
   - name: test-files-bind-to-a-node
     description: "Every test file binds to a graph node, by the mirror of its path or a node's tests: list"
     severity: error
@@ -476,7 +478,6 @@ rules:
             - "tests/test_a_commit_is_judged_against_the_declared_axes.py"
             - "tests/test_a_duplicate_ref_id_is_reported_by_the_reader_that_meets_it.py"
             - "tests/test_a_generated_graph_hands_out_no_ref_id_twice.py"
-            - "tests/test_a_layer_rule_that_fired_is_not_reported_inert.py"
             - "tests/test_a_remediation_can_be_followed.py"
             - "tests/test_a_stale_line_names_its_pair.py"
             - "tests/test_adopter_projects.py"
@@ -486,7 +487,6 @@ rules:
             - "tests/test_auto_link_docs.py"
             - "tests/test_axes_section_reads_unread_ownership.py"
             - "tests/test_axes_section_table_boundary.py"
-            - "tests/test_bead15_s3b_coverage.py"
             - "tests/test_bead18_s5_relation.py"
             - "tests/test_bootstrap_clean_lint.py"
             - "tests/test_bootstrap_domain_parent_invariant.py"
@@ -526,7 +526,6 @@ rules:
             - "tests/test_e2e_wave3.py"
             - "tests/test_every_caller_of_the_skeleton_writer.py"
             - "tests/test_every_lint_rendering_states_the_population.py"
-            - "tests/test_every_surface_past_lint_states_the_population.py"
             - "tests/test_every_wizard_answer_is_judged.py"
             - "tests/test_f3_gate_coverage.py"
             - "tests/test_federate_gate.py"
@@ -584,20 +583,16 @@ rules:
             - "tests/test_reindex_config.py"
             - "tests/test_reindex_routes.py"
             - "tests/test_reindex_tests.py"
-            - "tests/test_release_a_is_neutral_on_a_project_that_is_not_ours.py"
             - "tests/test_role_bdd_mutation_duties.py"
             - "tests/test_role_configurator.py"
             - "tests/test_role_configurator_hardening.py"
             - "tests/test_role_core_names_the_room.py"
             - "tests/test_role_duties.py"
             - "tests/test_room_environment.py"
-            - "tests/test_rules_docstring_references.py"
-            - "tests/test_s2_false_green_residue.py"
             - "tests/test_s2_lying_checks.py"
             - "tests/test_s2_move_regression.py"
             - "tests/test_s2_seam_crosscutting.py"
             - "tests/test_s3_config_check_residual.py"
-            - "tests/test_s3_decomposition.py"
             - "tests/test_s4_cli_decomposition.py"
             - "tests/test_s4_decomposition.py"
             - "tests/test_s4_the_instruments_agree.py"
@@ -633,7 +628,6 @@ rules:
             - "tests/test_the_routing_table_is_one_table.py"
             - "tests/test_the_stale_pair_count_is_derived_in_one_place.py"
             - "tests/test_the_suite_reads_the_package_under_test.py"
-            - "tests/test_the_view_and_the_rule_engine_read_one_layer_declaration.py"
             - "tests/test_tracked_write_guard.py"
             - "tests/test_tui_no_raw_sqlite.py"
             - "tests/test_two_readers_of_one_markdown_table.py"
@@ -684,7 +678,8 @@ rules:
 
   # The node leg, held apart so it can be `warn` while the file leg is `error`.
   # WARN, AND WHY: measured 2026-09-28, 20 of the 51 features have no bound test
-  # file of their own or of a part of them. While 184 files are unplaced, any of
+  # file of their own or of a part of them (19 after E1 bound tests to ci-gate).
+  # While 176 files are unplaced, any of
   # them may test such a node, so "no bound test" is not "untested" and cannot be
   # an error. Nor can it be exempted honestly: an exemption would claim to know
   # the node is untested for a reason, and nobody knows that yet. Each finding

@@ -1,53 +1,40 @@
-"""The architecture view and the rule engine answer "what layer" from one lookup.
+"""The architecture view ranks every node by the declared layers, through the shared lookup.
 
-BDL-070 A5 (`beadloom-06dz`). Two more bodies answered the question the epic is
-about. `application.architecture_view` kept its own tag table and its own rank
-table and climbed `part_of` itself; `graph.rules.liveness` read a node's tags
-into a third map of its own. Both now call
-`graph.rules.layers`, and this file holds the properties that say so.
-
-**Each caller kept the verdict it had through Release A.** The view INHERITS a
-layer through `part_of`, because a feature has to sit in its container's lane;
-liveness read OWN TAGS ONLY, because inheriting changes which rules it calls
-inert and Release A changes no verdict. **Release B made that change**, in
-`beadloom-5tcc.6`, because a rule reporting an error while the same run counted
-it inert was a false signal this epic introduced (BDL-UX #296) — the class below
-is what moved, and it says which case moved and which did not. The disagreement
-between the view's edge predicate and the rule engine's is NOT resolved here —
-`beadloom-w34m` (B4) owns it.
+BDL-070 A5 (`beadloom-06dz`). `application.architecture_view` kept its own tag
+table and its own rank table and climbed `part_of` itself; it now calls
+`graph.rules.layers`, and the view's rank is that lookup's index, node for node.
+The view INHERITS a layer through `part_of`, because a feature has to sit in its
+container's lane.
 
 **The declaration is read, never written down.** A fixture below declares
-`tier-*` layers, which this project does not use, and the view ranks by them.
-That is the property an adopter depends on: Beadloom ships to projects whose
-layers are named differently.
+`tier-*` layers, which this project does not use, and the view ranks by them. That
+is the property an adopter depends on: Beadloom ships to projects whose layers are
+named differently.
+
+Split out of ``tests/test_the_view_and_the_rule_engine_read_one_layer_declaration.py``
+by node (BDL-074 E1); the rule engine's half is
+``tests/integration/graph/rules/test_liveness_reads_the_layer_the_rule_decides_on.py``.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from typing import TYPE_CHECKING
 
 from beadloom.application.architecture_view import build_architecture_view_data
 from beadloom.graph.rules.layer_reach import part_of_parents
 from beadloom.graph.rules.layers import layer_of
-from beadloom.graph.rules.liveness import inert_rules
 from beadloom.graph.rules.node_tags import node_tags
-from beadloom.graph.rules.types import LayerDef, LayerRule
-from beadloom.infrastructure.db import create_schema
+from beadloom.graph.rules.types import LayerDef
+from tests.support.in_memory_graph import DDD_LAYERS, add_edge, add_node, open_graph
 
 if TYPE_CHECKING:
+    import sqlite3
     from collections.abc import Sequence
 
     import pytest
 
-DDD_LAYERS = (
-    LayerDef(name="services", tag="layer-service"),
-    LayerDef(name="application", tag="layer-application"),
-    LayerDef(name="domains", tag="layer-domain"),
-    LayerDef(name="infrastructure", tag="layer-infra"),
-)
 
 #: A declaration that is not this project's. Every claim about "the declaration
 #: decides" is measured on it as well, because this repository's own tags are
@@ -56,26 +43,6 @@ TIER_LAYERS = (
     LayerDef(name="ui", tag="tier-ui"),
     LayerDef(name="core", tag="tier-core"),
 )
-
-
-def _open() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    create_schema(conn)
-    return conn
-
-
-def _node(conn: sqlite3.Connection, ref_id: str, kind: str, *tags: str) -> None:
-    conn.execute(
-        "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
-        (ref_id, kind, f"{ref_id} summary.", None, json.dumps({"tags": list(tags)})),
-    )
-
-
-def _edge(conn: sqlite3.Connection, src: str, dst: str, kind: str) -> None:
-    conn.execute(
-        "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)", (src, dst, kind)
-    )
 
 
 def _declare_layers(
@@ -104,17 +71,6 @@ def _declare_layers(
     )
 
 
-def _layer_rule(layers: Sequence[LayerDef], edge_kind: str = "depends_on") -> LayerRule:
-    return LayerRule(
-        name="architecture-layers",
-        description="layers, declared",
-        layers=tuple(layers),
-        enforce="top-down",
-        allow_skip=True,
-        edge_kind=edge_kind,
-    )
-
-
 def _ddd_graph(conn: sqlite3.Connection) -> None:
     """A graph with the shapes this repository has and two it does not.
 
@@ -123,27 +79,27 @@ def _ddd_graph(conn: sqlite3.Connection) -> None:
     this repository hides, because every one of its features is one ``part_of``
     hop from a tagged domain.
     """
-    _node(conn, "beadloom", "service", "layer-service")
-    _node(conn, "application", "domain", "layer-application")
-    _node(conn, "graph", "domain", "layer-domain")
-    _node(conn, "db", "domain", "layer-infra")
-    _node(conn, "site-generation", "feature")
-    _node(conn, "deep", "component")
-    _node(conn, "orphan", "component")
-    _edge(conn, "application", "beadloom", "part_of")
-    _edge(conn, "graph", "beadloom", "part_of")
-    _edge(conn, "db", "beadloom", "part_of")
-    _edge(conn, "site-generation", "application", "part_of")
-    _edge(conn, "deep", "site-generation", "part_of")
-    _edge(conn, "application", "graph", "depends_on")
-    _edge(conn, "graph", "db", "depends_on")
+    add_node(conn, "beadloom", "service", "layer-service")
+    add_node(conn, "application", "domain", "layer-application")
+    add_node(conn, "graph", "domain", "layer-domain")
+    add_node(conn, "db", "domain", "layer-infra")
+    add_node(conn, "site-generation", "feature")
+    add_node(conn, "deep", "component")
+    add_node(conn, "orphan", "component")
+    add_edge(conn, "application", "beadloom", "part_of")
+    add_edge(conn, "graph", "beadloom", "part_of")
+    add_edge(conn, "db", "beadloom", "part_of")
+    add_edge(conn, "site-generation", "application", "part_of")
+    add_edge(conn, "deep", "site-generation", "part_of")
+    add_edge(conn, "application", "graph", "depends_on")
+    add_edge(conn, "graph", "db", "depends_on")
 
 
 class TestOneAnswerForEveryNode:
     """The view's rank is the shared lookup's index, node for node."""
 
     def test_the_view_and_the_rule_engine_return_the_same_layer_for_every_node(self) -> None:
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             _declare_layers(conn, DDD_LAYERS)
@@ -168,7 +124,7 @@ class TestOneAnswerForEveryNode:
 
     def test_the_population_holds_both_answers(self) -> None:
         """Guard the guard: the agreement above must not hold vacuously."""
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             _declare_layers(conn, DDD_LAYERS)
@@ -186,7 +142,7 @@ class TestOneAnswerForEveryNode:
         assert ranks["orphan"] is None
 
     def test_a_node_keeps_its_own_layer_and_does_not_climb(self) -> None:
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             _declare_layers(conn, DDD_LAYERS)
@@ -203,12 +159,12 @@ class TestTheDeclarationDecides:
     """No layer tag is written down in the view, so another project's tags work."""
 
     def test_a_declaration_this_project_does_not_use_still_ranks_the_graph(self) -> None:
-        conn = _open()
+        conn = open_graph()
         try:
-            _node(conn, "web", "service", "tier-ui")
-            _node(conn, "engine", "domain", "tier-core")
-            _node(conn, "parser", "feature")
-            _edge(conn, "parser", "engine", "part_of")
+            add_node(conn, "web", "service", "tier-ui")
+            add_node(conn, "engine", "domain", "tier-core")
+            add_node(conn, "parser", "feature")
+            add_edge(conn, "parser", "engine", "part_of")
             _declare_layers(conn, TIER_LAYERS)
             conn.commit()
             data = build_architecture_view_data(conn, pages={})
@@ -222,7 +178,7 @@ class TestTheDeclarationDecides:
 
     def test_a_graph_with_no_layer_declaration_reports_no_layer(self) -> None:
         """Honest degradation: no declaration is not "everything is in layer 0"."""
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             conn.commit()
@@ -244,7 +200,7 @@ class TestTheDeclarationDecides:
         the fact rather than guessing (A8 review, Major 3).
         """
         # Arrange
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             conn.commit()
@@ -259,12 +215,10 @@ class TestTheDeclarationDecides:
         assert "4" in logged[0]
         assert "no layer rule" in logged[0]
 
-    def test_a_declared_graph_logs_nothing(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_declared_graph_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
         """The line is absent on the ordinary run, so its presence means something."""
         # Arrange
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             _declare_layers(conn, DDD_LAYERS)
@@ -282,9 +236,9 @@ class TestTheDeclarationDecides:
     ) -> None:
         """A project with no layering at all lost nothing and is told nothing."""
         # Arrange
-        conn = _open()
+        conn = open_graph()
         try:
-            _node(conn, "solo", "domain")
+            add_node(conn, "solo", "domain")
             conn.commit()
             # Act
             with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
@@ -295,7 +249,7 @@ class TestTheDeclarationDecides:
         assert [r.getMessage() for r in caplog.records if r.levelno == logging.INFO] == []
 
     def test_an_edge_carries_no_violation_flag_without_a_declaration(self) -> None:
-        conn = _open()
+        conn = open_graph()
         try:
             _ddd_graph(conn)
             conn.commit()
@@ -304,89 +258,3 @@ class TestTheDeclarationDecides:
             conn.close()
         for edge in data["edges"]:  # type: ignore[union-attr]
             assert "violation" not in edge
-
-
-class TestLivenessReadsTheLayerTheRuleDecidesOn:
-    """The one verdict Release B moved, and the graphs it did not move.
-
-    Release A pinned liveness to OWN tags here and said why: inheriting changes
-    which rules it calls inert. `beadloom-5tcc.6` made that change in the release
-    that announces it, so the first test below is the verdict that moved — it
-    asserted an inert rule and now asserts a live one, on the same graph.
-    """
-
-    def test_an_edge_between_two_inheriting_nodes_wakes_the_rule(self) -> None:
-        """The verdict Release B moved, on the graph Release A pinned it with.
-
-        ``deep`` and ``other`` both inherit a layer through ``part_of``, so the
-        rule judges ``deep -> other`` as an edge from the service layer to the
-        infrastructure one. Liveness reported the rule inert here until
-        BDL-UX #296 was closed, which is a rule reported inert on 4.0.0 and not
-        reported on the next release, on a graph nobody edited.
-        """
-        conn = _open()
-        try:
-            _node(conn, "api", "service", "layer-service")
-            _node(conn, "store", "domain", "layer-infra")
-            _node(conn, "deep", "feature")
-            _node(conn, "other", "feature")
-            _edge(conn, "deep", "api", "part_of")
-            _edge(conn, "other", "store", "part_of")
-            _edge(conn, "deep", "other", "depends_on")
-            conn.commit()
-            found = inert_rules(conn, [_layer_rule(DDD_LAYERS)])
-        finally:
-            conn.close()
-        assert found == []
-
-    def test_a_single_populated_layer_names_the_empty_tags_in_the_old_words(self) -> None:
-        conn = _open()
-        try:
-            _node(conn, "graph", "domain", "layer-domain")
-            _node(conn, "feature", "feature")
-            _edge(conn, "feature", "graph", "part_of")
-            conn.commit()
-            found = inert_rules(conn, [_layer_rule(DDD_LAYERS)])
-            inert = {rule.name: reason for rule, reason in found}
-        finally:
-            conn.close()
-        assert inert == {
-            "architecture-layers": (
-                "fewer than two of its layers are populated (no node carries "
-                "'layer-application', 'layer-infra', 'layer-service')"
-            )
-        }
-
-    def test_an_edge_between_two_tagged_nodes_leaves_the_rule_live(self) -> None:
-        conn = _open()
-        try:
-            _node(conn, "api", "service", "layer-service")
-            _node(conn, "store", "domain", "layer-infra")
-            _edge(conn, "api", "store", "depends_on")
-            conn.commit()
-            inert = inert_rules(conn, [_layer_rule(DDD_LAYERS)])
-        finally:
-            conn.close()
-        assert inert == []
-
-    def test_a_node_whose_extra_is_not_an_object_does_not_break_an_unrelated_rule(self) -> None:
-        """One malformed row answers "no tags", rather than ending the run.
-
-        Reading every node's tags in one pass means a row nobody asked about is
-        read anyway, so the tolerance is a consequence of the shared reader and
-        is asserted rather than left to be discovered.
-        """
-        conn = _open()
-        try:
-            _node(conn, "api", "service", "layer-service")
-            _node(conn, "store", "domain", "layer-infra")
-            _edge(conn, "api", "store", "depends_on")
-            conn.execute(
-                "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
-                ("odd", "component", "odd summary.", '"not an object"'),
-            )
-            conn.commit()
-            inert = inert_rules(conn, [_layer_rule(DDD_LAYERS)])
-        finally:
-            conn.close()
-        assert inert == []
