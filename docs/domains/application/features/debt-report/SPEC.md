@@ -216,8 +216,10 @@ is not read, so "all M test file(s) placed" means all M files those patterns mat
 repository: `not counted: 167 of 620 test file(s) are unplaced (not under tests/integration/ or
 tests/unit/) and bind to no node, so a node with no bound test may still be tested; a test file
 is read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests`.
-Under the default layout the clause names each group with its patterns and ends `under the
-roots tests, test, spec or beside a node's code`. So a project whose tests match no pattern is
+Under the default layout the clause names each group with its patterns and the roots and
+test trees the project has, since the index records only the roots that exist
+(`beadloom-2mj3.17`). With none of them it ends `under no root, since none of tests, test,
+spec, __tests__ exists, or beside a node's code`. So a project whose tests match no pattern is
 charged for every covered node and the report says why. The placement counts come from
 `infrastructure.repository.count_test_files_by_placement`.
 
@@ -232,16 +234,29 @@ the binding before G2 read 3; a Python project whose tests are mirrored under a 
 project score `untested: 0` as on main. `beadloom-2mj3.15` added the conventions that were
 still worse than main — a Jest project with `__tests__/` folders, and JVM and SwiftPM test-tree
 files whose names carry no test affix — each now scoring as on main. A Python project whose
-tests sit flat under `test/`, or a TypeScript project with flat `spec/*.spec.ts` files, has them
-read under the default roots and unplaced, so its count is withheld (0, as on main).
+tests sit flat under `test/`, a TypeScript project with flat `spec/*.spec.ts` files, or a Jest
+project with a top-level `__tests__/` folder (`beadloom-2mj3.17`), has them read under the
+default roots `tests`, `test`, `spec` and `__tests__` and unplaced, so its count is withheld
+(0, as on main).
 `tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py`
-runs those layouts, one project per convention. Three conventions of the retired mapper are
-non-goals and score differently from main by design, each stated in the
-[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#what-is-not-bound-the-non-goals):
-an Xcode `ShopTests/` target is not read until `tests.mirrors` declares it, so every covered node
-counts untested. A test bound on main only by its imports or a folder named after a node is
-unplaced, so the count is withheld. A marker file without a test file names no framework,
-so a project with no test file has every covered node untested.
+runs those layouts, one project per convention.
+
+Three conventions of the retired mapper are non-goals, each stated in the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#what-is-not-bound-the-non-goals).
+Two of them change the score, because the file they concern is not read or names no
+framework, so nothing withholds the count:
+
+- NG2: an Xcode `ShopTests/` target is outside every root, test tree and node source, so it
+  is not read until `tests.mirrors` declares it, and every covered node counts untested where
+  main counted 0.
+- NG4: a marker file without a test file (`conftest.py`, `jest.config.*`) names no framework,
+  so a project with no test file has every covered node untested where main counted 0.
+
+NG3 does not change the score. A test bound on main only by its imports or by a folder named
+after a node, such as `tests/billing/test_x.py`, is read under its root and counted unplaced,
+because no kind folder, mirror or `tests:` list places it. The count is withheld: 0, as on
+main (`TestANameAFolderOrAnImportUnderARootIsNotAGuessAtItsNode` in
+`tests/integration/application/reindex/test_a_convention_main_reached_by_a_guess_is_stated_not_guessed.py`).
 
 The population is carried UNWEIGHTED, like `layer_populations`: under Test Gaps in the Rich
 report, and as `test_population` in `format_debt_json`.

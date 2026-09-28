@@ -150,14 +150,17 @@ kinds bind to no node for different reasons, and a count that merged them would 
 
 **The recorded test layout** (BDL-074 G2) — `TEST_LAYOUT_KEY` (`"test_layout"`) is the `meta`
 key the reindex records the test layout it read under. `RecordedTestLayout` is that record:
-`kind_prefixes` (each kind's folders under every root, `tests/unit/`), `declared_kinds` (the
-kinds whose folder `.beadloom/config.yml` declares rather than defaults), `beside_code`,
-`roots`, `frameworks` (the names of the pattern groups a file path is matched against),
+`kind_prefixes` (each kind's folders under every root that exists, `tests/unit/`),
+`declared_kinds` (the kinds whose folder `.beadloom/config.yml` declares rather than
+defaults), `beside_code`, `roots` (the roots in force that exist on disk, since
+`beadloom-2mj3.17`), `frameworks` (the names of the pattern groups a file path is matched against),
 `mirror_roots` (the build tools' test trees the project has, `src/test/java`; BDL-074 G2b) and
 `patterns` (each group's patterns in the order they are matched, `beadloom-2mj3.15`; `()` in a
-record written before it, which named the groups alone). `encode()` gives the JSON the `meta`
-table holds, `patterns` as `[[name, [pattern, ...]], ...]`, and a changed record forces one test
-re-index. `read_test_layout(conn)` ->
+record written before it, which named the groups alone) and `absent_roots` (the roots in force
+the project does not have, so a reader names the roots that exist and can say which were
+looked for, `beadloom-2mj3.17`; `()` in an older record). `encode()` gives the JSON the `meta`
+table holds, `patterns` as `[[name, [pattern, ...]], ...]` and `absent_roots` as a list, and a
+changed record forces one test re-index. `read_test_layout(conn)` ->
 `RecordedTestLayout | None` reads it back, `None` for an index written before G2 or a record
 that does not parse, so a reader states that the layout is unknown rather than a default. It
 sits beside the placement vocabulary for the same reason: `context_oracle.test_layout` writes

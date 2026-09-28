@@ -128,7 +128,7 @@ path decides only WHETHER it is a test, by the patterns below. Every key is opti
 
 | Key | Default | A declared value |
 |-----|---------|------------------|
-| `tests.roots` | `[tests, test, spec]`, each read only where a folder of exactly that spelling exists | replaces the list |
+| `tests.roots` | `[tests, test, spec, __tests__]`, each read only where a folder of exactly that spelling exists | replaces the list |
 | `tests.kinds` | `unit`, `integration`, `acceptance`, `self_check`, each in a folder of its own name | replaces the folder of that one kind |
 | `tests.patterns` | the five groups below | replaces all five groups |
 | `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
@@ -141,6 +141,10 @@ path decides only WHETHER it is a test, by the patterns below. Every key is opti
 | JavaScript, TypeScript | `jest` | `*.test.*`, `*.spec.*`, `__tests__/**/*.[jt]s`, `__tests__/**/*.[jt]sx` |
 | Java, Kotlin | `junit` | `*Test.java`, `*Tests.java`, `*TestCase.java`, `*IT.java`, `*ITCase.java`, `*Test.kt`, `*Tests.kt`, `src/test/**/*.java`, `src/test/**/*.kt` |
 | Swift | `xctest` | `*Tests.swift`, `*Tests/**/*.swift` |
+
+`ctx` and the debt report name only the roots that exist. A project with none of the four, and
+with tests read beside the code, sees a clause ending `under no root, since none of tests,
+test, spec, __tests__ exists, or beside a node's code`.
 
 A pattern without a `/` matches the file name. A pattern with a `/` matches the end of the
 file's path, folder by folder, and `**` stands for any number of folders: `__tests__/**` is
@@ -181,8 +185,10 @@ What is deliberately not bound, and the declaration that binds it:
   its untested count. List the folder under the node's `tests:` in the graph to bind it.
 - **A marker file without a test file** (`conftest.py`, `jest.config.js`, an empty `src/test/`
   or `ShopTests/`) names no framework: a project with no test file reads `none` and scores that.
-- **A top-level `__tests__/` folder** is outside every default root and is not read. Add it to
-  `tests.roots` and list it under the node's `tests:` to bind it.
+- **A flat `test/` or `spec/` folder, or a top-level `__tests__/`**, is a default root, so its
+  files are read without a declaration and counted `unplaced` unless a kind folder or a
+  node's `tests:` places them, and the debt report then withholds its untested count. List the
+  folder under the node's `tests:` in the graph to bind it.
 
 The full rule is in the [Test Mapping SPEC](domains/context-oracle/features/test-mapping/SPEC.md).
 

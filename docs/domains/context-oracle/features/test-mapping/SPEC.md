@@ -40,16 +40,27 @@ project that declares nothing is read by the defaults below.
 
 | Key | Default | A declared value |
 |-----|---------|------------------|
-| `roots` | `[tests, test, spec]`, each read only where a folder of exactly that spelling exists | replaces the list |
+| `roots` | `[tests, test, spec, __tests__]`, each read only where a folder of exactly that spelling exists | replaces the list |
 | `kinds` | each kind in the folder of its own name: `unit`, `integration`, `acceptance`, `self_check` | replaces the folder of that one kind |
 | `patterns` | the five framework groups below | replaces all five groups |
 | `mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
 | `beside_code` | `true` | `true` or `false` |
 
 `test/` and `spec/` joined `tests/` as default roots by the owner's ruling of 2026-09-28
-(`beadloom-2mj3.15`, NG1), in place of a walk over the whole project: a flat `test/` or
-`spec/` folder is read without a declaration, and a file there binds by the mirror or a
-`tests:` list, or is read and counted `unplaced`.
+(`beadloom-2mj3.15`, NG1), in place of a walk over the whole project, and a top-level
+`__tests__/` joined them under the same ruling (`beadloom-2mj3.17`), because NG1 named all
+three places. A flat `test/`, `spec/` or top-level `__tests__/` folder is read without a
+declaration, and a file there binds by the mirror or a `tests:` list, or is read and counted
+`unplaced`.
+
+The index records only the roots that exist (`RecordedTestLayout.roots`) and keeps the roots
+looked for and not found apart (`RecordedTestLayout.absent_roots`), so `ctx`, the debt report
+and `beadloom mutation` name only the roots a project has. A project with none of them, and
+with tests read beside the code, is told which were looked for:
+
+```
+a test file is read when its path matches a pattern of ... under no root, since none of tests, test, spec, __tests__ exists, or beside a node's code
+```
 
 A pattern matches the END of a file's project-relative path, case-sensitively
 (`test_layout.pattern_matches()`). A pattern without a `/` matches the file name. A pattern
@@ -105,12 +116,13 @@ A root or a test tree is read only when a folder of exactly that spelling exists
 a case-insensitive disk `tests/` and a SwiftPM `Tests/`, or `spec/` and `Spec/`, are not read
 as each other. A declaration that cannot be used is a reindex warning naming the key, and the
 default stands for that key: a `roots` that is not a list of folders, a kind Beadloom does not
-know, a `beside_code` that is not a boolean. A `roots` list that names the project itself or a
+know, a `beside_code` that is not a boolean, a `patterns` that does not map each framework
+name to a list of file patterns (a name, or the end of a path). A `roots` list that names the project itself or a
 folder outside it — `.`, `/`, `./`, `..`, `a/../b` — is refused whole, because `.` would walk
 `.git`, `.venv` and a mutmut copy of the code, and `..` a folder outside the project:
 
 ```
-`tests.roots` in .beadloom/config.yml must be a list of folders inside the project, none of them the project itself or outside it; the default (tests, test, spec) is used
+`tests.roots` in .beadloom/config.yml must be a list of folders inside the project, none of them the project itself or outside it; the default (tests, test, spec, __tests__) is used
 ```
 
 This repository declares `roots: [tests]`, the four kinds, `pytest` patterns only and
@@ -221,9 +233,10 @@ never by what it imports (NG3). A `ShopTests/` folder holding no test file names
 (NG4).
 
 NG1 was not accepted as a non-goal: the retired mapper also bound a flat `test/` or `spec/`
-file by its name, and that folder is now a default root, so the file is read and counted
-`unplaced` rather than ignored. A top-level `__tests__/` outside every root is not read. A
-project declares it as a root and binds it with a `tests:` list.
+file, or a file in a top-level `__tests__/`, by its name, and each of those folders is now a
+default root (`beadloom-2mj3.15`, `beadloom-2mj3.17`). The file is read and counted
+`unplaced` rather than ignored, so the debt report withholds its count as main scored it. A
+`tests:` list binds it without a `roots` declaration.
 
 ### What a test file holds
 
@@ -277,11 +290,12 @@ four-key shape its readers expect:
 
 The reindex also records the layout it read in the index, as `meta.test_layout`
 (`infrastructure.repository.RecordedTestLayout`): each kind's folders, the kinds the
-config declares, `beside_code`, the roots, the framework names, the test trees present
-and, since `beadloom-2mj3.15`, each group's patterns in the order they are matched. The
-readers that state a count state it against that record, and an index whose recorded
-layout differs from the config is rebuilt by the next incremental reindex rather than
-reported as unchanged. A record written before the patterns were recorded reads with no
+config declares, `beside_code`, the roots present, the framework names, the test trees
+present, since `beadloom-2mj3.15` each group's patterns in the order they are matched, and
+since `beadloom-2mj3.17` the roots in force that the project does not have. The readers that
+state a count state it against that record, and an index whose recorded layout differs from
+the config, or from the roots and test trees on disk, is rebuilt by the next incremental
+reindex rather than reported as unchanged. A record written before the patterns were recorded reads with no
 patterns, and the changed record forces one test re-index.
 
 A node's `tests:` prefix that covers no indexed test file is a reindex warning, because
@@ -298,8 +312,9 @@ Measured on this repository by `beadloom reindex` on 2026-09-28 (`features/BDL-0
 `909a0098`): 620 test files, 275 bound to a node (74 under `tests/unit/` and 201 under
 `tests/integration/`, all by the mirror), 167 `unplaced`, 75 acceptance step and 103
 self-check. The five files over the 615 measured at `293db6b5` are `beadloom-2mj3.15`'s
-new test files, and the default roots `test/` and `spec/` changed nothing here, because this
-repository declares `roots: [tests]` and has neither folder. None is bound beside the code, because this repository has
+new test files, and the default roots `test/`, `spec/` and `__tests__/` changed nothing here,
+because this repository declares `roots: [tests]` and has none of those folders (`620 =
+275/167/75/103`, unchanged after `beadloom-2mj3.17`). None is bound beside the code, because this repository has
 `beside_code: false`. When the binding landed (BDL-074 C1, 2026-09-27) the same count
 read 462 test files, 0 bound, 392 `unplaced` and 70 `other_kind`. The heuristic it
 replaced gave the root node 882 files and bound 532 mutmut copies under `mutants/` to
@@ -323,7 +338,10 @@ the `test_files` table records each file's placement.
   and bind to no node, so the count above can be short`. The folders are the recorded
   roots' mirrored kind folders and the test trees present, and `, nor inside a node's
   source` follows them when tests beside the code are read. Under the default roots the
-  sentence names `spec/`, `test/` and `tests/` unit and integration folders. A cached
+  sentence names the unit and integration folders of the roots that exist
+  (`beadloom-2mj3.17`). With no root and no test tree present it reads `(inside no node's
+  source)` when tests beside the code are read, and `(under no root)` when they are not. A
+  cached
   bundle built before the key existed falls back to the default layout's sentence.
   Since `beadloom-2mj3.15` the bundle also carries `test_recognition`, the
   `describe_test_file_recognition()` clause (`null` without a recorded layout), and the
@@ -340,9 +358,11 @@ the `test_files` table records each file's placement.
   reads as "all N files those patterns matched". Under the default layout the clause is
   `a test file is read when its path matches a pattern of go_test (*_test.go), jest
   (*.test.*, *.spec.*, __tests__/**/*.[jt]s, __tests__/**/*.[jt]sx), junit (...), pytest
-  (test_*.py, *_test.py) or xctest (*Tests.swift, *Tests/**/*.swift) under the roots tests,
-  test, spec or beside a node's code`, with every `junit` pattern named where `(...)` stands
-  here. A record written before the patterns were recorded names the groups alone.
+  (test_*.py, *_test.py) or xctest (*Tests.swift, *Tests/**/*.swift) under ...`, where
+  `...` names the roots and test trees that exist, followed by `or beside a node's code`, and
+  every `junit` pattern is named where `(...)` stands here. With no root and no test tree it
+  ends `under no root, since none of tests, test, spec, __tests__ exists, or beside a node's
+  code` (`beadloom-2mj3.17`). A record written before the patterns were recorded names the groups alone.
   See the [debt report](../../../application/features/debt-report/SPEC.md).
 - **Lint.** Since BDL-074 C3 the rule engine judges the binding: `test_binding` reports a
   test file bound to no node and a node with no bound test file, and
@@ -394,8 +414,10 @@ Module `src/beadloom/context_oracle/test_layout.py` (BDL-074 G2):
   `kind_prefixes(kind) -> tuple[str, ...]` (`root/folder/` for every root),
   `locate(path) -> tuple[str | None, str] | None` (`None` under no root, else the kind and
   the path below it), `mirror_of(path) -> tuple[str, str, str] | None` (the test tree,
-  the code tree and the path below), and `recorded(present_mirror_roots=()) ->
-  RecordedTestLayout`.
+  the code tree and the path below), and `recorded(present_mirror_roots=(),
+  present_roots=None) -> RecordedTestLayout` (*present_roots* are the roots the project has,
+  `None` for all of them; the record's `roots` and `kind_prefixes` hold those, and
+  `absent_roots` the rest, `beadloom-2mj3.17`).
 - `pattern_matches(pattern: str, path: str) -> bool` (`beadloom-2mj3.15`) — whether a
   pattern matches the end of a project-relative path: the file name for a pattern without
   a `/`, the last folders and the name for the folder form, `**` any number of folders.
@@ -405,7 +427,7 @@ Module `src/beadloom/context_oracle/test_layout.py` (BDL-074 G2):
   unreadable config yields the default layout and one sentence.
 - `layout_from_config(config) -> tuple[TestLayout, list[str]]` — the same over a parsed
   mapping.
-- `DEFAULT_ROOTS` (`("tests", "test", "spec")`), `DEFAULT_PATTERNS`, `DEFAULT_MIRRORS`,
+- `DEFAULT_ROOTS` (`("tests", "test", "spec", "__tests__")`), `DEFAULT_PATTERNS`, `DEFAULT_MIRRORS`,
   `CONFIG_PATH`, `CONFIG_KEY`.
 - `KIND_UNIT`, `KIND_INTEGRATION`, `MIRRORED_KINDS`, `KINDS` (acceptance, integration,
   self_check, unit).
@@ -444,13 +466,15 @@ Module `src/beadloom/context_oracle/test_binding.py`:
 - `describe_unplaced(counts: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   — the sentence that says how many test files are unplaced and bind to no node; `None`
   when none is. It names the recorded layout's mirrored folders and test trees, adding
-  `, nor inside a node's source` when tests beside the code are read; with no layout it
-  names the default folders. `ctx` and the debt report both print it.
+  `, nor inside a node's source` when tests beside the code are read. With no folder to name
+  it says `inside no node's source` or `under no root` (`beadloom-2mj3.17`). With no layout
+  it names the default folders. `ctx` and the debt report both print it.
 - `describe_test_file_recognition(layout: RecordedTestLayout) -> str` (BDL-074 G2) — what
   makes a file a test file this index reads, in one clause: `a test file is read when its
   path matches a pattern of`, each group with its patterns in parentheses (the group names
-  alone for a record without patterns), the roots and test trees, and `or beside a node's
-  code` when that is read. `ctx` and the debt report state it every time
+  alone for a record without patterns), the recorded roots and test trees, and `or beside a
+  node's code` when that is read. With none recorded it says `under no root, since none of
+  <absent roots> exists` (`beadloom-2mj3.17`). `ctx` and the debt report state it every time
   (`beadloom-2mj3.15`).
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   (BDL-074 F1) — every test file bound to no node, stated by why: `describe_unplaced()`'s
@@ -480,6 +504,9 @@ Module `src/beadloom/infrastructure/repository.py`:
   (BDL-074 G2); `None` for an index written before it or a record that does not parse.
   `RecordedTestLayout.patterns` (`beadloom-2mj3.15`) holds each group's patterns in match
   order, encoded as `[[name, [pattern, ...]], ...]`; `()` for an older record.
+  `RecordedTestLayout.absent_roots` (`beadloom-2mj3.17`) holds the roots in force the project
+  does not have, encoded as `absent_roots`; `()` for an older record. Its `roots` and
+  `kind_prefixes` hold only the roots that exist.
 - `count_test_files_by_placement(conn) -> dict[str, int]` — indexed test files per
   placement; `{}` when the `test_files` table does not exist.
 - `count_other_kind_test_files(conn) -> dict[str, int]` — `other_kind` files per recorded
@@ -487,10 +514,10 @@ Module `src/beadloom/infrastructure/repository.py`:
 
 ## Testing
 
-Tests bound to `test-mapping`, its own and its two components' (100 tests in 10 files, measured
-by `beadloom ctx test-mapping` on 2026-09-28 at `909a0098`):
+Tests bound to `test-mapping`, its own and its two components' (103 tests in 10 files, measured
+by `beadloom ctx test-mapping` on 2026-09-28 at `a7b888a8`):
 
-- `test-mapping` (54 tests in 5 files), under `tests/unit/context_oracle/test_binding/`:
+- `test-mapping` (57 tests in 5 files), under `tests/unit/context_oracle/test_binding/`:
   `test_a_test_file_binds_to_the_node_its_path_mirrors.py` (the binding),
   `test_a_test_beside_the_code_binds_to_the_node_covering_it.py` (beside the code),
   `test_a_test_in_a_build_tools_test_tree_binds_by_its_mirror.py` (the test trees and the
@@ -514,8 +541,8 @@ Bound to `reindex`:
 `tests/integration/application/reindex/test_every_convention_the_retired_mapper_read_is_read.py`
 (the conventions proven no worse than the retired mapper) and
 `tests/integration/application/reindex/test_a_convention_main_reached_by_a_guess_is_stated_not_guessed.py`
-(the non-goals, the default roots `test/` and `spec/`, and the declarations that restore the
-retired mapper's figures, the Xcode mirror among them). Elsewhere:
+(the non-goals, the default roots `test/`, `spec/` and `__tests__/` read where they exist, and
+the declarations that restore the retired mapper's figures, the Xcode mirror among them). Elsewhere:
 `tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py`,
 `tests/unit/services/commands/test_the_ctx_markdown_prints_the_bundles_unplaced_sentence.py`
 and `tests/unit/services/commands/test_the_ctx_markdown_says_which_files_count_as_tests.py`

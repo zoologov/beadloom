@@ -198,8 +198,10 @@ to the node whose source holds it (placement `beside_code`), unless the layout s
 `beside_code: false`. Any other file binds to nothing and records a placement: `unowned`,
 `unplaced` or `other_kind`. No file is bound by a guess — not by its name, its imports or a
 folder named after a node: the path only decides whether a file is a test, by the layout's
-patterns, and a file outside every root (default `tests/`, `test/`, `spec/`), test tree and
-node source is not read. The keys, their defaults per language and
+patterns, and a file outside every root (default `tests/`, `test/`, `spec/` and a top-level
+`__tests__/`, each read where it exists), test tree and node source is not read. The index
+records only the roots that exist, so `ctx` and the debt report name only those
+(`beadloom-2mj3.17`). The keys, their defaults per language and
 the full rule are in the [Test Mapping SPEC](features/test-mapping/SPEC.md).
 
 The reindex stores the binding in the `test_files` / `test_imports` / `test_overrides` tables,
@@ -526,14 +528,17 @@ when the mirrored folder holds no code.
   -- `"U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind
   to no node"`, or `None` when no file is unplaced. The folders are the recorded layout's
   mirrored kind folders and test trees, and `, nor inside a node's source` follows them when
-  tests beside the code are read; with no layout, the default folders. The one wording `ctx`
-  and the debt report share.
+  tests beside the code are read. With no folder to name it says `(inside no node's source)`
+  or `(under no root)` (`beadloom-2mj3.17`); with no layout, the default folders. The one
+  wording `ctx` and the debt report share.
 - `describe_test_file_recognition(layout: RecordedTestLayout) -> str` (BDL-074 G2) -- what
   makes a file a test file the index reads: the clause starts `a test file is read when its
   path matches a pattern of`, then names each framework group with its patterns in
   parentheses (the group names alone for a record written before the patterns were
-  recorded) and the roots or test trees, and ends `or beside a node's code` when that is
-  read. `ctx` and the debt report state it every time (`beadloom-2mj3.15`).
+  recorded) and the recorded roots or test trees, and ends `or beside a node's code` when
+  that is read. With none recorded it names the roots looked for: `under no root, since none
+  of tests, test, spec, __tests__ exists, or beside a node's code` (`beadloom-2mj3.17`).
+  `ctx` and the debt report state it every time (`beadloom-2mj3.15`).
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   (BDL-074 F1) -- every test file bound to no node, stated by why: `describe_unplaced()`'s
   sentence over *layout*, then the unowned files, then each `other_kind` kind by its count (`A acceptance
@@ -595,11 +600,12 @@ itself or a folder outside it (`.`, `/`, `..`) is refused whole. `TestLayout` an
 `folder_of(kind)`, `kind_prefixes(kind)`,
 `locate(path)` (the kind and the path below it, or `None` under no root),
 `mirror_of(path)` (the test tree, the code tree and the path below it) and
-`recorded(present_mirror_roots=())`, the `RecordedTestLayout` the index keeps, patterns
-included. `pattern_matches(pattern, path)` (`beadloom-2mj3.15`) says whether a pattern matches
+`recorded(present_mirror_roots=(), present_roots=None)`, the `RecordedTestLayout` the index
+keeps, patterns included; its `roots` are *present_roots* (`None`: all of them) and
+`absent_roots` the rest (`beadloom-2mj3.17`). `pattern_matches(pattern, path)` (`beadloom-2mj3.15`) says whether a pattern matches
 the end of a path: the file name for a pattern without `/`, the last folders and the name for
 the folder form (`__tests__/**`), where `**` is any number of folders. Constants:
-`DEFAULT_ROOTS`, `DEFAULT_PATTERNS` (`pytest`, `go_test`, `jest`, `junit`, `xctest`),
+`DEFAULT_ROOTS` (`tests`, `test`, `spec`, `__tests__`), `DEFAULT_PATTERNS` (`pytest`, `go_test`, `jest`, `junit`, `xctest`),
 `DEFAULT_MIRRORS`, `CONFIG_PATH`, `CONFIG_KEY`, `KIND_UNIT`, `KIND_INTEGRATION`,
 `MIRRORED_KINDS`, `KINDS`. The defaults per language are in the
 [Test Mapping SPEC](features/test-mapping/SPEC.md#configuration-the-test-layout).

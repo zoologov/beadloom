@@ -127,7 +127,8 @@ see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.
 every file whose project-relative PATH matches one of its patterns (default `pytest`,
 `go_test`, `jest`, `junit`, `xctest`; a pattern with a `/` matches the end of the path, so
 `__tests__/**` reads a whole folder, `beadloom-2mj3.15`) in three places: under each declared
-root (default `tests/`, `test/` and `spec/`, each where it exists), under each
+root (default `tests/`, `test/`, `spec/` and a top-level `__tests__/`, each where it
+exists), under each
 build tool's test tree the project has (default `src/test/java/`, `src/test/kotlin/`,
 SwiftPM's `Tests/`), and — when the layout has `beside_code: true`, the default — among the
 code scan's files outside all of those. A test beside the code is taken from the code scan
@@ -158,8 +159,12 @@ bound file states the project's. The `tests:` declaration is read from the graph
 full reindex (step 3a), because the rebuild overwrites the `extra["tests"]` it arrived in.
 
 The layout is recorded in the index as `meta.test_layout` (`TestLayout.recorded()`, stored by
-`RecordedTestLayout.encode()`, each group's patterns included since `beadloom-2mj3.15`), so `ctx`, the debt report and the rule engine can state their
-counts against it without importing `context_oracle`. `IndexedTestFiles.warnings` carries a
+`RecordedTestLayout.encode()`, each group's patterns included since `beadloom-2mj3.15`), so
+`ctx`, the debt report and the rule engine can state their counts against it without importing
+`context_oracle`. Since `beadloom-2mj3.17` the record holds the roots that exist as `roots` and
+the roots in force that do not as `absent_roots`, both read from disk by
+`_recorded_layout()`, so a reader names only the roots a project has. `is_test_index_current()`
+compares the same record, so a root folder created or removed forces one test re-index. `IndexedTestFiles.warnings` carries a
 sentence for each unusable part of the `tests:` config block and one for each node's `tests:`
 prefix that covers no indexed test file, and both reindex paths add them to
 `ReindexResult.warnings`:

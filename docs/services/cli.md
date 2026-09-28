@@ -281,8 +281,11 @@ The debt score formula combines four categories:
   unplaced share. Whenever the index recorded a test layout, the population ends with what a
   test file is read by (BDL-074 G2; every time since `beadloom-2mj3.15`): under the default
   layout `a test file is read when its path matches a pattern of go_test (*_test.go), jest
-  (...), junit (...), pytest (test_*.py, *_test.py) or xctest (...) under the roots tests,
-  test, spec or beside a node's code`, where each `(...)` names that group's patterns.
+  (...), junit (...), pytest (test_*.py, *_test.py) or xctest (...) under ...`, where each
+  `(...)` names that group's patterns and `...` names the roots and test trees that exist,
+  followed by `or beside a node's code`. With none of them the clause ends `under no root,
+  since none of tests, test, spec, __tests__ exists, or beside a node's code`
+  (`beadloom-2mj3.17`).
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 
