@@ -50,3 +50,19 @@ Feature: a mutation run covers a change or a sample, and says what it covered
     Given a ledger project whose package is the declared mutation scope, committed to git
     When a sample of 200 mutants out of 7000 is reported with 180 killed and 20 survived
     Then the score reads 90.0% with a 95% interval from 85.1% to 93.4%
+
+  @bead:beadloom-2mj3.10 @node:mutation-scope @node:cli-commands
+  Scenario: the fallback holds the unplaced test files and never a self-check
+    Given a ledger project whose package is the declared mutation scope, committed to git
+    And a test file at the top of the tests folder
+    And a self-check file in the self-check folder
+    When the post function is changed and the population of the change is printed
+    Then the fallback is the test file at the top of the tests folder alone
+
+  @bead:beadloom-2mj3.10 @node:mutation-scope @node:cli-commands
+  Scenario: an acceptance step file is selected by the node tags of the scenarios it loads
+    Given a ledger project whose package is the declared mutation scope, committed to git
+    And an acceptance step file loading a scenario tagged with the posting node
+    And an acceptance step file loading a scenario tagged with the ledger node
+    When the post function is changed and the population of the change is printed
+    Then the posting node selects the step file whose scenario names it, and not the other

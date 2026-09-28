@@ -13,10 +13,19 @@ names is the runner's business and stays out of the product (BDL-061 CONTEXT Q5)
 lines in are counted, the ones inside the declared scope are named, a changed
 line outside any function is counted because no mutant of it exists, a file
 that is not readable Python is named rather than guessed, and the test files the
-binding places under no node are listed — because while they exist, a node's
+binding has not placed yet are listed — because while they exist, a node's
 bound tests can be short of the tests that actually exercise it. An empty
 population is a statement too: a change that touches no function of the
 declared scope has nothing to mutate and no score.
+
+**Each kind of test file is selected by what it is (BDL-074 G1).** A file the
+binding ties to the node is BOUND. An acceptance step file is selected when the
+scenarios it loads carry the node's ``@node:`` tag (:mod:`.acceptance`). An
+UNPLACED file — outside every kind folder, which the layout has not reached — is
+the runner's fallback, because it may exercise the node and the binding cannot
+say. A self-check tests the repository's own files rather than the changed code,
+and a file under a mirrored folder whose code no node owns names code other than
+the change's; neither is listed.
 
 The diff is taken against the MERGE BASE of a ref and the working tree, so a
 pull request's own commits are measured in CI (where the tree is the commit) and
@@ -29,18 +38,17 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from beadloom.application.mutation_scope.acceptance import acceptance_files_by_node
 from beadloom.application.mutation_scope.scope import lies_within, load_mutation_targets
 from beadloom.application.mutation_scope.touched import changed_lines, touched_functions
-from beadloom.context_oracle.test_binding import (
-    PLACEMENT_MIRROR,
-    PLACEMENT_OVERRIDE,
-    describe_unbound,
-)
+from beadloom.context_oracle.test_binding import describe_unbound
+from beadloom.graph.rules.suite_tables import read_test_files
 from beadloom.infrastructure.repository import (
+    KIND_ACCEPTANCE,
+    PLACEMENT_UNPLACED,
     count_other_kind_test_files,
     count_test_files_by_placement,
     get_owning_ref_id,
-    get_test_file_bindings,
 )
 
 if TYPE_CHECKING:
@@ -48,8 +56,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
 
-#: The placements under which a test file is bound to a node by the binding.
-_BOUND_PLACEMENTS = frozenset({PLACEMENT_MIRROR, PLACEMENT_OVERRIDE})
+    from beadloom.graph.rules.suite_tables import IndexedTestFile
 
 #: The only source this module reads functions from.
 _PYTHON = ".py"
@@ -70,21 +77,27 @@ class ChangedFunction:
 
 @dataclass(frozen=True)
 class NodeSelection:
-    """A node the change reaches: its touched functions and the tests bound to it."""
+    """A node the change reaches: its touched functions, and the tests selected for it.
+
+    ``bound_tests`` are the files the binding ties to the node; ``acceptance_tests``
+    the step files whose loaded scenarios carry its ``@node:`` tag.
+    """
 
     node: str | None
     functions: tuple[str, ...]
     bound_tests: tuple[str, ...]
+    acceptance_tests: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ChangePlan:
     """The population of a change, over the declared scope, the graph and the binding.
 
-    ``unbound_tests`` lists every test file bound to no node, whatever the reason:
-    it is the runner's fallback selection. What the plan STATES about them is
-    counted by reason from ``test_placements`` and ``other_kinds``, so its unplaced
-    count is the one ``ctx`` and the debt report state (BDL-074 F1).
+    ``unplaced_tests`` lists the test files placed under no kind folder: the
+    runner's fallback selection (BDL-074 G1). What the plan STATES about the files
+    bound to no node is counted by reason from ``test_placements`` and
+    ``other_kinds``, so its unplaced count is the one ``ctx`` and the debt report
+    state (BDL-074 F1).
     """
 
     base: str
@@ -94,7 +107,7 @@ class ChangePlan:
     functions: tuple[ChangedFunction, ...]
     outside_lines: int
     nodes: tuple[NodeSelection, ...]
-    unbound_tests: tuple[str, ...]
+    unplaced_tests: tuple[str, ...]
     test_files: int
     test_placements: Mapping[str, int] = field(default_factory=dict)
     other_kinds: Mapping[str, int] = field(default_factory=dict)
@@ -167,7 +180,7 @@ def plan_change(
         outside += result.outside
         owner = get_owning_ref_id(conn, path)
         functions.extend(ChangedFunction(path, name, owner) for name in result.functions)
-    bindings = get_test_file_bindings(conn)
+    test_files = read_test_files(conn) or []
     return ChangePlan(
         base=base,
         files_changed=len(touched),
@@ -175,11 +188,11 @@ def plan_change(
         unread=tuple(unread),
         functions=tuple(functions),
         outside_lines=outside,
-        nodes=_node_selections(functions, bindings),
-        unbound_tests=tuple(
-            path for path, ref_id, placement in bindings if not _is_bound(ref_id, placement)
+        nodes=_node_selections(project_root, functions, test_files),
+        unplaced_tests=tuple(
+            test.path for test in test_files if test.placement == PLACEMENT_UNPLACED
         ),
-        test_files=len(bindings),
+        test_files=len(test_files),
         test_placements=count_test_files_by_placement(conn),
         other_kinds=count_other_kind_test_files(conn),
     )
@@ -194,27 +207,29 @@ def _python_source(path: Path) -> str | None:
         return None
 
 
-def _is_bound(ref_id: str | None, placement: str) -> bool:
-    return ref_id is not None and placement in _BOUND_PLACEMENTS
-
-
 def _node_selections(
+    project_root: Path,
     functions: Iterable[ChangedFunction],
-    bindings: list[tuple[str, str | None, str]],
+    test_files: list[IndexedTestFile],
 ) -> tuple[NodeSelection, ...]:
-    """One selection per node the change reaches, in the order the change reaches it."""
+    """One selection per node the change reaches, in the order the change reaches it.
+
+    A file is bound when the binding recorded a node for it, whatever placement
+    bound it: the mirror, a ``tests:`` declaration, or any placement added later.
+    """
     names: dict[str | None, list[str]] = {}
     for function in functions:
         names.setdefault(function.node, []).append(function.name)
+    step_files = [test.path for test in test_files if test.kind == KIND_ACCEPTANCE]
+    by_tag = acceptance_files_by_node(project_root, step_files) if names else {}
     return tuple(
         NodeSelection(
             node=node,
             functions=tuple(dict.fromkeys(touched)),
             bound_tests=tuple(
-                path
-                for path, ref_id, placement in bindings
-                if node is not None and ref_id == node and _is_bound(ref_id, placement)
+                test.path for test in test_files if node is not None and test.ref_id == node
             ),
+            acceptance_tests=by_tag.get(node, ()) if node is not None else (),
         )
         for node, touched in names.items()
     )
@@ -264,6 +279,8 @@ def _describe_selection(selection: NodeSelection) -> str:
         if selection.bound_tests
         else "no test file is bound to it"
     )
+    if selection.acceptance_tests:
+        bound += f", {len(selection.acceptance_tests)} acceptance step file(s) by tag"
     return f"  {selection.node or '(no node)'}: {', '.join(selection.functions)}; {bound}"
 
 
@@ -284,11 +301,12 @@ def change_payload(plan: ChangePlan) -> dict[str, object]:
                 "node": selection.node,
                 "functions": list(selection.functions),
                 "bound_tests": list(selection.bound_tests),
+                "acceptance_tests": list(selection.acceptance_tests),
             }
             for selection in plan.nodes
         ],
         "test_files": plan.test_files,
-        "unbound_tests": list(plan.unbound_tests),
+        "unplaced_tests": list(plan.unplaced_tests),
         "test_placements": dict(plan.test_placements),
         "other_kinds": dict(plan.other_kinds),
         "empty": plan.empty,

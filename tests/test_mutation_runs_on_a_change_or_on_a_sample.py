@@ -260,7 +260,7 @@ class TestPlanChange:
 
     def test_the_files_the_binding_places_under_no_node_are_listed(self, ledger: Path) -> None:
         plan = self._plan(ledger)
-        assert plan.unbound_tests == ("tests/test_flat.py",)
+        assert plan.unplaced_tests == ("tests/test_flat.py",)
         assert plan.test_files == 3
 
     def test_a_committed_change_on_a_branch_is_measured_from_the_merge_base(
@@ -302,7 +302,7 @@ class TestDescribeChange:
             "nodes": (
                 NodeSelection("posting", ("post",), ("tests/unit/ledger/test_posting.py",)),
             ),
-            "unbound_tests": (),
+            "unplaced_tests": (),
             "test_files": 4,
         }
         fields.update(overrides)
@@ -323,7 +323,7 @@ class TestDescribeChange:
     def test_unplaced_tests_are_stated_as_a_share(self) -> None:
         """The share is counted by placement, as `ctx` counts it (BDL-074 F1)."""
         plan = self._plan(
-            unbound_tests=("a", "b", "c"), test_placements={"mirror": 1, "unplaced": 3}
+            unplaced_tests=("a", "b", "c"), test_placements={"mirror": 1, "unplaced": 3}
         )
         text = "\n".join(describe_change(plan))
         assert "3 of 4 test file(s) are unplaced" in text

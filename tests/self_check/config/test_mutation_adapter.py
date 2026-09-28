@@ -154,19 +154,37 @@ class TestTheChangedFunctionsBecomeExactNames:
 
 
 class TestTheTestsARunIsGiven:
+    """Each kind of test file is chosen by what it is (BDL-074 G1, review M2).
+
+    The fallback used to be every pool file bound to no node, which counted the
+    acceptance step and self-check files that bind to no node BY DESIGN: 74 of the
+    134 fallback files on T's fixture, a part that could never empty.
+    """
+
     PLAN: ClassVar[dict[str, object]] = {
         "nodes": [
-            {"node": "posting", "functions": ["post"], "bound_tests": ["tests/unit/p/test_a.py"]}
+            {
+                "node": "posting",
+                "functions": ["post"],
+                "bound_tests": ["tests/unit/p/test_a.py"],
+                "acceptance_tests": ["tests/acceptance/steps/test_posting_steps.py"],
+            }
         ],
-        "unbound_tests": ["tests/test_flat.py", "tests/test_unpooled.py"],
+        "unplaced_tests": ["tests/test_flat.py", "tests/test_unpooled.py"],
+        "other_kinds": {"acceptance": 2, "self_check": 3},
     }
 
-    def test_the_bound_tests_and_the_pools_unbound_files(self) -> None:
+    def test_the_bound_tests_the_tagged_steps_and_the_pools_unplaced_files(self) -> None:
         pool = ["tests/test_flat.py", "tests/unit/other/test_b.py"]
         chosen = adapter.tests_for_change(self.PLAN, pool)
         assert chosen.bound == ("tests/unit/p/test_a.py",)
+        assert chosen.acceptance == ("tests/acceptance/steps/test_posting_steps.py",)
         assert chosen.fallback == ("tests/test_flat.py",)
-        assert chosen.files == ("tests/test_flat.py", "tests/unit/p/test_a.py")
+        assert chosen.files == (
+            "tests/acceptance/steps/test_posting_steps.py",
+            "tests/test_flat.py",
+            "tests/unit/p/test_a.py",
+        )
 
     def test_a_pool_file_bound_to_another_node_is_left_out(self) -> None:
         """The binding says it tests something else; the pool is only asked about
@@ -174,11 +192,31 @@ class TestTheTestsARunIsGiven:
         chosen = adapter.tests_for_change(self.PLAN, ["tests/unit/other/test_b.py"])
         assert "tests/unit/other/test_b.py" not in chosen.files
 
-    def test_an_unbound_file_outside_the_pool_is_not_added(self) -> None:
-        """The pool was derived by coverage and runs in `mutants/`; an unbound file
+    def test_an_unplaced_file_outside_the_pool_is_not_added(self) -> None:
+        """The pool was derived by coverage and runs in `mutants/`; an unplaced file
         outside it may not (the whole suite does not fit that room)."""
         chosen = adapter.tests_for_change(self.PLAN, [])
-        assert chosen.files == ("tests/unit/p/test_a.py",)
+        assert "tests/test_flat.py" not in chosen.files
+        assert "tests/unit/p/test_a.py" in chosen.files
+
+    def test_a_pool_self_check_or_untagged_step_file_is_never_the_fallback(self) -> None:
+        """They are not in `unplaced_tests`, so a pool that holds them adds nothing."""
+        pool = [
+            "tests/self_check/docs/test_readme.py",
+            "tests/acceptance/steps/test_vault_steps.py",
+        ]
+        chosen = adapter.tests_for_change(self.PLAN, pool)
+        assert chosen.fallback == ()
+
+    def test_the_population_line_states_every_kind_and_the_excluded_self_checks(self) -> None:
+        pool = ["tests/test_flat.py", "tests/self_check/docs/test_readme.py"]
+        line = adapter.describe_tests(adapter.tests_for_change(self.PLAN, pool), self.PLAN)
+        assert line == (
+            "Tests: 3 file(s) — 1 bound to the changed node(s), 1 acceptance step "
+            "file(s) by the @node tags of their scenarios, 1 of 2 unplaced file(s) "
+            "from the pool as the FALLBACK; 3 self-check file(s) excluded, because "
+            "they test this repository's files rather than the changed code"
+        )
 
 
 _PYPROJECT = """\
@@ -379,7 +417,7 @@ class TestTheCommandLine:
                         "bound_tests": ["tests/unit/test_p.py"],
                     }
                 ],
-                "unbound_tests": ["tests/test_a.py"],
+                "unplaced_tests": ["tests/test_a.py"],
             }
         }
         (tmp_path / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
@@ -413,7 +451,7 @@ class TestTheCommandLine:
                 "empty": False,
                 "functions": [{"path": POSTING, "name": "post", "node": "posting"}],
                 "nodes": [{"node": "posting", "functions": ["post"], "bound_tests": []}],
-                "unbound_tests": [],
+                "unplaced_tests": [],
             }
         }
         (tmp_path / "plan.json").write_text(json.dumps(plan), encoding="utf-8")

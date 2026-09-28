@@ -104,6 +104,36 @@ def _given_a_flat_test(world: dict[str, Any]) -> None:
     _write(world["project"], FLAT_TEST, _ONE_TEST)
 
 
+SELF_CHECK = "tests/self_check/docs/test_readme.py"
+POSTING_STEPS = "tests/acceptance/steps/test_posting_steps.py"
+LEDGER_STEPS = "tests/acceptance/steps/test_ledger_steps.py"
+
+
+@given("a self-check file in the self-check folder")
+def _given_a_self_check(world: dict[str, Any]) -> None:
+    _write(world["project"], SELF_CHECK, _ONE_TEST)
+
+
+def _step_file_tagged(project: Path, node: str, step_file: str) -> None:
+    feature = f"tests/acceptance/features/{node}.feature"
+    _write(project, feature, f"Feature: {node}\n\n  @node:{node}\n  Scenario: s\n    Given g\n")
+    _write(
+        project,
+        step_file,
+        f'from pytest_bdd import scenarios\n\nscenarios("../features/{node}.feature")\n',
+    )
+
+
+@given("an acceptance step file loading a scenario tagged with the posting node")
+def _given_posting_steps(world: dict[str, Any]) -> None:
+    _step_file_tagged(world["project"], MODULE_NODE, POSTING_STEPS)
+
+
+@given("an acceptance step file loading a scenario tagged with the ledger node")
+def _given_ledger_steps(world: dict[str, Any]) -> None:
+    _step_file_tagged(world["project"], PACKAGE_NODE, LEDGER_STEPS)
+
+
 def _print_change(world: dict[str, Any]) -> None:
     project = world["project"]
     _cli(project, "reindex", "--full")
@@ -137,7 +167,14 @@ def _then_post_population(world: dict[str, Any]) -> None:
 @then("the posting node's bound test is the laid-out unit test")
 def _then_bound_test(world: dict[str, Any]) -> None:
     nodes = world["change"]["nodes"]
-    assert nodes == [{"node": MODULE_NODE, "functions": ["post"], "bound_tests": [POSTING_TEST]}]
+    assert nodes == [
+        {
+            "node": MODULE_NODE,
+            "functions": ["post"],
+            "bound_tests": [POSTING_TEST],
+            "acceptance_tests": [],
+        }
+    ]
 
 
 @then("the population is stated as empty")
@@ -148,7 +185,7 @@ def _then_empty(world: dict[str, Any]) -> None:
 
 @then(parsers.parse("the change says {unbound:d} of {total:d} test files is placed under no node"))
 def _then_unbound(world: dict[str, Any], unbound: int, total: int) -> None:
-    assert world["change"]["unbound_tests"] == [FLAT_TEST]
+    assert world["change"]["unplaced_tests"] == [FLAT_TEST]
     assert f"{unbound} of {total} test file(s)" in world["text"], world["text"]
 
 
@@ -204,3 +241,16 @@ def _then_no_score_line(world: dict[str, Any]) -> None:
     assert "Score:" not in world["text"], world["text"]
     assert "Not judged by this run" not in world["text"], world["text"]
     assert "a change covers functions, not declared targets" in world["text"], world["text"]
+
+
+@then("the fallback is the test file at the top of the tests folder alone")
+def _then_fallback_unplaced_only(world: dict[str, Any]) -> None:
+    assert world["change"]["unplaced_tests"] == [FLAT_TEST]
+
+
+@then("the posting node selects the step file whose scenario names it, and not the other")
+def _then_acceptance_by_tag(world: dict[str, Any]) -> None:
+    (posting,) = world["change"]["nodes"]
+    assert posting["node"] == MODULE_NODE
+    assert posting["acceptance_tests"] == [POSTING_STEPS]
+    assert "1 acceptance step file(s) by tag" in world["text"], world["text"]

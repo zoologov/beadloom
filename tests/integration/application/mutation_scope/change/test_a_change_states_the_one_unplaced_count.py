@@ -7,9 +7,9 @@ acceptance and self-check kinds — under the word the other two use for one of 
 One definition, one number: the change states the sentence `ctx` states, and names
 each other kind beside it by its count.
 
-The list of every file bound to no node stays in the plan (`unbound_tests`): it is
-the runner's fallback selection, and narrowing it would change what a per-change
-run executes, which this correction does not decide.
+The runner's fallback selection was narrowed afterwards to the unplaced files alone
+(`unplaced_tests`, BDL-074 G1): the kinds that bind to no node by design never
+become bound, so a fallback that held them could never empty.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ class TestTheChangeStatesOneUnplacedCount:
         }
         assert payload["other_kinds"] == {"acceptance": 1, "self_check": 2}
 
-    def test_the_runners_fallback_still_lists_every_file_bound_to_no_node(
+    def test_the_runners_fallback_is_the_unplaced_count_it_states(
         self, tmp_path: Path
     ) -> None:
         conn = _suite().build(tmp_path)
@@ -120,8 +120,8 @@ class TestTheChangeStatesOneUnplacedCount:
         finally:
             conn.close()
 
-        assert len(plan.unbound_tests) == 6
-        assert "tests/self_check/docs/test_readme.py" in plan.unbound_tests
+        assert plan.unplaced_tests == ("tests/test_flat.py", "tests/test_other_flat.py")
+        assert "tests/self_check/docs/test_readme.py" not in plan.unplaced_tests
 
     def test_a_suite_with_every_file_bound_states_no_binding_line(
         self, tmp_path: Path

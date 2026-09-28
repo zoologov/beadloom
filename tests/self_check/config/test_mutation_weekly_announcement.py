@@ -7,6 +7,12 @@ announcement was built for it, and the weekly sample that replaced it inherits
 it; these tests read it the way `test_mutation_ci_job.py` reads the jobs: as
 data.
 
+**Two states are announced, and they are not one** (BDL-074 G1, review M1): NO
+VERDICT, where the job ended before it judged and scored every mutant it drew, and
+A VERDICT UNDER THE FLOOR, where every mutant was judged and the whole interval of
+the score lies below the floor. Both fail the job, so the score step names the
+floor verdict it reached and the announcement titles and words the issue by it.
+
 **What they measure, and what they cannot.** The verdict — "did this run judge
 every mutant it drew" — is the adapter's `judge`, which is RUN over its shapes in
 `test_mutation_adapter.py`; here the wiring from that step to the announcement is
@@ -86,8 +92,42 @@ exit 0
 """
 
 
+#: The two titles the watch issue carries, one per state that is announced.
+NO_VERDICT = "Mutation weekly sample: no verdict"
+UNDER_FLOOR = "Mutation weekly sample: under its floor"
+
+#: What the score step reports for a sample judged under its floor: T's run
+#: 36406732958 in shape, 150 of 150 judged at 82.0% with the interval below 0.88.
+UNDER_FLOOR_REPORT = (
+    "Score: 82.0% of 150 scored mutants\n"
+    "Sample: a random sample of 150 of 6992 mutants; 95% interval 75.1% to 87.3% (Wilson)\n"
+    "Survivors: 27 over 5 node(s)\n"
+    "  rule-engine: 15 survivor(s) — beadloom.graph.rules.liveness.x__cycle_reasons__mutmut_4\n"
+    "Floor: 0.88 — the sample's interval lies wholly under it."
+)
+
+
+def _open(number: str, title: str) -> str:
+    """The open watch issue as the announcement's lookup prints it."""
+    return f"{number}\t{title}"
+
+
+def _constants() -> dict[str, str]:
+    """The announcement's literal environment, read from the workflow, not restated."""
+    env = _steps("announce")[0]["env"]
+    assert isinstance(env, dict)
+    return {str(key): str(value) for key, value in env.items() if "${{" not in str(value)}
+
+
 def _announce(
-    tmp_path: Path, *, result: str, verdict: str, detail: str = "", open_issue: str = ""
+    tmp_path: Path,
+    *,
+    result: str,
+    verdict: str,
+    detail: str = "",
+    open_issue: str = "",
+    floor: str = "",
+    report: str = "",
 ) -> list[str]:
     """Run the announcement against a stubbed `gh` and return the calls it made.
 
@@ -104,6 +144,7 @@ def _announce(
     stub.chmod(0o755)
     log = tmp_path / "gh.log"
     env = dict(os.environ)
+    env.update(_constants())
     env.update(
         {
             "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
@@ -111,12 +152,12 @@ def _announce(
             "GH_TOKEN": "stub",
             "REPO": "owner/repo",
             "OWNER": "owner",
-            "WATCH_LABEL": "mutation-weekly",
-            "WATCH_TITLE": "Mutation weekly sample: no verdict",
             "RUN_URL": "https://example.invalid/run/1",
             "RESULT": result,
             "VERDICT": verdict,
             "DETAIL": detail,
+            "FLOOR": floor,
+            "REPORT": report,
             "FAKE_OPEN_ISSUE": open_issue,
         }
     )
@@ -139,6 +180,11 @@ def _announce(
         check=True,
     )
     return log.read_text(encoding="utf-8").splitlines() if log.is_file() else []
+
+
+def _state_part(call: str) -> str:
+    """The body of a `gh` call up to its standing footer, which names both states."""
+    return call.split("--body", 1)[1].split("This issue is the one place")[0]
 
 
 def _verbs(calls: list[str]) -> list[str]:
@@ -165,6 +211,95 @@ class TestTheVerdictReachesTheAnnouncement:
         assert isinstance(outputs, dict)
         assert outputs["verdict"] == "${{ steps.judged.outputs.verdict }}"
         assert outputs["detail"] == "${{ steps.judged.outputs.detail }}"
+
+    def test_the_job_publishes_the_floor_and_the_score_report(self) -> None:
+        """A judged sample can still miss its floor, and the announcement has to
+        tell that from a run that judged nothing (BDL-074 G1, review M1)."""
+        outputs = _job(SAMPLE)["outputs"]
+        assert isinstance(outputs, dict)
+        assert outputs["floor"] == "${{ steps.score.outputs.floor }}"
+        assert outputs["report"] == "${{ steps.score.outputs.report }}"
+
+    def test_the_score_step_names_the_floor_it_reached(self) -> None:
+        run = str(_step_with_id(SAMPLE, "score")["run"])
+        assert "floor=held" in run
+        assert "floor=under" in run
+        assert "floor=unscored" in run
+        assert "interval lies wholly under it" in run
+        assert '>> "$GITHUB_OUTPUT"' in run
+
+
+_UV_STUB = """#!/bin/bash
+printf '%s\\n' "$FAKE_SCORE"
+exit "$FAKE_CODE"
+"""
+
+
+def _score(tmp_path: Path, *, code: int, text: str) -> dict[str, str]:
+    """Run the score step against a stubbed `uv` and read back what it published."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "uv"
+    stub.write_text(_UV_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+    output, summary = tmp_path / "output", tmp_path / "summary"
+    env = dict(os.environ)
+    env.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
+            "RUNNER_TEMP": str(tmp_path),
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_STEP_SUMMARY": str(summary),
+            "POPULATION": "6992",
+            "FAKE_SCORE": text,
+            "FAKE_CODE": str(code),
+        }
+    )
+    bash = shutil.which("bash")
+    assert bash is not None
+    script = tmp_path / "score.sh"
+    script.write_text(str(_step_with_id(SAMPLE, "score")["run"]), encoding="utf-8")
+    ran = subprocess.run(  # noqa: S603 — the argv is this repository's own workflow
+        [bash, "-e", str(script)], env=env, capture_output=True, encoding="utf-8", check=False
+    )
+    assert ran.returncode == code, "the step must exit with the command's own code"
+    lines = output.read_text(encoding="utf-8").splitlines()
+    floor = next(line.removeprefix("floor=") for line in lines if line.startswith("floor="))
+    start = lines.index("report<<MUTATION_SCORE_REPORT")
+    end = lines.index("MUTATION_SCORE_REPORT", start + 1)
+    return {"floor": floor, "report": "\n".join(lines[start + 1 : end])}
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="the score step is a bash step")
+class TestTheScoreStepNamesItsFloorVerdict:
+    """RUN, with `uv` stubbed to print a report and exit as `beadloom mutation` does."""
+
+    def test_a_sample_under_its_floor_is_named_under(self, tmp_path: Path) -> None:
+        published = _score(tmp_path, code=1, text=UNDER_FLOOR_REPORT)
+        assert published["floor"] == "under"
+        assert "95% interval 75.1% to 87.3%" in published["report"]
+
+    def test_a_sample_at_or_over_its_floor_is_named_held(self, tmp_path: Path) -> None:
+        text = "Floor: 0.88 — the sample's interval reaches it."
+        assert _score(tmp_path, code=0, text=text)["floor"] == "held"
+
+    def test_a_finding_that_is_not_the_floor_is_unscored(self, tmp_path: Path) -> None:
+        text = "WARN [mutation-counters-missing] x: no counters"
+        assert _score(tmp_path, code=1, text=text)["floor"] == "unscored"
+
+    def test_an_unanswerable_command_is_unscored(self, tmp_path: Path) -> None:
+        assert _score(tmp_path, code=2, text="Error: no index")["floor"] == "unscored"
+
+    def test_the_phrase_the_step_reads_is_the_one_the_command_prints(self) -> None:
+        """The step tells a missed floor from any other finding by the command's
+        own floor line; reworded there, every miss would read as no verdict."""
+        from beadloom.application.mutation_scope import SampleInterval
+        from beadloom.services.commands.mutation import _floor_verdict
+
+        missed = _floor_verdict(True, SampleInterval(6992, 150, 123, 0.751, 0.873))
+        phrase = "interval lies wholly under it"
+        assert phrase in missed
+        assert f'grep -q "{phrase}"' in str(_step_with_id(SAMPLE, "score")["run"])
 
 
 class TestTheAnnouncementSpeaksForAJobThatCannotSpeak:
@@ -218,20 +353,115 @@ class TestTheAnnouncementSpeaksForAJobThatCannotSpeak:
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="the announcement is a bash step")
 class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
-    """The script, RUN, over the six states a weekly run can hand it.
+    """The script, RUN, over the states a weekly run can hand it.
 
-    Six calls to a stubbed `gh`, so what is measured here is which branch the
+    Calls to a stubbed `gh`, so what is measured here is which branch the
     script takes and with what arguments. It is not measured against GitHub.
     """
 
     def test_a_judged_run_with_nothing_open_says_nothing(self, tmp_path: Path) -> None:
-        calls = _announce(tmp_path, result="success", verdict="judged")
+        calls = _announce(tmp_path, result="success", verdict="judged", floor="held")
         assert _verbs(calls) == ["label create mutation-weekly", "issue list -R"]
 
     def test_a_judged_run_closes_the_issue_the_outage_opened(self, tmp_path: Path) -> None:
-        calls = _announce(tmp_path, result="success", verdict="judged", open_issue="12")
+        calls = _announce(
+            tmp_path,
+            result="success",
+            verdict="judged",
+            floor="held",
+            open_issue=_open("12", NO_VERDICT),
+        )
         assert "issue close 12" in _verbs(calls)
         assert "issue create -R" not in _verbs(calls)
+        comment = next(call for call in calls if call.startswith("issue comment 12"))
+        assert "judged its sample, and the sample scored at or above its floor" in comment
+        assert "again" not in comment
+
+    def test_a_run_back_over_its_floor_closes_the_under_floor_issue_saying_so(
+        self, tmp_path: Path
+    ) -> None:
+        """The close is worded by the state it ends: a sample that was judged every
+        week did not 'reach a verdict again' (review M1)."""
+        calls = _announce(
+            tmp_path,
+            result="success",
+            verdict="judged",
+            floor="held",
+            open_issue=_open("12", UNDER_FLOOR),
+        )
+        assert "issue close 12" in _verbs(calls)
+        comment = next(call for call in calls if call.startswith("issue comment 12"))
+        assert "This week's sample scored at or above its floor" in comment
+        assert "judged its sample" not in comment
+
+    def test_a_failed_job_that_judged_its_sample_is_a_verdict_under_the_floor(
+        self, tmp_path: Path
+    ) -> None:
+        """Runs 36373061140 and 36406732958: 150 of 150 judged, 82.0% with the
+        interval under 0.88, so the score step failed the job. That is a verdict,
+        and the issue says which one, with the score, the interval, the sample size
+        and the survivors by node."""
+        calls = _announce(
+            tmp_path,
+            result="failure",
+            verdict="judged",
+            detail="150 mutant(s) judged: killed 123, survived 27, timeout 0, no_tests 0",
+            floor="under",
+            report=UNDER_FLOOR_REPORT,
+        )
+        create = next(call for call in calls if call.startswith("issue create"))
+        assert f"--title {UNDER_FLOOR}" in create
+        assert "no verdict" not in _state_part(create)
+        assert "82.0% of 150 scored mutants" in create
+        assert "95% interval 75.1% to 87.3%" in create
+        assert "a random sample of 150" in create
+        assert "rule-engine: 15 survivor(s)" in create
+
+    def test_a_failed_job_with_no_verdict_is_titled_so(self, tmp_path: Path) -> None:
+        calls = _announce(tmp_path, result="failure", verdict="")
+        create = next(call for call in calls if call.startswith("issue create"))
+        assert f"--title {NO_VERDICT}" in create
+        assert "under its floor" not in _state_part(create)
+
+    def test_a_judged_sample_the_score_step_could_not_score_is_no_verdict(
+        self, tmp_path: Path
+    ) -> None:
+        calls = _announce(
+            tmp_path, result="failure", verdict="judged", detail="150 judged", floor="unscored"
+        )
+        create = next(call for call in calls if call.startswith("issue create"))
+        assert f"--title {NO_VERDICT}" in create
+        assert "the score step reported no floor verdict" in create
+
+    def test_an_open_issue_is_retitled_to_the_state_of_the_week(self, tmp_path: Path) -> None:
+        """Issue #85 opened as 'no verdict' over a sample judged under its floor; the
+        next run's comment carries the true state, and so does the title."""
+        calls = _announce(
+            tmp_path,
+            result="failure",
+            verdict="judged",
+            floor="under",
+            report=UNDER_FLOOR_REPORT,
+            open_issue=_open("85", NO_VERDICT),
+        )
+        assert "issue comment 85" in _verbs(calls)
+        edit = next(call for call in calls if call.startswith("issue edit 85"))
+        assert f"--title {UNDER_FLOOR}" in edit
+        assert "issue create -R" not in _verbs(calls)
+
+    def test_an_issue_already_in_the_state_of_the_week_keeps_its_title(
+        self, tmp_path: Path
+    ) -> None:
+        calls = _announce(
+            tmp_path,
+            result="failure",
+            verdict="judged",
+            floor="under",
+            report=UNDER_FLOOR_REPORT,
+            open_issue=_open("85", UNDER_FLOOR),
+        )
+        assert "issue comment 85" in _verbs(calls)
+        assert "issue edit 85" not in _verbs(calls)
 
     def test_a_red_job_opens_the_first_issue(self, tmp_path: Path) -> None:
         """The shape the nine nights took, and the job output is empty because
@@ -256,7 +486,7 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
             result="success",
             verdict="silent",
             detail="the second run added no mutants",
-            open_issue="12",
+            open_issue=_open("12", NO_VERDICT),
         )
         assert "issue comment 12" in _verbs(calls)
         assert "issue create -R" not in _verbs(calls)
@@ -274,7 +504,9 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
         still reaches here, and the workflow's header names it among the cases
         the announcement does not cover.
         """
-        calls = _announce(tmp_path, result="cancelled", verdict="", open_issue="12")
+        calls = _announce(
+            tmp_path, result="cancelled", verdict="", open_issue=_open("12", NO_VERDICT)
+        )
         assert "issue comment 12" in _verbs(calls)
 
 
