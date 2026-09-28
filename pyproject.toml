@@ -365,6 +365,7 @@ pytest_add_cli_args_test_selection = [
     "tests/acceptance/steps/application/wave-plan/test_wave_plan_steps.py",
     "tests/test_a_commit_is_judged_against_the_declared_axes.py",
     "tests/self_check/process/test_a_commit_is_judged_against_the_declared_axes.py",
+    "tests/integration/graph/rules/test_a_kind_states_how_it_was_recognised.py",
     "tests/integration/graph/rules/test_a_layer_rule_that_fired_is_not_reported_inert.py",
     "tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py",
     "tests/self_check/architecture/test_a_layer_the_declaration_names_and_no_node_is_in.py",

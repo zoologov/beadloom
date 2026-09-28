@@ -14,6 +14,12 @@ both directions, and state how much of the suite and the graph it judged.
   over both is true of neither. The kind is the one the index recorded. A judged
   file whose ``ref_id`` is empty is a finding, and the finding names the
   placement that left it empty.
+- Each kind named that way states how it was recognised (review
+  ``beadloom-b9ll`` m4): by the folder the test layout the index recorded gives
+  it, and whether that folder was declared in ``.beadloom/config.yml`` or is the
+  default. The folder is trusted, not verified — what a file holds is never
+  checked against its kind, so a unit test dropped into ``tests/self_check/`` is
+  counted as a self-check — and the line says so, rather than implying a check.
 - The NODE leg judges every node the ``for`` matcher selects. A node is bound
   when a test file is bound to it or to one of its ``part_of`` descendants — the
   union ``ctx`` counts. Acceptance scenarios are not counted here; that binding
@@ -50,6 +56,7 @@ from beadloom.infrastructure.repository import (
     KIND_UNRECORDED,
     PLACEMENT_OTHER_KIND,
     label_test_kind,
+    read_test_layout,
 )
 
 if TYPE_CHECKING:
@@ -58,9 +65,20 @@ if TYPE_CHECKING:
 
     from beadloom.graph.rules.suite_tables import IndexedTestFile
     from beadloom.graph.rules.types import NodeMatcher, TestBindingRule
+    from beadloom.infrastructure.repository import RecordedTestLayout
 
 #: ``rule_type`` of every finding this module makes about a file or a node.
 TEST_BINDING_RULE_TYPE = "test_binding"
+
+#: The limit every kind recognised by its folder carries (review m4).
+_FOLDER_TRUSTED = (
+    "the folder is trusted, not verified: what a file holds is not checked against its kind"
+)
+#: Said of a kind when the index recorded no test layout to name its folder from.
+_NO_LAYOUT = (
+    "recognised by its folder alone (the index records no test layout, so where that "
+    "folder was declared is not stated: reindex to record it)"
+)
 
 _NO_TEST_TABLE = (
     "the index holds no test-file table — it was written before test files were "
@@ -97,6 +115,7 @@ def _file_leg(
     glob: str,
     files: list[IndexedTestFile],
     scenario_rules: Sequence[str],
+    layout: RecordedTestLayout | None,
 ) -> _Leg:
     matched = [f for f in files if fnmatchcase(f.path, glob)]
     other = [f for f in matched if f.placement == PLACEMENT_OTHER_KIND]
@@ -127,14 +146,21 @@ def _file_leg(
         f"{len(judged) - len(unbound)} bound to a node, {len(unbound)} bound to none — "
         f"{ledger.excused} excused by {ledger.exemptions_used} exemption(s), "
         f"{len(unbound) - ledger.excused} reported"
-        f"{_kinds_not_judged(other, scenario_rules)}"
+        f"{_kinds_not_judged(other, scenario_rules, layout)}"
     )
     dead = None if judged else f"its `files` glob `{glob}` matches no indexed test file it judges"
     return _Leg(findings, statement, dead)
 
 
-def _kinds_not_judged(other: list[IndexedTestFile], scenario_rules: Sequence[str]) -> str:
-    """The files a kind folder places, by recorded kind and count, each with how it binds."""
+def _kinds_not_judged(
+    other: list[IndexedTestFile],
+    scenario_rules: Sequence[str],
+    layout: RecordedTestLayout | None,
+) -> str:
+    """The files a kind folder places, by recorded kind and count, each with how it binds.
+
+    Each is followed by how that kind was recognised, from the recorded *layout*.
+    """
     counts = Counter(f.kind or KIND_UNRECORDED for f in other)
     if not counts:
         return ""
@@ -154,10 +180,28 @@ def _kinds_not_judged(other: list[IndexedTestFile], scenario_rules: Sequence[str
     }
     stated = [
         f"{count} {label_test_kind(kind)} file(s) — "
-        f"{statements.get(kind, 'bound to no node, and not judged by this rule')}"
+        f"{statements.get(kind, 'bound to no node, and not judged by this rule')}, "
+        f"{_recognised(kind, layout)}"
         for kind, count in sorted(counts.items())
     ]
     return f"; not judged by their path, by kind: {'; '.join(stated)}"
+
+
+def _recognised(kind: str, layout: RecordedTestLayout | None) -> str:
+    """How files of *kind* were recognised as that kind, with the limit of it."""
+    if layout is None:
+        return _NO_LAYOUT
+    prefixes = layout.kind_prefixes.get(kind)
+    if not prefixes:
+        return "a kind no folder of the recorded test layout names"
+    folders = ", ".join(f"`{prefix}`" for prefix in prefixes)
+    noun = "the folder" if len(prefixes) == 1 else "the folders"
+    source = (
+        " declared in .beadloom/config.yml (`tests.kinds`)"
+        if kind in layout.declared_kinds
+        else ", Beadloom's default, which no `tests.kinds` entry replaces"
+    )
+    return f"recognised by {noun} {folders}{source} ({_FOLDER_TRUSTED})"
 
 
 def _node_leg(
@@ -210,7 +254,8 @@ def _legs(
         return None
     legs: list[_Leg] = []
     if rule.files is not None:
-        legs.append(_file_leg(rule, rule.files, files, scenario_rules))
+        layout = read_test_layout(conn)
+        legs.append(_file_leg(rule, rule.files, files, scenario_rules, layout))
     if rule.for_matcher is not None:
         legs.append(_node_leg(conn, rule, rule.for_matcher, files))
     return legs

@@ -10,8 +10,9 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from beadloom.context_oracle.intent import select_intent
+from beadloom.context_oracle.test_binding import describe_unplaced
 from beadloom.infrastructure.db import get_meta
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.infrastructure.repository import count_test_files_by_placement, read_test_layout
 
 if TYPE_CHECKING:
     import sqlite3
@@ -466,8 +467,11 @@ def build_context(
     # Step 10: The focus node's tests, from the binding the reindex wrote into its
     # extra, and how the project's test files were placed: "0 tests" reads
     # differently when most of the suite is not laid out yet (BDL-074 C2).
+    # The unplaced sentence names the folders of the layout the reindex recorded
+    # (BDL-074 G2), so it is stated here, where the index is open.
     tests_info: dict[str, Any] | None = focus_extra.get("tests")
     test_placements = count_test_files_by_placement(conn)
+    test_unplaced = describe_unplaced(test_placements, read_test_layout(conn))
 
     # Step 11: Extract git activity from focus node's extra.
     activity_info: dict[str, Any] | None = focus_extra.get("activity")
@@ -507,5 +511,6 @@ def build_context(
         "routes": routes_info,
         "tests": tests_info,
         "test_placements": test_placements,
+        "test_unplaced": test_unplaced,
         "warning": warning,
     }

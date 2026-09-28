@@ -1,12 +1,20 @@
 """Test binding: which graph node a test file belongs to, derived from where it lives.
 
-A test file under ``tests/<kind>/`` for a mirrored kind (``unit``, ``integration``)
+A test file under ``<root>/<kind>/`` for a mirrored kind (``unit``, ``integration``)
 names a code path with the rest of its path: ``tests/unit/<path>/test_<name>.py``
 names ``<package>/<path>/<name>.py``, and a folder named after a module
 (``tests/unit/<path>/<module>/test_*.py``) names that module. The node that OWNS
 that code path — the most specific node whose source covers it, by the one rule
 ``infrastructure.repository`` holds — is the node the test binds to. No file
 declares anything; the fact is stated once, by where the file is.
+
+A test file inside the code, outside every test root — ``foo_test.go`` beside
+``foo.go``, ``test_x.py`` beside ``x.py``, ``x.test.ts`` beside ``x.ts`` — binds
+to the node whose source covers it, by the same ownership rule (BDL-074 G2, the
+owner's ruling on review ``beadloom-b9ll`` M3). Its place binds it, never its
+name: a Go test that names another package still belongs to the one it sits in.
+The roots, the kind folders and the file-name patterns are the project's
+:class:`~beadloom.context_oracle.test_layout.TestLayout`.
 
 A node may also claim tests its path does not mirror, with a ``tests:`` list of
 path prefixes in its YAML, resolved by the same ownership rule over those
@@ -31,19 +39,21 @@ read by :mod:`.test_file_reader`; the walk and the storage live in the reindex.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from fnmatch import fnmatch
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 # The placement vocabulary is defined below both of its readers — this module, which
 # assigns a placement, and the rule engine's `test_binding`, which judges it — and
 # re-exported here under its old names (BDL-074 C3).
+from beadloom.context_oracle.test_layout import MIRRORED_KINDS as MIRRORED_KINDS
+from beadloom.context_oracle.test_layout import TestLayout
 from beadloom.infrastructure.repository import (
     KIND_ACCEPTANCE,
     KIND_SELF_CHECK,
     label_test_kind,
     most_specific_owner,
 )
+from beadloom.infrastructure.repository import PLACEMENT_BESIDE_CODE as PLACEMENT_BESIDE_CODE
 from beadloom.infrastructure.repository import PLACEMENT_MIRROR as PLACEMENT_MIRROR
 from beadloom.infrastructure.repository import PLACEMENT_OTHER_KIND as PLACEMENT_OTHER_KIND
 from beadloom.infrastructure.repository import PLACEMENT_OVERRIDE as PLACEMENT_OVERRIDE
@@ -53,24 +63,21 @@ from beadloom.infrastructure.repository import PLACEMENT_UNPLACED as PLACEMENT_U
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Mapping
 
-#: The folder a project's tests live under, relative to its root.
-TEST_ROOT = "tests"
+    from beadloom.infrastructure.repository import RecordedTestLayout
 
-#: Kinds whose path under ``tests/<kind>/`` mirrors the code.
-MIRRORED_KINDS = frozenset({"unit", "integration"})
+#: The folder a project's tests live under by default, relative to its root.
+TEST_ROOT = "tests"
 
 #: Kinds laid out by folder whose binding is not the mirror: acceptance scenarios
 #: bind by their ``@node:`` tag and self-checks test the repository itself.
 OTHER_KINDS = frozenset({KIND_ACCEPTANCE, KIND_SELF_CHECK})
 
-#: The file names pytest collects by default.
-TEST_FILE_PATTERNS = ("test_*.py", "*_test.py")
-
-
-#: The framework every indexed test file is written for.
-FRAMEWORK_PYTEST = "pytest"
 #: The framework stated when a project has no test file at all.
 FRAMEWORK_NONE = "none"
+#: How the frameworks of several test files are joined into one name.
+_FRAMEWORK_JOIN = "+"
+
+_DEFAULT_LAYOUT = TestLayout()
 
 _PY_SUFFIX = ".py"
 _PACKAGE_MARKER = "__init__.py"
@@ -93,8 +100,13 @@ class BoundTestFile:
 
 
 def is_test_file(name: str) -> bool:
-    """Whether a file NAME is one pytest collects by default."""
-    return any(fnmatch(name, pattern) for pattern in TEST_FILE_PATTERNS)
+    """Whether a file NAME is a test under the default layout's patterns."""
+    return _DEFAULT_LAYOUT.is_test_file(name)
+
+
+def name_frameworks(frameworks: Iterable[str]) -> str:
+    """One framework name for a set of them — ``go_test+pytest`` — or ``none``."""
+    return _FRAMEWORK_JOIN.join(sorted(set(frameworks))) or FRAMEWORK_NONE
 
 
 def bind_test_file(
@@ -104,17 +116,24 @@ def bind_test_file(
     scan_paths: Iterable[str],
     node_sources: Iterable[tuple[str, str]],
     overrides: Iterable[tuple[str, str]],
+    layout: TestLayout = _DEFAULT_LAYOUT,
 ) -> BoundTestFile:
     """Bind the test file at *path* (relative to the project root) to a node.
 
     *code_files* are the project's indexed code paths, *node_sources* and
-    *overrides* ``(ref_id, source-or-prefix)`` pairs. The declaration wins; then
-    the mirror, for a mirrored kind; everything else binds to nothing and says why.
+    *overrides* ``(ref_id, source-or-prefix)`` pairs, *layout* the project's test
+    layout. The declaration wins; then, under a root, the mirror for a mirrored
+    kind; outside every root, the node whose source covers the file, when the
+    layout reads tests beside the code; everything else binds to nothing and
+    says why.
     """
-    kind, under_kind = _split_kind(path)
+    located = layout.locate(path)
+    kind, under_kind = located if located is not None else (None, "")
     declared = most_specific_owner(overrides, path)
     if declared is not None:
         return BoundTestFile(path, kind, declared, PLACEMENT_OVERRIDE)
+    if located is None:
+        return _beside_code(path, node_sources, layout)
     if kind is None:
         return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
     if kind not in MIRRORED_KINDS:
@@ -126,15 +145,14 @@ def bind_test_file(
     return BoundTestFile(path, kind, owner, PLACEMENT_MIRROR)
 
 
-def _split_kind(path: str) -> tuple[str | None, str]:
-    """The kind folder of *path* and the path beneath it, or ``(None, "")``."""
-    parts = PurePosixPath(path).parts
-    if len(parts) < 3 or parts[0] != TEST_ROOT:
-        return None, ""
-    kind = parts[1]
-    if kind not in MIRRORED_KINDS | OTHER_KINDS:
-        return None, ""
-    return kind, "/".join(parts[2:])
+def _beside_code(
+    path: str, node_sources: Iterable[tuple[str, str]], layout: TestLayout
+) -> BoundTestFile:
+    """A file outside every root: the node its source covers, if the layout reads it."""
+    owner = most_specific_owner(node_sources, path) if layout.beside_code else None
+    if owner is None:
+        return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
+    return BoundTestFile(path, None, owner, PLACEMENT_BESIDE_CODE)
 
 
 def mirrored_code_path(
@@ -254,22 +272,50 @@ def estimate_coverage(file_count: int, *, framework_detected: bool) -> str:
     return "low" if framework_detected else "none"
 
 
-def describe_unplaced(counts: Mapping[str, int]) -> str | None:
+def describe_unplaced(
+    counts: Mapping[str, int], layout: RecordedTestLayout | None = None
+) -> str | None:
     """The share of a project's test files that bind to nothing because of where they are.
 
-    *counts* are test files by placement. ``None`` when no file is unplaced: then a
-    node with no bound test has none, and there is nothing to qualify. Otherwise a
-    reader of any per-node count must be told the count can be short — which ``ctx``
-    and the debt report both say, in this one sentence.
+    *counts* are test files by placement, *layout* the test layout the index
+    recorded. ``None`` when no file is unplaced: then a node with no bound test has
+    none, and there is nothing to qualify. Otherwise a reader of any per-node count
+    must be told the count can be short — which ``ctx`` and the debt report both
+    say, in this one sentence. It names the mirrored folders of the recorded roots,
+    and, when tests beside the code are read, that no node's source holds the file;
+    with no recorded layout it names the default folders.
     """
     unplaced = counts.get(PLACEMENT_UNPLACED, 0)
     if not unplaced:
         return None
-    folders = " or ".join(f"{TEST_ROOT}/{kind}/" for kind in sorted(MIRRORED_KINDS))
+    if layout is None:
+        prefixes = [f"{TEST_ROOT}/{kind}/" for kind in MIRRORED_KINDS]
+    else:
+        prefixes = [p for kind in MIRRORED_KINDS for p in layout.kind_prefixes.get(kind, ())]
+    beside = ", nor inside a node's source" if layout is not None and layout.beside_code else ""
     return (
         f"{unplaced} of {sum(counts.values())} test file(s) are unplaced "
-        f"(not under {folders}) and bind to no node"
+        f"(not under {' or '.join(sorted(prefixes))}{beside}) and bind to no node"
     )
+
+
+def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
+    """What makes a file a test file this project's index reads, in one clause.
+
+    Stated where a count of test files could read as "this project has none":
+    a file no pattern matches, or one outside every root and every node's source,
+    is not read at all (review ``beadloom-b9ll`` M3).
+    """
+    frameworks = sorted(layout.frameworks)
+    named = (
+        f"{', '.join(frameworks[:-1])} or {frameworks[-1]}"
+        if len(frameworks) > 1
+        else "".join(frameworks)
+    )
+    roots = ", ".join(layout.roots)
+    where = f"the root {roots}" if len(layout.roots) == 1 else f"the roots {roots}"
+    beside = " or beside a node's code" if layout.beside_code else ""
+    return f"a test file is read when its name matches a pattern of {named} under {where}{beside}"
 
 
 def describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None:

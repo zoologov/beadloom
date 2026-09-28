@@ -20,12 +20,13 @@ the :mod:`beadloom.application.graph_reads` facade, never directly — the
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Mapping
 
 
 @dataclass(frozen=True)
@@ -396,6 +397,9 @@ PLACEMENT_UNOWNED = "unowned"
 PLACEMENT_UNPLACED = "unplaced"
 #: Under a kind folder whose binding is not the mirror.
 PLACEMENT_OTHER_KIND = "other_kind"
+#: Inside a node's source, outside every test root: bound to the node covering it
+#: (BDL-074 G2) — ``foo_test.go`` beside ``foo.go``, ``test_x.py`` beside ``x.py``.
+PLACEMENT_BESIDE_CODE = "beside_code"
 
 #: The ``kind`` values an ``other_kind`` file carries, beside the placement vocabulary
 #: for the same reason (BDL-074 F1): the binding assigns them and the rule engine names
@@ -415,6 +419,69 @@ KIND_UNRECORDED = "unrecorded"
 def label_test_kind(kind: str) -> str:
     """The words a count of *kind* files is stated in: ``3 self-check file(s)``."""
     return _KIND_LABELS.get(kind, kind)
+
+
+#: The ``meta`` key the reindex records its test layout under (BDL-074 G2).
+TEST_LAYOUT_KEY = "test_layout"
+
+
+@dataclass(frozen=True)
+class RecordedTestLayout:
+    """The layout a reindex recognised test files by, as it recorded it in the index.
+
+    Kept beside the placement vocabulary for the same reason: the binding writes it
+    and the rule engine states it, and neither may import the other. *kind_prefixes*
+    are each kind's folders under every root (``tests/unit/``); *declared_kinds* the
+    kinds whose folder the project's config declares rather than defaults;
+    *frameworks* the names of the pattern groups a file name is matched against.
+    """
+
+    kind_prefixes: Mapping[str, tuple[str, ...]]
+    declared_kinds: frozenset[str]
+    beside_code: bool
+    roots: tuple[str, ...]
+    frameworks: tuple[str, ...]
+
+    def encode(self) -> str:
+        """The record as the JSON the ``meta`` table holds."""
+        return json.dumps(
+            {
+                "kind_prefixes": {kind: list(p) for kind, p in sorted(self.kind_prefixes.items())},
+                "declared_kinds": sorted(self.declared_kinds),
+                "beside_code": self.beside_code,
+                "roots": list(self.roots),
+                "frameworks": list(self.frameworks),
+            },
+            sort_keys=True,
+        )
+
+
+def read_test_layout(conn: sqlite3.Connection) -> RecordedTestLayout | None:
+    """The test layout the last reindex recorded, or ``None`` when it recorded none.
+
+    ``None`` for an index written before BDL-074 G2, or one whose record does not
+    parse: the reader then states that the layout is unknown rather than a default.
+    """
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (TEST_LAYOUT_KEY,)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None:
+        return None
+    try:
+        raw = json.loads(str(row[0]))
+        return RecordedTestLayout(
+            kind_prefixes={
+                str(kind): tuple(str(p) for p in prefixes)
+                for kind, prefixes in raw["kind_prefixes"].items()
+            },
+            declared_kinds=frozenset(str(kind) for kind in raw["declared_kinds"]),
+            beside_code=bool(raw["beside_code"]),
+            roots=tuple(str(root) for root in raw["roots"]),
+            frameworks=tuple(str(name) for name in raw["frameworks"]),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:

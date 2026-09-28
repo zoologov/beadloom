@@ -14,8 +14,11 @@ import json
 from typing import TYPE_CHECKING
 
 from beadloom.application.debt_report.models import DebtData, DebtWeights
-from beadloom.context_oracle.test_binding import describe_unplaced
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.context_oracle.test_binding import (
+    describe_test_file_recognition,
+    describe_unplaced,
+)
+from beadloom.infrastructure.repository import count_test_files_by_placement, read_test_layout
 
 if TYPE_CHECKING:
     import sqlite3
@@ -200,14 +203,24 @@ def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
     While any test file is unplaced the count is WITHHELD — 0, with the reason as
     the population — because an unplaced file binds to no node, so a node with no
     bound test may still be tested by one. Counting it would charge a project for
-    its layout, not its tests. The name-guessing mapper this replaces counted a
-    node only when it detected no test framework anywhere, so a project whose
-    framework it detected and whose tests are not laid out scores what it scored
-    before (0), and a project with no test file at all has every covered node
-    untested, before and after.
+    its layout, not its tests.
+
+    The name-guessing mapper this replaces counted a node only when it detected
+    no test framework anywhere. So a project whose test files the binding reads
+    scores what it scored before (0) while any of them is unplaced, and once every
+    one is placed it is charged only for the nodes none of them binds to. The
+    binding reads a file under the declared test roots, or beside a node's code,
+    whose name matches the declared patterns (default: pytest, Go and JS/TS; BDL-074
+    G2). The debt report's integration test ``test_an_adopter_scores_what_it_scored_before``
+    runs this claim on a Go module and three Python layouts. The limit it keeps: a
+    project whose tests match no declared pattern (JUnit, XCTest by default) has no
+    test file the binding reads, and has every covered node untested — where the
+    mapper detected the framework and counted 0. The population then says what a
+    test file is read by, so the reader can see why.
     """
     placements = count_test_files_by_placement(conn)
-    unplaced = describe_unplaced(placements)
+    layout = read_test_layout(conn)
+    unplaced = describe_unplaced(placements, layout)
     if unplaced is not None:
         return 0, [], f"not counted: {unplaced}, so a node with no bound test may still be tested"
 
@@ -224,6 +237,8 @@ def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
         f"counted over {covered} node(s) the test binding covers, "
         f"all {sum(placements.values())} test file(s) placed"
     )
+    if not placements and layout is not None:
+        population = f"{population}; {describe_test_file_recognition(layout)}"
     return len(untested_refs), untested_refs, population
 
 

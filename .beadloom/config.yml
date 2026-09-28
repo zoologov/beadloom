@@ -4,6 +4,27 @@ scan_paths:
 - src
 sync:
   hook_mode: warn
+# BDL-074 G2 (`beadloom-2mj3.11`, review `beadloom-b9ll` M3 and m4). Where this
+# project's tests are and which files are tests, declared rather than defaulted so
+# the lint population line can say where each kind's folder came from.
+#
+# `beside_code: false` because five modules under src/ are named like tests
+# (context_oracle/test_binding.py, test_file_reader.py, graph/rules/test_binding.py,
+# test_import_boundary.py, application/reindex/test_index.py) and a file name cannot
+# tell a test module from a module about tests. Every test here is under tests/.
+#
+# `patterns` names pytest only: this project is Python, and declaring the group
+# replaces the Go and JS/TS defaults rather than keeping them unused.
+tests:
+  roots: [tests]
+  beside_code: false
+  kinds:
+    unit: unit
+    integration: integration
+    acceptance: acceptance
+    self_check: self_check
+  patterns:
+    pytest: ["test_*.py", "*_test.py"]
 docs_audit:
   # Targeted false-positive suppressions (BDL-057.6). Each {path, fact, value}
   # triple silences exactly one keyword-proximity false match — it does NOT mask

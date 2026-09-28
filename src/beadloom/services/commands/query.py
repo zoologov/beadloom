@@ -57,10 +57,16 @@ def _format_markdown(bundle: dict[str, object]) -> str:
         )
         # The count above is a count of BOUND files. A repository whose tests are
         # not laid out yet binds few of them, and saying so is what keeps "0 tests"
-        # from reading as "nobody tested this" (BDL-074 C2).
-        placements = cast("dict[str, int]", bundle.get("test_placements") or {})
-        unplaced = describe_unplaced(placements)
-        if unplaced is not None:
+        # from reading as "nobody tested this" (BDL-074 C2). The sentence is the
+        # bundle's, stated against the layout the index recorded (BDL-074 G2); a
+        # bundle built before it carried one (the context cache keeps bundles)
+        # states the default layout's.
+        if "test_unplaced" in bundle:
+            unplaced = cast("str | None", bundle["test_unplaced"])
+        else:
+            placements = cast("dict[str, int]", bundle.get("test_placements") or {})
+            unplaced = describe_unplaced(placements)
+        if unplaced:
             lines.append(f"  {unplaced}, so the count above can be short")
 
     # Activity.
