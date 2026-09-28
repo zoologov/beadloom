@@ -14,7 +14,7 @@ make — and this script is where those answers meet mutmut 3.7, as it is:
     exercise the node while the binding cannot say. Self-checks are never chosen:
     they test this repository's files, not the changed code. The fallback shrinks
     as unplaced files are laid out and is empty once none is left in the pool
-    (60 of the 170 unplaced files were in it on 2026-09-28). Then prepare the
+    (59 of the 167 unplaced files were in it on 2026-09-28, measured). Then prepare the
     mutants and take the EXACT names of the changed functions' mutants from
     ``mutants/*.meta`` (a glob ending ``__mutmut_*`` makes mutmut's clean run
     fall back to the whole selection, BDL-073).

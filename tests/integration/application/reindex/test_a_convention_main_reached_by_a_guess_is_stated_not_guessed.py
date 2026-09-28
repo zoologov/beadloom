@@ -40,8 +40,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 #: Where the binding reads a test file under Beadloom's defaults, as the debt
-#: report and ``ctx`` end their statement of it.
-_READ_WHERE = "under the roots tests, test, spec or beside a node's code"
+#: report and ``ctx`` end their statement of it, for a project with no test root.
+_READ_WHERE_NO_ROOT = (
+    "under no root, since none of tests, test, spec, __tests__ exists, or beside a node's code"
+)
 
 
 def _tests_of(root: Path, ref_id: str) -> dict[str, Any]:
@@ -60,25 +62,18 @@ def _untested(root: Path) -> tuple[int, list[str], str]:
 
 
 class TestAFileOutsideEveryRootTreeAndSourceIsNotRead:
-    """Main: ``jest``/``xctest``, 1 file, 2 tests for billing; ``untested: 0``."""
+    """Main: ``xctest``, 1 file, 2 tests for billing; ``untested: 0``. The one place of
+    the retired mapper left unread: an Xcode test target, whose folder is named after
+    the project (NG2, accepted by the owner)."""
 
-    @pytest.mark.parametrize(
-        "build",
-        [
-            pytest.param(jest_top_level_tests_folder, id="top-level __tests__/"),
-            pytest.param(xcode_project, id="Xcode ShopTests/"),
-        ],
-    )
-    def test_the_debt_report_says_where_a_test_file_is_read(
-        self, tmp_path: Path, build: Callable[[Path], Path]
-    ) -> None:
-        root = build(tmp_path)
+    def test_the_debt_report_says_where_a_test_file_is_read(self, tmp_path: Path) -> None:
+        root = xcode_project(tmp_path)
         assert reindex(root).test_files_indexed == 0
         assert _tests_of(root, "billing")["test_files"] == []
         count, _, population = _untested(root)
         assert count == 3
         assert population.startswith("counted over 3 node(s) the test binding covers, all 0")
-        assert population.endswith(_READ_WHERE)
+        assert population.endswith(_READ_WHERE_NO_ROOT)
 
     def test_a_declared_root_reads_them_as_unplaced_and_withholds_the_count(
         self, tmp_path: Path
@@ -88,9 +83,8 @@ class TestAFileOutsideEveryRootTreeAndSourceIsNotRead:
         assert reindex(root).test_files_unplaced == 2
         assert _untested(root)[0] == 0
 
-    def test_a_declared_root_and_a_tests_list_bind_them_as_main_did(self, tmp_path: Path) -> None:
+    def test_a_tests_list_binds_a_top_level_tests_folder_as_main_did(self, tmp_path: Path) -> None:
         root = jest_top_level_tests_folder(tmp_path)
-        declare_config(root, {"roots": ["tests", "__tests__"]})
         declare_tests(root, "billing", ["__tests__/billing.test.ts"])
         reindex(root)
         assert _tests_of(root, "billing") == {
@@ -114,6 +108,14 @@ class TestAFileOutsideEveryRootTreeAndSourceIsNotRead:
         assert _untested(root)[0] == 0
 
 
+def sentence_names_only(sentence: str, folder: str) -> bool:
+    """Whether the unplaced sentence names *folder*'s kind folders and no other root's."""
+    return sentence.startswith(
+        f"2 of 2 test file(s) are unplaced (not under {folder}/integration/ or "
+        f"{folder}/unit/, nor inside a node's source)"
+    )
+
+
 def _unplaced_sentence(root: Path) -> object:
     conn = open_db(root / ".beadloom" / "beadloom.db")
     try:
@@ -124,17 +126,20 @@ def _unplaced_sentence(root: Path) -> object:
         conn.close()
 
 
-class TestTheDefaultRootsTestAndSpecAreReadWhereTheyExist:
-    """The owner's ruling on NG1 (2026-09-28): ``test/`` and ``spec/`` are default roots
-    beside ``tests/``, each read only when a folder of exactly that spelling exists.
-    Main bound these files by their names and counted ``untested: 0`` (measured);
-    the binding reads them, counts them unplaced and withholds the count."""
+class TestTheDefaultRootsAreReadWhereTheyExist:
+    """The owner's ruling on NG1 (2026-09-28): ``test/``, ``spec/`` and — applied to the
+    third place NG1 named (``beadloom-2mj3.17``) — a top-level ``__tests__/`` are
+    default roots beside ``tests/``, each read only when a folder of exactly that
+    spelling exists. Main bound these files by their names and counted
+    ``untested: 0`` (measured); the binding reads them, counts them unplaced and
+    withholds the count."""
 
     @pytest.mark.parametrize(
         ("build", "folder"),
         [
             pytest.param(lambda root: python_flat_under(root, "test"), "test", id="flat test/"),
             pytest.param(jest_flat_spec, "spec", id="flat spec/"),
+            pytest.param(jest_top_level_tests_folder, "__tests__", id="top-level __tests__/"),
         ],
     )
     def test_a_flat_file_is_read_unplaced_and_the_count_withheld_as_on_main(
@@ -146,9 +151,8 @@ class TestTheDefaultRootsTestAndSpecAreReadWhereTheyExist:
         count, _, population = _untested(root)
         assert count == 0
         assert population.startswith("not counted: 2 of 2 test file(s) are unplaced")
-        sentence = str(_unplaced_sentence(root))
-        assert sentence.startswith("2 of 2 test file(s) are unplaced (not under ")
-        assert f"{folder}/unit/" in sentence
+        assert sentence_names_only(str(_unplaced_sentence(root)), folder)
+        assert population.endswith(f"under the root {folder} or beside a node's code")
 
     def test_a_file_mirrored_under_test_binds_without_a_declaration_as_on_main(
         self, tmp_path: Path
@@ -222,4 +226,4 @@ class TestAFrameworkMarkerWithoutATestFileNamesNoFramework:
         assert _tests_of(root, "billing")["coverage_estimate"] == "none"
         count, _, population = _untested(root)
         assert count == 3
-        assert population.endswith(_READ_WHERE)
+        assert population.endswith("under the root tests or beside a node's code")

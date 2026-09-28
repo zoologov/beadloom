@@ -436,7 +436,9 @@ class RecordedTestLayout:
     *frameworks* the names of the pattern groups a file path is matched against;
     *mirror_roots* the build tools' test trees the project has (``src/test/java``);
     *patterns* each group's patterns, in the order they are matched — empty in a
-    record written before ``beadloom-2mj3.15``, which named the groups alone.
+    record written before ``beadloom-2mj3.15``, which named the groups alone;
+    *absent_roots* the roots in force the project does not have, so a reader names
+    the roots that exist and can say which were looked for (``beadloom-2mj3.17``).
     """
 
     kind_prefixes: Mapping[str, tuple[str, ...]]
@@ -446,6 +448,7 @@ class RecordedTestLayout:
     frameworks: tuple[str, ...]
     mirror_roots: tuple[str, ...] = ()
     patterns: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    absent_roots: tuple[str, ...] = ()
 
     def encode(self) -> str:
         """The record as the JSON the ``meta`` table holds."""
@@ -458,6 +461,7 @@ class RecordedTestLayout:
                 "frameworks": list(self.frameworks),
                 "mirror_roots": list(self.mirror_roots),
                 "patterns": [[name, list(group)] for name, group in self.patterns],
+                "absent_roots": list(self.absent_roots),
             },
             sort_keys=True,
         )
@@ -491,6 +495,7 @@ def read_test_layout(conn: sqlite3.Connection) -> RecordedTestLayout | None:
                 (str(name), tuple(str(pattern) for pattern in group))
                 for name, group in raw.get("patterns", ())
             ),
+            absent_roots=tuple(str(root) for root in raw.get("absent_roots", ())),
         )
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
         return None

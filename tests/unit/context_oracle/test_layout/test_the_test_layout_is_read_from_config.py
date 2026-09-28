@@ -36,9 +36,9 @@ def _layout(tests: object) -> tuple[TestLayout, list[str]]:
 class TestTheDefaults:
     """A project that declares nothing gets the layout Beadloom ships."""
 
-    def test_the_roots_are_tests_test_and_spec_and_tests_beside_the_code_are_read(self) -> None:
+    def test_the_four_default_roots_and_tests_beside_the_code_are_read(self) -> None:
         layout, problems = layout_from_config({})
-        assert layout.roots == ("tests", "test", "spec")
+        assert layout.roots == ("tests", "test", "spec", "__tests__")
         assert layout.beside_code is True
         assert problems == []
 
@@ -140,11 +140,11 @@ class TestAMalformedDeclaration:
 
     def test_roots_that_are_not_a_list_of_paths_are_reported(self) -> None:
         layout, problems = _layout({"roots": "test"})
-        assert layout.roots == ("tests", "test", "spec")
+        assert layout.roots == ("tests", "test", "spec", "__tests__")
         assert problems == [
             "`tests.roots` in .beadloom/config.yml must be a list of folders inside the "
             "project, none of them the project itself or outside it; the default (tests, "
-            "test, spec) is used"
+            "test, spec, __tests__) is used"
         ]
 
     def test_patterns_that_are_not_lists_of_names_by_framework_are_reported(self) -> None:
@@ -163,7 +163,7 @@ class TestAMalformedDeclaration:
 
     def test_a_tests_key_that_is_not_a_mapping_is_reported(self) -> None:
         layout, problems = layout_from_config({"tests": ["tests"]})
-        assert layout.roots == ("tests", "test", "spec")
+        assert layout.roots == ("tests", "test", "spec", "__tests__")
         assert len(problems) == 1
 
 

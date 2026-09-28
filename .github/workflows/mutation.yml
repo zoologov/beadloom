@@ -54,8 +54,9 @@
 # (rule-engine): 36 bound + 10 acceptance by tag + 60 fallback = 106 files, 103
 # self-checks excluded. The rule that fallback replaced took every pool file
 # bound to no node: 36 bound + 134 fallback = 170 files, 74 of those 134 being
-# acceptance step and self-check files that could never become bound. 170
-# unplaced test files remain in the suite, 60 of them in the pool.
+# acceptance step and self-check files that could never become bound. 167
+# unplaced test files remain in the suite, 59 of them in the pool of 227
+# (measured 2026-09-28 on the index at beadloom-2mj3.17, after G3 placed three).
 #
 # PER CHANGE — THE BUDGET, and what is known about it. The PRD's budget is 10
 # minutes on `ubuntu-latest`. Its largest cost is mutmut's stats pass over the

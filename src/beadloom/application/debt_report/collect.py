@@ -210,19 +210,24 @@ def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
     The binding scores 0 while any file is unplaced, and once every one is placed
     it charges only the nodes none of them binds to. It reads the conventions
     that mapper read, each in the place its ecosystem keeps it (``beadloom-2mj3.15``):
-    pytest, Go and Jest files beside the code or under a declared root, Jest's
+    pytest, Go and Jest files beside the code or under a root, Jest's
     ``__tests__/`` folders, every Java and Kotlin file in ``src/test/``, and every
     Swift file in a ``*Tests`` folder — the five default groups of
-    :mod:`beadloom.context_oracle.test_layout`. The debt report's integration test
-    ``test_an_adopter_scores_what_it_scored_before`` runs that claim on one
-    project per convention.
+    :mod:`beadloom.context_oracle.test_layout`. A file the mapper bound only by its
+    name, in a ``tests/``, ``test/``, ``spec/`` or top-level ``__tests__/`` folder,
+    is read under those default roots and unplaced, so the count is withheld — 0,
+    as on main (the owner's NG1 ruling; ``beadloom-2mj3.15``, ``.17``). The debt
+    report's integration test ``test_an_adopter_scores_what_it_scored_before`` runs
+    that claim on one project per convention.
 
     The limit it keeps: a test file outside every root, test tree and node source
-    — a flat ``test/`` folder nobody declared, a top-level ``__tests__/`` — is not
-    read, because binding it would take a guess at its node; the mapper guessed,
-    and counted 0 for such a project where the binding charges each node. So the
-    population ALWAYS ends with the patterns and roots a test file is read by, and
-    "all N test file(s) placed" reads as "all N files those patterns matched".
+    is not read — an Xcode test target such as ``ShopTests/``, whose folder is
+    named after the project, until ``tests.mirrors`` declares it (NG2, accepted by
+    the owner) — and a marker such as ``conftest.py`` without a test file names no
+    framework (NG4). Such a project has every covered node counted where the mapper
+    counted 0. So the population ALWAYS ends with the patterns and the roots a test
+    file is read by, and "all N test file(s) placed" reads as "all N files those
+    patterns matched".
     """
     placements = count_test_files_by_placement(conn)
     layout = read_test_layout(conn)

@@ -354,10 +354,16 @@ def describe_unplaced(
     else:
         prefixes = [p for kind in MIRRORED_KINDS for p in layout.kind_prefixes.get(kind, ())]
         prefixes += [f"{root}/" for root in layout.mirror_roots]
-    beside = ", nor inside a node's source" if layout is not None and layout.beside_code else ""
+    beside = layout is not None and layout.beside_code
+    if prefixes:
+        where = f"not under {_either(sorted(prefixes))}" + (
+            ", nor inside a node's source" if beside else ""
+        )
+    else:
+        where = "inside no node's source" if beside else "under no root"
     return (
         f"{unplaced} of {sum(counts.values())} test file(s) are unplaced "
-        f"(not under {_either(sorted(prefixes))}{beside}) and bind to no node"
+        f"({where}) and bind to no node"
     )
 
 
@@ -385,11 +391,16 @@ def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
     )
     all_roots = (*layout.roots, *layout.mirror_roots)
     roots = ", ".join(all_roots)
-    where = f"the root {roots}" if len(all_roots) == 1 else f"the roots {roots}"
-    beside = " or beside a node's code" if layout.beside_code else ""
+    if all_roots:
+        where = f"the root {roots}" if len(all_roots) == 1 else f"the roots {roots}"
+        beside = " or beside a node's code"
+    else:
+        looked_for = ", ".join(layout.absent_roots)
+        where = f"no root, since none of {looked_for} exists" if looked_for else "no root"
+        beside = ", or beside a node's code"
     return (
         f"a test file is read when its path matches a pattern of {_either(groups)} "
-        f"under {where}{beside}"
+        f"under {where}{beside if layout.beside_code else ''}"
     )
 
 

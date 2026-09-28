@@ -11,13 +11,16 @@ package read ``none, 0 tests`` where the name-guessing mapper had read ``go_test
 or beside the code.
 
 - ``roots`` — the folders tests are laid out in by kind, ``<root>/<kind>/...``.
-  Default ``[tests, test, spec]``, each read only where a folder of exactly that
-  spelling exists. A file under a root binds by the mirror, or by a node's
+  Default ``[tests, test, spec, __tests__]``, each read only where a folder of
+  exactly that spelling exists. A file under a root binds by the mirror, or by a node's
   ``tests:`` list, or not at all — then it is read and counted unplaced, which
   withholds the debt report's untested count, as the retired mapper's name guess
   scored such a project on main. ``test/`` and ``spec/`` were added by the owner's
-  ruling of 2026-09-28 (``beadloom-2mj3.15``, NG1) in place of a project-wide walk.
-  A declared list replaces the default.
+  ruling of 2026-09-28 (``beadloom-2mj3.15``, NG1) in place of a project-wide walk,
+  and a top-level ``__tests__/`` by the same ruling (``beadloom-2mj3.17``): NG1
+  named all three places. The index records the roots that exist and names only
+  those; with none, it names the ones looked for. A declared list replaces the
+  default.
 - ``patterns`` — file patterns grouped by the framework they name. A file is a
   test when its path matches one, and its framework is that group's name. A
   pattern matches the END of a path: one without a ``/`` matches the file name,
@@ -66,7 +69,7 @@ write. Pure apart from :func:`load_test_layout`, which reads the file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
 from functools import lru_cache
 from pathlib import PurePosixPath
@@ -94,9 +97,9 @@ MIRRORED_KINDS = frozenset({KIND_UNIT, KIND_INTEGRATION})
 #: Every kind a folder can hold, in the order they are stated.
 KINDS = (KIND_ACCEPTANCE, KIND_INTEGRATION, KIND_SELF_CHECK, KIND_UNIT)
 
-#: ``tests/`` (pytest, Go), ``test/`` (Mocha, Node, Maven-less Java, Python) and
-#: ``spec/`` (RSpec, Jasmine): see the module docstring.
-DEFAULT_ROOTS = ("tests", "test", "spec")
+#: ``tests/`` (pytest, Go), ``test/`` (Mocha, Node, Python), ``spec/`` (RSpec,
+#: Jasmine) and a top-level ``__tests__/`` (Jest): see the module docstring.
+DEFAULT_ROOTS = ("tests", "test", "spec", "__tests__")
 #: Each ecosystem's own convention, named for the framework its patterns belong
 #: to (see the module docstring).
 DEFAULT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -192,17 +195,26 @@ class TestLayout:
                 return test_root, code_root, path[len(prefix) :]
         return None
 
-    def recorded(self, present_mirror_roots: tuple[str, ...] = ()) -> RecordedTestLayout:
+    def recorded(
+        self,
+        present_mirror_roots: tuple[str, ...] = (),
+        present_roots: tuple[str, ...] | None = None,
+    ) -> RecordedTestLayout:
         """The record the index keeps of this layout, for readers that may not import it.
 
         *present_mirror_roots* are the test trees of :attr:`mirrors` the project
-        has: the record names what was read, not every tree a default could name.
+        has, and *present_roots* the :attr:`roots` it has (``None``: all of them):
+        the record names what was read, not every folder a default could name, and
+        keeps the roots looked for and not found apart (``beadloom-2mj3.17``).
         """
+        roots = self.roots if present_roots is None else present_roots
+        in_force = replace(self, roots=roots)
         return RecordedTestLayout(
-            kind_prefixes={kind: self.kind_prefixes(kind) for kind in KINDS},
+            kind_prefixes={kind: in_force.kind_prefixes(kind) for kind in KINDS},
             declared_kinds=self.declared_kinds,
             beside_code=self.beside_code,
-            roots=self.roots,
+            roots=roots,
+            absent_roots=tuple(root for root in self.roots if root not in roots),
             frameworks=tuple(framework for framework, _ in self.patterns),
             mirror_roots=present_mirror_roots,
             patterns=self.patterns,
@@ -317,7 +329,7 @@ def _patterns(value: object, problems: list[str]) -> tuple[tuple[str, tuple[str,
     ):
         problems.append(
             f"`{CONFIG_KEY}.patterns` in {CONFIG_PATH} must map each framework name to a "
-            "list of file-name patterns; the default "
+            "list of file patterns (a name, or the end of a path); the default "
             f"({', '.join(name for name, _ in DEFAULT_PATTERNS)}) is used"
         )
         return DEFAULT_PATTERNS

@@ -53,6 +53,7 @@ from beadloom.graph.import_resolver import resolve_import_to_node
 from beadloom.infrastructure.db import get_meta, set_meta
 from beadloom.infrastructure.repository import (
     TEST_LAYOUT_KEY,
+    RecordedTestLayout,
     count_other_kind_test_files,
     count_test_files_by_placement,
     label_test_kind,
@@ -173,6 +174,14 @@ def present_mirror_roots(project_root: Path, layout: TestLayout) -> tuple[str, .
     )
 
 
+def _recorded_layout(project_root: Path, layout: TestLayout) -> RecordedTestLayout:
+    """The layout as the index records it: the roots and test trees this project has."""
+    present_roots = tuple(
+        root for root in layout.roots if _is_folder_as_spelled(project_root, root)
+    )
+    return layout.recorded(present_mirror_roots(project_root, layout), present_roots)
+
+
 def _is_folder_as_spelled(project_root: Path, relative: str) -> bool:
     """Whether *relative* is a folder under *project_root*, with exactly that spelling.
 
@@ -213,7 +222,7 @@ def is_test_index_current(project_root: Path, conn: sqlite3.Connection) -> bool:
     compared by hash, and the recorded layout against the one the config declares.
     """
     layout = load_test_layout(project_root)[0]
-    recorded = layout.recorded(present_mirror_roots(project_root, layout))
+    recorded = _recorded_layout(project_root, layout)
     if get_meta(conn, TEST_LAYOUT_KEY) != recorded.encode():
         return False
     on_disk = {
@@ -295,11 +304,7 @@ def index_test_files(
     frameworks = {path: layout.framework_of(path) or "" for path in files}
     _rebuild_extra_tests(conn, bound, counts, frameworks)
     set_meta(conn, TEST_INDEX_VERSION_KEY, TEST_INDEX_VERSION)
-    set_meta(
-        conn,
-        TEST_LAYOUT_KEY,
-        layout.recorded(present_mirror_roots(project_root, layout)).encode(),
-    )
+    set_meta(conn, TEST_LAYOUT_KEY, _recorded_layout(project_root, layout).encode())
     conn.commit()
 
     by_placement: dict[str, int] = {}

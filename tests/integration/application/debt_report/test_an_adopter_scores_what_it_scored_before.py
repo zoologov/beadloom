@@ -23,8 +23,11 @@ from tests.support.adopter_test_layouts import (
     CONVENTIONS_MAIN_READ,
     go_module,
     gradle_kotlin_project,
+    jest_flat_spec,
+    jest_top_level_tests_folder,
     maven_project,
     python_beside_the_code,
+    python_flat_under,
     python_with_a_test_root,
     swift_package,
     write,
@@ -39,14 +42,20 @@ if TYPE_CHECKING:
 #: framework anywhere, and it detected pytest or go_test in each of them.
 UNTESTED_ON_MAIN = 0
 
-#: What the population says a test file is read by, under Beadloom's defaults
-#: (``beadloom-2mj3.15``: stated on every population, not only an empty one).
-READ_BY_DEFAULT = (
-    "a test file is read when its path matches a pattern of go_test (*_test.go), "
+#: Beadloom's default patterns, as the population names them.
+DEFAULT_PATTERNS_STATED = (
+    "go_test (*_test.go), "
     "jest (*.test.*, *.spec.*, __tests__/**/*.[jt]s, __tests__/**/*.[jt]sx), "
     "junit (*Test.java, *Tests.java, *TestCase.java, *IT.java, *ITCase.java, *Test.kt, "
     "*Tests.kt, src/test/**/*.java, src/test/**/*.kt), pytest (test_*.py, *_test.py) or "
-    "xctest (*Tests.swift, *Tests/**/*.swift) under the roots tests, test, spec or beside a "
+    "xctest (*Tests.swift, *Tests/**/*.swift)"
+)
+#: What the population says a test file is read by, under Beadloom's defaults, for
+#: a project with no test root such as the Go module (``beadloom-2mj3.15``: stated on
+#: every population; ``.17``: only the roots that exist are named).
+READ_BY_DEFAULT = (
+    f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
+    "under no root, since none of tests, test, spec, __tests__ exists, or beside a "
     "node's code"
 )
 
@@ -89,7 +98,8 @@ class TestNoWorseThanMain:
             "or test/unit/, nor inside a node's source)"
         )
         assert population.endswith(
-            READ_BY_DEFAULT.replace("the roots tests, test, spec", "the root test")
+            f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
+            "under the root test or beside a node's code"
         )
 
 
@@ -114,6 +124,24 @@ def test_every_convention_main_read_scores_what_it_scored_on_main(
 ) -> None:
     """``beadloom-2mj3.15``: main read each of these and counted 0 untested (measured)."""
     assert _untested(build(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        pytest.param(lambda root: python_flat_under(root, "test"), id="flat test/"),
+        pytest.param(jest_flat_spec, id="flat spec/"),
+        pytest.param(jest_top_level_tests_folder, id="top-level __tests__/"),
+    ],
+)
+def test_a_default_root_main_read_by_name_scores_what_it_scored_on_main(
+    tmp_path: Path, build: Callable[[Path], Path]
+) -> None:
+    """The owner's NG1 ruling (``beadloom-2mj3.15``, ``.17``): main bound these files by
+    their names and counted 0; they are read unplaced, so the count is withheld."""
+    count, refs, population = _untested(build(tmp_path))
+    assert (count, refs) == (UNTESTED_ON_MAIN, [])
+    assert population.startswith("not counted: 2 of 2 test file(s) are unplaced")
 
 
 class TestWhatTheCountStillSays:
@@ -148,5 +176,6 @@ class TestWhatTheCountStillSays:
         _, _, population = _untested(root)
         assert population.endswith(
             "a test file is read when its path matches a pattern of junit (*Test.java) "
-            "under the roots tests, test, spec or beside a node's code"
+            "under no root, since none of tests, test, spec, __tests__ exists, or beside a "
+            "node's code"
         )
