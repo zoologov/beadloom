@@ -7,9 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Wave 15 — `beadloom-b9ll` (R), third run, clean prompt, alone, read-only.
-**Goal:** an independent verdict on the whole change and on each finding of the first two runs.
+**Bead:** PAUSED by the owner before the review's fourth run. Next: `beadloom-b9ll` (R, fourth run, clean prompt), then W `beadloom-7u77`, V `beadloom-paze`, PR 3.
+**Goal:** an independent verdict on the whole change and on each finding of the first three runs.
 **Done when:** OK or OK with minors; else another fix wave.
+
+**Wave 16 closed (2026-09-28):** `beadloom-2mj3.17` `48853754`, `a7b888a8` — a top-level `__tests__/` is a default root beside `tests`, `test`, `spec` (the coordinator's NG1 question had omitted it; the owner's ruling applied); only existing roots are named; the third review's minors and nits fixed. Docs `beadloom-2mj3.18` `466b9039` (10 stale → 0; the debt-report SPEC says only NG2 and NG4 change the score). Suite on the tree at `48853754`: 11 580 passed, 0 failed; `beadloom ci` rc 0 with the docs.
+
+**Wave 15 (2026-09-28): review third run CHANGES REQUIRED** — 1 major (M-3-1: the top-level `__tests__/` still unread), 2 minors, 3 nits; every earlier finding resolved or explained.
 
 **Wave 14 closed (2026-09-28):** G5 `beadloom-2mj3.15` `3e3a10db`, `5242be97`, `8cb23141`, `909a0098` — the retired mapper enumerated into 32 conventions: 23 proven no worse than main against main's measured figures, 9 ruled out as guessing (owner: NG2–NG4 in the PRD's Non-goals; NG1 not accepted — `test/` and `spec/` became default roots); folder-form patterns (`__tests__/**`); ctx and the debt report always name the patterns and roots in force; `test-layout` and `test-file-reader` are graph nodes under test-mapping; the re-review's four minors fixed. Docs `bbf06b7a` (24 stale → 0). Suite on the tree at `8cb23141`: 11 574 passed, 0 failed; `beadloom ci` rc 0 with the docs.
 
