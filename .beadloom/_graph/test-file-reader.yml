@@ -1,0 +1,18 @@
+# A module of the test binding, and a part of its feature (review `beadloom-b9ll`
+# m-new-4, `beadloom-2mj3.15`). A node's `source` names one path, and the binding's
+# modules sit beside unrelated ones in `context_oracle/`, so each is its own node:
+# without one, the ownership rule placed it under `context-oracle`, and its unit
+# tests bound there instead of to the feature.
+nodes:
+  - ref_id: test-file-reader
+    kind: component
+    summary: "Test file reader — the test functions and absolute imports one test file holds: parsed for Python, counted by the line a test is written in for Go, JS/TS, Java, Kotlin and Swift"
+    source: src/beadloom/context_oracle/test_file_reader.py
+    docs_absent: >-
+      Documented in the test-mapping SPEC, the feature it is a part of: the loader
+      keeps a document for one node only, and its section "What a test file
+      holds" states what the reader counts.
+edges:
+  - src: test-file-reader
+    dst: test-mapping
+    kind: part_of

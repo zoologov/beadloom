@@ -10,10 +10,13 @@ the one this repository has always printed.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from beadloom.context_oracle.test_binding import (
     PLACEMENT_BESIDE_CODE,
     PLACEMENT_UNPLACED,
     describe_test_file_recognition,
+    describe_unbound,
     describe_unplaced,
 )
 from beadloom.context_oracle.test_layout import layout_from_config
@@ -40,12 +43,25 @@ class TestTheFoldersNamed:
         )
 
 
+#: Beadloom's default patterns, as the recognition clause states them.
+DEFAULT_PATTERNS_STATED = (
+    "go_test (*_test.go), "
+    "jest (*.test.*, *.spec.*, __tests__/**/*.[jt]s, __tests__/**/*.[jt]sx), "
+    "junit (*Test.java, *Tests.java, *TestCase.java, *IT.java, *ITCase.java, *Test.kt, "
+    "*Tests.kt, src/test/**/*.java, src/test/**/*.kt), "
+    "pytest (test_*.py, *_test.py) or "
+    "xctest (*Tests.swift, *Tests/**/*.swift)"
+)
+
+
 class TestWhatATestFileIsReadBy:
-    def test_names_every_framework_and_where_it_is_looked_for(self) -> None:
+    """``beadloom-2mj3.15``: the clause names the patterns in force, not only their groups."""
+
+    def test_names_every_pattern_and_where_it_is_looked_for(self) -> None:
         layout, _ = layout_from_config({})
         assert describe_test_file_recognition(layout.recorded()) == (
-            "a test file is read when its name matches a pattern of go_test, jest, junit, "
-            "pytest or xctest under the root tests or beside a node's code"
+            f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
+            "under the root tests or beside a node's code"
         )
 
     def test_several_roots_and_no_tests_beside_the_code(self) -> None:
@@ -53,8 +69,27 @@ class TestWhatATestFileIsReadBy:
             {"tests": {"roots": ["test", "spec"], "beside_code": False}}
         )
         assert describe_test_file_recognition(layout.recorded()) == (
-            "a test file is read when its name matches a pattern of go_test, jest, junit, "
-            "pytest or xctest under the roots test, spec"
+            f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
+            "under the roots test, spec"
+        )
+
+    def test_declared_patterns_are_the_ones_named(self) -> None:
+        layout, _ = layout_from_config(
+            {"tests": {"patterns": {"pytest": ["test_*.py"]}, "beside_code": False}}
+        )
+        assert describe_test_file_recognition(layout.recorded()) == (
+            "a test file is read when its path matches a pattern of pytest (test_*.py) "
+            "under the root tests"
+        )
+
+    def test_a_record_written_before_the_patterns_were_recorded_names_the_groups(
+        self,
+    ) -> None:
+        layout, _ = layout_from_config({"tests": {"beside_code": False}})
+        recorded = replace(layout.recorded(), patterns=())
+        assert describe_test_file_recognition(recorded) == (
+            "a test file is read when its path matches a pattern of go_test, jest, junit, "
+            "pytest or xctest under the root tests"
         )
 
 
@@ -69,3 +104,21 @@ class TestATestTreeTheProjectHas:
         assert describe_test_file_recognition(recorded).endswith(
             "under the roots tests, src/test/java"
         )
+
+
+class TestTheUnboundLineOfAChange:
+    """Review ``beadloom-b9ll`` m-new-2: ``mutation --changed-since`` named the default folders."""
+
+    def test_names_the_recorded_roots_as_ctx_and_the_debt_report_do(self) -> None:
+        layout, _ = layout_from_config({"tests": {"roots": ["test"]}})
+        counts = {PLACEMENT_UNPLACED: 1, PLACEMENT_BESIDE_CODE: 1}
+        assert describe_unbound(counts, {}, layout.recorded()) == describe_unplaced(
+            counts, layout.recorded()
+        )
+        assert "test/unit/" in (describe_unbound(counts, {}, layout.recorded()) or "")
+        assert "nor inside a node's source" in (
+            describe_unbound(counts, {}, layout.recorded()) or ""
+        )
+
+    def test_without_a_recorded_layout_names_the_default_folders(self) -> None:
+        assert describe_unbound({PLACEMENT_UNPLACED: 2, "mirror": 2}, {}) == UNPLACED_SENTENCE

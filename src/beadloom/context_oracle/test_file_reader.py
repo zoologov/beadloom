@@ -24,6 +24,7 @@ where the tree-sitter extractor drops an aliased import.
 
 # beadloom:domain=context-oracle
 # beadloom:feature=test-mapping
+# beadloom:component=test-file-reader
 
 from __future__ import annotations
 

@@ -139,7 +139,10 @@ BREAKS: tuple[Break, ...] = (
     ),
     Break(
         name="a recovered floor closes its issue in the words of the other state",
-        old="This week's sample scored at or above its floor.",
+        old=(
+            "This week's sample's interval reaches its floor, "
+            "so its score is no longer shown to be under it."
+        ),
         new="This week's job judged its sample again.",
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
         "test_a_run_back_over_its_floor_closes_the_under_floor_issue_saying_so",

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from beadloom.application.reindex import reindex
 from beadloom.context_oracle.builder import build_context
 from beadloom.infrastructure.db import open_db
-from tests.support.adopter_test_layouts import python_with_a_test_root
+from tests.support.adopter_test_layouts import jest_project, python_with_a_test_root
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,3 +37,20 @@ class TestTheUnplacedSentence:
 
     def test_is_none_when_every_file_is_placed(self, tmp_path: Path) -> None:
         assert _bundle(python_with_a_test_root(tmp_path, mirrored=True))["test_unplaced"] is None
+
+
+class TestWhichFilesCountAsTests:
+    """``beadloom-2mj3.15``: the bundle says what a test file is read by, every time."""
+
+    def test_stated_when_every_file_is_placed(self, tmp_path: Path) -> None:
+        bundle = _bundle(python_with_a_test_root(tmp_path, mirrored=True))
+        assert str(bundle["test_recognition"]).startswith(
+            "a test file is read when its path matches a pattern of go_test (*_test.go), "
+        )
+        assert str(bundle["test_recognition"]).endswith(
+            "under the root test or beside a node's code"
+        )
+
+    def test_names_the_jest_folder_convention_it_reads(self, tmp_path: Path) -> None:
+        bundle = _bundle(jest_project(tmp_path, "src/{p}/__tests__/{p}.ts"))
+        assert "__tests__/**/*.[jt]s" in str(bundle["test_recognition"])

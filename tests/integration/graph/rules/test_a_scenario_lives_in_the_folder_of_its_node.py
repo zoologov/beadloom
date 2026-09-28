@@ -78,6 +78,22 @@ def _findings(violations: list[Violation]) -> list[Violation]:
     return _of_type(violations, SCENARIO_BINDING_RULE_TYPE)
 
 
+class TestAFeatureFileWithNoScenario:
+    """First review of ``beadloom-b9ll``, n3: the statement counts every file the glob
+    matched, and a file with no scenario was never judged, so one in the wrong folder
+    was never reported. Its place is judged like any other file's."""
+
+    def test_one_in_a_folder_that_names_no_node_is_reported(self, tmp_path: Path) -> None:
+        write_feature(tmp_path, "specs/ledger/nowhere/empty.feature", "Feature: F\n")
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+        assert finding.file_path == "specs/ledger/nowhere/empty.feature"
+        assert "`nowhere`, which names no node" in finding.message
+
+    def test_one_in_its_nodes_folder_is_not_reported(self, tmp_path: Path) -> None:
+        write_feature(tmp_path, "specs/ledger/billing/empty.feature", "Feature: F\n")
+        assert _findings(_evaluate(tmp_path, _rule())) == []
+
+
 class TestTheTagAndTheFolder:
     def test_a_scenario_tagged_with_its_folder_node_is_not_reported(self, tmp_path: Path) -> None:
         write_feature(

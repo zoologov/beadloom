@@ -28,7 +28,7 @@ reaches stands the rule down, in the test-file vocabulary.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.evaluators import evaluate_one_import_rule
@@ -92,7 +92,7 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
     judged: list[str] = []
     outside_from = unbound = outside_of = 0
     for path in sorted(by_file):
-        if not fnmatch(path, rule.from_glob):
+        if not fnmatchcase(path, rule.from_glob):
             outside_from += 1
         elif selection is None:
             judged.append(path)

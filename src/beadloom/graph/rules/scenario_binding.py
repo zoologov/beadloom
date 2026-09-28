@@ -195,7 +195,10 @@ def _judge_file(
 
 def _tally(rule: ScenarioBindingRule, suite: ScenarioSuite, graph: _Graph) -> _Tally:
     root = suite_root(rule.features)
-    by_file: dict[str, list[Scenario]] = {}
+    # A file with no scenario is judged by its place alone: it is counted among the
+    # files the statement names, so it is judged among them (review
+    # ``beadloom-b9ll``, n3).
+    by_file: dict[str, list[Scenario]] = {path: [] for path in suite.empty_files}
     for scenario in suite.scenarios:
         by_file.setdefault(scenario.path, []).append(scenario)
     ledger = ExemptionLedger(rule.exempt, by_path=True)

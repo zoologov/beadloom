@@ -17,10 +17,17 @@ verification bead (`beadloom-paze`) reads one real run of each.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from tests.support.repository_root import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 MUTATION = WORKFLOWS / "mutation.yml"
@@ -187,6 +194,38 @@ class TestTheVerdictIsTheProductsAndNotTheRunners:
             assert guard != -1, step
             assert guard < step.index("mutmut run"), step
             assert "exit 1" in step[guard : step.index("mutmut run")], step
+
+    @pytest.mark.parametrize("names", ["\n", "", "\n  \n"], ids=["newline", "empty", "blanks"])
+    def test_a_names_file_holding_no_name_is_refused(self, tmp_path: Path, names: str) -> None:
+        """First review of ``beadloom-b9ll``, n1: a sample of size 0 writes a names
+        file holding one newline, `mapfile` reads it as one empty name, and the
+        guard above passed it on. The guard is run here, up to its `fi`, under a
+        bash that has `mapfile`, against each file that holds no name."""
+        bash = shutil.which("bash")
+        version = subprocess.run(  # noqa: S603 - a fixed argv to the bash on PATH
+            [bash or "bash", "-c", "echo ${BASH_VERSINFO[0]}"],
+            capture_output=True,
+            encoding="utf-8",
+            check=False,
+        )
+        if bash is None or int(version.stdout.strip() or 0) < 4:
+            pytest.skip("no bash with `mapfile` on PATH (macOS ships bash 3.2)")
+        runs = [step for step in _run_steps() if "mutmut run" in step]
+        assert runs
+        for step in runs:
+            guard = step[step.index("mapfile") : step.index("fi", step.index("-eq 0")) + 2]
+            names_file = re.search(r'"\$RUNNER_TEMP/([\w.-]+)"', guard)
+            assert names_file is not None, guard
+            (tmp_path / names_file.group(1)).write_text(names, encoding="utf-8")
+            result = subprocess.run(  # noqa: S603 - the script is this repository's workflow
+                [bash, "-c", guard],
+                env={"RUNNER_TEMP": str(tmp_path), "PATH": "/usr/bin:/bin"},
+                capture_output=True,
+                encoding="utf-8",
+                check=False,
+            )
+            assert result.returncode == 1, (guard, result.stdout)
+            assert "::error::" in result.stdout
 
     def test_the_counters_cover_exactly_the_names_that_were_selected(self) -> None:
         """`mutmut export-cicd-stats` counts every mutant in every `.meta`, run or

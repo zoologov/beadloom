@@ -14,10 +14,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from beadloom.application.debt_report import _count_untested
 from beadloom.application.reindex import reindex
 from beadloom.infrastructure.db import open_db
 from tests.support.adopter_test_layouts import (
+    CONVENTIONS_MAIN_READ,
     go_module,
     gradle_kotlin_project,
     maven_project,
@@ -28,12 +31,23 @@ from tests.support.adopter_test_layouts import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 #: `status --debt-report` on main (db5c3f28) said `untested: 0` for every project
 #: here: the retired mapper counted a node untested only when it detected no test
 #: framework anywhere, and it detected pytest or go_test in each of them.
 UNTESTED_ON_MAIN = 0
+
+#: What the population says a test file is read by, under Beadloom's defaults
+#: (``beadloom-2mj3.15``: stated on every population, not only an empty one).
+READ_BY_DEFAULT = (
+    "a test file is read when its path matches a pattern of go_test (*_test.go), "
+    "jest (*.test.*, *.spec.*, __tests__/**/*.[jt]s, __tests__/**/*.[jt]sx), "
+    "junit (*Test.java, *Tests.java, *TestCase.java, *IT.java, *ITCase.java, *Test.kt, "
+    "*Tests.kt, src/test/**/*.java, src/test/**/*.kt), pytest (test_*.py, *_test.py) or "
+    "xctest (*Tests.swift, *Tests/**/*.swift) under the root tests or beside a node's code"
+)
 
 
 def _untested(root: Path) -> tuple[int, list[str], str]:
@@ -50,7 +64,8 @@ class TestNoWorseThanMain:
         count, refs, population = _untested(go_module(tmp_path))
         assert (count, refs) == (UNTESTED_ON_MAIN, [])
         assert population == (
-            "counted over 3 node(s) the test binding covers, all 2 test file(s) placed"
+            "counted over 3 node(s) the test binding covers, all 2 test file(s) placed; "
+            f"{READ_BY_DEFAULT}"
         )
 
     def test_python_tests_beside_the_code_count_every_package_tested(self, tmp_path: Path) -> None:
@@ -72,6 +87,7 @@ class TestNoWorseThanMain:
             "not counted: 2 of 2 test file(s) are unplaced (not under test/integration/ "
             "or test/unit/, nor inside a node's source)"
         )
+        assert population.endswith(READ_BY_DEFAULT.replace("the root tests", "the root test"))
 
 
 class TestJavaKotlinAndSwiftNoWorseThanMain:
@@ -85,6 +101,16 @@ class TestJavaKotlinAndSwiftNoWorseThanMain:
 
     def test_the_swift_package_counts_every_target_folder_tested(self, tmp_path: Path) -> None:
         assert _untested(swift_package(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
+
+
+@pytest.mark.parametrize(
+    "build", [pytest.param(row[1], id=row[0]) for row in CONVENTIONS_MAIN_READ]
+)
+def test_every_convention_main_read_scores_what_it_scored_on_main(
+    tmp_path: Path, build: Callable[[Path], Path]
+) -> None:
+    """``beadloom-2mj3.15``: main read each of these and counted 0 untested (measured)."""
+    assert _untested(build(tmp_path))[:2] == (UNTESTED_ON_MAIN, [])
 
 
 class TestWhatTheCountStillSays:
@@ -106,8 +132,7 @@ class TestWhatTheCountStillSays:
         assert count == 3
         assert population == (
             "counted over 3 node(s) the test binding covers, all 0 test file(s) placed; "
-            "a test file is read when its name matches a pattern of go_test, jest, junit, "
-            "pytest or xctest under the root tests or beside a node's code"
+            f"{READ_BY_DEFAULT}"
         )
 
     def test_a_framework_no_pattern_names_is_stated_as_not_read(self, tmp_path: Path) -> None:
@@ -119,6 +144,6 @@ class TestWhatTheCountStillSays:
         )
         _, _, population = _untested(root)
         assert population.endswith(
-            "a test file is read when its name matches a pattern of junit "
+            "a test file is read when its path matches a pattern of junit (*Test.java) "
             "under the root tests or beside a node's code"
         )

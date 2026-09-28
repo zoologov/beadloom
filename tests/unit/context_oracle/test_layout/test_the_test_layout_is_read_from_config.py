@@ -60,7 +60,7 @@ class TestTheDefaults:
         assert dict(DEFAULT_PATTERNS) == {
             "pytest": ("test_*.py", "*_test.py"),
             "go_test": ("*_test.go",),
-            "jest": ("*.test.*", "*.spec.*"),
+            "jest": ("*.test.*", "*.spec.*", "__tests__/**/*.[jt]s", "__tests__/**/*.[jt]sx"),
             "junit": (
                 "*Test.java",
                 "*Tests.java",
@@ -69,8 +69,10 @@ class TestTheDefaults:
                 "*ITCase.java",
                 "*Test.kt",
                 "*Tests.kt",
+                "src/test/**/*.java",
+                "src/test/**/*.kt",
             ),
-            "xctest": ("*Tests.swift",),
+            "xctest": ("*Tests.swift", "*Tests/**/*.swift"),
         }
 
     def test_each_kind_is_the_folder_of_its_own_name_and_none_is_declared(self) -> None:
@@ -140,8 +142,9 @@ class TestAMalformedDeclaration:
         layout, problems = _layout({"roots": "test"})
         assert layout.roots == ("tests",)
         assert problems == [
-            "`tests.roots` in .beadloom/config.yml must be a list of folders; "
-            "the default (tests) is used"
+            "`tests.roots` in .beadloom/config.yml must be a list of folders inside the "
+            "project, none of them the project itself or outside it; the default (tests) "
+            "is used"
         ]
 
     def test_patterns_that_are_not_lists_of_names_by_framework_are_reported(self) -> None:

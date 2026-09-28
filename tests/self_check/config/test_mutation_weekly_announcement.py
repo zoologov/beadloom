@@ -374,8 +374,11 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
         assert "issue close 12" in _verbs(calls)
         assert "issue create -R" not in _verbs(calls)
         comment = next(call for call in calls if call.startswith("issue comment 12"))
-        assert "judged its sample, and the sample scored at or above its floor" in comment
+        assert "judged its sample, and the sample's interval reaches its floor" in comment
         assert "again" not in comment
+        # "held" means the interval reaches the floor, not that the score is at or
+        # above it (review ``beadloom-b9ll`` m-new-1): 84.0% [77.4, 88.9] holds 0.88.
+        assert "at or above" not in comment
 
     def test_a_run_back_over_its_floor_closes_the_under_floor_issue_saying_so(
         self, tmp_path: Path
@@ -391,8 +394,9 @@ class TestTheAnnouncementTakesTheBranchTheRunCallsFor:
         )
         assert "issue close 12" in _verbs(calls)
         comment = next(call for call in calls if call.startswith("issue comment 12"))
-        assert "This week's sample scored at or above its floor" in comment
+        assert "This week's sample's interval reaches its floor" in comment
         assert "judged its sample" not in comment
+        assert "at or above" not in comment
 
     def test_a_failed_job_that_judged_its_sample_is_a_verdict_under_the_floor(
         self, tmp_path: Path

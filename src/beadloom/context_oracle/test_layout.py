@@ -1,5 +1,6 @@
 # beadloom:domain=context-oracle
 # beadloom:feature=test-mapping
+# beadloom:component=test-layout
 """Test layout: where a project keeps its tests, and which files are tests.
 
 Read from the ``tests:`` block of ``.beadloom/config.yml`` (BDL-074 G2), with a
@@ -11,10 +12,13 @@ or beside the code.
 
 - ``roots`` — the folders tests are laid out in by kind, ``<root>/<kind>/...``.
   Default ``[tests]``. A declared list replaces the default.
-- ``patterns`` — file-name patterns grouped by the framework they name. A file
-  is a test when its name matches one, and its framework is that group's name.
-  Default ``pytest`` (``test_*.py``, ``*_test.py``), ``go_test`` (``*_test.go``),
-  ``jest`` (``*.test.*``, ``*.spec.*``), ``junit`` and ``xctest`` (below). A
+- ``patterns`` — file patterns grouped by the framework they name. A file is a
+  test when its path matches one, and its framework is that group's name. A
+  pattern matches the END of a path: one without a ``/`` matches the file name,
+  one with a ``/`` matches the last folders and the name, where ``**`` stands for
+  any number of folders (``__tests__/**`` is every file under a ``__tests__/``
+  folder, at any depth). Default ``pytest`` (``test_*.py``, ``*_test.py``),
+  ``go_test`` (``*_test.go``), ``jest``, ``junit`` and ``xctest`` (see below). A
   declared mapping replaces all five, because it states which frameworks the
   project has.
 - ``mirrors`` — test trees a build tool keeps beside a code tree, each mapped to
@@ -22,17 +26,6 @@ or beside the code.
   Gradle trees (``src/test/java`` -> ``src/main/java``, ``src/test/kotlin`` ->
   ``src/main/kotlin``) and SwiftPM's (``Tests`` -> ``Sources``, where a test target
   ``<Target>Tests`` mirrors ``<Target>``). A declared mapping replaces them.
-
-The JVM and Swift defaults are each ecosystem's own convention (``beadloom-2mj3.13``,
-owner ruling 2026-09-28), and only that. Java: Maven Surefire's default includes
-``*Test.java``, ``*Tests.java``, ``*TestCase.java`` and Failsafe's ``*IT.java``,
-``*ITCase.java``; their prefix forms ``Test*.java`` and ``IT*.java`` are left out,
-because a prefix also names production classes (``TestDataBuilder``). Kotlin:
-``*Test.kt`` (the Kotlin and Android documentation) and ``*Tests.kt`` (what Spring
-Initializr generates); Gradle itself runs every class in the test tree and names
-no pattern. Swift: ``*Tests.swift``, the form the XCTest and Swift Testing
-templates generate. Java and Kotlin are one group, ``junit``, as the retired mapper
-named them.
 - ``kinds`` — the folder each kind is laid out in under a root. Default: each
   kind's own name. A declared entry replaces that one kind, so the population
   line can say which folder was declared and which is the default (review m4).
@@ -41,6 +34,24 @@ named them.
   code has modules named like tests (this one has five ``test_*.py`` modules
   under ``src/``) switches it off, because a file name cannot tell a test module
   from a module about tests.
+
+Every default is an ecosystem's own convention, and only that (owner ruling
+2026-09-28). JS/TS: Jest's default ``testMatch`` — ``*.test.*``, ``*.spec.*``, and
+every ``.js``, ``.jsx``, ``.ts`` and ``.tsx`` file under a ``__tests__/`` folder
+(``beadloom-2mj3.15``: the retired mapper read that folder, and a name pattern
+cannot state it). Java (``beadloom-2mj3.13``): Maven Surefire's default includes
+``*Test.java``, ``*Tests.java``, ``*TestCase.java`` and Failsafe's ``*IT.java``,
+``*ITCase.java``; their prefix forms ``Test*.java`` and ``IT*.java`` are left out,
+because a prefix also names production classes (``TestDataBuilder``). Kotlin:
+``*Test.kt`` (the Kotlin and Android documentation) and ``*Tests.kt`` (what Spring
+Initializr generates). Swift: ``*Tests.swift``, the form the XCTest and Swift
+Testing templates generate. Java and Kotlin are one group, ``junit``, as the
+retired mapper named them. A build tool's test tree holds test code only, whatever
+a file there is named — Gradle runs every class in it and names no pattern, Kotest
+names a class ``*Spec``, and a SwiftPM test target holds helpers under any name —
+so every ``.java`` and ``.kt`` file under ``src/test/`` and every ``.swift`` file
+under a folder named ``*Tests`` is a test too, as the retired mapper read them
+(``beadloom-2mj3.15``).
 
 A declaration that cannot be used is reported and the default stands for it: a
 layout that silently fell back would bind a project's tests by a rule it did not
@@ -51,6 +62,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from functools import lru_cache
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -77,12 +89,12 @@ MIRRORED_KINDS = frozenset({KIND_UNIT, KIND_INTEGRATION})
 KINDS = (KIND_ACCEPTANCE, KIND_INTEGRATION, KIND_SELF_CHECK, KIND_UNIT)
 
 DEFAULT_ROOTS = ("tests",)
-#: The owner's ruling of 2026-09-28: Python, Go and JS/TS, each named for the
-#: framework its patterns belong to.
+#: Each ecosystem's own convention, named for the framework its patterns belong
+#: to (see the module docstring).
 DEFAULT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("pytest", ("test_*.py", "*_test.py")),
     ("go_test", ("*_test.go",)),
-    ("jest", ("*.test.*", "*.spec.*")),
+    ("jest", ("*.test.*", "*.spec.*", "__tests__/**/*.[jt]s", "__tests__/**/*.[jt]sx")),
     (
         "junit",
         (
@@ -93,10 +105,16 @@ DEFAULT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "*ITCase.java",
             "*Test.kt",
             "*Tests.kt",
+            "src/test/**/*.java",
+            "src/test/**/*.kt",
         ),
     ),
-    ("xctest", ("*Tests.swift",)),
+    ("xctest", ("*Tests.swift", "*Tests/**/*.swift")),
 )
+#: The folder separator a pattern states a folder with, and the wildcard for any
+#: number of folders.
+_FOLDER = "/"
+_ANY_FOLDERS = "**"
 #: The build tools' test trees and the code trees they mirror (see the docstring).
 DEFAULT_MIRRORS: tuple[tuple[str, str], ...] = (
     ("src/test/java", "src/main/java"),
@@ -118,16 +136,20 @@ class TestLayout:
     beside_code: bool = True
     mirrors: tuple[tuple[str, str], ...] = DEFAULT_MIRRORS
 
-    def framework_of(self, name: str) -> str | None:
-        """The framework whose pattern the file NAME matches first, or ``None``."""
+    def framework_of(self, path: str) -> str | None:
+        """The framework whose pattern the project-relative *path* matches first, or ``None``.
+
+        A bare file name is a path with no folder: a name pattern matches it, a
+        folder pattern does not.
+        """
         for framework, patterns in self.patterns:
-            if any(fnmatchcase(name, pattern) for pattern in patterns):
+            if any(pattern_matches(pattern, path) for pattern in patterns):
                 return framework
         return None
 
-    def is_test_file(self, name: str) -> bool:
-        """Whether a file NAME matches any pattern of any framework."""
-        return self.framework_of(name) is not None
+    def is_test_file(self, path: str) -> bool:
+        """Whether *path* matches any pattern of any framework."""
+        return self.framework_of(path) is not None
 
     def folder_of(self, kind: str) -> str:
         """The folder *kind* is laid out in under a root."""
@@ -175,7 +197,36 @@ class TestLayout:
             roots=self.roots,
             frameworks=tuple(framework for framework, _ in self.patterns),
             mirror_roots=present_mirror_roots,
+            patterns=self.patterns,
         )
+
+
+def pattern_matches(pattern: str, path: str) -> bool:
+    """Whether *pattern* matches the end of the project-relative *path*.
+
+    A pattern without a ``/`` matches the file name. One with a ``/`` matches the
+    path's last folders and its name, segment by segment, where a ``**`` segment
+    stands for any number of folders — none between two segments, at least one
+    at the end, because a path names a file. Matching is case-sensitive on every
+    platform, as the binding's paths are.
+    """
+    parts = PurePosixPath(path).parts
+    if _FOLDER not in pattern:
+        return bool(parts) and fnmatchcase(parts[-1], pattern)
+    segments = tuple(segment for segment in pattern.split(_FOLDER) if segment)
+    return any(_segments_match(segments, parts[start:]) for start in range(len(parts)))
+
+
+@lru_cache(maxsize=4096)
+def _segments_match(segments: tuple[str, ...], parts: tuple[str, ...]) -> bool:
+    if not segments:
+        return not parts
+    head, rest = segments[0], segments[1:]
+    if head == _ANY_FOLDERS:
+        if not rest:
+            return bool(parts)
+        return any(_segments_match(rest, parts[skip:]) for skip in range(len(parts) + 1))
+    return bool(parts) and fnmatchcase(parts[0], head) and _segments_match(rest, parts[1:])
 
 
 def load_test_layout(project_root: Path) -> tuple[TestLayout, list[str]]:
@@ -221,15 +272,29 @@ def _is_names(value: object) -> TypeGuard[list[str]]:
 
 
 def _roots(value: object, problems: list[str]) -> tuple[str, ...]:
+    """The declared roots, each a folder inside the project and not the project itself.
+
+    ``.`` or ``/`` would walk the whole project — ``.git``, ``.venv`` and a mutmut
+    copy of the code among it — and ``..`` a folder outside it (review
+    ``beadloom-b9ll``, nit), so a list naming one is refused whole.
+    """
     if value is None:
         return DEFAULT_ROOTS
-    if not _is_names(value):
+    roots = tuple(_folder(root) for root in value) if _is_names(value) else ()
+    if not roots or not all(roots):
         problems.append(
-            f"`{CONFIG_KEY}.roots` in {CONFIG_PATH} must be a list of folders; "
-            f"the default ({', '.join(DEFAULT_ROOTS)}) is used"
+            f"`{CONFIG_KEY}.roots` in {CONFIG_PATH} must be a list of folders inside the "
+            f"project, none of them the project itself or outside it; the default "
+            f"({', '.join(DEFAULT_ROOTS)}) is used"
         )
         return DEFAULT_ROOTS
-    return tuple(root.strip().strip("/") for root in value)
+    return roots
+
+
+def _folder(root: str) -> str:
+    """*root* as ``a/b``, or ``""`` when it names the project itself or leaves it."""
+    parts = PurePosixPath(root.strip().strip("/")).parts
+    return "" if not parts or ".." in parts else _FOLDER.join(parts)
 
 
 def _patterns(value: object, problems: list[str]) -> tuple[tuple[str, tuple[str, ...]], ...]:

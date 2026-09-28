@@ -94,6 +94,18 @@ def _of_type(violations: list[Violation], rule_type: str) -> list[Violation]:
 
 
 class TestTheCrossing:
+    def test_the_from_glob_is_matched_with_case_as_written(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """First review of ``beadloom-b9ll``, n2: ``fnmatch`` folds case where the
+        platform's ``normcase`` does (Windows), while ``test_binding`` and the
+        exemptions match with ``fnmatchcase``. A case-folding ``normcase`` is put in
+        place here, so this room checks what a Windows room would see."""
+        monkeypatch.setattr("os.path.normcase", str.lower)
+        violations = _evaluate(tmp_path, _rule(from_glob="Tests/Unit/**", of_matcher=None))
+
+        assert _of_type(violations, TEST_IMPORT_BOUNDARY_RULE_TYPE) == []
+
     def test_a_unit_test_of_a_domain_node_importing_infrastructure_is_reported(
         self, tmp_path: Path
     ) -> None:

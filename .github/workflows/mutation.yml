@@ -187,7 +187,9 @@ jobs:
       - name: Run the selected mutants
         if: steps.select.outputs.mutants != '0'
         run: |
-          mapfile -t names < "$RUNNER_TEMP/names.txt"
+          # A file holding only a newline — a sample of size 0 — reads as one empty
+          # name, which the guard below would pass on; blank lines are no names.
+          mapfile -t names < <(grep -v '^[[:space:]]*$' "$RUNNER_TEMP/names.txt")
           if [ "${#names[@]}" -eq 0 ]; then
             echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
             exit 1
@@ -300,7 +302,9 @@ jobs:
 
       - name: Run the sampled mutants
         run: |
-          mapfile -t names < "$RUNNER_TEMP/sample-names.txt"
+          # A file holding only a newline — a sample of size 0 — reads as one empty
+          # name, which the guard below would pass on; blank lines are no names.
+          mapfile -t names < <(grep -v '^[[:space:]]*$' "$RUNNER_TEMP/sample-names.txt")
           if [ "${#names[@]}" -eq 0 ]; then
             echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
             exit 1
@@ -441,10 +445,15 @@ jobs:
         # whether or not they watch all activity, and an invalid assignee would
         # fail this step under `set -e` and take the announcement with it.
         #
-        # A run whose sample is judged and scores at or above its floor CLOSES
-        # the open issue instead of staying quiet, with a comment worded by the
-        # state it ends. A watch issue left open after the thing it watches
-        # recovered is a second silence, of the kind that gets muted.
+        # A run whose sample is judged and HELD its floor CLOSES the open issue
+        # instead of staying quiet, with a comment worded by the state it ends.
+        # Held means the sample's interval reaches the floor — `beadloom mutation`
+        # fails only when the whole interval lies under it — so a held week can
+        # still show a score under the floor (84.0% [77.4, 88.9] holds 0.88), and
+        # every close says "the interval reaches its floor", never that the score
+        # is at or above it (review `beadloom-b9ll` m-new-1). A watch issue left
+        # open after the thing it watches recovered is a second silence, of the
+        # kind that gets muted.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -475,22 +484,22 @@ jobs:
           if [ "$VERDICT" = "judged" ] && [ "$FLOOR" = "held" ]; then
             if [ -n "$number" ]; then
               if [ "$open_title" = "$TITLE_UNDER_FLOOR" ]; then
-                opening="This week's sample scored at or above its floor."
+                opening="This week's sample's interval reaches its floor, so its score is no longer shown to be under it."
               else
-                opening="This week's job judged its sample, and the sample scored at or above its floor."
+                opening="This week's job judged its sample, and the sample's interval reaches its floor."
               fi
               gh issue comment "$number" -R "$REPO" --body "$(printf '%s\n' \
                 "$opening" "" '```text' "$report" '```' "" "Run: $RUN_URL")"
               gh issue close "$number" -R "$REPO" --reason completed
             fi
-            echo "the weekly sample was judged and scored at or above its floor; nothing to announce"
+            echo "the weekly sample was judged and its interval reaches its floor; nothing to announce"
             exit 0
           fi
 
           footer="This issue is the one place the weekly sample speaks through: while it
           is open, each further week that misses its floor or reaches no verdict adds a
           comment here and retitles the issue to that week's state, and the first run
-          whose sample scores at or above its floor closes it."
+          whose sample's interval reaches its floor closes it."
 
           if [ "$VERDICT" = "judged" ] && [ "$FLOOR" = "under" ]; then
             title="$TITLE_UNDER_FLOOR"

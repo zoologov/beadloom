@@ -116,9 +116,9 @@ class BoundTestFile:
     placement: str
 
 
-def is_test_file(name: str) -> bool:
-    """Whether a file NAME is a test under the default layout's patterns."""
-    return _DEFAULT_LAYOUT.is_test_file(name)
+def is_test_file(path: str) -> bool:
+    """Whether a file *path* (or a bare name) is a test under the default layout's patterns."""
+    return _DEFAULT_LAYOUT.is_test_file(path)
 
 
 def name_frameworks(frameworks: Iterable[str]) -> str:
@@ -369,28 +369,46 @@ def _either(items: list[str]) -> str:
 def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
     """What makes a file a test file this project's index reads, in one clause.
 
-    Stated where a count of test files could read as "this project has none":
-    a file no pattern matches, or one outside every root and every node's source,
-    is not read at all (review ``beadloom-b9ll`` M3).
+    A file no pattern matches, or one outside every root, every test tree and
+    every node's source, is not read at all, so a count of test files is a count
+    of the files this clause names. ``ctx`` and the debt report state it every
+    time (``beadloom-2mj3.15``), not only when the count is zero (review
+    ``beadloom-b9ll`` M3): "all 1 test file(s) placed" read as "every test file"
+    on a project whose Jest ``__tests__/`` files were not read (M-new-1). It
+    names each group's patterns; a record written before they were recorded
+    names the groups alone.
     """
-    named = _either(sorted(layout.frameworks))
+    groups = (
+        [f"{name} ({', '.join(group)})" for name, group in sorted(layout.patterns)]
+        if layout.patterns
+        else sorted(layout.frameworks)
+    )
     all_roots = (*layout.roots, *layout.mirror_roots)
     roots = ", ".join(all_roots)
     where = f"the root {roots}" if len(all_roots) == 1 else f"the roots {roots}"
     beside = " or beside a node's code" if layout.beside_code else ""
-    return f"a test file is read when its name matches a pattern of {named} under {where}{beside}"
+    return (
+        f"a test file is read when its path matches a pattern of {_either(groups)} "
+        f"under {where}{beside}"
+    )
 
 
-def describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None:
+def describe_unbound(
+    counts: Mapping[str, int],
+    kinds: Mapping[str, int],
+    layout: RecordedTestLayout | None = None,
+) -> str | None:
     """Every test file bound to no node, stated by why — ``None`` when there is none.
 
     *counts* are test files by placement, *kinds* the ``other_kind`` files by their
-    recorded kind. The unplaced share is :func:`describe_unplaced`'s sentence, the
-    one ``ctx`` and the debt report state, so a surface that also shows the other
-    reasons states the same number for "unplaced" (BDL-074 F1): the unowned files
-    and each kind are named beside it by their own count, never folded into it.
+    recorded kind, *layout* the test layout the index recorded. The unplaced share
+    is :func:`describe_unplaced`'s sentence over that layout, the one ``ctx`` and
+    the debt report state, so a surface that also shows the other reasons states
+    the same number and the same folders for "unplaced" (BDL-074 F1; review
+    ``beadloom-b9ll`` m-new-2): the unowned files and each kind are named beside it
+    by their own count, never folded into it.
     """
-    parts = [part for part in (describe_unplaced(counts),) if part is not None]
+    parts = [part for part in (describe_unplaced(counts, layout),) if part is not None]
     unowned = counts.get(PLACEMENT_UNOWNED, 0)
     if unowned:
         parts.append(f"{unowned} unowned (under a mirrored folder whose code no node owns)")

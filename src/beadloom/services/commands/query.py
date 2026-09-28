@@ -68,6 +68,12 @@ def _format_markdown(bundle: dict[str, object]) -> str:
             unplaced = describe_unplaced(placements)
         if unplaced:
             lines.append(f"  {unplaced}, so the count above can be short")
+        # Which files count as tests, stated whether or not any is unplaced: the
+        # count above is a count of the files these patterns matched, and a file
+        # they miss is not read at all (``beadloom-2mj3.15``).
+        recognition = cast("str | None", bundle.get("test_recognition"))
+        if recognition:
+            lines.append(f"  {recognition[0].upper()}{recognition[1:]}")
 
     # Activity.
     activity_info = cast("dict[str, Any] | None", focus.get("activity"))

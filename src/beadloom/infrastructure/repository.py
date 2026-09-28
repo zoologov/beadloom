@@ -433,8 +433,10 @@ class RecordedTestLayout:
     and the rule engine states it, and neither may import the other. *kind_prefixes*
     are each kind's folders under every root (``tests/unit/``); *declared_kinds* the
     kinds whose folder the project's config declares rather than defaults;
-    *frameworks* the names of the pattern groups a file name is matched against;
-    *mirror_roots* the build tools' test trees the project has (``src/test/java``).
+    *frameworks* the names of the pattern groups a file path is matched against;
+    *mirror_roots* the build tools' test trees the project has (``src/test/java``);
+    *patterns* each group's patterns, in the order they are matched — empty in a
+    record written before ``beadloom-2mj3.15``, which named the groups alone.
     """
 
     kind_prefixes: Mapping[str, tuple[str, ...]]
@@ -443,6 +445,7 @@ class RecordedTestLayout:
     roots: tuple[str, ...]
     frameworks: tuple[str, ...]
     mirror_roots: tuple[str, ...] = ()
+    patterns: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def encode(self) -> str:
         """The record as the JSON the ``meta`` table holds."""
@@ -454,6 +457,7 @@ class RecordedTestLayout:
                 "roots": list(self.roots),
                 "frameworks": list(self.frameworks),
                 "mirror_roots": list(self.mirror_roots),
+                "patterns": [[name, list(group)] for name, group in self.patterns],
             },
             sort_keys=True,
         )
@@ -483,6 +487,10 @@ def read_test_layout(conn: sqlite3.Connection) -> RecordedTestLayout | None:
             roots=tuple(str(root) for root in raw["roots"]),
             frameworks=tuple(str(name) for name in raw["frameworks"]),
             mirror_roots=tuple(str(root) for root in raw.get("mirror_roots", ())),
+            patterns=tuple(
+                (str(name), tuple(str(pattern) for pattern in group))
+                for name, group in raw.get("patterns", ())
+            ),
         )
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
         return None

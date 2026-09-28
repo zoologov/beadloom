@@ -46,9 +46,11 @@ from beadloom.graph.rules.suite_tables import read_test_files
 from beadloom.infrastructure.repository import (
     KIND_ACCEPTANCE,
     PLACEMENT_UNPLACED,
+    RecordedTestLayout,
     count_other_kind_test_files,
     count_test_files_by_placement,
     get_owning_ref_id,
+    read_test_layout,
 )
 
 if TYPE_CHECKING:
@@ -97,7 +99,8 @@ class ChangePlan:
     runner's fallback selection (BDL-074 G1). What the plan STATES about the files
     bound to no node is counted by reason from ``test_placements`` and
     ``other_kinds``, so its unplaced count is the one ``ctx`` and the debt report
-    state (BDL-074 F1).
+    state (BDL-074 F1), over the folders of ``test_layout``, the layout the index
+    recorded (review ``beadloom-b9ll`` m-new-2).
     """
 
     base: str
@@ -111,6 +114,7 @@ class ChangePlan:
     test_files: int
     test_placements: Mapping[str, int] = field(default_factory=dict)
     other_kinds: Mapping[str, int] = field(default_factory=dict)
+    test_layout: RecordedTestLayout | None = None
 
     @property
     def empty(self) -> bool:
@@ -195,6 +199,7 @@ def plan_change(
         test_files=len(test_files),
         test_placements=count_test_files_by_placement(conn),
         other_kinds=count_other_kind_test_files(conn),
+        test_layout=read_test_layout(conn),
     )
 
 
@@ -264,7 +269,7 @@ def describe_change(plan: ChangePlan) -> list[str]:
             f"Not read: {', '.join(plan.unread)} — only Python source that parses "
             f"is read, so the functions these files hold are not counted"
         )
-    unbound = describe_unbound(plan.test_placements, plan.other_kinds)
+    unbound = describe_unbound(plan.test_placements, plan.other_kinds, plan.test_layout)
     if unbound is not None:
         lines.append(
             f"Binding: {unbound} — so the tests bound to a node can be short of the "

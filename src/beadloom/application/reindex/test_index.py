@@ -11,7 +11,7 @@ readers expect (``framework``, ``test_files``, ``test_count``, ``coverage_estima
 Where test files are and what makes a file one is the project's test layout
 (:mod:`beadloom.context_oracle.test_layout`, BDL-074 G2): the roots it declares
 are walked (``tests/`` by default), and when tests beside the code are read, the
-indexed code files whose names match a test pattern are taken from the code scan
+indexed code files whose paths match a test pattern are taken from the code scan
 — they are not walked again. The layout is recorded in the index
 (``meta.test_layout``), so the readers that state a count can say what it was
 recognised by.
@@ -138,9 +138,12 @@ def discover_test_files(
     """Every test file the layout reads, by project-relative path, with its text.
 
     The files under the layout's roots and the build tools' test trees it
-    mirrors whose names match a test pattern, and — when it reads tests beside
+    mirrors whose paths match a test pattern, and — when it reads tests beside
     the code — each of *code_files* (the code scan's paths) outside all of those
-    whose name matches one. *layout* defaults to the one the project declares.
+    whose path matches one. A file anywhere else is not read, whatever its name:
+    binding it would take a guess at its node, which the owner's ruling of
+    2026-09-28 excludes, so ``ctx`` and the debt report say where a test file is
+    read instead (``beadloom-2mj3.15``). *layout* defaults to the one the project declares.
     """
     layout = layout if layout is not None else load_test_layout(project_root)[0]
     found: dict[str, str] = {}
@@ -191,7 +194,7 @@ def _under_a_test_root(path: str, layout: TestLayout) -> bool:
 
 def _is_test_path(relative: str, layout: TestLayout) -> bool:
     parts = PurePosixPath(relative).parts
-    return not _SKIP_DIRS.intersection(parts) and layout.is_test_file(parts[-1])
+    return not _SKIP_DIRS.intersection(parts) and layout.is_test_file(relative)
 
 
 def _read(path: Path) -> str:
@@ -289,7 +292,7 @@ def index_test_files(
         )
         bound.append(binding)
 
-    frameworks = {path: layout.framework_of(PurePosixPath(path).name) or "" for path in files}
+    frameworks = {path: layout.framework_of(path) or "" for path in files}
     _rebuild_extra_tests(conn, bound, counts, frameworks)
     set_meta(conn, TEST_INDEX_VERSION_KEY, TEST_INDEX_VERSION)
     set_meta(

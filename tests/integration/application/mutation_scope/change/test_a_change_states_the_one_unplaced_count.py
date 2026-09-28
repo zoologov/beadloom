@@ -18,7 +18,13 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.mutation_scope import change_payload, describe_change, plan_change
 from beadloom.context_oracle.test_binding import describe_unplaced
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.context_oracle.test_layout import layout_from_config
+from beadloom.infrastructure.db import set_meta
+from beadloom.infrastructure.repository import (
+    TEST_LAYOUT_KEY,
+    count_test_files_by_placement,
+    read_test_layout,
+)
 from tests.support.suite_index import SuiteFile, SuiteIndex, SuiteNode
 
 if TYPE_CHECKING:
@@ -111,9 +117,7 @@ class TestTheChangeStatesOneUnplacedCount:
         }
         assert payload["other_kinds"] == {"acceptance": 1, "self_check": 2}
 
-    def test_the_runners_fallback_is_the_unplaced_count_it_states(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_runners_fallback_is_the_unplaced_count_it_states(self, tmp_path: Path) -> None:
         conn = _suite().build(tmp_path)
         try:
             plan = plan_change(tmp_path, conn, "", base="main")
@@ -123,9 +127,7 @@ class TestTheChangeStatesOneUnplacedCount:
         assert plan.unplaced_tests == ("tests/test_flat.py", "tests/test_other_flat.py")
         assert "tests/self_check/docs/test_readme.py" not in plan.unplaced_tests
 
-    def test_a_suite_with_every_file_bound_states_no_binding_line(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_suite_with_every_file_bound_states_no_binding_line(self, tmp_path: Path) -> None:
         index = SuiteIndex(
             nodes=[SuiteNode("ledger", kind="domain")],
             files=[SuiteFile("tests/unit/ledger/test_posting.py", ref_id="ledger")],
@@ -137,3 +139,23 @@ class TestTheChangeStatesOneUnplacedCount:
             conn.close()
 
         assert not [line for line in lines if line.startswith("Binding:")]
+
+
+class TestTheChangeNamesTheDeclaredFolders:
+    """Review ``beadloom-b9ll`` m-new-2: the change named the default ``tests/`` folders."""
+
+    def test_the_binding_line_names_the_recorded_roots_as_ctx_does(self, tmp_path: Path) -> None:
+        conn = _suite().build(tmp_path)
+        layout, _ = layout_from_config({"tests": {"roots": ["test"]}})
+        set_meta(conn, TEST_LAYOUT_KEY, layout.recorded().encode())
+        try:
+            line = _binding_line(conn, tmp_path)
+            ctx_sentence = describe_unplaced(
+                count_test_files_by_placement(conn), read_test_layout(conn)
+            )
+        finally:
+            conn.close()
+
+        assert ctx_sentence is not None
+        assert ctx_sentence in line
+        assert "not under test/integration/ or test/unit/, nor inside a node's source" in line

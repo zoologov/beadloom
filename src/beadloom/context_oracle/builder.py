@@ -10,7 +10,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from beadloom.context_oracle.intent import select_intent
-from beadloom.context_oracle.test_binding import describe_unplaced
+from beadloom.context_oracle.test_binding import describe_test_file_recognition, describe_unplaced
 from beadloom.infrastructure.db import get_meta
 from beadloom.infrastructure.repository import count_test_files_by_placement, read_test_layout
 
@@ -469,9 +469,15 @@ def build_context(
     # differently when most of the suite is not laid out yet (BDL-074 C2).
     # The unplaced sentence names the folders of the layout the reindex recorded
     # (BDL-074 G2), so it is stated here, where the index is open.
+    # Which files count as tests is stated every time (``beadloom-2mj3.15``): a
+    # count of bound files is a count of the files the patterns matched.
     tests_info: dict[str, Any] | None = focus_extra.get("tests")
     test_placements = count_test_files_by_placement(conn)
-    test_unplaced = describe_unplaced(test_placements, read_test_layout(conn))
+    test_layout = read_test_layout(conn)
+    test_unplaced = describe_unplaced(test_placements, test_layout)
+    test_recognition = (
+        describe_test_file_recognition(test_layout) if test_layout is not None else None
+    )
 
     # Step 11: Extract git activity from focus node's extra.
     activity_info: dict[str, Any] | None = focus_extra.get("activity")
@@ -512,5 +518,6 @@ def build_context(
         "tests": tests_info,
         "test_placements": test_placements,
         "test_unplaced": test_unplaced,
+        "test_recognition": test_recognition,
         "warning": warning,
     }
