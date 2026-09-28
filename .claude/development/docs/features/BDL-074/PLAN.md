@@ -68,8 +68,11 @@ nine green checks.
 | W2 | `beadloom-2mj3.2` | docs: the pairs C2 made stale (added 2026-09-27) | P1 | C2 | Done |
 | W3 | `beadloom-2mj3.3` | docs: the pairs D1 made stale (added 2026-09-28) | P1 | D1 | Done |
 | W4 | `beadloom-2mj3.5` | docs: the pairs C3 made stale (added 2026-09-28) | P1 | C3 | Done |
-| T | `beadloom-75pl` | test: the invariants, measured | P1 | C2, D1, E1, E2 | Pending |
-| R | `beadloom-b9ll` | review | P1 | T | Pending |
+| T | `beadloom-75pl` | test: the invariants, measured | P1 | C2, D1, E1, E2 | Done |
+| F1 | `beadloom-2mj3.6` | truthful suite numbers (added 2026-09-28, owner, after T) | P1 | T | Pending |
+| F2 | `beadloom-2mj3.7` | reindex and test-mapping get bound tests (added 2026-09-28) | P1 | T | Pending |
+| F3 | `beadloom-2mj3.8` | the three tags; self-checks and scenarios outside the outcomes (added 2026-09-28) | P1 | T | Pending |
+| R | `beadloom-b9ll` | review | P1 | T, F1, F2, F3 | Pending |
 | W | `beadloom-7u77` | tech-writer | P2 | R | Pending |
 | V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | Pending |
 

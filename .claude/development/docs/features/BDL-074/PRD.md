@@ -135,3 +135,29 @@ nothing, the same way it tells me which features have no documentation.
   `tests/self_check/<category>/` against the isolated snapshot, or kept as a recorded finding; the
   self-check share of suite time (145.5 s, 28%, measured 2026-09-27) is re-measured and reported.
 - `beadloom ci` rc 0 and the nine required checks green on every pull request of the epic.
+
+### Corrections (2026-09-28, after T measured every criterion — `beadloom-75pl`)
+
+T found 10 criteria met, 4 not met, 2 not measurable before PR 3. The owner ruled on each:
+
+- **Every test file bound or exempt.** The 101 self-check files bind to no node and are named in no
+  exemption; the rule reported them under a phrase that was not true. Fixed in this epic:
+  `beadloom-2mj3.6` makes the self-check and acceptance kinds outcomes the rule names by kind and
+  count, corrects six false exemption reasons, and gives `ctx` and `beadloom mutation` one unplaced
+  count.
+- **The 227 clear-node files.** 216 sit in their node's folder. The other 11 are accounted for: one
+  was retired with its module (C2), one became mixed, and nine acceptance step files follow the
+  folder of the node their `@node:` tag names — the owner's layout ruling of 2026-09-28 — rather than
+  the map's node. The criterion is read as "placed by the rule in force", not as 227 literally.
+- **Every `@node:` tag names a node the scenario executes.** The folder half holds. The execution half
+  is **not delivered by this epic**: a static stand-in found 59 of 81 executed pairs, too weak to be a
+  rule. It moves to `beadloom-o9rl` (a coverage run of the acceptance suite). The three tags that
+  name never-executed nodes are resolved here, in `beadloom-2mj3.8`.
+- **Every self-check in one of three outcomes, against the snapshot.** The 36 marked self-checks and
+  7 scenarios kept outside the three outcomes are placed in `beadloom-2mj3.8`. "Against the isolated
+  snapshot" is read as **no contact with the live index, tracker or history**; 66 self-check files
+  read files of the working tree, which the snapshot copies unchanged, and are not moved.
+- **Also in this epic:** `reindex` and `test-mapping`, two of the nine kept nodes, had 0 bound tests;
+  `beadloom-2mj3.7` splits their mixed files.
+- **Not measurable before PR 3:** the per-change job's time on `ubuntu-latest` (locally 394 s, about
+  642 s projected before setup — at risk) and the checks on PR 3 are V's (`beadloom-paze`).
