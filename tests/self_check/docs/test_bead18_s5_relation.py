@@ -1,7 +1,8 @@
 """Self-checks of this repository's documents and published site (BDL-074 A3).
 
-Moved out of ``tests/test_bead18_s5_relation.py``;
-the product tests of the same code stay there.
+Moved out of ``tests/test_bead18_s5_relation.py`` (A3, and the real-tree legs of
+findings `.18-1` and `.18-2` in G3); the product tests of the same code stay there,
+and its finding counter reads the two legs here from this file's source.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
 """
@@ -185,3 +186,46 @@ class TestAnExcusedPairSaysSo:
 
         assert report.working_documents > 0
         assert excused == []
+
+
+class TestADirectoryThatHoldsIntentReachesTheDenominator:
+    """The real-tree leg of finding `.18-1`, whose product cases stay in
+    ``tests/test_bead18_s5_relation.py``'s class of the same name."""
+
+    def test_every_directory_holding_a_to_be_document_is_counted_here(
+        self, self_check_snapshot: Path
+    ) -> None:
+        """FINDING BDL-061.18-1 on the real tree, closed by `beadloom-mr2l.73`.
+
+        61 directories contribute a document to the TO-BE population and 57 were
+        counted as epics; the four that were not appeared in no field of the
+        report and in no line of the gate summary. The two sizes are one size
+        now, and this test is the one that holds them together.
+        """
+        spaces = resolve_doc_spaces(self_check_snapshot)
+        directories = {p.parent for p in spaces.documents_in(self_check_snapshot, SPACE_TO_BE)}
+
+        assert repo_report(self_check_snapshot).epics == len(directories)
+
+
+class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
+    """The real-tree leg of finding `.18-2`, whose product cases stay in
+    ``tests/test_bead18_s5_relation.py``'s class of the same name."""
+
+    def test_this_repository_names_the_epics_its_export_forgot(
+        self, self_check_snapshot: Path
+    ) -> None:
+        """FINDING BDL-061.18-2 on the real tree, closed by `.74` and `.73`.
+
+        23 of the 60 directories under the feature root are absent from the
+        tracker export and not one was reported as unverifiable. `.74` gave the
+        state its own channel and `.73` widened the population to every
+        directory holding intent, which is why this leg needed both.
+        """
+        beads = repo_beads(self_check_snapshot)
+        directories = [
+            p.name for p in sorted((self_check_snapshot / EPICS).iterdir()) if p.is_dir()
+        ]
+        forgotten = [name for name in directories if name not in beads]
+
+        assert repo_report(self_check_snapshot).epics_without_bead_status >= len(forgotten)

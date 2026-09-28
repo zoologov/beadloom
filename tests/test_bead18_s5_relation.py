@@ -72,9 +72,8 @@ from tests.support.relation_report import (
     EPICS,
     HANDED_OUT,
     relation_report_of,
-    repo_beads,
-    repo_report,
 )
+from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     import sqlite3
@@ -233,21 +232,6 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
 
         assert report.epics == 1
 
-    def test_every_directory_holding_a_to_be_document_is_counted_here(
-        self, self_check_snapshot: Path
-    ) -> None:
-        """FINDING BDL-061.18-1 on the real tree, closed by `beadloom-mr2l.73`.
-
-        61 directories contribute a document to the TO-BE population and 57 were
-        counted as epics; the four that were not appeared in no field of the
-        report and in no line of the gate summary. The two sizes are one size
-        now, and this test is the one that holds them together.
-        """
-        spaces = resolve_doc_spaces(self_check_snapshot)
-        directories = {p.parent for p in spaces.documents_in(self_check_snapshot, SPACE_TO_BE)}
-
-        assert repo_report(self_check_snapshot).epics == len(directories)
-
 
 def _tmp() -> Path:
     """A throwaway project root, removed when the test that asked for it ends."""
@@ -318,24 +302,6 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
         report = relation_report_of(root, known={"billing"}, beads={"BDL-OTHER": ("closed",)})
 
         assert report.epics_without_bead_status == 1
-
-    def test_this_repository_names_the_epics_its_export_forgot(
-        self, self_check_snapshot: Path
-    ) -> None:
-        """FINDING BDL-061.18-2 on the real tree, closed by `.74` and `.73`.
-
-        23 of the 60 directories under the feature root are absent from the
-        tracker export and not one was reported as unverifiable. `.74` gave the
-        state its own channel and `.73` widened the population to every
-        directory holding intent, which is why this leg needed both.
-        """
-        beads = repo_beads(self_check_snapshot)
-        directories = [
-            p.name for p in sorted((self_check_snapshot / EPICS).iterdir()) if p.is_dir()
-        ]
-        forgotten = [name for name in directories if name not in beads]
-
-        assert repo_report(self_check_snapshot).epics_without_bead_status >= len(forgotten)
 
     def test_deleting_an_epics_records_does_not_make_the_gate_quieter(self) -> None:
         """FINDING BDL-061.18-2 at the gate, closed by `beadloom-mr2l.74`.
@@ -929,10 +895,18 @@ class TestTheFindingsAreExecutable:
     fall — deleting a closed finding's test would lose the only executable
     record that the defect is gone, which is the same loss as deleting an open
     one, one step later.
+
+    Two closed findings are held by their real-tree legs in the self-check half
+    of this file, beside its other checks of this repository (BDL-074). They are
+    counted from that file's source, because a test module is never imported by
+    another.
     """
 
     #: Twelve findings were filed by `.18`, and twelve statements must remain.
     _FILED = 12
+
+    #: Where the real-tree legs of findings `.18-1` and `.18-2` live.
+    _SELF_CHECK_HALF = REPO_ROOT / "tests" / "self_check" / "docs" / "test_bead18_s5_relation.py"
 
     def _statements(self) -> tuple[list[tuple[str, pytest.MarkDecorator]], list[str]]:
         import inspect
@@ -953,7 +927,28 @@ class TestTheFindingsAreExecutable:
                 marks.extend((name, mark) for mark in xfails)
                 if not xfails and "FINDING BDL-061.18-" in (function.__doc__ or ""):
                     closed.append(name)
+        closed.extend(self._closed_in_source(self._SELF_CHECK_HALF))
         return marks, closed
+
+    @staticmethod
+    def _closed_in_source(path: Path) -> list[str]:
+        """The closed findings a test file states, read from its source.
+
+        A test counts when its docstring names a finding and no decorator of it
+        mentions ``xfail``; an ``xfail`` there counts as nothing, so the total
+        falls and the test below says so.
+        """
+        import ast
+
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        return [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name.startswith("test_")
+            and "FINDING BDL-061.18-" in (ast.get_docstring(node) or "")
+            and not any("xfail" in ast.unparse(d) for d in node.decorator_list)
+        ]
 
     def test_every_xfail_here_is_strict_and_names_its_finding(self) -> None:
         marks, _ = self._statements()

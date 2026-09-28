@@ -1,8 +1,8 @@
 """The reindex stores each node's git activity in ``nodes.extra``, and skips it without git.
 
-The context bundle's reading of that activity is in
-``tests/test_the_context_bundle_carries_git_activity.py`` (split by node, BDL-074
-``beadloom-2mj3.7``).
+The context bundle's reading of that activity is under
+``tests/integration/context_oracle/builder/`` and ``ctx``'s rendering of it under
+``tests/integration/services/commands/query/`` (split by node, BDL-074).
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 """The reindex extracts API routes into ``nodes.extra``, and keeps them across an incremental run.
 
-The context bundle's reading of those routes is in
-``tests/test_the_context_bundle_carries_routes.py`` (split by node, BDL-074
-``beadloom-2mj3.7``).
+The context bundle's reading of those routes is under
+``tests/integration/context_oracle/builder/`` and ``ctx``'s rendering of them under
+``tests/integration/services/commands/query/`` (split by node, BDL-074).
 """
 
 from __future__ import annotations

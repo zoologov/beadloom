@@ -473,6 +473,12 @@ rules:
   # self-checks (they bind to no node, by design); the rule now names each kind by
   # its count. Six files the map measured as executing no src/ line moved out of
   # the mixed group, whose reason was false for them, into a fourth group.
+  # CORRECTED AGAIN by G3 (`beadloom-2mj3.12`): the mixed group's reason was false
+  # for three more files, checked against the map. Two were F2's split remainders,
+  # which the map never measured; each is now split again, its bundle half under
+  # context-builder and its markdown half under cli-commands. The third was
+  # measured as one node (`exit-condition`) and unit tests only, and moved under
+  # that node's mirrored path. The group's `until` no longer names E1, closed.
   - name: test-files-bind-to-a-node
     description: "Every test file binds to a graph node, by the mirror of its path or a node's tests: list"
     severity: error
@@ -611,11 +617,8 @@ rules:
             - "tests/test_sync_update_names_what_it_did_not_clear.py"
             - "tests/test_the_axes_section_is_required_by_the_template.py"
             - "tests/test_the_commit_gate_states_what_it_compared.py"
-            - "tests/test_the_context_bundle_carries_git_activity.py"
-            - "tests/test_the_context_bundle_carries_routes.py"
             - "tests/test_the_derivations_hold_as_shapes.py"
             - "tests/test_the_document_every_bead_writes.py"
-            - "tests/test_the_exit_condition_vocabulary_lives_below_both_declarers.py"
             - "tests/test_the_explore_role_is_composed_like_the_others.py"
             - "tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py"
             - "tests/test_the_gate_checks_the_surface_the_project_declared.py"
@@ -639,8 +642,8 @@ rules:
             clear-node files; a mixed file binds to no node until it is split.
           until: >-
             the file is split by node and each part placed under tests/unit/ or
-            tests/integration/ by the mirror -- E1 (`beadloom-cs2o`) for the rule
-            engine's, follow-up slices of BDL-074 for the rest
+            tests/integration/ by the mirror, in the follow-up slices of BDL-074;
+            the run after a file is placed reports its entry here for deletion
         - files:
             - "tests/test_a_declaration_that_owns_nothing_is_reported.py"
             - "tests/test_a_document_path_has_one_spelling.py"
@@ -692,7 +695,7 @@ rules:
   # file of their own or of a part of them (19 after E1 bound tests to ci-gate;
   # 17 after F2 bound tests to reindex and test-mapping, measured by
   # `lint --strict --format json` on 2026-09-28).
-  # While 170 files are unplaced, any of
+  # While 167 files are unplaced (after G3), any of
   # them may test such a node, so "no bound test" is not "untested" and cannot be
   # an error. Nor can it be exempted honestly: an exemption would claim to know
   # the node is untested for a reason, and nobody knows that yet. Each finding

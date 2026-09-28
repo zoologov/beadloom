@@ -535,7 +535,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_the_derivations_hold_as_shapes.py",
     "tests/test_the_explore_role_is_composed_like_the_others.py",
     "tests/self_check/process/test_the_explore_role_is_composed_like_the_others.py",
-    "tests/test_the_exit_condition_vocabulary_lives_below_both_declarers.py",
+    "tests/unit/infrastructure/exit_condition/test_the_exit_condition_vocabulary_lives_below_both_declarers.py",
     "tests/unit/graph/rules/test_the_layer_a_node_is_in_is_answered_once.py",
     "tests/integration/graph/rules/test_the_layer_rule_states_the_population_it_judged.py",
     "tests/self_check/architecture/test_the_layer_rule_states_the_population_it_judged.py",

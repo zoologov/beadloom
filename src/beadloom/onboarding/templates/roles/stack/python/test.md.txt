@@ -26,9 +26,9 @@ tests/
   ```
 - **Shared helpers** live in `tests/support/` and are imported as `from tests.support.<module>
   import <name>`. Never write `from tests.test_<module> import <name>`.
-- **The root** comes from one module, `tests/support/repository_root.py`, which walks up from
-  its own file to the nearest `pyproject.toml`. No other file writes `Path(__file__).parents[N]`
-  or `.parent.parent`.
+- **The root** comes from one helper module in `tests/support/` (for example
+  `repository_root.py`) that walks up from its own file to the nearest `pyproject.toml`.
+  No other file writes `Path(__file__).parents[N]` or `.parent.parent`.
 - **Explicit roots:** a test builds its project under `tmp_path` and passes that path to the
   code it calls. It does not `monkeypatch.chdir` into the project unless the behaviour under
   test is the working-directory default itself.
