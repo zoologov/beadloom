@@ -78,7 +78,9 @@ nine green checks.
 | G3 | `beadloom-2mj3.12` | review fix: true reasons; two checks placed; stack-neutral test role (added 2026-09-28) | P1 | R | Done |
 | G4 | `beadloom-2mj3.13` | review fix: Java, Kotlin, Swift default patterns (added 2026-09-28, owner) | P1 | G2 | Done |
 | W6 | `beadloom-2mj3.14` | docs: the pairs the review fixes made stale (added 2026-09-28) | P1 | G1–G4 | Done |
-| R | `beadloom-b9ll` | review — first run CHANGES REQUIRED; re-run after G1–G4, W6 | P1 | T, F1–F3, W5, G1–G4, W6 | Pending |
+| G5 | `beadloom-2mj3.15` | review fix: every convention of the retired mapper, proven against main (added 2026-09-28) | P1 | R (2nd run) | Done |
+| W7 | `beadloom-2mj3.16` | docs: the pairs G5 made stale (added 2026-09-28) | P1 | G5 | Done |
+| R | `beadloom-b9ll` | review — 1st and 2nd runs CHANGES REQUIRED; 3rd run after G5, W7 | P1 | T, F1–F3, W5, G1–G5, W6, W7 | Pending |
 | W | `beadloom-7u77` | tech-writer | P2 | R | Pending |
 | V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | Pending |
 

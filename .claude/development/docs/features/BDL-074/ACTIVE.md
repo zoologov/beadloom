@@ -7,9 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Wave 13 — `beadloom-b9ll` (R, the review re-run on a clean prompt), alone, read-only.
-**Goal:** an independent verdict on the whole change and on each finding of the first run.
+**Bead:** Wave 15 — `beadloom-b9ll` (R), third run, clean prompt, alone, read-only.
+**Goal:** an independent verdict on the whole change and on each finding of the first two runs.
 **Done when:** OK or OK with minors; else another fix wave.
+
+**Wave 14 closed (2026-09-28):** G5 `beadloom-2mj3.15` `3e3a10db`, `5242be97`, `8cb23141`, `909a0098` — the retired mapper enumerated into 32 conventions: 23 proven no worse than main against main's measured figures, 9 ruled out as guessing (owner: NG2–NG4 in the PRD's Non-goals; NG1 not accepted — `test/` and `spec/` became default roots); folder-form patterns (`__tests__/**`); ctx and the debt report always name the patterns and roots in force; `test-layout` and `test-file-reader` are graph nodes under test-mapping; the re-review's four minors fixed. Docs `bbf06b7a` (24 stale → 0). Suite on the tree at `8cb23141`: 11 574 passed, 0 failed; `beadloom ci` rc 0 with the docs.
+
+**Wave 13 (2026-09-28): review re-run CHANGES REQUIRED** — M1, M2 resolved; M3 partly: Jest `__tests__/` folders unread (reproduced on a TypeScript project), the third "worse than main" found one ecosystem at a time; 4 minors. Fixed in wave 14 by enumerating every convention instead.
 
 **Wave 12 closed (2026-09-28):** G1 `e9ec89a5`, `293db6b5` — the announcement names its state (held / under / unscored), the under-floor body carries score, interval and survivors by node; the per-change fallback holds unplaced files only, acceptance chosen by `@node` tags, self-checks excluded — on T's fixture 170 files / 342 s → 106 files / 180 s locally. G2 `2f156dad`, `2bb32fb4` — tests beside the code bind; `tests.roots` / `patterns` / kinds in config; the reviewer's Go module no worse than main; a `tests:` entry that binds nothing warns. `beadloom-2mj3.13` `8c1a9fe5`, `416d64ef` — Java, Kotlin, Swift default patterns and `tests.mirrors` for `src/test/*` and SwiftPM `Tests/`, each no worse than main; the dead `get_test_file_bindings` removed; G1's one failure traced to a run between the scenarios and their code, not reproduced in 22 seeded runs. G3 `cdaac9d2`, `723fdaea`, `55b557de` — true exemption reasons (unplaced 170 → 167), the two recorded-finding checks placed, the test/review/tech-writer roles stack-neutral. Docs `fa23ccde` (41 stale → 0). Gate owner `beadloom-2mj3.13` on HEAD `fa23ccde`: 11 453 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0. Filed outside the epic: `beadloom-k6ou` (split the remaining 167 mixed files).
 
