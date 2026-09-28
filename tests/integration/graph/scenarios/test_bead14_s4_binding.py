@@ -601,7 +601,7 @@ class TestTheScenariosExecute:
             ignore=shutil.ignore_patterns("__pycache__"),
         )
         shutil.copyfile(REPO_ROOT / "tests" / "__init__.py", suite.parent / "__init__.py")
-        steps = suite / "steps" / "graph" / "test_scenario_coverage_steps.py"
+        steps = suite / "steps" / "common" / "test_scenario_coverage_steps.py"
         source = steps.read_text(encoding="utf-8")
         broken = source.replace(
             "the scenario-coverage rule is evaluated",

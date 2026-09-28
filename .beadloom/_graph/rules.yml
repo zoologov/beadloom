@@ -410,10 +410,11 @@ rules:
     severity: warn
     scenario_coverage:
       for: { kind: feature }
-      # The whole acceptance tree (BDL-074 B3): a scenario lives under the
-      # package of the node it binds to, tests/acceptance/<package>/, and one
-      # whose @node: tag disagrees with the node its steps execute stays in
-      # tests/acceptance/features/ until its content is rewritten.
+      # The whole acceptance tree (BDL-074 B3, then beadloom-2mj3.4): a scenario
+      # lives in the folder of the node it binds to, tests/acceptance/<domain>/<node>/,
+      # spelled as that node's docs/ folder is; one whose @node: tag disagrees with
+      # the node its steps execute stays in tests/acceptance/features/ until its
+      # content is rewritten.
       features: "tests/acceptance/**/*.feature"
       references:
         - ".claude/development/docs/features/**/PRD.md"

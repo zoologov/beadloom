@@ -11,7 +11,7 @@ Until BDL-068 ``beadloom-iur5`` the role files were the exception: they came
 from five ``agents/*.md.txt`` assets that this suite refreshed from — and then
 asserted byte-identical to — this repository's own live ``.claude/agents/``.
 The tests for that round trip are gone with it; what replaces them is
-``tests/acceptance/onboarding/composed_role_scaffold.feature``.
+``tests/acceptance/onboarding/agentic-flow-setup/composed_role_scaffold.feature``.
 """
 
 from __future__ import annotations
