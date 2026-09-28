@@ -98,6 +98,61 @@ Everything lives under `.beadloom/` in your repo.
 | `languages` | all supported | File extensions to parse (e.g. `[".py", ".ts"]`) |
 | `docs_dir` | `docs/` | Documentation root directory |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |
+| `tests` | see below | Where your tests are and which files are tests |
+
+#### `tests:` — where your tests are
+
+Beadloom binds each test file to the graph node it tests, and never by a guess at its name. A
+test binds in one of three ways:
+
+- **By the mirror of its path.** A file under `<root>/unit/` or `<root>/integration/` names the
+  code its path mirrors: `tests/unit/billing/test_invoice.py` names `billing/invoice.py` under
+  a scan path, or under a package directly beneath one.
+  A file in a build tool's test tree names the code tree beside it, with the language's test
+  affix taken off: `src/test/java/shop/BillingTest.java` names
+  `src/main/java/shop/Billing.java`, and `Tests/ShopTests/BillingTests.swift` names
+  `Sources/Shop/Billing.swift`. The node that owns that code binds the test.
+- **Beside the code.** A test inside a node's source, outside every root and test tree —
+  `billing_test.go` beside `billing.go`, `invoice.test.ts` beside `invoice.ts` — binds to that
+  node. It must lie under `scan_paths` in a language listed in `languages`.
+- **Through `tests:` in the graph.** A node may list path prefixes under `tests:` in its graph
+  YAML to claim tests its path does not mirror. A declaration wins over the other two, and a
+  prefix that covers no test file is a reindex warning.
+
+A file none of the three reaches is `unplaced`: it binds to no node, and `beadloom reindex`,
+`ctx` and the debt report say how many there are. A file name decides only WHETHER a file is a
+test, by the patterns below. Every key is optional:
+
+| Key | Default | A declared value |
+|-----|---------|------------------|
+| `tests.roots` | `[tests]` | replaces the list |
+| `tests.kinds` | `unit`, `integration`, `acceptance`, `self_check`, each in a folder of its own name | replaces the folder of that one kind |
+| `tests.patterns` | the five groups below | replaces all five groups |
+| `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
+| `tests.beside_code` | `true` | `true` or `false` |
+
+| Language | Framework group | Default file-name patterns |
+|----------|-----------------|----------------------------|
+| Python | `pytest` | `test_*.py`, `*_test.py` |
+| Go | `go_test` | `*_test.go` |
+| JavaScript, TypeScript | `jest` | `*.test.*`, `*.spec.*` |
+| Java, Kotlin | `junit` | `*Test.java`, `*Tests.java`, `*TestCase.java`, `*IT.java`, `*ITCase.java`, `*Test.kt`, `*Tests.kt` |
+| Swift | `xctest` | `*Tests.swift` |
+
+```yaml
+# .beadloom/config.yml — a Python project keeping its tests in test/
+tests:
+  roots: [test]
+  patterns:
+    pytest: ["test_*.py"]
+  beside_code: false
+```
+
+Declaring `patterns` states which frameworks the project has, so the Go, JS/TS, Java/Kotlin and
+Swift defaults are dropped. Switch `beside_code` off when your code has modules named like
+tests (`test_utils.py` under `src/`), because a file name cannot tell a test module from a
+module about tests. A key that cannot be used is a reindex warning and its default stands. The
+full rule is in the [Test Mapping SPEC](domains/context-oracle/features/test-mapping/SPEC.md).
 
 ### `.beadloom/flow.yml` — the agentic dev flow
 

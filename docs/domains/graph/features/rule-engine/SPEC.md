@@ -599,6 +599,20 @@ neither `files` nor `for` is refused at load time.
   project's own files and binds to no node by design, a sanctioned outcome rather than a gap.
   Any other recorded kind is named as bound to no node and not judged by this rule. A judged
   file with no node is a finding that names its placement.
+- **Each kind states how it was recognised** (BDL-074 G2): by its folder in the test layout
+  the reindex recorded (`infrastructure.repository.read_test_layout`), and whether that folder
+  was declared in `.beadloom/config.yml` (`tests.kinds`) or is Beadloom's default, which no
+  `tests.kinds` entry replaces. The folder is trusted, not verified: what a file holds is never
+  checked against its kind, so a unit test dropped into `tests/self_check/` counts as a
+  self-check, and the statement says so rather than implying a check. An index that recorded
+  no layout says `recognised by its folder alone` and asks for a reindex. On this repository,
+  measured by `beadloom lint --strict --format json` on 2026-09-28, the rule
+  `test-files-bind-to-a-node` opens its statement with the counts and names the acceptance
+  step files by their folder (elided with `…`):
+
+  ```
+  test files: judged 438 of 615 indexed test file(s) matching `tests/**` (0 outside the glob): 271 bound to a node, 167 bound to none — 167 excused by 4 exemption(s), 0 reported; not judged by their path, by kind: 74 acceptance step file(s) — …, recognised by the folder `tests/acceptance/` declared in .beadloom/config.yml (`tests.kinds`) (the folder is trusted, not verified: what a file holds is not checked against its kind); 103 self-check file(s) — …
+  ```
 - **The `for` leg** judges every node the matcher selects. A node is bound when a test file
   is bound to it or to one of its `part_of` descendants. Acceptance scenarios are not counted
   here, because that binding is `scenario_coverage`'s population. A node with no bound test
@@ -1596,8 +1610,9 @@ All three surfaces that require an exit condition are covered in ONE file on pur
 
 ### Suite Rule Tests (BDL-074 C3)
 
-- **`test_binding`** (`tests/integration/graph/rules/test_a_test_file_binds_to_a_node_or_is_reported.py`)
-  and **`test_import_boundary`**
+- **`test_binding`** (`tests/integration/graph/rules/test_a_test_file_binds_to_a_node_or_is_reported.py`,
+  and `tests/integration/graph/rules/test_a_kind_states_how_it_was_recognised.py` for the
+  recognition clause) and **`test_import_boundary`**
   (`tests/integration/graph/rules/test_a_unit_test_of_a_domain_node_imports_no_infrastructure.py`)
   run over temporary indexes built by `tests/support/suite_index.py`.
 - **`scenario_binding`** (`tests/integration/graph/rules/test_a_scenario_lives_in_the_folder_of_its_node.py`)

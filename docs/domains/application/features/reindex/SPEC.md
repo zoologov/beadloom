@@ -122,33 +122,58 @@ see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.
 
 ### Test Index
 
-`test_index.py` (BDL-074 C1) walks `tests/` only — never `scan_paths`, so a mutmut copy
-under `mutants/` is never indexed — and records every pytest-named file (`test_*.py`,
-`*_test.py`, `__pycache__` skipped). Tests never enter `code_symbols`, `code_imports` or
-`file_index`: they must not become code. Each file is bound by
+`test_index.py` (BDL-074 C1) reads the project's test layout from the `tests:` block of
+`.beadloom/config.yml` (`context_oracle.test_layout.load_test_layout`, BDL-074 G2) and records
+every file whose name matches one of its patterns (default `pytest`, `go_test`, `jest`,
+`junit`, `xctest`) in three places: under each declared root (default `tests/`), under each
+build tool's test tree the project has (default `src/test/java/`, `src/test/kotlin/`,
+SwiftPM's `Tests/`), and — when the layout has `beside_code: true`, the default — among the
+code scan's files outside all of those. A test beside the code is taken from the code scan
+rather than a second walk. A root or test tree is read only when a folder of exactly that
+spelling exists, so a case-insensitive disk does not read `Tests/` for `tests`.
+`__pycache__/`, `__snapshots__/` and `node_modules/` are skipped. A walked folder is never a
+scan path, so a mutmut copy under `mutants/` is never indexed unless a scan path covers it.
+Files under a root never enter `code_symbols`, `code_imports` or `file_index`: they must not
+become code. A test beside the code was already indexed as code by the code scan, and this
+step does not change that. Each file is bound by
 `context_oracle.test_binding.bind_test_file` (see the
 [Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md)) and stored as:
 
 - `test_files(path, kind, ref_id, placement, test_count, file_hash)`;
 - `test_imports(file_path, line_number, import_path, resolved_ref_id)`, each import resolved by
-  `graph.import_resolver.resolve_import_to_node`, memoised per import path.
+  `graph.import_resolver.resolve_import_to_node`, memoised per import path. Imports are read
+  from Python files only; a file in another language is counted by suffix and records none.
 
 It runs after `file_index` is populated (step 5g), because a test's imports resolve through the
 same ownership as the code's. A file whose hash matches the recorded one is not parsed again.
 It then rebuilds `nodes.extra["tests"]` for every node with a `source` or a `tests:`
 declaration, in the four-key shape (`framework`, `test_files`, `test_count`,
 `coverage_estimate`). A parent's files are the union of its descendants' along `part_of`.
-The `tests:` declaration is read from the graph only at a full reindex (step 3a), because the
-rebuild overwrites the `extra["tests"]` it arrived in.
+`framework` is named from the pattern groups the node's bound files matched; a node with no
+bound file states the project's. The `tests:` declaration is read from the graph only at a
+full reindex (step 3a), because the rebuild overwrites the `extra["tests"]` it arrived in.
+
+The layout is recorded in the index as `meta.test_layout` (`TestLayout.recorded()`, stored by
+`RecordedTestLayout.encode()`), so `ctx`, the debt report and the rule engine can state their
+counts against it without importing `context_oracle`. `IndexedTestFiles.warnings` carries a
+sentence for each unusable part of the `tests:` config block and one for each node's `tests:`
+prefix that covers no indexed test file, and both reindex paths add them to
+`ReindexResult.warnings`:
+
+```
+Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')
+```
 
 `beadloom reindex` prints the placement counts after the other totals, on both the changed and
 the `nothing_changed` branch:
 
 ```
-Tests:   597 files (252 bound to a node, 170 unplaced, 72 acceptance step, 103 self-check)
+Tests:   615 files (271 bound to a node, 167 unplaced, 74 acceptance step, 103 self-check)
 ```
 
-The bound and unplaced counts are always printed. `W unowned` appears only when non-zero. The
+The bound and unplaced counts are always printed. The bound count covers the `mirror`,
+`override` and `beside_code` placements, and names the last in parentheses when non-zero
+(`N bound to a node (B beside the code)`, BDL-074 G2). `W unowned` appears only when non-zero. The
 `other_kind` files are named by their recorded kind, one entry per kind with its count
 (`A acceptance step`, `S self-check`; a kind without a label is named as recorded), because
 the two bind differently and one phrase over both was true of neither (BDL-074 F1). An index
@@ -167,7 +192,7 @@ by `beadloom reindex` on 2026-09-28.
    - The index predates derived-edge provenance (`meta.import_edge_provenance` absent or older). One rebuild is required because a derived `depends_on` edge is otherwise indistinguishable from a graph-declared one, so refreshing the first would delete the second.
    - The index predates the test tables (`meta.test_index_version` absent or not `1`, `needs_full_test_reindex`). Only a full rebuild reads the `tests:` declarations.
    - Any graph YAML file changed, detected via `_graph_yaml_changed()` which directly compares hashes for files with `kind == "graph"` (belt-and-suspenders check that catches changes even when `file_index` is stale).
-4. **Early return** if no files changed and the test index matches the test files on disk (`is_test_index_current`; test files are not in `file_index`, so a test-only change is detected by hashing `tests/`) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
+4. **Early return** if no files changed and the test index matches the test files on disk (`is_test_index_current`; test files under the roots are not in `file_index`, so a test-only change is detected by hashing the files under the roots and test trees, and a test layout that differs from the one `meta.test_layout` records is a change too) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
 5. **True incremental path**:
    - Snapshot `symbols_hash` from `sync_state` before modifications for drift preservation.
    - Delete old data for changed and deleted files (from `docs`, `code_symbols`, `sync_state`).
@@ -190,6 +215,7 @@ Configuration is read from `.beadloom/config.yml`:
 |-----|------|---------|-------------|
 | `docs_dir` | `str` | `"docs"` | Relative path to documentation directory from project root |
 | `scan_paths` | `list[str]` | `["src", "lib", "app"]` | Directories to scan for source code |
+| `tests` | mapping | see the [Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#configuration-the-test-layout) | The test layout (BDL-074 G2): `roots`, `kinds`, `patterns`, `mirrors`, `beside_code` |
 
 ### File Hashing
 
@@ -333,14 +359,22 @@ Module `src/beadloom/application/reindex/test_index.py`:
 - `record_declared_test_overrides(conn) -> list[str]` -- copy each node's `tests:` list into
   `test_overrides`; returns one warning per declaration that is not a non-empty list of path
   strings.
-- `discover_test_files(project_root) -> dict[str, str]` -- every pytest-named file under
-  `tests/`, by project-relative path, with its text.
+- `discover_test_files(project_root, layout=None, *, code_files=()) -> dict[str, str]` --
+  every test file the layout reads, by project-relative path, with its text: the files under
+  the roots and the present test trees whose names match a pattern and, when the layout reads
+  tests beside the code, each of *code_files* outside those whose name matches one. *layout*
+  defaults to the one the project declares.
+- `present_mirror_roots(project_root, layout) -> tuple[str, ...]` -- the build tools' test
+  trees of the layout that exist, spelled exactly as declared (BDL-074 G2b).
 - `index_test_files(project_root, conn, *, code_files) -> IndexedTestFiles` -- rebuild
   `test_files` / `test_imports` and every node's `extra["tests"]`; sets
-  `meta.test_index_version`. `IndexedTestFiles.by_placement` counts files per placement, with
-  `total` and `unplaced` properties.
-- `is_test_index_current(project_root, conn) -> bool` -- whether `test_files` holds exactly
-  the test files on disk, by hash.
+  `meta.test_index_version` and `meta.test_layout`. `IndexedTestFiles.by_placement` counts
+  files per placement, with `total` and `unplaced` properties, and `warnings` holds the layout
+  problems and the `tests:` prefixes that bind nothing.
+- `is_test_index_current(project_root, conn) -> bool` -- whether the recorded layout is the
+  one the config declares and `test_files` holds exactly the files under the roots and test
+  trees on disk, by hash. It is asked only when no code file changed, so a test beside the
+  code is unchanged by construction.
 - `needs_full_test_reindex(conn) -> bool` -- whether the index predates the test tables.
 - `placement_counts(conn) -> dict[str, int]` -- files per placement, read from `test_files`.
   Since BDL-074 C2 it delegates to `infrastructure.repository.count_test_files_by_placement`,
@@ -506,12 +540,15 @@ class ReindexResult:
 
 ## Testing
 
-Test files bound to `reindex` (BDL-074 F2: 92 tests in 10 files, measured by `beadloom reindex`
-on 2026-09-28): `tests/integration/application/reindex/` (`test_reindex.py`,
+Test files bound to `reindex` (110 tests in 12 files, measured by `beadloom reindex` on
+2026-09-28): `tests/integration/application/reindex/` (`test_reindex.py`,
 `test_reindex_config.py`, `test_reindex_tests.py`,
 `test_reindex_indexes_test_files_in_their_own_tables.py`, `test_reindex_activity.py`,
 `test_reindex_routes.py`, `test_an_incremental_reindex_refreshes_the_imports.py`,
-`test_the_sync_baseline_is_rebuilt_with_one_provenance.py`) and `tests/unit/application/reindex/`
+`test_the_sync_baseline_is_rebuilt_with_one_provenance.py`,
+`test_tests_are_found_beside_the_code_and_under_declared_roots.py` and
+`test_a_build_tools_test_tree_is_indexed_by_its_mirror.py`, BDL-074 G2) and
+`tests/unit/application/reindex/`
 (`test_a_graph_change_is_detected_by_its_hashes.py`,
 `test_the_reindex_hub_keeps_its_exports.py`). The CLI surface is tested in
 `tests/test_cli_reindex.py`, which binds to no node yet (placement `unplaced`). The `Tests:`

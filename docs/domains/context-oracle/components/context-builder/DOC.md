@@ -51,7 +51,11 @@ from the test binding. Since BDL-074 C2 the bundle also carries `test_placements
 project's indexed test files by placement, read from the `test_files` table by
 `infrastructure.repository.count_test_files_by_placement` (`{}` for an index older than
 that table). A reader needs it to tell a node with no bound test from a repository whose
-tests are not laid out yet: `ctx` prints the unplaced share under its `Tests:` line. See
+tests are not laid out yet. Since BDL-074 G2 the builder states that share itself, as
+`test_unplaced`: `test_binding.describe_unplaced()` over those counts and the test layout the
+index recorded (`infrastructure.repository.read_test_layout`), or `None` when no file is
+unplaced. It is stated here because the sentence names the recorded layout's folders and the
+index is open here. `ctx` prints it under its `Tests:` line. See
 [test mapping](../../features/test-mapping/SPEC.md).
 
 > Component doc (BDL-051). Public surface verified against `builder.py`.

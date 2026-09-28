@@ -8,7 +8,7 @@ Features (each with a `SPEC.md`):
 
 - **[Code Indexer](features/code-indexer/SPEC.md)** — tree-sitter symbol + `beadloom:` annotation extraction.
 - **[Route Extraction](features/route-extraction/SPEC.md)** — API route discovery across web frameworks.
-- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-node binding by the mirror of a test file's path; `ctx` and the debt report read it.
+- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-node binding by the mirror of a test file's path, by its place beside the code, or by a `tests:` declaration, over a test layout `.beadloom/config.yml` can declare; `ctx` and the debt report read it.
 - **[Search](features/search/SPEC.md)** — FTS5 full-text search over nodes + docs.
 - **[Cache](features/cache/SPEC.md)** — two-tier context-bundle cache.
 - **[Why](features/why/SPEC.md)** — bidirectional impact analysis.
@@ -42,8 +42,9 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for every extension in `_EXTENSION_LOADERS` |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
 | `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
-| `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under `tests/unit/` or `tests/integration/`; placements, the four-key `extra["tests"]` summary, and the unplaced-files sentence `ctx` and the debt report print |
-| `test_file_reader` | `test_file_reader.py` | One `ast` parse of a test file: its test-function count and its absolute imports |
+| `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under a mirrored kind folder or a build tool's test tree, else its place inside a node's source; placements, the four-key `extra["tests"]` summary, and the unplaced-files sentence `ctx` and the debt report print |
+| `test_file_reader` | `test_file_reader.py` | One `ast` parse of a Python test file (its test-function count and absolute imports); a file in another language counted by the line its tests are written in |
+| `test_layout` | `test_layout.py` | The project's test layout, from the `tests:` block of `.beadloom/config.yml`: roots, kind folders, file-name patterns by framework, build-tool test trees and `beside_code`, each with a default (BDL-074 G2) |
 | `why` | `why.py` | Impact analysis via bidirectional BFS (upstream deps + downstream dependents) |
 
 ### BFS Algorithm
@@ -93,6 +94,7 @@ Parameters: `depth` (default 2), `max_nodes` (node limit, default 20).
     "coverage_estimate": "high|medium|low|none"
   },
   "test_placements": { "unplaced": 3, "other_kind": 1, "mirror": 12 },
+  "test_unplaced": "3 of 16 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node",
   "warning": null
 }
 ```
@@ -100,7 +102,9 @@ Parameters: `depth` (default 2), `max_nodes` (node limit, default 20).
 The `focus.links` and `focus.activity` fields are optional and only present when the focus node's `extra` JSON contains them. The `constraints`, `routes`, and `tests` fields are always present (may be empty list/null).
 `test_placements` (BDL-074 C2) counts the project's indexed test files by placement, read by
 `infrastructure.repository.count_test_files_by_placement`; it is `{}` for an index older than
-the test tables. The key is additive and the bundle version stays `2`.
+the test tables. `test_unplaced` (BDL-074 G2) is the `describe_unplaced()` sentence stated
+against the test layout the index recorded, or `null` when no file is unplaced. Both keys are
+additive and the bundle version stays `2`.
 
 ### Chunk Priority
 
@@ -171,28 +175,36 @@ Each extracted route is a `Route` dataclass with fields: `method`, `path`, `hand
 ### Test Mapping
 
 Since BDL-074 C1 a test file binds to a node by where it lives
-(`test_binding.bind_test_file`). A node's `tests:` YAML declaration wins. Otherwise a file
-under `tests/unit/` or `tests/integration/` binds to the node that owns the code path its
-path mirrors (`tests/unit/<path>/test_<name>.py` names `<root><path>/<name>.py`), by the same
-most-specific-`source` rule as code ownership. Any other file binds to nothing and records a
-placement: `unowned`, `unplaced` or `other_kind`. The full rule is in the
-[Test Mapping SPEC](features/test-mapping/SPEC.md).
+(`test_binding.bind_test_file`), and since BDL-074 G2 over the project's test layout
+(`test_layout.TestLayout`), read from the `tests:` block of `.beadloom/config.yml`. A node's
+`tests:` YAML declaration wins. Otherwise a file in a build tool's test tree (`src/test/java/`,
+`src/test/kotlin/`, SwiftPM's `Tests/` by default) or under a root's `unit/` or
+`integration/` folder binds to the node that owns the code path its path mirrors
+(`tests/unit/<path>/test_<name>.py` names `<root><path>/<name>.py`), by the same
+most-specific-`source` rule as code ownership. A file outside every root and test tree binds
+to the node whose source holds it (placement `beside_code`), unless the layout sets
+`beside_code: false`. Any other file binds to nothing and records a placement: `unowned`,
+`unplaced` or `other_kind`. No file is bound by a guess at its name: the name only decides
+whether a file is a test, by the layout's patterns. The keys, their defaults per language and
+the full rule are in the [Test Mapping SPEC](features/test-mapping/SPEC.md).
 
-The reindex stores the binding in the `test_files` / `test_imports` / `test_overrides` tables
-and rebuilds `nodes.extra["tests"]` from it in the four-key shape (`framework`, `test_files`,
-`test_count`, `coverage_estimate`). A parent's `test_files` is the union of its own and every
-`part_of` descendant's. Coverage estimation is unchanged: more than 3 test files = high,
-1-3 = medium, 0 with a framework = low, no framework = none.
+The reindex stores the binding in the `test_files` / `test_imports` / `test_overrides` tables,
+records the layout it read as `meta.test_layout`, and rebuilds `nodes.extra["tests"]` from the
+binding in the four-key shape (`framework`, `test_files`, `test_count`, `coverage_estimate`).
+`framework` is named from the pattern groups the node's bound files matched (`pytest`,
+`go_test`, `jest`, `junit`, `xctest`, joined by `+`). A parent's `test_files` is the union of
+its own and every `part_of` descendant's. Coverage estimation is unchanged: more than 3 test
+files = high, 1-3 = medium, 0 with a framework = low, no framework = none.
 
-On this repository most test files are not under the mirrored folders yet, so they are
-`unplaced` and every node reads no bound test file until they are relocated. The measured
-placement counts are in the [Test Mapping SPEC](features/test-mapping/SPEC.md#the-transition),
-and `beadloom reindex` prints the current ones on its `Tests:` line.
+On this repository 167 files are still `unplaced`, of 615 indexed (measured by `beadloom reindex`
+on 2026-09-28). The placement counts and their history are in the
+[Test Mapping SPEC](features/test-mapping/SPEC.md#the-transition), and `beadloom reindex`
+prints the current ones on its `Tests:` line.
 
 The count on a node is a count of BOUND files, so it can be short while files are
 unplaced. `ctx` says so: when any test file is unplaced, its Markdown output prints the
-`test_binding.describe_unplaced()` sentence under the `Tests:` line, ending "so the count
-above can be short". The debt report withholds its untested count for the same reason.
+bundle's `test_unplaced` sentence under the `Tests:` line, ending "so the count above can be
+short". The debt report withholds its untested count for the same reason.
 
 The name-guessing heuristic this replaced, `test_mapper.py` (framework detection, then
 import analysis, naming convention and directory proximity), was deleted in BDL-074 C2
@@ -447,7 +459,7 @@ class BoundTestFile:
     path: str
     kind: str | None        # unit | integration | acceptance | self_check | None
     ref_id: str | None
-    placement: str          # mirror | override | unowned | unplaced | other_kind
+    placement: str          # mirror | beside_code | override | unowned | unplaced | other_kind
 ```
 
 ```python
@@ -458,45 +470,64 @@ def bind_test_file(
     scan_paths: Iterable[str],
     node_sources: Iterable[tuple[str, str]],
     overrides: Iterable[tuple[str, str]],
+    layout: TestLayout = TestLayout(),
 ) -> BoundTestFile
 ```
 
 Bind one test file (project-relative path) to a node. The declaration in *overrides* wins,
-then the mirror for a mirrored kind. Everything else binds to nothing and says why.
+then the mirror of a build tool's test tree, then — outside every root — the node whose source
+covers the file when the layout reads tests beside the code, then the mirror for a mirrored
+kind. Everything else binds to nothing and says why.
 
 ```python
 def mirrored_code_path(
     under_kind: str, *, code_files: Collection[str], scan_paths: Iterable[str]
 ) -> str | None
+def tree_mirrored_code_path(
+    code_root: str, below: str, *, code_files: Collection[str]
+) -> str | None
 ```
 
-The code path a path beneath a kind folder names. The roots are each scan path and each package
-directly beneath one. The deepest resolving root wins, and a tie between equally deep roots
-resolves to `None`.
+`mirrored_code_path` is the code path a path beneath a kind folder names. The roots are each
+scan path and each package directly beneath one. The deepest resolving root wins, and a tie
+between equally deep roots resolves to `None`. `tree_mirrored_code_path` (BDL-074 G2b) is the
+code path a file below a build tool's test tree names in *code_root*, with the language's test
+affix taken off the name and a SwiftPM test target `<Target>Tests` read as `<Target>`; `None`
+when the mirrored folder holds no code.
 
-- `is_test_file(name: str) -> bool` -- whether pytest collects a file of that name by default
-  (`test_*.py`, `*_test.py`).
+- `is_test_file(name: str) -> bool` -- whether a file name is a test under the default
+  layout's patterns.
+- `name_frameworks(frameworks) -> str` -- one framework name for a set, sorted and joined by
+  `+` (`go_test+pytest`), or `none`.
 - `union_over_descendants(direct, parent_children) -> dict[str, frozenset[str]]` -- each node's
   files united with every descendant's, each file once.
 - `estimate_coverage(file_count: int, *, framework_detected: bool) -> str` -- `high` /
   `medium` / `low` / `none`.
 - `summarize_tests(files, counts, *, framework: str) -> dict[str, object]` -- one node's
   `extra["tests"]` in the four-key shape.
-- `describe_unplaced(counts: Mapping[str, int]) -> str | None` -- `"U of N test file(s) are
-  unplaced (not under tests/integration/ or tests/unit/) and bind to no node"`, or `None`
-  when no file is unplaced. The one wording `ctx` and the debt report share.
+- `describe_unplaced(counts: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
+  -- `"U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind
+  to no node"`, or `None` when no file is unplaced. The folders are the recorded layout's
+  mirrored kind folders and test trees, and `, nor inside a node's source` follows them when
+  tests beside the code are read; with no layout, the default folders. The one wording `ctx`
+  and the debt report share.
+- `describe_test_file_recognition(layout: RecordedTestLayout) -> str` (BDL-074 G2) -- what
+  makes a file a test file the index reads: the clause starts `a test file is read when its
+  name matches a pattern of`, then names the frameworks and the roots or test trees, and ends
+  `or beside a node's code` when that is read. The debt report adds it to its population when no test file is indexed.
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int]) -> str | None`
   (BDL-074 F1) -- every test file bound to no node, stated by why: `describe_unplaced()`'s
   sentence, then the unowned files, then each `other_kind` kind by its count (`A acceptance
   step and S self-check file(s) bind to no node by their kind`). `beadloom mutation
   --changed-since` prints it, so its unplaced count is the one `ctx` and the debt report state.
-- Constants: `TEST_ROOT`, `MIRRORED_KINDS`, `OTHER_KINDS` (built from
-  `infrastructure.repository`'s `KIND_ACCEPTANCE` and `KIND_SELF_CHECK` since BDL-074 F1),
-  `TEST_FILE_PATTERNS`, the five
-  `PLACEMENT_*` values, `FRAMEWORK_PYTEST`, `FRAMEWORK_NONE`. The `PLACEMENT_*` values are
+- Constants: `TEST_ROOT`, `MIRRORED_KINDS` (re-exported from `test_layout`), `OTHER_KINDS`
+  (built from `infrastructure.repository`'s `KIND_ACCEPTANCE` and `KIND_SELF_CHECK` since
+  BDL-074 F1), the six `PLACEMENT_*` values, `FRAMEWORK_NONE`. The `PLACEMENT_*` values are
   defined in `infrastructure/repository.py` since BDL-074 C3 and re-exported here under the
   same names: the rule engine's `test_binding` rule judges the placement this module assigns,
-  and the vocabulary sits below both domains rather than in one of them.
+  and the vocabulary sits below both domains rather than in one of them. `TEST_FILE_PATTERNS`
+  and `FRAMEWORK_PYTEST` were removed in BDL-074 G2: the patterns and the framework names are
+  the layout's.
 
 ### test_file_reader.py -- Public Classes and Functions
 
@@ -508,14 +539,46 @@ class TestFileContents:
 ```
 
 ```python
-def read_test_file(text: str) -> TestFileContents
+def read_test_file(text: str, *, suffix: str = ".py") -> TestFileContents
 def count_test_functions(text: str) -> int
 ```
 
-One `ast` parse per file. Module-level `test*` functions and `test*` methods of `Test*`
-classes count, sync or async, and a parametrised function counts once. Imports use the code
-index's form, except that an aliased `import a.b as c` is recorded here. Text that does not
-parse holds nothing.
+For Python, one `ast` parse per file. Module-level `test*` functions and `test*` methods of
+`Test*` classes count, sync or async, and a parametrised function counts once. Imports use the
+code index's form, except that an aliased `import a.b as c` is recorded here. Text that does
+not parse holds nothing. For another suffix (BDL-074 G2) the count is the number of lines its
+tests are written in — `func Test...(` for Go, an `it(` or `test(` call for JS/TS, `@Test` for
+Java and Kotlin, `func test...(` or a Swift Testing `@Test` function for Swift — and no import
+is read. A suffix with no known form counts 0.
+
+### test_layout.py -- Public Classes and Functions
+
+```python
+@dataclass(frozen=True)
+class TestLayout:
+    roots: tuple[str, ...] = ("tests",)
+    patterns: tuple[tuple[str, tuple[str, ...]], ...] = DEFAULT_PATTERNS
+    kind_folders: tuple[tuple[str, str], ...]          # each kind in its own name
+    declared_kinds: frozenset[str] = frozenset()
+    beside_code: bool = True
+    mirrors: tuple[tuple[str, str], ...] = DEFAULT_MIRRORS
+```
+
+```python
+def load_test_layout(project_root: Path) -> tuple[TestLayout, list[str]]
+def layout_from_config(config: Mapping[str, object]) -> tuple[TestLayout, list[str]]
+```
+
+The layout `.beadloom/config.yml` declares under `tests:`, and a sentence for each part of it
+that cannot be used; the default stands for that part. `TestLayout` answers
+`framework_of(name)`, `is_test_file(name)`, `folder_of(kind)`, `kind_prefixes(kind)`,
+`locate(path)` (the kind and the path below it, or `None` under no root),
+`mirror_of(path)` (the test tree, the code tree and the path below it) and
+`recorded(present_mirror_roots=())`, the `RecordedTestLayout` the index keeps. Constants:
+`DEFAULT_ROOTS`, `DEFAULT_PATTERNS` (`pytest`, `go_test`, `jest`, `junit`, `xctest`),
+`DEFAULT_MIRRORS`, `CONFIG_PATH`, `CONFIG_KEY`, `KIND_UNIT`, `KIND_INTEGRATION`,
+`MIRRORED_KINDS`, `KINDS`. The defaults per language are in the
+[Test Mapping SPEC](features/test-mapping/SPEC.md#configuration-the-test-layout).
 
 ### search.py -- Public Functions
 
@@ -634,9 +697,17 @@ Tests are located in:
 | `tests/unit/context_oracle/test_binding/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py` | Mirror, declaration, placements, deepest root, union over descendants |
 | `tests/unit/context_oracle/test_binding/test_the_unplaced_share_is_one_sentence.py` | `test_binding.py` | `describe_unplaced()` |
 | `tests/unit/context_oracle/test_file_reader/test_a_test_file_is_read_for_its_tests_and_imports.py` | `test_file_reader.py` | Test counting and imports |
+| `tests/unit/context_oracle/test_binding/test_a_test_beside_the_code_binds_to_the_node_covering_it.py` | `test_binding.py` | Placement `beside_code`, and `beside_code: false` |
+| `tests/unit/context_oracle/test_binding/test_a_test_in_a_build_tools_test_tree_binds_by_its_mirror.py` | `test_binding.py` | Maven, Gradle and SwiftPM test trees, the test affixes |
+| `tests/unit/context_oracle/test_binding/test_the_unplaced_sentence_names_the_declared_folders.py` | `test_binding.py` | `describe_unplaced()` against a recorded layout |
+| `tests/unit/context_oracle/test_file_reader/test_a_test_file_in_another_language_is_counted.py` | `test_file_reader.py` | Go, JS/TS, JUnit, XCTest and Swift Testing counts |
+| `tests/unit/context_oracle/test_layout/test_the_test_layout_is_read_from_config.py` | `test_layout.py` | The `tests:` block, its defaults and the unusable declarations |
+| `tests/unit/context_oracle/test_layout/test_java_kotlin_and_swift_tests_are_named_by_convention.py` | `test_layout.py` | The `junit` and `xctest` default patterns |
+| `tests/integration/context_oracle/builder/test_the_context_bundle_states_the_unplaced_sentence_of_the_recorded_layout.py` | `builder.py` | `test_unplaced` in the bundle |
 | `tests/integration/context_oracle/builder/test_the_context_bundle_carries_the_test_placements.py` | `builder.py` | `test_placements` in the bundle |
 | `tests/integration/context_oracle/builder/test_the_context_bundle_carries_a_nodes_tests.py` | `builder.py` | The focus node's `tests` in the bundle |
 | `tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py` | `services/commands` (ctx) | The unplaced line under `Tests:` |
+| `tests/unit/services/commands/test_the_ctx_markdown_prints_the_bundles_unplaced_sentence.py` | `services/commands` (ctx) | The bundle's `test_unplaced`, and the fallback for a cached bundle |
 | `tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py` | `application/debt_report` | The debt report's untested count |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
 | `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |

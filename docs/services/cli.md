@@ -151,7 +151,7 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
-On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node, and how many are `unplaced` — not yet under `tests/unit/` or `tests/integration/` — plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28: `Tests:   597 files (252 bound to a node, 170 unplaced, 72 acceptance step, 103 self-check)`. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28: `Tests:   615 files (271 bound to a node, 167 unplaced, 74 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
@@ -168,17 +168,21 @@ beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] 
 Outputs Markdown by default. `--json` for machine-readable format.
 
 The Markdown `Tests:` line counts the test files BOUND to the node by the
-[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). When any of the
-project's test files is unplaced — not under `tests/unit/` or `tests/integration/`, so bound
-to no node — one more line follows it (BDL-074 C2), so a count of 0 does not read as
-"nobody tested this":
+[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). Its framework is
+named from the patterns the node's bound files matched (`pytest`, `go_test`, `jest`, `junit`,
+`xctest`). When any of the project's test files is unplaced — reached by no mirror, no place
+beside the code and no `tests:` declaration, so bound to no node — one more line follows it
+(BDL-074 C2), so a count of 0 does not read as "nobody tested this". The folders it names
+are those of the test layout the index recorded (BDL-074 G2), and `, nor inside a node's
+source` follows them when tests beside the code are read:
 
 ```
 Tests: pytest, 0 tests in 0 files (low coverage)
   U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
 ```
 
-`--json` carries the same counts as `test_placements`, test files by placement.
+`--json` carries the same counts as `test_placements`, test files by placement, and the
+sentence itself as `test_unplaced` (`null` when no file is unplaced).
 
 The bundle carries an **Intent (TO-BE)** section: the epics whose planning
 documents declared this node, with the document and line to read the reason at.
@@ -268,7 +272,10 @@ The debt score formula combines four categories:
   unplaced file binds to no node and a node with no bound test may still be tested by it
   (BDL-074 C2). The Rich report prints the reason under Test Gaps, and `--json` carries it as
   `test_population`: either what the count was taken over or `not counted: ...` with the
-  unplaced share.
+  unplaced share. When the index holds no test file at all, the population adds what a test
+  file is read by (BDL-074 G2), under the default layout `a test file is read when its name
+  matches a pattern of go_test, jest, junit, pytest or xctest under the root tests or beside a
+  node's code`.
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 
@@ -2032,11 +2039,15 @@ is how a slice with no tests scores 100%.
   edits count and untracked files do not. The report states its POPULATION: the files
   changed, those inside the declared scope, the functions touched there (a top-level
   function or `Class.method`), the node owning each, the test files the binding ties to that
-  node, and the test files bound to no node stated by why (BDL-074 F1): the unplaced count
-  `ctx` and the debt report state, then the unowned files, then each other kind by its count.
-  That `Binding:` line is printed only when some test file is bound to no node, and `--json`
-  carries the counts as the change's `test_placements` and `other_kinds`, beside the
-  unchanged `unbound_tests` list the runner falls back to. Changed lines outside any
+  node whatever placement bound them, the acceptance step files whose loaded scenarios carry
+  that node's `@node:` tag (BDL-074 G1, printed as `, N acceptance step file(s) by tag` on the
+  node's line), and the test files bound to no node stated by why (BDL-074 F1): the unplaced
+  count `ctx` and the debt report state, then the unowned files, then each other kind by its
+  count. That `Binding:` line is printed only when some test file is bound to no node, and
+  `--json` carries the counts as the change's `test_placements` and `other_kinds`, each node's
+  `acceptance_tests`, and the `unplaced_tests` list the runner falls back to. `unplaced_tests`
+  replaced `unbound_tests` in BDL-074 G1: it holds the `unplaced` files only, never a
+  self-check or an acceptance step file. Changed lines outside any
   function are counted, and a file that is not parseable Python is named as not read. With
   `--stats` the run is taken to cover the changed files, `--target` is not needed, and the
   declared targets print as `Judged by this run: the functions above — a change covers
@@ -2171,32 +2182,49 @@ jobs:
   target with `--sample-of`, the floor `0.88` held against the interval.
 - `announce` speaks for the sample, and is described below.
 
-**The workflow is disabled.** Its state is `disabled_manually` since 2026-09-27, so neither
-job runs on any event. Enabling it is the owner's decision, after the verification bead
-(`beadloom-paze`, open) has read one run of each job: `gh workflow enable mutation.yml`, then
+**The workflow is enabled.** The owner enabled it on 2026-09-28, after PR #84 merged, and
+dispatched one sample by hand (run 36373061140). It had been disabled through the API on
+2026-09-27 (state `disabled_manually`), and a disabled workflow runs neither job on any event.
+Reading one run of each job is the verification bead's work (`beadloom-paze`, open). Should
+the workflow be disabled again: `gh workflow enable mutation.yml`, then
 `gh workflow run mutation.yml` for one sample by hand.
 
 **Neither job is a required status check.** The sample is scheduled and produces no check-run
 on a pull request, so requiring its context would make `main` unmergeable. The per-change job
-does report on a pull request once the workflow is enabled, and it is still not required: a
-disabled workflow reports nothing, and its budget is not met.
+does report on a pull request, and it is still not required: a disabled workflow reports
+nothing, and its budget has not yet been measured on the runner.
 `tests/self_check/config/test_mutation_ci_job.py` fails if a job of this workflow becomes one
 of the contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names.
 
-**What a per-change run selects, and the fallback.** The tests a change is run against are the
-test files the binding ties to the changed nodes, PLUS the files of the coverage-derived pool
-in `pyproject.toml` that the binding places under no node. The second part is the fallback,
-and today it is the whole selection: when D1 landed, the binding bound none of the 464 files
-in the test index to a node, so every changed function runs against the whole pool of 202 files. It shrinks only as test
-files are laid out under the nodes they test, which is later BDL-074 work and has not landed.
+**What a per-change run selects, and the fallback.** The adapter
+(`.github/scripts/mutmut_adapter.py`) chooses each kind of test file by what it is
+(BDL-074 G1), from the population `--changed-since` states:
 
-**The per-change budget is 10 minutes on `ubuntu-latest`, and it is NOT met.** Measured on
-2026-09-27 on a one-function change to the rule engine (`liveness._cycle_reasons`; Darwin
-arm64, 10 cores, CPython 3.13.7, mutmut 3.7.0): selecting took 496 s, nearly all of it
-mutmut's stats pass over the 202-file pool, and the four exact mutants then ran in 37 s
-(3 killed, 1 survived). That is about 9 minutes locally and a projected ~15 on the runner at
-the 1.63 factor below, before install. The projection is not a runner measurement. The job
-prints its own time against the 600 s budget and warns when it is over; its
+- **bound** — the files the binding ties to the changed node;
+- **acceptance** — the step files whose loaded scenarios carry the node's `@node:` tag;
+- **fallback** — the files of the coverage-derived pool in `pyproject.toml` that are
+  `unplaced`, because they may exercise the node and the binding cannot say;
+- **excluded** — every self-check, because it tests this repository's files rather than the
+  changed code.
+
+The select step prints all four: `Tests: N file(s) - B bound, A acceptance step file(s) by the
+@node tags of their scenarios, F of U unplaced file(s) from the pool as the FALLBACK; S
+self-check file(s) excluded`. Only the fallback is a guess, and it empties as unplaced files
+are laid out. Measured on 2026-09-28 by `beadloom-2mj3.10` on a one-line change to
+`liveness._cycle_reasons` (rule-engine): 36 bound + 10 acceptance by tag + 60 fallback = 106
+files, 103 self-checks excluded. The selection it replaced took every pool file bound to no
+node: 36 bound + 134 fallback = 170 files, and when D1 landed the binding bound none of the 464 files
+in the test index, so the fallback was the whole pool of 202 files.
+
+**The per-change budget is 10 minutes on `ubuntu-latest`, and it has not been measured on the
+runner.** Its largest cost is mutmut's stats pass over the selection, so it moves with the
+selection. Measured locally on the same one-line change (Darwin arm64, 10 cores,
+CPython 3.13.7, mutmut 3.7.0, other agents' suites running on the machine): the select step took 180 s
+over the 106 files and 342 s over the 170. D1's first measurement was 496 s over the 202-file
+pool, after which the four exact mutants ran in 37 s (3 killed, 1 survived). At the 1.63
+runner factor below, 180 s projects to about 5 minutes on the runner before install. That is
+a projection, not a runner measurement: no pull request has run this job on the runner yet.
+The job prints its own time against the 600 s budget and warns when it is over; its
 `timeout-minutes: 30` is above the budget so that an over-budget run still ends with its
 numbers.
 
@@ -2215,14 +2243,23 @@ stated an interval of 30.0% to 90.3%. No sample has run on a runner yet.
 BDL-072 the workflow speaks outside the Actions tab.** Between 2026-09-10 and 2026-09-18 the
 retired nightly reached a verdict on 0 of 7 187 mutants nine nights in a row and nothing said
 so. 643 mutants entered the declared scope while it was dead. The job `announce` holds
-`issues: write` and opens ONE issue labelled `mutation-weekly`, titled `Mutation weekly
-sample: no verdict`, when a weekly sample produces no verdict or one under its floor. While
-that issue is open each further failed week adds a comment to it instead of a new issue, so
-the comment count is the length of the outage, and the first run that judges its sample
-comments and closes it. A pull request's run is not announced, because its red is on the pull
-request. The job reads two things rather than the job status alone, because a dead run can be
-green: `needs.mutation-sample.result` for the shape where a step exits non-zero, and the
-`verdict` output of the adapter's `judge` step for the shape where every step succeeds. `judge`
+`issues: write` and opens ONE issue labelled `mutation-weekly` when a weekly sample produces
+no verdict or one under its floor, and its title says which (BDL-074 G1):
+`Mutation weekly sample: no verdict` when the job ended before it judged and scored every
+mutant it drew, and `Mutation weekly sample: under its floor` when every drawn mutant was
+judged and the whole interval of the score lies below the floor. The under-floor body carries
+the score, the interval, the sample size and the survivors by node. Both states fail the job,
+so the job result cannot tell them apart: the score step names its floor verdict as the
+output `floor` (`held`, `under` or `unscored`) and hands on its whole report as `report`. While
+that issue is open each further failed week adds a comment to it instead of a new issue, and
+retitles it to that week's state, so the comment count is the length of the outage. The first
+run whose sample is judged and scores at or above its floor comments and closes it, with the
+comment worded by the state it ends. A pull request's run is not announced, because its red is on the pull
+request. The job reads three things rather than the job status alone, because a dead run can
+be green and a judged run can be red: `needs.mutation-sample.result` for the shape where a step
+exits non-zero, the `verdict` output of the adapter's `judge` step for the shape where every
+step succeeds, and the score step's `floor` output to tell a verdict under the floor from no
+verdict. `judge`
 compares the counters with the names that were drawn: every drawn mutant must carry a verdict,
 or the run is silent and says how many never ran.
 
@@ -2232,13 +2269,17 @@ them is a scheduled run that never starts: GitHub disables a scheduled workflow 
 without repository activity, and a run that does not happen runs no job that could speak. The
 workflow header is the list, and this page does not keep a second copy of it.
 `tests/self_check/config/test_mutation_weekly_announcement.py` runs the announcement's shell
-over six run states against a stubbed `gh` that records the calls, and
-`tests/self_check/config/test_mutation_adapter.py` runs `judge` over its counter shapes. No
-test reaches `gh` itself. Two of its three paths were measured on GitHub by the nightly's last
+in twelve tests against a stubbed `gh` that records the calls, among them a failed job that
+judged its sample, which is titled `under its floor`, and the score step against a stubbed
+`uv`. `tests/self_check/config/test_mutation_adapter.py` runs `judge` over its counter shapes.
+No test reaches `gh` itself. Two of its three paths were measured on GitHub by the nightly's last
 two killed runs (`beadloom-e8m4`): the first opened issue #79, and the second commented on #79
 instead of opening another. The close path — a run that judges its scope — has never run,
-because no nightly ever scored. #79 was closed as not planned when the nightly was retired;
-under the new label the announcement has opened nothing yet.
+because no nightly ever scored. #79 was closed as not planned when the nightly was retired.
+Under the new label the announcement opened issue #85 on 2026-09-28, titled `Mutation weekly
+sample: no verdict` for a sample whose verdict was under its floor: that misnaming is what
+BDL-074 G1 corrected. The issue is still open under that title. The next failing run
+retitles it when its week's state differs, and the next run over its floor closes it.
 
 **The whole-scope nightly, BDL-068 S3.1 to 2026-09-27.** What follows is its record, in the
 past tense, because the floor, the runner factor and the sample size above were derived from

@@ -97,8 +97,11 @@ reports changes.
 **Outside the gate is not the same as unwatched, as of BDL-072.** The retired nightly reached a
 verdict on 0 of 7 187 mutants for nine consecutive nights and the only place that was visible
 was the Actions tab. The job `announce` holds `issues: write`, opens one issue labelled
-`mutation-weekly` when a weekly sample produces no verdict or one under its floor, comments on that issue each further
-failed week, and closes it on the first run that judges its sample. It does not cover a
+`mutation-weekly` when a weekly sample produces no verdict or one under its floor, and titles it
+by which of the two it is (`Mutation weekly sample: no verdict` or `Mutation weekly sample:
+under its floor`, BDL-074 G1). It comments on that issue each further failed week, retitling
+it to that week's state, and closes it on the first run whose sample is judged and scores at
+or above its floor. It does not cover a
 scheduled run that never starts, because a run that does not happen runs no job that could
 speak. Under the nightly's label two of its paths were measured on GitHub (`beadloom-e8m4`):
 one killed run opened issue #79 and the next commented on it instead of opening another. That

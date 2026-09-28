@@ -124,10 +124,13 @@ table; the `sqlite3.OperationalError` is caught and the answer is `{}`, because 
 such an index without creating the schema.
 
 **The placement vocabulary** — `PLACEMENT_MIRROR` (`"mirror"`, bound by the mirror of its
-path), `PLACEMENT_OVERRIDE` (`"override"`, bound by a node's `tests:` declaration),
-`PLACEMENT_UNOWNED` (`"unowned"`, under a mirrored kind folder and no node owns the code its
-path names), `PLACEMENT_UNPLACED` (`"unplaced"`, not under a kind folder) and
-`PLACEMENT_OTHER_KIND` (`"other_kind"`, under a kind folder whose binding is not the mirror).
+path under a mirrored kind folder or a build tool's test tree), `PLACEMENT_BESIDE_CODE`
+(`"beside_code"`, BDL-074 G2: outside every test root, inside a node's source, bound to the
+node covering it — `foo_test.go` beside `foo.go`), `PLACEMENT_OVERRIDE` (`"override"`, bound by
+a node's `tests:` declaration), `PLACEMENT_UNOWNED` (`"unowned"`, under a mirrored kind folder
+or a test tree and no node owns the code its path names), `PLACEMENT_UNPLACED` (`"unplaced"`,
+reached by no mirror, no place beside the code and no declaration) and `PLACEMENT_OTHER_KIND`
+(`"other_kind"`, under a kind folder whose binding is not the mirror).
 They are the values `test_files.placement` holds. Defined here since BDL-074 C3, because two
 peer domains share them: `context_oracle.test_binding` assigns a placement and re-exports the
 names under its old import path, and `graph.rules.test_binding` judges it.
@@ -145,15 +148,26 @@ kind, and the rule engine, the reindex `Tests:` line and `beadloom mutation --ch
 name it, so a count by kind is read from the index rather than inferred from a folder. The two
 kinds bind to no node for different reasons, and a count that merged them would state neither.
 
-**Test files with their binding** — `get_test_file_bindings(conn)` ->
-`list[tuple[str, str | None, str]]`: every indexed test file as `(path, ref_id, placement)`,
-ordered by path, with `ref_id` `None` where the file is bound to no node (BDL-074 D1). Its
-reader is `application.mutation_scope.change.plan_change`, which counts a file as bound only
-under the `mirror` or `override` placement: the files bound to a changed node are the tests a
-per-change mutation run selects, and the rest are the files the binding places under no node.
-What the plan states about those files is counted by reason, from
-`count_test_files_by_placement` and `count_other_kind_test_files` (BDL-074 F1).
-The absent-table case answers `[]`, for the reason given above.
+**The recorded test layout** (BDL-074 G2) — `TEST_LAYOUT_KEY` (`"test_layout"`) is the `meta`
+key the reindex records the test layout it read under. `RecordedTestLayout` is that record:
+`kind_prefixes` (each kind's folders under every root, `tests/unit/`), `declared_kinds` (the
+kinds whose folder `.beadloom/config.yml` declares rather than defaults), `beside_code`,
+`roots`, `frameworks` (the names of the pattern groups a file name is matched against) and
+`mirror_roots` (the build tools' test trees the project has, `src/test/java`; BDL-074 G2b).
+`encode()` gives the JSON the `meta` table holds. `read_test_layout(conn)` ->
+`RecordedTestLayout | None` reads it back, `None` for an index written before G2 or a record
+that does not parse, so a reader states that the layout is unknown rather than a default. It
+sits beside the placement vocabulary for the same reason: `context_oracle.test_layout` writes
+it and the rule engine states it, and neither may import the other. Its readers are the
+builder's `test_unplaced` sentence, the debt report's population and the `test_binding` rule's
+recognition clause.
+
+**Test files with their binding** — `get_test_file_bindings(conn)`, added in BDL-074 D1 to
+give `beadloom mutation --changed-since` every indexed test file as `(path, ref_id, placement)`,
+was removed by `beadloom-2mj3.13`. Since BDL-074 G1
+`application.mutation_scope.change.plan_change` reads the test files through
+`graph.rules.suite_tables.read_test_files`, which carries the recorded kind its selection
+needs, so the reader had no caller left.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 

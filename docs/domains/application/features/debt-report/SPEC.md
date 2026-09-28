@@ -199,19 +199,36 @@ every node that carries that key, and a node whose `test_files` is empty is unte
 name-guessing mapper it replaced (`test_mapper.map_tests`, deleted in the same change)
 counted a node only when its `coverage_estimate` was `none`.
 
-While any test file is unplaced — not under `tests/unit/` or `tests/integration/` — the count
-is WITHHELD: `untested_count` is 0 and no node is marked `untested`. An unplaced file binds
-to no node, so a node with no bound test may still be tested by one, and counting it would
-charge a project for its layout rather than its tests. The population then reads
+While any test file is unplaced — not under a mirrored kind folder or a build tool's test
+tree, and not inside a node's source — the count is WITHHELD: `untested_count` is 0 and no
+node is marked `untested`. An unplaced file binds to no node, so a node with no bound test may
+still be tested by one, and counting it would charge a project for its layout rather than its
+tests. The population then reads
 `not counted: <describe_unplaced sentence>, so a node with no bound test may still be tested`,
-the sentence `ctx` prints under its `Tests:` line. Once every test file is placed the count is
-live and the population reads `counted over N node(s) the test binding covers, all M test
-file(s) placed`. The placement counts come from
+the sentence `ctx` prints under its `Tests:` line. Since BDL-074 G2 that sentence is stated
+against the test layout the reindex recorded (`infrastructure.repository.read_test_layout`), so
+it names the project's own folders. Once every test file is placed the count is live and the
+population reads `counted over N node(s) the test binding covers, all M test file(s) placed`.
+When the index holds no test file at all and a layout is recorded, the population adds what a
+test file is read by, from `describe_test_file_recognition()`: `; a test file is read when its
+name matches a pattern of go_test, jest, junit, pytest or xctest under the root tests or beside
+a node's code` under the default layout. So a project whose tests match no declared pattern is
+charged for every covered node and the report says why. The placement counts come from
 `infrastructure.repository.count_test_files_by_placement`.
 
-Two cases score what the heuristic scored. A project whose tests are not laid out scores 0,
-as the heuristic did wherever it detected a framework (it estimated `low`, not `none`). A
-project with no test file has every covered node untested, before and after.
+The binding reads a test file by the project's layout — its roots, its patterns, the build
+tools' test trees and tests beside the code, each with a default (see the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#configuration-the-test-layout)) —
+so an adopter whose tests are not `tests/**/test_*.py` scores what the retired mapper scored.
+Measured by `beadloom-2mj3.11` and `beadloom-2mj3.13` on 2026-09-28, against `main` at
+`db5c3f28`: a Go module with a test beside each package scores `untested: 0` as on main, where
+the binding before G2 read 3; a Python project whose tests are mirrored under a declared
+`test/` root, or sit beside the code, scores as on main; a Maven, a Gradle-Kotlin and a SwiftPM
+project score `untested: 0` as on main. A Python project whose tests sit flat under `test/` has
+them unplaced, so its count is withheld, and its score is unchanged.
+`tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py`
+runs those layouts. A project with no test file has every covered node untested, before and
+after.
 
 The population is carried UNWEIGHTED, like `layer_populations`: under Test Gaps in the Rich
 report, and as `test_population` in `format_debt_json`.
@@ -421,7 +438,10 @@ class DebtReport: ...
 
 Test files: `tests/test_debt_report.py`, `tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py`
 (the untested count read from the binding, withheld while files are unplaced, and the
-`--category` report keeping its population clauses), and
+`--category` report keeping its population clauses),
+`tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py`
+(the count on a Go module, three Python layouts and the Maven, Gradle-Kotlin and SwiftPM
+layouts, and the population of a project with no test file), and
 `tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.
 
 Tests should cover the following scenarios:
