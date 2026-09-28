@@ -62,11 +62,11 @@ from tests.support.package_under_test import SHIPPED_FROM
 if TYPE_CHECKING:
     from pathlib import Path
 
-# This module is read from the checkout the package ships from, not from the
-# suite's own root: `tests/acceptance/steps/test_package_description_steps.py`
-# loads it by path, and that step also runs from a copy of the acceptance tree
-# (`tests/integration/graph/scenarios/test_bead14_s4_binding.py`), which has no repository root of
-# its own.
+# This module reads the checkout the package ships from (`SHIPPED_FROM`), not the
+# suite's own root. Until BDL-074 F3 an acceptance step loaded it by path, and that
+# step also ran from a copy of the acceptance tree with no repository root of its
+# own. The feature restated three of the checks below in Gherkin and was removed
+# as their duplicate, so this module is now the only home of the sweep.
 
 #: The manifest's `description` line. Read by pattern rather than by a TOML
 #: parser because `tomllib` is 3.11+ and this project supports 3.10; the one

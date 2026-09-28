@@ -10,6 +10,12 @@
 #
 # After this bead the audit reports three populations: verified, not applicable to this
 # project (with the reason), and declared but unverified (named, never counted as fine).
+#
+# A fourth scenario, "Beadloom's own repository still reports the surfaces it
+# provides", asserted on this repository and restated the two self-checks in
+# tests/self_check/config/test_fact_registry.py assertion for assertion. It was
+# removed as their duplicate (BDL-074 F3, `beadloom-2mj3.8`): every scenario left
+# here audits a project that is not Beadloom.
 
 @bead:beadloom-viaj.3 @node:docs-audit
 Feature: the audit reports facts about the project it audits, and names what it did not check
@@ -19,12 +25,6 @@ Feature: the audit reports facts about the project it audits, and names what it 
     When the audit collects that project's facts
     Then no declared fact carries a value read from Beadloom's own source
     And the MCP tool count is reported not applicable, and the reason names the project
-
-  Scenario: Beadloom's own repository still reports the surfaces it provides
-    Given the project under audit is Beadloom's own repository
-    When the audit collects that project's facts
-    Then the MCP tool count equals the length of the tool catalogue
-    And the CLI command count equals the number of commands the CLI registers
 
   Scenario: A fact the audit could not compute is named with its reason, not dropped
     Given a Python project that is not Beadloom

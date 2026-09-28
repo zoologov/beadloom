@@ -21,7 +21,7 @@ from beadloom.onboarding.composer import compose
 from beadloom.onboarding.doc_templates import DEFAULT_DOC_CONFIG
 from beadloom.onboarding.role_composer import compose_role
 
-scenarios("../features/axes_ruling.feature")
+scenarios("../../../onboarding/flow-composer/axes_ruling.feature")
 
 #: The two sentences BDL-UX #284 asks for, as the shipped sources spell them.
 AXIS_IS_NOT_A_ROLE = "the axis a node surfaced under is not its role"

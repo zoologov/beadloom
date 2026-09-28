@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from tests.support.ci_workflows import GH_CI, GL_CI
+from tests.support import ci_pipeline_properties as properties
 from tests.support.package_under_test import PACKAGE_ROOT
 
 if TYPE_CHECKING:
@@ -225,30 +225,28 @@ class TestNoVendoringScaffold:
 # ---------------------------------------------------------------------------
 
 
-def _ci_configs() -> list[object]:
-    """This repository's two CI configs, marked self-checks, then the two shipped templates."""
-    return [
-        pytest.param(GH_CI, marks=pytest.mark.self_check),
-        pytest.param(GL_CI, marks=pytest.mark.self_check),
-        _TPL / "github-workflow.yml",
-        _TPL / "gitlab-ci-job.yml",
-    ]
+def _ci_configs() -> list[Path]:
+    """The two CI templates the package ships.
+
+    This repository's own two pipelines are held to the same properties as
+    self-checks, in
+    ``tests/self_check/config/test_the_ci_configurations_survive_the_harness_move.py``
+    (BDL-074 F3). Both run the bodies in :mod:`tests.support.ci_pipeline_properties`.
+    """
+    return [_TPL / "github-workflow.yml", _TPL / "gitlab-ci-job.yml"]
 
 
 class TestCiConfigsModulePath:
     @pytest.mark.parametrize("cfg", _ci_configs(), ids=lambda p: p.name)
     def test_references_new_module_not_tools(self, cfg: Path) -> None:
-        text = cfg.read_text(encoding="utf-8")
-        assert "beadloom.ai_agents.ai_techwriter" in text
-        assert "tools.ai_techwriter" not in text
+        properties.references_new_module_not_tools(cfg)
 
     @pytest.mark.parametrize("cfg", _ci_configs(), ids=lambda p: p.name)
     def test_is_valid_yaml(self, cfg: Path) -> None:
         # GitHub Actions reuses the bare word `on:` which PyYAML loads as the
-        # boolean True key; that is still valid YAML — just assert it parses to
-        # a mapping.
-        loaded = yaml.safe_load(cfg.read_text(encoding="utf-8"))
-        assert isinstance(loaded, dict)
+        # boolean True key; that is still valid YAML — the property asserts it
+        # parses to a mapping.
+        properties.ci_config_is_valid_yaml(cfg)
 
 
 # ---------------------------------------------------------------------------

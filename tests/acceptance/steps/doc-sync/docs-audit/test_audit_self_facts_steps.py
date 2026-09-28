@@ -12,7 +12,6 @@ up — the acceptance suite runs inside ``uv run pytest``, not beside it.
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -23,9 +22,9 @@ from beadloom.doc_sync.audit import FactRegistry, run_audit
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
-from tests.support.package_under_test import SHIPPED_FROM
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
 
     from beadloom.doc_sync.audit import AuditResult, FactSet
@@ -90,18 +89,6 @@ def _adopter(world: dict[str, Any], tmp_path: Path) -> None:
     world["db"] = _adopter_db(root)
 
 
-@given("the project under audit is Beadloom's own repository")
-def _self(world: dict[str, Any]) -> None:
-    # The database contents do not enter the two surface facts; what decides
-    # them is the project root, so an empty schema keeps the step honest and
-    # leaves this repository's own index untouched.
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    create_schema(conn)
-    world["root"] = SHIPPED_FROM
-    world["db"] = conn
-
-
 @when("the audit collects that project's facts")
 def _collect(world: dict[str, Any]) -> None:
     world["fact_set"] = FactRegistry().collect_set(world["root"], world["db"])
@@ -146,21 +133,6 @@ def _reason_names_project(world: dict[str, Any]) -> None:
     reason = declined["mcp_tool_count"]
     assert world["project_name"] in reason, reason
     assert "extra_facts" in reason, reason
-
-
-@then("the MCP tool count equals the length of the tool catalogue")
-def _self_mcp(world: dict[str, Any]) -> None:
-    fact = _fact_set(world).facts["mcp_tool_count"]
-    assert fact.value == len(MCP_TOOL_CATALOG)
-    assert fact.source == "MCP tool catalog"
-
-
-@then("the CLI command count equals the number of commands the CLI registers")
-def _self_cli(world: dict[str, Any]) -> None:
-    fact = _fact_set(world).facts["cli_command_count"]
-    expected = FactRegistry._count_click_commands(get_cli_group())
-    assert fact.value == expected
-    assert fact.source == "CLI"
 
 
 @then("every fact the audit declined to declare carries a reason")

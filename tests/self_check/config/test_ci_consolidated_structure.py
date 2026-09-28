@@ -2,6 +2,9 @@
 
 Moved out of ``tests/test_ci_consolidated_structure.py``;
 the product tests of the same code stay there.
+The live rows of that module's properties -- the same assertion over this
+repository's own ``ci.yml`` and ``.gitlab-ci.yml`` -- moved here in BDL-074 F3
+under their ids; the body each runs is in :mod:`tests.support.ci_pipeline_properties`.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
 """
@@ -10,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from tests.support import ci_pipeline_properties as properties
+from tests.support.ci_pipeline_properties import held_to
 from tests.support.ci_workflows import (
     GH_CI,
     GH_TEMPLATE,
@@ -21,6 +26,33 @@ from tests.support.ci_workflows import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+#: The rows the properties below run over: this repository's own pipelines.
+GH_LIVE = (GH_CI,)
+GL_LIVE = (GL_CI,)
+
+test_github_has_all_consolidated_jobs = held_to(
+    properties.github_has_all_consolidated_jobs, GH_LIVE
+)
+test_github_tests_matrix_covers_3_10_to_3_13 = held_to(
+    properties.github_tests_matrix_covers_3_10_to_3_13, GH_LIVE
+)
+test_github_ai_techwriter_needs_the_three_verify_jobs = held_to(
+    properties.github_ai_techwriter_needs_the_three_verify_jobs, GH_LIVE
+)
+test_gitlab_declares_verify_and_docs_stages = held_to(
+    properties.gitlab_declares_verify_and_docs_stages, GL_LIVE
+)
+test_gitlab_verify_stage_jobs = held_to(properties.gitlab_verify_stage_jobs, GL_LIVE)
+test_gitlab_tests_matrix_covers_3_10_to_3_13 = held_to(
+    properties.gitlab_tests_matrix_covers_3_10_to_3_13, GL_LIVE
+)
+test_gitlab_ai_techwriter_in_docs_stage_needs_verify_jobs = held_to(
+    properties.gitlab_ai_techwriter_in_docs_stage_needs_verify_jobs, GL_LIVE
+)
+test_gitlab_ai_techwriter_runs_on_merge_request = held_to(
+    properties.gitlab_ai_techwriter_runs_on_merge_request, GL_LIVE
+)
 
 
 def _derive_required_check_names(ci_path: Path) -> set[str]:

@@ -354,7 +354,7 @@ pytest_add_cli_args_test_selection = [
     "tests/acceptance/steps/graph/rule-engine/test_layer_exemptions_steps.py",
     "tests/acceptance/steps/graph/rule-engine/test_layer_inheritance_steps.py",
     "tests/acceptance/steps/graph/rule-engine/test_layer_population_steps.py",
-    "tests/acceptance/steps/test_layer_view_verdict_steps.py",
+    "tests/acceptance/steps/application/site-generation/test_layer_view_verdict_steps.py",
     "tests/acceptance/steps/onboarding/role-duties/test_role_duties_steps.py",
     "tests/acceptance/steps/graph/rule-engine/test_rule_population_steps.py",
     "tests/acceptance/steps/common/test_scenario_coverage_steps.py",

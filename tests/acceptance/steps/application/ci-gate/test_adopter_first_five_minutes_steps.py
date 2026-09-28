@@ -1,4 +1,4 @@
-"""Step implementations for `features/adopter_first_five_minutes.feature`.
+"""Step implementations for `application/ci-gate/adopter_first_five_minutes.feature`.
 
 BDL-069 acceptance (`beadloom-956f`). Every other init scenario in this suite
 invokes `beadloom.services.cli:main` in-process, which measures the WORKING TREE.
@@ -35,7 +35,7 @@ from typing import Any
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
-scenarios("../features/adopter_first_five_minutes.feature")
+scenarios("../../../application/ci-gate/adopter_first_five_minutes.feature")
 
 #: The two-package layout BDL-UX #282 was measured on. `ledger` carries a second
 #: module so a skeleton naming only the first module it met would still leave one

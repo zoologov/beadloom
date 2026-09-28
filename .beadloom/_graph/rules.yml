@@ -763,9 +763,7 @@ rules:
       features: "tests/acceptance/**/*.feature"
       exempt:
         - files:
-            - "tests/acceptance/features/adopter_first_five_minutes.feature"
             - "tests/acceptance/features/attestation_scope.feature"
-            - "tests/acceptance/features/axes_ruling.feature"
             - "tests/acceptance/features/bootstrap_self_consistency.feature"
             - "tests/acceptance/features/commit_scope.feature"
             - "tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature"
@@ -780,10 +778,8 @@ rules:
             - "tests/acceptance/features/impact.feature"
             - "tests/acceptance/features/init_skeleton_carries_public_api.feature"
             - "tests/acceptance/features/init_skeleton_names_modules.feature"
-            - "tests/acceptance/features/layer_view_verdict.feature"
             - "tests/acceptance/features/mutation_runs_on_a_change_or_on_a_sample.feature"
             - "tests/acceptance/features/mutation_scope.feature"
-            - "tests/acceptance/features/package_description.feature"
             - "tests/acceptance/features/polish_symbols_under_source.feature"
             - "tests/acceptance/features/readme_pair_gate.feature"
             - "tests/acceptance/features/remediation_that_can_be_followed.feature"
@@ -799,10 +795,13 @@ rules:
           reason: >-
             B3 measured each of these against the suite map's coverage run and did
             not move it: its tag names a node its steps execute but not as the
-            primary one (29), a node they never execute (3), a tag the map did not
-            measure because a sibling feature matched the step file (5), or it was
-            written after the map (3). Placing it by its tag would move a
-            disagreement into a folder instead of resolving it.
+            primary one, a tag the map did not measure because a sibling feature
+            matched the step file, or it was written after the map. Placing it by
+            its tag would move a disagreement into a folder instead of resolving
+            it. B3 listed 40; E1 (`beadloom-cs2o`) moved the rule engine's 7, and
+            F3 (`beadloom-2mj3.8`) resolved the 3 whose tag named a node their
+            steps never execute and removed one feature that restated three
+            self-checks, so 29 remain.
           until: >-
             the feature is rewritten against the node its steps execute and moved
             to that node's folder -- E1 (`beadloom-cs2o`) for the rule engine's,
