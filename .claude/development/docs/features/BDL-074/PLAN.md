@@ -73,7 +73,10 @@ nine green checks.
 | F2 | `beadloom-2mj3.7` | reindex and test-mapping get bound tests (added 2026-09-28) | P1 | T | Done |
 | F3 | `beadloom-2mj3.8` | the three tags; self-checks and scenarios outside the outcomes (added 2026-09-28) | P1 | T | Done |
 | W5 | `beadloom-2mj3.9` | docs: the pairs the fix wave made stale (added 2026-09-28) | P1 | F1 | Done |
-| R | `beadloom-b9ll` | review | P1 | T, F1, F2, F3, W5 | Pending |
+| G1 | `beadloom-2mj3.10` | review fix: announcement states; fallback of unplaced files (added 2026-09-28) | P1 | R | Pending |
+| G2 | `beadloom-2mj3.11` | review fix: tests beside the code bind; configurable roots and patterns (added 2026-09-28) | P1 | R | Pending |
+| G3 | `beadloom-2mj3.12` | review fix: true reasons; two checks placed; stack-neutral test role (added 2026-09-28) | P1 | R | Pending |
+| R | `beadloom-b9ll` | review — first run CHANGES REQUIRED; re-run after G1–G3 | P1 | T, F1, F2, F3, W5, G1, G2, G3 | Pending |
 | W | `beadloom-7u77` | tech-writer | P2 | R | Pending |
 | V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | Pending |
 
