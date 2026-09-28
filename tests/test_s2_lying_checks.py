@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 # extractor READS this form, so these fixtures are genuinely annotated and #146's
 # source-owned fallback is exercised instead by `gamma` below (a node that
 # declares docs and owns no file at all) and by the unannotated modules in
-# tests/test_s3_owns_nothing.py.
+# tests/test_a_declaration_that_owns_nothing_is_reported.py.
 _ALPHA_CLEAN = (
     '"""Alpha service.\n\n# beadloom:component=alpha\n"""\n\n\n'
     "def run() -> int:\n    return 1\n"

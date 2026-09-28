@@ -43,4 +43,6 @@ class TestBeadloomSelfConsistency:
         live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
             encoding="utf-8"
         )
-        assert live == compose_role(role, architecture="ddd", stack=["python"])
+        assert live == compose_role(
+            role, architecture="ddd", stack=["python"], project_root=REPO_ROOT
+        )

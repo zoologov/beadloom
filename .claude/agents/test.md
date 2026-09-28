@@ -14,8 +14,38 @@ You are the **Tester**. You write behavior-focused tests for one bead: clear AAA
 2. Derive test targets from the graph (never hardcode): `beadloom ctx <ref-id> --json` (symbols, files, docs), `beadloom why <ref-id>` (what else might break), `beadloom search "<module>"` (related code + existing tests).
 3. List the existing tests so you extend rather than duplicate.
 
-### AAA pattern (Arrange-Act-Assert)
-One behavior per test; a clear Arrange / Act / Assert shape; a name that states the behavior (`test_<thing>_<condition>_<expected>`). Tests must be **independent** (any order) and **fast**.
+### What a test is
+Each standard below is one a reviewer can check by reading a single file. Where one can be
+checked by code, check it in the suite: a test over the suite's own files, run with every
+other test. Such a check fails on the next file written the wrong way, and a reviewer's
+attention does not.
+
+- **One behaviour per test.** A test that fails names the one thing that broke. Two
+  behaviours are two tests. When only the data varies, write one parameterised test.
+- **Arrange, act, assert.** Build the state, perform one action, check what it produced.
+  An assertion before the action, or a second action after the first assertion, is a
+  second test.
+- **No shared mutable state.** Each test builds what it reads, in a temporary directory
+  or a fresh store, and passes in any order and alone. It never reads or writes the
+  project's live state: its index, its tracker or its working tree.
+- **Named by the behaviour.** The test's name and its file's name say what is tested
+  (`test_<thing>_<condition>_<expected>`), never the work item that wrote it. A bead,
+  slice, wave or epic id is closed the day the file lands, and tells the next reader
+  nothing about what the file is for.
+- **Placed by the mirror.** A test file's path is its kind first (unit, integration,
+  acceptance, …), then the path of the code it tests, mirrored from the source root.
+  That path is how a reader finds the tests of a module, and the stack section below
+  says where Beadloom reads it to bind the file to its graph node. When the path cannot
+  mirror the code, declare the file on the node rather than placing it anywhere.
+- **Shared helpers in one support package.** A helper two test files use lives in the
+  suite's support package. A test module is never imported by another: the helper it
+  lends travels with the wrong file when either one moves.
+- **The repository root is found one way.** One helper finds it, by walking up to the
+  project's manifest, and every test that needs the root asks that helper. A file that
+  counts its own parent directories is correct only at the depth it was written at.
+- **Explicit roots, never the working directory.** Every call into the code under test
+  receives the directory it works on. A test that relies on the current directory passes
+  or fails depending on where the runner was started.
 
 ### Unit vs integration
 - **Unit:** one function/class in isolation; dependencies stubbed at the boundary; very fast.
@@ -33,8 +63,8 @@ One behavior per test; a clear Arrange / Act / Assert shape; a name that states 
 - Prefer parameterization over copy-pasted near-duplicate tests.
 
 ### Factory helpers + fixtures
-- Put shared setup in one canonical fixtures location your test framework provides, parameterized with sensible defaults so each test overrides only what it cares about.
-- Use small factory helpers for test data (e.g. `insert_node(...)`, `insert_edge(...)`) instead of repeating literals; use temp paths, never hardcoded ones.
+- Put shared setup in the fixtures location your test framework provides, and shared helpers in the support package, each parameterised with sensible defaults so a test overrides only what it cares about.
+- Use small factory helpers for test data (e.g. `insert_node(...)`, `insert_edge(...)`) instead of repeating literals; use temporary paths, never hardcoded ones.
 
 ### Coverage
 - Target **>= 80%** on the changed code (statements + branches). Coverage is a floor, not a goal — cover the edge cases above, not just the happy path.
@@ -253,14 +283,44 @@ reaches `bd` and states what each call form assumes about the answer; a site it 
 <!-- overlay:python — pytest layout, commands, and fixtures. -->
 ## STACK (Python)
 
-Tests live in `tests/` (flat, no subdirs). Naming: `src/<pkg>/<domain>/<module>.py` → `tests/test_<module>.py`; CLI → `tests/test_cli_<command>.py`; integration → `tests/test_integration*.py`.
+### Where each standard lives
+```
+tests/
+  unit/<package path>/test_<module>.py        # src/<pkg>/<package path>/<module>.py
+  unit/<package path>/<module>/test_*.py      # a folder named after one module
+  integration/<package path>/test_<module>.py # the same mirror, across components
+  acceptance/                                 # scenarios; each binds by its @node: tag
+  self_check/                                 # assertions about this project's own files
+  support/                                    # helpers shared by test files; never collected
+  conftest.py
+```
+- **The mirror is the binding.** `beadloom reindex` binds each `test_*.py` or `*_test.py`
+  under `tests/unit/` and `tests/integration/` to the node that owns the module its path
+  mirrors, and `beadloom ctx <ref-id>` reports those tests. A file outside a kind folder is
+  reported *unplaced* and binds to nothing. Every folder carries an `__init__.py`, so two
+  files with one basename in two folders stay two modules.
+- **What the path cannot mirror is declared** on the node, in its graph YAML. The prefixes
+  are resolved like `source:`, a trailing `/` being a directory, and a declaration wins over
+  the mirror:
+  ```yaml
+  tests:
+  - tests/integration/contracts/
+  ```
+- **Shared helpers** live in `tests/support/` and are imported as `from tests.support.<module>
+  import <name>`. Never write `from tests.test_<module> import <name>`.
+- **The root** comes from one module, `tests/support/repository_root.py`, which walks up from
+  its own file to the nearest `pyproject.toml`. No other file writes `Path(__file__).parents[N]`
+  or `.parent.parent`.
+- **Explicit roots:** a test builds its project under `tmp_path` and passes that path to the
+  code it calls. It does not `monkeypatch.chdir` into the project unless the behaviour under
+  test is the working-directory default itself.
 
 ### Tools + commands
 ```bash
 uv run pytest                                                   # all tests
 uv run pytest --cov=src --cov-report=term-missing               # with coverage
 uv run pytest --cov=src --cov-fail-under=80                     # enforce the floor
-uv run pytest tests/test_graph_loader.py -v                     # single file, verbose
+uv run pytest tests/unit/<package>/test_<module>.py -v          # single file, verbose
 ```
 
 ### Python patterns
@@ -280,3 +340,30 @@ def test_get_context_returns_bundle_for_valid_ref_id(db: sqlite3.Connection) -> 
     assert any(e.kind == "part_of" for e in bundle.graph.edges)
 ```
 - After code-touching tests: `beadloom reindex && beadloom sync-check && beadloom lint --strict`.
+
+## Project layer — this repository's test suite (`.beadloom/flow/roles/test.md`)
+
+Everything above ships to every adopter. Everything below is true of **this repository
+only** and is never distributed.
+
+- **Two guards run with every test.** `tests/conftest.py` starts each test in its own empty
+  directory, so a test that leaves its root to the `Path.cwd()` default fails here instead of
+  passing by accident. The contact guard fails a test that opens this checkout's
+  `.beadloom/beadloom.db` or runs `bd` or `git` against it, and its allowed list is empty.
+- **A fourth kind, `tests/self_check/`,** holds the assertions about this repository's own
+  files, in four folders: `architecture` (its graph, rules and code structure), `config` (its
+  manifest, CI workflows and declared configuration), `docs` (its documents and site) and
+  `process` (its roles, commands, hooks, tracker and the suite's own discipline). Every test
+  there carries the `self_check` marker by its folder. One that needs a built index takes the
+  `self_check_snapshot` fixture, a reindexed copy of the tree, and never the live index.
+- **The checkable standards are checked**, over every file of the suite:
+  `tests/self_check/architecture/test_the_suite_shares_helpers_through_support.py` fails on
+  an import of a test module and on a file that counts its own parents, and
+  `tests/self_check/architecture/test_a_test_file_is_named_by_its_behaviour.py` fails on a
+  work-item id in a test file's name. Each keeps an exemption list whose every entry states a
+  reason and an exit, and an entry that no longer matches fails, so the lists only shrink.
+- **The root helper is `tests/support/repository_root.py`** (`REPO_ROOT`, `TESTS_ROOT`).
+- **A moved or renamed test file is renamed in the mutation pool too.** The pool is the
+  `[tool.mutmut]` test selection in `pyproject.toml`, and
+  `tests/self_check/config/test_mutation_runner_scope.py` fails on an entry that no longer
+  exists.

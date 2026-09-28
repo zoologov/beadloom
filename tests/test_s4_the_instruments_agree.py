@@ -390,7 +390,8 @@ class TestOneSpellingOfTheRoom:
     coordinator reads, and English prose in the composed role core for the agent
     that has to build the directory. Its own comment says the three homes are
     "all three on one spelling bound by a test"; two of them are —
-    `test_bead22_wave_guarantee` binds `room_for` to the working-tree statement,
+    `test_the_wave_guarantee_holds_both_its_clauses` binds `room_for` to the
+    working-tree statement,
     `test_wave_plan` binds it to itself — and the role core is the one that was
     not.
 

@@ -28,7 +28,9 @@ class TestFlowConfigLoad:
 
 class TestDriftGuard:
     def test_live_claude_agents_reproduce_from_compose(self) -> None:
-        composed = compose_all_roles(load_flow_config(REPO_ROOT))
+        # With this repository's project layer: that is what setup-agentic-flow
+        # writes here, and what the live adapters must reproduce.
+        composed = compose_all_roles(load_flow_config(REPO_ROOT), project_root=REPO_ROOT)
         for role in ROLE_NAMES:
             live = (REPO_ROOT / ".claude" / "agents" / f"{role}.md").read_text(
                 encoding="utf-8"

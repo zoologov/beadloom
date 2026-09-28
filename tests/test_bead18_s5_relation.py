@@ -537,7 +537,7 @@ class TestAWrongWorkingDeclarationIsDetectable:
         under `docs/` to one reader and a top-level one to the other — and under
         one vocabulary it means what it says and excuses nothing here; that case
         is pinned in
-        `tests/test_bead75_one_path_vocabulary.py::TestADocsDirRelativeRootMeansWhatItSays`.
+        `tests/test_a_document_path_has_one_spelling.py::TestADocsDirRelativeRootMeansWhatItSays`.
         The assertion is untouched, and it is the assertion that matters: a
         declaration that silences a pair is a declaration the report names.
         """

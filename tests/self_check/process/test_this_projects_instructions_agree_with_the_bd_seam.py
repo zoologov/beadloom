@@ -1,6 +1,7 @@
 """Self-checks of this repository's agent roles, hooks, tracker and commits (BDL-074 A3).
 
-Moved out of ``tests/integration/services/bd_seam/test_s5_the_instruments_agree.py``;
+Moved out of ``tests/integration/services/bd_seam/``
+``test_what_the_bd_seam_claims_holds_for_the_installed_bd.py``;
 the product tests of the same code stay there.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).

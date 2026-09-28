@@ -26,7 +26,7 @@ def _documents_this_project_ships() -> list[str]:
 
     The loader's own iteration is what the cases below are about, so the list
     they judge it against is recomputed from the globs — the shape
-    `test_bead77_kind_and_root_disagree._found_by_any_root` uses one module over,
+    `test_a_kind_and_root_disagreement_is_reported._found_by_any_root` uses one module over,
     and for the same reason: a reader that agrees with itself proves nothing
     about whether it lost a file.
 

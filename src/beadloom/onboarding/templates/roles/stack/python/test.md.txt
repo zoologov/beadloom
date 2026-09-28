@@ -1,14 +1,44 @@
 <!-- overlay:python — pytest layout, commands, and fixtures. -->
 ## STACK (Python)
 
-Tests live in `tests/` (flat, no subdirs). Naming: `src/<pkg>/<domain>/<module>.py` → `tests/test_<module>.py`; CLI → `tests/test_cli_<command>.py`; integration → `tests/test_integration*.py`.
+### Where each standard lives
+```
+tests/
+  unit/<package path>/test_<module>.py        # src/<pkg>/<package path>/<module>.py
+  unit/<package path>/<module>/test_*.py      # a folder named after one module
+  integration/<package path>/test_<module>.py # the same mirror, across components
+  acceptance/                                 # scenarios; each binds by its @node: tag
+  self_check/                                 # assertions about this project's own files
+  support/                                    # helpers shared by test files; never collected
+  conftest.py
+```
+- **The mirror is the binding.** `beadloom reindex` binds each `test_*.py` or `*_test.py`
+  under `tests/unit/` and `tests/integration/` to the node that owns the module its path
+  mirrors, and `beadloom ctx <ref-id>` reports those tests. A file outside a kind folder is
+  reported *unplaced* and binds to nothing. Every folder carries an `__init__.py`, so two
+  files with one basename in two folders stay two modules.
+- **What the path cannot mirror is declared** on the node, in its graph YAML. The prefixes
+  are resolved like `source:`, a trailing `/` being a directory, and a declaration wins over
+  the mirror:
+  ```yaml
+  tests:
+  - tests/integration/contracts/
+  ```
+- **Shared helpers** live in `tests/support/` and are imported as `from tests.support.<module>
+  import <name>`. Never write `from tests.test_<module> import <name>`.
+- **The root** comes from one module, `tests/support/repository_root.py`, which walks up from
+  its own file to the nearest `pyproject.toml`. No other file writes `Path(__file__).parents[N]`
+  or `.parent.parent`.
+- **Explicit roots:** a test builds its project under `tmp_path` and passes that path to the
+  code it calls. It does not `monkeypatch.chdir` into the project unless the behaviour under
+  test is the working-directory default itself.
 
 ### Tools + commands
 ```bash
 uv run pytest                                                   # all tests
 uv run pytest --cov=src --cov-report=term-missing               # with coverage
 uv run pytest --cov=src --cov-fail-under=80                     # enforce the floor
-uv run pytest tests/test_graph_loader.py -v                     # single file, verbose
+uv run pytest tests/unit/<package>/test_<module>.py -v          # single file, verbose
 ```
 
 ### Python patterns
