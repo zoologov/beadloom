@@ -40,9 +40,9 @@
 | Bead | Role | Status | Details |
 |---|---|---|---|
 | `beadloom-ujzb` | epic | ready | BDL-076 parent |
-| `beadloom-hjr1` | J1 dev | ready | relative JS/TS imports resolve |
-| `beadloom-g9fb` | J2 dev | blocked | no false edges from a foreign scan path |
-| `beadloom-tmxa` | J3 dev | ready | `.vue` parsed; `export const`, `import()` |
+| `beadloom-hjr1` | J1 dev | ✓ done | relative JS/TS imports resolve; 379 edges unchanged here |
+| `beadloom-g9fb` | J2 dev | ready | no false edges from a foreign scan path |
+| `beadloom-tmxa` | J3 dev | in progress | `.vue` parsed; `export const`, `import()` |
 | `beadloom-kcwz` | A0 dev | blocked | our site under beadloom; `.vue` measured first |
 | `beadloom-o2ua` | A1 dev | blocked | the data file v2 |
 | `beadloom-iehv` | A2 dev | blocked | the viewer core |

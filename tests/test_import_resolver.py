@@ -210,24 +210,24 @@ class TestExtractImportsTypeScript:
         assert results[0].import_path == "path"
 
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
-    def test_relative_import_skipped(self, tmp_path: Path) -> None:
-        """`import './relative'` is skipped."""
+    def test_relative_import_kept(self, tmp_path: Path) -> None:
+        """`import './relative'` is kept; resolution maps it to a file (BDL-076 J1)."""
         from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import './relative';\n")
         results = extract_imports(ts)
-        assert len(results) == 0
+        assert [r.import_path for r in results] == ["./relative"]
 
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
-    def test_relative_parent_import_skipped(self, tmp_path: Path) -> None:
-        """`import { A } from '../parent'` is skipped (relative)."""
+    def test_relative_parent_import_kept(self, tmp_path: Path) -> None:
+        """`import { A } from '../parent'` is kept (BDL-076 J1)."""
         from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import { A } from '../parent';\n")
         results = extract_imports(ts)
-        assert len(results) == 0
+        assert [r.import_path for r in results] == ["../parent"]
 
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_js_file_uses_ts_parser(self, tmp_path: Path) -> None:

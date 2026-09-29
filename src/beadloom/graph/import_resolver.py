@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -139,19 +140,25 @@ def _get_ts_import_source(node: TSNode) -> str | None:
 
 
 def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
-    """Extract imports from a TypeScript/JavaScript AST root node."""
+    """Extract imports from a TypeScript/JavaScript AST root node.
+
+    A re-export (``export { X } from './x'``, ``export * from '../y'``) names a
+    module the same way an import does, and it is how an ``index.js`` facade
+    exposes its folder, so it is read too. An ``export`` without a ``from`` has
+    no source string among its direct children and yields nothing.
+
+    Relative specifiers are kept as written. They used to be skipped here, so a
+    JS/TS project got no ``depends_on`` edge between its own modules (BDL-076
+    J1, measured by A0); :func:`resolve_relative_import` now maps them to files.
+    """
     results: list[ImportInfo] = []
 
     for child in _walk(root):
-        if child.type != "import_statement":
+        if child.type not in ("import_statement", "export_statement"):
             continue
 
         source = _get_ts_import_source(child)
         if source is None:
-            continue
-
-        # Skip relative imports
-        if source.startswith(".") or source.startswith(".."):
             continue
 
         results.append(
@@ -734,6 +741,71 @@ def _normalize_ts_import(import_path: str) -> str | None:
     return None
 
 
+#: The order a relative JS/TS specifier is completed in (BDL-076 J1): the path
+#: as written, then each extension on it, then each extension on ``<path>/index``.
+#: A file therefore beats a folder of the same name, as it does for Node and for
+#: the bundlers. ``.mjs``/``.cjs`` and ``.vue`` need not be parseable here: the
+#: target only has to exist for its owning node to be named.
+_RELATIVE_EXTENSIONS: tuple[str, ...] = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue")
+
+#: TypeScript's ESM convention: a specifier carries the extension the file will
+#: have AFTER compilation, so ``./a.js`` in a source tree names ``a.ts``. Tried
+#: right after the path as written.
+_TS_SOURCES_OF_EMITTED: dict[str, tuple[str, ...]] = {
+    ".js": (".ts", ".tsx"),
+    ".jsx": (".tsx",),
+}
+
+
+def is_relative_specifier(specifier: str) -> bool:
+    """Whether a JS/TS module specifier is relative to the importing file."""
+    return specifier in (".", "..") or specifier.startswith(("./", "../"))
+
+
+def relative_import_candidates(specifier: str, importer: str) -> list[str]:
+    """The project-relative files a relative *specifier* may name, in resolution order.
+
+    *importer* is the importing file's project-relative POSIX path. A specifier
+    that climbs above the project root names nothing and yields ``[]``.
+
+    Not handled, each named so its absence reads as a decision: ``tsconfig``
+    ``paths``/``baseUrl`` beyond the two aliases in ``_TS_ALIAS_MAP``, a
+    folder's ``package.json`` ``main``/``exports``, ``.mts``/``.cts`` and
+    ``.d.ts`` targets, query suffixes (``./x.vue?raw``), CommonJS ``require()``.
+    """
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(importer), specifier))
+    if target == ".." or target.startswith("../"):
+        return []
+    stem, suffix = posixpath.splitext(target)
+    return [
+        target,
+        *(stem + ext for ext in _TS_SOURCES_OF_EMITTED.get(suffix, ())),
+        *(target + ext for ext in _RELATIVE_EXTENSIONS),
+        *(posixpath.join(target, f"index{ext}") for ext in _RELATIVE_EXTENSIONS),
+    ]
+
+
+def resolve_relative_import(
+    specifier: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+) -> str | None:
+    """Map a relative JS/TS *specifier* to the node that owns the file it names.
+
+    The first candidate of :func:`relative_import_candidates` that exists on
+    disk is the file; its owner is decided by the one ownership rule
+    (``get_owning_ref_id``, most specific source wins) — the rule the importing
+    side of an edge is attributed by. Returns ``None`` when the specifier names
+    no file, or names a file no node owns; the caller records either as an
+    unresolved import rather than dropping it.
+    """
+    for candidate in relative_import_candidates(specifier, importer):
+        if (project_root / candidate).is_file():
+            return get_owning_ref_id(conn, candidate)
+    return None
+
+
 def _find_node_by_source_prefix(
     dir_path: str,
     scan_paths: list[str],
@@ -1003,17 +1075,23 @@ def _index_one_file(
         return 0
 
     file_hash = hashlib.sha256(content.encode()).hexdigest()
-    rel_path = str(file_path.relative_to(project_root))
+    relative = file_path.relative_to(project_root)
+    rel_path = str(relative)
     is_ts = file_path.suffix in _TS_EXTENSIONS
 
     for imp in imports:
-        resolved = resolve_import_to_node(
-            imp.import_path,
-            file_path,
-            conn,
-            scan_paths=scan_paths,
-            is_ts=is_ts,
-        )
+        if is_ts and is_relative_specifier(imp.import_path):
+            resolved = resolve_relative_import(
+                imp.import_path, relative.as_posix(), project_root, conn
+            )
+        else:
+            resolved = resolve_import_to_node(
+                imp.import_path,
+                file_path,
+                conn,
+                scan_paths=scan_paths,
+                is_ts=is_ts,
+            )
         conn.execute(
             "INSERT INTO code_imports"
             " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
