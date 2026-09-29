@@ -48,9 +48,9 @@ its own. (The code indexer, by contrast, *is* a feature — it has a distinct
 input/output contract: source files → `code_symbols` rows — so it earns a
 `SPEC.md`, not a `DOC.md`.)
 
-A component is declared in a graph file exactly like a feature — `kind:
-component`, a `source: <file>`, a `part_of` edge to its domain, and a `docs:
-<DOC.md>` — and it is attributed in code with a `# beadloom:component=<id>`
+A component is declared in a graph file exactly like a feature —
+`kind: component`, a `source: <file>`, a `part_of` edge to its domain, and a
+`docs: <DOC.md>` — and it is attributed in code with a `# beadloom:component=<id>`
 annotation (the mirror of `# beadloom:feature=`). The distinction from a
 feature is intent, not weight: a feature is a *capability* (often a CLI command
 or a distinct contract); a component is *plumbing important enough to track and

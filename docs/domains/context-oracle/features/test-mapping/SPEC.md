@@ -475,11 +475,12 @@ Module `src/beadloom/context_oracle/test_binding.py`:
   makes a file a test file this index reads, in one clause: `a test file is read when its
   path matches a pattern of`, each group with its patterns in parentheses (the group names
   alone for a record without patterns), the recorded roots and test trees, and `or beside a
-  node's code` when that is read. With none recorded it says `and it lies beside a node's
-  code, since none of the roots <absent roots> exists`, or `under a root, and none of the roots
-  <absent roots> exists` when tests beside the code are not read; with no absent root recorded,
-  `no root is recorded` replaces `none of the roots ... exists` (`beadloom-2mj3.17`, reworded
-  by `beadloom-2mj3.19`). `ctx` and the debt report state it every time (`beadloom-2mj3.15`).
+  node's code` when that is read. With none recorded it says
+  `and it lies beside a node's code, since none of the roots <absent roots> exists`, or
+  `under a root, and none of the roots <absent roots> exists` when tests beside the code are
+  not read; with no absent root recorded, `no root is recorded` replaces
+  `none of the roots ... exists` (`beadloom-2mj3.17`, reworded by `beadloom-2mj3.19`). `ctx`
+  and the debt report state it every time (`beadloom-2mj3.15`).
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   (BDL-074 F1) — every test file bound to no node, stated by why: `describe_unplaced()`'s
   sentence over *layout*, then `W unowned (under a mirrored folder whose code no node owns)` when non-zero,

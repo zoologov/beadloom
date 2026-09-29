@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -34,7 +35,7 @@ import yaml
 from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import Mapping
 
 MUTATION = REPO_ROOT / ".github" / "workflows" / "mutation.yml"
 
@@ -119,6 +120,26 @@ def _constants() -> dict[str, str]:
     return {str(key): str(value) for key, value in env.items() if "${{" not in str(value)}
 
 
+def _step_environment(bin_dir: Path, values: Mapping[str, str | Path]) -> dict[bytes, bytes]:
+    """A step's environment as the Actions runner hands it to bash: bytes.
+
+    `subprocess` encodes a `str` environment value with the filesystem codec,
+    which the locale chooses outside macOS, so the score report's em dash raised
+    `UnicodeEncodeError` on both locale legs of PR #86's first run and on no
+    UTF-8 tree. The runner writes a step's environment as UTF-8 whatever the
+    image's locale, so text is encoded as UTF-8 here; a path is encoded with the
+    filesystem codec that produced it, and *bin_dir* goes first on `PATH` so the
+    stub answers for the real command.
+    """
+    env = dict(os.environb)
+    env[b"PATH"] = os.fsencode(bin_dir) + os.pathsep.encode() + env.get(b"PATH", b"")
+    for key, value in values.items():
+        env[key.encode("utf-8")] = (
+            os.fsencode(value) if isinstance(value, Path) else value.encode("utf-8")
+        )
+    return env
+
+
 def _announce(
     tmp_path: Path,
     *,
@@ -143,12 +164,11 @@ def _announce(
     stub.write_text(_GH_STUB, encoding="utf-8")
     stub.chmod(0o755)
     log = tmp_path / "gh.log"
-    env = dict(os.environ)
-    env.update(_constants())
-    env.update(
+    env = _step_environment(
+        bin_dir,
         {
-            "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
-            "GH_LOG": str(log),
+            **_constants(),
+            "GH_LOG": log,
             "GH_TOKEN": "stub",
             "REPO": "owner/repo",
             "OWNER": "owner",
@@ -159,7 +179,7 @@ def _announce(
             "FLOOR": floor,
             "REPORT": report,
             "FAKE_OPEN_ISSUE": open_issue,
-        }
+        },
     )
     bash = shutil.which("bash")
     assert bash is not None
@@ -169,7 +189,9 @@ def _announce(
     # The announcement's owner mention carries an em dash (the `announce` job's body),
     # so handing the script to bash as an argument raised UnicodeEncodeError on
     # both locale legs of run 35404835459 and on no UTF-8 tree. The script is
-    # the workflow's text, so the encoding moves and the prose does not.
+    # the workflow's text, so the encoding moves and the prose does not. The
+    # environment is the other half of the same encoding, and it is bytes for
+    # the same reason (`_step_environment`).
     script = tmp_path / "announce.sh"
     script.write_text(_announcement_script(), encoding="utf-8")
     subprocess.run(  # noqa: S603 — the argv is this repository's own workflow
@@ -243,17 +265,16 @@ def _score(tmp_path: Path, *, code: int, text: str) -> dict[str, str]:
     stub.write_text(_UV_STUB, encoding="utf-8")
     stub.chmod(0o755)
     output, summary = tmp_path / "output", tmp_path / "summary"
-    env = dict(os.environ)
-    env.update(
+    env = _step_environment(
+        bin_dir,
         {
-            "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
-            "RUNNER_TEMP": str(tmp_path),
-            "GITHUB_OUTPUT": str(output),
-            "GITHUB_STEP_SUMMARY": str(summary),
+            "RUNNER_TEMP": tmp_path,
+            "GITHUB_OUTPUT": output,
+            "GITHUB_STEP_SUMMARY": summary,
             "POPULATION": "6992",
             "FAKE_SCORE": text,
             "FAKE_CODE": str(code),
-        }
+        },
     )
     bash = shutil.which("bash")
     assert bash is not None
@@ -574,9 +595,11 @@ class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
 
     The character is the WORKFLOW's, not a test's, so the fix is where the
     encoding is decided and not in the prose: the script reaches bash through a
-    file this module writes as UTF-8, and the argv is then a path. These two
-    tests hold that on every leg rather than only on the two that vary the
-    locale.
+    file this module writes as UTF-8, and the argv is then a path. The
+    environment went the same way on PR #86's first run, through the score
+    report, and is handed to bash as UTF-8 bytes, as the runner hands it. The
+    tests below hold both halves on every leg rather than only on the two that
+    vary the locale.
     """
 
     def test_the_announcement_carries_a_character_neither_locale_can_encode(self) -> None:
@@ -615,4 +638,61 @@ class TestTheWorkflowsProseNeverCrossesTheLocalesCodec:
             "an argument carries the workflow's own prose, whose codec is then the "
             "locale's rather than this file's, so the call raises UnicodeEncodeError "
             f"on a non-UTF-8 leg and nowhere else: {carried}"
+        )
+
+    @pytest.mark.skipif(shutil.which("bash") is None, reason="both steps are bash steps")
+    @pytest.mark.parametrize("step", ["announce", "score"])
+    def test_no_environment_value_handed_to_bash_carries_the_reports_prose(
+        self, step: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The environment is the argv's other half, and PR #86 found it.
+
+        `subprocess` encodes an environment value with the same filesystem codec
+        it encodes an argv with, so the score report — whose floor line carries
+        the em dash `beadloom mutation` prints — raised `UnicodeEncodeError` on
+        both locale legs of PR #86's first run through `REPORT` and `FAKE_SCORE`,
+        ten tests, while the argv guard above held. The runner hands a step its
+        environment as UTF-8 bytes whatever the image's locale, so the tests
+        hand bash bytes too; a `str` value carrying the report's characters is
+        the defect, measured on every leg rather than only on the two that vary
+        the locale.
+        """
+        real_run = subprocess.run
+        recorded: list[dict[object, object]] = []
+
+        def _record(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            env = kwargs.get("env")
+            assert isinstance(env, dict)
+            recorded.append(env)
+            return real_run(argv, **kwargs)  # type: ignore[call-overload,no-any-return]  # the spy forwards the caller's own keywords unchanged
+
+        monkeypatch.setattr(subprocess, "run", _record)
+        if step == "announce":
+            _announce(
+                tmp_path,
+                result="failure",
+                verdict="judged",
+                floor="under",
+                report=UNDER_FLOOR_REPORT,
+            )
+        else:
+            _score(tmp_path, code=1, text=UNDER_FLOOR_REPORT)
+
+        assert recorded, "the step was never invoked, so nothing was measured"
+        prose = {char for char in UNDER_FLOOR_REPORT if not char.isascii()}
+        assert prose, "over an ASCII report this test would pass vacuously"
+        carried = sorted(
+            {
+                char
+                for env in recorded
+                for value in env.values()
+                if isinstance(value, str)
+                for char in value
+                if char in prose
+            }
+        )
+        assert not carried, (
+            "an environment value carries the score report as text, whose codec is "
+            "then the locale's rather than the runner's UTF-8, so the call raises "
+            f"UnicodeEncodeError on a non-UTF-8 leg and nowhere else: {carried}"
         )
