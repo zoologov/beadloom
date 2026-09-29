@@ -29,9 +29,9 @@
 | `beadloom-nxf7` | R1 dev | done | 7.0.0 on every current-version site and `[7.0.0]` in CHANGELOG; no ignore triple needed; `beadloom-tu41` filed |
 | `beadloom-10er` | T1 dev | done | the PLAN template without a status column; BRIEF's twin filed as `beadloom-3nwz` |
 | `beadloom-3nwz` | T1b dev | done | the BRIEF template without a status column |
-| `beadloom-fdvz` | D1 tech-writer | ready | README.ru.md, then README.md |
-| `beadloom-n5w5` | D2 tech-writer | ready | ROADMAP.md |
-| `beadloom-o2z4` | D3 tech-writer | ready | BDL-UX-Issues.md |
-| `beadloom-adbg` | V1 test | blocked | the built wheel; the README's steps |
+| `beadloom-fdvz` | D1 tech-writer | done | the README pair: the audit's rows fixed and measured on 7.0.0, the section on tests bound to the graph; `readme-pair` 118 blocks, 0 findings |
+| `beadloom-n5w5` | D2 tech-writer | ✓ done | ROADMAP.md |
+| `beadloom-o2z4` | D3 tech-writer | done | BDL-UX-Issues.md: Open 133→79, Improvements 20→17, Excluded 7→6, Closed 117→175; no number both open and closed; `beadloom-s34t` filed |
+| `beadloom-adbg` | V1 test | ready | the built wheel; the README's steps |
 | `beadloom-bz48` | R review | blocked | review |
 | `beadloom-vgst` | P publish | blocked | publish and verify |

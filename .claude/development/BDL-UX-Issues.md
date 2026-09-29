@@ -1,20 +1,20 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding on Beadloom itself and on an anonymised
-> downstream project. Open items are listed under **Open Issues**; recurring observations
+> downstream project. Open items are listed under **Open Issues**. Recurring observations
 > that are not defects live under **Improvements**.
 >
 > **No hand-written tally.** The counts that used to sit here were maintained by hand and
-> were wrong (they claimed 46 open against 34 actual). This log becomes a shipped *kind*
-> with computed facts in BDL-061 — until then a number here would be a claim nobody checks,
-> which is the exact defect this log exists to record.
-
-
-# Beadloom UX Issues
-
-> Dogfooding feedback: issues, friction points, and improvement ideas collected while using Beadloom on a downstream project.
+> were wrong (they claimed 46 open against 34 actual). The log is declared as `issue_log:`
+> in `.beadloom/config.yml`, and `beadloom issue-number check` reads it for duplicate,
+> unwritten and unclaimed numbers. No command computes its open or closed counts, so a
+> number written here would be a claim nobody checks, which is the defect this log exists
+> to record.
 >
-> **How to use:** Add entries during development. Each entry should include date, context, and severity.
+> **How to use:** take a number with `beadloom issue-number allocate --holder <bead-id>`,
+> which writes its claim to the ledger, then add the entry under **Open Issues** in
+> descending order. Each entry includes date, context and severity. When an entry is fixed,
+> move it to **Closed Issues** with a dated line of evidence rather than striking it in place.
 
 ---
 
@@ -34,64 +34,6 @@
 ---
 
 ## Open Issues
-
-304. [2026-09-29] [HIGH] a replacement for a heuristic was proven "no worse than main" one ecosystem at a time, so the review found the same regression three times
-
-    **Severity:** high (an adopter whose tests sat in a layout the old name-guessing mapper read would, on
-    upgrade, see `ctx` report 0 tests and the debt report count every covered node untested — a false
-    score, not a missing feature)
-    **Command:** `beadloom reindex`, `beadloom ctx`, `beadloom status --debt-report`
-    **Context:** BDL-074 replaced `test_mapper`'s guesses with a declared binding (the mirror, beside the
-    code, `tests:`). Each fix proved "no worse than main" on the layouts it had in front of it.
-    **Issue:** the review found the regression for Go (run 1), then Java/Kotlin/Swift (after an owner
-    question), then Jest's `__tests__/` (run 2), then a top-level `__tests__/` (run 3 — the coordinator's
-    question to the owner had omitted one of three places the agent named). Each was real; each was found
-    by sampling.
-    **Expected:** when a component that *guessed* is replaced by one that *declares*, first enumerate
-    everything the old one recognised — from its source, not from memory — and prove each row against the
-    old one's measured output. `beadloom-2mj3.15` did exactly that (32 conventions: 23 proven no worse, 9
-    ruled out as guessing, NG2–NG4 in the PRD) and closed the class; it should have been the first step.
-    **Also:** a question put to the owner must carry every option the agent named, or the owner rules on
-    less than was found.
-    **Tracker:** `beadloom-2mj3` (closed). Fixed in BDL-074 (`beadloom-2mj3.11`, `.13`, `.15`, `.17`).
-
-303. [2026-09-19] [HIGH] the nightly mutation job is killed by its runner at 93-100 minutes, so the declared scope has had no aggregate score since 2026-09-09 even now that the run works
-
-    **Severity:** high (the guard defect BDL-UX #289 records is fixed and the chain is proven, but the duty this project declares — an aggregate mutation score over fifteen declared targets, held against two floors — has still never been measured on the runner that is supposed to hold it, and nothing in the pipeline says that out loud)
-    **Command:** the `Mutation` workflow, dispatched by hand on a branch
-    **Context:** BDL-072, `beadloom-e8m4`, 2026-09-19, measured on two dispatched runs after the #289 fix landed.
-    **What happened.** Both runs started, built the index, entered the rules slice and classified mutants — and were then killed mid-step with `##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.` followed by `##[error]The operation was canceled.` Steps 8-14 (both exports, both scoring steps, the artifact) were skipped each time, so neither run printed a score.
-
-    | run | head | started -> ended | wall | reached |
-    |---|---|---|---|---|
-    | `35405302194` | `aa89a831` | 23:20:35Z -> 01:00:57Z | 100 min | 4151 of 7187 mutants classified (4001 killed, 1 timeout, 149 survived) |
-    | `35419948880` | `1f0b3d45` | 03:56:33Z -> 05:30:04Z | 93.5 min | same step, cancelled |
-
-    **What it is NOT.** Not `timeout-minutes` (340, and neither run came near it). Not a concurrency supersession: the workflow's last five runs were checked both times and no other run of the group existed, and the group is scoped by `github.event_name` since BDL-072. Not the guard defect: the mutants ran, which is precisely what nine previous nightlies could not do.
-    **What was measured instead, and it is a smaller claim.** One declared target end to end on a developer machine: `mutmut run 'beadloom.application.waves.landing.*'`, `export-cicd-stats`, then `beadloom mutation --min-score 0.80` → `Counters: killed 28, mutants 7187, survived 1` and **`Score: 96.6% of 29 scored mutants`**, floor met, exit 0. The first printed score since 2026-09-09. It proves the chain; it does not touch the aggregate, the 0.94 rules floor or the 0.88 scope floor.
-    **Expected:** either the job completes on the runner it declares, or the duty is restated as something this project can actually measure — a slice per night, a resumable run, or a stated acceptance that the aggregate is taken elsewhere. A floor nobody can reach is not a gate.
-    **What is NOT established:** the cause of the shutdown. Disk exhaustion in `mutants/`, a runner reclamation, and an account-level limit are all consistent with two samples, and none was measured. The obvious next step is a run with `df` and memory reported per step.
-    **Related:** #289 (the guard that made every night score zero — fixed by BDL-072), #293/#298 (`beadloom-qq6m`, the shared live index), #226 (`beadloom-jwfc`, the pre-push crash that trains `--no-verify`).
-    **Tracker:** `beadloom-5isv` (P1). The number was allocated by `beadloom-e8m4`, the BDL-072 bead that measured both killed runs.
-
-    **AMENDED 2026-09-27 — CLOSED AS SUPERSEDED, the killer not identified.** Ten runs in all: nine of ten
-    died at queue positions 4125-4226 whether at four children (73-102 min) or two (153 min), and across a
-    refactor that removed 197 mutants from that region; one ran 262 min at two children and ended with
-    *the hosted runner lost communication with the server ... starves it for CPU/Memory*. Ruled out by
-    measurement or static search: the timeout, supersession, billing, the loader's memory (no child above
-    399 MiB) and any code signalling the runner's process group. Still live and unmeasured: `systemd-oomd`,
-    the kernel OOM killer, VM reclamation. The owner retired the whole-scope nightly instead (workflow
-    disabled, #79 closed not_planned) in favour of mutation scoped to each pull request plus a weekly
-    sample. The settling experiment — `auditctl` on kill syscalls with a PSI/`MemAvailable`/`dmesg`
-    sampler — is recorded on `beadloom-5isv` and deliberately not run. Side finding, external: mutmut
-    3.7.0's timeout thread catches only `ProcessLookupError`, so a `PermissionError` on Linux would stop
-    wall-clock timeouts silently.
-
-    **AMENDED 2026-09-29 — the duty restated, and now measured.** BDL-074 D1 replaced the whole-scope
-    nightly with `mutation-per-change` on pull requests and a weekly `mutation-sample` of 150. The first
-    weekly sample on CI completed in 25 min and scored 82.0% [75.1, 87.3] under the 0.88 floor, which the
-    owner kept (issue #85 open; `beadloom-inmv`). On PR #86 the per-change job ran 1578 mutants in 632 s
-    and, after 213 survivors were killed and 45 recorded equivalent, scored 97.1%.
 
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
@@ -144,37 +86,6 @@
     **Tracker:** `beadloom-l5jb`.
     **Related:** #298 (the entry this defect first produced).
 
-298. [2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365
-
-    **Severity:** medium (no wrong code shipped and no verdict moved; what is wrong is a guard whose own reading can be partial, which can redden a CI leg intermittently — and it is the kind of guard this epic added to stop checks reporting over an unnamed population)
-    **Command:** `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80`, the whole suite on the tree
-    **Context:** BDL-070 Release B, 2026-09-13, the wave gate owner's full tree run at `d6e8aa3d`, taken before opening the second pull request.
-    **What happened.** One failure: `tests/test_the_view_flags_what_the_rule_finds.py::TestOnThisRepository::test_the_agreement_is_not_vacuous` — `assert len(verdicts) > 300`, got **57**. The test was added by B4 (`beadloom-w34m`) in this release.
-    **Why it is not a regression, measured rather than argued.**
-
-    | check | result |
-    |---|---|
-    | the two preceding full tree runs on this branch | 10712 and 10719 passed, 0 failed — this test passed |
-    | commits since the last green run | one content commit, seven TEXT files (docstring, role template + recompose, two SPECs) |
-    | live index right after the red run | 108 nodes, 365 active `depends_on`, `PRAGMA integrity_check` ok |
-    | damage signatures in the run's log | 0 `malformed` / `disk I/O` / `OperationalError` |
-    | the failing test alone, on that index | 1 passed |
-    | the failing test alone, after a reindex | 1 passed |
-    | its whole file, after a reindex | 8 passed |
-
-    **The mechanism, stated as inferred.** The test reads the live repository through the shared fixture `live_repo_reindexed` (scope: scope="session"), and at least twelve other test files reindex the live project root in the same run. A read taken while another test is mid-rebuild sees a partial edge set; 57 of 365 is what a torn read looks like. Nobody reproduced the interleaving on purpose.
-    **MEASURED AFTER FILING, 2026-09-13 — and it widens the mechanism above rather than confirming it.** The full re-run was green (10718 passed, 0 failed), and one test moved from passed to skipped: `tests/test_guards_parity.py:198` skipped itself with *"this repository is being written by another process right now — beadloom.db, beadloom.db-shm, beadloom.db-wal changed over an idle 1.19s control window"*. That other process was **the coordinator**. While the suite ran, it committed the #298/#299 repair and pushed the branch; the pre-commit hook runs `beadloom lint` and `sync-check`, and the pre-push Gate runs `beadloom ci`, which re-indexes — all writing the live index the suite was reading. During the first, red run the coordinator was also committing and launching reviews.
-    **So the writer behind the 57-edge read is NOT established as "other tests in the same run".** It is at least as likely to be the gate owner's own git hooks. Which one produced the torn read was not measured. The parity test is the instrument that got this right: it measured the writes, named the cause, and declined to attribute, where the vacuity guard read a partial graph and failed.
-    **A practice rule this entry now carries:** the wave gate owner does not commit or push while its own full tree run is in flight — every hook in this repository writes the index that run reads.
-    **Expected:** a test that asserts on the live repository's graph reads an index no other writer can rebuild underneath it — other tests or an out-of-run process — through an isolated copy or a lock around the rebuild. Or, like `test_guards_parity`, it measures whether the index moved during its reading and skips with the reason rather than failing on a partial graph.
-    **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
-    **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
-    **Folded 2026-09-14 into `beadloom-qq6m`** by owner decision, with #293: one bead for the suite's shared live index. `beadloom-jorg` is closed with a pointer, and its description remains this entry's specification.
-    **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
-
-    **AMENDED 2026-09-29 — see #293's amendment:** the guard's read now goes to the snapshot, not the live
-    index (BDL-074 A2/A3).
-
 297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
 
     **Severity:** medium (no wrong code shipped; what is wrong is an independence gate that reports itself in force while one ordinary command defeats it, and that cannot release in the shape the flow prescribes)
@@ -187,48 +98,6 @@
     **What is NOT established:** whether an earlier review in this repository was materially steered through `bd show`. It was measured on these three passes only.
     **Tracker:** `beadloom-6rfz`.
     **Related:** #212, #219, #286 — the withholding defeated through the epic document, commit messages and the launch prompt. This is the fourth channel.
-
-296. [2026-09-13] [MEDIUM] a layer rule reports an error and is counted inert in the same run, because liveness still reads own tags
-
-    **Severity:** medium (no wrong verdict: the error is reported and `lint --strict` exits 1 as it should. What is wrong is that the same run tells a reader the rule checked nothing, and `rules_inert` is the counter the Gate's summary and the TUI's lint panel present as "this check did nothing")
-    **Command:** `beadloom lint`, and every surface that reads `rules_inert`
-    **Context:** BDL-070 B5 (`beadloom-bi78`), 2026-09-13. Found writing the acceptance scenarios for Release B on graphs that are not this repository.
-    **What happened.** `evaluate_layer_rules` decides on the DERIVED layer since B3 (`beadloom-ku26`) — a node's own tag, else the nearest `part_of` container that declares one. `graph/rules/liveness.py:288` `_layer_reasons` still decides on `own_layer_of` alone, and its own docstring says the move would happen "in the release that announces it, `beadloom-ku26` (B3)". B3 announced it and did not make it.
-    **Measured** on the nested-parts fixture (`tests/acceptance/steps/tiered_project.py`, `tier-web` / `tier-core` / `tier-store`, two untagged components inside containers in different tiers), written and indexed once and linted:
-
-    | what the run says | value |
-    |---|---|
-    | `error_count` | 1 — `store-db -> web-api`, reported by `tier-order` |
-    | `rules_evaluated` | 1 |
-    | `layer_populations` | `evaluated=2, skipped_untagged=0` |
-    | `rules_inert` | 1 |
-    | liveness message | `Rule 'tier-order' cannot fire: no live 'depends_on' edge runs between two of its layers. It is counted as evaluated but checks nothing` |
-
-    The peer-container fixture reaches the other branch of the same function and says `fewer than two of its layers are populated (no node carries 'tier-store', 'tier-web')` while the rule reports two same-layer crossings.
-    **This repository cannot see it.** Every node here that is in a layer carries the tag itself, so own tags and derived layers agree and liveness is satisfied. `beadloom lint` on this tree emits no `rule_liveness` finding for `architecture-layers`. The shape needs untagged components inside tagged containers — an adopter's shape, and the reason BDL-070's CONTEXT requires every layer claim to be measured on a graph that is not ours.
-    **Expected:** liveness decides on the same layer membership the rule decides on, so a rule that reported a finding is never counted inert. Moving it is a VERDICT CHANGE for an adopter — a rule reported inert today would stop being reported — which is why it belongs in a release that says so rather than in a fix taken in passing.
-    **What is NOT established:** how many adopter projects carry the shape, and whether `rules_inert` feeds anything that blocks. The Gate's summary and the TUI panel present it; no exit code was traced to it.
-    **Held by:** `tests/test_a_layer_rule_that_fired_is_not_reported_inert.py` — three `xfail(strict=True)` statements that go green the day liveness is moved.
-    **Related:** the epic's own subject — one question answered by more than one body. `layers.py`'s module docstring names `liveness._layer_reasons` as the third reader and says it "did neither"; it now agrees with neither.
-
-    **RESOLVED 2026-09-13 by `beadloom-5tcc.6` (BDL-070 Release B).** Fixed in the release that
-    announces the verdict change, which is what this entry asked for. Liveness asks
-    `layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two layers for
-    direction or inside one against the shared-container predicate — over the same derived layer
-    the rule's own verdict rests on. **Swapping the layer lookup alone would have closed one of
-    the two fixtures and not the other**, which is why the predicate changed rather than the
-    lookup: on the peer-container graph no reading of membership inhabits a second layer, and
-    what the rule reports there is a same-layer crossing. Measured on both, each written and
-    indexed once by the same unchanged reindex and linted: nested parts `error_count 1,
-    rules_inert 1` to `error_count 1, rules_inert 0`; peer containers `error_count 2,
-    rules_inert 1` to `error_count 2, rules_inert 0`. No error appears or is withdrawn on either.
-    This repository is unchanged and still cannot see the shape, as the entry says: `lint
-    --strict` rc 0 with 55 findings, 0 errors and 0 inert rules before and after.
-    **One report changed hands.** `layer_declaration` stood down whenever fewer than two layers
-    held a node, because liveness named the same tags for exactly that graph; liveness is now
-    silent on the peer fixture, so the declaration states it instead and prints its sentence with
-    a count of one for the first time — a branch that read "1 of them hold a node" until this
-    bead, and is pinned by a test now.
 
 295. [2026-09-12] [LOW] a node whose `extra.tags` is a truthy non-iterable fails every tag question in the run, and the indexer wrote it without complaint
 
@@ -351,6 +220,10 @@
     green with it. Kept open here only until the next few weeks of PRs confirm it; close on the first
     month without a `malformed` or `disk I/O error` signature.
 
+    **Still open by its own condition, 2026-09-29.** The records sweep of this date confirmed the
+    cause removed and did not close the entry: it closes after the first month without a
+    `malformed` or `disk I/O error` signature, roughly 2026-10-29.
+
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
     **Severity:** low (the panel is a dashboard and decides nothing, but it is one of the surfaces an owner looks at to ask how much is wrong, and it answers `0 warnings` over 71 of them)
@@ -396,49 +269,6 @@
     **Tracker:** `beadloom-xzvp`.
     **Related:** #269 and BDL-069's `beadloom-rqma.4` — `reindex` attributing a prefix-sharing sibling's API routes to a node. Same family: a node whose source is a path inside another node's reach.
 
-289. [2026-09-12] [HIGH] a self-scanning guard test reads mutmut's own mutated copy of the package, so the nightly mutation run reaches a verdict on 0 of 6544 mutants
-
-    **Severity:** high (the mutation duty has produced no score since 2026-09-10 — the instrument that measures whether the tests can tell a defect from a correct program is itself dead, and the only thing that said so is a nightly nobody is watching)
-    **Command:** the `Mutation` workflow — `uv run mutmut run`, then `beadloom mutation --min-score`
-    **Context:** found 2026-09-12 while verifying `main` after BDL-069 landed. NOT caused by BDL-069; the first red nightly predates the epic's branch.
-    **What happened.** `tests/test_two_readers_of_one_markdown_table.py::TestThePackageHasTwoReadersOfOneRow::test_every_pipe_split_in_the_package_is_declared` fails inside every mutmut run:
-
-    ```
-    AssertionError: a body splits a line on a pipe and no reader has classified it — undeclared
-      [('application/guards/surface.py', 'x__bound__mutmut_2'),
-       ('application/guards/surface.py', 'x__bound__mutmut_3'),
-       ...
-       ('doc_sync/tables.py', 'x_cells_of__mutmut_6'),
-       ('doc_sync/tables.py', 'x_cells_of__mutmut_orig')], gone []
-    !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
-    1 failed, 4303 passed, 37 skipped, 1 xfailed in 600.70s
-    failed to collect stats. runner returned 1
-    ```
-
-    **The mechanism.** The guard derives its scan root from its own file: `_SRC = Path(__file__).resolve().parent.parent / "src" / "beadloom"` (line 49), and walks `_SRC.rglob("*.py")` (line 103). mutmut 3.x builds a `mutants/` tree and runs the pool from inside it — `mutation.yml:146` says so of `.beadloom/`, and the failure itself shows the TESTS are copied too: the undeclared sites are reported by paths relative to `_SRC`, and they name functions that exist only in mutmut's output. So inside a run `__file__` is under `mutants/`, and `_SRC` resolves to the mutated `src/beadloom` beside it rather than to the repository's. The guard then reads mutmut's generated variants (`x_cells_of__mutmut_1..6`, `x__bound__mutmut_2..4`), each a function body holding a `.split("|")` that no declaration in the test names, and asserts. The test is one of the 136 files in `[tool.mutmut] pytest_add_cli_args_test_selection` (`pyproject.toml:455`), so it runs on every mutant AND on the baseline stats collection, which is where it aborts the run.
-
-    **What the failure costs, measured from the run's own output.** Both `beadloom mutation` invocations report:
-
-    ```
-    Counters: killed 0, mutants 6544, no_tests 0, skipped 0, survived 0, suspicious 0, timeout 0
-    Score: none — see the findings below.
-    Floor: 0.94 — the score is under it.
-    WARN [mutation-run-zero-mutants] ...: the run produced 6544 mutants and reached a
-    verdict on none of them, so the score is a ratio over an empty denominator — a run
-    whose every mutant was skipped states no more than a run that never happened
-    ```
-
-    **The instrument is NOT the defect, and this is the part worth keeping.** `beadloom mutation` was handed 6544 mutants and zero verdicts and refused to divide — it printed `Score: none`, named the population, and exited 1. `mutation-run-zero-mutants` is exactly the rule BDL-068 added for this, and it is the reason this entry exists at all rather than a green nightly over an empty denominator. What is broken is the run it was asked to judge.
-
-    **When it started, derived rather than recalled.** Nightly history: `e17c2258` 2026-09-09 success, `0dd384d9` 2026-09-10 failure, `aa21caff` 2026-09-11 failure. The only commits in that range are `101fe7d1` (#63, BDL-068 S6), `2915363a` (#64) and `0dd384d9` (#65). `git log --diff-filter=A` puts the test's introduction at `101fe7d1`, and `git log -S` puts its entry into `pytest_add_cli_args_test_selection` at the same commit — the guard and its selection landed together, and the first nightly after them went red.
-
-    **Expected:** a guard that scans the package must scan the package under test, not whatever tree it happens to be copied into — the root belongs to an explicit anchor (the installed `beadloom.__file__`, or a path that refuses to resolve inside `mutants/`), and a body mutmut generated is not a reader anyone wrote. Either the guard excludes generated variants by shape, or it is removed from mutmut's selection and stays a plain-suite check. Second, and separately: a nightly whose red nobody sees is a check reporting into nothing — this one has been red for two nights and was found by hand.
-
-    **What this entry does NOT claim.** The mutation SCORE is unknown, not low: no mutant was judged, so nothing here says the declared targets are or are not covered to their floors. The last figure anyone can stand behind is the 2026-09-09 nightly. Whether any OTHER self-scanning test in the 136-file selection has the same shape was not measured — one was found, by its failure, and the class was not swept.
-
-    **Tracker:** `beadloom-ey4m`.
-    **Related:** #269 (the two readers this guard was built to hold apart), #239 (a population of zero reading as coverage — the same shape the WARN refused to produce here).
-
 287. [2026-09-12] [MEDIUM] a `.beadloom/config.yml` that cannot be read crashes `beadloom ci` with a traceback instead of a verdict — three shapes reach the same raise
 
     **Severity:** medium (an adopter's first-run experience, and the shapes of broken config no gate leg can report on, because the run ends before any leg runs)
@@ -466,106 +296,10 @@
     **Expected:** the brief should state the channel it does NOT cover, the way every other instrument in this project names the boundary of its knowledge — "N author comment(s) withheld; anything the launch prompt carried is not counted here". A reviewer would then know the number it is reading is partial. A stronger form: the launch prompt itself becomes an artifact the brief can read, so pointers are counted rather than remembered.
     **Related:** #212 and #219 (the withholding defeated by the epic document and by commit messages), #284 (a rule held by attention rather than by a check).
 
-285. [2026-09-11] [WITHDRAWN] ~~a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line~~
-
-    > **WITHDRAWN 2026-09-11, the same day, by the coordinator who filed it. The entry is wrong and the instrument was right.**
-    > An Explore run over the code found `waves/scope.py:175` `DECLARATION_FIELDS = (title, description, design, notes)` and `scope.py:138` unioning every anchored `refs:` line; `scope.py:225,239` mark the whole bead `ref_not_in_graph` when ANY one ref is unknown. The SPEC says so (`wave-plan/SPEC.md:51`, "every occurrence is read").
-    > So the appended line WAS read. It was unioned with the description's line, the union still carried `site-dashboard`, and one unknown ref poisons the bead. Removing `site-dashboard` resolved it — which is what a union predicts, and the entry misread as "the description wins".
-    > **And `waves` named the cause.** The same run's output carries, at line 52: `FINDING: unresolved_scope: beadloom-yn6i — ref_not_in_graph (site-dashboard)`. The filer read the output with `sed -n '1,22p'` and cut that line off. The diagnosis was drawn from a truncated answer — the pipe-masking shape, this time on content rather than an exit code.
-    > **The inferred unsafe case cannot happen.** A union can only widen a scope; a stale narrower line cannot narrow it.
-    > Bead `beadloom-rqma.3`, opened for this entry, is closed as not-a-defect. Kept rather than deleted, as this log keeps its withdrawals.
-    > **Not withdrawn, and not measured:** the same Explore run read that `mcp_server.py:759-763` takes the alphabetically FIRST declared ref and that `mcp.md:333` describes the fields as "design/description" — a second reader of the declaration that may disagree with `waves`. That is READ, not run, and is not this entry.
-
-    **Severity:** medium (measured failing SAFE — an unreadable description scope serialises against everything; the unsafe case is inferred and not measured, see below)
-    **Command:** `bd update <bead-id> --append-notes "refs: ..."`, then `beadloom waves`
-    **Context:** BDL-069, 2026-09-11. `beadloom-yn6i` was pulled into the epic; its description, written by the agent that filed it, ends with `refs: tui, site-dashboard, agent-prime`.
-    **Measured.** `site-dashboard` is not a graph node (`beadloom ctx site-dashboard` exits 1). The coordinator appended a correct declaration the way `/coordinator` and `CLAUDE.md` document it:
-
-    ```
-    bd update beadloom-yn6i --append-notes "refs: tui, application, agent-prime, mcp-server, cli"
-    beadloom waves beadloom-8lmj beadloom-yn6i ...
-      beadloom-8lmj | beadloom-yn6i — unresolved_scope: beadloom-yn6i: ref_not_in_graph
-    ```
-
-    The appended line was not read. After the SAME list was written into the description's own `refs:` line instead, the same command resolved the scope — `shared_node: agent-prime`. So the description's line wins and the notes line is ignored, with nothing in the output saying a second declaration exists.
-    **Why the documented method is the trap.** The instruction is to declare scope with `--append-notes`. A bead filed by an agent often already carries a `refs:` line in its description, because the filing template asks for one. From then on the documented command writes a declaration nobody reads, and `waves` keeps judging the old one.
-    **The unsafe case, stated as inferred.** Here the stale line named a node that does not exist, which reads as an unknown scope and serialises against everything — conservative. A stale line naming a valid but NARROWER set would read as a known scope, and two beads the appended line says conflict could be reported independent and launched together. That case was not constructed or run.
-    **Expected:** when a bead carries more than one `refs:` declaration, `waves` either merges them or reports the disagreement and which one it judged — never silently picks one. The documentation that says `--append-notes` should say what happens to a description that already declares scope.
-    **Related:** #283 and #284 (the same day; a declaration or a population the instrument did not read, and nothing saying so), #257.
-
-284. [2026-09-11] [MEDIUM] an axis row is ruled by the axis a node first surfaced under, and three nodes ruled out as blast radius turned out to be the sites the fix had to reach
-
-    **Severity:** medium (nothing wrong shipped — `scope-check` caught all three; the cost is that the approved RFC disagreed with the code three times in one epic)
-    **Command:** `/task-init` step 0.5 and the axes decision; `beadloom impact --section`
-    **Context:** BDL-069, planning on 2026-09-10, re-ruled three times on 2026-09-11 as the work landed.
-    **Measured.** The RFC ruled 13 nodes in scope. Three of the nodes ruled OUT were edited by the beads that closed:
-
-    | Node | Surfaced under | Ruled | What the fix actually had to reach |
-    |---|---|---|---|
-    | `reindex` | callers | no — "reads the graph downstream of the loss" | `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment |
-    | `graph-diff` | callers | no — "reads at a git ref" | it reads at a git ref AND parses what it reads — and was reducing duplicates the opposite way to the loader |
-    | `onboarding` | callers | no — "reads the manifest for other facts" | it owns `templates/docs/core/*.md.txt`, the skeleton text the fix had to change |
-
-    **The pattern is one direction, and that is the finding.** Every re-ruling moved a node from "blast radius" to "work site". None moved the other way. The ruling read each node by the AXIS it first appeared under — a `callers` row read as "calls into the change, is not changed" — and a node that surfaces as a caller can also own what the fix must reach.
-
-    **Two different causes sit under the three, and they want different answers:**
-    - **`onboarding` was invisible to the derivation, not misread.** The thing the fix reached is `.md.txt` template text, and `beadloom impact` reads Python. The derivation could not have shown that node owning those files; the person ruling had no row that said so.
-    - **`reindex` and `graph-diff` were visible and misread.** Both are Python and both appeared. What the axes do not carry is a node's ROLE in the fix, only its relation to the seed — and the ruling substituted the second for the first.
-
-    **Expected:**
-    - `/task-init`'s axes guidance should say, where the person rules, that the axis a node surfaced under is not its role in the change — a `callers` row can be a work site;
-    - and a derivation that cannot read a surface the change may reach should say so ON the row, not only in the section's `Unresolved` line. `onboarding`'s templates were in the unreadable population and nothing pointed from that population to the node that owns it.
-    **Related:** #283 (a second instrument reporting over a narrower population than the planning question, found the same day), #239 (a population of zero reading as coverage), #281 (`impact` cannot read YAML or Markdown).
-
-283. [2026-09-11] [MEDIUM] `beadloom waves --parent` compares only READY beads, so it reports a clean wave for a bead that conflicts with one already running
-
-    **Severity:** medium (the conflict was caught because the coordinator asked a second time; a coordinator that trusted the first answer launches two agents into one serialised pair)
-    **Command:** `beadloom waves --parent <epic>`
-    **Context:** BDL-069, 2026-09-11. `beadloom-8lmj` was pulled into the epic while `beadloom-h7b3` was in progress.
-    **Measured:**
-
-    ```
-    beadloom waves --parent beadloom-rqma
-      1 wave(s) for 1 bead(s), 0 serialisation(s)
-      Wave 1: beadloom-8lmj
-
-    beadloom waves beadloom-h7b3 beadloom-8lmj
-      2 wave(s) for 2 bead(s), 1 serialisation(s)
-      beadloom-8lmj | beadloom-h7b3 — dependency_edge: cli-commands -> agent-prime
-    ```
-
-    The first answer is correct about its population and wrong about the question. `--parent` takes the plan from `bd ready`, and a bead that is `in_progress` is not ready, so it is not in the plan and nothing is compared against it. The answer reads "0 serialisations" — which, for a coordinator deciding whether to launch, is the claim "nothing conflicts".
-    **Why it is this project's own class.** A check reported over a population narrower than the question it was asked, and the narrower population was not named. The output does not say "in-progress beads under this parent were not compared"; it says nothing about them at all.
-    **Expected:** `waves --parent` compares the planned beads against the beads under the same parent that are already `in_progress`, and names any serialisation against running work separately from serialisation within the plan. At minimum it states how many in-progress beads under the parent it did NOT compare against, so "0 serialisations" cannot be read as "nothing conflicts".
-    **Workaround, measured:** pass the running bead explicitly — `beadloom waves <running-id> <new-id>` — which compares the pair.
-    **Related:** #284 (the same day, the same shape in the planning ruling), #257 (`waves` derived two beads' scopes as disjoint while one document belonged to both), #274 (hand-listed ids losing beads).
-
-281. [2026-09-10] [MEDIUM] the release version is stated in NINE places, and no command names that population — three instruments each check a disjoint part of it and none knows the others exist
-
-    **Severity:** medium (nothing ships wrong — every place was found; the cost is that three of the seven fail only once a release is already underway, and one of those is `severity: error`)
-    **Command:** the release procedure itself; `beadloom lint --strict`, `beadloom docs audit`, `beadloom doctor`
-    **Context:** cutting 4.0.0 (BDL-068's release). Bumping `src/beadloom/__init__.py` and the four documents left the tree RED, and the two failures arrived in the two least convenient places: a `lint --strict` error, and two assertions inside the test suite.
-    **Measured on 2026-09-10.** The version is written in seven places, and what checks each one is not the same instrument:
-
-    | Where | What checks it |
-    |---|---|
-    | `src/beadloom/__init__.py:6` | the source of truth — `[tool.hatch.version]` reads it |
-    | `.claude/CLAUDE.md`, `project-info` auto-region | `beadloom doctor`, `agent_instructions_version` |
-    | `docs/getting-started.md:45` | `beadloom docs audit`, as a version subject |
-    | `.beadloom/_graph/beadloom.yml:5`, the node summary | `beadloom lint --strict`, rule `graph-summary-facts`, **severity error** |
-    | `docs/services/cli.md:778-779`, twice, inside an EXAMPLE of the attribution rule | `beadloom docs audit`, `doc-fact-stale` |
-    | `docs/domains/doc-sync/features/docs-audit/SPEC.md:107-108`, the same example in the twin document | nothing — and it is the same sentence as the row above |
-    | `tests/test_integration_v1.py:28` and `:35` | the test suite, two literals |
-    | `CHANGELOG.md`, the release heading | nothing |
-    | `.claude/development/ROADMAP.md:3` | nothing |
-
-    **The shape, and why it is this epic's own class.** BDL-068 S6 shipped `doc_sync/version_subjects.py` — the instrument for exactly this question, "which subject does a version token belong to". Its population is **documents**. The graph node summary is a YAML value judged by a lint rule; the test literals are Python judged by pytest. Three instruments, three disjoint populations, no one of them able to say how much of the fact it covers — and two places covered by none. Each check is individually correct and the union is unnamed, which is the population defect this epic spent six slices removing, sitting in the release procedure of the release that removed it.
-    **What made it visible rather than costly:** `graph-summary-facts` is `severity: error`, so the graph node was a hard red instead of a wrong string shipped to PyPI. That is the check working. The complaint is not that it fired — it is that it fired at the END, after the four "obvious" places had been edited and the work was believed done.
-    **The Gate DOES catch it — measured rather than assumed.** This entry first recorded that as unmeasured; the measurement was then taken by putting `v3.0.2` back into the node summary and running the Gate. `beadloom ci` exits 1 with `lint FAIL: 1 error(s)`, and the error names its own population in the form this epic argues for: *"read from 102 node summaries: 2 state a checkable fact (1 agree, 1 disagree, 0 could not be verified) and 100 state none"*. So nothing could reach `main` with a stale graph version. The complaint is only about WHEN — the Gate is the last door, and four of the nine places had already been edited under the belief the job was done.
-    **The same probe found TWO more places, which is the entry's real point.** Deriving the list by hand produced seven. Running the instruments produced nine: `docs audit` reported `docs/services/cli.md:779` (`doc-fact-stale: doc says '3.0.2' but project state is '4.0.0'`), and grepping for its twin found the identical sentence in `docs-audit/SPEC.md`, which NO check reads. A hand-derived population of a version's homes was wrong by two on the first attempt, by the person who had just written the list — which is the argument for the command rather than the checklist, made against the checklist's own author.
-    **And a third-order effect worth recording:** changing the node summary made `docs/architecture.md` and `docs/guides/ci-setup.md` stale by `hash_changed`, needing `sync-update beadloom`. Neither document states a version. The version's blast radius is therefore larger than the places that state it.
-    **Expected:** one command that names the population — `beadloom version-subjects`-shaped, reporting every place this project states its own version, what checks each, and which are checked by nothing. The derivation is available: the manifest names the source of truth, and the other six are literal matches for that value. Failing that, the release checklist should carry the list, which is the weaker answer this epic argues against — a rule stated as a spelling rather than as a shape.
-    **Related:** #253 (the foreign-subject face of the same scanner), #266 (a version subject whose source cannot be consulted), #239 (a population of zero reading as coverage).
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the brief names the launch prompt as a
+    channel it cannot see (`DEFEAT_NOTICE` and `CHANNEL_LAUNCH_PROMPT` in
+    `application/review_brief/models.py`, 97e05047, BDL-068). Remains: nothing counts what a
+    launch prompt carried, and a prompt is not a readable artifact. No bead holds this entry.
 
 280. [2026-09-10] [MEDIUM] a room's `locale` dimension is the TEXT codec, and a run has a second one it never reports — the codec `argv` is decoded with
 
@@ -606,17 +340,16 @@
     **Not fixed in `.84`, deliberately:** the fix is a behaviour change to the scaffold, whose write policy `beadloom-0mdo.67` settled eight days ago for a different question, and a bead about a CHECK's population should not also decide a WRITER's.
     **Related:** #277 (the same population as a constant, in the orphan check), #252 (the class the role-map check exists to close), #191 (the last time one command answered one question two ways).
 
-275. [2026-09-09] [MEDIUM] a bead qualifies as a work item by depending on the plan, so a one-bead plan is held against the bead that blocks on it
+277. [2026-09-09] [LOW] the orphan check's role population is the manifest and its tool population is a constant, and only the first is stated
 
-    **Severity:** medium (the report is `derived`, its reason is empty and its line is reassuring; the population it describes is the plan's own bead)
-    **Command:** `beadloom waves <bead>`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-0mdo.83`, which shipped the population notice on the same day. The notice exists because three beads of this slice were lost by hand-listing ids (#274).
-    **Measured on this repository's own tracker (870 beads):** `beadloom waves beadloom-0mdo.69` reports `every ready bead under beadloom-0mdo.70 is in this plan (0 of 1 bead(s) under beadloom-0mdo.70 are ready)`. `beadloom-0mdo.70` is the S6 REVIEW task. Its population is one bead — `beadloom-0mdo.69`, the bead the plan was asked about — because `beads_under` is a childless bead's own blockers and nothing else. The right answer is available and loses on size: for that plan there are exactly two candidates, `beadloom-0mdo.70` at 1 and `beadloom-0mdo` at 94, and `_narrowest` takes the minimum. `beadloom waves beadloom-0mdo.14` resolves to `beadloom-0mdo` correctly, because `.14` is a child and nothing blocks on it alone.
-    **Why it matters:** the line is the reassuring form of the shape this epic exists to remove — a clean statement over a population of one, with `derived` true and no reason recorded. It is worse than silence, because a coordinator reading it has been told the plan holds everything ready under its work item. And it fires exactly where #274 happened: a plan of ONE bead, which is the single-bead wave this project runs constantly.
-    **Expected:** a candidate work item has children. `beads_under` already distinguishes the two halves it sums — the parent-child closure and one dependency step — and a candidate whose closure is empty is a blocker rather than an item. Measured on the same tracker: under that rule `beadloom-0mdo.69` resolves to `beadloom-0mdo`, 94 beads, which is the answer `.14` already gets.
-    **Workaround, in force:** name the item. `derive_population(..., work_item=...)` stops the search, and a caller that passes `--parent` is answered about the item it asked for.
-    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-7`, `xfail(strict=True)`, with the measured attribution and both candidates' sizes pinned beside it. Verified by mutation: restricting candidates to beads that are somebody's parent turns it red as XPASS.
-    **Related:** #274 (the defect the notice answers), #245 (a line that fires on every run is a line its reader discounts — this one is the opposite failure, a line that reassures on every run).
+    **Severity:** low (no third tool ships today, so nothing here can produce it; it reaches an adopter before it reaches this repository)
+    **Command:** `beadloom config-check`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-ec1a`, which reports the role adapters a dropped tool leaves behind.
+    **Measured:** `orphaned_adapters` opens `for tool, agent_dir in TOOL_AGENT_DIRS.items()` and keeps a manifest row only when its parent equals one of the two directories that constant holds. With `tools: [claude]`, a manifest recording `.windsurf/agents/dev.md` and that file on disk, the check returns zero orphans and states no population it could not enter. The control is in the same run: `.cursor/agents/dev.md` under the same configuration IS reported.
+    **Why it matters:** the docstring makes exactly this argument for the other axis — "a role a later release renames or retires is still reported, because the record of the write does not depend on the roles this release happens to compose" — and the code does not make it for tools. It also names its limits carefully and names only the deleted-manifest one, so a reader has been told where the check is blind and this is not in the list. The adopter who meets it is the one who scaffolded under a release that shipped a third tool and upgraded to one that does not.
+    **Expected:** either the tool is derived from the manifest row's own directory, which is where the record of the write already is, or the constant's role as the population is stated beside the limit that already is.
+    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-9`, `xfail(strict=True)`, with the silence pinned beside it — the file on disk, the manifest row present, zero orphans. Verified by mutation: deriving the tool from the row's directory turns it red as XPASS.
+    **Related:** #191 (one command answering one hand edit two ways), #268-#273 (this bead's other findings).
 
 276. [2026-09-09] [MEDIUM] the ownership block's GitHub surface drops the caveat that says `unowned` is not a proof
 
@@ -629,71 +362,17 @@
     **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-8`, `xfail(strict=True)`, with a clause-by-clause comparison of the two surfaces pinned beside it. Verified by mutation: appending the caveat to the notices turns it red as XPASS.
     **Related:** #258 (a red that trains a discount — this is the same training through the missing caveat), #233.
 
-277. [2026-09-09] [LOW] the orphan check's role population is the manifest and its tool population is a constant, and only the first is stated
+275. [2026-09-09] [MEDIUM] a bead qualifies as a work item by depending on the plan, so a one-bead plan is held against the bead that blocks on it
 
-    **Severity:** low (no third tool ships today, so nothing here can produce it; it reaches an adopter before it reaches this repository)
-    **Command:** `beadloom config-check`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-ec1a`, which reports the role adapters a dropped tool leaves behind.
-    **Measured:** `orphaned_adapters` opens `for tool, agent_dir in TOOL_AGENT_DIRS.items()` and keeps a manifest row only when its parent equals one of the two directories that constant holds. With `tools: [claude]`, a manifest recording `.windsurf/agents/dev.md` and that file on disk, the check returns zero orphans and states no population it could not enter. The control is in the same run: `.cursor/agents/dev.md` under the same configuration IS reported.
-    **Why it matters:** the docstring makes exactly this argument for the other axis — "a role a later release renames or retires is still reported, because the record of the write does not depend on the roles this release happens to compose" — and the code does not make it for tools. It also names its limits carefully and names only the deleted-manifest one, so a reader has been told where the check is blind and this is not in the list. The adopter who meets it is the one who scaffolded under a release that shipped a third tool and upgraded to one that does not.
-    **Expected:** either the tool is derived from the manifest row's own directory, which is where the record of the write already is, or the constant's role as the population is stated beside the limit that already is.
-    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-9`, `xfail(strict=True)`, with the silence pinned beside it — the file on disk, the manifest row present, zero orphans. Verified by mutation: deriving the tool from the row's directory turns it red as XPASS.
-    **Related:** #191 (one command answering one hand edit two ways), #268-#273 (this bead's other findings).
-
-268. [2026-09-09] [MEDIUM] two readers of one markdown table row, and the component lifted so a third could not be wrong is one of them
-
-    **Severity:** medium (0 disagreements on this repository's 259 planning documents, so nothing here can produce it; the two readers meet inside one computation and one document)
-    **Command:** `beadloom waves`, `beadloom active-sync`, and every check that reads a `## Axes` section
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `doc_sync/tables.py` was lifted by `beadloom-0mdo.46` after two readers of one fact disagreed twice in one slice, and its docstring states the purpose: "a third reader cannot be wrong about it a third time" (#213, #244, #259).
-    **Measured:** `application/active_table/table.py:33` splits a row with its own body — `stripped.strip("|").split("|")` — and carries its own separator predicate. It is older than the component and does not spend it. A shape derivation over the parsed source finds exactly four `split("|")` sites in `src/beadloom`: two are row readers and two belong to `guards/surface.py` and are about tool matchers. The two row readers answer three measured rows differently: `|` and `||` are not a row to `cells_of` and one empty cell to `split_table_row`, and `|| a | b ||` is four cells to the first and two to the second.
-    **Why it matters:** the `focus-document` medium spends BOTH in one computation — it collects a document's rows with `tables.cells_of` and asks `active_table`'s `names_bead` about the cells it got — while `active-sync` reads the same document with `split_table_row`. A row written `|| beadloom-x.1 | dev | done ||` gives `active-sync` a bead id in its first cell and gives the medium an empty one, so one instrument updates that bead's status and the other reports that no row names it. Measured on this repository: 0 disagreements over 259 planning documents and 32 353 lines, 12 over 610 markdown files and 106 740 lines, every one of them a lone `|` inside a diagram. The divergence is invisible on this arrangement, which is BDL-UX #240's condition.
-    **Expected:** one reader. `split_table_row` spends `tables.cells_of`, or the component absorbs it — the two bodies answer one question and the question has one answer.
-    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-1`, `xfail(strict=True)`. `TestThePackageHasTwoReadersOfOneRow` derives the population from the source, so a FOURTH pipe-split has to be classified by whoever adds it.
-    **Related:** #213, #244, #259 (the three times a table boundary was read wrongly), #272 (the medium that spends both).
-
-269. [2026-09-09] [MEDIUM] a one-hyphen alignment row is valid GitHub Flavored Markdown and reaches the approved-node list as an axis named `-`
-
-    **Severity:** medium (a finding against a document that is correct, in the list `scope-check` compares every commit against)
-    **Command:** `beadloom docs quality`, `beadloom scope-check`, and the `docs-quality` step of `beadloom ci`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. This is BDL-UX #244's own class inside the component that was lifted to end it.
-    **Measured:** `doc_sync/tables.py`'s `_SEPARATOR_CELL_RE` is `^:?-{2,}:?$` and demands two hyphens. GitHub Flavored Markdown's delimiter row holds hyphens with optional colons and one hyphen is a well-formed cell, so `|-|-|-|-|-|` is a valid alignment row that `table_blocks` returns as DATA. `read_axes_section` over a `## Axes` section written that way returns two rows where the document states one: `axis='-'`, `node=''`, `in_scope=None`, and `check_axes_section` reports it as `axis-without-a-scope-decision`. `application/active_table/table.py`'s `is_separator_cells` answers the same row correctly, so the two predicates disagree and the lifted one is the wrong one.
-    **Why it matters:** the kept rows of the `## Axes` section are the approved-node list a commit is judged against, and a phantom row enters it. The document's author has no repair except changing a spelling their Markdown renderer is indifferent to. Nothing here produces it because this repository writes `| ------ |`, which is the arrangement question BDL-UX #240 records.
-    **Expected:** `^:?-+:?$`. The predicate answers what the format defines rather than what this repository happens to write.
-    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-2`, two `xfail(strict=True)` — one on the predicate and one on the section it reaches. Verified by mutation: widening the regex turns both red as XPASS.
-    **Related:** #244 (the same class, first instance), #268 (the second reader that gets this right).
-
-271. [2026-09-09] [HIGH] a ledger file the claim reader drops is a free number, so the allocator hands out a number two writers then hold
-
-    **Severity:** high (the collision the allocator exists to make impossible, produced by the allocator, silently)
-    **Command:** `beadloom issue-number allocate`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.66` allocates a number by `os.open(O_CREAT | O_EXCL)` of one claim file per number, and the file name IS the allocation.
-    **Measured:** `read_claims` keeps a `*.md` whose stem matches `^(\d{1,6})$` and drops every other file in the ledger without reporting one. With a ledger holding `0003-the-clean-room-convention.md` and a log whose highest number is 2, `read_claims` returns `()`, `allocate_number` computes candidate 3, creates `0003.md` because that name is free, and returns 3. Two writers now hold #3 in two files. `check_issue_numbers` afterwards reports `claims=1` and one `unwritten-claim` — a finding about the wrong thing — and says nothing about the file it could not read.
-    **Why it matters:** the name the reader drops is the name the module's own docstring invites. The claim file is described as "where the incident's body grows when the log becomes a composed view of the ledger", and a body grows a title. The failure is silent in both directions: nothing reports the unread file, and the number it holds is handed out as free — which is the mechanism BDL-UX #187, #211 and #253 were filed about, arriving through the door built to close them.
-    **Expected:** a claim is the number at the start of the file name, so `0003-the-clean-room-convention.md` holds #3; and a `*.md` in the ledger that states no number at all is reported as a population the reader could not enter, never dropped.
-    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-4`, `xfail(strict=True)`, with the whole collision pinned beside it. Verified by mutation: relaxing the stem pattern to a prefix match turns it red as XPASS.
-    **Related:** #187, #211, #253 (the collisions the allocator answers), #267 (the check's stated population).
-
-272. [2026-09-09] [MEDIUM] the `focus-document` medium reads the first cell of every table row in the file, so its population is neither the bead table nor the bead column
-
-    **Severity:** medium (a false red on a bead table that numbers its waves first, and a false green on a bead named only by a table about something else)
-    **Command:** `beadloom waves`
-    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.75` shipped the medium so a wave states the document every bead of a work item writes, and `FocusDocument.row_cells` is documented as "the FIRST cell of every markdown table row in the file", justified as "the column an ACTIVE table names its bead in".
-    **Measured, on projects built to be arranged differently:** with a bead table headed `| Wave | Bead | Status |`, the check reports `failed — 2 of 2 bead(s) of this plan write into a focus document no row of it names` about a document that gives each of them a row of its own. With a bead named only by a second table — `| Bead | Why it was not done here |`, the deferral shape this repository's own `active-table` documents — the check reports `passed — each writes a line of its own` about a bead the status table has no row for.
-    **Why it matters:** both halves are claims about an arrangement rather than about the flow. The column is a convention, and the population is every table row rather than the bead table's. Measured on this repository: 0 of 58 `ACTIVE.md` documents carry a short-form bead id outside the status table, and 28 of the 58 carry no bead-status table `active_table.find_status_column` can find at all — including BDL-068's own, where the medium still collects 35 first cells from four other tables. So neither face can be produced here, which is BDL-UX #240's condition again.
-    **Expected:** the medium reads the bead table, through the same reader `active-sync` locates it with — a header whose first cell is `Bead` followed by an alignment row — and reports a document that holds no such table as a population it could not enter rather than as rows.
-    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-5`, two `xfail(strict=True)`, one per face, each with the measured verdict pinned beside it.
-    **Related:** #257 (the medium's own entry), #268 (the two readers this computation spends), #210 (the ambiguity `names_bead` already refuses to guess at).
-
-274. [2026-09-09] [MEDIUM] `beadloom waves` takes the beads to plan as an authored argument list, so a wave is planned over the population its caller happened to type
-
-    **Severity:** medium (the tool whose subject is derived scope requires an authored population to start from, and the coordinator of the epic about that lost three beads to it)
-    **Command:** `beadloom waves BEADS...`
-    **Tracker:** to be filed as a bead
-    **Measured, on the coordinator of BDL-068 S6:** `beadloom-0mdo.69` could not close because three beads of the slice had never been executed — `beadloom-0mdo.78`, `beadloom-ec1a` and `beadloom-iur5`. All three were in `bd ready --limit 0` the whole time. Eleven waves were planned by passing hand-listed bead ids to `waves`, and three ids were never typed. Nothing reported their absence, because nothing knew they should have been present.
-    **The shape is this epic's own, in the instrument that carries it.** `waves` decides a wave from the **derived** independence of node scopes — that is the whole point of it, and BDL-UX #232 was filed against reading an authored `refs:` line. But the set of beads it reasons over is **authored**: whatever the caller wrote on the command line. So the tool derives the hard half and inherits the easy half from a human typing ids at midnight.
-    **Why the coordinator did not notice:** every plan it produced was internally correct. The waves were right, the serialisations were right, the media were measured. A plan over a subset is not a wrong plan — it is a right plan about a smaller world, and `waves` has no way to say *"you did not ask me about three beads that are ready under this parent."*
-    **Expected:** `waves` can derive its own population — `--parent <epic-id>`, or "everything ready under this work item" — and when given an explicit list, says how many ready beads under the same parent it was **not** asked about. The second half is the cheaper one and is the same sentence the Gate now prints about the suite it does not run (BDL-UX #247).
-    **Related:** #232 (an authored `refs:` line), #257 and #261 (the population `waves` compares is narrower than the change), and `beadloom-0mdo.78` — which is one of the three beads this defect lost.
+    **Severity:** medium (the report is `derived`, its reason is empty and its line is reassuring; the population it describes is the plan's own bead)
+    **Command:** `beadloom waves <bead>`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69` re-asking its questions of `beadloom-0mdo.83`, which shipped the population notice on the same day. The notice exists because three beads of this slice were lost by hand-listing ids (#274).
+    **Measured on this repository's own tracker (870 beads):** `beadloom waves beadloom-0mdo.69` reports `every ready bead under beadloom-0mdo.70 is in this plan (0 of 1 bead(s) under beadloom-0mdo.70 are ready)`. `beadloom-0mdo.70` is the S6 REVIEW task. Its population is one bead — `beadloom-0mdo.69`, the bead the plan was asked about — because `beads_under` is a childless bead's own blockers and nothing else. The right answer is available and loses on size: for that plan there are exactly two candidates, `beadloom-0mdo.70` at 1 and `beadloom-0mdo` at 94, and `_narrowest` takes the minimum. `beadloom waves beadloom-0mdo.14` resolves to `beadloom-0mdo` correctly, because `.14` is a child and nothing blocks on it alone.
+    **Why it matters:** the line is the reassuring form of the shape this epic exists to remove — a clean statement over a population of one, with `derived` true and no reason recorded. It is worse than silence, because a coordinator reading it has been told the plan holds everything ready under its work item. And it fires exactly where #274 happened: a plan of ONE bead, which is the single-bead wave this project runs constantly.
+    **Expected:** a candidate work item has children. `beads_under` already distinguishes the two halves it sums — the parent-child closure and one dependency step — and a candidate whose closure is empty is a blocker rather than an item. Measured on the same tracker: under that rule `beadloom-0mdo.69` resolves to `beadloom-0mdo`, 94 beads, which is the answer `.14` already gets.
+    **Workaround, in force:** name the item. `derive_population(..., work_item=...)` stops the search, and a caller that passes `--parent` is answered about the item it asked for.
+    **Held by:** `tests/test_the_populations_the_last_four_beads_report_over.py`, `FINDING BDL-068.S6-7`, `xfail(strict=True)`, with the measured attribution and both candidates' sizes pinned beside it. Verified by mutation: restricting candidates to beads that are somebody's parent turns it red as XPASS.
+    **Related:** #274 (the defect the notice answers), #245 (a line that fires on every run is a line its reader discounts — this one is the opposite failure, a line that reassures on every run).
 
 273. [2026-09-09] [MEDIUM] a clean room states the CAUSE of its missing freshness baseline and never the population, and about forty verdicts in one epic were read as green over it
 
@@ -706,61 +385,60 @@
     **Held by:** `tests/test_the_room_and_the_claim_it_supports.py`, `FINDING BDL-068.S6-6`, `xfail(strict=True)` on the room's clause, with the Gate's own honest line held beside it so a later simplification of either cannot remove the only place the population is stated.
     **Related:** #181 (a room's verdict is not the tree's), #258 (an expected red that trained a discount), #266 (the other thing the room's absent `.git` reaches), #243 (why a baseline must not be carried in).
 
-253. [2026-09-04] [LOW] a scanned document cannot say which release of a DEPENDENCY a measurement was taken on, because every semver token is read as a claim about this project's version
+272. [2026-09-09] [MEDIUM] the `focus-document` medium reads the first cell of every table row in the file, so its population is neither the bead table nor the bead column
 
-    **Severity:** low (one suppression per sentence, and the suppression route is declared, dated and checked — but the class recurs for every adopter who documents a dependency's behaviour)
-    **Command:** `beadloom docs audit`
-    **Context:** BDL-068 S5, `beadloom-0mdo.39`. `docs/domains/application/README.md` gained the sentence "Measured on bd 1.0.4 in an isolated rig with every exit code read without a pipe", which is what makes the landing-lock measurement answerable at all.
-    **Measured:** `docs audit` reported `1 stale fact(s)` — `README.md:56 version mentioned 1.0.4, actual 3.0.2` — and the Gate went red on it. `_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a pin, so it has no notion of WHOSE product a version belongs to.
-    **Why it matters:** this project requires every measurement to name the room it was taken in, and the version of the tool under measurement is part of that room. The audit currently makes the two rules contradict: a document either states which release it measured, or it passes. The two existing suppressions of the same family cover an EXAMPLE token (#190) and a PAST TENSE (#205); this is a third form — another product's number — and it is the one an adopter meets first, because documenting a dependency's behaviour is ordinary.
-    **Expected:** a version token attributed to a named product is not read as this project's version. The attribution is present in the text every time (`bd 1.0.4`, `Python 3.13.7`, `mcp>=2.0`), so this is a token-boundary question rather than a semantic one — the same shape as the clause-scoped matching that retired three triples in BDL-061.45.
-    **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
+    **Severity:** medium (a false red on a bead table that numbers its waves first, and a false green on a bead named only by a table about something else)
+    **Command:** `beadloom waves`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.75` shipped the medium so a wave states the document every bead of a work item writes, and `FocusDocument.row_cells` is documented as "the FIRST cell of every markdown table row in the file", justified as "the column an ACTIVE table names its bead in".
+    **Measured, on projects built to be arranged differently:** with a bead table headed `| Wave | Bead | Status |`, the check reports `failed — 2 of 2 bead(s) of this plan write into a focus document no row of it names` about a document that gives each of them a row of its own. With a bead named only by a second table — `| Bead | Why it was not done here |`, the deferral shape this repository's own `active-table` documents — the check reports `passed — each writes a line of its own` about a bead the status table has no row for.
+    **Why it matters:** both halves are claims about an arrangement rather than about the flow. The column is a convention, and the population is every table row rather than the bead table's. Measured on this repository: 0 of 58 `ACTIVE.md` documents carry a short-form bead id outside the status table, and 28 of the 58 carry no bead-status table `active_table.find_status_column` can find at all — including BDL-068's own, where the medium still collects 35 first cells from four other tables. So neither face can be produced here, which is BDL-UX #240's condition again.
+    **Expected:** the medium reads the bead table, through the same reader `active-sync` locates it with — a header whose first cell is `Bead` followed by an alignment row — and reports a document that holds no such table as a population it could not enter rather than as rows.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-5`, two `xfail(strict=True)`, one per face, each with the measured verdict pinned beside it.
+    **Related:** #257 (the medium's own entry), #268 (the two readers this computation spends), #210 (the ambiguity `names_bead` already refuses to guess at).
 
-    **RESOLVED 2026-09-09 by `beadloom-0mdo.63` (BDL-068 S6).** A version is now attributed to the nearest subject NAME to its left inside its own clause, and only a version whose nearest name is this project's — or that has no name at all — is compared against this project's version. The vocabulary of names is derived from what a project already declares (every distribution in `pyproject.toml` / `package.json` / `Cargo.toml`, the interpreter families implied by `requires-python` / `engines.node` / `rust-version`, and `git` when the project is a git repository) and configured per NAME in `docs_audit.subjects` for what no manifest carries. **Measured with a real `DocScanner` over the audit's 68-document surface: eight of the ten version triples went inert and were retired, and the 13 tokens they covered are now reported as `bd x12, git x1` under `attributed_versions` rather than silenced.** One `docs_audit.subjects` entry — `bd` — replaced nine of them.
+271. [2026-09-09] [HIGH] a ledger file the claim reader drops is a free number, so the allocator hands out a number two writers then hold
 
-    Two things this fix deliberately does NOT cover, stated rather than assumed: the example token `v2.2.0` in `docs/services/cli.md` (a version MENTIONED rather than used — see #190 below) and `3.0.0` in `docs/guides/architecture-model.md` (this project's OWN past version — #205). Both keep their triple, and the config records why.
+    **Severity:** high (the collision the allocator exists to make impossible, produced by the allocator, silently)
+    **Command:** `beadloom issue-number allocate`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `beadloom-0mdo.66` allocates a number by `os.open(O_CREAT | O_EXCL)` of one claim file per number, and the file name IS the allocation.
+    **Measured:** `read_claims` keeps a `*.md` whose stem matches `^(\d{1,6})$` and drops every other file in the ledger without reporting one. With a ledger holding `0003-the-clean-room-convention.md` and a log whose highest number is 2, `read_claims` returns `()`, `allocate_number` computes candidate 3, creates `0003.md` because that name is free, and returns 3. Two writers now hold #3 in two files. `check_issue_numbers` afterwards reports `claims=1` and one `unwritten-claim` — a finding about the wrong thing — and says nothing about the file it could not read.
+    **Why it matters:** the name the reader drops is the name the module's own docstring invites. The claim file is described as "where the incident's body grows when the log becomes a composed view of the ledger", and a body grows a title. The failure is silent in both directions: nothing reports the unread file, and the number it holds is handed out as free — which is the mechanism BDL-UX #187, #211 and #253 were filed about, arriving through the door built to close them.
+    **Expected:** a claim is the number at the start of the file name, so `0003-the-clean-room-convention.md` holds #3; and a `*.md` in the ledger that states no number at all is reported as a population the reader could not enter, never dropped.
+    **Held by:** `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py`, `FINDING BDL-068.S6-4`, `xfail(strict=True)`, with the whole collision pinned beside it. Verified by mutation: relaxing the stem pattern to a prefix match turns it red as XPASS.
+    **Related:** #187, #211, #253 (the collisions the allocator answers), #267 (the check's stated population).
 
-    **Related:** #190 (its foreign-subject face is absorbed here; its example-token face is not), #205 (the past tense, open).
+269. [2026-09-09] [MEDIUM] a one-hyphen alignment row is valid GitHub Flavored Markdown and reaches the approved-node list as an axis named `-`
 
-267. [2026-09-09] [MEDIUM] `issue-number check` returns a clean list over 2% of the log, because the leg that skips history never says how much of it it skipped
+    **Severity:** medium (a finding against a document that is correct, in the list `scope-check` compares every commit against)
+    **Command:** `beadloom docs quality`, `beadloom scope-check`, and the `docs-quality` step of `beadloom ci`
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. This is BDL-UX #244's own class inside the component that was lifted to end it.
+    **Measured:** `doc_sync/tables.py`'s `_SEPARATOR_CELL_RE` is `^:?-{2,}:?$` and demands two hyphens. GitHub Flavored Markdown's delimiter row holds hyphens with optional colons and one hyphen is a well-formed cell, so `|-|-|-|-|-|` is a valid alignment row that `table_blocks` returns as DATA. `read_axes_section` over a `## Axes` section written that way returns two rows where the document states one: `axis='-'`, `node=''`, `in_scope=None`, and `check_axes_section` reports it as `axis-without-a-scope-decision`. `application/active_table/table.py`'s `is_separator_cells` answers the same row correctly, so the two predicates disagree and the lifted one is the wrong one.
+    **Why it matters:** the kept rows of the `## Axes` section are the approved-node list a commit is judged against, and a phantom row enters it. The document's author has no repair except changing a spelling their Markdown renderer is indifferent to. Nothing here produces it because this repository writes `| ------ |`, which is the arrangement question BDL-UX #240 records.
+    **Expected:** `^:?-+:?$`. The predicate answers what the format defines rather than what this repository happens to write.
+    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-2`, two `xfail(strict=True)` — one on the predicate and one on the section it reaches. Verified by mutation: widening the regex turns both red as XPASS.
+    **Related:** #244 (the same class, first instance), #268 (the second reader that gets this right).
 
-    **Severity:** medium (the verdict is honest about the EMPTY case and silent about the ordinary one, which is every project that adopts the allocator with a log already written)
-    **Command:** `beadloom issue-number check`, and the `issue-log` step of `beadloom ci`
-    **Context:** BDL-068 S6, `beadloom-l9ee`. The bead was deciding whether the log's entry BODIES should move to one file per entry, and the answer turns on how much of the log `beadloom-0mdo.66`'s ledger actually protects.
-    **Measured on this repository:** the verdict read `240 entr(ies), 5 claim(s), floor 262` and then `No duplicate, unwritten or unclaimed number.` `_ledger_findings` skips every entry below the floor — `if entry.number < floor: continue` — so `unclaimed-number` entered **5 of the 240 entries the header names** and the pass read as a statement about all of them. The Gate line was the same shape: `240 entr(ies) uniquely numbered; 5 claim(s), floor 262`.
-    **Why it matters:** the skip is deliberate and right — the floor is derived so a project's history is not retro-required to have been allocated (`beadloom-mr2l.72`'s class) — but BDL-068's own constraint is that the unresolved population is part of every answer, and a clean list is trusted and stopped at. The module already stated the ALL-OR-NOTHING case (`not_verified` when the ledger holds no claim) and had no words for the partial one, which is the case every adopter is in from their first allocation onwards. The related silence: `unaccounted` numbers were reported as a count, and a count is not something a reader can go and look for.
-    **Expected:** the verdict names the population the leg did not enter, and names the numbers it cannot account for.
-    **RESOLVED 2026-09-09 by `beadloom-l9ee` (BDL-068 S6).** `IssueNumberReport.entries_below_floor` carries the population; the command prints `235 of 240 entr(ies) are below floor 262: \`unclaimed-number\` did not enter them, and no claim holds their numbers`, the Gate line carries `PARTLY CHECKED`, and the unaccounted numbers are named rather than counted. **Observed while writing this entry, and deliberately not done:** quoting an unaccounted number in prose moves it into the mention population and silences its own report, because the check's corpus is the log that contains the entry describing the check. The number this log cannot account for is therefore left unquoted here so that it keeps being reported. The self-reference errs in the safe direction for the allocator — a number quoted anywhere is never handed out again — and in the unsafe one for this leg, which is why the leg reports rather than blocks. Neither leg is a finding — an unreached population is coverage — so no tree turns red on the upgrade. The clause is emitted only when there is something to qualify, because a summary that qualifies every log is one a reader stops reading.
-    **Related:** #260 (this is the qualification that bead's decision rests on), #173 (a leg that read nothing must say so), the ledger `beadloom-0mdo.66` shipped.
+268. [2026-09-09] [MEDIUM] two readers of one markdown table row, and the component lifted so a third could not be wrong is one of them
 
-265. [2026-09-09] [MEDIUM] the graph is one file, so one writer per file is available here and is not taken
+    **Severity:** medium (0 disagreements on this repository's 259 planning documents, so nothing here can produce it; the two readers meet inside one computation and one document)
+    **Command:** `beadloom waves`, `beadloom active-sync`, and every check that reads a `## Axes` section
+    **Context:** BDL-068 S6, `beadloom-0mdo.69`. `doc_sync/tables.py` was lifted by `beadloom-0mdo.46` after two readers of one fact disagreed twice in one slice, and its docstring states the purpose: "a third reader cannot be wrong about it a third time" (#213, #244, #259).
+    **Measured:** `application/active_table/table.py:33` splits a row with its own body — `stripped.strip("|").split("|")` — and carries its own separator predicate. It is older than the component and does not spend it. A shape derivation over the parsed source finds exactly four `split("|")` sites in `src/beadloom`: two are row readers and two belong to `guards/surface.py` and are about tool matchers. The two row readers answer three measured rows differently: `|` and `||` are not a row to `cells_of` and one empty cell to `split_table_row`, and `|| a | b ||` is four cells to the first and two to the second.
+    **Why it matters:** the `focus-document` medium spends BOTH in one computation — it collects a document's rows with `tables.cells_of` and asks `active_table`'s `names_bead` about the cells it got — while `active-sync` reads the same document with `split_table_row`. A row written `|| beadloom-x.1 | dev | done ||` gives `active-sync` a bead id in its first cell and gives the medium an empty one, so one instrument updates that bead's status and the other reports that no row names it. Measured on this repository: 0 disagreements over 259 planning documents and 32 353 lines, 12 over 610 markdown files and 106 740 lines, every one of them a lone `|` inside a diagram. The divergence is invisible on this arrangement, which is BDL-UX #240's condition.
+    **Expected:** one reader. `split_table_row` spends `tables.cells_of`, or the component absorbs it — the two bodies answer one question and the question has one answer.
+    **Held by:** `tests/test_two_readers_of_one_markdown_table.py`, `FINDING BDL-068.S6-1`, `xfail(strict=True)`. `TestThePackageHasTwoReadersOfOneRow` derives the population from the source, so a FOURTH pipe-split has to be classified by whoever adds it.
+    **Related:** #213, #244, #259 (the three times a table boundary was read wrongly), #272 (the medium that spends both).
 
-    **Severity:** medium (it removes a shared write rather than reporting it, and it changes every adopter's `.beadloom/_graph/` layout)
-    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
-    **Issue:** `.beadloom/_graph/services.yml` holds every one of this project's 100 nodes, so every bead that adds, renames or moves one writes the same file. `beadloom-kqsv` shipped the `graph-files` medium, which STATES the sharing and checks the one half a plan can observe — whether the node population the graph files declare is the one the index resolved its scopes from. It does not remove the sharing, and it cannot: the node a bead is about to add is in no graph the plan could read.
-    **The primitive that would remove it** is the one `beadloom-0mdo.66` already took at the boundary for issue numbers — one writer per file, `O_CREAT|O_EXCL`, one claim file per number. Applied here it is one graph file per node. `onboarding/graph_files.each_graph_file` already globs `*.yml`, so the loader needs no change, and the serialisation BDL-UX #261 sketched — a bead's scope reaching the graph file its declared nodes are defined in — becomes both meaningful and non-noisy on the same act. Measured today it fires on every pair of every wave and collapses each to a wave of one, which is BDL-UX #245's failure mode.
-    **The cost, stated rather than waved off:** 100 files where there is one, a `services.yml` whose comments group nodes by layer and would have to go somewhere, and every reader of that directory re-measured for 100 opens instead of one. Weigh it against the write rate: 8 of the 55 commits on `features/BDL-068` touch `services.yml`.
-    **RESOLVED 2026-09-09 by `beadloom-0mdo.80` (BDL-068 S6).** `.beadloom/_graph/` now holds one file per node, named after the node, and every edge sits in a file named after one of its two endpoints — under its `src` by default, and under the NEW node when a bead adds one, since that is the placement that writes no existing node's file. `onboarding/graph_layout.py` states the property and reports the surface where a shared write is still possible; seven pins over this repository's own graph go red the day a node is appended to another node's file. **The cost was measured before the split was taken, over 100 nodes and 169 edges:** `load_graph` 61.34 ms to 66.40 ms, `each_graph_file` 50.24 ms to 55.44 ms, `beadloom reindex --full` 1895 ms to 1950 ms, and `lint --strict`, `doctor` and `status` unmoved because they read the index. **Nothing that was one pass became N** — every reader of the directory already globbed `*.yml` and iterated. The migration was text-level rather than a `yaml.safe_dump` round trip: all 161 comment lines and all 1146 content lines survive as written, and the loader produces identical node and edge rows before and after. What is not preserved is `git blame` through a 1-to-100 split. **The write rate the entry asked to weigh this against was re-read at the finer grain that decides it:** 7 of those 8 commits ADD a node, so the shared write was the common case and not a corner.
-    **AND THE SERIALISATION THE SPLIT WAS SUPPOSED TO UNLOCK IS REDUNDANT, NOT MEANINGFUL — the opposite of what this entry predicted.** One node per file makes the node-to-file map injective, so "two beads whose declared nodes are defined in one graph file" holds exactly when the two beads declare the same node, which `conflict_between` already reports as `shared_node`. It was noise on a single-file graph and is redundant on a split one, and there is no layout between the two where it is neither. `TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` is that measurement, and `beadloom-kqsv`'s pin for the reopening condition was retired rather than restated, so the fact has one home.
-    **What did NOT change, deliberately.** `beadloom init` still writes one `services.yml` and a single-file graph stays valid for every reader, so no adopter is migrated and no migration command ships. One file is the easier thing to review once, and the shared write only matters when concurrent agents write the graph. What an adopter gets is the number, through the `graph-files` medium of `beadloom waves`, whose pass now names the file every node-adding bead writes with the count it holds, or says each node has a file of its own.
-    **Related:** #261 (the medium this leaves in place), #260 (one writer per file, stated as the general property), the ledger directory `beadloom-0mdo.66` shipped.
+263. [2026-09-09] [MEDIUM] the codec sweep's vocabulary is a list of call names, so a decoding call it has never seen reads as no call at all
 
-264. [2026-09-09] [MEDIUM] a population literal is a derivable fact with two homes, and every node-adding bead pays three hand edits for it
-
-    **Severity:** medium (it reddens CI for a bead that did not cause it, and the bead that did cause it correctly refuses to fix it)
-    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
-    **Issue:** `tests/test_bead77_kind_and_root_disagree.py` asserts `populations[SPACE_TO_BE] == 203`, `populations[SPACE_AS_IS] == 116` and `len(spaces.working_documents(REPO_ROOT)) == 58`, and `tests/test_reference_leg_syntax.py` asserts a reference count. Every one is a hand-maintained copy of a fact this project can derive, so any bead that adds a node or a planning document has to find and bump it.
-    **Measured:** `beadloom-mr2l.72`'s comment records the third instance — adding one bug feature's BRIEF and ACTIVE reddened CI on three literals at once, none owned by the bead that caused them, the dev subagent correctly refused to edit outside its bead and the coordinator bumped them by hand. `beadloom-0mdo.59` and `beadloom-0mdo.63` then hit it again in one S6 wave: both added a graph node, both had to raise the same count, and `beadloom waves` reported `0 serialisations` for the pair. 7 of the 55 commits on `features/BDL-068` touch that one test file.
-    **Expected:** the assertion states the RELATION the test is about — that the TO-BE and AS-IS populations partition the documents the spaces resolve, that no working document is counted twice — and derives the count rather than restating it. A test that has to be edited by every unrelated bead is not pinning a behaviour, it is pinning a snapshot.
-    **Not a serialisation and not a medium:** one writer per file does not apply, because the file already has one writer per bead. The defect is one fact with two homes, which is what BDL-068 exists to remove; the answer is to delete the copy.
-    **Related:** #261 (the population this was measured in), `beadloom-mr2l.72` (the same shape for `ROADMAP.md` and the issue log).
-
-261. [2026-09-09] [HIGH] a wave shares more than its focus document — the graph the plan is derived from, and a test's population literals
-
-    **Severity:** high (one of the shared artifacts is the derivation's own input)
-    **Tracker:** `beadloom-kqsv` — `bd show` it; the tracker is the source of truth for this entry's text
-    **Issue:** measured across three S6 waves, `beadloom waves` reported `0 serialisations` while four artifacts were shared in fact: `ACTIVE.md`, `docs/services/components/cli-commands/DOC.md`, `tests/test_bead77_kind_and_root_disagree.py` (hand-maintained population literals any node-adding bead must bump), and `.beadloom/_graph/services.yml` — **the graph `waves` derives scope from**. A bead that adds a node writes the file the plan is computed from, so the plan cannot see that collision by construction.
-    **Related:** #257 (the focus document), and `beadloom-mr2l.72`, whose comment already recorded the population-literal shape as three hand edits per feature.
+    **Severity:** medium (the instrument reports clean about a population it did not enter, which is the class it exists to prevent)
+    **Command:** `uv run pytest tests/test_locale_independent_io.py tests/test_decode_handlers.py`
+    **Context:** BDL-068 S6, `beadloom-0mdo.66`. The allocator writes its claim file through `os.open(O_CREAT | O_EXCL)` and then `os.fdopen(handle, "w", encoding="utf-8")`, which is the first `os.fdopen` in `src/beadloom`.
+    **Measured:** the shared definition in `tests/decoding_calls.py` recognises a text-I/O call by NAME — `read_text`, `write_text`, `open`, `decode` and five `subprocess` entry points. `os.fdopen` is in none of them, so both instruments walked past a call that decodes: the codec sweep did not ask it to state an `encoding=`, and the handler ledger did not ask what a decode failure there would do. It happens to state its codec, so nothing is wrong today — which is exactly why it is worth recording, because the next one need not.
+    **The same run found the opposite error and it is already fixed:** `os.open` was read AS a text open, because `called_name` returns `open` for `os.open(...)` and the module-name guard only knew `tarfile`, `zipfile` and friends. That produced a false positive in both instruments at once and is closed here by `DESCRIPTOR_OPENERS` — the same shape as the `CONTAINER_OPENERS` note above it, which its own comment says was found the same way, by a call this package had never made.
+    **Why it is not closed with it:** the false positive is a fixed misreading of a known name; this is an unknown name, and the repair is a different one. A vocabulary of call names cannot be completed by adding to it — `io.TextIOWrapper`, `codecs.open` and `csv.reader` over a text handle are all outside it too. The honest fix is the one this project applies everywhere else: report the population the sweep could not classify, so a call it does not recognise arrives as *unresolved* rather than as absent.
+    **Expected:** `tests/decoding_calls.py` states what it did NOT classify, and the two instruments report that count beside their verdicts.
+    **Related:** #173 (unverifiable is not clean), and `beadloom-0mdo.64`, which found `CONTAINER_OPENERS` by rooting the sweep at `tests/`.
 
 260. [2026-09-09] [MEDIUM] `ACTIVE.md` is a shared write, and the property that makes it impossible is one writer per file — not generation
 
@@ -780,16 +458,9 @@
 
     **The ADR genre is NOT shipped, and neither is the `decision` doc kind — deliberately, on this entry's own condition.** The condition it states is right and is not optional: a decision record must be a doc-code pair so it can go stale, or it is this log in a different folder. The pairing is `doc-sync` and `graph` machinery — a new doc kind, indexed into `docs`, paired by `sync_check` — and this bead's derived axis is `issue-numbers` alone. Shipping the directory without the pairing is the regression this entry warned about, so neither half ships here. The decision itself is recorded where this project already records decisions and already checks them, which is `CONTEXT.md`'s table.
 
-259. [2026-09-08] [LOW] a THIRD reader of a markdown table takes one header for a whole heading, and is guarded only by the words its rows happen to carry
-
-    **Severity:** low (the class is present and no instance exists today, because vocabulary is doing the work a boundary should do)
-    **Command:** `beadloom task-init` routing, `beadloom config-check`
-    **Tracker:** `beadloom-0mdo.77`; found by `beadloom-0mdo.46` while fixing the other two
-    **Context:** BDL-068 S6 wave 5, from the fix for #244. #213 and #244 were the same sentence in two readers, hours apart; the search for a third found one.
-    **Issue:** `application/work_item_routing.py::_routes_in` reads the composed `/task-init` routing table by matching the FIRST row whose leading cells equal the expected header, and then treats every table row anywhere below it as a route. A second table under the same heading contributes its rows to the first table's population, exactly as #213 and #244 did.
-    **Why no instance fires today:** the reader discards a row whose second cell does not contain `simplified` or `full`, so a second table's header row and most of its data rows fall out. That is a vocabulary guard standing in for a boundary, and #213's own measured cause was that vocabulary cannot decide this — the entry blamed header words and the cause was one level below them.
-    **Why it is LOW and not MEDIUM:** the composed `/task-init` command in this repository states one table under that heading, so nothing is currently misread, and the failure direction is under-reporting a route rather than inventing one.
-    **Expected:** `_routes_in` reads its table through `doc_sync.tables.table_blocks`, the one place that now decides where a table starts, and stops depending on its rows' vocabulary to end one. Measure first: the change alters which rows a routing table contributes, so it needs its own before-and-after over the composed commands this project ships.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `beadloom-l9ee` closed with the issue-log
+    claim corrected, and the ADR was deliberately not shipped. Remains: the per-bead `Progress`
+    section of ACTIVE.md is still a shared write, and no bead in the tracker holds it.
 
 257. [2026-09-08] [HIGH] `waves` derived two beads' scopes as disjoint while one document belonged to both, and the landing lock ordered the commits it could not order the edits of
 
@@ -802,155 +473,11 @@
     **It is sharper than it looks because of what else moved this week.** BDL-UX #194 and #237 were withdrawn on 2026-09-04 when the merge slot turned out to work: `acquire` refuses a held slot at rc 1. So the project spent three epics believing the lock was broken and the scopes sound, and both beliefs were inverted — the lock works and orders commits; the scopes are sound about code and silent about documents.
     **Expected:** the derived scope reaches the documents a node owns, or the plan says which population it compared and which it did not. `beadloom waves` already prints four shared media it cannot decide by code independence; a fifth line naming the documents two beads share would be the same shape. Do not answer it by widening `refs:` — that is the authored scope #232 was filed against.
 
-256. [2026-09-08] [HIGH] a clean room can resolve the package under test to the MAIN tree, so a correctly-named room returns a verdict about a tree it does not contain
-
-    **Severity:** high (the failure #235 was filed for, surviving the fix that was believed to close it)
-    **Command:** the clean-room convention; `beadloom clean-room` as of `beadloom-0mdo.37`
-    **Tracker:** routed to S6, beside `beadloom-0mdo.38` (#236)
-    **Context:** measured by `beadloom-0mdo.68` in BDL-068 S6 wave 2, in a room whose directory name was already bead-unique.
-    **Issue:** the run used `uv run --project <main tree> pytest` from inside the room, and the editable install resolved `beadloom` to the **main tree's** `src`. The room then reported a failure caused by the *neighbour's* uncommitted CLI command — a clean-room verdict about a tree the room did not contain.
-    **Why it is worse than #235 was:** #235 was two agents sharing a directory, and the fix was to make the directory unshareable — `beadloom-0mdo.37` shipped exactly that hours earlier, with an exclusive `mkdir`. This failure passes through a correct, exclusive, bead-named room. The isolation the name provides is of the *files*; nothing was isolating the *interpreter's import path*, and no report distinguishes the two.
-    **The room needs its own environment:** `uv venv` plus `uv pip install -e .[all,dev]` inside it. Measured: with `.[dev]` alone, four TUI tests error on collection — which is BDL-UX #236 (a room's verdict is decided by extras the convention never names) meeting this one, and is why the two belong in the same slice.
-    **Two measurements added 2026-09-08 by `beadloom-0mdo.38`, so `.74` starts from facts rather than from this entry's estimate.** *First, half of this entry is already closed and was verified rather than argued:* `beadloom-0mdo.37`'s `room_invocation` hands back `PYTHONPATH=<room>/src <the project's own .venv python> -m pytest <room>/tests`, and run in this bead's room `import beadloom` printed a path **under the room**. `PYTHONPATH` precedes the editable install's own finder on `sys.path`, so the failure this entry names does not occur when the invocation the command hands back is the one used. What survives is the environment, not the import path. *Second, the collection failure is four MODULES and not four tests:* with `.[dev]` alone, `tests/tui/` contributes 3 modules that skip cleanly on `could not import 'textual'` and 1 (`test_context_scroll.py`) that stops the collection with an error, and the run collects 8859 items against 9222 under `.[all,dev]`.
-    **And the cost is measured, so it is not the reason to decide either way.** On a warm `uv` cache, macOS/APFS: `uv venv` **0.04 s**, `uv pip install -e '.[all,dev]'` **3.6 s**, `.[dev]` alone **0.5 s**, for a room of **160 MB apparent** — APFS clones from the cache, so the marginal bytes are near zero here and are not on a filesystem without cloning. Against a 7-minute suite run and several rebuilds per bead, per-room environments are affordable. What is left to decide is which extras, and #236's answer gives that a derivation to start from: the extras this project's own legs declare, not a constant.
-    **Expected:** `beadloom clean-room` owns the environment as well as the directory, since `beadloom-0mdo.37` has just made it the single place that answers this question. A room that resolves the code under test to somewhere else is not a room, and the verdict it returns cannot be told from a real one by reading it.
-
-
-    > **NARROWED 2026-09-08 by `beadloom-0mdo.38`, which measured it rather than inheriting it.**
-    > The import-path half is **already closed** by `beadloom-0mdo.37`'s invocation: `import beadloom`
-    > inside that bead's room printed a path **under the room**. So the severity above is overstated
-    > — a room built by `beadloom clean-room` does not resolve the package to the main tree, and the
-    > failure this entry describes belonged to a hand-built room using `uv run --project <main tree>`.
-    > **What survives is the environment half**, which `beadloom-0mdo.74` owns: the room needs its own
-    > venv, and the cost is now measured rather than feared — `uv venv` 0.04 s, `uv pip install -e
-    > '.[all,dev]'` 3.6 s warm, 160 MB apparent.
-    > **The coordinator filed this at HIGH from an agent's report without checking whether a fix
-    > landed hours earlier had already covered part of it.** That is the same shape as #194, #237 and
-    > #164 — an entry written from a failure's appearance and not re-derived — committed by the person
-    > who wrote those three withdrawals up. The entry is narrowed rather than withdrawn: the
-    > environment half is real.
-
-    > **CLOSED 2026-09-09 by `beadloom-0mdo.74`, on the narrowed half.** `beadloom clean-room` now
-    > creates a virtual environment inside the room and installs the room's own sources into it, and
-    > `room_invocation` names that interpreter. So the room isolates the environment as well as the
-    > files, which is the guarantee the name never gave.
-    > **Which extras, and the reading that was measured and rejected.** The extras are the UNION of
-    > every extra any leg of this project's workflows installs, read from the TYPED install step
-    > (`rooms.leg_installs`) rather than from the satisfied set, which needs the analysed distribution
-    > installed under the running interpreter and is unresolved for a project this tool is merely
-    > pointed at. The MODAL set was tried first and is wrong here: of the 8 installing jobs
-    > `leg_installs` reports on this repository, four install `dev, languages` to build a site or run
-    > a release gate and two run the suite, so the commonest environment is the one no suite verdict
-    > is taken under. The union is taken because the two errors are not symmetric — a missing extra
-    > removes tests from a run WITHOUT failing it, a surplus one removes nothing.
-    > **The cost, re-measured at HEAD rather than inherited.** Warm `uv` cache, macOS/APFS: `uv venv`
-    > **0.082 s**, `uv pip install -e` **1.07 s** for the union (`dev, graphql, languages, mutation,
-    > tui, watch`, 169 MB) against **1.78 s** and 160 MB for `.[all,dev]`; the room is **184 MB**
-    > apparent. The surplus the union buys is 9 MB and no time. Against a seven-minute suite the whole
-    > step is under half a percent, so it is **paid per room and never cached**: an environment kept
-    > outside the room and reused is a directory two rooms share, which is #235 again. `uv`'s own
-    > package cache is the reuse that matters and is content-addressed, so it cannot carry one room's
-    > source into another.
-    > **Without `uv` it is not the same measurement:** `python -m venv` 1.84 s plus `pip install -e`
-    > 39.6 s over the same tree, about thirty times. The room records which installer built it, and a
-    > failure is reported rather than retried under the other one.
-    > **A room that could not build one is a FINDING and never a refusal** — the files are isolated
-    > either way — and it names the interpreter its verdict will be taken under instead, so
-    > `beadloom clean-room` exits 1 rather than printing a room a reader assumes has its own. The
-    > effect on `beadloom-uzck` is stated rather than acted on: a rebuild now pays the install again,
-    > so the argument for not retyping 16 `--carry` flags is stronger than when that bead was filed.
-255. [2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly
-
-    **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)
-    **Command:** `beadloom impact <path>`
-    **Tracker:** routed to S6
-    **Context:** found by `beadloom-0mdo.72` while deriving S6's axes — that is, by using the instrument for the job the slice exists to do.
-    **Issue:** given a path that exists and is not Python, `impact` exits 1 with an unhandled `SyntaxError` out of `ast.parse` at `src/beadloom/application/impact/axes.py:129`. An **absent** path is handled and reported cleanly. So the failure is worse for the case that is more likely to be a real request: a reader pointing the tool at `CLAUDE.md`, the issue log or a role template gets a traceback, while a typo gets a sentence.
-    **Why it matters beyond a rough edge:** it is why S6's own axes derivation reaches **0 of its subject's 862** `beadloom <subcommand>` instruction sites across 68 non-Python artifacts and 11 170 lines. The slice about the flow's own documents cannot ask the derivation about a document at all. S5's equivalent ratio was 14 of ~261; this is zero of everything.
-    **This project's own rule applies to its own tool:** a target the derivation cannot read is `unresolved` and says so — the distinction this epic has now shipped ten times. A traceback is not that distinction; it is the absence of one.
-    **Expected:** a non-Python target is a verdict, not a crash. Whether `impact` should eventually derive anything from a markdown or YAML artifact is a separate and larger question — answer the crash first, and state the second rather than sliding into it.
-
-254. [2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside
-
-    > **Renumbered from #253 to #254 on 2026-09-05, by the S5 review's Major 2.** Two entries were
-    > filed as #253 on the same day by two agents working the same slice: the LOW dependency-release
-    > entry above and this one. The LOW entry keeps the number — it already had five citations in
-    > `.beadloom/config.yml` and three in `ACTIVE.md`, all committed, while this one had none in any
-    > file. **Commit `050d63ac`'s subject still says #253 and means this entry**; that is history and
-    > is left alone rather than rewritten.
-    > **This is the third instance of one class in this project**, after the duplicate #211 and the
-    > #216-#232 run of bead titles carrying numbers the log never received. It is also exactly the
-    > defect `beadloom-0mdo.53` closed for the TRACKER hours earlier — a number authored before it is
-    > allocated, kept in two places — reappearing in the log, which has no allocator at all. The RFC
-    > already names it as S6's subject (`mr2l.91`); S5 is the slice that produced the duplicate the
-    > check was proposed for, which is the argument for building it rather than a reason to wait.
-
-    **Severity:** high (an agent session wedges with no self-heal, and the state that wedges it is an ordinary mid-refactor moment)
-    **Command:** `beadloom guard bead-claimed`, the emitted `.claude/settings.json` `PreToolUse` binding
-    **Tracker:** routed to S6
-    **Context:** hit by `beadloom-0mdo.51` during BDL-068 S5, splitting `src/beadloom/services/bd_seam.py` into a package. `git mv` succeeded; the very next call — creating `__init__.py` — was blocked. Between the two the package does not import.
-    **Issue:** `guard_probes.py:79` reaches the tracker by importing `beadloom.services.bd_seam` from the editable install rooted at the working tree. While that import fails the guard cannot answer, and a guard that cannot answer **blocks**. Its own remediation reads *"fix the reported error, then re-run"* — it asks for a file write it has just disabled.
-    **Measured, from two independent sessions:** `Bash`, `Write` and `Edit` are all on the guard's surface and all return the same `ImportError`; `Read` is not, which is the only reason the proposed repair could be checked before asking a human to type it. There is no escape from inside: no env var, no marker and no path exclusion is reachable, because the failure is raised **before** any path or command analysis runs. **A human ran one heredoc in their own shell. Nothing else cleared it.**
-    **The uncomfortable half, and it is ours:** BDL-068 S4 widened the matcher to include `Bash` (`beadloom-0mdo.31`), which was correct and is the whole of #170. Before that, a shell write slipped past the guard and could have repaired it. So closing a real coverage hole converted a recoverable failure into a dead end, and the improvement is what removed the last exit.
-    **It is #170 asked in the other direction.** That entry asked *which write paths can this guard not see*. This asks *what does a guard do when it cannot answer about itself*. S4 taught four instruments to say `NOTHING TO CHECK`, `not compared`, `not_covered` and `unresolved`; this one says `ERROR` and stops the world.
-    **Not exotic.** Any refactor leaving the package momentarily unimportable wedges a session the same way: a module split, a renamed symbol, a syntax error saved mid-edit.
-    **Expected — the shape, not the instance.** A guard that cannot evaluate itself is `unresolved`, and an unresolved guard **warns and permits** rather than blocking, saying loudly that it checked nothing. A gate that blocks on its own inability is not strict, it is unavailable. If some inability must block, it must leave a reachable repair path, and `Read`-only is not one. Consider also isolating the probe from the tree it guards, so editing Beadloom cannot disarm the guard that watches the edit.
-    **Related:** #174 and #175 (a check reporting its own inability in a form nobody can act on) are the same family; #170 is its other direction.
-
-252. [2026-09-04] [MEDIUM] a composed role is missing from the entry-point document that enumerates roles, and no check asks whether it is there
-
-    **Severity:** medium (an adopter's agent reads the entry point to learn what roles exist, and learns four of five)
-    **Command:** `beadloom setup-agentic-flow`, `beadloom config-check`
-    **Tracker:** routed to S6
-    **Context:** noticed by the owner reading `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, then measured.
-    **Measured:**
-
-    ```
-    explore.md.txt                          the role template exists
-    commands/coordinator.md.txt             explore x4
-    commands/task-init.md.txt               explore x4
-    .claude/agents/explore.md               composed
-
-    CLAUDE.md.txt      (shipped)            explore x0
-    .claude/CLAUDE.md  (composed, here)     explore x0
-    ```
-
-    **Issue:** `Explore` shipped in BDL-068 S1 as a composed role and is used by two slash skills. `CLAUDE.md` is the document that calls itself the entry point, whose §0.0 draws the role map and whose §4 is the Agent Roles table. Both list four roles. So the role exists, two skills invoke it, and the map an agent is told to read first does not know about it.
-    **What already checks, and what it checks instead:** `config-check` reports `On disk: 5 role file(s)` — it counts `explore` — and checks two things, neither of which is this. It compares composed adapters against the compositions this flow would write (drift), and it checks that a declared duty reaches the composed core of every role it names, in both directions (`beadloom-0mdo.27`, shipped in S4). Nothing asks whether every composed role is NAMED in the document that enumerates roles.
-    **Why it is the same family and still a third direction:** #228 was "a duty declared for a role does not reach that role's core". This is "a role that exists does not reach the document listing roles". `.27` built the duty↔core check; the role↔map check is one more edge of the same graph and was not built because nobody had added a role since the map was written.
-    **Expected:** `config-check` derives the role set from what `role-composer` composes and asserts that each one is named in the composed `CLAUDE.md`, reporting a role the map omits and a map entry no role backs. Both directions, like `.27`. Then fix this instance — `Explore` belongs in §0.0's map and §4's table, in the shipped template and therefore in every adopter's composed copy.
-    **Not a documentation chore.** Fixing only the text leaves the next role in the same position, which is precisely the argument `beadloom-0mdo.12` made for refusing to split a duty from its check.
-
-251. [2026-09-04] [LOW] `sync-check` reports nine surface-drift warnings on the tree that a freshly reindexed clean room reports as `[ok]`, and a tree reindex does not clear them
-
-    **Severity:** low (warn-level, pre-existing, and untouched) — recorded because the two rooms disagree, not because the warnings matter
-    **Command:** `beadloom sync-check`, `beadloom reindex`
-    **Context:** observed by `beadloom-0mdo.58` while deriving S5's axes in a room built from `git archive HEAD` at `b350f6b` and reindexed there.
-    **Issue:** the tree reports nine surface-drift warnings; a clean room built from the same commit and reindexed reports `[ok]` for all nine. Re-running `reindex` on the tree does not clear them. So the freshness answer depends on which room asked, and the room that says less is the one built from the committed state.
-    **Why it is worth an entry at `warn`:** this project's whole verdict discipline rests on a clean room and the tree being two different claims about the same code, with the tree being the stricter one. Here the tree is stricter for a reason nobody has established, and "stricter for an unknown reason" is indistinguishable from "wrong" until someone looks. Same family as #163 and the S4 docs-wave finding, where `sync-check` was green over real prose drift: the freshness fact models something adjacent to the question.
-    **Expected:** establish which of the two answers is right, then either the tree stops reporting nine things the committed state does not carry, or the room stops missing them. Do not silence either side first.
-
-250. [2026-09-04] [MEDIUM] a node is approved into a work item's axes by having been SWEPT, so a `Derived by` field silently overrides an explicit `no`
-
-    **Severity:** medium (a path into the approval list that no one chose, in the list `scope-check` compares every commit against)
-    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
-    **Context:** found by `beadloom-0mdo.58` while deriving S5's axes — the first slice whose targets are files it READS rather than files it changes.
-    **Issue:** `WorkItemAxes.approved` is `kept | targets`, and `_agreement` checks `approved` first, so a row marked `no` in the scope column is still approved when it appears as a derivation target. `doc-spaces` and `intent-reader` are in BDL-068's approved set today for that reason alone — they were swept, not kept.
-    **Why the rule was right until it wasn't:** it assumed a slice changes what it derives from, which held for S1 through S4. S5's subject is where this project *calls* `bd`, so its `impact` targets include files it only reads. The assumption is now false and nothing announced the change.
-    **Same family as #244**, filed hours earlier: both are entries reaching the approval list without anyone writing them there. #244 arrives from a table header; this one arrives from a field meant to record provenance. The approval list is what `scope-check` judges every commit against, so a name nobody chose is a name every commit may touch.
-    **Expected:** `approved` follows the scope decision and nothing else. A target that was swept and ruled out is a target that was swept and ruled out; provenance is not consent.
-
-249. [2026-09-04] [MEDIUM] `ci.yml` names a locale macOS does not have, so anyone reproducing that leg locally measures the C row twice
-
-    **Severity:** medium (the reproduction silently succeeds at measuring the wrong room, which is worse than failing to run)
-    **Command:** the `tests-locale` matrix in `.github/workflows/ci.yml`; `beadloom rooms`
-    **Tracker:** `beadloom-0mdo.50` (#248), same area
-    **Context:** measured by `beadloom-0mdo.49` while entering the 8-bit room to fix PR #61's red leg.
-    **Issue:** the matrix declares `en_US.ISO-8859-1`. That spelling is not a locale macOS has; setting it silently falls back to ASCII. So a developer reproducing the 8-bit leg with the name CI uses runs the **C** room a second time and reports it as the 8-bit one. The real 8-bit room on this platform is `en_US.ISO8859-1`, without the hyphen.
-    **Why it is not merely a typo:** the two rooms differ in exactly the behaviour the leg exists to test. Under C, `beadloom scope-check`'s `Declared axes: NOT CHECKED — …` line carries three non-ASCII bytes; under a real 8-bit locale, `console_streams.tolerate_unencodable_output` degrades the em dash to a literal ASCII `\u2014` and all 540 bytes become ASCII. A test whose premise depends on the child's bytes therefore behaves differently in the two rooms — which is how PR #61 shipped a leg that was green in one and red in the other.
-    **`ci.yml` already knows this can happen:** its anti-vacuity step exists to catch a locale that degraded rather than applied. That step protects the CI legs. Nothing protects the developer reproducing them, and the reproduction is where the room census claims its value.
-    **Expected:** the room's name is the one the platform answers to, or the census says which spelling it resolved and whether the locale applied or degraded. A room that silently becomes a different room is a phantom room, and `beadloom rooms` is the instrument that should refuse to report it as entered.
-    **Related:** #248 (the census carries no locale dimension at all), and the reason this was found rather than reasoned about — the fix that closed PR #61's leg was verified in three rooms, and this is the difference between two of them.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `waves` states a `focus-document` medium
+    (`application/waves/media.py`, `beadloom-0mdo.75`). Remains: the measured case, a document
+    owned by an ancestor node (`docs/domains/application/README.md`), is reached by neither
+    ownership nor the medium, as `media.py`'s own docstring says, and no line names the documents
+    two beads share.
 
 246. [2026-09-04] [MEDIUM] a declared mutation target that no run ever covers passes every green Gate, and the one command that would say so is silenced by the flag its only caller passes
 
@@ -963,37 +490,11 @@
     **Expected:** what the product CAN check without owning a runner is whether it has ever seen a score for a declared target. `beadloom mutation --stats` could record the run it just judged — targets, score, tool, room, timestamp — under `.beadloom/`, and the Gate could then report a declared target whose last measurement is absent, or older than a stated age. That turns "declared" into "declared and measured on <date>", which is the distinction the feature exists to make and currently cannot.
     **Note:** `--only` itself is not the defect. A run that covers one slice of a larger scope is the normal state and saying so is right. The defect is that "this run did not cover it" and "no run has ever covered it" are printed as the same sentence.
 
-245. [2026-09-04] [MEDIUM] the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one
-
-    **Severity:** medium (a correct verdict followed by advice that would switch off the parallelism the command exists to plan)
-    **Command:** `beadloom waves`, `beadloom axes <doc> --refs`
-    **Tracker:** `beadloom-0mdo.46`, routed to S6
-    **Context:** BDL-068 S4's fix cycle, immediately after the RFC's `## Axes` section was populated at epic scale for the first time.
-    **Issue:** on an `unguarded_axis` finding `waves` prints *"generate each bead's `refs:` from the `## Axes` section of <the RFC>"*. `beadloom axes <doc> --refs` prints ONE line generated from every row kept in scope — 24 nodes on this epic — and there is no per-bead selection; the help text confirms the unit is the work item. Performed exactly, the remedy hands every bead in the epic an identical 24-node scope, `shared_node` fires on every pair, and every wave becomes a wave of one.
-    **The root is a level confusion, not a typo:** a work item's axes are the UNION of its slices' — the RFC says so — while a bead's scope is a SUBSET chosen for that bead. One document holds the union; nothing holds the per-bead subset, and `--refs` cannot invent it. CONTEXT Q1 ("a bead's `refs:` is generated from the document") is right; the selection step between the two is what is missing.
-    **Same class as #234**, closed in this same epic: a correct verdict followed by a remedy that does not follow the cause down as far as the reason does. There it would have authored a scope; here it would disable every parallel wave. A remedy standing beside a correct verdict is the line nobody re-reads.
-    **Expected:** either the section records which rows belong to which bead, so `axes --refs <bead-id>` can answer, or the remedy stops prescribing an action that has no correct form and states instead which comparison it could not make. Do not ship it unchanged — it is advice to make the tool useless, printed by the tool.
-
-244. [2026-09-04] [MEDIUM] a second markdown table in `## Axes` contributes its header row as an approved node named `Node`
-
-    **Severity:** medium (a phantom entry in the list `scope-check` compares every commit against)
-    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
-    **Tracker:** `beadloom-0mdo.46`, routed to S6
-    **Context:** found by `beadloom-0mdo.44` while appending S4's 28 rows to BDL-068's `## Axes`. Measured after the append: `beadloom waves` reports `29 node(s) approved … 1 axis row(s) name no node`.
-    **Issue:** `read_axes_section` takes the header row of a SECOND table in the section as data, producing an approved node literally named `Node`.
-    **Why the document invites the second table:** the RFC's own per-slice union rule says each slice appends its rows with its own `Derived by` / `Measured on` line — which is naturally a new table, not more rows under one header. The parser's one-table-per-section assumption is contradicted by the document rule this project wrote for itself, and the contradiction can only appear once an epic reaches its second slice, which is why it survived S1.
-    **Why a phantom here is worse than elsewhere:** the approval list is what `scope-check` compares commits against. A name nobody chose is a name every commit is allowed to touch.
-    **Expected:** a row whose cells are a table header is not a row. Fix this before #245 is evaluated — that finding cannot be judged honestly while this one injects a node nobody wrote.
-
-243. [2026-09-04] [MEDIUM] re-copying changed files into a room that has already been reindexed manufactures a stale-doc failure that looks exactly like a defect
-
-    **Severity:** medium (a false red in the measurement whose whole purpose is to be trusted, and the false red is indistinguishable from a true one)
-    **Command:** the clean-room convention (`git archive HEAD` + only your files), BDL-UX #181, #235, #236
-    **Context:** BDL-068 S4, `beadloom-0mdo.41`, met and measured rather than reasoned about.
-    **Issue:** an agent that has already built and reindexed its room, then edits a file and copies the new version in, gets a SECOND failure — `test_bead15_s3b_coverage`, `sync-check` exit 2, `stale: 2` — which does not reproduce at pure HEAD. The copy postdates the room's own doc-freshness baseline, so the room correctly reports the file as changed since it was last attested. Nothing is wrong with the change. The failure is produced by the room's lifecycle and is shaped exactly like a defect in the work being measured.
-    **Why it belongs with #235 and #236:** those three are the whole isolation story of a clean room and all three were assumed rather than checked — #235 the room may contain a neighbour, #236 the room's dependency set is unstated so its verdict is not reproducible, #243 the room is not re-enterable and nothing says so. A convention that is only correct when performed exactly once, without saying so, is a convention that will be performed twice.
-    **Expected:** a room is BUILT, never refreshed. The agent that met this rebuilt from scratch and the pristine room gave the same one-failure verdict as the first, which is the check that makes this an entry rather than a guess. The durable form is the one #235 already proposes: a command that creates the room and refuses a directory it did not create empty — which makes re-entry impossible rather than merely discouraged, and answers both entries at once.
-    **Workaround (in use):** rebuild the room after any edit. Do not re-copy, do not re-sync.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `mutation.yml` passes no `--only`. The weekly
+    sample passes all 15 declared targets as `--target`, a hand-copied list, and per-change runs
+    use `--changed-since`. Remains: the Gate calls only `check_mutation_scope`, which asks whether
+    a mutant could run, and nothing records when a target was last measured. No bead owns this
+    half.
 
 242. [2026-09-04] [LOW] the launch context a subagent receives carries a `git status` snapshot that is stale by construction, and one agent published from it
 
@@ -1004,71 +505,6 @@
     **Why it belongs in this log rather than being shrugged off:** it is the same shape as everything else in BDL-068 — a fact that was true when it was written, presented without the reader being able to tell how stale it is. The difference is that the agent caught its own instance, which is what the flow is supposed to produce.
     **Expected, and it is ours to do rather than the harness's:** the role protocol says a tree fact is DERIVED at the moment it is stated, never read from launch context. `beadloom-0mdo.27`'s duty mechanism can carry that as a declared duty, which makes it checkable rather than remembered. Routed as a note on the S6 slice, not as its own bead.
 
-241. [2026-09-04] [MEDIUM] `config-check` reports a duty delivered to five roles on a project holding no role files, and does not say which question it answered
-
-    **Severity:** medium (adopter-facing: the reassuring output is produced by the state in which nothing is protected)
-    **Command:** `beadloom config-check`
-    **Tracker:** `bd show` the S4 fix bead
-    **Issue:** on a project with no role files on disk, `config-check` prints `Duties: 1 declared, checked over 10 composed artifact(s)` and `no blocking drift`. It judges the COMPOSITION rather than the artifact, which is a defensible choice — `--fix` writes compositions, and drift covers the scaffolded case — but the choice is nowhere stated and the printed sentence does not say which of the two questions it answered. On a scaffolded project the pair is sound; that was tested rather than assumed.
-    **The root, shared with #239:** `beadloom-0mdo.31` and `beadloom-0mdo.27` landed in the SAME WAVE of BDL-068 S4 and answered one question in opposite ways. `.31` reads the artifact on disk and reports `unresolved` when it is missing, with the reason recorded and the reasoning stated. `.27` judges the composition and does not state that it did. Neither agent could see the other. This is the one place the slice's eight instruments disagree, and #239 and #241 are its two consequences.
-    **Expected:** each instrument states which question it answered, in the sentence it prints. Then the divergence is a visible design choice instead of two commands that look like they agree.
-
-240. [2026-09-04] [MEDIUM] the commit hook's typed leg is gated by a hand-written `^(src|tests)/` regex and prints nothing at all on a flat-layout project
-
-    **Severity:** medium, and adopter-facing — **this repository cannot observe it**, being src-layout, which is why it survived the bead that built it
-    **Command:** the pre-commit hook's type-check leg (`beadloom install-hooks`)
-    **Tracker:** `bd show` the S4 fix bead
-    **Issue:** the leg selects the files it will type-check with a literal `^(src|tests)/` path regex. A project whose package sits at the repository root — the flat layout, which is common and which `beadloom impact` already has a filed defect about (#225) — matches nothing, and the leg prints NOTHING. Not "no typed files staged", not a skip: silence.
-    **Why it is the slice's own shape, one level up:** `beadloom-gsal` fixed exactly this defect in the same leg — it replaced a hand-written typed surface with one derived from `pyproject`, citing `beadloom-mr2l.82` shipping a hand-written list that `pyproject` then moved out from under. The derivation landed and the GATE ON IT stayed a spelling. A rule stated as a shape, reached through a filter stated as a spelling.
-    **Expected:** the gate is derived from the same source as the surface. If `pyproject` says what is typed, nothing else needs to say where it lives.
-
-239. [2026-09-04] [MEDIUM] `guard --liveness` prints `0 of 0 write path(s) bound`, and an empty population reads as full coverage
-
-    **Severity:** medium (the phantom gate, in the instrument built during this slice to report exactly that class)
-    **Command:** `beadloom guard --liveness`
-    **Tracker:** `bd show` the S4 fix bead
-    **Issue:** `surface.build_surface` correctly reports `unresolved` when a source cannot be READ — its docstring states the rule outright: "'100% of the zero tools I found' is the most confident way to state it". But an EMPTY population is not an unreadable one. Role adapters that exist and grant nothing produce `grants={}`, no error, and `covered == (0, 0)`; the renderer prints `surface (claude): 0 of 0 write path(s) bound, matcher(s) '...'` with no line saying the population was empty. Reproduced three ways, each a state an adopter reaches without doing anything wrong.
-    **Why it is worth the entry:** `beadloom-0mdo.31` shipped this instrument in BDL-068 S4 to answer "what fraction of edit events could this binding have seen?", and got the unreadable case exactly right while leaving the empty case reading as a pass. The check that exists to find phantom gates has one.
-    **Expected:** an empty population prints differently from a covered one. `0 of 0` is not a fraction, it is the absence of a denominator, and the report needs a word for that — the same distinction `beadloom-0mdo.32` shipped for unowned paths (`not compared`, never `agrees`) two waves earlier in the same slice.
-
-238. [2026-09-04] [LOW] this repository's own `.gitignore` drifted from the ignore block Beadloom emits, and nothing compares the two
-
-    **Severity:** low here, medium for an early adopter (an upgrade adds a written file that the ignore block written at `init` time does not name)
-    **Command:** `beadloom init` / `beadloom config-check`, `onboarding/ignore_block.py`
-    **Context:** BDL-068 S4. `.beadloom/guard-firings.1.jsonl` appeared as an untracked file during wave 3 and `beadloom waves` would have reported it as a path owned by no bead. It appeared now, and not earlier, because `beadloom-0mdo.31` widened the guard matcher to include `Bash` in the same slice, so firings roughly tripled and the log rotated for the first time.
-    **Issue:** the pattern this project SHIPS is already correct — `ignore_block.py:95` emits `.beadloom/guard-firings*.jsonl`, a glob, and its own docstring explains the rotation it covers. This repository's `.gitignore` carries `.beadloom/guard-firings.jsonl`, the exact filename, written before rotation existed and never re-derived. So the product is right and its own repository is stale, and the only reason anyone noticed is that an unrelated bead made the rotation happen.
-    **Why it is the epic's own shape:** a rule stated as a SPELLING rather than as a SHAPE, in the one file where nobody looks for rules. And a second layer: the ignore block is GENERATED for an adopter and hand-maintained here, so the two can only agree by coincidence. An adopter who ran `init` before the rotation feature has the same stale line and nothing will tell them either.
-    **Expected:** `config-check` compares the ignore block on disk against the block the current version emits, and reports the drift — the same both-directions check `beadloom-0mdo.27` built for role duties, applied to the other thing `init` writes into a repository it does not own. Fixing this repository's line is the instance; the check is the class.
-    **Fixed (instance):** `.gitignore` now carries the shipped glob. The class is filed as a bead under S6.
-
-235. [2026-09-03] [MEDIUM] the clean-room instruction names a fixed directory, so two agents in one wave build one room and both call it clean
-
-    **Severity:** medium (the whole product of a clean room is isolation, and the failure looks like a set of unrelated red tests rather than like a room problem)
-    **Command:** the clean-room convention every launch prompt carries (`git archive HEAD` + only your files), BDL-UX #181
-    **Context:** BDL-068 S4 wave 1, `beadloom-0mdo.27` and `beadloom-0mdo.31` running concurrently. Both agents are handed a session-scoped scratchpad directory, and the convention names the room after the concept rather than after the bead, so both built `<scratchpad>/cleanroom`. Reconstructed from mtimes: `.31`'s `git archive HEAD | tar -x` landed at 22:53, `.27` copied its own untracked files in at 23:16, `.31` copied its files at 23:26.
-    **Issue:** the run `.31` then took reported 8 failures. Five were `.27`'s — its acceptance steps, and two annotation-consistency checks over a graph node HEAD does not carry — and none of them was a defect in either bead. Rebuilding under a bead-unique name and re-running gave 1 failure, itself a stated property of the room (no `.git`, so `sync-check` has no baseline). So the polluted room cost one full 5-minute suite run and would have cost a wrong verdict: had the report been written from it, `.31` would have attributed `.27`'s work to itself, in the one measurement whose entire purpose is to separate them.
-    **Why it matters more than the wasted run:** this is the failure the gate-owner rule exists to catch, one layer below where the rule looks. The gate owner is told that a clean room cannot see interactions between beads on the TREE. Nobody said the rooms themselves could interact. An agent that follows the convention exactly, and correctly, gets a room containing its neighbour's work — and every check it runs there is honest about a tree that exists nowhere.
-    **Expected:** the room's path carries the bead id, and the convention says so — `<scratchpad>/room-<bead-id>`, not `<scratchpad>/cleanroom`. Stronger, and the form this project prefers: the room is created by a command that derives the path from the claimed bead and refuses a directory it did not create empty, so "is this room mine" is answered rather than assumed. A room that cannot say whose it is is not a clean room, it is a shared directory with a reassuring name.
-    **Related:** #181 (the clean-room duty itself), #228 (the duty reaches roles only through the coordinator's typing — a convention typed into a prompt is a convention that can be typed imprecisely).
-    **Partly addressed 2026-09-04 (`beadloom-67t1`), and still open for the rest:** the convention half shipped. `room_for(bead_id)` returns `room-<bead-id>`, `beadloom waves` prints it per bead for every wave including a wave of one, the `working-tree` medium's statement carries it, and the five role cores carry it under the `clean-room` duty `config-check` checks. What did NOT ship is the stronger form this entry asks for: no command creates the room, derives its path from the claimed bead and refuses a directory it did not create empty. So "is this room mine" is still answered by reading the path rather than by the tool, and the entry stays open on that clause.
-
-234. [2026-09-03] [LOW] `waves` prints one remedy for four unreadable-scope causes, and on the no-declaration case it prescribes the authored scope the tool exists to refuse
-
-    **Severity:** low (the verdict is right; the sentence after it sends the reader the wrong way)
-    **Command:** `beadloom waves`
-    **Tracker:** to be attached to `beadloom-en0x` (#232), which owns the scope parser
-    **Issue:** planning S4's wave, `beadloom-nn4c` was serialised against all six other beads with the reason `unresolved_scope: declaration_not_at_a_line_start` and the remedy "move the declaration to the start of its own line". That bead has **no declaration to move**. Its note is a paragraph explaining, in prose, why writing `refs: flow-guards` there would be an authored scope dressed as a derived one — and the parser matched the `refs:` inside that explanation. So the tool read a sentence *about* a declaration as a malformed declaration, and then told the reader to promote it to a real one. Following the printed remedy would have created exactly the defect #232 is filed against, in the same slice.
-    **Why it is worth an entry rather than a shrug:** the serialisation was CORRECT and the exit code was right. Only the remedy was wrong, which is the failure mode that survives longest — nobody re-reads a line that appears beside a correct verdict. The parser's four unreadable causes are already distinguished in the *reason* (`no declaration`, a name the graph lacks, a `refs:` inside a sentence, a second ref without a separator); the remedy does not follow the reason down that far.
-    **Expected:** the remedy is derived from the cause, like the reason already is. For `declaration_not_at_a_line_start` the honest remedy is two-branched: *if* you meant this as a declaration, move it to the start of its own line; *if* the line is prose about a declaration, the serialisation is the correct answer and nothing needs fixing. A tool that cannot tell prose about `refs:` from a careless `refs:` should say which of the two it cannot tell apart, not pick one.
-    **Found by:** the coordinator, on its own note, while planning BDL-068 S4 — the note deliberately said no scope could be derived (`impact` over `tests/` attributed a node to none of 148 sites, BDL-UX #225) and the tool answered as if the note were the scope.
-
-233. [2026-09-03] [MEDIUM] the read-only guard test reports a `bd` export burst as the guard's own write
-
-    **Severity:** medium
-    **Tracker:** `beadloom-nn4c`
-    **Issue:** The differing digest is `.beads/issues.jsonl`, never `beadloom.db`. `_moved_with_nothing_running` opens a control window of the measurement window's duration and skips only if the repository moves DURING it, so a millisecond `bd` export burst lands in the measurement window and misses the control. A two-writer wave makes it likelier — the check is least reliable exactly when the flow is most parallel. Attributed by `beadloom-0mdo.26` after `.22` recorded it non-reproducing and `.23` and `.24` each looked across four runs without meeting it.
-    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-nn4c`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
-
 232. [2026-09-03] [MEDIUM] `waves` plans from an authored `refs:` line, so two beads editing one document read as independent
 
     **Severity:** medium
@@ -1076,12 +512,11 @@
     **Issue:** `beadloom-0mdo.21` and `.26` both edited `docs/services/cli.md` concurrently; `waves` reported 0 findings. The graph knows the file — it is the `cli` node's spec — but `waves` compares the `refs:` each bead DECLARES, and both were authored from the CODE each would touch. The planner's input is authored while everything else BDL-068 built is derived.
     **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-en0x`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
 
-231. [2026-09-03] [MEDIUM] the commit hook warns about type errors on an undeclared surface, discards the output, and never blocks
-
-    **Severity:** medium
-    **Tracker:** `beadloom-gsal`
-    **Issue:** `.git/hooks/pre-commit` runs mypy over every staged Python file with `2>/dev/null` and prints one contentless sentence. `[tool.mypy]` declares `packages = ["beadloom"]`; `uv run mypy tests/` reports 970 errors in 90 files. A real error in `src/` produces the identical sentence, so the case that matters is drowned by the case that does not. Sharper than `mr2l.82`'s one-liner.
-    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-gsal`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `beadloom-en0x` compares each declaration
+    against the recorded `## Axes` (`unguarded_axis`, `declared_outside_the_axes`), and the
+    `focus-document` and `graph-files` media name shared documents (#257, #261, #265). Remains: a
+    bead's scope is still an authored `refs:` line, and a node's spec document is part of no
+    bead's scope.
 
 230. [2026-09-03] [MEDIUM] a branch whose name carries a suffix after the work-item key names no work item
 
@@ -1096,13 +531,6 @@
     **Tracker:** `beadloom-qil0`
     **Issue:** `git diff main...HEAD -- .beads/issues.jsonl` adds 16 record lines carrying 30 author comments and 81,270 characters, and the brief's own change inventory lists that file and tells the reviewer to read it. `models.py:170` asserted that a reviewer seeing `0 withheld` learns the author wrote nothing; on that run it was false by 31,544 characters.
     **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-qil0`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
-
-228. [2026-09-03] [HIGH] the clean-room duty reaches the roles that must perform it only through the coordinator's typing
-
-    **Severity:** high
-    **Tracker:** `beadloom-67t1`
-    **Issue:** Zero occurrences of `clean room` in `.claude/agents/*` and in the role templates `setup-agentic-flow` composes for an adopter; the rule lives in the project layer of CLAUDE.md, which is never distributed, and in `waves/media.py`, which emits it only for a wave of more than one bead. Roughly twenty single-bead waves across two epics carried it by prompt alone. Same class as BDL-061 S4 and worse: there the duty at least reached the role.
-    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-67t1`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
 
 226. [2026-09-02] [HIGH] the pre-push Gate crashes on a full pipe and reports it as stale docs
 
@@ -1174,6 +602,12 @@
     **Pinned, not silent:** `tests/test_graph_files_are_read_under_one_policy.py` asserts BOTH halves — the fixed frame is gone AND the second one is still there — so it fails the day somebody closes `indexing.py`, and no future reader of this repository can take "init no longer tracebacks" as true.
     **Tracker:** `beadloom-l22o`.
 
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `beadloom-4ad3` (BDL-069) routed
+    `read_declared_docs` through `each_graph_file`, so an unparseable graph file and a top-level
+    list now finish at exit 0. Remains: a date scalar (`added: <date>`) still raises `TypeError`
+    in `graph/loader.load_graph`, and `tests/test_graph_files_are_read_under_one_policy.py` pins
+    that residue.
+
 219. [2026-09-02] [HIGH] The review's withholding does not cover commit messages, which is where this project writes its accounts
 
     **Severity:** high (the better the commit message, the more completely the mechanism is defeated)
@@ -1184,6 +618,11 @@
     **Expected, and it is a decision rather than a patch:** (a) `review-brief` also withholds or summarises commit bodies on the reviewed range and says how many it withheld; or (b) the mechanism stops claiming to withhold and instead REPORTS what is reachable, so the reviewer can declare it — which is what both the `.16` and the `.23` reviewer did unprompted, and the only reason either leak is known; or (c) accept it, on the ground that independence on a re-review is not worth the cost and the first pass is the only one where it matters.
     **Related:** #212 (defeated through `ACTIVE.md`, fixed by prompt), #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained). All three are one shape: an instrument that measures its own scope and is read as measuring the question.
     **Tracker:** `beadloom-tm76`.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: option (b) shipped in 97e05047 (BDL-068 S2
+    and S3). `commit_bodies_channel` reports the reviewed range's commits and their body-line
+    counts. Remains: commit bodies are still not withheld, and `beadloom-tm76` is open with no
+    decision recorded.
 
 218. [2026-09-02] [HIGH] `init` holds three hand-written step sequences and no artifact states what the sequence is
 
@@ -1223,24 +662,6 @@
     **Why it is recorded as a class and not a typo:** BDL-067 found three instances of *a user-facing message asserting a fact the code knows to be false* — a comment counting monkeypatch bindings and calling them branches (#192 fix cycle 1), a message blaming Beadloom for the adopter's own rules (cycle 2), a withdrawal claiming a rule failed where none was evaluated (cycle 3). Each arrived the same way: careful reasoning about one shape, not carried across to the neighbouring shape. This is the fourth, one layer up, in the Gate every adopter runs. Three reviews found three of them and each was found only after the previous was fixed, which says the sweep is the deliverable and the individual fix is not.
     **Tracker:** `beadloom-uz8x`. Filed separately from BDL-067 by the same reasoning the owner applied to #214: a different defect on a different surface, deserving its own measurement.
 
-213. [2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions
-
-    **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
-    **Command:** `beadloom ci` (the `docs quality` step)
-    **Context:** the BDL-067 coordinator wrote its verification of a subagent's report as a two-column table — the claim in one column, what re-measuring it produced in the other — in `ACTIVE.md`.
-    **Issue:** the check reported `decision-reason: the decision carries no reason` against a row that records a *measurement*, not a decision. Rewriting the same content as a bulleted list silenced it, with no change in meaning. A table of "claim → what I measured" is a shape this repository will keep writing, because the playbook asks a coordinator to verify rather than believe its subagents, and nothing distinguishes it from a decision table but the words in the header.
-    **Expected:** either recognise a verification table by its header vocabulary, or scope `decision-reason` to a section the document declares as decisions rather than to any two-column table.
-    **Related:** the same run showed a second-order version of the problem — the coordinator counted error-level lines with `grep -c "::error"` and matched its own prose, because the text quoted the token. A substring count is not a measurement of severity.
-
-212. [2026-08-31] [HIGH] The review's withholding is defeated by the epic document the playbook itself mandates
-
-    **Severity:** high (the withholding is the whole mechanism; where it is ceremonial, the review's independence is asserted and not held)
-    **Command:** `beadloom review-brief <bead-id>` + the `/coordinator` review-launch prompt
-    **Context:** BDL-067, review bead `beadloom-e8s4.4`. The launch prompt carried no author summary — deliberately, per the playbook's own rule that a review prompt carries the bead id and nothing else about the change.
-    **Issue:** `review-brief` reported **0 comments withheld** and was correct: the authors' accounts were not in bead comments. They were in `ACTIVE.md` — the per-bead Results table, carrying the `gate._step_lint -> lint_step` API change, the red-verification counts and the coverage numbers — and the launch prompt named `ACTIVE.md` as required reading, because the playbook says a role subagent gets `CONTEXT.md` + `ACTIVE.md`. So the coordinator withheld the author's account through one channel and handed it over through another, in the same prompt. **The reviewer detected this and declared it unprompted**, which is the only reason it is written down; nothing in the tooling could have reported it.
-    **Expected:** the review launch prompt must not name `ACTIVE.md` (fixed as practice on 2026-08-31), and `review-brief` should be able to say that a document the reviewer was told to read carries author accounts — a withholding that a neighbouring file defeats is withholding nobody performed.
-    **Related:** #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained) — this is that issue arriving with a measured instance, and the instance is worse than the issue as written: the leak came not from a careless prompt but from the prompt the playbook prescribes.
-
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
     **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
@@ -1263,6 +684,12 @@
     **Expected:** strip a surrounding code span before resolving (one `strip("`")` on the cell); when a cell resolves only after stripping, say so rather than reporting it as an unknown id; and make a run that resolved zero of N rows reachable at the hook rather than reported at exit 0.
 
     **Workaround, applied to BDL-062's ACTIVE.md here:** write bead ids bare in the first column. Measured after the change: `resolved 15 of 15 row(s)`, 15 rows updated to the tracker's statuses.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed by `beadloom-0mdo.54`: a bead id in a code
+    span resolves (`application/active_table/row_ids.py`), unresolved rows are classified by
+    shape, and `active-sync --check` exits 1 on an inert run. Remains: fix mode, the form the hook
+    runs, prints `resolved NONE` and exits 0, and the hook keeps only `withheld:` lines, so an
+    inert table is still invisible at the hook.
 
 209. [2026-08-27] [HIGH] `docs audit` verifies nothing in a non-English document and counts it as scanned anyway
 
@@ -1310,19 +737,6 @@
 
     Both left unfixed as out of scope for a docstring bead. They are the residue: a symbol-resolving checker finds *deleted names*, and prose goes stale without ever naming one.
 
-207. [2026-08-26] [MEDIUM] The pre-commit hook re-stages `.beads/issues.jsonl` after an agent deliberately unstages it
-
-    **Severity:** medium (it defeats the one discipline that keeps concurrent waves from committing each other's work)
-    **Context:** self-reported by `.7` of BDL-062, unprompted, as "one thing to know before the next agent commits".
-
-    `.7` unstaged `.beads/issues.jsonl` on purpose — it was another agent's tracker export — and `active-sync --stage` in the pre-commit hook **added it back**, saying so on stderr.
-
-    The project CLAUDE.md instructs every agent, in these words: *"Commit only your own files, by explicit path — never `git add -A`."* That instruction is **not sufficient on its own**, because a hook stages a file after the agent has decided not to. An agent following the rule exactly still commits another agent's state.
-
-    Same family as #194 (`bd merge-slot` is not an exclusion primitive): the concurrency discipline this project documents rests on primitives that do not enforce it. Two independent mechanisms, one gap.
-
-    **Strengthened 2026-08-27 by BDL-062 `.12`.** An explicit pathspec commit — `git commit -- README.md README.ru.md`, which builds a temporary index and normally ignores hook staging — **did not** prevent it: `beadloom active-sync ADDED these path(s) to this commit: .beads/issues.jsonl`. So the pathspec form is not a workaround, and "commit only your own files by explicit path" cannot be satisfied by any agent following it exactly.
-
 206. [2026-08-26] [MEDIUM] `docs/**/features/*/SPEC.md` is excluded from `docs audit` outright, so declared facts drift freely there
 
     **Severity:** medium (SPECs are where a node's contract is written, and they are the one doc class nothing fact-checks)
@@ -1333,6 +747,11 @@
     Also found in the same sweep: stale gate step lists in **eight** files, one naming a `coverage-lint` step that does not exist.
 
     The exclusion is presumably deliberate (SPECs are generated skeletons in some projects). But "excluded" and "verified" print the same way in the coverage report, which is this feature's whole subject one level up. At minimum the audit should name the class it does not read.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the audit names what it did not read. It
+    prints `74 document(s) scanned, 52 not read`, and `--verbose` and `--json` name each SPEC with
+    its built-in exclude pattern (f2e9d202, BDL-061 S2b). Remains: `docs/**/features/*/SPEC.md` is
+    still excluded, so facts in SPECs drift unchecked, and whether to read them is undecided.
 
 205. [2026-08-26] [MEDIUM] Writing a factually correct number can manufacture a false stale fact — keyword binding collides across senses
 
@@ -1351,19 +770,6 @@
     This is the general form of #193 (`framework_count`: web frameworks parsed vs nodes declaring a test framework) and #202 (`cli_command_count`: 34 top-level vs 43 recursive). Three instances now, in three subsystems — it is a property of keyword-proximity binding, not three coincidences.
 
     `.7`'s rule, which belongs in the writing guidance either way: **measure the audit's answer, do not predict it.**
-
-204. [2026-08-26] [MEDIUM] `review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained
-
-    **Severity:** medium (a number that describes the mechanism's ignorance rather than the reviewer's; the exact class BDL-062 exists to close)
-    **Context:** self-reported by the `.6` review agent as the FIRST line of its verdict, unprompted.
-
-    The withholding mechanism exists so a reviewer meets the work without the authors' account of it. `review-brief` printed **"0 withheld"**. The account had already arrived — through the coordinator's launch prompt, which carried `.4`'s "14 corrections, none of the 9 self-lint tests edited", `.5`'s "113 parses / 49 files / zero non-stream lines", `.5`'s two self-caught neutered-passing tests, `.9`'s severity fix, #198's 363/363 and #199/#200 by number.
-
-    So several review checks were **verifications of stated claims rather than independent discoveries**, and the tool said withholding was in force. `--release` could not establish independence either: one tracker identity (#194).
-
-    The mechanism measures its own channel and reports as if it measured the reviewer's knowledge. It has no way to see the prompt, and it does not say so — it says `0`.
-
-    **This is the coordinator's process failure and the tool's honesty failure at once**, which is why it is filed rather than merely noted. Fix candidates: `review-brief` states the surface it can and cannot see instead of a bare count; or the coordinator's brief is itself passed through the withholding surface. Choosing is the work.
 
 203. [2026-08-26] [LOW] Two stated behaviours in `doc_area` survive mutation — the rationale is documented and observed by nothing
 
@@ -1390,6 +796,11 @@
     ```
 
     Both call it "CLI commands", in the same run, to the same reader. Neither is wrong; they count different things under one name — the same defect shape as #193's `framework_count`, which BDL-062 `.4` resolved by renaming. This one was not caught because nothing compares two subsystems' facts to each other.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `beadloom ci` no longer prints both numbers.
+    Its doctor step shows a check count, and its docs-audit step lists `cli_command_count` as NOT
+    VERIFIED. Remains: the two counts still disagree under one name. `doctor` prints `CLI has 44
+    commands registered`, and `docs audit` computes 55 recursively.
 
 201. [2026-08-26] [MEDIUM] `--format porcelain` drops `message` — and porcelain is the default whenever stdout is not a terminal
 
@@ -1512,70 +923,6 @@
 
     **Related:** #195 (the measured half), #172 (rule liveness), BDL-062.
 
-193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
-
-    **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
-    **Command:** `beadloom docs audit --json`
-    **Context:** found while scoping BDL-062, checking why `framework_count` equalled `node_count` exactly.
-    **Measured on `main`@`cdc16de`:**
-
-    ```
-    facts.framework_count.value = 84        # == node_count, exactly
-    nodes carrying a framework  = 84
-    DISTINCT frameworks         = 1         # {'pytest': 84}
-    ```
-
-    `_collect_framework_count` counts nodes whose `extra.tests.framework` is non-empty. The fact is named `framework_count` and the scanner matches it on the keywords `["framework", "supported framework"]` — both of which promise *how many frameworks*, not *how many nodes declare one*.
-
-    So a document stating the true fact — "Beadloom supports 1 test framework" — would be reported as disagreeing with 84. The audit is currently `not_covered` on it only because no document happens to phrase it that way. The defect is latent in the prose, not in the code path.
-
-    Same family as BDL-062's subject: a fact whose name does not describe what it computes, sitting green because nothing exercises it. Distinct from #187/#190 — this is semantics, not extraction.
-
-    **Fix decided — rename.** Two later measurements settled it, so this is no longer an open choice.
-
-    *The DISTINCT candidate is worse, measured by `.3`:* `unverifiable_reason('framework_count', 1)` returns *"its value is 1: 0 and 1 are too common in prose to be read as claims"*. Counting distinct frameworks yields 1 here, which renders the fact structurally uncheckable on this repository and on every single-framework project. It buys correct semantics at the price of never being verifiable again.
-
-    *The defect is no longer latent — it reached the graph,* found by `.1`'s new `graph_summary_facts` rule:
-
-    ```
-    route-extraction summary states framework_count 12 but this project computes 84 (graph DB)
-    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
-    ```
-
-    The summary is **factually correct**: the extractor carries exactly 12 framework literals — `echo, express, fastapi, fiber, flask, gin, graphql_python, graphql_schema, graphql_ts, grpc, nestjs, spring`. Two unrelated meanings of "framework" collide under one fact name: *web frameworks a component parses* versus *nodes declaring a test framework*.
-
-    So the finding is a true positive for the defect and a false positive for the node. The `.1` agent deliberately built **no** suppression mechanism, and was right to: silencing a correct sentence to protect a misnamed fact is backwards, and a silencer built before the owner has ruled would have had no caller.
-
-    Renaming to `nodes_with_framework`, with scanner keywords that mean that, clears all three at once — the latent prose landmine, this live finding, and the collision itself. It has prose consequences, so it lands with `.4`/`.7` of BDL-062.
-
-187. [2026-08-25] [HIGH] External (steveyegge/beads): `bd list --json` returns a filtered view as a bare list, with nothing saying it filtered
-
-    **Severity:** high (a consumer cannot tell a complete answer from a partial one, and the partial one looks complete) — **External**
-    **Command:** `bd list --json`
-    **Context:** found while fixing `beadloom-mr2l.84`, where the ACTIVE reconcile could never write `✓ done` for a closed bead. The lookup bug was real, but fixing it alone would have changed nothing.
-    **Measured on this repository:**
-
-    ```
-    bd list --json                 → 38 rows   {open: 34, in_progress: 3, deferred: 1}
-    bd list --json --status closed → 50 rows
-    .beads/issues.jsonl            → 709 records
-    ```
-
-    **Issue:** the default omits every closed bead, and the payload is a **bare JSON list** — there is no envelope, so there is nowhere for the command to state that it filtered, and it does not. A program reading it receives 38 items that are indistinguishable from "all of them". Ours did exactly that.
-    **Why it is HIGH despite being another project's default:** the human default is defensible (`list` shows open work). The machine one is not, because the caller is a program and the omission is silent. It is the same equation this log records against our own tools — a green result that describes the checker's ignorance rather than the state of the world — arriving through a dependency instead of through our code.
-    **Expected:** with `--json`, either return everything and let the caller filter, or wrap the rows in an envelope that names the filter applied (`{"filter": {"status": ["open", "in_progress", "deferred"]}, "issues": [...]}`). A bare list is a shape that *cannot* carry the qualification the answer needs.
-    **Ours to fix regardless:** any Beadloom code reading `bd list` must pass an explicit `--status` or read `.beads/issues.jsonl`, and must not treat the default as the tracker's contents. `beadloom-mr2l.84` did that for the reconcile; nothing sweeps the rest.
-    **Related:** #97 (`bd close --suggest-next` lists still-blocked beads), #165 (`bd create` is O(N) processes), #174/#175 (unverifiable is not clean).
-
-191. [2026-08-23] [MEDIUM] `setup-agentic-flow` without `--force` still recomposes a hand-edited ROLE adapter — the asymmetry `--fix` no longer has
-
-    **Severity:** medium (it is the #139/#151/#186 data-loss shape in the sibling command, and it is now the only door left open)
-    **Command:** `beadloom setup-agentic-flow` (no flags), on a repo with a `flow.yml`
-    **Context:** recorded, deliberately NOT fixed, by BDL-061 `.58` — it was named as adjacent to that bead and absorbing it would have made one bead answer for two decisions. `.59` closed #186 by teaching `config-check --fix` one rule: *rewrite only what Beadloom can prove it wrote*. `setup-agentic-flow` composes the role adapters through `generate_adapters(config, project_root)` with no `preserve=` argument, so the same hand edit `--fix` now declines is recomposed over by the command `--fix`'s own remediation tells the reader to run.
-    **Why it is undecided rather than a defect with an obvious fix:** the two commands have genuinely different contracts. `--fix` is a repair and must not destroy; `setup-agentic-flow` is a scaffold and an adopter may reasonably expect a re-run to reinstate the shipped flow. But the commands + `CLAUDE.md` path in the SAME command already declines a hand edit and reports migration guidance (BDL-UX #188 made that guidance visible), so today one command treats two of its three artifact kinds one way and the third the other, with nothing stating which is intended.
-    **Expected:** decide it, and make the three kinds agree. If the scaffold should preserve, pass `preserve=` the way `.59` does and report the decline; if it should overwrite, say so in the output and in the SPEC, and stop `config-check --fix` from pointing at a command that will do what `--fix` refused.
-    **Related:** #186 (the decided half), #139, #152, #188.
-
 190. [2026-08-23] [LOW] `docs audit` reads a version mentioned as an EXAMPLE as a claim about this project — a doc cannot cite anybody else's version
 
     **Severity:** low (it is a false positive with an obvious workaround, and it blocks a specific and now-recurring kind of sentence)
@@ -1596,6 +943,36 @@
     **Expected:** treat a version as a claim about THIS project only when the mention is attributive — near a project-version keyword, or in a line that does not already name another subject — the same clause-scoping `.45` gave the count facts. Failing that, an explicit inline escape (a fenced block, or a marker) so a doc can quote a foreign version without a tolerance entry.
     **Related:** #169 (the token boundary for counts), #161, #253 (the attribution rule that absorbed the foreign-subject face), #205 (the past tense), BDL-057 (the audit surface).
 
+    **PARTLY FIXED, re-measured 2026-09-29.** The PARTIALLY RESOLVED line above still holds.
+    Fixed: `Measured under CPython 3.13.7` is no longer flagged. Remains: `a JavaScript project at
+    0.4.1` is still read as this project's version, and `drifted from 1.5.0 to 3.0.0` gives two
+    stale mentions.
+
+187. [2026-08-25] [HIGH] External (steveyegge/beads): `bd list --json` returns a filtered view as a bare list, with nothing saying it filtered
+
+    **Severity:** high (a consumer cannot tell a complete answer from a partial one, and the partial one looks complete) — **External**
+    **Command:** `bd list --json`
+    **Context:** found while fixing `beadloom-mr2l.84`, where the ACTIVE reconcile could never write `✓ done` for a closed bead. The lookup bug was real, but fixing it alone would have changed nothing.
+    **Measured on this repository:**
+
+    ```
+    bd list --json                 → 38 rows   {open: 34, in_progress: 3, deferred: 1}
+    bd list --json --status closed → 50 rows
+    .beads/issues.jsonl            → 709 records
+    ```
+
+    **Issue:** the default omits every closed bead, and the payload is a **bare JSON list** — there is no envelope, so there is nowhere for the command to state that it filtered, and it does not. A program reading it receives 38 items that are indistinguishable from "all of them". Ours did exactly that.
+    **Why it is HIGH despite being another project's default:** the human default is defensible (`list` shows open work). The machine one is not, because the caller is a program and the omission is silent. It is the same equation this log records against our own tools — a green result that describes the checker's ignorance rather than the state of the world — arriving through a dependency instead of through our code.
+    **Expected:** with `--json`, either return everything and let the caller filter, or wrap the rows in an envelope that names the filter applied (`{"filter": {"status": ["open", "in_progress", "deferred"]}, "issues": [...]}`). A bare list is a shape that *cannot* carry the qualification the answer needs.
+    **Ours to fix regardless:** any Beadloom code reading `bd list` must pass an explicit `--status` or read `.beads/issues.jsonl`, and must not treat the default as the tracker's contents. `beadloom-mr2l.84` did that for the reconcile; nothing sweeps the rest.
+    **Related:** #97 (`bd close --suggest-next` lists still-blocked beads), #165 (`bd create` is O(N) processes), #174/#175 (unverifiable is not clean).
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed on our side by `beadloom-0mdo.52`: every
+    consumer passes `--all` (`services/commands/waves.py`, `docsync.py`), and
+    `services/bd_seam/assumptions.py` records the assumption. Remains: upstream, `bd list --json`
+    on bd 1.0.4 still returns a bare list of 50 rows with closed beads omitted. That half is
+    External, like #97, and could move to Excluded Issues.
+
 185. [2026-08-23] [LOW] SUSPECTED: a byte-identity assertion over a WAL-mode database may accuse the wrong thing — one occurrence, not attributable
 
     **Severity:** low, and deliberately filed as a SUSPICION rather than a defect
@@ -1615,28 +992,6 @@
     **Why it is worse than an ugly traceback:** an uninitialised project is a *legitimate, expected* state for this command, since `config-check` is one of the first things anyone runs. So the most likely first-contact experience with the command is a silent failure that reads as "your config is wrong" rather than "there is no index yet, run `beadloom init`".
     **Expected:** an absent index is an answer, not an exception — say so and exit on a code that means it (this is `unverifiable is not clean` again, from the caller's side rather than the checker's). At minimum, never exit non-zero with both streams empty: a verdict nobody can read is not a verdict.
     **Related:** #175 (a rebuilt index has nothing to compare against), #174, #146 — the same family, and this is the entry point.
-
-181. [2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does
-
-    **Severity:** medium (no defect ships, but every agent reports green on a tree that is red, and the discrepancy reads as a contradiction rather than as two different measurements)
-    **Command:** the multi-agent wave protocol in `/coordinator`, not a Beadloom command
-    **Context:** BDL-061 S2b ran four dev beads across two waves in one shared working tree. Because a shared tree makes a full-suite run meaningless for any single agent, each verified in a **clean room** — `git archive HEAD` plus only its own files — and each honestly reported green. The coordinator's combined run then found `beadloom ci` rc 1 with 28 stale pairs.
-    **Issue:** the clean-room technique is *correct* — it is the only way to attribute a result to one bead while neighbours are editing — and it is *blind by construction* to any interaction between beads. Nothing in the protocol runs the combined tree until the coordinator does it at wave end, so a wave's integration state is unmeasured for its whole duration and the first honest number arrives last.
-    **Why it is worth filing rather than shrugging at:** four agents reported green, the tree was red, and none of them was wrong. That is a signalling failure, not an engineering one, and it will recur on every wave. It also inverts the usual risk: the *more* carefully each agent isolates itself, the less anyone knows about the whole.
-    **Expected:**
-    - The wave protocol should name the combined run as a distinct, owned step — not a coordinator habit. It is currently in nobody's bead.
-    - An agent's green should be *typed*: "green in a clean room over N files" is a different claim from "green on the tree", and reporting them with the same word is what makes the discrepancy read as a contradiction.
-    - Cheapest mechanical improvement: have the last agent of a wave, or the merge-slot holder, run the combined gate — someone already holds a lock at exactly the right moment.
-    **Related:** #118 (parallel agents collide on the shared pre-commit hook) — same root, that the wave shares one tree; BDL-061 S6 (`beadloom waves`) is where the decision about what may share a tree belongs.
-
-180. [2026-08-24] [MEDIUM] A `docs-audit` fact that fails to COLLECT is silently dropped from the declared list, so coverage cannot report it
-
-    **Severity:** medium (it is the one hole the coverage report cannot cover, and it is in the mechanism that was just built to close #173)
-    **Command:** `beadloom docs audit`, `beadloom ci`
-    **Context:** found while implementing `beadloom-mr2l.45`. `FactRegistry.collect` wraps every source in `try/except`, logs a warning, and omits the fact. Reproduced in-process: with the Click surface registry unpopulated, `cli_command_count` vanishes and the audit reports `2/8 declared fact(s) verified` — an honest-looking fraction over a denominator that silently lost a fact. The same happens to `rule_type_count` against a database with no `rules` table, and to `version` when a manifest cannot be parsed.
-    **Issue:** BDL-061.45 made the audit report what it could not VERIFY, but a fact that could not be COLLECTED never reaches that report. Coverage can only speak about facts in `result.facts`, so the failure mode moved one level up rather than away: *a fact that failed to collect reads as a fact that does not exist*. The warning goes to a logger nobody reads at `beadloom ci` time — #178's shape exactly.
-    **Expected:** `FactRegistry` records collection failures alongside successes (`uncollected: {name: reason}`), the audit prints them in the same place it prints `not_covered` / `unreadable`, and the declared-fact denominator counts them. A fact that could not be computed is a fourth coverage status, not an absence.
-    **Related:** #173 (the coverage report this hole sits inside), #174/#175 (*unverifiable is not clean*), #178 (honesty routed to a channel nobody reads).
 
 179. [2026-08-23] [MEDIUM] How many rule types exist? Three documents give three answers and all of them are wrong
 
@@ -1678,6 +1033,11 @@
     **Still open, unchanged:** rename `rule_type_count` to `rule_count` with keywords meaning "rules this project declares", and give the type count its own fact if it is worth auditing. It remains a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config, which is why it is still a bead of its own. BDL-062 `.4` did exactly the same rename for `framework_count` -> `nodes_with_framework` (#193), so the shape of the work is now demonstrated rather than proposed.
     **MEASURED AGAINST THE FIXED AUDIT (`beadloom-mr2l.45`, 2026-08-24), and it changes the ask.** Registering the fact is necessary but NOT sufficient here, for two reasons the coverage report makes visible: (1) the document that states the number — `docs/domains/graph/features/rule-engine/SPEC.md` — matches `docs/**/features/*/SPEC.md` and is **never scanned**, so a registered fact would still read `not_covered` while the SPEC drifted; (2) the existing `rule_type_count` fact is a MISNOMER — it counts rows in the `rules` table (12 configured rules on this repo), not the loader's nine dispatch KINDS, and `FACT_KEYWORDS` maps `rule`, `rule type` and `rule kind` all to that one fact. Registering the dispatch count therefore means splitting the keywords and renaming the existing fact, which is a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config. That is a bead of its own, not a line in #173's fix.
 
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the SPEC table and the AGENTS.md map are
+    checked against `AUTHORING_KEYS`. Remains: `_collect_rule_type_count` in `doc_sync/audit.py`
+    still counts rows of the `rules` table, so `rule type count` equals the rule count (19), and
+    feature SPECs are still excluded from the scan. No open bead holds the rename.
+
 178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing
 
     **Severity:** high (it is in the required set, so it is load-bearing for merge, and the failure mode is the one the whole S2 slice was about)
@@ -1704,48 +1064,6 @@
     **Expected:** either backfill both counters to the live DB totals on the incremental path — the fix #112 already applied to `Symbols:` for exactly this reason — or label them as per-run deltas and omit them when the path does not compute one. Same shape as #148: a number whose meaning depends on which path produced it.
     **Related:** #112 (closed, BDL-047 — the identical defect on `Symbols:`), #148.
 
-173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
-
-    **Severity:** high (a false positive fails the Gate and gets fixed; every one of these is silent, and the audit's own output reads as a clean bill of health)
-    **Command:** `beadloom docs audit`, `beadloom ci`
-    **Context:** the sweep asked for by `beadloom-mr2l.44` while fixing #169. #169 was found twice by the Gate going red; nobody had looked for the half that keeps the Gate green. Measured on this repo, 2026-08-23.
-    **The worst one printed a lie as a verification.** `The graph holds 1,067 nodes.` was extracted as `067`, compared equal to the project's `node_count` of 67, and listed under **Fresh (verified)** — the audit affirmed a claim that is off by a thousand. Symmetrically, the TRUE sentence `The suite has 6,390 tests.` extracted as `390` and was reported stale. One defect, both directions, and only the noisy direction was ever noticed. (Fixed in `.44`; recorded here as the proof the class is real.)
-    **Two more, unfixed and pinned as strict `xfail`s** in `tests/test_doc_scanner_tokenization.py::TestKnownBlindSpots` so they go LOUD when someone fixes them:
-    - Counts below 10 are never extracted for any `*_count` fact. `language_count` is **1** in this repo, so that fact cannot be audited at all — any claim about it, right or wrong, is invisible, and the audit reads green.
-    - A Layer-1 modifier word anywhere in the +/-3 word window suppresses a genuine count even when it modifies a different noun: `The graph holds 316 edges, one per import.` yields nothing, because of `per`.
-    **The measurement that makes the shape plain:** the audit prints a Ground Truth block of **nine** facts and then `13 mention(s) fresh` — and all 13 are the **same** fact (`mcp_tool_count`). `cli_command_count`, `edge_count`, `node_count`, `rule_type_count`, `test_count` and `version` have **zero** findings; no doc in the repo states the current version at all. A green `docs-audit` leg today means "one fact of nine was checked", and nothing in the output says so. By design but equally silent: `SPEC.md` / `CONTRIBUTING.md` suppress all count facts and `docs/**/features/*/SPEC.md` is excluded outright — 26 of the 72 `.md` files under `docs/` are never scanned.
-    **Expected — report the surface, not more heuristics:**
-    - Emit per-fact coverage: for each fact in the registry, the number of mentions found. A fact with **zero** mentions is `not_covered`, printed as such, and never counted as passing. This is "unknown is not zero" applied to the audit's own output.
-    - Name the files whose counts were suppressed by the file-type heuristic, and why.
-    - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
-    **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
-    > **FIXED in BDL-061 (`beadloom-mr2l.45`).** Not three parser fixes — the audit now REPORTS WHAT IT DID NOT VERIFY, which is the same equation as #174/#175 (`unverifiable is not clean`) and #172 (a rule that cannot match reports itself). Three parts. (1) **Per-fact coverage.** Every declared fact carries `verified` / `not_covered` / `unreadable`, printed against the fact in the `Ground Truth` block and summarised on the one line everybody reads — including the `beadloom ci` step line: `14 mention(s) fresh; 2/9 declared fact(s) verified, NOT VERIFIED: cli_command_count, edge_count, ...`. A fact nothing was found for is never counted as passing, and a mention hidden by a `docs_audit.ignore` rule is NOT coverage. (2) **Clause-scoped matching** fixes the modifier class: both the modifier window and the keyword window stop at `,` `;` `:` and the dashes, so `316 edges, one per import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not. The separator set was chosen by MEASUREMENT — parentheses are deliberately excluded because they cost the true verification in `MCP tools (18):`, and a lost true positive is the very silent false negative being fixed. Repo-wide: 0 mentions gained, 5 lost, all five confirmed false positives; three more `docs_audit.ignore` entries went dead and were retired. (3) **The scan surface is published** — all 33 unread documents named with the pattern that skipped them, plus the count-suppressed ones, in `--verbose` and in `--json`. The single-digit floor was RE-MEASURED and KEPT: removing it yields 14 extra mentions on this repo of which 13 are ordinals, table cells and category breakdowns, several of which would have failed the Gate. Trading a silent false negative for a loud false positive that then needs a suppression entry is the wrong trade — so the floor stays and `language_count` (value 1) is now reported `unreadable` by name instead of reading green. Coverage is reported, not enforced (a WARN every project would carry on every run would spend the channel `sync-check` needs); `docs audit --fail-if unverified>N` is the opt-in. MEASURED after the fix: **2 of 9 declared facts verifiable-and-verified on this repo, 6 `not_covered` because no document states them, 1 `unreadable`** — and every one of those seven is now named in the output.
-
-171. [2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid
-
-    **Severity:** medium (silent, produces a well-formed but wrong DAG, and only surfaces when someone reads the echo)
-    **Command:** `bd create --parent <id>`, `bd dep add`
-    **Context:** observed in BDL-061 S2 wave 1, with three agents and the coordinator working the same epic. Our convention writes the bead's own number into its title (`[BDL-061.39][dev] ...`), but the number is authored **before** creation while the id is allocated **at** creation. During a concurrent wave those two diverge: the coordinator wrote two beads intending `.39` and `.40`; a subagent had meanwhile created its own bead, which took `.39`; the coordinator's two landed as `.40` and `.41` carrying `[BDL-061.39]` and `[BDL-061.40]` in their titles.
-    **The damage is not the cosmetic mismatch, it is the wiring.** The coordinator then ran `bd dep add beadloom-mr2l.39 beadloom-mr2l.5`, which made the *subagent's* Windows-CI bead depend on the S2 core — a real edge, on a real bead, accepted without complaint, and wrong. `bd dep add` cannot detect this: every id exists and the graph stays acyclic, so there is nothing malformed to reject.
-    **What caught it:** `bd dep add` echoes both beads' **full titles**, not just their ids. Reading that echo is the only reason the mis-wiring was noticed within seconds instead of surviving into the next wave. That verbosity is good design and worth keeping — the entry records it so nobody "tidies" it into id-only output.
-    **Expected:** three separable pieces.
-    - **Stop keeping the number twice.** Either drop the id from the title convention and let `bd` be the single source of it, or have the scaffolding write the title *after* creation from the id actually allocated. Two sources of truth for one number is the root cause; the concurrency only exposes it.
-    - **Make `bd create` report the id it allocated in a form a script can consume**, so an agent that must reference its own bead does not have to predict the number. (`--json` on create would be enough.)
-    - **Consider a `bd dep add --expect-title <substring>` guard**, or at minimum document that dependency wiring under a concurrent wave must be verified against `bd dep tree`, not assumed from the ids the author had in mind.
-    **Note on scope:** `/coordinator` *mandates* launching independent ready beads concurrently, so this is not an exotic mode — it is the prescribed one. The id-in-title convention is ours, not `bd`'s, which makes the first fix ours to make.
-
-170. [2026-08-22] [HIGH] 🔴 A guard bound to `Edit|Write` does not see a file written through `Bash` — the enforcement surface is narrower than the promise
-
-    **Severity:** high (the guard reports it ran and passed on the edits it saw; the edits it never saw are indistinguishable from none)
-    **Command:** `beadloom guard`, `beadloom setup-agentic-flow` (the emitted `.claude/settings.json`)
-    **Context:** found while dogfooding BDL-061 S1 on this repo. The shipped hook binds `PreToolUse` with `matcher: "Edit|Write|NotebookEdit"`. An agent that edits a file with `python3 - <<EOF`, `sed -i`, or a heredoc goes through `Bash` and fires no guard at all. This is not hypothetical: the coordinator's own session was operating under an instruction to prefer `Bash` for file edits, so a whole class of edits to this very repository was unguarded while `--liveness` showed the guards healthy and firing.
-    **Why it is worse than a missing matcher:** the failure is silent and it is *shaped like success*. `bead-claimed` cannot warn about an edit it was never told about, so a session that edits exclusively through `Bash` produces a clean liveness report and zero warnings — the same output as a session that complied perfectly.
-    **Expected:** three separable pieces, and the third is the real one.
-    - Add `Bash` to the emitted matcher and derive the edit target from the command line where it can be — necessarily partial, since a shell command's write targets are not decidable in general.
-    - Because it is partial, the verdict must say so: a `Bash` invocation whose target cannot be determined is `not_covered`, not `pass`. This is the "unknown is not zero" rule applied to the enforcement surface itself.
-    - **Report the surface, not just the firings.** `--liveness` today answers "did each declared guard fire?". It should also answer "what fraction of edit events could this binding have seen?" — a guard that is healthy on a matcher covering one of three write paths is 33% of a guard, and nothing currently says so.
-    **Related:** M3 from review `.3` (the harness owns event routing *and* the guard list, so `.claude/settings.json` carries two decisions Beadloom cannot see) is the same defect from the other end and is already S3 work. This entry is the reason M3 is not cosmetic.
-
 168. [2026-08-22] [MEDIUM] `pytest-randomly` produces failures no seed reproduces, and nothing in the output says the order was random
 
     **Severity:** medium (agent-facing: a ghost failure costs a full investigation cycle, and the log is the only place that would have warned)
@@ -1754,6 +1072,12 @@
     **Expected:** pin a seed in CI and in the pre-push Gate so a red run is reproducible by construction, and keep randomisation for a separate scheduled job whose whole purpose is to find order dependence. A random-order failure that cannot be replayed is not a signal anyone can act on.
     **Related:** #147 / `.29` friction 3 — a stale `beadloom.db-wal` left by an earlier command is one of the shared-state channels that makes ordering matter.
 
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the main shared-state channel is gone,
+    because since BDL-074 (`beadloom-qq6m`) no test reads the live index. Remains:
+    `pytest-randomly` is still a dev dependency in `pyproject.toml`, and neither `ci.yml` nor
+    `addopts` pins a seed. pytest-randomly prints its seed in the header, so "nothing in the
+    output says the order was random" was never quite accurate.
+
 167. [2026-08-22] [LOW] `sync-check` prints one `[stale]` line per pair, so a single stale doc reads as a wall of 28 identical lines
 
     **Severity:** low (pure signal-to-noise, but it lands on every agent at every gate)
@@ -1761,6 +1085,11 @@
     **Context:** one doc with many watched symbols emits one line per pair. The output is 28 lines that differ in no visible way, and the count of distinct DOCUMENTS needing attention — the number the reader actually wants — has to be derived by eye.
     **Expected:** group by document: one line per doc with the pair count and the reasons, and the per-pair detail behind `--verbose` or `--json`.
     **MEASURED AGAIN AT GATE SCALE (BDL-061 S2b, 2026-08-24), and it is worse than filed.** The combined tree of a four-bead wave reported 28 stale pairs, all of them the SAME document (`docs/domains/onboarding/README.md`) — because `symbols_hash` is per `ref_id`, one changed file makes every sibling pair of that node stale. The Gate's output, `beadloom sync-check`'s output and `beadloom doctor`'s output each carried 28 near-identical lines, so the reader's first question — *is this one document or twenty-eight?* — could only be answered from `--json`. At gate scale the noise is not merely low signal-to-noise: it misrepresents the SIZE of the problem, which is what a reader decides how to spend an hour on.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: freshness is per file since
+    `beadloom-mr2l.78` (#182), and each line names its code file, so one change no longer prints
+    28 identical lines. Remains: the report is one line per pair with no grouping per document,
+    and a copy of main printed 533 lines.
 
 166. [2026-08-22] [MEDIUM] Adding one CLI command drifts six reference docs, and `sync-update --all --yes` does not cover them
 
@@ -1771,12 +1100,9 @@
     **Related:** #163 — bulk re-baselining is exactly the operation that needs to be recorded rather than made frictionless, so the fix here should count these, not just make them faster.
     **RE-MEASURED (BDL-061 S2b, 2026-08-24): the second half no longer holds, the first half does.** `sync-update --all --yes` DOES clear the reference-doc path — `_mark_synced_noninteractive` calls `mark_reference_synced(conn, None, project_root, all_docs=True)` and reports the count (measured on this repository at the close of S2b: `Re-baselined 7 reference doc(s)`, clearing all six drifted entries in one command) — so the six-commands-for-one-fact friction is gone. What remains is the shape: adding the single flag `sync-check --record-surface` drifted all six `watches:` documents at once, and the bulk form clears them with no record of which six were re-read. That is #163's objection, not a convenience one, and it is the half worth fixing: one attestation with N consequences should say what it attested to.
 
-165. [2026-08-22] [LOW] External (steveyegge/beads): `bd create` costs one process per bead, so building a DAG of ~50 beads stalls
-
-    **Severity:** low (a workaround exists and is fast) — **External**
-    **Command:** `bd create`
-    **Context:** a background agent building a >50-bead fixture ran for 600s without finishing, because each `bd create` is a separate process against embedded Dolt. `bd import` created 60 issues in one process in 0.88s — roughly three orders of magnitude better.
-    **Expected:** document `bd import` as the way to build a DAG (`bd create --graph <plan.json>` is already noted in `/task-init`, and is the same insight). Ours to fix in the shipped guidance: any scaffolding path that creates more than a handful of beads should generate a JSON plan and import it once.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `sync-update --all --yes` clears reference
+    docs, as the 2026-08-24 re-measure says. Remains: it prints only `Re-baselined N reference
+    doc(s).` and never names the documents it re-attested (#163, #279).
 
 163. [2026-08-20] [MEDIUM] `sync-update` can re-attest a doc nobody read — re-baselining silences `sync-check` without evidence
 
@@ -1830,17 +1156,14 @@
     **Expected:** a separate cardinality key for the second question rather than overloading `max_symbols` — e.g. `max_subtree_symbols` (all symbols under the node's source, the old semantics) and/or `max_children` (how many nodes are `part_of` it). Keeping them distinct is the point: a threshold that silently answers whichever question happens to be convenient is how a metric stops meaning anything.
     > Deliberately NOT folded into the `domain-size-limit` threshold when it was recalibrated 290 → 180.
 
-147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
+149. [2026-08-05] [LOW] `graph --format c4 --level component --scope <ref>` on a node with no internals prints a single useless `C4Container` instead of saying so
 
-    **Severity:** high (a verification verb has a side effect on the artifact it verifies; blocks any least-privilege/read-only integration)
-    **Command:** `beadloom lint` (vs `beadloom lint --no-reindex`)
-    **Context:** Dogfood on a downstream project wiring a STRICTLY read-only introspection seam (an agent may run a fixed allowlist of read subcommands and must not mutate repository state). `lint` was assumed read-only — it *reports* violations.
-    **Issue:** plain `lint` performs an implicit reindex and rewrites `.beadloom/beadloom.db`. Measured by sha256 of the DB file: before `2cfb…`, after `beadloom lint` `15cd…` (changed), after `beadloom lint --no-reindex --strict` unchanged. So the only read-only form is `--no-reindex`, and nothing in `lint --help` marks the default as state-mutating. A read-only integration that trusted the verb would silently mutate the index — and, worse, would mutate it under a concurrently-running gate.
-    **Compounding:** `--strict` is also required for a non-zero exit on an `error`-severity violation; plain `lint` exits 0 while printing the violation. A caller checking only the exit code reads a real boundary break as clean (same false-green family as #142/#146).
-    **Expected:** make `lint` read-only by default (reindex only on an explicit `--reindex`), or at minimum document the write in `--help` and warn when the index is written by a verb the user invoked to *check* something. Ideally `--no-reindex` becomes the default and the docs name the trade-off (possibly stale graph) explicitly.
-    **Workaround:** downstream pinned the argv form to `lint --no-reindex --strict` and added a test asserting the DB hash is unchanged across the call.
-    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and again in `.7`.** `lint --no-reindex` is a genuine read-only path — `beadloom.db` is byte-identical afterwards under both `journal_mode=wal` and `journal_mode=delete`, and a MISSING index is now exit 2 with `index not found … Run 'beadloom reindex' first` instead of an empty database created in the same breath and reported clean. `--help` states that the default writes, and plain `lint` names on stderr that its exit code stays 0 over error-severity violations without `--strict` (the code itself is deliberately unchanged: turning it would flip an adopter's green pipeline red).
-    > **Two residues, both measured, both unfixed.** (a) On a WAL index the read-only form still creates and leaves `beadloom.db-wal` / `beadloom.db-shm`, so byte-identity is a property of the FILE, not of `.beadloom/`. (b) **`--no-reindex` answers about the INDEX and never says so:** with a real error-severity crossing on disk and a stale index, `lint --no-reindex --strict` printed `0 violations, 12 rules evaluated` at rc 0, silent on both streams, while plain `lint --strict` on the same tree exited 1 — and `beadloom ci --no-reindex` reported `lint PASS` over that same live violation. The flag is exposed to adopters (`.github/actions/beadloom-gate` has a `no-reindex` input; `docs/guides/ci-setup.md` recommends `beadloom ci --no-reindex` in the GitLab example), so #147's fix created a second way to lint a stale graph. `file_index` already stores a sha256 per path, so "N files differ from the index" is one query. **Documented in `docs/services/cli.md` and `docs/guides/ci-setup.md`; no bead yet.**
+    **Severity:** low (silently useless output rather than an error — reads as a rendered diagram)
+    **Command:** `beadloom graph --format c4 --level component --scope <ref_id>`
+    **Context:** Dogfood: an integration offers a "detailed diagram of one container" view and passes whatever node the user names.
+    **Issue:** when `<ref>` is a leaf (no nested nodes), the command exits 0 and emits a valid-but-empty C4 diagram — one `C4Container` block, no internals. Rendered, it is a single box. There is no signal distinguishing "this node has no internals" from "here are its internals", so a caller cannot tell the user the truth without pre-checking the graph itself.
+    **Expected:** exit non-zero (or print an explicit note) when `--scope` resolves to a node with no contained nodes, so the caller can fall back to a neighbourhood view and say why.
+    **Workaround:** downstream detects the degenerate output and falls back to the node's neighbourhood diagram plus an honest note to the reader.
 
 148. [2026-08-05] [MEDIUM] `lint` prints machine porcelain when stdout is not a TTY — the human summary line vanishes in a pipe, so the documented output is not what a program receives
 
@@ -1853,14 +1176,28 @@
     **Expected:** keep one shape by default and gate the machine form behind an explicit flag (`--porcelain`/`--json`), or emit the summary line in both modes. TTY-dependent output shape should never be the only way to get the documented text.
     **Workaround:** downstream reconstructs the verdict from the porcelain lines and appends its own summary.
 
-149. [2026-08-05] [LOW] `graph --format c4 --level component --scope <ref>` on a node with no internals prints a single useless `C4Container` instead of saying so
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `lint --format rich|json|porcelain|github`
+    selects the shape, and `sync-check` has `--porcelain` and `--json`. The flag dates from
+    BDL-007, so "no flag to select the shape" was already false. Remains: the default still
+    switches on the TTY, and piped `lint` prints porcelain rows with no `Errors/Warnings` summary
+    line.
 
-    **Severity:** low (silently useless output rather than an error — reads as a rendered diagram)
-    **Command:** `beadloom graph --format c4 --level component --scope <ref_id>`
-    **Context:** Dogfood: an integration offers a "detailed diagram of one container" view and passes whatever node the user names.
-    **Issue:** when `<ref>` is a leaf (no nested nodes), the command exits 0 and emits a valid-but-empty C4 diagram — one `C4Container` block, no internals. Rendered, it is a single box. There is no signal distinguishing "this node has no internals" from "here are its internals", so a caller cannot tell the user the truth without pre-checking the graph itself.
-    **Expected:** exit non-zero (or print an explicit note) when `--scope` resolves to a node with no contained nodes, so the caller can fall back to a neighbourhood view and say why.
-    **Workaround:** downstream detects the degenerate output and falls back to the node's neighbourhood diagram plus an honest note to the reader.
+147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
+
+    **Severity:** high (a verification verb has a side effect on the artifact it verifies; blocks any least-privilege/read-only integration)
+    **Command:** `beadloom lint` (vs `beadloom lint --no-reindex`)
+    **Context:** Dogfood on a downstream project wiring a STRICTLY read-only introspection seam (an agent may run a fixed allowlist of read subcommands and must not mutate repository state). `lint` was assumed read-only — it *reports* violations.
+    **Issue:** plain `lint` performs an implicit reindex and rewrites `.beadloom/beadloom.db`. Measured by sha256 of the DB file: before `2cfb…`, after `beadloom lint` `15cd…` (changed), after `beadloom lint --no-reindex --strict` unchanged. So the only read-only form is `--no-reindex`, and nothing in `lint --help` marks the default as state-mutating. A read-only integration that trusted the verb would silently mutate the index — and, worse, would mutate it under a concurrently-running gate.
+    **Compounding:** `--strict` is also required for a non-zero exit on an `error`-severity violation; plain `lint` exits 0 while printing the violation. A caller checking only the exit code reads a real boundary break as clean (same false-green family as #142/#146).
+    **Expected:** make `lint` read-only by default (reindex only on an explicit `--reindex`), or at minimum document the write in `--help` and warn when the index is written by a verb the user invoked to *check* something. Ideally `--no-reindex` becomes the default and the docs name the trade-off (possibly stale graph) explicitly.
+    **Workaround:** downstream pinned the argv form to `lint --no-reindex --strict` and added a test asserting the DB hash is unchanged across the call.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and again in `.7`.** `lint --no-reindex` is a genuine read-only path — `beadloom.db` is byte-identical afterwards under both `journal_mode=wal` and `journal_mode=delete`, and a MISSING index is now exit 2 with `index not found … Run 'beadloom reindex' first` instead of an empty database created in the same breath and reported clean. `--help` states that the default writes, and plain `lint` names on stderr that its exit code stays 0 over error-severity violations without `--strict` (the code itself is deliberately unchanged: turning it would flip an adopter's green pipeline red).
+    > **Two residues, both measured, both unfixed.** (a) On a WAL index the read-only form still creates and leaves `beadloom.db-wal` / `beadloom.db-shm`, so byte-identity is a property of the FILE, not of `.beadloom/`. (b) **`--no-reindex` answers about the INDEX and never says so:** with a real error-severity crossing on disk and a stale index, `lint --no-reindex --strict` printed `0 violations, 12 rules evaluated` at rc 0, silent on both streams, while plain `lint --strict` on the same tree exited 1 — and `beadloom ci --no-reindex` reported `lint PASS` over that same live violation. The flag is exposed to adopters (`.github/actions/beadloom-gate` has a `no-reindex` input; `docs/guides/ci-setup.md` recommends `beadloom ci --no-reindex` in the GitLab example), so #147's fix created a second way to lint a stale graph. `file_index` already stores a sha256 per path, so "N files differ from the index" is one query. **Documented in `docs/services/cli.md` and `docs/guides/ci-setup.md`; no bead yet.**
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: `lint --no-reindex` leaves `beadloom.db`
+    byte-identical (same sha1, measured by the audit on a copy of main). Remains: (a) on a WAL
+    index it leaves new `-wal` and `-shm` files, and (b) it says nothing when the index is older
+    than the tree. Neither residue has a bead.
 
 145. [2026-08-03] [MEDIUM] `ctx <ref> --json` returns the REPO-WIDE `code_symbols` array, not the focused node's — an agent sizing/inspecting a node from its own context bundle reads every other package's symbols
 
@@ -1879,6 +1216,11 @@
     **Issue:** Stale output is per-(symbol,occurrence), not grouped per-doc/per-ref. There is no rolled-up summary ("N stale across M refs: <ref-list>"). Also fires on **test-only** commits (a test signature touch), which is noisy for a test wave that legitimately defers docs to a later tech-writer step.
     **Expected:** Group the stale report by ref/doc with a count (`conversation: 41 stale`, `application: 118 stale`, …) + a one-line total, so the fix target (`sync-update <ref>`) is obvious at a glance. Optionally a `--summary` mode. Per-occurrence detail behind `--verbose`.
     **Workaround:** `beadloom sync-check --json` and group client-side; defer to the tech-writer `sync-update` wave regardless of the noise.
+
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: findings are one per doc-code pair
+    (`doc-stale` per pair in `application/gate.py`), not one per symbol occurrence. Remains: there
+    is no grouping per ref or document and no summary line, and `sync-check` on the tree printed
+    533 per-pair lines with no total.
 
 138. [2026-07-02] [MEDIUM] `docs generate` silently no-ops on a coarse graph; no monolith-drift guard; `component`→`DOC.md` not generated
 
@@ -1904,80 +1246,9 @@
     **Expected:** `sync-update --all` should re-attest `reference` docs so a subsequent `sync-check`/`sync-update` reports them fresh (0 re-baselined on the second pass), matching symbol-pair behavior.
     **Workaround:** None needed for the Gate (warn-only, exit 0). Ignore the repeated count; confirm `beadloom ci` rc0 + the `TestSyncCheckNewPairs` test green as the real signal.
 
-114. [2026-06-02] [LOW] Committed VitePress scaffold ships no `package-lock.json` — `npm ci` cannot run on a fresh checkout
-
-    **Severity:** low
-    **Command:** `cd site && npm ci`
-    **Context:** BDL-040 F4 BEAD-05 dogfood. The BEAD-01 scaffold committed `site/package.json` (pinned deps) but no `site/package-lock.json`. The bead instructions (and the scaffold's own header comment) say to run `npm ci && npm run docs:build`, but `npm ci` hard-requires a lockfile and errors out without one — so the very first build must use `npm install` (which then generates the lockfile).
-    **Issue:** Mismatch between the documented build command (`npm ci`) and what a fresh checkout actually supports (`npm install` only, until a lockfile is committed).
-    **Expected:** Either commit a `package-lock.json` alongside `package.json` (so `npm ci` works + the build is reproducible/pinned), or change the documented first-run command to `npm install`. Committing the lockfile is preferable — it pins the transitive dep tree for a deterministic dogfood/CI build.
-    **Workaround:** Use `npm install` for the first build; commit the resulting `package-lock.json` so subsequent `npm ci` works.
-    **Resolution (BEAD-05 follow-up):** `site/package-lock.json` is now committed (generated by `npm install`), so `npm ci` works on a fresh checkout and the dogfood build is reproducible/pinned. `site/node_modules` + `site/.vitepress/dist` stay gitignored.
-
-71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
-
-    **Severity:** medium
-    **Command:** `beadloom init --bootstrap -y` → `beadloom lint --strict`
-    **Context:** Bootstrapping Beadloom on a production FastAPI monolith project provided for field-testing. The project has a clean architecture with domain packages containing `graphql/` sub-packages.
-    **Issue:** The auto-generated `rules.yml` includes a `feature-needs-domain` rule that requires every feature to be `part_of` a domain. However, the bootstrap classifier creates features inside services too (e.g., `core-rest` feature → `part_of` core service; `tasks-graphql` feature → `part_of` tasks service). Running `beadloom lint --strict` immediately after init exits with 2 violations — a "broken out of the box" experience.
-    **Expected:** Either (a) the default rule should accept features inside both domains and services (`has_edge_to: {}`), or (b) the bootstrap classifier should only classify nodes as `feature` when they are inside a `domain`-kind parent (not `service`-kind). Zero violations should be the norm after a clean bootstrap.
-    **Workaround:** Manually edit `.beadloom/_graph/rules.yml`: change `has_edge_to: { kind: domain }` to `has_edge_to: {}` and rename the rule to `feature-needs-parent`.
-
-72. [2026-03-10] [LOW] `beadloom setup-rules` doesn't detect IDE when marker directory is gitignored
-
-    **Severity:** low
-    **Command:** `beadloom setup-rules`
-    **Context:** The project has `.cursor/` listed in `.gitignore`, so the directory doesn't exist on a fresh clone, but does exist in the working tree.
-    **Issue:** `setup-rules` outputs `No IDE markers detected` and creates no files. The `.cursor/` directory was present in the filesystem but gitignored. Auto-detection apparently checks for marker files but the detection logic may miss directories that exist but are in `.gitignore`.
-    **Expected:** If marker directories exist on disk (regardless of gitignore), they should be detected. Alternatively, if no markers are found, print a helpful hint: `"No IDE markers detected. Use --tool cursor|windsurf|cline to specify."` so the user doesn't have to run `--help` to discover the flag.
-    **Workaround:** Explicitly pass `--tool cursor`.
-
-73. [2026-03-10] [LOW] `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md`
-
-    **Severity:** low
-    **Command:** `beadloom doctor`
-    **Context:** After bootstrapping on an external project, the existing `.claude/CLAUDE.md` contained content from a previous project (Beadloom itself) with `Version: 1.9.0` and DDD package references (`context_oracle/`, `doc_sync/`, etc.).
-    **Issue:** `doctor` checks `.claude/CLAUDE.md` for version and package claims, finding `CLAUDE.md claims 1.9.0, actual is 1.7.0` and `Package drift: claimed but missing: context_oracle, doc_sync, graph, infrastructure, onboarding, services, tui`. These are false positives — CLAUDE.md is a user-maintained file that may describe the project in custom terms, not necessarily matching Beadloom's internal structure.
-    **Expected:** `doctor` should validate `.beadloom/AGENTS.md` (which Beadloom generates and controls) rather than `.claude/CLAUDE.md` (which is user-authored and project-specific). If CLAUDE.md is checked at all, it should be limited to `<!-- beadloom:auto-start -->` / `<!-- beadloom:auto-end -->` sections.
-    **Workaround:** Ignore the warnings; they're false positives caused by stale CLAUDE.md content from another project.
-
-88. [2026-03-11] [HIGH] Incremental `beadloom reindex` returns 0 nodes after doc enrichment
-
-    **Severity:** high
-    **Command:** `beadloom reindex`
-    **Context:** After enriching 18 documentation files (replacing skeleton content with detailed descriptions), an incremental `beadloom reindex` was run to update the index.
-    **Issue:** Incremental reindex returned `Nodes: 0, Edges: 0, Symbols: 0, Imports: 0` — completely empty index. The `services.yml` was verified to be intact (18 nodes, 34 edges, correct YAML block format). Running `beadloom reindex --full` immediately after returned `Nodes: 18, Edges: 34, Symbols: 272` — completely normal.
-    **Root cause hypothesis:** Incremental reindex likely detects that many files changed (18 doc files + potentially cached state) and incorrectly drops the entire index instead of updating it. The SQLite cache may have become inconsistent after bulk doc writes by parallel agents.
-    **Expected:** Incremental reindex should never return 0 nodes when `services.yml` is valid. If the incremental path detects inconsistency, it should auto-fallback to `--full` reindex rather than returning an empty result. At minimum, print a warning: `"Incremental reindex returned 0 nodes — possible cache inconsistency. Retry with --full."`.
-    **Workaround:** Always use `beadloom reindex --full` after bulk changes. Do not rely on incremental reindex after modifying many files simultaneously.
-    **Root cause (confirmed 2026-05-28 code review):** NOT cache inconsistency. `incremental_reindex` (`infrastructure/reindex.py:1088-1296`) never assigns `result.nodes_loaded`/`edges_loaded` on the docs/code-only path — they keep their `ReindexResult` default of `0`, and the CLI prints them verbatim (`services/cli.py:288-289`). The index is intact; this is a **display bug**, not data loss. Trivial fix: query live DB totals (as the `nothing_changed` branch already does at `cli.py:274-279`). Note this is a recurrence — the same symptom (#21) was "fixed" in v1.5.0.
-
-86. [2026-03-10] [HIGH] YAML flow-style edges silently produce 0 nodes on reindex
-
-    **Severity:** high
-    **Command:** `beadloom reindex`
-    **Context:** During manual graph editing of `services.yml`, edges were written in YAML inline/flow format: `- { src: houses, dst: core-external-inspection-system, kind: depends_on }`. This is perfectly valid YAML per the spec. Nodes were written in block format.
-    **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
-    **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
-    **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
-
-93. [2026-05-28] [LOW] `AGENTS.md` MCP tool list is stale (documents 13 tools, actual is 14)
-
-    **Severity:** low
-    **Command:** `beadloom doctor`
-    **Context:** Self-audit (2026-05-28). doctor reports *"MCP tool drift: AGENTS.md documents 13 tools, actual is 14"*.
-    **Issue:** The generated `AGENTS.md` lists 13 MCP tools but 14 are registered. Unlike the won't-fix README case (#20), `AGENTS.md` IS agent-facing and HAS a `generate_agents_md()` regeneration path — so this is a real regeneration/sync gap that should never drift.
-    **Expected:** `generate_agents_md()` should enumerate MCP tools from the live registry so the count can't drift; `setup-rules --refresh` (or a doctor `--fix`) should bring it back in sync.
-    **Workaround:** Regenerate `AGENTS.md`.
-
-94. [2026-05-28] [MEDIUM] Over-broad `except Exception` for "table missing" can swallow real errors silently
-
-    **Severity:** medium
-    **Command:** internal (reindex / metadata reads)
-    **Context:** Self-audit (2026-05-28). Same silent-failure class as #86 / #88.
-    **Issue:** `infrastructure/reindex.py:125`, `:863`, `:926` use bare `except Exception` to mean "table doesn't exist on first run" and then return `{}` / skip. As written they also swallow genuine `sqlite3` corruption, IO errors, and programming errors — silently returning empty and masking real failures behind a "first run" assumption.
-    **Expected:** Catch the specific `sqlite3.OperationalError` (and verify it's a missing-table case, e.g. via `PRAGMA table_info`) so only the intended condition is handled; let all other exceptions propagate.
-    **Workaround:** None.
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the drift converges. In a git-initialised
+    copy, 7 surface-drift lines went to 0 after one `sync-update --yes --all`. Remains: every pass
+    still prints `Re-baselined 10 reference doc(s).`, so the command's own count never reaches 0.
 
 95. [2026-05-28] [MEDIUM] Per-bundle full table scan of `code_symbols` won't scale; L2 `bundle_cache` is not on the build path
 
@@ -1988,18 +1259,21 @@
     **Expected:** Filter symbols in SQL by the subgraph's ref_ids (indexed join), avoid per-row JSON parsing of non-matching rows (e.g. a `symbol_annotations(ref_id, symbol_id)` table or an indexed `ref_id` column), and/or wire `build_context` through the existing `bundle_cache`.
     **Workaround:** None needed at small scale.
 
+    **PARTLY FIXED, re-measured 2026-09-29.** Fixed: the L2 cache is on the build path, because
+    `ctx` and the MCP server go through `build_context_cached` with `SqliteCache`. Remains: on a
+    cache miss, `_collect_code_symbols` still runs `SELECT * FROM code_symbols` and parses every
+    row's JSON (`context_oracle/builder.py`).
+
+73. [2026-03-10] [LOW] `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md`
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** After bootstrapping on an external project, the existing `.claude/CLAUDE.md` contained content from a previous project (Beadloom itself) with `Version: 1.9.0` and DDD package references (`context_oracle/`, `doc_sync/`, etc.).
+    **Issue:** `doctor` checks `.claude/CLAUDE.md` for version and package claims, finding `CLAUDE.md claims 1.9.0, actual is 1.7.0` and `Package drift: claimed but missing: context_oracle, doc_sync, graph, infrastructure, onboarding, services, tui`. These are false positives — CLAUDE.md is a user-maintained file that may describe the project in custom terms, not necessarily matching Beadloom's internal structure.
+    **Expected:** `doctor` should validate `.beadloom/AGENTS.md` (which Beadloom generates and controls) rather than `.claude/CLAUDE.md` (which is user-authored and project-specific). If CLAUDE.md is checked at all, it should be limited to `<!-- beadloom:auto-start -->` / `<!-- beadloom:auto-end -->` sections.
+    **Workaround:** Ignore the warnings; they're false positives caused by stale CLAUDE.md content from another project.
+
 ---
-
-263. [2026-09-09] [MEDIUM] the codec sweep's vocabulary is a list of call names, so a decoding call it has never seen reads as no call at all
-
-    **Severity:** medium (the instrument reports clean about a population it did not enter, which is the class it exists to prevent)
-    **Command:** `uv run pytest tests/test_locale_independent_io.py tests/test_decode_handlers.py`
-    **Context:** BDL-068 S6, `beadloom-0mdo.66`. The allocator writes its claim file through `os.open(O_CREAT | O_EXCL)` and then `os.fdopen(handle, "w", encoding="utf-8")`, which is the first `os.fdopen` in `src/beadloom`.
-    **Measured:** the shared definition in `tests/decoding_calls.py` recognises a text-I/O call by NAME — `read_text`, `write_text`, `open`, `decode` and five `subprocess` entry points. `os.fdopen` is in none of them, so both instruments walked past a call that decodes: the codec sweep did not ask it to state an `encoding=`, and the handler ledger did not ask what a decode failure there would do. It happens to state its codec, so nothing is wrong today — which is exactly why it is worth recording, because the next one need not.
-    **The same run found the opposite error and it is already fixed:** `os.open` was read AS a text open, because `called_name` returns `open` for `os.open(...)` and the module-name guard only knew `tarfile`, `zipfile` and friends. That produced a false positive in both instruments at once and is closed here by `DESCRIPTOR_OPENERS` — the same shape as the `CONTAINER_OPENERS` note above it, which its own comment says was found the same way, by a call this package had never made.
-    **Why it is not closed with it:** the false positive is a fixed misreading of a known name; this is an unknown name, and the repair is a different one. A vocabulary of call names cannot be completed by adding to it — `io.TextIOWrapper`, `codecs.open` and `csv.reader` over a text handle are all outside it too. The honest fix is the one this project applies everywhere else: report the population the sweep could not classify, so a call it does not recognise arrives as *unresolved* rather than as absent.
-    **Expected:** `tests/decoding_calls.py` states what it did NOT classify, and the two instruments report that count beside their verdicts.
-    **Related:** #173 (unverifiable is not clean), and `beadloom-0mdo.64`, which found `CONTAINER_OPENERS` by rooting the sweep at `tests/`.
 
 ## Improvements
 
@@ -2277,16 +1551,6 @@
     4. Optionally adapts `.claude/commands/dev.md` code patterns section with project-appropriate examples
     This would make Beadloom initialization a truly one-command experience for AI-assisted projects.
 
-78. [2026-03-10] [LOW] Bootstrap should auto-validate generated rules and warn on immediate violations — see also #71
-
-    **Severity:** low
-    **Command:** `beadloom init --bootstrap -y`
-    **Context:** After bootstrap, user expects a clean state but `beadloom lint --strict` fails (see issue #71).
-    **Issue:** Bootstrap generates `rules.yml` and `services.yml` independently. It doesn't validate that the generated rules are satisfied by the generated graph. The user discovers violations only when they manually run `lint`.
-    **Expected:** At the end of bootstrap, automatically run `lint` internally. If violations are found, either:
-    - (a) Auto-fix the rules to match the generated graph (preferred), or
-    - (b) Print a warning: `"⚠ 2 lint violations detected in the generated graph. Run 'beadloom lint' to see details and fix .beadloom/_graph/rules.yml"`
-
 79. [2026-03-10] [INFO] Field-testing metrics: Beadloom bootstrap on a production FastAPI monolith
 
     **Severity:** info
@@ -2534,33 +1798,6 @@
     For AI agents via MCP: a `prune_orphaned_docs` tool that returns the list of files to delete and accepts confirmation.
     **Workaround:** Manually delete each orphaned doc file reported by `beadloom doctor`.
 
-89. [2026-03-11] [MEDIUM] `sync-check` reports `untracked_files` for annotated and documented files
-
-    **Severity:** medium
-    **Command:** `beadloom sync-check`
-    **Context:** After adding `# beadloom:domain=` / `# beadloom:feature=` annotations to ALL 55 source files AND enriching all 18 docs with detailed content mentioning every module, `sync-check` still reports 19 of 48 pairs as stale with reason `untracked_files`.
-    **Issue:** Files like `app/core/broker.py` have both:
-    - Code annotation: `# beadloom:domain=core`
-    - Doc mention: `docs/services/core.md` describes `broker.py` in detail
-    - Doc marker: `<!-- beadloom:track=app/core/broker.py -->`
-    Yet sync-check reports: `core: untracked_files - broker.py` and marks ALL other pairs in the same node as stale (6 stale entries for one untracked file).
-    **Pattern:** The affected files are always the ones listed in `beadloom doctor` as "untracked source files". These are files inside the node's `source` directory that exist on disk but apparently aren't indexed as individual tracked items. The multiplier effect (1 untracked file → N stale pairs) inflates the stale count significantly.
-    **Expected:** If a file has a `# beadloom:domain=X` annotation AND the doc mentions it (or has a `beadloom:track` marker), sync-check should mark it as OK, not `untracked_files`. The annotation is an explicit signal that the file belongs to node X and should be tracked.
-    **Impact:** On the field-tested project, this prevents reaching 100% sync-check OK even with comprehensive annotations and documentation. Max achievable: 60% (29/48).
-    **Workaround:** None. Accept the stale warnings as false positives.
-
-90. [2026-03-11] [MEDIUM] `<!-- beadloom:track=... -->` HTML comments in docs have no effect on sync-check
-
-    **Severity:** medium
-    **Command:** `beadloom sync-check`
-    **Context:** During documentation enrichment, `<!-- beadloom:track=app/core/broker.py -->` HTML comments were added to docs following the convention observed in the `beadloom prime` output hint: `"New features: add # beadloom:feature=REF_ID annotations"`. AI agents naturally extend this to docs with `<!-- beadloom:track=... -->`.
-    **Issue:** These HTML comments have no effect on the sync engine. Adding `<!-- beadloom:track=app/core/external-inspection-system/constants.py -->` before a section describing `constants.py` does NOT make sync-check recognize the file as tracked. The comments are inert — they don't participate in staleness detection, freshness tracking, or coverage calculation.
-    **Expected:** Either:
-    - (a) Recognize `<!-- beadloom:track=<path> -->` in docs as an explicit file-to-doc binding. When present, sync-check should create a tracked pair and monitor both the doc section and the source file for changes.
-    - (b) If this convention is not supported, document it clearly in `beadloom prime` / `AGENTS.md` / `docs generate` output so AI agents don't waste effort adding markers that do nothing.
-    Option (a) would be a powerful feature: it creates a lightweight, explicit doc-code binding without requiring the full annotation + reindex workflow. AI agents writing docs could simply add `<!-- beadloom:track=... -->` and sync-check would start monitoring.
-    **Workaround:** Do not use `<!-- beadloom:track=... -->` comments. They have no functional effect.
-
 85. [2026-03-10] [INFO] Bootstrap accuracy target: 95%+ across all supported languages
 
     **Severity:** info
@@ -2639,12 +1876,1172 @@
     > under `next`, unqualified. So our own tool passes bd's false signal through to an agent finishing
     > a bead. Tracked on `beadloom-0mdo.52`.
 
-98. [2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions — `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity` flake fixed in commit a4c88fa. While investigating, the test also looks internally inconsistent (comment references "mno345 from Jan 10" absent from the sample; `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing, unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
-    > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).
+> **#98 moved to Closed Issues on 2026-09-29.** It was fixed in BDL-036 (BEAD-10, b4d5e62) while
+> it sat here as a follow-up, so its exclusion was stale. Its entry is under "Verified against
+> current behaviour on 2026-09-29".
 
 ---
 
 ## Closed Issues
+
+### Verified against current behaviour on 2026-09-29 (the 7.0.0 records sweep, BDL-075)
+
+Fifty-eight entries whose defects no longer reproduce: 54 from Open Issues, 3 from Improvements
+and #98 from Excluded Issues. The evidence comes from a read-only audit of all 153 Open and
+Improvements entries, taken on this date against `origin/main` at `11b5ad0d` in scratch copies of
+the repository. Before each entry moved, it was spot-checked again on `features/BDL-075` by
+reading the named source, the bead's state in the tracker, or a command's output. No entry's text
+was rewritten. The dated line under each heading is the evidence.
+
+Three are not plain fixes. #285 was withdrawn and was never true. #251 no longer reproduces, and
+its cause was never found. #303 is superseded by the owner's retirement of the whole-scope
+nightly. #293 is not here: its cause is removed, and it stays open until its own confirmation
+month ends, roughly 2026-10-29.
+
+Eight of these entries also stood in the BDL-036 summary below as one-line items: #71, #86, #88,
+#89, #90, #93, #94 and #98, and #98 stood under Excluded Issues as well. Each now has its full
+text only here, and the BDL-036 lines point to it. The same was done for #91 and #92, whose full
+text the 2026-08-31 sweep had already moved.
+
+Both the audit and the spot-checks ran on macOS under CPython 3.13. No Linux leg, no locale leg
+and no 3.10 to 3.12 interpreter was entered.
+
+304. ~~[2026-09-29] [HIGH] a replacement for a heuristic was proven "no worse than main" one ecosystem at a time, so the review found the same regression three times~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The entry was filed with its fix already landed:
+    `beadloom-2mj3` and its children `.11`, `.13`, `.15` and `.17` are closed (BDL-074), and `.15`
+    enumerated the 32 conventions the old mapper recognised. Nothing in it remains open. It stays
+    as the lesson it records.
+
+    **Severity:** high (an adopter whose tests sat in a layout the old name-guessing mapper read would, on
+    upgrade, see `ctx` report 0 tests and the debt report count every covered node untested — a false
+    score, not a missing feature)
+    **Command:** `beadloom reindex`, `beadloom ctx`, `beadloom status --debt-report`
+    **Context:** BDL-074 replaced `test_mapper`'s guesses with a declared binding (the mirror, beside the
+    code, `tests:`). Each fix proved "no worse than main" on the layouts it had in front of it.
+    **Issue:** the review found the regression for Go (run 1), then Java/Kotlin/Swift (after an owner
+    question), then Jest's `__tests__/` (run 2), then a top-level `__tests__/` (run 3 — the coordinator's
+    question to the owner had omitted one of three places the agent named). Each was real; each was found
+    by sampling.
+    **Expected:** when a component that *guessed* is replaced by one that *declares*, first enumerate
+    everything the old one recognised — from its source, not from memory — and prove each row against the
+    old one's measured output. `beadloom-2mj3.15` did exactly that (32 conventions: 23 proven no worse, 9
+    ruled out as guessing, NG2–NG4 in the PRD) and closed the class; it should have been the first step.
+    **Also:** a question put to the owner must carry every option the agent named, or the owner rules on
+    less than was found.
+    **Tracker:** `beadloom-2mj3` (closed). Fixed in BDL-074 (`beadloom-2mj3.11`, `.13`, `.15`, `.17`).
+
+303. ~~[2026-09-19] [HIGH] the nightly mutation job is killed by its runner at 93-100 minutes, so the declared scope has had no aggregate score since 2026-09-09 even now that the run works~~ **CLOSED (superseded, 2026-09-29)**
+
+    **Closed 2026-09-29 as superseded.** `beadloom-5isv` closed when the owner retired the
+    whole-scope nightly. `.github/workflows/mutation.yml` now schedules only the weekly sample
+    (`cron: "17 3 * * 1"`) beside the per-change job, and the amendment above records the first
+    measured weekly score. The score under the floor is a separate open item, `beadloom-inmv`
+    (GitHub issue 85).
+
+    **Severity:** high (the guard defect BDL-UX #289 records is fixed and the chain is proven, but the duty this project declares — an aggregate mutation score over fifteen declared targets, held against two floors — has still never been measured on the runner that is supposed to hold it, and nothing in the pipeline says that out loud)
+    **Command:** the `Mutation` workflow, dispatched by hand on a branch
+    **Context:** BDL-072, `beadloom-e8m4`, 2026-09-19, measured on two dispatched runs after the #289 fix landed.
+    **What happened.** Both runs started, built the index, entered the rules slice and classified mutants — and were then killed mid-step with `##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.` followed by `##[error]The operation was canceled.` Steps 8-14 (both exports, both scoring steps, the artifact) were skipped each time, so neither run printed a score.
+
+    | run | head | started -> ended | wall | reached |
+    |---|---|---|---|---|
+    | `35405302194` | `aa89a831` | 23:20:35Z -> 01:00:57Z | 100 min | 4151 of 7187 mutants classified (4001 killed, 1 timeout, 149 survived) |
+    | `35419948880` | `1f0b3d45` | 03:56:33Z -> 05:30:04Z | 93.5 min | same step, cancelled |
+
+    **What it is NOT.** Not `timeout-minutes` (340, and neither run came near it). Not a concurrency supersession: the workflow's last five runs were checked both times and no other run of the group existed, and the group is scoped by `github.event_name` since BDL-072. Not the guard defect: the mutants ran, which is precisely what nine previous nightlies could not do.
+    **What was measured instead, and it is a smaller claim.** One declared target end to end on a developer machine: `mutmut run 'beadloom.application.waves.landing.*'`, `export-cicd-stats`, then `beadloom mutation --min-score 0.80` → `Counters: killed 28, mutants 7187, survived 1` and **`Score: 96.6% of 29 scored mutants`**, floor met, exit 0. The first printed score since 2026-09-09. It proves the chain; it does not touch the aggregate, the 0.94 rules floor or the 0.88 scope floor.
+    **Expected:** either the job completes on the runner it declares, or the duty is restated as something this project can actually measure — a slice per night, a resumable run, or a stated acceptance that the aggregate is taken elsewhere. A floor nobody can reach is not a gate.
+    **What is NOT established:** the cause of the shutdown. Disk exhaustion in `mutants/`, a runner reclamation, and an account-level limit are all consistent with two samples, and none was measured. The obvious next step is a run with `df` and memory reported per step.
+    **Related:** #289 (the guard that made every night score zero — fixed by BDL-072), #293/#298 (`beadloom-qq6m`, the shared live index), #226 (`beadloom-jwfc`, the pre-push crash that trains `--no-verify`).
+    **Tracker:** `beadloom-5isv` (P1). The number was allocated by `beadloom-e8m4`, the BDL-072 bead that measured both killed runs.
+
+    **AMENDED 2026-09-27 — CLOSED AS SUPERSEDED, the killer not identified.** Ten runs in all: nine of ten
+    died at queue positions 4125-4226 whether at four children (73-102 min) or two (153 min), and across a
+    refactor that removed 197 mutants from that region; one ran 262 min at two children and ended with
+    *the hosted runner lost communication with the server ... starves it for CPU/Memory*. Ruled out by
+    measurement or static search: the timeout, supersession, billing, the loader's memory (no child above
+    399 MiB) and any code signalling the runner's process group. Still live and unmeasured: `systemd-oomd`,
+    the kernel OOM killer, VM reclamation. The owner retired the whole-scope nightly instead (workflow
+    disabled, #79 closed not_planned) in favour of mutation scoped to each pull request plus a weekly
+    sample. The settling experiment — `auditctl` on kill syscalls with a PSI/`MemAvailable`/`dmesg`
+    sampler — is recorded on `beadloom-5isv` and deliberately not run. Side finding, external: mutmut
+    3.7.0's timeout thread catches only `ProcessLookupError`, so a `PermissionError` on Linux would stop
+    wall-clock timeouts silently.
+
+    **AMENDED 2026-09-29 — the duty restated, and now measured.** BDL-074 D1 replaced the whole-scope
+    nightly with `mutation-per-change` on pull requests and a weekly `mutation-sample` of 150. The first
+    weekly sample on CI completed in 25 min and scored 82.0% [75.1, 87.3] under the 0.88 floor, which the
+    owner kept (issue #85 open; `beadloom-inmv`). On PR #86 the per-change job ran 1578 mutants in 632 s
+    and, after 213 survivors were killed and 45 recorded equivalent, scored 97.1%.
+
+298. ~~[2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-jorg` closed, folded into `beadloom-qq6m` (closed).
+    The guard now lives in
+    `tests/self_check/architecture/test_the_view_flags_what_the_rule_finds.py` and reads the
+    session `self_check_snapshot` fixture, not the live index (BDL-074 A2).
+
+    **Severity:** medium (no wrong code shipped and no verdict moved; what is wrong is a guard whose own reading can be partial, which can redden a CI leg intermittently — and it is the kind of guard this epic added to stop checks reporting over an unnamed population)
+    **Command:** `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80`, the whole suite on the tree
+    **Context:** BDL-070 Release B, 2026-09-13, the wave gate owner's full tree run at `d6e8aa3d`, taken before opening the second pull request.
+    **What happened.** One failure: `tests/test_the_view_flags_what_the_rule_finds.py::TestOnThisRepository::test_the_agreement_is_not_vacuous` — `assert len(verdicts) > 300`, got **57**. The test was added by B4 (`beadloom-w34m`) in this release.
+    **Why it is not a regression, measured rather than argued.**
+
+    | check | result |
+    |---|---|
+    | the two preceding full tree runs on this branch | 10712 and 10719 passed, 0 failed — this test passed |
+    | commits since the last green run | one content commit, seven TEXT files (docstring, role template + recompose, two SPECs) |
+    | live index right after the red run | 108 nodes, 365 active `depends_on`, `PRAGMA integrity_check` ok |
+    | damage signatures in the run's log | 0 `malformed` / `disk I/O` / `OperationalError` |
+    | the failing test alone, on that index | 1 passed |
+    | the failing test alone, after a reindex | 1 passed |
+    | its whole file, after a reindex | 8 passed |
+
+    **The mechanism, stated as inferred.** The test reads the live repository through the shared fixture `live_repo_reindexed` (scope: scope="session"), and at least twelve other test files reindex the live project root in the same run. A read taken while another test is mid-rebuild sees a partial edge set; 57 of 365 is what a torn read looks like. Nobody reproduced the interleaving on purpose.
+    **MEASURED AFTER FILING, 2026-09-13 — and it widens the mechanism above rather than confirming it.** The full re-run was green (10718 passed, 0 failed), and one test moved from passed to skipped: `tests/test_guards_parity.py:198` skipped itself with *"this repository is being written by another process right now — beadloom.db, beadloom.db-shm, beadloom.db-wal changed over an idle 1.19s control window"*. That other process was **the coordinator**. While the suite ran, it committed the #298/#299 repair and pushed the branch; the pre-commit hook runs `beadloom lint` and `sync-check`, and the pre-push Gate runs `beadloom ci`, which re-indexes — all writing the live index the suite was reading. During the first, red run the coordinator was also committing and launching reviews.
+    **So the writer behind the 57-edge read is NOT established as "other tests in the same run".** It is at least as likely to be the gate owner's own git hooks. Which one produced the torn read was not measured. The parity test is the instrument that got this right: it measured the writes, named the cause, and declined to attribute, where the vacuity guard read a partial graph and failed.
+    **A practice rule this entry now carries:** the wave gate owner does not commit or push while its own full tree run is in flight — every hook in this repository writes the index that run reads.
+    **Expected:** a test that asserts on the live repository's graph reads an index no other writer can rebuild underneath it — other tests or an out-of-run process — through an isolated copy or a lock around the rebuild. Or, like `test_guards_parity`, it measures whether the index moved during its reading and skips with the reason rather than failing on a partial graph.
+    **What is NOT established:** the interleaving itself, and how many other live-repository tests are exposed to it. One test was caught, by its own guard firing.
+    **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
+    **Folded 2026-09-14 into `beadloom-qq6m`** by owner decision, with #293: one bead for the suite's shared live index. `beadloom-jorg` is closed with a pointer, and its description remains this entry's specification.
+    **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
+
+    **AMENDED 2026-09-29 — see #293's amendment:** the guard's read now goes to the snapshot, not the live
+    index (BDL-074 A2/A3).
+
+296. ~~[2026-09-13] [MEDIUM] a layer rule reports an error and is counted inert in the same run, because liveness still reads own tags~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The RESOLVED line above holds. `graph/rules/liveness.py` calls
+    `layers.can_fire_on` over the derived layers, and `beadloom-5tcc.6` is closed.
+
+    **Severity:** medium (no wrong verdict: the error is reported and `lint --strict` exits 1 as it should. What is wrong is that the same run tells a reader the rule checked nothing, and `rules_inert` is the counter the Gate's summary and the TUI's lint panel present as "this check did nothing")
+    **Command:** `beadloom lint`, and every surface that reads `rules_inert`
+    **Context:** BDL-070 B5 (`beadloom-bi78`), 2026-09-13. Found writing the acceptance scenarios for Release B on graphs that are not this repository.
+    **What happened.** `evaluate_layer_rules` decides on the DERIVED layer since B3 (`beadloom-ku26`) — a node's own tag, else the nearest `part_of` container that declares one. `graph/rules/liveness.py:288` `_layer_reasons` still decides on `own_layer_of` alone, and its own docstring says the move would happen "in the release that announces it, `beadloom-ku26` (B3)". B3 announced it and did not make it.
+    **Measured** on the nested-parts fixture (`tests/acceptance/steps/tiered_project.py`, `tier-web` / `tier-core` / `tier-store`, two untagged components inside containers in different tiers), written and indexed once and linted:
+
+    | what the run says | value |
+    |---|---|
+    | `error_count` | 1 — `store-db -> web-api`, reported by `tier-order` |
+    | `rules_evaluated` | 1 |
+    | `layer_populations` | `evaluated=2, skipped_untagged=0` |
+    | `rules_inert` | 1 |
+    | liveness message | `Rule 'tier-order' cannot fire: no live 'depends_on' edge runs between two of its layers. It is counted as evaluated but checks nothing` |
+
+    The peer-container fixture reaches the other branch of the same function and says `fewer than two of its layers are populated (no node carries 'tier-store', 'tier-web')` while the rule reports two same-layer crossings.
+    **This repository cannot see it.** Every node here that is in a layer carries the tag itself, so own tags and derived layers agree and liveness is satisfied. `beadloom lint` on this tree emits no `rule_liveness` finding for `architecture-layers`. The shape needs untagged components inside tagged containers — an adopter's shape, and the reason BDL-070's CONTEXT requires every layer claim to be measured on a graph that is not ours.
+    **Expected:** liveness decides on the same layer membership the rule decides on, so a rule that reported a finding is never counted inert. Moving it is a VERDICT CHANGE for an adopter — a rule reported inert today would stop being reported — which is why it belongs in a release that says so rather than in a fix taken in passing.
+    **What is NOT established:** how many adopter projects carry the shape, and whether `rules_inert` feeds anything that blocks. The Gate's summary and the TUI panel present it; no exit code was traced to it.
+    **Held by:** `tests/test_a_layer_rule_that_fired_is_not_reported_inert.py` — three `xfail(strict=True)` statements that go green the day liveness is moved.
+    **Related:** the epic's own subject — one question answered by more than one body. `layers.py`'s module docstring names `liveness._layer_reasons` as the third reader and says it "did neither"; it now agrees with neither.
+
+    **RESOLVED 2026-09-13 by `beadloom-5tcc.6` (BDL-070 Release B).** Fixed in the release that
+    announces the verdict change, which is what this entry asked for. Liveness asks
+    `layers.can_fire_on` — whether any live edge is one the rule COMPARES, across two layers for
+    direction or inside one against the shared-container predicate — over the same derived layer
+    the rule's own verdict rests on. **Swapping the layer lookup alone would have closed one of
+    the two fixtures and not the other**, which is why the predicate changed rather than the
+    lookup: on the peer-container graph no reading of membership inhabits a second layer, and
+    what the rule reports there is a same-layer crossing. Measured on both, each written and
+    indexed once by the same unchanged reindex and linted: nested parts `error_count 1,
+    rules_inert 1` to `error_count 1, rules_inert 0`; peer containers `error_count 2,
+    rules_inert 1` to `error_count 2, rules_inert 0`. No error appears or is withdrawn on either.
+    This repository is unchanged and still cannot see the shape, as the entry says: `lint
+    --strict` rc 0 with 55 findings, 0 errors and 0 inert rules before and after.
+    **One report changed hands.** `layer_declaration` stood down whenever fewer than two layers
+    held a node, because liveness named the same tags for exactly that graph; liveness is now
+    silent on the peer fixture, so the declaration states it instead and prints its sentence with
+    a count of one for the first time — a branch that read "1 of them hold a node" until this
+    bead, and is pinned by a test now.
+
+289. ~~[2026-09-12] [HIGH] a self-scanning guard test reads mutmut's own mutated copy of the package, so the nightly mutation run reaches a verdict on 0 of 6544 mutants~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-ey4m` and `beadloom-3js4` (BDL-072) are closed. Later
+    runs classified mutants again: #303 records 4151 of 7187 classified, and the per-change job on
+    PR 86 ran 1578. `tests/support/mutmut_copy.py` gives the guard a fixture shaped like mutmut's
+    copy.
+
+    **Severity:** high (the mutation duty has produced no score since 2026-09-10 — the instrument that measures whether the tests can tell a defect from a correct program is itself dead, and the only thing that said so is a nightly nobody is watching)
+    **Command:** the `Mutation` workflow — `uv run mutmut run`, then `beadloom mutation --min-score`
+    **Context:** found 2026-09-12 while verifying `main` after BDL-069 landed. NOT caused by BDL-069; the first red nightly predates the epic's branch.
+    **What happened.** `tests/test_two_readers_of_one_markdown_table.py::TestThePackageHasTwoReadersOfOneRow::test_every_pipe_split_in_the_package_is_declared` fails inside every mutmut run:
+
+    ```
+    AssertionError: a body splits a line on a pipe and no reader has classified it — undeclared
+      [('application/guards/surface.py', 'x__bound__mutmut_2'),
+       ('application/guards/surface.py', 'x__bound__mutmut_3'),
+       ...
+       ('doc_sync/tables.py', 'x_cells_of__mutmut_6'),
+       ('doc_sync/tables.py', 'x_cells_of__mutmut_orig')], gone []
+    !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    1 failed, 4303 passed, 37 skipped, 1 xfailed in 600.70s
+    failed to collect stats. runner returned 1
+    ```
+
+    **The mechanism.** The guard derives its scan root from its own file: `_SRC = Path(__file__).resolve().parent.parent / "src" / "beadloom"` (line 49), and walks `_SRC.rglob("*.py")` (line 103). mutmut 3.x builds a `mutants/` tree and runs the pool from inside it — `mutation.yml:146` says so of `.beadloom/`, and the failure itself shows the TESTS are copied too: the undeclared sites are reported by paths relative to `_SRC`, and they name functions that exist only in mutmut's output. So inside a run `__file__` is under `mutants/`, and `_SRC` resolves to the mutated `src/beadloom` beside it rather than to the repository's. The guard then reads mutmut's generated variants (`x_cells_of__mutmut_1..6`, `x__bound__mutmut_2..4`), each a function body holding a `.split("|")` that no declaration in the test names, and asserts. The test is one of the 136 files in `[tool.mutmut] pytest_add_cli_args_test_selection` (`pyproject.toml:455`), so it runs on every mutant AND on the baseline stats collection, which is where it aborts the run.
+
+    **What the failure costs, measured from the run's own output.** Both `beadloom mutation` invocations report:
+
+    ```
+    Counters: killed 0, mutants 6544, no_tests 0, skipped 0, survived 0, suspicious 0, timeout 0
+    Score: none — see the findings below.
+    Floor: 0.94 — the score is under it.
+    WARN [mutation-run-zero-mutants] ...: the run produced 6544 mutants and reached a
+    verdict on none of them, so the score is a ratio over an empty denominator — a run
+    whose every mutant was skipped states no more than a run that never happened
+    ```
+
+    **The instrument is NOT the defect, and this is the part worth keeping.** `beadloom mutation` was handed 6544 mutants and zero verdicts and refused to divide — it printed `Score: none`, named the population, and exited 1. `mutation-run-zero-mutants` is exactly the rule BDL-068 added for this, and it is the reason this entry exists at all rather than a green nightly over an empty denominator. What is broken is the run it was asked to judge.
+
+    **When it started, derived rather than recalled.** Nightly history: `e17c2258` 2026-09-09 success, `0dd384d9` 2026-09-10 failure, `aa21caff` 2026-09-11 failure. The only commits in that range are `101fe7d1` (#63, BDL-068 S6), `2915363a` (#64) and `0dd384d9` (#65). `git log --diff-filter=A` puts the test's introduction at `101fe7d1`, and `git log -S` puts its entry into `pytest_add_cli_args_test_selection` at the same commit — the guard and its selection landed together, and the first nightly after them went red.
+
+    **Expected:** a guard that scans the package must scan the package under test, not whatever tree it happens to be copied into — the root belongs to an explicit anchor (the installed `beadloom.__file__`, or a path that refuses to resolve inside `mutants/`), and a body mutmut generated is not a reader anyone wrote. Either the guard excludes generated variants by shape, or it is removed from mutmut's selection and stays a plain-suite check. Second, and separately: a nightly whose red nobody sees is a check reporting into nothing — this one has been red for two nights and was found by hand.
+
+    **What this entry does NOT claim.** The mutation SCORE is unknown, not low: no mutant was judged, so nothing here says the declared targets are or are not covered to their floors. The last figure anyone can stand behind is the 2026-09-09 nightly. Whether any OTHER self-scanning test in the 136-file selection has the same shape was not measured — one was found, by its failure, and the class was not swept.
+
+    **Tracker:** `beadloom-ey4m`.
+    **Related:** #269 (the two readers this guard was built to hold apart), #239 (a population of zero reading as coverage — the same shape the WARN refused to produce here).
+
+285. ~~[2026-09-11] [WITHDRAWN] a bead's scope appended by the documented command is silently ignored when its description already carries a `refs:` line~~ **WITHDRAWN (closed 2026-09-29)**
+
+    **WITHDRAWN, closed 2026-09-29.** The claim was never true: `waves/scope.py` unions every
+    `refs:` line on a bead, and `beadloom-rqma.3` closed as withdrawn, not a defect. The entry was
+    struck through on the day it was filed and stayed under Open Issues until this sweep.
+
+    > **WITHDRAWN 2026-09-11, the same day, by the coordinator who filed it. The entry is wrong and the instrument was right.**
+    > An Explore run over the code found `waves/scope.py:175` `DECLARATION_FIELDS = (title, description, design, notes)` and `scope.py:138` unioning every anchored `refs:` line; `scope.py:225,239` mark the whole bead `ref_not_in_graph` when ANY one ref is unknown. The SPEC says so (`wave-plan/SPEC.md:51`, "every occurrence is read").
+    > So the appended line WAS read. It was unioned with the description's line, the union still carried `site-dashboard`, and one unknown ref poisons the bead. Removing `site-dashboard` resolved it — which is what a union predicts, and the entry misread as "the description wins".
+    > **And `waves` named the cause.** The same run's output carries, at line 52: `FINDING: unresolved_scope: beadloom-yn6i — ref_not_in_graph (site-dashboard)`. The filer read the output with `sed -n '1,22p'` and cut that line off. The diagnosis was drawn from a truncated answer — the pipe-masking shape, this time on content rather than an exit code.
+    > **The inferred unsafe case cannot happen.** A union can only widen a scope; a stale narrower line cannot narrow it.
+    > Bead `beadloom-rqma.3`, opened for this entry, is closed as not-a-defect. Kept rather than deleted, as this log keeps its withdrawals.
+    > **Not withdrawn, and not measured:** the same Explore run read that `mcp_server.py:759-763` takes the alphabetically FIRST declared ref and that `mcp.md:333` describes the fields as "design/description" — a second reader of the declaration that may disagree with `waves`. That is READ, not run, and is not this entry.
+
+    **Severity:** medium (measured failing SAFE — an unreadable description scope serialises against everything; the unsafe case is inferred and not measured, see below)
+    **Command:** `bd update <bead-id> --append-notes "refs: ..."`, then `beadloom waves`
+    **Context:** BDL-069, 2026-09-11. `beadloom-yn6i` was pulled into the epic; its description, written by the agent that filed it, ends with `refs: tui, site-dashboard, agent-prime`.
+    **Measured.** `site-dashboard` is not a graph node (`beadloom ctx site-dashboard` exits 1). The coordinator appended a correct declaration the way `/coordinator` and `CLAUDE.md` document it:
+
+    ```
+    bd update beadloom-yn6i --append-notes "refs: tui, application, agent-prime, mcp-server, cli"
+    beadloom waves beadloom-8lmj beadloom-yn6i ...
+      beadloom-8lmj | beadloom-yn6i — unresolved_scope: beadloom-yn6i: ref_not_in_graph
+    ```
+
+    The appended line was not read. After the SAME list was written into the description's own `refs:` line instead, the same command resolved the scope — `shared_node: agent-prime`. So the description's line wins and the notes line is ignored, with nothing in the output saying a second declaration exists.
+    **Why the documented method is the trap.** The instruction is to declare scope with `--append-notes`. A bead filed by an agent often already carries a `refs:` line in its description, because the filing template asks for one. From then on the documented command writes a declaration nobody reads, and `waves` keeps judging the old one.
+    **The unsafe case, stated as inferred.** Here the stale line named a node that does not exist, which reads as an unknown scope and serialises against everything — conservative. A stale line naming a valid but NARROWER set would read as a known scope, and two beads the appended line says conflict could be reported independent and launched together. That case was not constructed or run.
+    **Expected:** when a bead carries more than one `refs:` declaration, `waves` either merges them or reports the disagreement and which one it judged — never silently picks one. The documentation that says `--append-notes` should say what happens to a description that already declares scope.
+    **Related:** #283 and #284 (the same day; a declaration or a population the instrument did not read, and nothing saying so), #257.
+
+284. ~~[2026-09-11] [MEDIUM] an axis row is ruled by the axis a node first surfaced under, and three nodes ruled out as blast radius turned out to be the sites the fix had to reach~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-rqma.2` is closed. `.claude/commands/task-init.md`
+    now says to rule each row by the node's role in the change, not by the axis it surfaced under,
+    and `impact --section` gained an `Owns unread` cell.
+
+    **Severity:** medium (nothing wrong shipped — `scope-check` caught all three; the cost is that the approved RFC disagreed with the code three times in one epic)
+    **Command:** `/task-init` step 0.5 and the axes decision; `beadloom impact --section`
+    **Context:** BDL-069, planning on 2026-09-10, re-ruled three times on 2026-09-11 as the work landed.
+    **Measured.** The RFC ruled 13 nodes in scope. Three of the nodes ruled OUT were edited by the beads that closed:
+
+    | Node | Surfaced under | Ruled | What the fix actually had to reach |
+    |---|---|---|---|
+    | `reindex` | callers | no — "reads the graph downstream of the loss" | `reindex/indexing.py` parses nodes, so routing it through the policy was BEAD-05's own assignment |
+    | `graph-diff` | callers | no — "reads at a git ref" | it reads at a git ref AND parses what it reads — and was reducing duplicates the opposite way to the loader |
+    | `onboarding` | callers | no — "reads the manifest for other facts" | it owns `templates/docs/core/*.md.txt`, the skeleton text the fix had to change |
+
+    **The pattern is one direction, and that is the finding.** Every re-ruling moved a node from "blast radius" to "work site". None moved the other way. The ruling read each node by the AXIS it first appeared under — a `callers` row read as "calls into the change, is not changed" — and a node that surfaces as a caller can also own what the fix must reach.
+
+    **Two different causes sit under the three, and they want different answers:**
+    - **`onboarding` was invisible to the derivation, not misread.** The thing the fix reached is `.md.txt` template text, and `beadloom impact` reads Python. The derivation could not have shown that node owning those files; the person ruling had no row that said so.
+    - **`reindex` and `graph-diff` were visible and misread.** Both are Python and both appeared. What the axes do not carry is a node's ROLE in the fix, only its relation to the seed — and the ruling substituted the second for the first.
+
+    **Expected:**
+    - `/task-init`'s axes guidance should say, where the person rules, that the axis a node surfaced under is not its role in the change — a `callers` row can be a work site;
+    - and a derivation that cannot read a surface the change may reach should say so ON the row, not only in the section's `Unresolved` line. `onboarding`'s templates were in the unreadable population and nothing pointed from that population to the node that owns it.
+    **Related:** #283 (a second instrument reporting over a narrower population than the planning question, found the same day), #239 (a population of zero reading as coverage), #281 (`impact` cannot read YAML or Markdown).
+
+283. ~~[2026-09-11] [MEDIUM] `beadloom waves --parent` compares only READY beads, so it reports a clean wave for a bead that conflicts with one already running~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-rqma.1` is closed. `waves --parent` compares the plan
+    against beads already in progress under the same work item and prints the conflicts separately
+    (`application/waves/independence.py`, `planner.py`).
+
+    **Severity:** medium (the conflict was caught because the coordinator asked a second time; a coordinator that trusted the first answer launches two agents into one serialised pair)
+    **Command:** `beadloom waves --parent <epic>`
+    **Context:** BDL-069, 2026-09-11. `beadloom-8lmj` was pulled into the epic while `beadloom-h7b3` was in progress.
+    **Measured:**
+
+    ```
+    beadloom waves --parent beadloom-rqma
+      1 wave(s) for 1 bead(s), 0 serialisation(s)
+      Wave 1: beadloom-8lmj
+
+    beadloom waves beadloom-h7b3 beadloom-8lmj
+      2 wave(s) for 2 bead(s), 1 serialisation(s)
+      beadloom-8lmj | beadloom-h7b3 — dependency_edge: cli-commands -> agent-prime
+    ```
+
+    The first answer is correct about its population and wrong about the question. `--parent` takes the plan from `bd ready`, and a bead that is `in_progress` is not ready, so it is not in the plan and nothing is compared against it. The answer reads "0 serialisations" — which, for a coordinator deciding whether to launch, is the claim "nothing conflicts".
+    **Why it is this project's own class.** A check reported over a population narrower than the question it was asked, and the narrower population was not named. The output does not say "in-progress beads under this parent were not compared"; it says nothing about them at all.
+    **Expected:** `waves --parent` compares the planned beads against the beads under the same parent that are already `in_progress`, and names any serialisation against running work separately from serialisation within the plan. At minimum it states how many in-progress beads under the parent it did NOT compare against, so "0 serialisations" cannot be read as "nothing conflicts".
+    **Workaround, measured:** pass the running bead explicitly — `beadloom waves <running-id> <new-id>` — which compares the pair.
+    **Related:** #284 (the same day, the same shape in the planning ruling), #257 (`waves` derived two beads' scopes as disjoint while one document belonged to both), #274 (hand-listed ids losing beads).
+
+281. ~~[2026-09-10] [MEDIUM] the release version is stated in NINE places, and no command names that population — three instruments each check a disjoint part of it and none knows the others exist~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom version-surface` exists since 351f40f6 (BDL-069). It
+    reports every place this project states its version and which instrument checks each.
+
+    **Severity:** medium (nothing ships wrong — every place was found; the cost is that three of the seven fail only once a release is already underway, and one of those is `severity: error`)
+    **Command:** the release procedure itself; `beadloom lint --strict`, `beadloom docs audit`, `beadloom doctor`
+    **Context:** cutting 4.0.0 (BDL-068's release). Bumping `src/beadloom/__init__.py` and the four documents left the tree RED, and the two failures arrived in the two least convenient places: a `lint --strict` error, and two assertions inside the test suite.
+    **Measured on 2026-09-10.** The version is written in seven places, and what checks each one is not the same instrument:
+
+    | Where | What checks it |
+    |---|---|
+    | `src/beadloom/__init__.py:6` | the source of truth — `[tool.hatch.version]` reads it |
+    | `.claude/CLAUDE.md`, `project-info` auto-region | `beadloom doctor`, `agent_instructions_version` |
+    | `docs/getting-started.md:45` | `beadloom docs audit`, as a version subject |
+    | `.beadloom/_graph/beadloom.yml:5`, the node summary | `beadloom lint --strict`, rule `graph-summary-facts`, **severity error** |
+    | `docs/services/cli.md:778-779`, twice, inside an EXAMPLE of the attribution rule | `beadloom docs audit`, `doc-fact-stale` |
+    | `docs/domains/doc-sync/features/docs-audit/SPEC.md:107-108`, the same example in the twin document | nothing — and it is the same sentence as the row above |
+    | `tests/test_integration_v1.py:28` and `:35` | the test suite, two literals |
+    | `CHANGELOG.md`, the release heading | nothing |
+    | `.claude/development/ROADMAP.md:3` | nothing |
+
+    **The shape, and why it is this epic's own class.** BDL-068 S6 shipped `doc_sync/version_subjects.py` — the instrument for exactly this question, "which subject does a version token belong to". Its population is **documents**. The graph node summary is a YAML value judged by a lint rule; the test literals are Python judged by pytest. Three instruments, three disjoint populations, no one of them able to say how much of the fact it covers — and two places covered by none. Each check is individually correct and the union is unnamed, which is the population defect this epic spent six slices removing, sitting in the release procedure of the release that removed it.
+    **What made it visible rather than costly:** `graph-summary-facts` is `severity: error`, so the graph node was a hard red instead of a wrong string shipped to PyPI. That is the check working. The complaint is not that it fired — it is that it fired at the END, after the four "obvious" places had been edited and the work was believed done.
+    **The Gate DOES catch it — measured rather than assumed.** This entry first recorded that as unmeasured; the measurement was then taken by putting `v3.0.2` back into the node summary and running the Gate. `beadloom ci` exits 1 with `lint FAIL: 1 error(s)`, and the error names its own population in the form this epic argues for: *"read from 102 node summaries: 2 state a checkable fact (1 agree, 1 disagree, 0 could not be verified) and 100 state none"*. So nothing could reach `main` with a stale graph version. The complaint is only about WHEN — the Gate is the last door, and four of the nine places had already been edited under the belief the job was done.
+    **The same probe found TWO more places, which is the entry's real point.** Deriving the list by hand produced seven. Running the instruments produced nine: `docs audit` reported `docs/services/cli.md:779` (`doc-fact-stale: doc says '3.0.2' but project state is '4.0.0'`), and grepping for its twin found the identical sentence in `docs-audit/SPEC.md`, which NO check reads. A hand-derived population of a version's homes was wrong by two on the first attempt, by the person who had just written the list — which is the argument for the command rather than the checklist, made against the checklist's own author.
+    **And a third-order effect worth recording:** changing the node summary made `docs/architecture.md` and `docs/guides/ci-setup.md` stale by `hash_changed`, needing `sync-update beadloom`. Neither document states a version. The version's blast radius is therefore larger than the places that state it.
+    **Expected:** one command that names the population — `beadloom version-subjects`-shaped, reporting every place this project states its own version, what checks each, and which are checked by nothing. The derivation is available: the manifest names the source of truth, and the other six are literal matches for that value. Failing that, the release checklist should carry the list, which is the weaker answer this epic argues against — a rule stated as a spelling rather than as a shape.
+    **Related:** #253 (the foreign-subject face of the same scanner), #266 (a version subject whose source cannot be consulted), #239 (a population of zero reading as coverage).
+
+274. ~~[2026-09-09] [MEDIUM] `beadloom waves` takes the beads to plan as an authored argument list, so a wave is planned over the population its caller happened to type~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.83` is closed. `waves --parent` derives the bead
+    list from the tracker, and without it every plan reports how many ready beads under the same
+    work item it was not asked about (`application/waves/population.py`, `planner.py`).
+
+    **Severity:** medium (the tool whose subject is derived scope requires an authored population to start from, and the coordinator of the epic about that lost three beads to it)
+    **Command:** `beadloom waves BEADS...`
+    **Tracker:** to be filed as a bead
+    **Measured, on the coordinator of BDL-068 S6:** `beadloom-0mdo.69` could not close because three beads of the slice had never been executed — `beadloom-0mdo.78`, `beadloom-ec1a` and `beadloom-iur5`. All three were in `bd ready --limit 0` the whole time. Eleven waves were planned by passing hand-listed bead ids to `waves`, and three ids were never typed. Nothing reported their absence, because nothing knew they should have been present.
+    **The shape is this epic's own, in the instrument that carries it.** `waves` decides a wave from the **derived** independence of node scopes — that is the whole point of it, and BDL-UX #232 was filed against reading an authored `refs:` line. But the set of beads it reasons over is **authored**: whatever the caller wrote on the command line. So the tool derives the hard half and inherits the easy half from a human typing ids at midnight.
+    **Why the coordinator did not notice:** every plan it produced was internally correct. The waves were right, the serialisations were right, the media were measured. A plan over a subset is not a wrong plan — it is a right plan about a smaller world, and `waves` has no way to say *"you did not ask me about three beads that are ready under this parent."*
+    **Expected:** `waves` can derive its own population — `--parent <epic-id>`, or "everything ready under this work item" — and when given an explicit list, says how many ready beads under the same parent it was **not** asked about. The second half is the cheaper one and is the same sentence the Gate now prints about the suite it does not run (BDL-UX #247).
+    **Related:** #232 (an authored `refs:` line), #257 and #261 (the population `waves` compares is narrower than the change), and `beadloom-0mdo.78` — which is one of the three beads this defect lost.
+
+267. ~~[2026-09-09] [MEDIUM] `issue-number check` returns a clean list over 2% of the log, because the leg that skips history never says how much of it it skipped~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The RESOLVED line above holds, re-measured on this branch
+    before the sweep: `beadloom issue-number check` printed `235 of 277 entr(ies) are below floor
+    262` and named numbers 196 and 288 as unaccounted for. They are written here without a `#` on
+    purpose: the check counts any `#N` in prose as stating the number, so a mention would silence
+    the gap.
+
+    **Severity:** medium (the verdict is honest about the EMPTY case and silent about the ordinary one, which is every project that adopts the allocator with a log already written)
+    **Command:** `beadloom issue-number check`, and the `issue-log` step of `beadloom ci`
+    **Context:** BDL-068 S6, `beadloom-l9ee`. The bead was deciding whether the log's entry BODIES should move to one file per entry, and the answer turns on how much of the log `beadloom-0mdo.66`'s ledger actually protects.
+    **Measured on this repository:** the verdict read `240 entr(ies), 5 claim(s), floor 262` and then `No duplicate, unwritten or unclaimed number.` `_ledger_findings` skips every entry below the floor — `if entry.number < floor: continue` — so `unclaimed-number` entered **5 of the 240 entries the header names** and the pass read as a statement about all of them. The Gate line was the same shape: `240 entr(ies) uniquely numbered; 5 claim(s), floor 262`.
+    **Why it matters:** the skip is deliberate and right — the floor is derived so a project's history is not retro-required to have been allocated (`beadloom-mr2l.72`'s class) — but BDL-068's own constraint is that the unresolved population is part of every answer, and a clean list is trusted and stopped at. The module already stated the ALL-OR-NOTHING case (`not_verified` when the ledger holds no claim) and had no words for the partial one, which is the case every adopter is in from their first allocation onwards. The related silence: `unaccounted` numbers were reported as a count, and a count is not something a reader can go and look for.
+    **Expected:** the verdict names the population the leg did not enter, and names the numbers it cannot account for.
+    **RESOLVED 2026-09-09 by `beadloom-l9ee` (BDL-068 S6).** `IssueNumberReport.entries_below_floor` carries the population; the command prints `235 of 240 entr(ies) are below floor 262: \`unclaimed-number\` did not enter them, and no claim holds their numbers`, the Gate line carries `PARTLY CHECKED`, and the unaccounted numbers are named rather than counted. **Observed while writing this entry, and deliberately not done:** quoting an unaccounted number in prose moves it into the mention population and silences its own report, because the check's corpus is the log that contains the entry describing the check. The number this log cannot account for is therefore left unquoted here so that it keeps being reported. The self-reference errs in the safe direction for the allocator — a number quoted anywhere is never handed out again — and in the unsafe one for this leg, which is why the leg reports rather than blocks. Neither leg is a finding — an unreached population is coverage — so no tree turns red on the upgrade. The clause is emitted only when there is something to qualify, because a summary that qualifies every log is one a reader stops reading.
+    **Related:** #260 (this is the qualification that bead's decision rests on), #173 (a leg that read nothing must say so), the ledger `beadloom-0mdo.66` shipped.
+
+265. ~~[2026-09-09] [MEDIUM] the graph is one file, so one writer per file is available here and is not taken~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The RESOLVED line above holds. `.beadloom/_graph/` holds 113
+    per-node files, and `beadloom-kqsv` is closed.
+
+    **Severity:** medium (it removes a shared write rather than reporting it, and it changes every adopter's `.beadloom/_graph/` layout)
+    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
+    **Issue:** `.beadloom/_graph/services.yml` holds every one of this project's 100 nodes, so every bead that adds, renames or moves one writes the same file. `beadloom-kqsv` shipped the `graph-files` medium, which STATES the sharing and checks the one half a plan can observe — whether the node population the graph files declare is the one the index resolved its scopes from. It does not remove the sharing, and it cannot: the node a bead is about to add is in no graph the plan could read.
+    **The primitive that would remove it** is the one `beadloom-0mdo.66` already took at the boundary for issue numbers — one writer per file, `O_CREAT|O_EXCL`, one claim file per number. Applied here it is one graph file per node. `onboarding/graph_files.each_graph_file` already globs `*.yml`, so the loader needs no change, and the serialisation BDL-UX #261 sketched — a bead's scope reaching the graph file its declared nodes are defined in — becomes both meaningful and non-noisy on the same act. Measured today it fires on every pair of every wave and collapses each to a wave of one, which is BDL-UX #245's failure mode.
+    **The cost, stated rather than waved off:** 100 files where there is one, a `services.yml` whose comments group nodes by layer and would have to go somewhere, and every reader of that directory re-measured for 100 opens instead of one. Weigh it against the write rate: 8 of the 55 commits on `features/BDL-068` touch `services.yml`.
+    **RESOLVED 2026-09-09 by `beadloom-0mdo.80` (BDL-068 S6).** `.beadloom/_graph/` now holds one file per node, named after the node, and every edge sits in a file named after one of its two endpoints — under its `src` by default, and under the NEW node when a bead adds one, since that is the placement that writes no existing node's file. `onboarding/graph_layout.py` states the property and reports the surface where a shared write is still possible; seven pins over this repository's own graph go red the day a node is appended to another node's file. **The cost was measured before the split was taken, over 100 nodes and 169 edges:** `load_graph` 61.34 ms to 66.40 ms, `each_graph_file` 50.24 ms to 55.44 ms, `beadloom reindex --full` 1895 ms to 1950 ms, and `lint --strict`, `doctor` and `status` unmoved because they read the index. **Nothing that was one pass became N** — every reader of the directory already globbed `*.yml` and iterated. The migration was text-level rather than a `yaml.safe_dump` round trip: all 161 comment lines and all 1146 content lines survive as written, and the loader produces identical node and edge rows before and after. What is not preserved is `git blame` through a 1-to-100 split. **The write rate the entry asked to weigh this against was re-read at the finer grain that decides it:** 7 of those 8 commits ADD a node, so the shared write was the common case and not a corner.
+    **AND THE SERIALISATION THE SPLIT WAS SUPPOSED TO UNLOCK IS REDUNDANT, NOT MEANINGFUL — the opposite of what this entry predicted.** One node per file makes the node-to-file map injective, so "two beads whose declared nodes are defined in one graph file" holds exactly when the two beads declare the same node, which `conflict_between` already reports as `shared_node`. It was noise on a single-file graph and is redundant on a split one, and there is no layout between the two where it is neither. `TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` is that measurement, and `beadloom-kqsv`'s pin for the reopening condition was retired rather than restated, so the fact has one home.
+    **What did NOT change, deliberately.** `beadloom init` still writes one `services.yml` and a single-file graph stays valid for every reader, so no adopter is migrated and no migration command ships. One file is the easier thing to review once, and the shared write only matters when concurrent agents write the graph. What an adopter gets is the number, through the `graph-files` medium of `beadloom waves`, whose pass now names the file every node-adding bead writes with the count it holds, or says each node has a file of its own.
+    **Related:** #261 (the medium this leaves in place), #260 (one writer per file, stated as the general property), the ledger directory `beadloom-0mdo.66` shipped.
+
+264. ~~[2026-09-09] [MEDIUM] a population literal is a derivable fact with two homes, and every node-adding bead pays three hand edits for it~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.79` is closed. No `test_bead77_*` file remains,
+    and the literals are replaced by a relation in
+    `tests/self_check/docs/test_every_document_of_this_repository_is_in_one_space.py`.
+
+    **Severity:** medium (it reddens CI for a bead that did not cause it, and the bead that did cause it correctly refuses to fix it)
+    **Tracker:** the bead filed by `beadloom-kqsv` — `bd show` it
+    **Issue:** `tests/test_bead77_kind_and_root_disagree.py` asserts `populations[SPACE_TO_BE] == 203`, `populations[SPACE_AS_IS] == 116` and `len(spaces.working_documents(REPO_ROOT)) == 58`, and `tests/test_reference_leg_syntax.py` asserts a reference count. Every one is a hand-maintained copy of a fact this project can derive, so any bead that adds a node or a planning document has to find and bump it.
+    **Measured:** `beadloom-mr2l.72`'s comment records the third instance — adding one bug feature's BRIEF and ACTIVE reddened CI on three literals at once, none owned by the bead that caused them, the dev subagent correctly refused to edit outside its bead and the coordinator bumped them by hand. `beadloom-0mdo.59` and `beadloom-0mdo.63` then hit it again in one S6 wave: both added a graph node, both had to raise the same count, and `beadloom waves` reported `0 serialisations` for the pair. 7 of the 55 commits on `features/BDL-068` touch that one test file.
+    **Expected:** the assertion states the RELATION the test is about — that the TO-BE and AS-IS populations partition the documents the spaces resolve, that no working document is counted twice — and derives the count rather than restating it. A test that has to be edited by every unrelated bead is not pinning a behaviour, it is pinning a snapshot.
+    **Not a serialisation and not a medium:** one writer per file does not apply, because the file already has one writer per bead. The defect is one fact with two homes, which is what BDL-068 exists to remove; the answer is to delete the copy.
+    **Related:** #261 (the population this was measured in), `beadloom-mr2l.72` (the same shape for `ROADMAP.md` and the issue log).
+
+261. ~~[2026-09-09] [HIGH] a wave shares more than its focus document — the graph the plan is derived from, and a test's population literals~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-kqsv` is closed. `application/waves/media.py` states
+    the `focus-document` and `graph-files` media, and the test population literals were removed
+    (#264).
+
+    **Severity:** high (one of the shared artifacts is the derivation's own input)
+    **Tracker:** `beadloom-kqsv` — `bd show` it; the tracker is the source of truth for this entry's text
+    **Issue:** measured across three S6 waves, `beadloom waves` reported `0 serialisations` while four artifacts were shared in fact: `ACTIVE.md`, `docs/services/components/cli-commands/DOC.md`, `tests/test_bead77_kind_and_root_disagree.py` (hand-maintained population literals any node-adding bead must bump), and `.beadloom/_graph/services.yml` — **the graph `waves` derives scope from**. A bead that adds a node writes the file the plan is computed from, so the plan cannot see that collision by construction.
+    **Related:** #257 (the focus document), and `beadloom-mr2l.72`, whose comment already recorded the population-literal shape as three hand edits per feature.
+
+259. ~~[2026-09-08] [LOW] a THIRD reader of a markdown table takes one header for a whole heading, and is guarded only by the words its rows happen to carry~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.77` is closed.
+    `application/work_item_routing.py` reads the table through `doc_sync.tables.table_blocks`, the
+    reader #213 and #244 were fixed in.
+
+    **Severity:** low (the class is present and no instance exists today, because vocabulary is doing the work a boundary should do)
+    **Command:** `beadloom task-init` routing, `beadloom config-check`
+    **Tracker:** `beadloom-0mdo.77`; found by `beadloom-0mdo.46` while fixing the other two
+    **Context:** BDL-068 S6 wave 5, from the fix for #244. #213 and #244 were the same sentence in two readers, hours apart; the search for a third found one.
+    **Issue:** `application/work_item_routing.py::_routes_in` reads the composed `/task-init` routing table by matching the FIRST row whose leading cells equal the expected header, and then treats every table row anywhere below it as a route. A second table under the same heading contributes its rows to the first table's population, exactly as #213 and #244 did.
+    **Why no instance fires today:** the reader discards a row whose second cell does not contain `simplified` or `full`, so a second table's header row and most of its data rows fall out. That is a vocabulary guard standing in for a boundary, and #213's own measured cause was that vocabulary cannot decide this — the entry blamed header words and the cause was one level below them.
+    **Why it is LOW and not MEDIUM:** the composed `/task-init` command in this repository states one table under that heading, so nothing is currently misread, and the failure direction is under-reporting a route rather than inventing one.
+    **Expected:** `_routes_in` reads its table through `doc_sync.tables.table_blocks`, the one place that now decides where a table starts, and stops depending on its rows' vocabulary to end one. Measure first: the change alters which rows a routing table contributes, so it needs its own before-and-after over the composed commands this project ships.
+
+256. ~~[2026-09-08] [HIGH] a clean room can resolve the package under test to the MAIN tree, so a correctly-named room returns a verdict about a tree it does not contain~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The NARROWED and CLOSED blocks above hold.
+    `application/waves/room_env.py` builds a room-local `.venv` and installs the room's own
+    sources, and `beadloom-0mdo.74` is closed.
+
+    **Severity:** high (the failure #235 was filed for, surviving the fix that was believed to close it)
+    **Command:** the clean-room convention; `beadloom clean-room` as of `beadloom-0mdo.37`
+    **Tracker:** routed to S6, beside `beadloom-0mdo.38` (#236)
+    **Context:** measured by `beadloom-0mdo.68` in BDL-068 S6 wave 2, in a room whose directory name was already bead-unique.
+    **Issue:** the run used `uv run --project <main tree> pytest` from inside the room, and the editable install resolved `beadloom` to the **main tree's** `src`. The room then reported a failure caused by the *neighbour's* uncommitted CLI command — a clean-room verdict about a tree the room did not contain.
+    **Why it is worse than #235 was:** #235 was two agents sharing a directory, and the fix was to make the directory unshareable — `beadloom-0mdo.37` shipped exactly that hours earlier, with an exclusive `mkdir`. This failure passes through a correct, exclusive, bead-named room. The isolation the name provides is of the *files*; nothing was isolating the *interpreter's import path*, and no report distinguishes the two.
+    **The room needs its own environment:** `uv venv` plus `uv pip install -e .[all,dev]` inside it. Measured: with `.[dev]` alone, four TUI tests error on collection — which is BDL-UX #236 (a room's verdict is decided by extras the convention never names) meeting this one, and is why the two belong in the same slice.
+    **Two measurements added 2026-09-08 by `beadloom-0mdo.38`, so `.74` starts from facts rather than from this entry's estimate.** *First, half of this entry is already closed and was verified rather than argued:* `beadloom-0mdo.37`'s `room_invocation` hands back `PYTHONPATH=<room>/src <the project's own .venv python> -m pytest <room>/tests`, and run in this bead's room `import beadloom` printed a path **under the room**. `PYTHONPATH` precedes the editable install's own finder on `sys.path`, so the failure this entry names does not occur when the invocation the command hands back is the one used. What survives is the environment, not the import path. *Second, the collection failure is four MODULES and not four tests:* with `.[dev]` alone, `tests/tui/` contributes 3 modules that skip cleanly on `could not import 'textual'` and 1 (`test_context_scroll.py`) that stops the collection with an error, and the run collects 8859 items against 9222 under `.[all,dev]`.
+    **And the cost is measured, so it is not the reason to decide either way.** On a warm `uv` cache, macOS/APFS: `uv venv` **0.04 s**, `uv pip install -e '.[all,dev]'` **3.6 s**, `.[dev]` alone **0.5 s**, for a room of **160 MB apparent** — APFS clones from the cache, so the marginal bytes are near zero here and are not on a filesystem without cloning. Against a 7-minute suite run and several rebuilds per bead, per-room environments are affordable. What is left to decide is which extras, and #236's answer gives that a derivation to start from: the extras this project's own legs declare, not a constant.
+    **Expected:** `beadloom clean-room` owns the environment as well as the directory, since `beadloom-0mdo.37` has just made it the single place that answers this question. A room that resolves the code under test to somewhere else is not a room, and the verdict it returns cannot be told from a real one by reading it.
+
+
+    > **NARROWED 2026-09-08 by `beadloom-0mdo.38`, which measured it rather than inheriting it.**
+    > The import-path half is **already closed** by `beadloom-0mdo.37`'s invocation: `import beadloom`
+    > inside that bead's room printed a path **under the room**. So the severity above is overstated
+    > — a room built by `beadloom clean-room` does not resolve the package to the main tree, and the
+    > failure this entry describes belonged to a hand-built room using `uv run --project <main tree>`.
+    > **What survives is the environment half**, which `beadloom-0mdo.74` owns: the room needs its own
+    > venv, and the cost is now measured rather than feared — `uv venv` 0.04 s, `uv pip install -e
+    > '.[all,dev]'` 3.6 s warm, 160 MB apparent.
+    > **The coordinator filed this at HIGH from an agent's report without checking whether a fix
+    > landed hours earlier had already covered part of it.** That is the same shape as #194, #237 and
+    > #164 — an entry written from a failure's appearance and not re-derived — committed by the person
+    > who wrote those three withdrawals up. The entry is narrowed rather than withdrawn: the
+    > environment half is real.
+
+    > **CLOSED 2026-09-09 by `beadloom-0mdo.74`, on the narrowed half.** `beadloom clean-room` now
+    > creates a virtual environment inside the room and installs the room's own sources into it, and
+    > `room_invocation` names that interpreter. So the room isolates the environment as well as the
+    > files, which is the guarantee the name never gave.
+    > **Which extras, and the reading that was measured and rejected.** The extras are the UNION of
+    > every extra any leg of this project's workflows installs, read from the TYPED install step
+    > (`rooms.leg_installs`) rather than from the satisfied set, which needs the analysed distribution
+    > installed under the running interpreter and is unresolved for a project this tool is merely
+    > pointed at. The MODAL set was tried first and is wrong here: of the 8 installing jobs
+    > `leg_installs` reports on this repository, four install `dev, languages` to build a site or run
+    > a release gate and two run the suite, so the commonest environment is the one no suite verdict
+    > is taken under. The union is taken because the two errors are not symmetric — a missing extra
+    > removes tests from a run WITHOUT failing it, a surplus one removes nothing.
+    > **The cost, re-measured at HEAD rather than inherited.** Warm `uv` cache, macOS/APFS: `uv venv`
+    > **0.082 s**, `uv pip install -e` **1.07 s** for the union (`dev, graphql, languages, mutation,
+    > tui, watch`, 169 MB) against **1.78 s** and 160 MB for `.[all,dev]`; the room is **184 MB**
+    > apparent. The surplus the union buys is 9 MB and no time. Against a seven-minute suite the whole
+    > step is under half a percent, so it is **paid per room and never cached**: an environment kept
+    > outside the room and reused is a directory two rooms share, which is #235 again. `uv`'s own
+    > package cache is the reuse that matters and is content-addressed, so it cannot carry one room's
+    > source into another.
+    > **Without `uv` it is not the same measurement:** `python -m venv` 1.84 s plus `pip install -e`
+    > 39.6 s over the same tree, about thirty times. The room records which installer built it, and a
+    > failure is reported rather than retried under the other one.
+    > **A room that could not build one is a FINDING and never a refusal** — the files are isolated
+    > either way — and it names the interpreter its verdict will be taken under instead, so
+    > `beadloom clean-room` exits 1 rather than printing a room a reader assumes has its own. The
+    > effect on `beadloom-uzck` is stated rather than acted on: a rebuild now pays the install again,
+    > so the argument for not retyping 16 `--carry` flags is stronger than when that bead was filed.
+
+255. ~~[2026-09-08] [MEDIUM] `beadloom impact` crashes with an unhandled SyntaxError on a target that EXISTS but is not Python, while an absent path is reported cleanly~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.73` is closed. Measured by the audit in a
+    scratch copy: `beadloom impact .claude/CLAUDE.md` exits 0 with `[unreadable-target] ... its
+    suffix is .md and this derivation reads .py source`, and prints no traceback.
+
+    **Severity:** medium (the derivation cannot be pointed at the documents this epic's last slice is about, and it fails by traceback rather than by verdict)
+    **Command:** `beadloom impact <path>`
+    **Tracker:** routed to S6
+    **Context:** found by `beadloom-0mdo.72` while deriving S6's axes — that is, by using the instrument for the job the slice exists to do.
+    **Issue:** given a path that exists and is not Python, `impact` exits 1 with an unhandled `SyntaxError` out of `ast.parse` at `src/beadloom/application/impact/axes.py:129`. An **absent** path is handled and reported cleanly. So the failure is worse for the case that is more likely to be a real request: a reader pointing the tool at `CLAUDE.md`, the issue log or a role template gets a traceback, while a typo gets a sentence.
+    **Why it matters beyond a rough edge:** it is why S6's own axes derivation reaches **0 of its subject's 862** `beadloom <subcommand>` instruction sites across 68 non-Python artifacts and 11 170 lines. The slice about the flow's own documents cannot ask the derivation about a document at all. S5's equivalent ratio was 14 of ~261; this is zero of everything.
+    **This project's own rule applies to its own tool:** a target the derivation cannot read is `unresolved` and says so — the distinction this epic has now shipped ten times. A traceback is not that distinction; it is the absence of one.
+    **Expected:** a non-Python target is a verdict, not a crash. Whether `impact` should eventually derive anything from a markdown or YAML artifact is a separate and larger question — answer the crash first, and state the second rather than sliding into it.
+
+254. ~~[2026-09-04] [HIGH] a guard that cannot evaluate itself blocks every write, including the one that would repair it — the session is unrecoverable from inside~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.60` is closed.
+    `application/guards/invocation.py` routes a guard that cannot evaluate itself to
+    `_unresolved`, which permits at the harness warning code. Read from source, not measured live.
+
+    > **Renumbered from #253 to #254 on 2026-09-05, by the S5 review's Major 2.** Two entries were
+    > filed as #253 on the same day by two agents working the same slice: the LOW dependency-release
+    > entry above and this one. The LOW entry keeps the number — it already had five citations in
+    > `.beadloom/config.yml` and three in `ACTIVE.md`, all committed, while this one had none in any
+    > file. **Commit `050d63ac`'s subject still says #253 and means this entry**; that is history and
+    > is left alone rather than rewritten.
+    > **This is the third instance of one class in this project**, after the duplicate #211 and the
+    > #216-#232 run of bead titles carrying numbers the log never received. It is also exactly the
+    > defect `beadloom-0mdo.53` closed for the TRACKER hours earlier — a number authored before it is
+    > allocated, kept in two places — reappearing in the log, which has no allocator at all. The RFC
+    > already names it as S6's subject (`mr2l.91`); S5 is the slice that produced the duplicate the
+    > check was proposed for, which is the argument for building it rather than a reason to wait.
+
+    **Severity:** high (an agent session wedges with no self-heal, and the state that wedges it is an ordinary mid-refactor moment)
+    **Command:** `beadloom guard bead-claimed`, the emitted `.claude/settings.json` `PreToolUse` binding
+    **Tracker:** routed to S6
+    **Context:** hit by `beadloom-0mdo.51` during BDL-068 S5, splitting `src/beadloom/services/bd_seam.py` into a package. `git mv` succeeded; the very next call — creating `__init__.py` — was blocked. Between the two the package does not import.
+    **Issue:** `guard_probes.py:79` reaches the tracker by importing `beadloom.services.bd_seam` from the editable install rooted at the working tree. While that import fails the guard cannot answer, and a guard that cannot answer **blocks**. Its own remediation reads *"fix the reported error, then re-run"* — it asks for a file write it has just disabled.
+    **Measured, from two independent sessions:** `Bash`, `Write` and `Edit` are all on the guard's surface and all return the same `ImportError`; `Read` is not, which is the only reason the proposed repair could be checked before asking a human to type it. There is no escape from inside: no env var, no marker and no path exclusion is reachable, because the failure is raised **before** any path or command analysis runs. **A human ran one heredoc in their own shell. Nothing else cleared it.**
+    **The uncomfortable half, and it is ours:** BDL-068 S4 widened the matcher to include `Bash` (`beadloom-0mdo.31`), which was correct and is the whole of #170. Before that, a shell write slipped past the guard and could have repaired it. So closing a real coverage hole converted a recoverable failure into a dead end, and the improvement is what removed the last exit.
+    **It is #170 asked in the other direction.** That entry asked *which write paths can this guard not see*. This asks *what does a guard do when it cannot answer about itself*. S4 taught four instruments to say `NOTHING TO CHECK`, `not compared`, `not_covered` and `unresolved`; this one says `ERROR` and stops the world.
+    **Not exotic.** Any refactor leaving the package momentarily unimportable wedges a session the same way: a module split, a renamed symbol, a syntax error saved mid-edit.
+    **Expected — the shape, not the instance.** A guard that cannot evaluate itself is `unresolved`, and an unresolved guard **warns and permits** rather than blocking, saying loudly that it checked nothing. A gate that blocks on its own inability is not strict, it is unavailable. If some inability must block, it must leave a reachable repair path, and `Read`-only is not one. Consider also isolating the probe from the tree it guards, so editing Beadloom cannot disarm the guard that watches the edit.
+    **Related:** #174 and #175 (a check reporting its own inability in a form nobody can act on) are the same family; #170 is its other direction.
+
+253. ~~[2026-09-04] [LOW] a scanned document cannot say which release of a DEPENDENCY a measurement was taken on, because every semver token is read as a claim about this project's version~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The RESOLVED line above holds. `doc_sync/version_subjects.py`
+    exists, `.beadloom/config.yml` declares `docs_audit.subjects`, and `beadloom-0mdo.63` is
+    closed.
+
+    **Severity:** low (one suppression per sentence, and the suppression route is declared, dated and checked — but the class recurs for every adopter who documents a dependency's behaviour)
+    **Command:** `beadloom docs audit`
+    **Context:** BDL-068 S5, `beadloom-0mdo.39`. `docs/domains/application/README.md` gained the sentence "Measured on bd 1.0.4 in an isolated rig with every exit code read without a pipe", which is what makes the landing-lock measurement answerable at all.
+    **Measured:** `docs audit` reported `1 stale fact(s)` — `README.md:56 version mentioned 1.0.4, actual 3.0.2` — and the Gate went red on it. `_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a pin, so it has no notion of WHOSE product a version belongs to.
+    **Why it matters:** this project requires every measurement to name the room it was taken in, and the version of the tool under measurement is part of that room. The audit currently makes the two rules contradict: a document either states which release it measured, or it passes. The two existing suppressions of the same family cover an EXAMPLE token (#190) and a PAST TENSE (#205); this is a third form — another product's number — and it is the one an adopter meets first, because documenting a dependency's behaviour is ordinary.
+    **Expected:** a version token attributed to a named product is not read as this project's version. The attribution is present in the text every time (`bd 1.0.4`, `Python 3.13.7`, `mcp>=2.0`), so this is a token-boundary question rather than a semantic one — the same shape as the clause-scoped matching that retired three triples in BDL-061.45.
+    **Workaround, in force:** two `docs_audit.ignore` triples with their reason, in `.beadloom/config.yml` — one for `docs/domains/application/README.md` and one for `docs/services/cli.md`. Needing two of them for ONE measurement inside ONE bead is the evidence that this is a class and not an instance: every document that describes what a dependency was measured to do needs its own. Each goes inert if its sentence is deleted, and `TestEverySuppressionStillSuppresses` reports it the day it does.
+
+    **RESOLVED 2026-09-09 by `beadloom-0mdo.63` (BDL-068 S6).** A version is now attributed to the nearest subject NAME to its left inside its own clause, and only a version whose nearest name is this project's — or that has no name at all — is compared against this project's version. The vocabulary of names is derived from what a project already declares (every distribution in `pyproject.toml` / `package.json` / `Cargo.toml`, the interpreter families implied by `requires-python` / `engines.node` / `rust-version`, and `git` when the project is a git repository) and configured per NAME in `docs_audit.subjects` for what no manifest carries. **Measured with a real `DocScanner` over the audit's 68-document surface: eight of the ten version triples went inert and were retired, and the 13 tokens they covered are now reported as `bd x12, git x1` under `attributed_versions` rather than silenced.** One `docs_audit.subjects` entry — `bd` — replaced nine of them.
+
+    Two things this fix deliberately does NOT cover, stated rather than assumed: the example token `v2.2.0` in `docs/services/cli.md` (a version MENTIONED rather than used — see #190 below) and `3.0.0` in `docs/guides/architecture-model.md` (this project's OWN past version — #205). Both keep their triple, and the config records why.
+
+    **Related:** #190 (its foreign-subject face is absorbed here; its example-token face is not), #205 (the past tense, open).
+
+252. ~~[2026-09-04] [MEDIUM] a composed role is missing from the entry-point document that enumerates roles, and no check asks whether it is there~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.59` is closed. `onboarding/role_map.py` exists,
+    `config-check` prints `Role map: 5 composed role(s)`, and the shipped `CLAUDE.md.txt` names
+    `explore`.
+
+    **Severity:** medium (an adopter's agent reads the entry point to learn what roles exist, and learns four of five)
+    **Command:** `beadloom setup-agentic-flow`, `beadloom config-check`
+    **Tracker:** routed to S6
+    **Context:** noticed by the owner reading `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, then measured.
+    **Measured:**
+
+    ```
+    explore.md.txt                          the role template exists
+    commands/coordinator.md.txt             explore x4
+    commands/task-init.md.txt               explore x4
+    .claude/agents/explore.md               composed
+
+    CLAUDE.md.txt      (shipped)            explore x0
+    .claude/CLAUDE.md  (composed, here)     explore x0
+    ```
+
+    **Issue:** `Explore` shipped in BDL-068 S1 as a composed role and is used by two slash skills. `CLAUDE.md` is the document that calls itself the entry point, whose §0.0 draws the role map and whose §4 is the Agent Roles table. Both list four roles. So the role exists, two skills invoke it, and the map an agent is told to read first does not know about it.
+    **What already checks, and what it checks instead:** `config-check` reports `On disk: 5 role file(s)` — it counts `explore` — and checks two things, neither of which is this. It compares composed adapters against the compositions this flow would write (drift), and it checks that a declared duty reaches the composed core of every role it names, in both directions (`beadloom-0mdo.27`, shipped in S4). Nothing asks whether every composed role is NAMED in the document that enumerates roles.
+    **Why it is the same family and still a third direction:** #228 was "a duty declared for a role does not reach that role's core". This is "a role that exists does not reach the document listing roles". `.27` built the duty↔core check; the role↔map check is one more edge of the same graph and was not built because nobody had added a role since the map was written.
+    **Expected:** `config-check` derives the role set from what `role-composer` composes and asserts that each one is named in the composed `CLAUDE.md`, reporting a role the map omits and a map entry no role backs. Both directions, like `.27`. Then fix this instance — `Explore` belongs in §0.0's map and §4's table, in the shipped template and therefore in every adopter's composed copy.
+    **Not a documentation chore.** Fixing only the text leaves the next role in the same position, which is precisely the argument `beadloom-0mdo.12` made for refusing to split a duty from its check.
+
+251. ~~[2026-09-04] [LOW] `sync-check` reports nine surface-drift warnings on the tree that a freshly reindexed clean room reports as `[ok]`, and a tree reindex does not clear them~~ **CLOSED 2026-09-29 (no longer reproduces, cause never found)**
+
+    **Closed 2026-09-29. It no longer reproduces, and its cause was never found.** The audit ran
+    `sync-check` on a full copy of the repository with its own index (529 `[ok]`, 0 surface-drift
+    lines, rc 0) and in a reindexed `git archive` room (every `watches=` document `[ok]`). Nobody
+    established which of the two original answers was right, and `beadloom-0mdo.46` records that
+    #251 was not investigated. If a tree and a room disagree like this again, reopen this entry
+    rather than filing a new one.
+
+    **Severity:** low (warn-level, pre-existing, and untouched) — recorded because the two rooms disagree, not because the warnings matter
+    **Command:** `beadloom sync-check`, `beadloom reindex`
+    **Context:** observed by `beadloom-0mdo.58` while deriving S5's axes in a room built from `git archive HEAD` at `b350f6b` and reindexed there.
+    **Issue:** the tree reports nine surface-drift warnings; a clean room built from the same commit and reindexed reports `[ok]` for all nine. Re-running `reindex` on the tree does not clear them. So the freshness answer depends on which room asked, and the room that says less is the one built from the committed state.
+    **Why it is worth an entry at `warn`:** this project's whole verdict discipline rests on a clean room and the tree being two different claims about the same code, with the tree being the stricter one. Here the tree is stricter for a reason nobody has established, and "stricter for an unknown reason" is indistinguishable from "wrong" until someone looks. Same family as #163 and the S4 docs-wave finding, where `sync-check` was green over real prose drift: the freshness fact models something adjacent to the question.
+    **Expected:** establish which of the two answers is right, then either the tree stops reporting nine things the committed state does not carry, or the room stops missing them. Do not silence either side first.
+
+250. ~~[2026-09-04] [MEDIUM] a node is approved into a work item's axes by having been SWEPT, so a `Derived by` field silently overrides an explicit `no`~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.72` (S6). `WorkItemAxes.approved` in
+    `application/waves/models.py` returns only the kept rows, and a swept target becomes
+    `AXIS_NOT_DERIVED` or `AXIS_RULED_OUT`.
+
+    **Severity:** medium (a path into the approval list that no one chose, in the list `scope-check` compares every commit against)
+    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
+    **Context:** found by `beadloom-0mdo.58` while deriving S5's axes — the first slice whose targets are files it READS rather than files it changes.
+    **Issue:** `WorkItemAxes.approved` is `kept | targets`, and `_agreement` checks `approved` first, so a row marked `no` in the scope column is still approved when it appears as a derivation target. `doc-spaces` and `intent-reader` are in BDL-068's approved set today for that reason alone — they were swept, not kept.
+    **Why the rule was right until it wasn't:** it assumed a slice changes what it derives from, which held for S1 through S4. S5's subject is where this project *calls* `bd`, so its `impact` targets include files it only reads. The assumption is now false and nothing announced the change.
+    **Same family as #244**, filed hours earlier: both are entries reaching the approval list without anyone writing them there. #244 arrives from a table header; this one arrives from a field meant to record provenance. The approval list is what `scope-check` judges every commit against, so a name nobody chose is a name every commit may touch.
+    **Expected:** `approved` follows the scope decision and nothing else. A target that was swept and ruled out is a target that was swept and ruled out; provenance is not consent.
+
+249. ~~[2026-09-04] [MEDIUM] `ci.yml` names a locale macOS does not have, so anyone reproducing that leg locally measures the C row twice~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed as the entry's Expected (b) by `beadloom-0mdo.50` and
+    `.85`. The name in `ci.yml` stays, because it is the Linux name. Under
+    `LC_ALL=en_US.ISO-8859-1` on macOS, `beadloom rooms` now says the locale asked for did not
+    apply (`LOCALE_ASKED_DIMENSION` in `application/rooms.py`).
+
+    **Severity:** medium (the reproduction silently succeeds at measuring the wrong room, which is worse than failing to run)
+    **Command:** the `tests-locale` matrix in `.github/workflows/ci.yml`; `beadloom rooms`
+    **Tracker:** `beadloom-0mdo.50` (#248), same area
+    **Context:** measured by `beadloom-0mdo.49` while entering the 8-bit room to fix PR #61's red leg.
+    **Issue:** the matrix declares `en_US.ISO-8859-1`. That spelling is not a locale macOS has; setting it silently falls back to ASCII. So a developer reproducing the 8-bit leg with the name CI uses runs the **C** room a second time and reports it as the 8-bit one. The real 8-bit room on this platform is `en_US.ISO8859-1`, without the hyphen.
+    **Why it is not merely a typo:** the two rooms differ in exactly the behaviour the leg exists to test. Under C, `beadloom scope-check`'s `Declared axes: NOT CHECKED — …` line carries three non-ASCII bytes; under a real 8-bit locale, `console_streams.tolerate_unencodable_output` degrades the em dash to a literal ASCII `\u2014` and all 540 bytes become ASCII. A test whose premise depends on the child's bytes therefore behaves differently in the two rooms — which is how PR #61 shipped a leg that was green in one and red in the other.
+    **`ci.yml` already knows this can happen:** its anti-vacuity step exists to catch a locale that degraded rather than applied. That step protects the CI legs. Nothing protects the developer reproducing them, and the reproduction is where the room census claims its value.
+    **Expected:** the room's name is the one the platform answers to, or the census says which spelling it resolved and whether the locale applied or degraded. A room that silently becomes a different room is a phantom room, and `beadloom rooms` is the instrument that should refuse to report it as entered.
+    **Related:** #248 (the census carries no locale dimension at all), and the reason this was found rather than reasoned about — the fix that closed PR #61's leg was verified in three rooms, and this is the difference between two of them.
+
+245. ~~[2026-09-04] [MEDIUM] the `unguarded_axis` remedy, followed literally, gives every bead one scope and collapses every wave to a wave of one~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.46` is closed. The `unguarded_axis` remedy in
+    `application/waves/models.py` tells each bead to derive its own `refs:` with `beadloom impact`
+    inside the `## Axes` ceiling, which is that ceiling and not any one bead's scope.
+
+    **Severity:** medium (a correct verdict followed by advice that would switch off the parallelism the command exists to plan)
+    **Command:** `beadloom waves`, `beadloom axes <doc> --refs`
+    **Tracker:** `beadloom-0mdo.46`, routed to S6
+    **Context:** BDL-068 S4's fix cycle, immediately after the RFC's `## Axes` section was populated at epic scale for the first time.
+    **Issue:** on an `unguarded_axis` finding `waves` prints *"generate each bead's `refs:` from the `## Axes` section of <the RFC>"*. `beadloom axes <doc> --refs` prints ONE line generated from every row kept in scope — 24 nodes on this epic — and there is no per-bead selection; the help text confirms the unit is the work item. Performed exactly, the remedy hands every bead in the epic an identical 24-node scope, `shared_node` fires on every pair, and every wave becomes a wave of one.
+    **The root is a level confusion, not a typo:** a work item's axes are the UNION of its slices' — the RFC says so — while a bead's scope is a SUBSET chosen for that bead. One document holds the union; nothing holds the per-bead subset, and `--refs` cannot invent it. CONTEXT Q1 ("a bead's `refs:` is generated from the document") is right; the selection step between the two is what is missing.
+    **Same class as #234**, closed in this same epic: a correct verdict followed by a remedy that does not follow the cause down as far as the reason does. There it would have authored a scope; here it would disable every parallel wave. A remedy standing beside a correct verdict is the line nobody re-reads.
+    **Expected:** either the section records which rows belong to which bead, so `axes --refs <bead-id>` can answer, or the remedy stops prescribing an action that has no correct form and states instead which comparison it could not make. Do not ship it unchanged — it is advice to make the tool useless, printed by the tool.
+
+244. ~~[2026-09-04] [MEDIUM] a second markdown table in `## Axes` contributes its header row as an approved node named `Node`~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.46` is closed. `doc_sync/tables.py` parses each
+    table on its own, and the audit measured `read_axes_section` over a two-table section
+    returning no `Node` row.
+
+    **Severity:** medium (a phantom entry in the list `scope-check` compares every commit against)
+    **Command:** `beadloom axes`, `beadloom waves`, `beadloom scope-check`
+    **Tracker:** `beadloom-0mdo.46`, routed to S6
+    **Context:** found by `beadloom-0mdo.44` while appending S4's 28 rows to BDL-068's `## Axes`. Measured after the append: `beadloom waves` reports `29 node(s) approved … 1 axis row(s) name no node`.
+    **Issue:** `read_axes_section` takes the header row of a SECOND table in the section as data, producing an approved node literally named `Node`.
+    **Why the document invites the second table:** the RFC's own per-slice union rule says each slice appends its rows with its own `Derived by` / `Measured on` line — which is naturally a new table, not more rows under one header. The parser's one-table-per-section assumption is contradicted by the document rule this project wrote for itself, and the contradiction can only appear once an epic reaches its second slice, which is why it survived S1.
+    **Why a phantom here is worse than elsewhere:** the approval list is what `scope-check` compares commits against. A name nobody chose is a name every commit is allowed to touch.
+    **Expected:** a row whose cells are a table header is not a row. Fix this before #245 is evaluated — that finding cannot be judged honestly while this one injects a node nobody wrote.
+
+243. ~~[2026-09-04] [MEDIUM] re-copying changed files into a room that has already been reindexed manufactures a stale-doc failure that looks exactly like a defect~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Closed by `beadloom-0mdo.41` and `beadloom-uzck`. `beadloom
+    clean-room <bead>` derives the room from the bead and refuses a directory it did not create,
+    and `--rebuild` replaces a room rather than refreshing it (`application/waves/clean_room.py`).
+
+    **Severity:** medium (a false red in the measurement whose whole purpose is to be trusted, and the false red is indistinguishable from a true one)
+    **Command:** the clean-room convention (`git archive HEAD` + only your files), BDL-UX #181, #235, #236
+    **Context:** BDL-068 S4, `beadloom-0mdo.41`, met and measured rather than reasoned about.
+    **Issue:** an agent that has already built and reindexed its room, then edits a file and copies the new version in, gets a SECOND failure — `test_bead15_s3b_coverage`, `sync-check` exit 2, `stale: 2` — which does not reproduce at pure HEAD. The copy postdates the room's own doc-freshness baseline, so the room correctly reports the file as changed since it was last attested. Nothing is wrong with the change. The failure is produced by the room's lifecycle and is shaped exactly like a defect in the work being measured.
+    **Why it belongs with #235 and #236:** those three are the whole isolation story of a clean room and all three were assumed rather than checked — #235 the room may contain a neighbour, #236 the room's dependency set is unstated so its verdict is not reproducible, #243 the room is not re-enterable and nothing says so. A convention that is only correct when performed exactly once, without saying so, is a convention that will be performed twice.
+    **Expected:** a room is BUILT, never refreshed. The agent that met this rebuilt from scratch and the pristine room gave the same one-failure verdict as the first, which is the check that makes this an entry rather than a guess. The durable form is the one #235 already proposes: a command that creates the room and refuses a directory it did not create empty — which makes re-entry impossible rather than merely discouraged, and answers both entries at once.
+    **Workaround (in use):** rebuild the room after any edit. Do not re-copy, do not re-sync.
+
+241. ~~[2026-09-04] [MEDIUM] `config-check` reports a duty delivered to five roles on a project holding no role files, and does not say which question it answered~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.41` is closed. `config-check` states that its
+    duty count is over the composition the flow would write, not the role files on disk, and
+    reports the role files on disk on a separate line.
+
+    **Severity:** medium (adopter-facing: the reassuring output is produced by the state in which nothing is protected)
+    **Command:** `beadloom config-check`
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** on a project with no role files on disk, `config-check` prints `Duties: 1 declared, checked over 10 composed artifact(s)` and `no blocking drift`. It judges the COMPOSITION rather than the artifact, which is a defensible choice — `--fix` writes compositions, and drift covers the scaffolded case — but the choice is nowhere stated and the printed sentence does not say which of the two questions it answered. On a scaffolded project the pair is sound; that was tested rather than assumed.
+    **The root, shared with #239:** `beadloom-0mdo.31` and `beadloom-0mdo.27` landed in the SAME WAVE of BDL-068 S4 and answered one question in opposite ways. `.31` reads the artifact on disk and reports `unresolved` when it is missing, with the reason recorded and the reasoning stated. `.27` judges the composition and does not state that it did. Neither agent could see the other. This is the one place the slice's eight instruments disagree, and #239 and #241 are its two consequences.
+    **Expected:** each instrument states which question it answered, in the sentence it prints. Then the divergence is a visible design choice instead of two commands that look like they agree.
+
+240. ~~[2026-09-04] [MEDIUM] the commit hook's typed leg is gated by a hand-written `^(src|tests)/` regex and prints nothing at all on a flat-layout project~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.42` is closed. The hook's typed leg selects
+    Python files by kind, not by a `^(src|tests)/` location (`services/commands/docsync.py`).
+    Residue recorded on `.42`: `.pyi` files are outside the population, and the ruff leg still
+    discards stderr.
+
+    **Severity:** medium, and adopter-facing — **this repository cannot observe it**, being src-layout, which is why it survived the bead that built it
+    **Command:** the pre-commit hook's type-check leg (`beadloom install-hooks`)
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** the leg selects the files it will type-check with a literal `^(src|tests)/` path regex. A project whose package sits at the repository root — the flat layout, which is common and which `beadloom impact` already has a filed defect about (#225) — matches nothing, and the leg prints NOTHING. Not "no typed files staged", not a skip: silence.
+    **Why it is the slice's own shape, one level up:** `beadloom-gsal` fixed exactly this defect in the same leg — it replaced a hand-written typed surface with one derived from `pyproject`, citing `beadloom-mr2l.82` shipping a hand-written list that `pyproject` then moved out from under. The derivation landed and the GATE ON IT stayed a spelling. A rule stated as a shape, reached through a filter stated as a spelling.
+    **Expected:** the gate is derived from the same source as the surface. If `pyproject` says what is typed, nothing else needs to say where it lives.
+
+239. ~~[2026-09-04] [MEDIUM] `guard --liveness` prints `0 of 0 write path(s) bound`, and an empty population reads as full coverage~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.41` is closed. `application/guards/surface.py`
+    reports `NOTHING TO CHECK` for an empty write-path population instead of `0 of 0 write path(s)
+    bound`.
+
+    **Severity:** medium (the phantom gate, in the instrument built during this slice to report exactly that class)
+    **Command:** `beadloom guard --liveness`
+    **Tracker:** `bd show` the S4 fix bead
+    **Issue:** `surface.build_surface` correctly reports `unresolved` when a source cannot be READ — its docstring states the rule outright: "'100% of the zero tools I found' is the most confident way to state it". But an EMPTY population is not an unreadable one. Role adapters that exist and grant nothing produce `grants={}`, no error, and `covered == (0, 0)`; the renderer prints `surface (claude): 0 of 0 write path(s) bound, matcher(s) '...'` with no line saying the population was empty. Reproduced three ways, each a state an adopter reaches without doing anything wrong.
+    **Why it is worth the entry:** `beadloom-0mdo.31` shipped this instrument in BDL-068 S4 to answer "what fraction of edit events could this binding have seen?", and got the unreadable case exactly right while leaving the empty case reading as a pass. The check that exists to find phantom gates has one.
+    **Expected:** an empty population prints differently from a covered one. `0 of 0` is not a fraction, it is the absence of a denominator, and the report needs a word for that — the same distinction `beadloom-0mdo.32` shipped for unowned paths (`not compared`, never `agrees`) two waves earlier in the same slice.
+
+238. ~~[2026-09-04] [LOW] this repository's own `.gitignore` drifted from the ignore block Beadloom emits, and nothing compares the two~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.40` is closed. `.gitignore` carries
+    `.beadloom/guard-firings*.jsonl`, and `config-check` compares the ignore block on disk against
+    the emitted one (`ignore_block_findings` in `onboarding/ignore_block.py`).
+
+    **Severity:** low here, medium for an early adopter (an upgrade adds a written file that the ignore block written at `init` time does not name)
+    **Command:** `beadloom init` / `beadloom config-check`, `onboarding/ignore_block.py`
+    **Context:** BDL-068 S4. `.beadloom/guard-firings.1.jsonl` appeared as an untracked file during wave 3 and `beadloom waves` would have reported it as a path owned by no bead. It appeared now, and not earlier, because `beadloom-0mdo.31` widened the guard matcher to include `Bash` in the same slice, so firings roughly tripled and the log rotated for the first time.
+    **Issue:** the pattern this project SHIPS is already correct — `ignore_block.py:95` emits `.beadloom/guard-firings*.jsonl`, a glob, and its own docstring explains the rotation it covers. This repository's `.gitignore` carries `.beadloom/guard-firings.jsonl`, the exact filename, written before rotation existed and never re-derived. So the product is right and its own repository is stale, and the only reason anyone noticed is that an unrelated bead made the rotation happen.
+    **Why it is the epic's own shape:** a rule stated as a SPELLING rather than as a SHAPE, in the one file where nobody looks for rules. And a second layer: the ignore block is GENERATED for an adopter and hand-maintained here, so the two can only agree by coincidence. An adopter who ran `init` before the rotation feature has the same stale line and nothing will tell them either.
+    **Expected:** `config-check` compares the ignore block on disk against the block the current version emits, and reports the drift — the same both-directions check `beadloom-0mdo.27` built for role duties, applied to the other thing `init` writes into a repository it does not own. Fixing this repository's line is the instance; the check is the class.
+    **Fixed (instance):** `.gitignore` now carries the shipped glob. The class is filed as a bead under S6.
+
+235. ~~[2026-09-03] [MEDIUM] the clean-room instruction names a fixed directory, so two agents in one wave build one room and both call it clean~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-0mdo.37` and `beadloom-67t1` are closed. The
+    condition this entry kept itself open on shipped: `beadloom clean-room <bead>` derives the
+    room's path from the bead and refuses a directory it did not create.
+
+    **Severity:** medium (the whole product of a clean room is isolation, and the failure looks like a set of unrelated red tests rather than like a room problem)
+    **Command:** the clean-room convention every launch prompt carries (`git archive HEAD` + only your files), BDL-UX #181
+    **Context:** BDL-068 S4 wave 1, `beadloom-0mdo.27` and `beadloom-0mdo.31` running concurrently. Both agents are handed a session-scoped scratchpad directory, and the convention names the room after the concept rather than after the bead, so both built `<scratchpad>/cleanroom`. Reconstructed from mtimes: `.31`'s `git archive HEAD | tar -x` landed at 22:53, `.27` copied its own untracked files in at 23:16, `.31` copied its files at 23:26.
+    **Issue:** the run `.31` then took reported 8 failures. Five were `.27`'s — its acceptance steps, and two annotation-consistency checks over a graph node HEAD does not carry — and none of them was a defect in either bead. Rebuilding under a bead-unique name and re-running gave 1 failure, itself a stated property of the room (no `.git`, so `sync-check` has no baseline). So the polluted room cost one full 5-minute suite run and would have cost a wrong verdict: had the report been written from it, `.31` would have attributed `.27`'s work to itself, in the one measurement whose entire purpose is to separate them.
+    **Why it matters more than the wasted run:** this is the failure the gate-owner rule exists to catch, one layer below where the rule looks. The gate owner is told that a clean room cannot see interactions between beads on the TREE. Nobody said the rooms themselves could interact. An agent that follows the convention exactly, and correctly, gets a room containing its neighbour's work — and every check it runs there is honest about a tree that exists nowhere.
+    **Expected:** the room's path carries the bead id, and the convention says so — `<scratchpad>/room-<bead-id>`, not `<scratchpad>/cleanroom`. Stronger, and the form this project prefers: the room is created by a command that derives the path from the claimed bead and refuses a directory it did not create empty, so "is this room mine" is answered rather than assumed. A room that cannot say whose it is is not a clean room, it is a shared directory with a reassuring name.
+    **Related:** #181 (the clean-room duty itself), #228 (the duty reaches roles only through the coordinator's typing — a convention typed into a prompt is a convention that can be typed imprecisely).
+    **Partly addressed 2026-09-04 (`beadloom-67t1`), and still open for the rest:** the convention half shipped. `room_for(bead_id)` returns `room-<bead-id>`, `beadloom waves` prints it per bead for every wave including a wave of one, the `working-tree` medium's statement carries it, and the five role cores carry it under the `clean-room` duty `config-check` checks. What did NOT ship is the stronger form this entry asks for: no command creates the room, derives its path from the claimed bead and refuses a directory it did not create empty. So "is this room mine" is still answered by reading the path rather than by the tool, and the entry stays open on that clause.
+
+234. ~~[2026-09-03] [LOW] `waves` prints one remedy for four unreadable-scope causes, and on the no-declaration case it prescribes the authored scope the tool exists to refuse~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-en0x` is closed and covers this entry. The
+    unanchored-scope remedy in `application/waves/models.py` has one branch for a declaration and
+    one for prose, and the no-declaration remedy is derived from the axes.
+
+    **Severity:** low (the verdict is right; the sentence after it sends the reader the wrong way)
+    **Command:** `beadloom waves`
+    **Tracker:** to be attached to `beadloom-en0x` (#232), which owns the scope parser
+    **Issue:** planning S4's wave, `beadloom-nn4c` was serialised against all six other beads with the reason `unresolved_scope: declaration_not_at_a_line_start` and the remedy "move the declaration to the start of its own line". That bead has **no declaration to move**. Its note is a paragraph explaining, in prose, why writing `refs: flow-guards` there would be an authored scope dressed as a derived one — and the parser matched the `refs:` inside that explanation. So the tool read a sentence *about* a declaration as a malformed declaration, and then told the reader to promote it to a real one. Following the printed remedy would have created exactly the defect #232 is filed against, in the same slice.
+    **Why it is worth an entry rather than a shrug:** the serialisation was CORRECT and the exit code was right. Only the remedy was wrong, which is the failure mode that survives longest — nobody re-reads a line that appears beside a correct verdict. The parser's four unreadable causes are already distinguished in the *reason* (`no declaration`, a name the graph lacks, a `refs:` inside a sentence, a second ref without a separator); the remedy does not follow the reason down that far.
+    **Expected:** the remedy is derived from the cause, like the reason already is. For `declaration_not_at_a_line_start` the honest remedy is two-branched: *if* you meant this as a declaration, move it to the start of its own line; *if* the line is prose about a declaration, the serialisation is the correct answer and nothing needs fixing. A tool that cannot tell prose about `refs:` from a careless `refs:` should say which of the two it cannot tell apart, not pick one.
+    **Found by:** the coordinator, on its own note, while planning BDL-068 S4 — the note deliberately said no scope could be derived (`impact` over `tests/` attributed a node to none of 148 sites, BDL-UX #225) and the tool answered as if the note were the scope.
+
+233. ~~[2026-09-03] [MEDIUM] the read-only guard test reports a `bd` export burst as the guard's own write~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-nn4c` is closed (ef63d2c). `TestAttributionByFile` in
+    `tests/integration/application/guards/test_guards_parity.py` attributes `issues.jsonl` to the
+    tracker and keeps `beadloom.db` as the guard's.
+
+    **Severity:** medium
+    **Tracker:** `beadloom-nn4c`
+    **Issue:** The differing digest is `.beads/issues.jsonl`, never `beadloom.db`. `_moved_with_nothing_running` opens a control window of the measurement window's duration and skips only if the repository moves DURING it, so a millisecond `bd` export burst lands in the measurement window and misses the control. A two-writer wave makes it likelier — the check is least reliable exactly when the flow is most parallel. Attributed by `beadloom-0mdo.26` after `.22` recorded it non-reproducing and `.23` and `.24` each looked across four runs without meeting it.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-nn4c`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+231. ~~[2026-09-03] [MEDIUM] the commit hook warns about type errors on an undeclared surface, discards the output, and never blocks~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-gsal` is closed (a7b08da). The hook's typed leg runs
+    `beadloom typed-surface --filter`, captures the mypy output, and blocks in block mode
+    (`services/commands/docsync.py`).
+
+    **Severity:** medium
+    **Tracker:** `beadloom-gsal`
+    **Issue:** `.git/hooks/pre-commit` runs mypy over every staged Python file with `2>/dev/null` and prints one contentless sentence. `[tool.mypy]` declares `packages = ["beadloom"]`; `uv run mypy tests/` reports 970 errors in 90 files. A real error in `src/` produces the identical sentence, so the case that matters is drowned by the case that does not. Sharper than `mr2l.82`'s one-liner.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-gsal`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+228. ~~[2026-09-03] [HIGH] the clean-room duty reaches the roles that must perform it only through the coordinator's typing~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `beadloom-67t1` is closed. The `_rooms` fragment is composed
+    into every role (`SHARED_ROLE_FRAGMENTS` in `onboarding/composer.py`), so the duty reaches
+    each role file without the coordinator typing it.
+
+    **Severity:** high
+    **Tracker:** `beadloom-67t1`
+    **Issue:** Zero occurrences of `clean room` in `.claude/agents/*` and in the role templates `setup-agentic-flow` composes for an adopter; the rule lives in the project layer of CLAUDE.md, which is never distributed, and in `waves/media.py`, which emits it only for a wave of more than one bead. Roughly twenty single-bead waves across two epics carried it by prompt alone. Same class as BDL-061 S4 and worse: there the duty at least reached the role.
+    **Detail:** the full measurement, the reproduction and the fix shape are on the bead — `bd show beadloom-67t1`. This entry exists so the number is allocated and the finding is findable; the tracker is the source of truth for its text.
+
+213. ~~[2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.68` (7cf5ccf, squashed into 101fe7d1).
+    The cause was two tables under one heading read as one. `docs quality` now reads each table
+    through `doc_sync.tables.table_blocks`, and the audit measured `decision-reason: 0 finding(s)
+    over 569 read`.
+
+    **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
+    **Command:** `beadloom ci` (the `docs quality` step)
+    **Context:** the BDL-067 coordinator wrote its verification of a subagent's report as a two-column table — the claim in one column, what re-measuring it produced in the other — in `ACTIVE.md`.
+    **Issue:** the check reported `decision-reason: the decision carries no reason` against a row that records a *measurement*, not a decision. Rewriting the same content as a bulleted list silenced it, with no change in meaning. A table of "claim → what I measured" is a shape this repository will keep writing, because the playbook asks a coordinator to verify rather than believe its subagents, and nothing distinguishes it from a decision table but the words in the header.
+    **Expected:** either recognise a verification table by its header vocabulary, or scope `decision-reason` to a section the document declares as decisions rather than to any two-column table.
+    **Related:** the same run showed a second-order version of the problem — the coordinator counted error-level lines with `grep -c "::error"` and matched its own prose, because the text quoted the token. A substring count is not a measurement of severity.
+
+212. ~~[2026-08-31] [HIGH] The review's withholding is defeated by the epic document the playbook itself mandates~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.18`, whose description covers #204,
+    #212 and #219. `review-brief` prints a REACHABLE block per channel, and the channel for the
+    work item's documents names the ACTIVE.md the reviewer is sent to.
+
+    **Severity:** high (the withholding is the whole mechanism; where it is ceremonial, the review's independence is asserted and not held)
+    **Command:** `beadloom review-brief <bead-id>` + the `/coordinator` review-launch prompt
+    **Context:** BDL-067, review bead `beadloom-e8s4.4`. The launch prompt carried no author summary — deliberately, per the playbook's own rule that a review prompt carries the bead id and nothing else about the change.
+    **Issue:** `review-brief` reported **0 comments withheld** and was correct: the authors' accounts were not in bead comments. They were in `ACTIVE.md` — the per-bead Results table, carrying the `gate._step_lint -> lint_step` API change, the red-verification counts and the coverage numbers — and the launch prompt named `ACTIVE.md` as required reading, because the playbook says a role subagent gets `CONTEXT.md` + `ACTIVE.md`. So the coordinator withheld the author's account through one channel and handed it over through another, in the same prompt. **The reviewer detected this and declared it unprompted**, which is the only reason it is written down; nothing in the tooling could have reported it.
+    **Expected:** the review launch prompt must not name `ACTIVE.md` (fixed as practice on 2026-08-31), and `review-brief` should be able to say that a document the reviewer was told to read carries author accounts — a withholding that a neighbouring file defeats is withholding nobody performed.
+    **Related:** #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained) — this is that issue arriving with a measured instance, and the instance is worse than the issue as written: the leak came not from a careless prompt but from the prompt the playbook prescribes.
+
+207. ~~[2026-08-26] [MEDIUM] The pre-commit hook re-stages `.beads/issues.jsonl` after an agent deliberately unstages it~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.54`. The hook runs `active-sync
+    --stage`, which re-stages only paths the commit already carries and prints what it withheld
+    (`application/active_table/staging.py`). The hook has no `git add`. A staging of
+    `issues.jsonl` through another channel was seen once on `.54` and is outside this entry.
+
+    **Severity:** medium (it defeats the one discipline that keeps concurrent waves from committing each other's work)
+    **Context:** self-reported by `.7` of BDL-062, unprompted, as "one thing to know before the next agent commits".
+
+    `.7` unstaged `.beads/issues.jsonl` on purpose — it was another agent's tracker export — and `active-sync --stage` in the pre-commit hook **added it back**, saying so on stderr.
+
+    The project CLAUDE.md instructs every agent, in these words: *"Commit only your own files, by explicit path — never `git add -A`."* That instruction is **not sufficient on its own**, because a hook stages a file after the agent has decided not to. An agent following the rule exactly still commits another agent's state.
+
+    Same family as #194 (`bd merge-slot` is not an exclusion primitive): the concurrency discipline this project documents rests on primitives that do not enforce it. Two independent mechanisms, one gap.
+
+    **Strengthened 2026-08-27 by BDL-062 `.12`.** An explicit pathspec commit — `git commit -- README.md README.ru.md`, which builds a temporary index and normally ignores hook staging — **did not** prevent it: `beadloom active-sync ADDED these path(s) to this commit: .beads/issues.jsonl`. So the pathspec form is not a workaround, and "commit only your own files by explicit path" cannot be satisfied by any agent following it exactly.
+
+204. ~~[2026-08-26] [MEDIUM] `review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.18`. The bare `0 withheld` count is
+    gone. `review-brief` reports a count per channel and ends with `the launch prompt: NOT
+    INSPECTED`, which tells the reviewer to say the withholding was defeated if the prompt carried
+    the author's account.
+
+    **Severity:** medium (a number that describes the mechanism's ignorance rather than the reviewer's; the exact class BDL-062 exists to close)
+    **Context:** self-reported by the `.6` review agent as the FIRST line of its verdict, unprompted.
+
+    The withholding mechanism exists so a reviewer meets the work without the authors' account of it. `review-brief` printed **"0 withheld"**. The account had already arrived — through the coordinator's launch prompt, which carried `.4`'s "14 corrections, none of the 9 self-lint tests edited", `.5`'s "113 parses / 49 files / zero non-stream lines", `.5`'s two self-caught neutered-passing tests, `.9`'s severity fix, #198's 363/363 and #199/#200 by number.
+
+    So several review checks were **verifications of stated claims rather than independent discoveries**, and the tool said withholding was in force. `--release` could not establish independence either: one tracker identity (#194).
+
+    The mechanism measures its own channel and reports as if it measured the reviewer's knowledge. It has no way to see the prompt, and it does not say so — it says `0`.
+
+    **This is the coordinator's process failure and the tool's honesty failure at once**, which is why it is filed rather than merely noted. Fix candidates: `review-brief` states the surface it can and cannot see instead of a bare count; or the coordinator's brief is itself passed through the withholding surface. Choosing is the work.
+
+193. ~~[2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-062 (09bf9a18). The fact is renamed
+    `nodes_with_framework`, with node-specific keywords (`doc_sync/audit.py`,
+    `doc_sync/scanner.py`), which is the rename this entry records as decided.
+
+    **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
+    **Command:** `beadloom docs audit --json`
+    **Context:** found while scoping BDL-062, checking why `framework_count` equalled `node_count` exactly.
+    **Measured on `main`@`cdc16de`:**
+
+    ```
+    facts.framework_count.value = 84        # == node_count, exactly
+    nodes carrying a framework  = 84
+    DISTINCT frameworks         = 1         # {'pytest': 84}
+    ```
+
+    `_collect_framework_count` counts nodes whose `extra.tests.framework` is non-empty. The fact is named `framework_count` and the scanner matches it on the keywords `["framework", "supported framework"]` — both of which promise *how many frameworks*, not *how many nodes declare one*.
+
+    So a document stating the true fact — "Beadloom supports 1 test framework" — would be reported as disagreeing with 84. The audit is currently `not_covered` on it only because no document happens to phrase it that way. The defect is latent in the prose, not in the code path.
+
+    Same family as BDL-062's subject: a fact whose name does not describe what it computes, sitting green because nothing exercises it. Distinct from #187/#190 — this is semantics, not extraction.
+
+    **Fix decided — rename.** Two later measurements settled it, so this is no longer an open choice.
+
+    *The DISTINCT candidate is worse, measured by `.3`:* `unverifiable_reason('framework_count', 1)` returns *"its value is 1: 0 and 1 are too common in prose to be read as claims"*. Counting distinct frameworks yields 1 here, which renders the fact structurally uncheckable on this repository and on every single-framework project. It buys correct semantics at the price of never being verifiable again.
+
+    *The defect is no longer latent — it reached the graph,* found by `.1`'s new `graph_summary_facts` rule:
+
+    ```
+    route-extraction summary states framework_count 12 but this project computes 84 (graph DB)
+    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
+    ```
+
+    The summary is **factually correct**: the extractor carries exactly 12 framework literals — `echo, express, fastapi, fiber, flask, gin, graphql_python, graphql_schema, graphql_ts, grpc, nestjs, spring`. Two unrelated meanings of "framework" collide under one fact name: *web frameworks a component parses* versus *nodes declaring a test framework*.
+
+    So the finding is a true positive for the defect and a false positive for the node. The `.1` agent deliberately built **no** suppression mechanism, and was right to: silencing a correct sentence to protect a misnamed fact is backwards, and a silencer built before the owner has ruled would have had no caller.
+
+    Renaming to `nodes_with_framework`, with scanner keywords that mean that, clears all three at once — the latent prose landmine, this live finding, and the collision itself. It has prose consequences, so it lands with `.4`/`.7` of BDL-062.
+
+191. ~~[2026-08-23] [MEDIUM] `setup-agentic-flow` without `--force` still recomposes a hand-edited ROLE adapter — the asymmetry `--fix` no longer has~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-0mdo.67`. Reproduced by the audit in a
+    scratch project: after a hand edit to `.claude/agents/dev.md`, a plain re-run printed `Skipped
+    .claude/agents/dev.md (hand-edited)` and kept the edit.
+
+    **Severity:** medium (it is the #139/#151/#186 data-loss shape in the sibling command, and it is now the only door left open)
+    **Command:** `beadloom setup-agentic-flow` (no flags), on a repo with a `flow.yml`
+    **Context:** recorded, deliberately NOT fixed, by BDL-061 `.58` — it was named as adjacent to that bead and absorbing it would have made one bead answer for two decisions. `.59` closed #186 by teaching `config-check --fix` one rule: *rewrite only what Beadloom can prove it wrote*. `setup-agentic-flow` composes the role adapters through `generate_adapters(config, project_root)` with no `preserve=` argument, so the same hand edit `--fix` now declines is recomposed over by the command `--fix`'s own remediation tells the reader to run.
+    **Why it is undecided rather than a defect with an obvious fix:** the two commands have genuinely different contracts. `--fix` is a repair and must not destroy; `setup-agentic-flow` is a scaffold and an adopter may reasonably expect a re-run to reinstate the shipped flow. But the commands + `CLAUDE.md` path in the SAME command already declines a hand edit and reports migration guidance (BDL-UX #188 made that guidance visible), so today one command treats two of its three artifact kinds one way and the third the other, with nothing stating which is intended.
+    **Expected:** decide it, and make the three kinds agree. If the scaffold should preserve, pass `preserve=` the way `.59` does and report the decline; if it should overwrite, say so in the output and in the SPEC, and stop `config-check --fix` from pointing at a command that will do what `--fix` refused.
+    **Related:** #186 (the decided half), #139, #152, #188.
+
+181. ~~[2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** All three asks shipped. `beadloom waves` names each wave's
+    `gate_owner` (`application/gate_ownership.py`), the coordinator has that owner run the
+    combined-tree Gate, and roles report a typed claim such as "green in a clean room over N
+    files" under the `clean-room` duty that `config-check` checks.
+
+    **Severity:** medium (no defect ships, but every agent reports green on a tree that is red, and the discrepancy reads as a contradiction rather than as two different measurements)
+    **Command:** the multi-agent wave protocol in `/coordinator`, not a Beadloom command
+    **Context:** BDL-061 S2b ran four dev beads across two waves in one shared working tree. Because a shared tree makes a full-suite run meaningless for any single agent, each verified in a **clean room** — `git archive HEAD` plus only its own files — and each honestly reported green. The coordinator's combined run then found `beadloom ci` rc 1 with 28 stale pairs.
+    **Issue:** the clean-room technique is *correct* — it is the only way to attribute a result to one bead while neighbours are editing — and it is *blind by construction* to any interaction between beads. Nothing in the protocol runs the combined tree until the coordinator does it at wave end, so a wave's integration state is unmeasured for its whole duration and the first honest number arrives last.
+    **Why it is worth filing rather than shrugging at:** four agents reported green, the tree was red, and none of them was wrong. That is a signalling failure, not an engineering one, and it will recur on every wave. It also inverts the usual risk: the *more* carefully each agent isolates itself, the less anyone knows about the whole.
+    **Expected:**
+    - The wave protocol should name the combined run as a distinct, owned step — not a coordinator habit. It is currently in nobody's bead.
+    - An agent's green should be *typed*: "green in a clean room over N files" is a different claim from "green on the tree", and reporting them with the same word is what makes the discrepancy read as a contradiction.
+    - Cheapest mechanical improvement: have the last agent of a wave, or the merge-slot holder, run the combined gate — someone already holds a lock at exactly the right moment.
+    **Related:** #118 (parallel agents collide on the shared pre-commit hook) — same root, that the wave shares one tree; BDL-061 S6 (`beadloom waves`) is where the decision about what may share a tree belongs.
+
+180. ~~[2026-08-24] [MEDIUM] A `docs-audit` fact that fails to COLLECT is silently dropped from the declared list, so coverage cannot report it~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed by `beadloom-mr2l.45`. `FactRegistry.collect_set` returns
+    the facts and a reason for each fact that declined, and `docs audit` prints each as `NOT
+    VERIFIED: <reason>`. Residue noted by the audit: a version-parse exception is logged and then
+    reported as `no manifest declares a version`.
+
+    **Severity:** medium (it is the one hole the coverage report cannot cover, and it is in the mechanism that was just built to close #173)
+    **Command:** `beadloom docs audit`, `beadloom ci`
+    **Context:** found while implementing `beadloom-mr2l.45`. `FactRegistry.collect` wraps every source in `try/except`, logs a warning, and omits the fact. Reproduced in-process: with the Click surface registry unpopulated, `cli_command_count` vanishes and the audit reports `2/8 declared fact(s) verified` — an honest-looking fraction over a denominator that silently lost a fact. The same happens to `rule_type_count` against a database with no `rules` table, and to `version` when a manifest cannot be parsed.
+    **Issue:** BDL-061.45 made the audit report what it could not VERIFY, but a fact that could not be COLLECTED never reaches that report. Coverage can only speak about facts in `result.facts`, so the failure mode moved one level up rather than away: *a fact that failed to collect reads as a fact that does not exist*. The warning goes to a logger nobody reads at `beadloom ci` time — #178's shape exactly.
+    **Expected:** `FactRegistry` records collection failures alongside successes (`uncollected: {name: reason}`), the audit prints them in the same place it prints `not_covered` / `unreadable`, and the declared-fact denominator counts them. A fact that could not be computed is a fourth coverage status, not an absence.
+    **Related:** #173 (the coverage report this hole sits inside), #174/#175 (*unverifiable is not clean*), #178 (honesty routed to a channel nobody reads).
+
+173. ~~[2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The FIXED line above holds, re-measured by the audit: `docs
+    audit` prints `4 of 9 declared fact(s) verified; NOT VERIFIED: ...` beside its scanned and
+    unread document counts.
+
+    **Severity:** high (a false positive fails the Gate and gets fixed; every one of these is silent, and the audit's own output reads as a clean bill of health)
+    **Command:** `beadloom docs audit`, `beadloom ci`
+    **Context:** the sweep asked for by `beadloom-mr2l.44` while fixing #169. #169 was found twice by the Gate going red; nobody had looked for the half that keeps the Gate green. Measured on this repo, 2026-08-23.
+    **The worst one printed a lie as a verification.** `The graph holds 1,067 nodes.` was extracted as `067`, compared equal to the project's `node_count` of 67, and listed under **Fresh (verified)** — the audit affirmed a claim that is off by a thousand. Symmetrically, the TRUE sentence `The suite has 6,390 tests.` extracted as `390` and was reported stale. One defect, both directions, and only the noisy direction was ever noticed. (Fixed in `.44`; recorded here as the proof the class is real.)
+    **Two more, unfixed and pinned as strict `xfail`s** in `tests/test_doc_scanner_tokenization.py::TestKnownBlindSpots` so they go LOUD when someone fixes them:
+    - Counts below 10 are never extracted for any `*_count` fact. `language_count` is **1** in this repo, so that fact cannot be audited at all — any claim about it, right or wrong, is invisible, and the audit reads green.
+    - A Layer-1 modifier word anywhere in the +/-3 word window suppresses a genuine count even when it modifies a different noun: `The graph holds 316 edges, one per import.` yields nothing, because of `per`.
+    **The measurement that makes the shape plain:** the audit prints a Ground Truth block of **nine** facts and then `13 mention(s) fresh` — and all 13 are the **same** fact (`mcp_tool_count`). `cli_command_count`, `edge_count`, `node_count`, `rule_type_count`, `test_count` and `version` have **zero** findings; no doc in the repo states the current version at all. A green `docs-audit` leg today means "one fact of nine was checked", and nothing in the output says so. By design but equally silent: `SPEC.md` / `CONTRIBUTING.md` suppress all count facts and `docs/**/features/*/SPEC.md` is excluded outright — 26 of the 72 `.md` files under `docs/` are never scanned.
+    **Expected — report the surface, not more heuristics:**
+    - Emit per-fact coverage: for each fact in the registry, the number of mentions found. A fact with **zero** mentions is `not_covered`, printed as such, and never counted as passing. This is "unknown is not zero" applied to the audit's own output.
+    - Name the files whose counts were suppressed by the file-type heuristic, and why.
+    - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
+    **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
+    > **FIXED in BDL-061 (`beadloom-mr2l.45`).** Not three parser fixes — the audit now REPORTS WHAT IT DID NOT VERIFY, which is the same equation as #174/#175 (`unverifiable is not clean`) and #172 (a rule that cannot match reports itself). Three parts. (1) **Per-fact coverage.** Every declared fact carries `verified` / `not_covered` / `unreadable`, printed against the fact in the `Ground Truth` block and summarised on the one line everybody reads — including the `beadloom ci` step line: `14 mention(s) fresh; 2/9 declared fact(s) verified, NOT VERIFIED: cli_command_count, edge_count, ...`. A fact nothing was found for is never counted as passing, and a mention hidden by a `docs_audit.ignore` rule is NOT coverage. (2) **Clause-scoped matching** fixes the modifier class: both the modifier window and the keyword window stop at `,` `;` `:` and the dashes, so `316 edges, one per import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not. The separator set was chosen by MEASUREMENT — parentheses are deliberately excluded because they cost the true verification in `MCP tools (18):`, and a lost true positive is the very silent false negative being fixed. Repo-wide: 0 mentions gained, 5 lost, all five confirmed false positives; three more `docs_audit.ignore` entries went dead and were retired. (3) **The scan surface is published** — all 33 unread documents named with the pattern that skipped them, plus the count-suppressed ones, in `--verbose` and in `--json`. The single-digit floor was RE-MEASURED and KEPT: removing it yields 14 extra mentions on this repo of which 13 are ordinals, table cells and category breakdowns, several of which would have failed the Gate. Trading a silent false negative for a loud false positive that then needs a suppression entry is the wrong trade — so the floor stays and `language_count` (value 1) is now reported `unreadable` by name instead of reading green. Coverage is reported, not enforced (a WARN every project would carry on every run would spend the channel `sync-check` needs); `docs audit --fail-if unverified>N` is the opt-in. MEASURED after the fix: **2 of 9 declared facts verifiable-and-verified on this repo, 6 `not_covered` because no document states them, 1 `unreadable`** — and every one of those seven is now named in the output.
+
+171. ~~[2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed on this project's side. `waves` checks that each bead's
+    title agrees with the number the tracker allocated (`application/waves/media_checks.py`), and
+    `/task-init` takes ids from `bd create --json` or `--graph`. The `--expect-title` guard on
+    `bd` was not built.
+
+    **Severity:** medium (silent, produces a well-formed but wrong DAG, and only surfaces when someone reads the echo)
+    **Command:** `bd create --parent <id>`, `bd dep add`
+    **Context:** observed in BDL-061 S2 wave 1, with three agents and the coordinator working the same epic. Our convention writes the bead's own number into its title (`[BDL-061.39][dev] ...`), but the number is authored **before** creation while the id is allocated **at** creation. During a concurrent wave those two diverge: the coordinator wrote two beads intending `.39` and `.40`; a subagent had meanwhile created its own bead, which took `.39`; the coordinator's two landed as `.40` and `.41` carrying `[BDL-061.39]` and `[BDL-061.40]` in their titles.
+    **The damage is not the cosmetic mismatch, it is the wiring.** The coordinator then ran `bd dep add beadloom-mr2l.39 beadloom-mr2l.5`, which made the *subagent's* Windows-CI bead depend on the S2 core — a real edge, on a real bead, accepted without complaint, and wrong. `bd dep add` cannot detect this: every id exists and the graph stays acyclic, so there is nothing malformed to reject.
+    **What caught it:** `bd dep add` echoes both beads' **full titles**, not just their ids. Reading that echo is the only reason the mis-wiring was noticed within seconds instead of surviving into the next wave. That verbosity is good design and worth keeping — the entry records it so nobody "tidies" it into id-only output.
+    **Expected:** three separable pieces.
+    - **Stop keeping the number twice.** Either drop the id from the title convention and let `bd` be the single source of it, or have the scaffolding write the title *after* creation from the id actually allocated. Two sources of truth for one number is the root cause; the concurrency only exposes it.
+    - **Make `bd create` report the id it allocated in a form a script can consume**, so an agent that must reference its own bead does not have to predict the number. (`--json` on create would be enough.)
+    - **Consider a `bd dep add --expect-title <substring>` guard**, or at minimum document that dependency wiring under a concurrent wave must be verified against `bd dep tree`, not assumed from the ids the author had in mind.
+    **Note on scope:** `/coordinator` *mandates* launching independent ready beads concurrently, so this is not an exotic mode — it is the prescribed one. The id-in-title convention is ours, not `bd`'s, which makes the first fix ours to make.
+
+170. ~~[2026-08-22] [HIGH] 🔴 A guard bound to `Edit|Write` does not see a file written through `Bash` — the enforcement surface is narrower than the promise~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The shipped guard matcher is
+    `Edit|Write|MultiEdit|NotebookEdit|Bash` (`.claude/settings.json`, `WRITE_TOOLS` in
+    `application/guards/surface.py`), and `guard --liveness` reports the write-path surface
+    (`beadloom-0mdo.31`). The wording for an empty population is #239.
+
+    **Severity:** high (the guard reports it ran and passed on the edits it saw; the edits it never saw are indistinguishable from none)
+    **Command:** `beadloom guard`, `beadloom setup-agentic-flow` (the emitted `.claude/settings.json`)
+    **Context:** found while dogfooding BDL-061 S1 on this repo. The shipped hook binds `PreToolUse` with `matcher: "Edit|Write|NotebookEdit"`. An agent that edits a file with `python3 - <<EOF`, `sed -i`, or a heredoc goes through `Bash` and fires no guard at all. This is not hypothetical: the coordinator's own session was operating under an instruction to prefer `Bash` for file edits, so a whole class of edits to this very repository was unguarded while `--liveness` showed the guards healthy and firing.
+    **Why it is worse than a missing matcher:** the failure is silent and it is *shaped like success*. `bead-claimed` cannot warn about an edit it was never told about, so a session that edits exclusively through `Bash` produces a clean liveness report and zero warnings — the same output as a session that complied perfectly.
+    **Expected:** three separable pieces, and the third is the real one.
+    - Add `Bash` to the emitted matcher and derive the edit target from the command line where it can be — necessarily partial, since a shell command's write targets are not decidable in general.
+    - Because it is partial, the verdict must say so: a `Bash` invocation whose target cannot be determined is `not_covered`, not `pass`. This is the "unknown is not zero" rule applied to the enforcement surface itself.
+    - **Report the surface, not just the firings.** `--liveness` today answers "did each declared guard fire?". It should also answer "what fraction of edit events could this binding have seen?" — a guard that is healthy on a matcher covering one of three write paths is 33% of a guard, and nothing currently says so.
+    **Related:** M3 from review `.3` (the harness owns event routing *and* the guard list, so `.claude/settings.json` carries two decisions Beadloom cannot see) is the same defect from the other end and is already S3 work. This entry is the reason M3 is not cosmetic.
+
+165. ~~[2026-08-22] [LOW] External (steveyegge/beads): `bd create` costs one process per bead, so building a DAG of ~50 beads stalls~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Our half shipped with `beadloom-0mdo.53`: `/task-init`
+    prescribes `bd create --graph plan.json --json`, and `services/bd_seam/creation.py` uses
+    `--graph`. The per-process cost of a plain `bd create` is upstream and unchanged.
+
+    **Severity:** low (a workaround exists and is fast) — **External**
+    **Command:** `bd create`
+    **Context:** a background agent building a >50-bead fixture ran for 600s without finishing, because each `bd create` is a separate process against embedded Dolt. `bd import` created 60 issues in one process in 0.88s — roughly three orders of magnitude better.
+    **Expected:** document `bd import` as the way to build a DAG (`bd create --graph <plan.json>` is already noted in `/task-init`, and is the same insight). Ours to fix in the shipped guidance: any scaffolding path that creates more than a handful of beads should generate a JSON plan and import it once.
+
+114. ~~[2026-06-02] [LOW] Committed VitePress scaffold ships no `package-lock.json` — `npm ci` cannot run on a fresh checkout~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** The Resolution line above holds. `site/package-lock.json` is
+    tracked, and `ci.yml` and `deploy-site.yml` run `npm ci`.
+
+    **Severity:** low
+    **Command:** `cd site && npm ci`
+    **Context:** BDL-040 F4 BEAD-05 dogfood. The BEAD-01 scaffold committed `site/package.json` (pinned deps) but no `site/package-lock.json`. The bead instructions (and the scaffold's own header comment) say to run `npm ci && npm run docs:build`, but `npm ci` hard-requires a lockfile and errors out without one — so the very first build must use `npm install` (which then generates the lockfile).
+    **Issue:** Mismatch between the documented build command (`npm ci`) and what a fresh checkout actually supports (`npm install` only, until a lockfile is committed).
+    **Expected:** Either commit a `package-lock.json` alongside `package.json` (so `npm ci` works + the build is reproducible/pinned), or change the documented first-run command to `npm install`. Committing the lockfile is preferable — it pins the transitive dep tree for a deterministic dogfood/CI build.
+    **Workaround:** Use `npm install` for the first build; commit the resulting `package-lock.json` so subsequent `npm ci` works.
+    **Resolution (BEAD-05 follow-up):** `site/package-lock.json` is now committed (generated by `npm install`), so `npm ci` works on a fresh checkout and the dogfood build is reproducible/pinned. `site/node_modules` + `site/.vitepress/dist` stay gitignored.
+
+98. ~~[2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-10 (b4d5e62). `_SAMPLE_GIT_LOG` in
+    `tests/integration/infrastructure/git_activity/test_git_activity.py` builds its dates from
+    `datetime.now() - timedelta(...)`. The entry stayed under Excluded Issues as a follow-up after
+    the fix had landed.
+
+    `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails
+    once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity`
+    flake fixed in commit a4c88fa. While investigating, the test also looks internally
+    inconsistent (comment references "mno345 from Jan 10" absent from the sample;
+    `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics
+    clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing,
+    unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
+    > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).
+
+94. ~~[2026-05-28] [MEDIUM] Over-broad `except Exception` for "table missing" can swallow real errors silently~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-02 (960f325). No `except Exception`
+    remains under `application/reindex/`, and the missing-table case catches
+    `sqlite3.OperationalError`.
+
+    **Severity:** medium
+    **Command:** internal (reindex / metadata reads)
+    **Context:** Self-audit (2026-05-28). Same silent-failure class as #86 / #88.
+    **Issue:** `infrastructure/reindex.py:125`, `:863`, `:926` use bare `except Exception` to mean "table doesn't exist on first run" and then return `{}` / skip. As written they also swallow genuine `sqlite3` corruption, IO errors, and programming errors — silently returning empty and masking real failures behind a "first run" assumption.
+    **Expected:** Catch the specific `sqlite3.OperationalError` (and verify it's a missing-table case, e.g. via `PRAGMA table_info`) so only the intended condition is handled; let all other exceptions propagate.
+    **Workaround:** None.
+
+93. ~~[2026-05-28] [LOW] `AGENTS.md` MCP tool list is stale (documents 13 tools, actual is 14)~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-01 (960f325). `beadloom doctor` on this
+    tree prints `[ok] MCP tool count matches: 18 tools.`
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). doctor reports *"MCP tool drift: AGENTS.md documents 13 tools, actual is 14"*.
+    **Issue:** The generated `AGENTS.md` lists 13 MCP tools but 14 are registered. Unlike the won't-fix README case (#20), `AGENTS.md` IS agent-facing and HAS a `generate_agents_md()` regeneration path — so this is a real regeneration/sync gap that should never drift.
+    **Expected:** `generate_agents_md()` should enumerate MCP tools from the live registry so the count can't drift; `setup-rules --refresh` (or a doctor `--fix`) should bring it back in sync.
+    **Workaround:** Regenerate `AGENTS.md`.
+
+90. ~~[2026-03-11] [MEDIUM] `<!-- beadloom:track=... -->` HTML comments in docs have no effect on sync-check~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-06 (960f325). In the audit's temporary
+    project, a `<!-- beadloom:track=... -->` marker turned the `untracked` rows into an `[ok]`
+    pair (`_TRACK_MARKER_RE` in `doc_sync/engine.py`).
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** During documentation enrichment, `<!-- beadloom:track=app/core/broker.py -->` HTML comments were added to docs following the convention observed in the `beadloom prime` output hint: `"New features: add # beadloom:feature=REF_ID annotations"`. AI agents naturally extend this to docs with `<!-- beadloom:track=... -->`.
+    **Issue:** These HTML comments have no effect on the sync engine. Adding `<!-- beadloom:track=app/core/external-inspection-system/constants.py -->` before a section describing `constants.py` does NOT make sync-check recognize the file as tracked. The comments are inert — they don't participate in staleness detection, freshness tracking, or coverage calculation.
+    **Expected:** Either:
+    - (a) Recognize `<!-- beadloom:track=<path> -->` in docs as an explicit file-to-doc binding. When present, sync-check should create a tracked pair and monitor both the doc section and the source file for changes.
+    - (b) If this convention is not supported, document it clearly in `beadloom prime` / `AGENTS.md` / `docs generate` output so AI agents don't waste effort adding markers that do nothing.
+    Option (a) would be a powerful feature: it creates a lightweight, explicit doc-code binding without requiring the full annotation + reindex workflow. AI agents writing docs could simply add `<!-- beadloom:track=... -->` and sync-check would start monitoring.
+    **Workaround:** Do not use `<!-- beadloom:track=... -->` comments. They have no functional effect.
+
+89. ~~[2026-03-11] [MEDIUM] `sync-check` reports `untracked_files` for annotated and documented files~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-06 (960f325). In the audit's temporary
+    project, a symbol-less module carrying `# beadloom:service=` became its own pair
+    (`hash_changed`), not `untracked_files`.
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** After adding `# beadloom:domain=` / `# beadloom:feature=` annotations to ALL 55 source files AND enriching all 18 docs with detailed content mentioning every module, `sync-check` still reports 19 of 48 pairs as stale with reason `untracked_files`.
+    **Issue:** Files like `app/core/broker.py` have both:
+    - Code annotation: `# beadloom:domain=core`
+    - Doc mention: `docs/services/core.md` describes `broker.py` in detail
+    - Doc marker: `<!-- beadloom:track=app/core/broker.py -->`
+    Yet sync-check reports: `core: untracked_files - broker.py` and marks ALL other pairs in the same node as stale (6 stale entries for one untracked file).
+    **Pattern:** The affected files are always the ones listed in `beadloom doctor` as "untracked source files". These are files inside the node's `source` directory that exist on disk but apparently aren't indexed as individual tracked items. The multiplier effect (1 untracked file → N stale pairs) inflates the stale count significantly.
+    **Expected:** If a file has a `# beadloom:domain=X` annotation AND the doc mentions it (or has a `beadloom:track` marker), sync-check should mark it as OK, not `untracked_files`. The annotation is an explicit signal that the file belongs to node X and should be tracked.
+    **Impact:** On the field-tested project, this prevents reaching 100% sync-check OK even with comprehensive annotations and documentation. Max achievable: 60% (29/48).
+    **Workaround:** None. Accept the stale warnings as false positives.
+
+88. ~~[2026-03-11] [HIGH] Incremental `beadloom reindex` returns 0 nodes after doc enrichment~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-02 (960f325). After a doc edit, an
+    incremental `reindex` printed `Nodes: 5 / Edges: 5 / Symbols: 9` in the audit's temporary
+    project. It still prints `Imports: 0 / Rules: 0`, which is #176.
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** After enriching 18 documentation files (replacing skeleton content with detailed descriptions), an incremental `beadloom reindex` was run to update the index.
+    **Issue:** Incremental reindex returned `Nodes: 0, Edges: 0, Symbols: 0, Imports: 0` — completely empty index. The `services.yml` was verified to be intact (18 nodes, 34 edges, correct YAML block format). Running `beadloom reindex --full` immediately after returned `Nodes: 18, Edges: 34, Symbols: 272` — completely normal.
+    **Root cause hypothesis:** Incremental reindex likely detects that many files changed (18 doc files + potentially cached state) and incorrectly drops the entire index instead of updating it. The SQLite cache may have become inconsistent after bulk doc writes by parallel agents.
+    **Expected:** Incremental reindex should never return 0 nodes when `services.yml` is valid. If the incremental path detects inconsistency, it should auto-fallback to `--full` reindex rather than returning an empty result. At minimum, print a warning: `"Incremental reindex returned 0 nodes — possible cache inconsistency. Retry with --full."`.
+    **Workaround:** Always use `beadloom reindex --full` after bulk changes. Do not rely on incremental reindex after modifying many files simultaneously.
+    **Root cause (confirmed 2026-05-28 code review):** NOT cache inconsistency. `incremental_reindex` (`infrastructure/reindex.py:1088-1296`) never assigns `result.nodes_loaded`/`edges_loaded` on the docs/code-only path — they keep their `ReindexResult` default of `0`, and the CLI prints them verbatim (`services/cli.py:288-289`). The index is intact; this is a **display bug**, not data loss. Trivial fix: query live DB totals (as the `nothing_changed` branch already does at `cli.py:274-279`). Note this is a recurrence — the same symptom (#21) was "fixed" in v1.5.0.
+
+86. ~~[2026-03-10] [HIGH] YAML flow-style edges silently produce 0 nodes on reindex~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-04 (960f325). In the audit's temporary
+    project, flow-style edges gave 5 nodes and 4 edges on `reindex --full`, and a malformed graph
+    file printed `Failed to parse graph file ... invalid YAML at line 4`. That parse error still
+    exits 0.
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** During manual graph editing of `services.yml`, edges were written in YAML inline/flow format: `- { src: houses, dst: core-external-inspection-system, kind: depends_on }`. This is perfectly valid YAML per the spec. Nodes were written in block format.
+    **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
+    **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
+    **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
+
+78. ~~[2026-03-10] [LOW] Bootstrap should auto-validate generated rules and warn on immediate violations — see also #71~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** `init` takes a lint verdict on the graph it has just written,
+    through `gate.lint_step`, and exits 1 with `beadloom ci will fail its lint step`
+    (`_verdict_on_the_generated_graph` in `services/commands/setup.py`).
+
+    **Severity:** low
+    **Command:** `beadloom init --bootstrap -y`
+    **Context:** After bootstrap, user expects a clean state but `beadloom lint --strict` fails (see issue #71).
+    **Issue:** Bootstrap generates `rules.yml` and `services.yml` independently. It doesn't validate that the generated rules are satisfied by the generated graph. The user discovers violations only when they manually run `lint`.
+    **Expected:** At the end of bootstrap, automatically run `lint` internally. If violations are found, either:
+    - (a) Auto-fix the rules to match the generated graph (preferred), or
+    - (b) Print a warning: `"⚠ 2 lint violations detected in the generated graph. Run 'beadloom lint' to see details and fix .beadloom/_graph/rules.yml"`
+
+72. ~~[2026-03-10] [LOW] `beadloom setup-rules` doesn't detect IDE when marker directory is gitignored~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Measured by the audit in a temporary project: with no marker,
+    `setup-rules` prints `No IDE markers detected. Use --tool to specify.`, and with a gitignored
+    `.cursor/` it created `.cursorrules`.
+
+    **Severity:** low
+    **Command:** `beadloom setup-rules`
+    **Context:** The project has `.cursor/` listed in `.gitignore`, so the directory doesn't exist on a fresh clone, but does exist in the working tree.
+    **Issue:** `setup-rules` outputs `No IDE markers detected` and creates no files. The `.cursor/` directory was present in the filesystem but gitignored. Auto-detection apparently checks for marker files but the detection logic may miss directories that exist but are in `.gitignore`.
+    **Expected:** If marker directories exist on disk (regardless of gitignore), they should be detected. Alternatively, if no markers are found, print a helpful hint: `"No IDE markers detected. Use --tool cursor|windsurf|cline to specify."` so the user doesn't have to run `--help` to discover the flag.
+    **Workaround:** Explicitly pass `--tool cursor`.
+
+71. ~~[2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations~~ **CLOSED (verified 2026-09-29)**
+
+    **Verified fixed 2026-09-29.** Fixed in BDL-036 BEAD-07 (b4d5e62).
+    `onboarding/scanner/rules_gen.py` emits `feature-needs-parent` with `has_edge_to: {}`, and the
+    audit's fresh bootstrap of a temporary project linted clean (rc 0).
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap -y` → `beadloom lint --strict`
+    **Context:** Bootstrapping Beadloom on a production FastAPI monolith project provided for field-testing. The project has a clean architecture with domain packages containing `graphql/` sub-packages.
+    **Issue:** The auto-generated `rules.yml` includes a `feature-needs-domain` rule that requires every feature to be `part_of` a domain. However, the bootstrap classifier creates features inside services too (e.g., `core-rest` feature → `part_of` core service; `tasks-graphql` feature → `part_of` tasks service). Running `beadloom lint --strict` immediately after init exits with 2 violations — a "broken out of the box" experience.
+    **Expected:** Either (a) the default rule should accept features inside both domains and services (`has_edge_to: {}`), or (b) the bootstrap classifier should only classify nodes as `feature` when they are inside a `domain`-kind parent (not `service`-kind). Zero violations should be the norm after a clean bootstrap.
+    **Workaround:** Manually edit `.beadloom/_graph/rules.yml`: change `has_edge_to: { kind: domain }` to `has_edge_to: {}` and rename the rule to `feature-needs-parent`.
 
 ### Verified against current behaviour on 2026-09-12 (the BDL-069 adopter runs)
 
@@ -3810,16 +4207,19 @@ section. Moved verbatim, nothing rewritten — a third of the "open" list was no
 
 > The product now passes its own checks honestly. `lint --strict` exit 0 (rules at ERROR, 0 violations), `doctor` exit 0, 2608 tests pass, coverage 90.54%. Adversarial review (BEAD-08) = PASSED, no faked green.
 
-- 91. ~~[CRITICAL] Beadloom violates its own architecture rules; lint --strict passes anyway~~ **FIXED (BEAD-03, 9c480d2)** — extracted orchestrators (reindex/doctor/debt_report/watcher) into a new `application/` DDD layer; `infrastructure/` is now domain-agnostic (zero domain imports); restored `no-dependency-cycles` + `architecture-layers` to `severity: error`; `lint --strict` genuinely clean.
-- 88. ~~[HIGH] Incremental reindex returns 0 nodes~~ **FIXED (BEAD-02, 960f325)** — incremental path now reports true live-DB totals (was a display bug).
-- 92. ~~[HIGH] doctor false version drift~~ **FIXED (BEAD-01, 960f325)** — reads in-tree `__version__`, not stale `importlib.metadata`.
-- 93. ~~[LOW] AGENTS.md MCP tool count drift (13 vs 14)~~ **FIXED (BEAD-01, 960f325)** — single-source `mcp_tools` catalog pinned to live registry by a drift-guard test.
-- 94. ~~[MEDIUM] Over-broad except Exception~~ **FIXED (BEAD-02, 960f325)** — narrowed to `sqlite3.OperationalError` (missing-table only).
-- 86. ~~[HIGH] YAML edges silently produce 0 nodes~~ **FIXED (BEAD-04, 960f325)** — loader raises `GraphParseError` with file+line on malformed YAML; flow-style edges parse correctly.
-- 89. ~~[MEDIUM] sync-check false untracked_files~~ **FIXED (BEAD-06, 960f325)** — file-level annotations on symbol-less modules now count as tracking signals; genuine 100% reachable (E2E test).
-- 90. ~~[MEDIUM] beadloom:track markers inert~~ **FIXED (BEAD-06, 960f325)** — track markers now count as a doc→file binding signal.
-- 71. ~~[MEDIUM] bootstrap generates rules that fail lint out-of-the-box~~ **FIXED (BEAD-07, b4d5e62)** — generated rule is `feature-needs-parent` (`has_edge_to: {}`); fresh bootstrap lints clean; regression test added.
-- 98. ~~[LOW] test_git_activity date-relative flake~~ **FIXED (BEAD-10, b4d5e62)** — `_SAMPLE_GIT_LOG` uses relative dates; deterministic windows.
+> Since 2026-09-29 each item below that starts with `#` is a summary line, and the entry's full
+> text sits in the sweep it names, so every number has one entry in this log.
+
+- #91 ~~[CRITICAL] Beadloom violates its own architecture rules; lint --strict passes anyway~~ **FIXED (BEAD-03, 9c480d2)** — extracted orchestrators (reindex/doctor/debt_report/watcher) into a new `application/` DDD layer; `infrastructure/` is now domain-agnostic (zero domain imports); restored `no-dependency-cycles` + `architecture-layers` to `severity: error`; `lint --strict` genuinely clean. The full entry is under "Verified fixed during the 2026-08-31 tracker cleanup".
+- #88 ~~[HIGH] Incremental reindex returns 0 nodes~~ **FIXED (BEAD-02, 960f325)** — incremental path now reports true live-DB totals (was a display bug). The full entry is under "Verified against current behaviour on 2026-09-29".
+- #92 ~~[HIGH] doctor false version drift~~ **FIXED (BEAD-01, 960f325)** — reads in-tree `__version__`, not stale `importlib.metadata`. The full entry is under "Verified fixed during the 2026-08-31 tracker cleanup".
+- #93 ~~[LOW] AGENTS.md MCP tool count drift (13 vs 14)~~ **FIXED (BEAD-01, 960f325)** — single-source `mcp_tools` catalog pinned to live registry by a drift-guard test. The full entry is under "Verified against current behaviour on 2026-09-29".
+- #94 ~~[MEDIUM] Over-broad except Exception~~ **FIXED (BEAD-02, 960f325)** — narrowed to `sqlite3.OperationalError` (missing-table only). The full entry is under "Verified against current behaviour on 2026-09-29".
+- #86 ~~[HIGH] YAML edges silently produce 0 nodes~~ **FIXED (BEAD-04, 960f325)** — loader raises `GraphParseError` with file+line on malformed YAML; flow-style edges parse correctly. The full entry is under "Verified against current behaviour on 2026-09-29".
+- #89 ~~[MEDIUM] sync-check false untracked_files~~ **FIXED (BEAD-06, 960f325)** — file-level annotations on symbol-less modules now count as tracking signals; genuine 100% reachable (E2E test). The full entry is under "Verified against current behaviour on 2026-09-29".
+- #90 ~~[MEDIUM] beadloom:track markers inert~~ **FIXED (BEAD-06, 960f325)** — track markers now count as a doc→file binding signal. The full entry is under "Verified against current behaviour on 2026-09-29".
+- #71 ~~[MEDIUM] bootstrap generates rules that fail lint out-of-the-box~~ **FIXED (BEAD-07, b4d5e62)** — generated rule is `feature-needs-parent` (`has_edge_to: {}`); fresh bootstrap lints clean; regression test added. The full entry is under "Verified against current behaviour on 2026-09-29".
+- #98 ~~[LOW] test_git_activity date-relative flake~~ **FIXED (BEAD-10, b4d5e62)** — `_SAMPLE_GIT_LOG` uses relative dates; deterministic windows. The full entry is under "Verified against current behaviour on 2026-09-29".
 
 99. [2026-05-30] [MEDIUM] Repo-wide documentation drift — sync-check has ~30 pre-existing stale doc pairs
 
@@ -3990,6 +4390,11 @@ The dated record of what was opened, closed or verified. Kept at the end on purp
 an agent reading this file needs the OPEN items, not the history, and preamble is the
 part of a long document that is read least usefully (BDL-UX #156).
 
+**Historical up to 2026-08-26, and not backfilled.** Its newest line opens #192. Entries opened
+later, #193 to #304, carry their dates in their own headings, and later closes and verifications
+are recorded in the dated subsections of Closed Issues.
+
+<details>
 <summary><strong>Chronology</strong> — what was opened, closed or verified, newest first</summary>
 
 - **2026-08-26** — (v3.0.0 release, `beadloom-mr2l.90`): **opened #192** — verifying the BUILT wheel against a project that is not us found that a virgin `beadloom init --yes` exits 0 over a graph of 2 nodes and 0 edges and then fails its own `beadloom ci` on `domain-needs-parent`, a rule the same command wrote one step earlier. It is not new; it had never been measured, because everything measured here runs on a repository whose graph has been hand-authored since BDL-008. The rest of what the release did was make the OPEN set adopter-visible. The CHANGELOG's Known limitations name eight items an adopter will meet, and three of them live only here rather than in the tracker: **#191** (`setup-agentic-flow` recomposes a hand-edited role adapter — the #139/#151/#186 shape in the sibling command, and the command an upgrader runs), **#187 of 2026-08-25** (`bd list --json` returns a filtered view as a bare list — External, and it stays open because it is `bd`'s default, not ours) and the `measurable-goal` recall cost. **Found while writing the release notes and not fixed here: this log has two issues numbered 187** — the closed `setup-agentic-flow`/`config-check` one of 2026-08-23 and the open External one of 2026-08-25 — so a reference to "#187" is ambiguous in both directions. Filed as a bead rather than renumbered, because renumbering breaks every reference already written in the CHANGELOG, the tracker and this file. **Repaired 2026-09-09 by `beadloom-0mdo.66`:** the closed half was renumbered to #262 with a forwarding line where it stood, so a reference written before that date still lands somewhere, and the log gained an allocator so the class cannot recur. Measured at release: **seventeen** beads of this epic open in the tracker (`bd list --status open --json`, excluding the epic row and the swarm placeholder).
