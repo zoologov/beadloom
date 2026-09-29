@@ -854,8 +854,8 @@ enforceable for a project that wants it.
 **Whose version a version is.** A semantic version is attributed to the nearest subject NAME
 to its left inside its own clause, and only a version whose nearest name is this project's --
 or that has no name at all -- is compared against this project's version. So
-`Measured on bd 1.0.4` states the release of the tracker and `The current release is 6.0.0`
-states this project's, and each number in `bd 1.0.4 answers and beadloom 6.0.0 asks` goes to
+`Measured on bd 1.0.4` states the release of the tracker and `The current release is 7.0.0`
+states this project's, and each number in `bd 1.0.4 answers and beadloom 7.0.0 asks` goes to
 the name beside it. The tokens given to another product are counted with their subjects in the
 audit's own output, and carried in `--json` under `attributed_versions` with the vocabulary
 that decided them under `version_subjects`, so the exemption is visible rather than silent.
@@ -2067,11 +2067,12 @@ is how a slice with no tests scores 100%.
 - `--survivors FILE` — a JSON list of `{path, mutant}` objects, printed as `Survivors: N over
   K node(s)` and one line per node, each file placed under the node that owns it. An empty
   list prints `Survivors: none`. It reads the index.
-- `--sample-of N` — the counters are a random sample of `N` mutants. Prints `Sample: a random
-  sample of S of N mutants; 95% interval L% to H% (Wilson)`. With `--min-score` the floor is
-  missed only when the WHOLE interval lies under it: a sample of 150 from a scope at 0.89
-  reads under 0.88 about a third of the time, and a floor that fails on that is a coin.
-  Requires `--stats`.
+- `--sample-of N` — the counters are a random sample drawn from a population of `N` mutants.
+  `N` is the population, not the sample: the sample's size `S` is what the counters scored.
+  Prints `Sample: a random sample of S of N mutants; 95% interval L% to H% (Wilson)`. With
+  `--min-score` the floor is missed only when the WHOLE interval lies under it: a sample of
+  150 from a scope at 0.89 reads under 0.88 about a third of the time, and a floor that fails
+  on that is a coin. Requires `--stats`.
 - `--json` — the same facts as the human report: `declared`, `not_judged`, `covered`,
   `tool`, `room`, `score`, `counters`, `missing_counters`, `min_score`, `below_floor` and
   `findings`, plus `change`, `survivors_by_node` and `sample`, each `null` when its option
@@ -2104,7 +2105,8 @@ Judged by this run: the functions above — a change covers functions, not decla
 No run was reported: the population above is what a runner is given.
 ```
 
-Over hand-written counters of 130 killed and 20 survived, read as a sample of 6 992, the
+Over hand-written counters of 130 killed and 20 survived — a sample of 150 drawn from a population
+of 6 992 — the
 point estimate is under the floor and the interval is not, so the command exits 0:
 
 ```

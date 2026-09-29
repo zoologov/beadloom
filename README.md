@@ -18,7 +18,7 @@
 
 🔎 **See what it produces:** [the interactive architecture graph of Beadloom](https://zoologov.github.io/beadloom/architecture.html) — click a node to open its card and blast radius. The page is built from this repository's own graph by `beadloom docs site`, not drawn by hand.
 
-**Platforms:** macOS and Linux, verified on every CI run &nbsp;|&nbsp; **Python:** 3.10+
+**Platforms:** Linux is verified on every CI run. The project is developed on macOS, but CI does not run it there &nbsp;|&nbsp; **Python:** 3.10 to 3.13
 
 ---
 
@@ -40,7 +40,7 @@ What is needed is an engineering control loop: explicit bounds on a task and on 
 
 Beadloom is an attempt to build that loop into the repository itself.
 
-## A check that passed and a check that ran are different facts
+## A check that passed and a check with nothing to check are different facts
 
 Most tools answer two ways: pass or fail. That leaves out a third case, and the third case is the one that hurts — the check ran over nothing and said `pass`.
 
@@ -48,17 +48,17 @@ This happens more often than you would think. A rule whose path pattern has a ty
 
 There is one honest answer here: "I did not check this." The usual answer is green.
 
-Beadloom says what it did not do. From real runs:
+Beadloom says what it did not do. Excerpts from real runs, with long lines wrapped:
 
 ```
-docs-audit  PASS: 19 mentions fresh; 4/9 declared facts verified,
-            NOT VERIFIED: cli_command_count, edge_count, language_count
-scope-check SKIP: skipped — the branch names no work item among the planning
-            documents, so there are no declared axes to judge against
-lint        domain-needs-parent: cannot fire: its `for` kind 'domain' matches
-            none of the 1 nodes in the graph. It is counted as evaluated and
-            checks nothing
-gate        not run by this gate: the test suite, the style linter, the type checker
+[PASS] docs-audit: 20 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
+       cli_command_count, edge_count, language_count, nodes_with_framework, test_count
+[SKIP] scope-check: skipped — the branch 'master' names no work item among the planning
+       documents, so there are no declared axes to judge against
+[SKIP] readme-pair: skipped — no document pair is declared; add a `document_pairs:` block
+       of `source:`/`follower:` entries to .beadloom/config.yml
+Rule 'domain-needs-parent' cannot fire: its `for` kind 'domain' matches none of the 1 nodes
+in the graph. It is counted as evaluated but checks nothing
 ```
 
 A guard has six outcomes rather than two:
@@ -74,9 +74,9 @@ A guard has six outcomes rather than two:
 
 What each check declines to assert is set out [further down](#when-a-check-cannot-answer-beadloom-says-so).
 
-## What Beadloom is not
+## What Beadloom does not do
 
-It is not a safety layer for the model. It cannot tell you whether an agent is being straight with you, whether it is holding something back, or whether it would act differently unobserved. Those are properties of the model, and they are worked on elsewhere.
+It knows nothing about the model itself. Whether an agent is honest, what it keeps quiet about, whether it would behave differently unobserved — Beadloom does not answer these questions. Those are properties of the model, and they are worked on elsewhere.
 
 It does not replace sandboxing, secret handling, access control or human review. An agent with network access and production credentials is an infrastructure question before it is a workflow question.
 
@@ -108,21 +108,38 @@ Beadloom keeps rules in an **architecture graph**. The graph is a description of
 
 The rule lives in the graph. There is a command over the graph. The command returns an exit code. An exit code is not forgotten — not by an agent, not by a person, not in CI.
 
-Every check converges into a single Gate. Here is its output on this repository:
+Every check converges into a single Gate. Here is its output on this repository at the 7.0.0 release, on 29 September 2026. Long lines are wrapped, and omitted text is marked with "…":
 
 ```
-reindex      PASS: up to date
-lint         PASS: 0 error(s), 59 warning(s), 6 crossings suppressed by an exemption
-sync-check   PASS: 363 pair(s) fresh
-docs-audit   PASS: 20 mention(s) fresh; 5/9 declared fact(s) verified,
-                   NOT VERIFIED: edge_count, language_count, nodes_with_framework, test_count
-docs-quality WARN: 248 document(s) read; NO CHECK READS: BRIEF, PLAN, SUMMARY
-doc-spaces   WARN: to_be 194, as_is 100, working 56
-config-check PASS: no blocking drift
-doctor       PASS: 13 check(s): 0 error(s), 204 warning(s), 1 info
+Beadloom CI gate
+
+  [PASS] reindex: up to date
+  [PASS] lint: 0 error(s), 73 warning(s), 10 crossings suppressed by an exemption,
+         architecture-layers judged 371 of 379 live depends_on edge(s)
+  [PASS] sync-check: 519 pair(s) fresh
+  [PASS] docs-audit: 20 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
+         cli_command_count, edge_count, language_count, nodes_with_framework, test_count
+  [WARN] docs-quality: 292 document(s) read; … NO CHECK READS: PLAN, SUMMARY; …
+  [PASS] issue-log: 277 entr(ies) uniquely numbered; … PARTLY CHECKED: 235 of 277 …
+  [PASS] readme-pair: 1 pair(s) held, 118 block(s) compared, 0 finding(s); …
+  [WARN] doc-spaces: to_be 229, as_is 124, working 65; …
+  [PASS] scope-check: 0 path(s) outside the axes BDL-075 declares (…); 3 judged, …
+  [PASS] config-check: no blocking drift; 1 artifact(s) reported (warn)
+  [PASS] doctor: 13 check(s): 0 error(s), 240 warning(s), 4 info
+  …
+PASS — gate clean
+Room: Darwin arm64 · CPython 3.13.7 · 10 cores · extras … · locale utf-8
+  23 of 23 declared room(s) not entered by this run: …
+Not run by this gate:
+  the test suite — `uv run pytest --cov=beadloom …` (.github/workflows/ci.yml: tests)
+  the style linter — `uv run ruff check src/ tests/` (.github/workflows/ci.yml: tests)
+  the type checker — `uv run mypy src/` (.github/workflows/ci.yml: tests)
+…
 ```
 
 What to look at here is not `PASS` but what stands next to it. Every step names **how much** it checked and **what it did not look at**. A check that had nothing to check does not read as a successful one — [a separate section](#when-a-check-cannot-answer-beadloom-says-so) is about that, and it is the main thing that separates Beadloom from a pile of linters.
+
+The last lines say the same about the Gate itself. It names the machine the run happened on, the CI environments the run did not enter, and the checks it did not run at all: the tests, the linter and the type checker. A green verdict is about that machine and the checks the Gate ran, not about the project as a whole.
 
 One Gate stands in three places: in the pre-push hook, in CI, and in an agent's hands. It does not matter which agent provider you use, because Beadloom is universal and is part of none of them. Claude Code, Cursor, an editor that speaks MCP, a CI job, a person at a keyboard — all of them meet the same `beadloom ci`.
 
@@ -151,20 +168,22 @@ On reindex, Beadloom merges three sources into one SQLite database: the graph it
 
 The graph on its own is just data. What makes it useful is what stands on top of it.
 
-- **[One Gate, and checks per step](#a-rule-becomes-a-command).** Every check under a single exit code. And `beadloom guard` checks one step of the process on its own, with four outcomes: passed, warning, blocked, could not check.
-- **[The agentic development flow](#the-agentic-development-flow)** — configurable and tool-agnostic. Roles dev → test → review → tech-writer, with adapters for Claude Code and Cursor as equals.
-- **Context on request, for people and agents alike.** `ctx` returns the code, documentation and rules in force for a node. `why` computes the blast radius. `prime` packs an overview of the project into under 2K tokens. `search` runs full-text over nodes, documentation and code symbols.
+- **[One Gate, and checks per step](#a-rule-becomes-a-command).** Every check under a single exit code. And `beadloom guard` checks one step of the process on its own and returns one of the six verdicts [described above](#a-check-that-passed-and-a-check-with-nothing-to-check-are-different-facts).
+- **[The agentic development flow](#the-agentic-development-flow)** — configurable and tool-agnostic. Five roles: explore, dev, test, review and tech-writer. The adapters for Claude Code and Cursor are equals.
+- **Context on request, for people and agents alike.** `ctx` returns the code, documentation and rules in force for a node. `why` computes the blast radius. `prime` packs an overview of the project into under two thousand tokens. `search` runs full-text over nodes and documentation.
 - **[Architecture as code](#architecture-as-code).** Boundaries and rules in YAML, checked by `beadloom lint` and blocked by the Gate.
+- **[Tests on the graph](#tests-are-bound-to-the-graph).** Every node shows which tests belong to it. Rules watch over the suite itself, and mutation testing shows whether the tests would notice a fault.
 - **Spec-Driven: the spec first, the code after.** Three documentation spaces: **TO-BE** — what you intend to build, **AS-IS** — what is built, **WORKING** — working notes taken as a task proceeds. The last are exempt from the freshness check on purpose: a progress note describes the work, not the code. `beadloom docs spaces` shows all three and finds tasks whose work is finished while the promised document never appeared.
 - **[Federation across repositories](#federation-contracts-between-services).** One landscape assembled from the graphs of individual services, with every contract checked against both of its sides.
 - **Documentation portal.** `beadloom docs site` builds a VitePress site: [interactive graphs](https://zoologov.github.io/beadloom/architecture.html), a metrics dashboard, and documentation tagged with its freshness.
-- **Terminal dashboard.** `beadloom tui` — three screens in the console: dashboard, graph explorer, documentation status.
+- **Terminal dashboard.** `beadloom tui` — three screens in the console: dashboard, graph explorer, documentation status. It works when Beadloom is installed with the `tui` extra.
 
 ## The first five minutes
 
 ```bash
 uv tool install beadloom        # recommended
 pipx install beadloom           # alternative
+uv tool install "beadloom[languages,tui]"   # eight more languages and the terminal dashboard
 ```
 
 ```bash
@@ -188,7 +207,7 @@ The return starts in two situations. The first is two agents or more working on 
 
 Who this is usually for:
 
-- **People who run agents in batches.** So that several agents working at once stay predictable. `beadloom waves` works out which tasks can run in parallel and which have to be serialised, and names the reason for every serialised pair. Each agent gets its own context and its own boundaries, and the result of any of them goes through the same Gate. See the [guide to parallel waves](docs/guides/parallel-waves.md).
+- **People who run agents in batches.** So that several agents working at once stay predictable. `beadloom waves` works out which tasks can run in parallel and which have to be serialised, and names the reason for every pair it had to serialise. Each agent gets its own context and its own boundaries, and the result of any of them goes through the same Gate. See the [guide to parallel waves](docs/guides/parallel-waves.md).
 - **Tech leads and architects.** So that the architecture is explicit, versioned, and outlives team turnover.
 - **Platform and DevEx engineers.** So that CI carries working checks on documentation freshness and boundaries, and agents get structural context through MCP.
 - **Developers.** So that the first hour of every task is not spent rebuilding the picture.
@@ -232,13 +251,14 @@ From here on, a "pair" means a document and the code it describes: Beadloom know
 
 | What happened | What Beadloom says |
 |---|---|
-| A document is declared in the graph but is not on disk | `missing`, and the Gate fails with exit code 2. Deleting the document is not a way to close the question |
+| A document is declared in the graph but is not on disk | `missing`. `sync-check` exits with code 2, and the Gate fails and exits with code 1. Deleting the document is not a way to close the question |
 | Nothing to compare against: the repository was just cloned | `unverified`. Such a pair is counted separately and never joins the fresh ones. The Gate shows `WARN` and leaves the exit code alone: the code is fine, it is the check that cannot answer |
 | A rule matches no file and no node | a `rule_liveness` warning. The summary line says how many of the rules that ran were unable to check anything |
 | A temporary exemption from the rules has expired | a warning, and every run prints how many violations that exemption is hiding. The exemption itself keeps working: a build should not go red because the date changed |
 | A number in the README that the audit never verified | `docs audit` reports how many declared facts it confirmed out of how many, names the rest, and lists the documents it never opened |
 | A task's work is finished and the document it promised never appeared | `docs spaces` shows it. To every other check such a node looks clean: there is nothing to go stale when there is no document at all |
 | Documentation marked in the config as temporary and exempt from the freshness check | the number of exempt pairs and the reason are printed next to the number of fresh ones, so an exemption cannot be mistaken for a check |
+| A translation of a document has drifted from its original: one has a paragraph the other lacks | `readme-pair` compares the pairs in the `document_pairs:` block by structure: headings, paragraphs, lists, tables and code blocks. It does not compare the text itself. When no pair is declared, the step says it was skipped, not that it passed |
 
 Separately, about how Beadloom knows a document is stale. It looks at **git**, not at its own index.
 
@@ -285,7 +305,25 @@ A rule that **cannot match anything** reports itself: a matcher that selects no 
 
 Beadloom applies its own thesis to itself: the `module-coverage` lint is raised to `error`, so every source module has to be a graph node or an explicit exemption, and a new untracked module fails `beadloom ci`.
 
-Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++ and Objective-C**.
+Import analysis works for **Python** right after installation. **TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++ and Objective-C** need the `languages` extra: `uv tool install "beadloom[languages]"`.
+
+## Tests are bound to the graph
+
+The agent at the start of this README brought coverage up to eighty percent with tests that assert nothing. Coverage does not see that: it only shows that a line ran. Beadloom looks at tests from three sides.
+
+What counts as a test is written once, in the `test` role: one behaviour per test, arrange, one action, and a check of its result. These requirements are the same for any stack.
+
+A test file belongs to a graph node in one of three ways: its path mirrors the path of the code it tests, it sits beside that code, or the node lists its tests under the `tests:` key. Beadloom guesses nothing else. A file that none of the three binds is counted apart, and every report about tests states how many such files there are: any one of them may test a node that at first sight has no tests. `beadloom ctx <node>` shows a node's tests. Three rules watch over the suite itself:
+
+- `test_binding` — whether every test file belongs to a node, and whether every node of a chosen kind has a test;
+- `test_import_boundary` — whether a test imports something the rule forbids it;
+- `scenario_binding` — whether an acceptance scenario sits in its node's folder.
+
+On every run, each rule says how much of the suite it checked.
+
+Whether a test would notice a fault is what mutation testing shows: small faults are put into the code, and it is checked whether any test fails. The project chooses the program that does this, and `beadloom mutation` scores what that program wrote. With `--changed-since main` the command states what has to be checked for this change: the changed functions in the declared scope, their nodes, and the tests bound to them. With `--sample-of` it reads the result as a random sample and prints a confidence interval. The floor counts as missed only when the whole interval lies below it. In this repository every pull request is checked this way, and once a week a random sample is drawn from the whole declared scope.
+
+Details are in the [testing guide](docs/guides/testing.md).
 
 ---
 
@@ -297,11 +335,11 @@ Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Jav
 | `reindex` | Rebuild the index from the graph, documentation and code |
 | `ctx REF_ID` | A context pack for a node (Markdown or `--json`) |
 | `why REF_ID` | What depends on a node and what breaks when it changes |
-| `search QUERY` | Full-text search over nodes, documentation and symbols |
+| `search QUERY` | Full-text search over nodes and documentation |
 | `lint` | Check the architecture rules (`--strict` for CI) |
 | `sync-check` | Documentation freshness against the code |
 | `ci` | The single Gate: every check under one exit code |
-| `impact REF_ID` | Who else writes this node, who calls it, how many branches it has |
+| `impact TARGET` | Who else writes the same place, who calls this code, and how many branches it has. `TARGET` is a path or a symbol name |
 | `scope-check` | Whether a commit stayed inside the axes its work item declared |
 | `waves --parent BEAD` | Which tasks can run at once, derived from the tracker rather than typed out |
 | `clean-room BEAD` | A room built from `HEAD` plus the files you name, so one agent's verdict is about its own work |
@@ -309,7 +347,7 @@ Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Jav
 | `export` / `federate` | Export the graph and assemble a landscape from several services |
 | `docs site` | Build the VitePress portal |
 
-The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `axes`, `typed-surface`, `bd-calls`, `issue-number`, `rooms`, `mutation`, `review-brief`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
+The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `axes`, `typed-surface`, `bd-calls`, `issue-number`, `rooms`, `mutation`, `review-brief`, `version-surface`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
 
 ## MCP, configuration, Beads
 
@@ -319,7 +357,7 @@ The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every co
 { "mcpServers": { "beadloom": { "command": "beadloom", "args": ["mcp-serve"] } } }
 ```
 
-Everything Beadloom knows about you lives in `.beadloom/` at the root of the repository: `config.yml` (scan paths and languages), `flow.yml` (the agentic flow declaration), `flow/` (your layer of the flow), `_graph/*.yml` (the graph and the rules, under version control), `AGENTS.md` (conventions for agents). The `beadloom.db` index is generated and does not belong in git.
+Everything Beadloom knows about you lives in `.beadloom/` at the root of the repository: `config.yml` (where the code and the tests are, languages, document pairs and check settings), `flow.yml` (the agentic flow declaration), `flow/` (your layer of the flow), `_graph/*.yml` (the graph and the rules, under version control), `AGENTS.md` (conventions for agents). The `beadloom.db` index is generated and does not belong in git.
 
 Code can be bound to a graph node with a one-line annotation:
 
@@ -329,7 +367,7 @@ def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
     ...
 ```
 
-Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents call `get_context(feature_id)` over MCP and get a ready pack instead of searching the code from scratch. The integration is optional.
+Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents call `get_context(ref_id)` over MCP and get a ready pack instead of searching the code from scratch. The integration is optional.
 
 **Windows is unverified.** Nothing in this project has ever been run on it. The `windows-latest` CI leg was built and then withdrawn, because it became the critical path of the pipeline. Details are in the *Windows: unverified by decision* section of the [flow guards SPEC](docs/domains/application/features/flow-guards/SPEC.md).
 
@@ -352,10 +390,10 @@ Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents
 ## Development
 
 ```bash
-uv sync --dev              # install with dev dependencies
-uv run pytest              # tests
-uv run ruff check src/     # linter
-uv run mypy                # type checking (strict)
+uv sync --extra all             # dependencies and development tools, as in CI
+uv run pytest                   # tests
+uv run ruff check src/ tests/   # linter
+uv run mypy src/                # type checking (strict)
 ```
 
 ## License

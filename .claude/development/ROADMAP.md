@@ -1,8 +1,10 @@
 # Beadloom Roadmap
 
-> **Current version: 6.0.0** (PyPI, published 2026-09-13 from `main` at `058ef59e` and verified
-> on the wheel downloaded from PyPI — not on the local build). What was checked there rather than
-> assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
+> **Current version: 7.0.0** (the BDL-075 release pull request from `features/BDL-075`, cut
+> 2026-09-29 and NOT yet verified on the downloaded wheel — BDL-075 records that verification
+> when it has been made). The release before it is 6.0.0 (PyPI, published 2026-09-13 from `main`
+> at `058ef59e` and verified on the wheel downloaded from PyPI — not on the local build). What
+> was checked there rather than assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
 > 6.0.0 in a fresh environment; `lint --strict` exits 1 on a layer violation the rule sees only
 > through inheritance, which 5.0.0 did not report; and a `layer_populations` entry carries five
 > keys. That is 6.0.0's verdict change and its narrowed population contract, read out of the
@@ -16,6 +18,8 @@
 > Rewritten 2026-08-31. The previous revision was headed *post-v2.0.0* and had not
 > been touched through two major releases: it still listed BDL-061 as unstarted
 > P0 work after it shipped as 3.0.0, and named BDL-062 through BDL-066 nowhere.
+> Re-measured on 2026-09-29 against the tracker, git history and `main` at `11b5ad0d`
+> (BDL-075, `beadloom-n5w5`). The open list was re-ranked in the owner's order.
 >
 > Pure debt and bugs live in `BDL-UX-Issues.md`. This file answers one question:
 > what to do next, and why that and not something else.
@@ -38,7 +42,12 @@
 | **v6.0.0** (09-13) | **MAJOR.** BDL-070 Release B, published from `main` at `058ef59e`, the squash merge of PR #75. `architecture-layers` decides on the population 5.0.0 reported: an end takes its layer through `part_of`, so verdicts change on a graph nobody edited. Over this repository's carried-forward index the rule judges 357 of 365 edges, where it judged 16. Breaking: that verdict change, and a `layer_populations` entry that loses three JSON keys and one porcelain field. Verified on the wheel downloaded from PyPI (sha256 `09668b53e0b60b6d…`, publish run 34788772241): the release harness exited 0, `lint --strict` returned 1 on a violation visible only through an inherited layer, and a `layer_populations` entry carries five keys. |
 | **BDL-072** (09-19) | the nightly mutation job scored 0 of 7187 mutants for nine nights: four guards derived their scan root from their own `__file__` and read mutmut's mutated copy. `tests/package_under_test.py` now resolves the package and declines mutmut's injected definitions. PR #78, closed out in #80. No version bump |
 | **BDL-073** (09-27) | the mutation duty: five gaps in `graph/rules` closed by tests each seen red against its mutant; the rule loader's twelve-branch dispatch became one table and `init` parses the rules once; two mutmut children. The runner still killed the whole-scope nightly, so the owner retired it the same day (BDL-UX #303, `beadloom-5isv` superseded). PR #81, closed out in #82. No version bump |
-| **BDL-074** (09-29) | **tests that belong to the graph.** Every test runs in an empty directory under a contact guard, and self-checks read a session snapshot: live-index contacts 98 → 0, the shared-index flake `beadloom-qq6m` closed. Unit and integration tests mirror the code, acceptance tests live one folder per node, and shared helpers live in `tests/support`. A test binds to a node by the mirror, by sitting beside the code, or through `tests:`, never by a guess; 23 of the retired mapper's 32 conventions are proven no worse than main, and 9 are ruled out as PRD non-goals. Four suite rules state their populations. The rule-engine pilot went from 765 to 886 tests and from 79.3% to 82.0% kill rate. The nightly is replaced by `mutation-per-change` on every PR and a weekly sample of 150; the first sample scored 82.0% [75.1, 87.3], under the 0.88 floor, issue #85. Four review runs; BDL-UX #304 records why. PRs #83, #84, #86, closed out in #87. No version bump; adopters see the change in the next release (roles, population wording, `tests.*` config) |
+| **BDL-074** (09-29) | **tests that belong to the graph.** Every test runs in an empty directory under a contact guard, and self-checks read a session snapshot: live-index contacts 98 → 0, the shared-index flake `beadloom-qq6m` closed. Unit and integration tests mirror the code, acceptance tests live one folder per node, and shared helpers live in `tests/support`. A test binds to a node by the mirror, by sitting beside the code, or through `tests:`, never by a guess; 23 of the retired mapper's 32 conventions are proven no worse than main, and 9 are ruled out as PRD non-goals. Four suite rules state their populations. The rule-engine pilot went from 765 to 886 tests and from 79.3% to 82.0% kill rate. The nightly is replaced by `mutation-per-change` on every PR and a weekly sample of 150; the first sample scored 82.0% [75.1, 87.3], under the 0.88 floor, issue #85. A second sample on `main` the same day scored 87.3% [81.1, 91.7], its interval reached the floor, and it closed #85. Four review runs; BDL-UX #304 records why. PRs #83, #84, #86, closed out in #87. No version bump; adopters see the change in the next release (roles, population wording, `tests.*` config) |
+
+Dates in this table are UTC. `CHANGELOG.md` dates a release by its commit's local time, so 6.0.0,
+uploaded 2026-09-13T23:24Z from a commit made at 02:06 +0300, reads 2026-09-14 there. Four
+documentation-only work items shipped with no row of their own: BDL-064 (PR #52), BDL-065 (PRs
+#54 and #56) and BDL-062 (PR #55) on `main`, and BDL-067 (PR #58) inside v4.0.0.
 
 ---
 
@@ -46,7 +55,10 @@
 
 The three P0 items below were the list this file carried into September, and BDL-068
 closed all three: `impact` / `axes` / `scope-check` for the first, `mutation` for the
-second, and the virgin-`init` blocker merged rather than sitting on a branch. They are
+second, and the virgin-`init` blocker merged rather than sitting on a branch. One part of
+the first is not closed: `scope-check` has never run in CI (BDL-UX #300, `beadloom-tsqz`,
+item 3 of the order below), so the second check the first item argues for is still a local
+habit. They are
 kept here in full rather than deleted, because what they diagnose — the measurements on
 BDL-067, the reason each was ranked where it was — is the evidence the instruments were
 built from, and a shipped instrument with no record of the defect it answers is the same
@@ -56,10 +68,11 @@ unattached rule this epic spent six slices removing.
 open, and they are stated with their reasons under *The class BDL-068 found* below. Read
 that section, not this one, for what is left.
 
-### P0 — the flow cannot see a change's axes, and cannot re-plan when they turn out larger
+### P0 — the flow cannot see a change's axes, and cannot re-plan when they turn out larger — SHIPPED in v4.0.0 (BDL-068 S1)
 
-**Not yet a bead. Needs `/task-init`.** Ranked above the two items below it: this one produces
-the work the others check.
+**Record: on 2026-09-02 this item was not yet a bead and needed `/task-init`.** BDL-068 S1 shipped
+`beadloom impact`, the `## Axes` section and `scope-check` (`17eafb84`, PR #59, 2026-09-03). The
+item was ranked above the two below it because it produces the work the others check.
 
 **Measured on BDL-067, 2026-08-31 to 2026-09-02.** One bug — "the bootstrap writes a domain with
 no `part_of` edge" — became 28 beads, 37 commits and nine review passes. At `5f46c4f`, the last
@@ -169,10 +182,13 @@ can see, a second ISSUES verdict on one work item forces a recorded re-plan rath
 fix cycle, and `beadloom impact` answers the three questions above from the source rather than
 from a human's recollection.
 
-### P0 — nothing can check the mutation duty this project ships
+### P0 — nothing can check the mutation duty this project ships — SHIPPED in v4.0.0 (BDL-068 S2+S3), rebuilt by BDL-072 to BDL-074
 
-**Not yet a bead. Needs `/task-init`.** Ranked first: the item below it is in flight and
-closing, this one has not started.
+**Record: on 2026-09-02 this item was not yet a bead and needed `/task-init`.** BDL-068 S2+S3
+shipped `beadloom mutation` with a floor and the CI workflow that runs it (`97e05047`, PR #60,
+2026-09-03). BDL-072, BDL-073 and BDL-074 rebuilt what it runs on, and the section *Shipped
+since v4.0.0* below records how. It was ranked first because the item below it was in flight and
+closing, and this one had not started.
 
 BDL-061 S4 (`beadloom-mr2l.13`) put a mutation-testing **duty** into every composed role
 core, on the stated ground that owning a runner would break tool-agnosticism. So the
@@ -250,7 +266,7 @@ verifying the 3.0.0 wheel against a project that is not us.
 microservice landscape and on a second private project by people who did not
 write it. The first command they ran left the Gate red.
 
-**State on `features/BDL-067`.** Both halves shipped. The INSTANCE: both writers of
+**State on `main` since `a4738b7c` (PR #58, 2026-09-02).** Both halves shipped. The INSTANCE: both writers of
 graph nodes hold one post-condition and one function that computes the edges they are
 short of, so no domain is written without a `part_of` edge. The CLASS: every entry
 point of `init` that writes a file under `.beadloom/_graph/` re-indexes and then runs
@@ -262,138 +278,22 @@ Two paths take no verdict and both are stated: a run that changed nothing under
 `.beadloom/_graph/`, and the wizard's `edit` answer, which hands the graph over to be
 edited by hand.
 
-**What this epic did NOT close, ranked below as its own item:** `init` still ends in a
-Python traceback on a graph file it cannot handle (BDL-UX #220, `beadloom-l22o`), and
-still writes two nodes under one `ref_id` on the classic Python `src/<project>/`
-layout (BDL-UX #214, `beadloom-7c6k`). Nine review passes were needed to get here, and
+**What this epic did NOT close:** `init` still ends in a Python traceback on a graph file
+it cannot handle (BDL-UX #220, `beadloom-l22o`), which is open and ranked in item 2 of the
+order below. It also wrote two nodes under one `ref_id` on the classic Python
+`src/<project>/` layout (BDL-UX #214, `beadloom-7c6k`). BDL-069 fixed that on 2026-09-12
+(`beadloom-5cpe`, PR #69). Nine review passes were needed to get here, and
 eight of the defects they found were one sentence true of one shape while a
 neighbouring shape existed — which is the argument for the axes artifact ranked above
 this item, not a separate observation.
 
-## What is being worked on now
+---
 
-### P1 — three lessons of BDL-074 belong in the shipped flow, not in one agent's memory
+## Shipped since v4.0.0 — kept as the record of why
 
-**Not yet a bead. Needs `/task-init`.** Owner decision 2026-09-29, after BDL-074 closed. Every rule
-below is stack-neutral, and every one reaches an adopter only if it is in the shipped templates
-(`src/beadloom/onboarding/templates/…`, then `beadloom setup-agentic-flow`). Today it lives in the
-coordinator's personal memory, which is visible to no other project and no other agent.
-
-**Measured on BDL-074.** The review of `beadloom-b9ll` took four runs. Three of them found the same
-adopter regression: tests laid out differently from ours read "worse than main" after the old
-name-guessing mapper was replaced. It was found one ecosystem at a time: Go, then JVM/Swift, then
-Jest's `__tests__/`, then a top-level `__tests__/`. The class closed only when `beadloom-2mj3.15`
-enumerated the retired mapper's 32 conventions from its source and proved each against main's
-measured output. One of the three findings was the coordinator's own: its question to the owner
-named two of the three places an agent had reported, so the owner ruled on less than was found. And
-the first review's withheld-accounts protocol was defeated by the coordinator's launch prompt, which
-carried its own observations (BDL-UX #304).
-
-**The three rules, and where each belongs:**
-
-1. **Before replacing a component, enumerate what it did.** When a change replaces a component, the
-   RFC carries a *Replaced behaviour* section. It lists everything the old component recognised or
-   produced, derived from its source rather than from recollection. For each row it names the test
-   that proves the new component no worse, or the owner ruling that drops it. This goes in the RFC
-   template (`/templates`) and in the explore role's deliverable. An RFC that says it replaces
-   something and has no such section is a `docs quality` finding, the way `missing_sections` already
-   reports a section missing that its peers carry. This rule is the one that can be checked.
-2. **A question to the owner carries every option the agent found.** This belongs in `/coordinator`,
-   because the coordinator is the one who relays. It stays prose: a question is not an artifact any
-   check can read.
-3. **A withheld-accounts review gets a clean launch prompt.** In `/coordinator`, the prompt lists only
-   the documents the reviewer may read and adds no observation of the coordinator's own. In the
-   `review` role, the reviewer reports whether its prompt carried such an observation; the BDL-074
-   reviewers already did this unasked. Declare both halves as a duty (`beadloom:duty` markers, as for
-   `landing-lock` and `clean-room`), so that `config-check` stops on a role that loses it. The prompt
-   itself stays uninspected, and the check says so: "the coordinator's launch prompt — not inspected".
-
-**Done when** the three rules are in the shipped core and compose into every adopter's roles, and
-an RFC that replaces a component without a *Replaced behaviour* section is reported. BDL-074 then
-reads as the first work item those rules would have shortened, not the last one they describe.
-
-### P1 — four populations are called "stale docs", and one indicator shows two of them
-
-**`beadloom-r9t5` · its own work item · not started — the next step is `/task-init`.**
-
-Split out of BDL-069's `beadloom-rqma.5` when that bead's axes were derived. Nineteen surfaces read
-`sync_state` and report a number or a list, using **four different populations** under one name:
-pairs `status='stale'` (8 sites), pairs `IN ('stale','missing')` (4), distinct `ref_id` — nodes (3),
-and documents after grouping (1).
-
-**Three cases show why this is a decision and not a rename.** `application/status.py:101` counts
-stale+missing while `infrastructure/health.py:41` counts stale only, and
-`services/commands/status.py:256-257` renders both on one table row — one indicator, two
-populations. `debt_report/collect.py` counts nodes under a docstring that says "entries" and a SPEC
-that says "per stale doc-code **pair**", and the debt weight depends on which is right. The
-`doc_status` screen counts nodes beside per-pair numbers.
-
-**Why it is not inside BDL-069.** What a screen should count is a product judgement per surface.
-BDL-069 keeps the mechanical half — one shared computation with the populations named — and this
-work item keeps the nineteen decisions. Making them inside a closing epic, by one agent, is the
-thing that epic exists to prevent.
-
-### P0 — `architecture-layers` evaluates 16 of 353 edges, and a green `lint --strict` claims all of them — SHIPPED by BDL-070
-
-**State on `main`, 2026-09-13 — measured, not claimed.** `architecture-layers` now decides on the layer
-each end of an edge inherits through `part_of`, and judges **357 of 365** live `depends_on` edges over
-this repository's carried-forward index (**356 of 364** in CI, which builds its index from empty —
-BDL-UX #290). It judged 16. Shipped in two pull requests, deliberately in this order: **#72**
-(`main` at `7efa4006`) made the rule report its population and changed no verdict; **#73** (`main`
-at `692205d7`) made it decide on that population, and changes verdicts on a graph nobody edited.
-
-- The one reverse edge, `agent-prime -> reindex`, was a real layering violation and was fixed by
-  dependency inversion, not exempted.
-- The same-layer rule is checked for the first time: an edge inside one layer is a finding when no
-  tagged container holds both ends. The **14** peer crossings on this repository are excused by name
-  in `rules.yml`, each with a reason and an exit condition; a bare allow is a rules-load error.
-- The architecture view asks the rule instead of computing its own verdict, which had shown **130**
-  false violations; rule liveness decides on the same layer the rule does (#296); the shipped
-  `dev` role template no longer tells adopters a green `lint --strict` enforces more than it does.
-
-**The release decision was taken by the owner on 2026-09-13, and both releases are published.** Two
-pull requests preserve the order, but they do not make two releases, so BDL-071 cut two versions.
-**5.0.0** carries BDL-069 and Release A. It was published from `release/5.0.0` at `d6eaee60`, a
-branch cut on `7efa4006`, so the population report reached adopters before any verdict changed.
-**6.0.0** carries Release B. It was published from `main` at `058ef59e`, the squash merge of PR #75.
-Each was verified on the wheel downloaded from PyPI, and `CHANGELOG.md` holds them as two sections.
-
-**Filed on the way, not fixed:** #290 (index lineage moves the denominator), #291 (the debt report
-reads no rules), #294, #295, #297 (the review withholding cannot release and `bd show` defeats it),
-#298 (a vacuity guard read a partial graph mid-run), #299 (an empty holder is accepted), and #300
-(`scope-check` never runs in CI — Actions checks a pull request out on a detached HEAD).
-
-The text below is kept as the record of why the item was ranked P0.
-
-**`beadloom-t6zq` · its own epic, next after BDL-069 · not started — the next step is `/task-init`.**
-
-Found by BDL-069's `beadloom-rqma.4` while choosing where a helper called from three domains may
-live. The rule that enforces the direction of dependencies between layers is severity `error`, and
-it evaluates an edge only when both ends carry a layer tag. A tag is not inherited through
-`part_of`, so a component or a feature is in no layer however deep inside one it sits — and the
-rule's own docstring says such nodes are "silently skipped".
-
-**Measured on this repository:** 12 nodes carry a layer tag; there are 353 active `depends_on`
-edges; **16 are evaluated**. By `part_of` ancestry, 345 of the 353 have a layer at both ends. One
-of those 345 is a reverse edge nothing reports — `agent-prime` (onboarding) → `reindex`
-(application). And a probe on a copy of HEAD, importing a domain module from
-`infrastructure/git_activity.py`, produced the edge and `lint --strict` reported no layer finding.
-
-**Why it ranks P0.** This is the check a team trusts to say the architecture's boundaries hold.
-Today "`lint --strict` is green" does not mean "no infrastructure module imports a domain", which is
-what the layering declares. It is the population-of-zero class BDL-068 and BDL-069 exist to remove,
-in the instrument with the widest reach — and it sits right before outside validation, where a
-team will read that green as a guarantee.
-
-**Why it is not inside BDL-069.** It is not a tail. Fixing it changes how the main architecture
-check decides, and the obvious fix — inherit a layer through `part_of` — turns a green Gate red on
-the upgrade that ships it, here and for an adopter. BDL-069's CONTEXT holds that no adopter's Gate
-may change verdict on upgrade.
-
-**What the planning has to settle before any bead is cut:**
-- report the rule's population first — how many edges it evaluated and how many it skipped for an
-  untagged end, the way `scenario-coverage` states its own — and only then change the verdict;
-- fix or explicitly account for `agent-prime` → `reindex` before inheritance ships.
+Three items this file ranked after 4.0.0 have shipped: the two P0 items, by BDL-069 and BDL-070,
+and the nightly P1, by BDL-072, BDL-073 and BDL-074. They moved here from the open list on
+2026-09-29, in the order they shipped. Each keeps its state line and the text that ranked it.
 
 ### P0 — the adopter's first two commands, measured on the published 4.0.0 wheel — SHIPPED by BDL-069
 
@@ -440,6 +340,71 @@ disagree* — survives. #282 is written about the property.
 editing, no check prints a remediation that cannot clear the reason it printed, and a graph file
 carrying a duplicate `ref_id` is reported rather than silently reduced.
 
+### P0 — `architecture-layers` evaluates 16 of 353 edges, and a green `lint --strict` claims all of them — SHIPPED by BDL-070
+
+**State on `main`, 2026-09-13 — measured, not claimed.** `architecture-layers` now decides on the layer
+each end of an edge inherits through `part_of`, and judges **357 of 365** live `depends_on` edges over
+this repository's carried-forward index (**356 of 364** in CI, which builds its index from empty —
+BDL-UX #290). It judged 16. Shipped in two pull requests, deliberately in this order: **#72**
+(`main` at `7efa4006`) made the rule report its population and changed no verdict; **#73** (`main`
+at `692205d7`) made it decide on that population, and changes verdicts on a graph nobody edited.
+
+- The one reverse edge, `agent-prime -> reindex`, was a real layering violation and was fixed by
+  dependency inversion, not exempted.
+- The same-layer rule is checked for the first time: an edge inside one layer is a finding when no
+  tagged container holds both ends. The **14** peer crossings on this repository are excused by name
+  in `rules.yml`, each with a reason and an exit condition; a bare allow is a rules-load error.
+- The architecture view asks the rule instead of computing its own verdict, which had shown **130**
+  false violations; rule liveness decides on the same layer the rule does (#296); the shipped
+  `dev` role template no longer tells adopters a green `lint --strict` enforces more than it does.
+
+**The release decision was taken by the owner on 2026-09-13, and both releases are published.** Two
+pull requests preserve the order, but they do not make two releases, so BDL-071 cut two versions.
+**5.0.0** carries BDL-069 and Release A. It was published from `release/5.0.0` at `d6eaee60`, a
+branch cut on `7efa4006`, so the population report reached adopters before any verdict changed.
+**6.0.0** carries Release B. It was published from `main` at `058ef59e`, the squash merge of PR #75.
+Each was verified on the wheel downloaded from PyPI, and `CHANGELOG.md` holds them as two sections.
+
+**Filed on the way, not fixed by BDL-070:** #290 (index lineage moves the denominator,
+`beadloom-xzvp`), #291 (the debt report reads no rules, `beadloom-is2z`), #294 (`beadloom-ui47`),
+#295 (`beadloom-efcb`), #297 (the review withholding cannot release and `bd show` defeats it,
+`beadloom-6rfz`), #298 (a vacuity guard read a partial graph mid-run), #299 (an empty holder is
+accepted, `beadloom-l5jb`), and #300 (`scope-check` never runs in CI — Actions checks a pull
+request out on a detached HEAD, `beadloom-tsqz`). Re-read against the tracker on 2026-09-29: #298
+is fixed, by BDL-074 closing `beadloom-qq6m` on 2026-09-27, and the other seven are open.
+
+The text below is kept as the record of why the item was ranked P0.
+
+**Record, 2026-09-12: `beadloom-t6zq` · its own epic, next after BDL-069 · not started — the next
+step is `/task-init`.** `beadloom-t6zq` closed on 2026-09-13.
+
+Found by BDL-069's `beadloom-rqma.4` while choosing where a helper called from three domains may
+live. The rule that enforces the direction of dependencies between layers is severity `error`, and
+it evaluates an edge only when both ends carry a layer tag. A tag is not inherited through
+`part_of`, so a component or a feature is in no layer however deep inside one it sits — and the
+rule's own docstring says such nodes are "silently skipped".
+
+**Measured on this repository:** 12 nodes carry a layer tag; there are 353 active `depends_on`
+edges; **16 are evaluated**. By `part_of` ancestry, 345 of the 353 have a layer at both ends. One
+of those 345 is a reverse edge nothing reports — `agent-prime` (onboarding) → `reindex`
+(application). And a probe on a copy of HEAD, importing a domain module from
+`infrastructure/git_activity.py`, produced the edge and `lint --strict` reported no layer finding.
+
+**Why it ranks P0.** This is the check a team trusts to say the architecture's boundaries hold.
+Today "`lint --strict` is green" does not mean "no infrastructure module imports a domain", which is
+what the layering declares. It is the population-of-zero class BDL-068 and BDL-069 exist to remove,
+in the instrument with the widest reach — and it sits right before outside validation, where a
+team will read that green as a guarantee.
+
+**Why it is not inside BDL-069.** It is not a tail. Fixing it changes how the main architecture
+check decides, and the obvious fix — inherit a layer through `part_of` — turns a green Gate red on
+the upgrade that ships it, here and for an adopter. BDL-069's CONTEXT holds that no adopter's Gate
+may change verdict on upgrade.
+
+**What the planning has to settle before any bead is cut:**
+- report the rule's population first — how many edges it evaluated and how many it skipped for an
+  untagged end, the way `scenario-coverage` states its own — and only then change the verdict;
+- fix or explicitly account for `agent-prime` → `reindex` before inheritance ships.
 
 ### P1 — the mutation duty shipped, and its nightly has been scoring nothing since it shipped — FIXED by BDL-072, then SUPERSEDED by BDL-074
 
@@ -447,8 +412,11 @@ carrying a duplicate `ref_id` is reported rather than silently reduced.
 runner still killed the whole-scope nightly at 93–262 min, and nobody identified what killed it.
 BDL-073 retired the nightly. BDL-074 replaced it with `mutation-per-change` on every pull request
 and a weekly sample of 150. The first sample completed in 25 min and scored 82.0% [75.1, 87.3],
-under the 0.88 floor. The owner kept the floor: issue #85 stays open, and `beadloom-inmv` holds the
-survivors outside the rule engine. The text below is kept as the record of why the item was ranked.
+under the 0.88 floor. The owner kept the floor, and `beadloom-inmv` holds that sample's 12
+survivors outside the rule engine. A second sample, dispatched on `main` the same day (run
+36590434847), scored 87.3% of 150 [81.1, 91.7]. Its interval reaches the floor, and it closed
+issue #85 at 15:56Z on 2026-09-29. It left 19 survivors over five nodes: 9 in the rule engine and
+10 outside it. The text below is kept as the record of why the item was ranked.
 
 **`beadloom-ey4m` (BDL-UX #289) · found 2026-09-12 while verifying `main` after BDL-069 landed.**
 
@@ -477,11 +445,153 @@ are or are not at their floors. The last figure anyone can stand behind is the 2
 a score rather than `none` — not when the guard is merely skipped under mutation — and a red
 nightly reaches someone without being looked for.
 
+---
 
-### P1 — BDL-066: agent behaviour observability, trace and result
+## What to do next, in order
+
+Nothing is in progress except the release in item 4. The order below is the owner's, accepted on
+2026-09-29 from an audit of this file against the tracker. Each item names its bead, and
+`bd show <id>` is where its state is checked. Every open P0 and P1 bug is named in this section,
+either inside an item or in the unranked list at its end.
+
+### 1. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0 bug, BDL-UX #226)
+
+The only open P0. `beadloom ci` writes its whole report through one `click.echo()`. Under
+`git push` its stdout is a non-blocking pipe, the flush raises `BlockingIOError`, and the Gate dies
+before it renders a verdict. The hook then prints `Beadloom Gate failed (docs stale / lint /
+coverage / doctor)` on any non-zero exit, so the user is told the documentation is stale and runs a
+tech-writer that has nothing to fix. Reproduced on 2026-09-03 (BDL-068) and again on 2026-09-19
+(BDL-072). Both times `beadloom ci` exited 0 in the foreground, and the branch was pushed with
+`--no-verify`.
+
+**Why first:** it sits in every adopter's first `git push`, and each occurrence teaches
+`--no-verify` for a reason that is false. **Done when** the report survives a full pipe, and the
+hook tells a Gate that crashed from a Gate that failed without naming a cause it did not observe.
+
+### 2. The adopter's first commands: `l22o`, `gv0z`, `6i5q`, `f7kb`, `is2z` (five P1 bugs)
+
+Each sits in a command an outside user runs first, and each was measured on a layout or a history
+this repository does not have:
+
+- `beadloom-l22o` (BDL-UX #220): `init --bootstrap` still ends in `yaml.parser.ParserError` on a
+  hand-edited graph file that does not parse. BDL-067 gave the four readers under `onboarding/` one
+  skip policy, and the traceback moved to a reader in another domain.
+- `beadloom-gv0z` (#217): domains that an earlier `init --mode import` left in `imported.yml` are
+  parented by no later run.
+- `beadloom-6i5q` (#218): `init` holds three hand-written step sequences, and no artifact states
+  what the sequence is. The bead asks for `/task-init` and an RFC before any code.
+- `beadloom-f7kb` (#225): `impact` under-reports on `src/<one package>` beside Python outside
+  `src/`, the commonest Python layout, and still reports its callers and co-writers as resolved.
+- `beadloom-is2z` (#291): the debt report reads `rules.yml` from two paths the product never
+  writes, so its rule-violation category is zero on every standard-layout project. On this
+  repository it counted 0 warnings where `lint --strict` reported 71 (measured 2026-09-12).
+
+**Why here:** the owner's next step is outside validation — Beadloom on another project, then a
+team on their own services. This file carries no item for that step, and its state is the
+owner's to record. Four of the five were filed before 4.0.0, and none has moved since it was filed.
+
+### 3. `beadloom-tsqz` — `scope-check` never runs in CI (P1 bug, BDL-UX #300)
+
+`actions/checkout` checks a pull request out on a detached HEAD, so no branch names a work item,
+and the Gate's `scope-check` leg skips on every pull request. Measured in PR #73's CI log (run
+34748533038) on 2026-09-13. `scope-check` is the second check of the BDL-068 axes item recorded
+above: the one that turns a declared `## Axes` section into a finding when a change leaves it. In
+CI its population is zero, so today it is a local habit. **Done when** the leg judges a pull
+request in CI, whatever its branch is called.
+
+### 4. BDL-075 — release 7.0.0 (in progress)
+
+`main` carries BDL-072, BDL-073 and BDL-074, and none of them is released. The owner chose a major
+on 2026-09-29: the debt report's untested count and the values in `extra.tests` change on a project
+nobody edited. The release also ships the PLAN and BRIEF templates without a status column
+(`beadloom-10er`, `beadloom-3nwz`) and corrects the `--sample-of` help text, which described the
+population as the sample size. It changes no other product code, so items 1–3 reach adopters in a
+later release. Epic `beadloom-uk2e`, work item `.claude/development/docs/features/BDL-075/`.
+
+### 5. Three lessons of BDL-074 belong in the shipped flow, not in one agent's memory (not yet a bead)
+
+**Not yet a bead. Needs `/task-init`.** Owner decision 2026-09-29, after BDL-074 closed. Every rule
+below is stack-neutral, and every one reaches an adopter only if it is in the shipped templates
+(`src/beadloom/onboarding/templates/…`, then `beadloom setup-agentic-flow`). Today it lives in the
+coordinator's personal memory, which is visible to no other project and no other agent.
+
+**Measured on BDL-074.** The review of `beadloom-b9ll` took four runs. Three of them found the same
+adopter regression: tests laid out differently from ours read "worse than main" after the old
+name-guessing mapper was replaced. It was found one ecosystem at a time: Go, then JVM/Swift, then
+Jest's `__tests__/`, then a top-level `__tests__/`. The class closed only when `beadloom-2mj3.15`
+enumerated the retired mapper's 32 conventions from its source and proved each against main's
+measured output. One of the three findings was the coordinator's own: its question to the owner
+named two of the three places an agent had reported, so the owner ruled on less than was found. And
+the first review's withheld-accounts protocol was defeated by the coordinator's launch prompt, which
+carried its own observations (BDL-UX #304).
+
+**The three rules, and where each belongs:**
+
+1. **Before replacing a component, enumerate what it did.** When a change replaces a component, the
+   RFC carries a *Replaced behaviour* section. It lists everything the old component recognised or
+   produced, derived from its source rather than from recollection. For each row it names the test
+   that proves the new component no worse, or the owner ruling that drops it. This goes in the RFC
+   template (`/templates`) and in the explore role's deliverable. An RFC that says it replaces
+   something and has no such section is a `docs quality` finding, the way `missing_sections` already
+   reports a section missing that its peers carry. This rule is the one that can be checked.
+2. **A question to the owner carries every option the agent found.** This belongs in `/coordinator`,
+   because the coordinator is the one who relays. It stays prose: a question is not an artifact any
+   check can read.
+3. **A withheld-accounts review gets a clean launch prompt.** In `/coordinator`, the prompt lists only
+   the documents the reviewer may read and adds no observation of the coordinator's own. In the
+   `review` role, the reviewer reports whether its prompt carried such an observation; the BDL-074
+   reviewers already did this unasked. Declare both halves as a duty (`beadloom:duty` markers, as for
+   `landing-lock` and `clean-room`), so that `config-check` stops on a role that loses it. The prompt
+   itself stays uninspected, and the check says so: "the coordinator's launch prompt — not inspected".
+
+**Done when** the three rules are in the shipped core and compose into every adopter's roles, and
+an RFC that replaces a component without a *Replaced behaviour* section is reported. BDL-074 then
+reads as the first work item those rules would have shortened, not the last one they describe.
+
+**Three open bugs are the same organ as rule 3, and belong to this item.** `beadloom-tm76` (P1,
+BDL-UX #219): the review's withholding does not cover commit messages, which is where this project
+writes its accounts. `beadloom-6rfz` (P2, #297): `review-brief --release` keeps withholding when
+the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway.
+`beadloom-qhxr` (P2): the review release gate keys on the first run's verdict, listed with the
+follow-ups in item 10.
+
+### 6. `beadloom-r9t5` — four populations are called "stale docs", and one indicator shows two of them (P1)
+
+**`beadloom-r9t5` · its own work item · not started — the next step is `/task-init`.**
+
+Split out of BDL-069's `beadloom-rqma.5` when that bead's axes were derived. Nineteen surfaces read
+`sync_state` and report a number or a list, using **four different populations** under one name:
+pairs `status='stale'` (8 sites), pairs `IN ('stale','missing')` (4), distinct `ref_id` — nodes (3),
+and documents after grouping (1).
+
+**Three cases show why this is a decision and not a rename.** `application/status.py:101` counts
+stale+missing while `infrastructure/health.py:45` counts stale only, and
+`services/commands/status.py:251-253` renders both on one table row — one indicator, two
+populations (line numbers re-measured 2026-09-29). `debt_report/collect.py` counts nodes under a docstring that says "entries" and a SPEC
+that says "per stale doc-code **pair**", and the debt weight depends on which is right. The
+`doc_status` screen counts nodes beside per-pair numbers.
+
+**Why it is not inside BDL-069.** What a screen should count is a product judgement per surface.
+BDL-069 keeps the mechanical half — one shared computation with the populations named — and this
+work item keeps the nineteen decisions. Making them inside a closing epic, by one agent, is the
+thing that epic exists to prevent.
+
+### 7. The three class gaps (not yet a bead)
+
+Stated with their reasons under *The class BDL-068 found* below. The order inside the item: gap 1,
+a rule made impossible to break rather than written down, which carries the highest measured
+failure rate; then gap 3, allocation for `ACTIVE.md` (BDL-UX #257); then gap 2, an expiry on a
+recorded finding. BDL-068 finished on 2026-09-10, and six work items (BDL-069 to BDL-074) ran
+after it without these being weighed. **Needs `/task-init`.**
+
+### 8. BDL-066 — agent behaviour observability, trace and result (not yet a bead)
 
 Docs drafted 2026-08-31, `Status: Draft`, beads not created.
 `.claude/development/docs/features/BDL-066/`.
+
+**The plan predates BDL-068, and two slices are re-derived before `/task-init`.** S6 (scope drift)
+overlaps BDL-068's `scope-check`, which does not run in CI (item 3). S3 (brief delta — constraints
+added beyond the bead) is the inspection that rule 3 of item 5 declares uninspected.
 
 The owner sees the conversation with the coordinator and nothing of what the
 coordinator tells its subagents. On 2026-08-27 a brief carried five constraints,
@@ -496,15 +606,56 @@ the reviewer was the author.
 Everything here raises detectability and none of it prevents. Any shipped text
 claiming otherwise is a defect.
 
-### P2 — Qwen as the writer of Russian documentation, and the style guide
+### 9. `beadloom-uxqc` — `doctor` audits the produced graph, not only the code (P1, BDL-UX #162)
 
-Two beads, one thread.
+The oldest open P1 task, filed 2026-08-20. Four graph defects shipped past every role and a green
+Gate (BDL-UX #144, #157, #159, and dropped `uses` edges). All four were found by a person clicking
+a node and asking whether it was true. The bead turns those hand audits into `doctor` checks: an
+island, an unexplained leaf, a claim without evidence.
+
+### 10. The follow-ups BDL-074 and this release filed (P2, two P3)
+
+The weekly sample reaches its floor since issue #85 closed, so none of these is a red. Each is
+quality work:
+
+- `beadloom-inmv`: kill the survivors outside the rule engine, or record why each is equivalent.
+  The bead names the first sample's 12. The second sample, which closed #85, left 10 outside the
+  rule engine and 9 inside it.
+- `beadloom-k6ou`: split the 167 test files still unplaced, each excused under
+  `test-files-bind-to-a-node`.
+- `beadloom-o9rl`: the execution half of `scenario_binding`, measured by running the acceptance
+  scenarios under coverage.
+- `beadloom-fi8m`: a scenario count that names the Outline rows beside the declared scenarios
+  (522 declared, 536 run).
+- `beadloom-xg0y`: `clean-room` builds its environment without `uv.lock`, and installed mutmut
+  3.8.0 where the lock pins 3.7.0.
+- `beadloom-qhxr`: the review release gate keys on the first run's verdict on a bead reviewed more
+  than once — the same organ as rule 3 of item 5.
+- `beadloom-tu41`: `docs audit` gives a version to the product named earlier on the line, across
+  code spans. Filed by this release's version bump.
+- `beadloom-s34t`: `issue-number check` reads only column-0 entries. A number written a second time
+  as a `- N.` bullet is not reported as a duplicate, and a number that is only mentioned in prose
+  counts as stated. This release repaired the issue log by hand around that blind spot.
+- `beadloom-uvgy` (P3): TUI notifications and labels may read graph text as markup. Not measured.
+- `beadloom-phjj` (P3): `ctx` prints an empty bold heading, `****`, for a document chunk that has
+  no heading. Found on the built 7.0.0 wheel on a fresh `init --bootstrap` project.
+
+`beadloom-10er` and `beadloom-3nwz`, the PLAN and BRIEF templates without a status column, closed
+on 2026-09-29 inside BDL-075.
+
+### 11. `beadloom-cxal` — the style guide, and Qwen as the writer of Russian documentation (P2)
+
+One bead, one thread. `beadloom-cxal` is P2 in the tracker, lowered from P1 on 2026-09-29 to agree
+with this rank. The owner ranks it eleventh because it serves neither use under *Vision* directly.
+The guide half of the thread has shipped as documentation: BDL-064 rewrote the multi-agent guide
+pair (PR #52, merged 2026-08-28), and BDL-065 had Goose+Qwen rewrite the Russian guide (PR #54,
+2026-08-28, and PR #56, 2026-08-31). BDL-065's role runtime has no bead and no work-item folder.
 
 **`beadloom-cxal` · BDL-063 — speech style guide for all four roles.** Shipped as
 data, not prose in a role file, because it must reach a Claude adapter, a Goose
-recipe and a machine check. Configurable per project. Target 3.1.0: editing a
-CORE role template changes what `setup-agentic-flow` composes in every adopter's
-repository.
+recipe and a machine check. Configurable per project. No release is targeted: the
+3.1.0 this item once named was never cut. Editing a CORE role template changes what
+`setup-agentic-flow` composes in every adopter's repository.
 
 **BDL-065 — Goose+Qwen as the tech-writer role, local and optional.** The mechanism is a
 **role runtime**: `flow.yml` names which executor runs a role, defaulting to the harness. Measured
@@ -517,9 +668,13 @@ section, which was not).
 
 Not yet a bead of its own beyond the guide work. **Needs `/task-init`.**
 
-### P3 — BDL-060 S5/S6: federation
+### Deferred until a need for it appears — BDL-060 S5/S6: federation
 
-Nine open beads, all P2, untouched since August.
+**Owner decision, 2026-09-29: federation is deferred until a need for it appears, and higher
+priorities go first.** It held P3 here, under a sentence that recorded its contradiction with the
+vision instead of resolving it. The nine beads — epic `beadloom-8qqp` and `8qqp.17` to `.24`, all
+P2 — were untouched from 2026-06-17, the day they were created, until 2026-09-29, when all nine
+were set to `deferred` in the tracker by the same decision.
 
 **S5** — live cross-repo `ctx`: an agent on service A sees `@repo-B:CONTRACT`.
 The F1 honesty debt: the claimed metric is not actually met, cross-repo identity
@@ -527,9 +682,28 @@ lives only in `export`/`federate` and not in bundles.
 
 **S6** — `unverified` lifecycle, the undeclared sweep, review-gated bootstrap.
 
-Federation is the stated top priority of the product vision and it has not moved
-in three weeks. Either it becomes active work or this ranking is wrong. Recorded
-so the contradiction is visible rather than quiet.
+### Open P1 bugs this order does not rank
+
+Named so that no open P1 bug is missing from this file. Each has an entry in `BDL-UX-Issues.md`
+under its number, and its state is in `bd show`:
+
+- `beadloom-uz8x` (#215): the Gate reports an index problem as a rules configuration error.
+- `beadloom-0mb5` (#221): attribution keys on the whole node, not on a rule-relevant projection of
+  it.
+- `beadloom-tgo8` (#222): the independent cross-check states and computes the attribution rule the
+  implementation stopped using.
+- `beadloom-hdky` (#224): a new test file landing on an existing path deletes its scenarios, and
+  the suite goes green.
+- `beadloom-mj2o` (#227): `mypy --strict` runs on one Python version locally and four in CI, so an
+  unused ignore lands as a red pull request.
+- `beadloom-qil0` (#229): the review brief sends the reviewer to the tracker export and does not
+  name it as a channel.
+- `beadloom-bdnv` (#230): a branch name with a suffix after the work-item key names no work item,
+  and the channel goes silent.
+- `beadloom-xzvp` (#290): `reindex` is not idempotent across a fresh and a carried-forward index,
+  and the layer rule's population inherits the difference.
+
+`beadloom-tm76` (#219) belongs to item 5, and `beadloom-r9t5` is item 6.
 
 ---
 
@@ -542,7 +716,7 @@ the record kept here and the detail readable through `bd show <id>`.
 | Bead | What is left |
 |---|---|
 | `mr2l.41` | three more ambient-decode sites, plus an MCP test runner with no timeout |
-| `mr2l.51` | three modules past 1000 lines with several responsibilities each |
+| `mr2l.51` | three modules past 1000 lines with several responsibilities each, when it closed. Thirteen modules under `src/` are past 1000 lines on 2026-09-29, measured with `wc -l` |
 | `mr2l.52` | read-only `lint` never says the index is older than the tree |
 | `mr2l.53` | `rule_type_count` is registered and verified, but still counts rules while its name says rule types |
 | `mr2l.60` | **P1 bug** — the backslash refusal makes the flow guard refuse every edit on Windows, and its stated reason is false there |
@@ -550,12 +724,12 @@ the record kept here and the detail readable through `bd show <id>`.
 | `mr2l.67` | the decode sweep: 29 narrow handlers, 49 unguarded decoding reads |
 | `mr2l.69` | the shared writing standard names `beadloom lint` where the checks live in `docs quality` |
 | `mr2l.71` | a closed epic's goal cannot be made measurable retroactively |
-| `mr2l.72` | ROADMAP and issue-log document KINDS, with counts the tool computes rather than a human tallies. **A concrete instance found on 2026-08-31:** `tests/test_bead77_kind_and_root_disagree.py` pins the TO-BE population as a literal and has been hand-edited once per feature — 190, then 194, then 198. Every feature that writes a PRD reddens CI until someone updates the number by hand |
+| `mr2l.72` | ROADMAP and issue-log document KINDS, with counts the tool computes rather than a human tallies. The instance named here on 2026-08-31, a test that pinned the TO-BE document population as a literal, is gone: BDL-074 replaced it with `tests/self_check/docs/test_every_document_of_this_repository_is_in_one_space.py`, which derives the population. The kinds are still undone |
 | `mr2l.81` | the commit gate cannot see a neighbour's hunk inside a file the committer touched |
 | `mr2l.82` | the commit-scoped hook type-checks a surface the project never declared typed |
 | `mr2l.88` | an ignore block keeps the pre-rotation pattern |
 | `mr2l.89` | MCP `mark_synced` still attests a whole ref, one layer above the CLI fix |
-| `mr2l.91` | the UX log has two issues numbered 187 — both still present |
+| `mr2l.91` | the UX log had two issues numbered 187. Fixed on 2026-09-09 by `beadloom-0mdo.66`: the closed one was renumbered to #262, and `issue-number allocate` now claims each number |
 | `mr2l.92` | the guard read-only test accuses the guard when `bd` flushes its own export |
 
 **One of them is about this document.** `mr2l.72` would make a ROADMAP and an
@@ -572,14 +746,33 @@ exist. Recorded rather than reopened, because the work is being done here.
 
 ## Standing debt outside the epics
 
+The table holds every open P2 bead that no item above names, checked against `bd list --all` on
+2026-09-29. P0 and P1 beads are in *What to do next, in order*, and the nine federation beads are
+under its deferral.
+
 | Bead | What |
 |---|---|
-| `beadloom-uxqc` | **P1** — `doctor` should audit the PRODUCED graph, not just the code: islands, unexplained nodes |
-| `beadloom-9glj` | `sync-update` can re-attest a doc nobody read |
-| `beadloom-431c` | `docs audit` checks numbers but never that a documented identifier still exists |
-| `beadloom-1d70` | no signal for a bounded context too large by SUBTREE |
+| `beadloom-9glj` | `sync-update` can re-attest a doc nobody read (BDL-UX #163) |
+| `beadloom-431c` | `docs audit` checks numbers but never that a documented identifier still exists (#161) |
+| `beadloom-1d70` | no signal for a bounded context too large by SUBTREE (#158) |
 | `beadloom-2qwb` | centralize remaining inline node-reads |
 | `beadloom-g0c5` | `test_tui.py` connection leak during textual GC |
+| `beadloom-l27n` | 102 planning documents depart from the shape their peers keep (#223) |
+| `beadloom-4axf` | the graph-file skip policy lives in a domain the graph domain may not import, so three readers restate it |
+| `beadloom-oew7` | `gate.py` holds both the orchestration and each leg's rendering |
+| `beadloom-ovam` | two minors from BDL-069's review pass 4 |
+| `beadloom-ui47` | `loader.get_node_tags` raises a bare `AttributeError` on a malformed `nodes.extra` (#294) |
+| `beadloom-efcb` | `node_tags` raises `TypeError` on a truthy non-iterable `extra.tags`, failing every tag question in the run (#295) |
+| `beadloom-vu0a` | the TUI lint panel branches on a severity the vocabulary does not contain |
+| `beadloom-l5jb` | `issue-number allocate` accepts an empty holder and writes a claim that names nobody (#299) |
+| `beadloom-g79p` | **deferred** — AsyncAPI ingestion is documented as a capability and wired to nothing (#160) |
+
+> **Two corrections on 2026-09-29, and a wider check.** `beadloom-uxqc` left this table for item 9
+> of the order. `beadloom-txeq` (BDL-064) read in_progress for 32 days after its PR #52 merged on
+> 2026-08-28. Its work is on `main`, so it was closed with that evidence. The check now covers
+> in-progress beads and swarm molecules as well as this table: molecule `beadloom-9lcb` read open
+> for the closed BDL-074 epic `beadloom-2mj3`, the shape `aa4bfad4` cleaned up on 2026-09-12. It
+> was closed on 2026-09-29.
 
 > **Three rows left this table on 2026-09-10, and are named rather than silently dropped:**
 > `beadloom-iur5` (the vendored agents snapshot — removed in BDL-068, and the CHANGELOG's
@@ -589,10 +782,13 @@ exist. Recorded rather than reopened, because the work is being done here.
 > this table still listed them as standing debt. The table is checked against `bd` rather than
 > remembered — that check is what found them, and it is worth repeating at every release.
 
-Two findings were checked on 2026-08-31 and are **still live**: BDL-UX **#147**
-(`beadloom lint` mutates the index — a read-only-sounding verb writes to the
-database) and **#160** (AsyncAPI extraction has zero callers outside its own
-module, while the federation SPEC states teams on AsyncAPI ingest through it).
+Two findings called still live on 2026-08-31, re-read on 2026-09-29. BDL-UX **#147** (`beadloom
+lint` mutates the index) was fixed in BDL-061 S2: `lint --no-reindex` is read-only. Two measured
+residues are unfixed. On a WAL index the read-only form leaves `beadloom.db-wal` and
+`beadloom.db-shm` behind, and `--no-reindex` answers about the index without saying so. **#160**
+(AsyncAPI extraction has no caller outside its own module, while the federation SPEC states teams
+on AsyncAPI ingest through it) is `beadloom-g79p`, deferred, last updated 2026-08-20.
+`extract_payload_body` still has no caller under `src/`.
 
 ---
 
@@ -676,18 +872,29 @@ about what it did not. `lint PASS` is architecture lint; the reader hears `ruff`
 
 ### The three gaps that are still open, and are the ones capability sharpens most
 
-**Ranked here rather than in the P0 list because BDL-068 must finish first; these are
-what to weigh against everything else once it does.**
+**These waited for BDL-068 to finish. It finished on 2026-09-10, and the three gaps are item 7
+of *What to do next, in order* above.**
 
-1. **Making a rule impossible to break, rather than written down.** `graph_plan`
-   refusing a title that states a bead number is the only real instance this project
-   has. Everything else — the clean-room words, the room name, the landing-lock form,
-   the commit-message rule — is text an agent must read and recall. This is the
-   subclass with the highest measured failure rate and the least coverage.
+1. **Making a rule impossible to break, rather than written down.** When this was
+   written, `graph_plan` refusing a title that states a bead number was the only real
+   instance this project had. Re-measured on 2026-09-29, there are six more.
+   `active-sync --stage` refuses to stage what the commit does not carry (#207,
+   2026-09-04, which the sentence missed). `issue-number allocate` claims a number by an
+   exclusive create (2026-09-09). `clean-room` derives a room's directory from the bead
+   and refuses one it did not build (2026-09-10). `config-check` stops on a role that
+   loses a duty it declares. A bare `allow` in `rules.yml` is a rules-load error
+   (BDL-070). Under BDL-074's contact guard a test cannot touch the live repository
+   (live-index contacts 98 → 0). The gap is narrower, not closed: the clean-room verdict
+   wording, the landing-lock form and the commit-message rule are still text an agent
+   must read and recall. This is the subclass with the highest measured failure rate.
 2. **An expiry on a recorded finding.** Nothing distinguishes an entry from 2026-08-22
    from one written yesterday, and three of six checked were false. A finding needs to
    carry what it was measured against and when, and a reader needs to be told when that
    has moved. `bd 1.0.4` is already written into S5's assertions; nothing acts on it.
+   Measured again on 2026-09-29: an audit of this file found three recorded findings
+   that had gone false with nothing saying so — the #214 clause in the virgin-`init`
+   record, "issue #85 stays open", and the two issues numbered 187. Guard exclusions
+   carry an `until` date. Recorded findings still do not.
 3. **Allocation for shared resources that no scope owns.** `ACTIVE.md` is written by
    every bead of every wave and belongs to no bead's code scope, so `beadloom waves`
    cannot see it by construction (#257). UX numbers HAVE one since 2026-09-09 (`beadloom-0mdo.66`): `beadloom issue-number
@@ -714,6 +921,11 @@ goals. Two uses rank everything:
   large projects alone with an AI fleet.
 - **A team of solos** — each member runs that flow on their own service, all
   federated into one landscape.
+
+**Federation is deferred until a need for it appears (owner, 2026-09-29).** The second use
+still ranks this list through its first half: every member's flow on their own service is the
+single-repository flow above. Its cross-repository half, BDL-060 S5/S6, waits under *Deferred*
+in the order above, and higher priorities go first.
 
 Every P0/P1 item must serve one of them. Items serving only adoption or market
 are demoted and flagged off-north-star.
@@ -748,7 +960,7 @@ top-tier models, no tiering by role.
 - **Import intent from import-linter/ArchUnit/dependency-cruiser** (lower the manual-YAML barrier). _REVIEW §6.6._
 - **Guides & demos** (onboarding/multi-agent/keep-docs-alive + demo). _STRATEGY-1/2 Ph7._
 - **Semantic search** (sqlite-vec/fastembed) — only at scale (1000+ nodes). _STRATEGY-2 Ph14._
-- **Semantic docs audit** — the `docs audit` detector is still English-keyword-proximity based (`doc_sync/audit.py`), so it mislabels numbers semantically (e.g. "12 supported languages" → `language_count`; the `.ru` "14 инструментов" → `cli_command_count`). BDL-057 shipped a *workaround*, not a fix: `docs_audit.ignore` triples + per-fact tolerances in `.beadloom/config.yml` (**6 suppressions**, measured 2026-08-31 — the figure this document carried, 15, was hand-written and wrong, which is the argument for `mr2l.72`) silence specific instances.
+- **Semantic docs audit** — the `docs audit` detector is still English-keyword-proximity based (`doc_sync/audit.py`), so it mislabels numbers semantically (e.g. "12 supported languages" → `language_count`; the `.ru` "14 инструментов" → `cli_command_count`). BDL-057 shipped a *workaround*, not a fix: `docs_audit.ignore` triples + per-fact tolerances in `.beadloom/config.yml` (**9 suppressions**, measured 2026-09-29, up from 6 on 2026-08-31 — the figure this document carried before that, 15, was hand-written and wrong, which is the argument for `mr2l.72`) silence specific instances.
 
   Three measured instances make the shape concrete: **#205** — a factually *correct* number binds to a fact computing something else ("supports 11 languages" → `language_count`, which is the number of languages the project is *written in*, 1); **#206** — `docs/**/features/*/SPEC.md` is excluded from the audit outright, so three references to a release that did not exist survived there; **#209** — the English-*word* half of the keyword table is dead in a non-English document, while Latin-script tokens and the version regex still bind, so one page is checked and its neighbour is not with nothing distinguishing them. A true fix needs semantic classification. _STRATEGY-2 Ph14.8; workaround landed BDL-057._
 - **Misc (market/hygiene/on-demand):** publish GH Action to marketplace · VS Code extension · gRPC/AsyncAPI/proto sources · monorepo workspace · richer-viz beyond P1 · TUI graph view / ASCII graph · plugin system · daemon · pre-commit-framework hook · Bitbucket recipes · property-based tests · perf benchmarks · re-export resolution · CLI "did-you-mean" · code similarity · data-ownership/ER · cross-system user-flow · per-system C4 decomposition · remote graph refs / full federation protocol.

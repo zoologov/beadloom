@@ -305,7 +305,7 @@ reproduced, and scores them with `--sample-of`, which prints the interval the sa
 mutant a verdict was reached about, survivors and mutants no test covered included. A counter
 the runner did not write is reported, never read as zero. On a sample, the 95% Wilson interval
 is the claim, and the floor is missed only when the whole interval lies under it. With example
-counters of 130 killed and 20 survived, read as a sample of 6 992:
+counters of 130 killed and 20 survived, read as a sample drawn from a population of 6 992:
 
 ```
 $ beadloom mutation --stats counters.json --target src/beadloom/graph/rules/ \

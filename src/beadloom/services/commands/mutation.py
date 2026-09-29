@@ -27,7 +27,8 @@ functions it touched in the declared scope, the node owning each, and the tests
 the binding ties to that node — and, with ``--stats``, scores the run over it;
 the declared targets are then printed as not judged by this run, because a
 change covers functions, not targets. ``--sample-of N`` reads the counters as a
-random sample of N mutants and prints the interval the sample supports.
+random sample drawn from a population of N mutants — the sample's own size is
+what the counters scored — and prints the interval the sample supports.
 ``--survivors FILE`` lists the surviving mutants under the node owning their
 file. The last two read the index, and so does the first.
 
@@ -133,7 +134,10 @@ _UNNAMED_TOOL = "an unnamed runner"
     "sample_of",
     type=click.IntRange(min=1),
     default=None,
-    help="The counters are a random sample of this many mutants; print its interval.",
+    help=(
+        "The counters are a random sample drawn from a population of this many "
+        "mutants; print the interval the sample supports."
+    ),
 )
 @click.option("--json", "output_json", is_flag=True, help="Structured JSON output.")
 def mutation(
