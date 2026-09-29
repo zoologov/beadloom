@@ -269,6 +269,46 @@ this item, not a separate observation.
 
 ## What is being worked on now
 
+### P1 — three lessons of BDL-074 belong in the shipped flow, not in one agent's memory
+
+**Not yet a bead. Needs `/task-init`.** Owner decision 2026-09-29, after BDL-074 closed. Every rule
+below is stack-neutral, and every one reaches an adopter only if it is in the shipped templates
+(`src/beadloom/onboarding/templates/…`, then `beadloom setup-agentic-flow`). Today it lives in the
+coordinator's personal memory, which is visible to no other project and no other agent.
+
+**Measured on BDL-074.** The review of `beadloom-b9ll` took four runs. Three of them found the same
+adopter regression: tests laid out differently from ours read "worse than main" after the old
+name-guessing mapper was replaced. It was found one ecosystem at a time: Go, then JVM/Swift, then
+Jest's `__tests__/`, then a top-level `__tests__/`. The class closed only when `beadloom-2mj3.15`
+enumerated the retired mapper's 32 conventions from its source and proved each against main's
+measured output. One of the three findings was the coordinator's own: its question to the owner
+named two of the three places an agent had reported, so the owner ruled on less than was found. And
+the first review's withheld-accounts protocol was defeated by the coordinator's launch prompt, which
+carried its own observations (BDL-UX #304).
+
+**The three rules, and where each belongs:**
+
+1. **Before replacing a component, enumerate what it did.** When a change replaces a component, the
+   RFC carries a *Replaced behaviour* section. It lists everything the old component recognised or
+   produced, derived from its source rather than from recollection. For each row it names the test
+   that proves the new component no worse, or the owner ruling that drops it. This goes in the RFC
+   template (`/templates`) and in the explore role's deliverable. An RFC that says it replaces
+   something and has no such section is a `docs quality` finding, the way `missing_sections` already
+   reports a section missing that its peers carry. This rule is the one that can be checked.
+2. **A question to the owner carries every option the agent found.** This belongs in `/coordinator`,
+   because the coordinator is the one who relays. It stays prose: a question is not an artifact any
+   check can read.
+3. **A withheld-accounts review gets a clean launch prompt.** In `/coordinator`, the prompt lists only
+   the documents the reviewer may read and adds no observation of the coordinator's own. In the
+   `review` role, the reviewer reports whether its prompt carried such an observation; the BDL-074
+   reviewers already did this unasked. Declare both halves as a duty (`beadloom:duty` markers, as for
+   `landing-lock` and `clean-room`), so that `config-check` stops on a role that loses it. The prompt
+   itself stays uninspected, and the check says so: "the coordinator's launch prompt — not inspected".
+
+**Done when** the three rules are in the shipped core and compose into every adopter's roles, and
+an RFC that replaces a component without a *Replaced behaviour* section is reported. BDL-074 then
+reads as the first work item those rules would have shortened, not the last one they describe.
+
 ### P1 — four populations are called "stale docs", and one indicator shows two of them
 
 **`beadloom-r9t5` · its own work item · not started — the next step is `/task-init`.**
