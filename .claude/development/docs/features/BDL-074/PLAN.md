@@ -1,6 +1,6 @@
 # PLAN: BDL-074 — Tests that belong to the graph
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-28
 
 ---
@@ -85,7 +85,8 @@ nine green checks.
 | R | `beadloom-b9ll` | review — runs 1–3 CHANGES REQUIRED; 4th run OK with minors | P1 | T, F1–F3, W5, G1–G6, W6–W8 | Done |
 | G7 | `beadloom-2mj3.19` | review fix: Rich markup escaped (added 2026-09-29) | P1 | R | Done |
 | W | `beadloom-7u77` | tech-writer | P2 | R, G7 | Done |
-| V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | In progress |
+| K1–K3 | `beadloom-2mj3.21`–`.23` | kill PR #86's 258 per-change survivors (added 2026-09-29, owner) | P1 | V's first CI run | Done |
+| V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W, K1–K3 | Done |
 
 > **Status is as of 2026-09-28 and is copied from the tracker by hand.** The tracker (`bd list --all --parent beadloom-2mj3`) and ACTIVE.md, which a pre-commit hook reconciles from it, are authoritative; this column is not. Rows B4, W1–W3 and the edges from B4 were added during the run and are recorded in ACTIVE.md and CONTEXT.md.
 

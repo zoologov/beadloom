@@ -1,6 +1,6 @@
 # RFC: BDL-074 — Tests that belong to the graph
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-28
 
 ---

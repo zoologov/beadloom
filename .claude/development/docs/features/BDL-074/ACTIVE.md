@@ -1,15 +1,23 @@
 # ACTIVE: BDL-074 — Tests that belong to the graph
 
-> **Last updated:** 2026-09-28
-> **Phase:** Development
+> **Last updated:** 2026-09-29
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** V `beadloom-paze` — push the tests-only wave to PR #86: `mutation-per-change` must hold its floor, and ai-techwriter's cache must miss on a push that changes only tests.
-**Goal:** PR #86 green including the per-change job; the owner agrees to merge.
-**Done when:** V records both; 9/9 required green.
+**Bead:** none — every bead of BDL-074 is closed, and the epic closes with this commit.
+
+## Outcome
+
+- **Merged:** PR #83 (phase A, `4890f28c`), PR #84 (phase B, `7cbc1874`), PR #86 (phases C–E, `45a3c2fc`), each with 9/9 required checks green.
+- **Isolation:** every test starts in an empty directory; a contact guard names what reaches the live index, tracker or history; self-checks read a session snapshot. Live-index contacts 98 → 0; `beadloom-qq6m` closed.
+- **Layout and binding:** unit and integration tests mirror the code; acceptance lives one folder per node; `tests/support` holds what tests share; a test binds by the mirror, beside the code, or through `tests:` — no guess. 32 conventions of the retired mapper enumerated: 23 proven no worse than main, 9 ruled out (PRD Non-goals NG2–NG4; NG1 rejected in favour of the default roots `tests`, `test`, `spec`, `__tests__`). This repository: 623 test files, 275+ bound, 167 unplaced (`beadloom-k6ou`).
+- **Rules:** four suite rules state their populations; exemptions carry a reason and an exit. The execution half of scenario binding is `beadloom-o9rl`.
+- **Mutation:** the whole-scope nightly is replaced by `mutation-per-change` (PR #86: 1578 mutants, 97.1%, 632 s on the largest change the project will send) and a weekly sample of 150 (first run 25 min, 82.0% [75.1, 87.3] under the 0.88 floor — issue #85, `beadloom-inmv`).
+- **Review:** four runs; the last OK with minors, both fixed. The adopter regression was found one ecosystem at a time until the retired mapper was enumerated — BDL-UX #304.
+- **Filed outside the epic:** `beadloom-inmv`, `beadloom-k6ou`, `beadloom-o9rl`, `beadloom-fi8m`, `beadloom-xg0y`, `beadloom-10er`, `beadloom-qhxr`, `beadloom-uvgy`.
 
 **Wave 19 closed (2026-09-29):** the 258 per-change survivors — `beadloom-2mj3.21` `5ca8deb6` (loader, types: 58 killed, 22 equivalent), `beadloom-2mj3.22` `b4ef12b2` (test_binding, suite_tables, test_import_boundary: 68 killed, 12 equivalent), `beadloom-2mj3.23` `5366ee3d`, `97c3d69a` (scenario_binding, evaluators, listed_exemptions, `__init__`, liveness: 87 killed, 11 equivalent); 0 not killed, no product bug, src/ untouched. Killed 213 of 258; the 45 equivalents each carry a reason on their bead. The pool lines of 2mj3.23 were committed by the coordinator with the owner's approval after the permission check refused the bead's own commit form.
 
@@ -66,7 +74,7 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-2mj3` | epic | ready | BDL-074 parent |
+| `beadloom-2mj3` | epic | ✓ done | BDL-074 parent |
 | `beadloom-l67s` | A1 dev | ✓ done | chdir and contact guards; 115 tests in 20 files broke before the fix (measured); allowed list 44 entries |
 | `beadloom-kixx` | A2 dev | ✓ done | self-check snapshot replaces `live_repo_reindexed`; allowed list 44 → 20; live-index contacts 98 → 1 (the A3 probe), 0 writers; build ≈5.1 s/session |
 | `beadloom-2esy` | A3 dev | ✓ done | 590 traced self-checks: 541 moved + 51 siblings = 592 in `tests/self_check/` (architecture 125, config 206, docs 68, process 193); 4 exact `lint`-leg duplicates removed; 45 kept in place with a reason; allowed list 20 → 0; live-index contacts 1 → 0, `beadloom-qq6m` closed; combined tree 10 959 passed, 0 failed, `beadloom ci` rc 0 |
@@ -104,7 +112,7 @@
 | `beadloom-b9ll` | R review | ✓ done | review |
 | `beadloom-7u77` | W tech-writer | ✓ done | 12 stale pairs → 0 (11 by edit, cli-commands attested by pair); test paths under `docs/` that do not exist 143 of 276 → 6 of 292 (all illustrative adopter paths); the no-root clause re-quoted in 8 places; 16 moved-path mentions outside `docs/` listed on the bead, not edited; README pair 12 → 15 authoring keys; `architecture.md` test tables; new `docs/guides/testing.md`, linked from both READMEs and Getting Started; 9 watched docs re-attested, declared surface re-recorded 493 → 519 pairs (+28 from 14 new modules, −2 from `test_mapper.py`); `ab029338`. On the tree: sync-check rc 0 at the fixpoint, docs audit 0 stale, docs quality rc 0, lint --strict rc 0, `tests/self_check/docs` 70 passed, `-m self_check` 709 passed, `beadloom ci` rc 0 |
 | `beadloom-2mj3.20` | fix | ✓ done | PR #86's red checks. tests-locale: the announcement tests handed bash the score report's em dash as a `str` environment value; the env is now UTF-8 bytes, as the runner hands it, and an env twin of the argv guard is red on Darwin before the fix; reproduced in a Linux room (C and en_US.ISO-8859-1): 5 failed → 62 passed; the workflow's announce and score steps measured not to fail under either locale, unchanged. site-build: a code span split over a line starting with `<absent roots>` in the test-mapping SPEC; rewrapped, `docs:build` rc 1 → rc 0; `test_site_markdown_compiles.py` now follows the open span across lines instead of per-line parity. On the tree: 11 593 passed, 0 failed; `beadloom ci` rc 0 |
-| `beadloom-paze` | V verify | in progress | the jobs on CI |
+| `beadloom-paze` | V verify | ✓ done | the jobs on CI |
 
 ## Notes
 
