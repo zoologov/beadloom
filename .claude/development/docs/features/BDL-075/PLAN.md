@@ -17,15 +17,23 @@ verified on the wheel downloaded from PyPI.
 ```mermaid
 graph TD
     T1[T1 PLAN template] --> V1[V1 built wheel]
-    R1[R1 bump + CHANGELOG] --> D1[D1 README pair]
+    T2[T2 BRIEF template] --> R1[R1 bump + CHANGELOG]
+    T2 --> V1
+    R1 --> D1[D1 README pair]
     R1 --> D2[D2 ROADMAP]
     R1 --> D3[D3 issue log]
-    D1 --> V1[V1 built wheel]
+    D1 --> V1
     D2 --> V1
     D3 --> V1
     V1 --> RV[R review]
+    F1[F1 review findings] --> RV
+    F2[F2 --sample-of help] --> RV
     RV --> P[P publish + verify]
 ```
+
+T1 ran before T2 and T2 before R1 because all three recompose the same files; the tracker holds the
+T2 → R1 edge, and T1 → T2 was kept by the coordinator. F1 and F2 were added after the review's first
+run and gate its second.
 
 **Critical path:** R1 → D1 → V1 → R → P
 
@@ -37,15 +45,15 @@ plan.
 | ID | Tracker | Name | Priority | Depends On |
 |---|---|---|---|---|
 | T1 | `beadloom-10er` | dev: the PLAN template carries the tracker id and no status column | P1 | - |
-| T2 | `beadloom-3nwz` | dev: the BRIEF template, the same change (added 2026-09-29, owner) | P1 | T1 |
+| T2 | `beadloom-3nwz` | dev: the BRIEF template, the same change (added 2026-09-29, owner) | P1 | - |
 | R1 | `beadloom-nxf7` | dev: the version to 7.0.0 and the `[7.0.0]` change log | P1 | T2 |
 | D1 | `beadloom-fdvz` | tech-writer: README.ru.md, then README.md | P1 | R1 |
 | D2 | `beadloom-n5w5` | tech-writer: ROADMAP.md | P1 | R1 |
 | D3 | `beadloom-o2z4` | tech-writer: BDL-UX-Issues.md, plus a bead for the `issue-number check` blind spot | P1 | R1 |
-| V1 | `beadloom-adbg` | test: the release harness on the built wheel; the README's steps followed literally | P1 | T1, D1, D2, D3 |
-| R | `beadloom-bz48` | review: authors' accounts withheld, clean launch prompt — first run CHANGES REQUIRED | P1 | V1 |
-| F1 | `beadloom-uk2e.1` | tech-writer: the review's findings in ROADMAP, CHANGELOG and the issue log (added 2026-09-29) | P1 | R |
-| F2 | `beadloom-uk2e.2` | dev: the `--sample-of` help names the population (added 2026-09-29, owner) | P1 | F1 |
+| V1 | `beadloom-adbg` | test: the release harness on the built wheel; the README's steps followed literally | P1 | T1, T2, D1, D2, D3 |
+| R | `beadloom-bz48` | review: authors' accounts withheld, clean launch prompt | P1 | V1, F1, F2 |
+| F1 | `beadloom-uk2e.1` | tech-writer: the review's findings in ROADMAP, CHANGELOG and the issue log (added 2026-09-29, from the review's first run) | P1 | - |
+| F2 | `beadloom-uk2e.2` | dev: the `--sample-of` help names the population (added 2026-09-29, owner; found by F1) | P1 | - |
 | P | `beadloom-vgst` | publish: merge, tag, release; verify the downloaded wheel; close-out | P1 | R |
 
 ## Bead Details

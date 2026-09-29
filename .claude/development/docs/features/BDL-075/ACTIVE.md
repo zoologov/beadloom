@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** V1 `beadloom-adbg` — the release harness on the built 7.0.0 wheel, on a project that is not this repository; the README's steps followed literally.
-**Goal:** what 7.0.0 publishes is shown on the artifact, not on the tree.
-**Done when:** the harness tells 6.0.0 from 7.0.0 and exits 0 on 7.0.0; every README step runs as written.
+**Bead:** P `beadloom-vgst` — PR, merge (owner), tag `v7.0.0`, GitHub release (owner), publish, verify the wheel downloaded from PyPI with V1's harness, close-out.
+**Goal:** 7.0.0 on PyPI, shown on the downloaded artifact.
+**Done when:** the harness exits 0 on `beadloom==7.0.0` from PyPI; ROADMAP's version line marked verified; the documents Done.
+
+**V1 and R closed (2026-09-29):** V1 `beadloom-adbg` — the harness fails on 6.0.0 from PyPI (7 of 7) and on three forged artifacts, passes on the built 7.0.0 wheel; every first-run step of both READMEs ran as written; suite 11 718 passed. R `beadloom-bz48` — first run CHANGES REQUIRED (1 major: ROADMAP behind the tracker after the coordinator's tracker changes; 5 minors) → F1 `beadloom-uk2e.1` `ace157ad`; the owner added F2 `beadloom-uk2e.2` `a5e54033` (the `--sample-of` help named the sample size, it is the population); second run OK with minors, fixed by the coordinator (PLAN's DAG and dependencies, ROADMAP's release sentence, `cli.md`'s sample sentence, CONTEXT's phase, the PRD's non-goal). Filed on the way: `beadloom-phjj`, `beadloom-tu41`, `beadloom-s34t`.
 
 **Waves 1–3 closed (2026-09-29):** T1 `5e64acf6` (PLAN template), `beadloom-3nwz` `c2bc090d` (BRIEF template, added by the owner); R1 `12d33f0c` (7.0.0 in 7 checked places, `[7.0.0]`, no ignore triple needed; `beadloom-tu41` filed); D1 `4507481e` (README pair: 12 defects, a section on tests bound to the graph, a `readme-pair` row; 118 blocks, 0 findings); D2 `16fa318e` (ROADMAP: 27 findings, open work ranked 1–11 in the owner's order, federation deferred; `beadloom-txeq` closed); D3 `f8b65c6a` (issue log: Open 133 → 79, Closed 117 → 175, no number in two sections; `beadloom-s34t` filed). Tracker: the nine federation beads deferred, molecule `beadloom-9lcb` closed, `beadloom-cxal` P1 → P2.
 
@@ -34,6 +36,6 @@
 | `beadloom-fdvz` | D1 tech-writer | done | the README pair: the audit's rows fixed and measured on 7.0.0, the section on tests bound to the graph; `readme-pair` 118 blocks, 0 findings |
 | `beadloom-n5w5` | D2 tech-writer | done | ROADMAP.md: the audit's 27 rows and M1-M8 resolved (detail in the bead); open work ranked 1-11 in the owner's order; three shipped items moved to 'Shipped since v4.0.0'; federation deferred; every open P0/P1 bug named; `beadloom-txeq` closed |
 | `beadloom-o2z4` | D3 tech-writer | done | BDL-UX-Issues.md: Open 133→79, Improvements 20→17, Excluded 7→6, Closed 117→175; no number both open and closed; `beadloom-s34t` filed |
-| `beadloom-adbg` | V1 test | ready | the built wheel; the README's steps |
-| `beadloom-bz48` | R review | blocked | review |
-| `beadloom-vgst` | P publish | blocked | publish and verify |
+| `beadloom-adbg` | V1 test | ✓ done | the built wheel; the README's steps |
+| `beadloom-bz48` | R review | ✓ done | review |
+| `beadloom-vgst` | P publish | ready | publish and verify |

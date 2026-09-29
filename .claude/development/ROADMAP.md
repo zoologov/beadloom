@@ -504,8 +504,9 @@ request in CI, whatever its branch is called.
 `main` carries BDL-072, BDL-073 and BDL-074, and none of them is released. The owner chose a major
 on 2026-09-29: the debt report's untested count and the values in `extra.tests` change on a project
 nobody edited. The release also ships the PLAN and BRIEF templates without a status column
-(`beadloom-10er`, `beadloom-3nwz`). It changes no other product code, so items 1–3 reach adopters
-in a later release. Epic `beadloom-uk2e`, work item `.claude/development/docs/features/BDL-075/`.
+(`beadloom-10er`, `beadloom-3nwz`) and corrects the `--sample-of` help text, which described the
+population as the sample size. It changes no other product code, so items 1–3 reach adopters in a
+later release. Epic `beadloom-uk2e`, work item `.claude/development/docs/features/BDL-075/`.
 
 ### 5. Three lessons of BDL-074 belong in the shipped flow, not in one agent's memory (not yet a bead)
 

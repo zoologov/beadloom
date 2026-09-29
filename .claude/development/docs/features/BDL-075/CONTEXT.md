@@ -16,7 +16,8 @@ ranked on what is open, and an issue log whose Open section holds only what is o
 
 - **No product code change** beyond the version literal and the PLAN and BRIEF templates
   (`beadloom-10er`, `beadloom-3nwz`, both added by the owner on 2026-09-29), and the `--sample-of`
-  help text (owner, 2026-09-29: a new flag must not ship with a false description). A defect found on the way is filed, not fixed.
+  help text (owner, 2026-09-29: a new flag must not ship with a false description). A defect found
+  on the way is filed, not fixed.
 - **A green publish run is not evidence.** The build reads its version from `__init__.py`, nothing
   checks it against the tag, and the upload uses `skip-existing: true`. The evidence is
   `beadloom --version` on the downloaded wheel.
@@ -94,6 +95,6 @@ the RFC's Axes. The audits are in the coordinator's scratchpad: `audit_readme.md
 
 ## Current Phase
 
-- **Phase:** Planning
-- **Current bead:** none. Beads are created after PLAN is approved.
-- **Blockers:** none
+- **Phase:** Development, publish pending. The release series is on `features/BDL-075`, reviewed OK
+  with minors on its second run (`beadloom-bz48`); P (`beadloom-vgst`) is next.
+- **Blockers:** none.

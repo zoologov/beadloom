@@ -2105,7 +2105,8 @@ Judged by this run: the functions above — a change covers functions, not decla
 No run was reported: the population above is what a runner is given.
 ```
 
-Over hand-written counters of 130 killed and 20 survived, read as a sample of 6 992, the
+Over hand-written counters of 130 killed and 20 survived — a sample of 150 drawn from a population
+of 6 992 — the
 point estimate is under the floor and the interval is not, so the command exits 0:
 
 ```

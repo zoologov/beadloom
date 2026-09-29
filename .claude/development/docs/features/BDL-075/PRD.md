@@ -85,6 +85,8 @@ entries are already fixed.
 ## Non-goals
 
 - **No product code change** beyond the version literal. Defects found on the way are filed.
+  *(Widened by the owner on 2026-09-29, recorded in CONTEXT: the PLAN and BRIEF templates and the
+  `--sample-of` help text ship in this release too.)*
 - **Not fixing** the open bugs the ROADMAP now ranks (`jwfc`, the adopter sweep, `tsqz`, …). They
   are ranked here and done later.
 - **Not scheduling federation.** It is recorded as deferred.
