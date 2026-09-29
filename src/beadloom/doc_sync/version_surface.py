@@ -20,8 +20,8 @@ had already read and classified as an example rather than a claim, and grepping
 for its twin found the same sentence in a document no check reads. That is the
 argument for a derivation rather than a checklist, made against the checklist's
 own author — so **no place is named anywhere in this module**, and
-``tests/test_version_surface.py`` parses this file with its docstrings stripped
-and fails if one appears.
+``tests/integration/doc_sync/version_surface/test_version_surface.py`` parses
+this file with its docstrings stripped and fails if one appears.
 
 The instruments ARE named, and that is a different thing from naming a place. An
 instrument's name is a fact about this codebase that changes when an instrument

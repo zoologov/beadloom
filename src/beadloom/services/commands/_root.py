@@ -40,7 +40,7 @@ class TolerantOutputGroup(click.Group):
 #: docstring rather than written again here, and that is the fix rather than a
 #: tidiness: this docstring WAS a third hand-written copy of the product's
 #: one-line description, and BDL-062 `.4` corrected the two copies that
-#: `tests/test_package_description.py` compared while this one -- the most
+#: `tests/self_check/config/test_package_description.py` compared while this one -- the most
 #: visible of them -- shipped the 1.x sentence through both 3.0 patch releases
 #: (BDL-UX #211).
 #: A copy that cannot drift is better than a copy a check remembers to read.

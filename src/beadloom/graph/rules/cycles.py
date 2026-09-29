@@ -14,7 +14,8 @@ per-start traversal is kept identical to the original to preserve that rotation
 byte-for-byte. The win here is the O(1) GREY-membership test; output is
 preserved exactly — the same set of unique normalized cycles, the same
 representative rotation per cycle, the ``seen_cycles`` dedup, and ``max_depth``
-semantics — pinned by the golden-parity test (``tests/test_cycle_rule.py``).
+semantics — pinned by the golden-parity test
+(``tests/integration/graph/rules/test_cycle_rule.py``).
 
 This module also owns the edge-*liveness* SQL helpers (``active`` edges are the
 only live reality for structural checks — BDL-037 Principle 8), which the layer

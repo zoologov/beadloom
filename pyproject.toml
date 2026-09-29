@@ -272,15 +272,20 @@ fail_under = 80
 # from the pool.
 #
 # ONE DERIVED ENTRY WAS EXCLUDED, and the reason was the room rather than taste:
-# tests/test_bead15_s3b_coverage.py ran `sync-check` over the tree it is in, and
+# test_bead15_s3b_coverage.py, then at the top of tests/, ran `sync-check` over
+# the tree it is in, and
 # in `mutants/` that tree is a MUTATED copy — every mutated module has a different
 # hash, so the pairs are stale by construction and the test cannot pass there.
 # The 2026-09-04 derivation returned it a second time, through doc_shape.py; the
 # other 42 new entries were run in a room with no `.git` and reported 1 failed,
 # 971 passed, 17 skipped -- the one failure being this file. BDL-074 A3 moved its
 # tree-reading checks to tests/self_check/, and E1 split the synthetic rest by
-# node: the two rule-engine parts and the freshness-skip part are in the pool
-# above, and nothing of the file is excluded any more.
+# node and deleted the file: the two rule-engine parts
+# (tests/integration/graph/rules/test_an_uncovered_module_fails_strict_lint_at_error_severity.py,
+# tests/integration/graph/rules/test_a_directory_source_covers_its_whole_subtree.py)
+# and the freshness-skip part
+# (tests/unit/doc_sync/engine/test_a_freshness_skip_needs_a_missing_baseline.py)
+# are in the pool below, and nothing of the file is excluded any more.
 #
 # A SECOND ENTRY IS EXCLUDED, found by running the derived pool in `mutants/`
 # rather than by reasoning about it: tests/test_bead18_s5_relation.py reads

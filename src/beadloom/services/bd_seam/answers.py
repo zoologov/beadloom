@@ -35,7 +35,7 @@ without a pipe. Both notice forms were measured rather than quoted:
 ``Showing 50 issues; more results matched…`` from ``bd list`` on this
 repository's tracker, and ``Showing 100 of 120 ready issues.`` from ``bd ready``
 on a rig grown past the cap with ``bd create --graph``. If a later bd stops
-narrowing either answer, ``tests/test_bd_call_sites.py`` compares
+narrowing either answer, ``tests/unit/services/bd_seam/test_bd_call_sites.py`` compares
 :data:`~beadloom.services.bd_seam.assumptions.BD_MEASURED_VERSION` against the
 ``bd`` on PATH and fails, so this guards nothing loudly rather than quietly.
 """

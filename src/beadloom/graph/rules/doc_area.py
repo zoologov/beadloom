@@ -37,7 +37,7 @@ How the two sides of a pair are reduced to one comparable segment:
   the largest area and the root settles one level below where the areas start;
   every pair is then compared on the wrong segment. Measured by swapping the
   descent for a ``0.60`` majority: 5 of the 21 tests in
-  ``tests/test_doc_area_coherence.py`` fail, among them the rule's founding
+  ``tests/integration/graph/rules/test_doc_area_coherence.py`` fail, among them the rule's founding
   ``test_a_node_documented_outside_its_area_is_named``. Support answers *is
   there one shared way down*; a majority answers *which way down is most
   popular*, and only the first question has a root for its answer.

@@ -291,9 +291,10 @@ jobs:
   #
   # WHAT THIS DECISION DOES NOT UNDO, because it was never about the runner: the
   # six guard tests that carried `skipif(sys.platform == "win32")` are gated on
-  # a MEASURED symlink capability (tests/symlink_capability.py) and run on any
-  # runner that holds it, and tests/test_windows_dimension.py fails the suite if
-  # a platform skip is ever re-added unjudged. Both hold with or without a leg.
+  # a MEASURED symlink capability (tests/support/symlink_capability.py) and run
+  # on any runner that holds it, and the ledger in
+  # tests/unit/application/guards/test_windows_dimension.py fails the suite if a
+  # platform skip is ever re-added unjudged. Both hold with or without a leg.
   #
   # RE-ADDING IT LATER: the job, its anti-vacuity probe — a Windows runner that
   # cannot create a symbolic link would capability-skip exactly the rows the leg
@@ -403,16 +404,19 @@ jobs:
         run: goose --version
 
       # S5 (BDL-052): cache the built index DB keyed on a hash of everything that
-      # feeds it (the graph YAML + all source + all docs). On a hit the index is
-      # already current for this exact tree, so the reindex below is skipped; any
-      # graph/src/docs change rotates the key → miss → a full reindex runs.
+      # feeds it (the graph YAML + all source + all docs + all tests + the
+      # .beadloom/*.yml config). On a hit the index is already current for this
+      # exact tree, so the reindex below is skipped; any change to one of those
+      # rotates the key → miss → a full reindex runs. tests/ and .beadloom/*.yml
+      # joined the key in BDL-074: reindex reads the test-file tables and the
+      # binding from tests/, and the tests.* roots and patterns from the config.
       - name: Cache the Beadloom index
         if: env.AI_TW_SKIP != '1'
         id: index-cache
         uses: actions/cache@v4
         with:
           path: .beadloom/beadloom.db
-          key: beadloom-index-${{ hashFiles('.beadloom/_graph/**', 'src/**', 'docs/**') }}
+          key: beadloom-index-${{ hashFiles('.beadloom/_graph/**', 'src/**', 'docs/**', 'tests/**', '.beadloom/*.yml') }}
 
       # Rebuild the index so sync-check sees current code↔doc state — skipped on
       # a cache hit (the cached DB already matches this tree's hash).

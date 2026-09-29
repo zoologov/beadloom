@@ -36,7 +36,7 @@ under-evaluation an ERROR from the rule itself, which is a verdict change the
 release states and an adopter reads in its notes. The advisory exists to be
 legible before that, not to be a permanent silence.
 
-The neutrality differential in ``tests/the_lint_path_before_release_a.py`` keeps
+The neutrality differential in ``tests/support/the_lint_path_before_release_a.py`` keeps
 a list of the same two types of its own. That duplication is deliberate: it is
 an oracle, and an oracle that imports the value it checks cannot catch the value
 being wrong.

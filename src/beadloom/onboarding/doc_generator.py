@@ -128,7 +128,7 @@ def _beadloom_description() -> str:
     """Beadloom's own one-line description, from the package docstring.
 
     The package docstring is one of the two copies
-    ``tests/test_package_description.py`` holds to the manifest, so reading it
+    ``tests/self_check/config/test_package_description.py`` holds to the manifest, so reading it
     here puts the scaffold inside that check rather than beside it.
     """
     from beadloom import __doc__ as package_description

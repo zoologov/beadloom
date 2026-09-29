@@ -146,7 +146,7 @@ docs_audit:
     # already exists. Measured 2026-09-14 with cli.md:821 put back to 4.0.0
     # under a 6.0.0 manifest: `beadloom docs audit` exited 0 with "No stale
     # mentions found" and 17 verified mentions where it had 18, and
-    # `tests/test_version_surface.py`, test
+    # `tests/self_check/config/test_version_surface.py`, test
     # `test_each_of_the_nine_is_found_with_its_checker[docs/services/cli.md-...]`,
     # failed, because no line of cli.md stated the current version under the
     # `docs-audit` checker any more. That test catches the regression only

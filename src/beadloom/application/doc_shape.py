@@ -84,7 +84,7 @@ def planning_document_globs(project_root: Path) -> tuple[str, ...]:
 
     Configurable from the start, because the flow ships to projects with their
     own conventions and a hardcoded path would make the check true only here —
-    the defect ``tests/adopter_project.py`` exists to catch.
+    the defect ``tests/support/adopter_project.py`` exists to catch.
     """
     import yaml
 

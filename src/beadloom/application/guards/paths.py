@@ -112,7 +112,7 @@ class PathFlavour:
     exercised for a platform this project has no runner for: ``beadloom-mr2l.64``
     withdrew the ``tests-windows`` leg on a measured cost, and a rule that can
     only be reasoned about there is how the refusal this bead repairs survived
-    for a release. It is the same technique ``tests/room_simulation.py`` applies
+    for a release. It is the same technique ``tests/support/room_simulation.py`` applies
     to a CI leg — the platform is a substitutable input, so its answer is
     measured on the machine at hand instead of predicted.
 

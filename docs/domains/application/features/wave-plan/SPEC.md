@@ -386,10 +386,10 @@ reach all of it.** Measured in the same slice by `beadloom-0mdo.59`: three beads
 whose code scopes are disjoint shared four artifacts —
 `.claude/development/docs/features/BDL-068/ACTIVE.md`,
 `docs/services/components/cli-commands/DOC.md`,
-`tests/test_a_kind_and_root_disagreement_is_reported.py` and `.beadloom/_graph/services.yml`
-(one file per node since `beadloom-0mdo.80`).
-Two of those are not documents: one is a test carrying hand-maintained population
-literals that any bead adding a node has to bump, and the other is the graph this
+`test_bead77_kind_and_root_disagree.py` (then at the top of `tests/`) and
+`.beadloom/_graph/services.yml` (one file per node since `beadloom-0mdo.80`).
+Two of those are not documents: one was a test carrying hand-maintained population
+literals that any bead adding a node had to bump, and the other is the graph this
 plan derives its scopes FROM.
 
 **Why `graph-files` is a medium and not a serialisation either (BDL-UX #261,
@@ -437,12 +437,14 @@ the index. Nothing that was one pass became N. `graph-layout`
 shared write is still possible.
 
 **The two artifacts neither medium covers, and why each needs a different
-answer.** `tests/test_a_kind_and_root_disagreement_is_reported.py` carries hand-maintained
+answer.** `test_bead77_kind_and_root_disagree.py` carried hand-maintained
 population counts (`populations[SPACE_TO_BE] == 203`,
 `populations[SPACE_AS_IS] == 116`, `len(working_documents(REPO_ROOT)) == 58`)
-that any bead adding a node or a document has to bump — one derivable fact with
+that any bead adding a node or a document had to bump — one derivable fact with
 two homes, whose answer is to remove the copy, not to serialise around it. One
-writer per file does not apply: the file has one writer per bead already.
+writer per file did not apply: the file had one writer per bead already. BDL-068
+S6 removed the copy, and the relation that replaced the three counts is in
+`tests/self_check/docs/test_every_document_of_this_repository_is_in_one_space.py`.
 `docs/services/components/cli-commands/DOC.md` is not the ancestor-document case
 #261 guessed at, and the measurement says so: node `cli-commands` owns
 `src/beadloom/services/commands/` — both `setup.py`, which `beadloom-0mdo.59`
