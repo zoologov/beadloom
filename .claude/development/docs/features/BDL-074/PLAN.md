@@ -80,9 +80,12 @@ nine green checks.
 | W6 | `beadloom-2mj3.14` | docs: the pairs the review fixes made stale (added 2026-09-28) | P1 | G1–G4 | Done |
 | G5 | `beadloom-2mj3.15` | review fix: every convention of the retired mapper, proven against main (added 2026-09-28) | P1 | R (2nd run) | Done |
 | W7 | `beadloom-2mj3.16` | docs: the pairs G5 made stale (added 2026-09-28) | P1 | G5 | Done |
-| R | `beadloom-b9ll` | review — 1st and 2nd runs CHANGES REQUIRED; 3rd run after G5, W7 | P1 | T, F1–F3, W5, G1–G5, W6, W7 | Pending |
-| W | `beadloom-7u77` | tech-writer | P2 | R | Pending |
-| V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | Pending |
+| G6 | `beadloom-2mj3.17` | review fix: a top-level __tests__/ is a default root (added 2026-09-28) | P1 | R (3rd run) | Done |
+| W8 | `beadloom-2mj3.18` | docs: the pairs G6 made stale (added 2026-09-28) | P1 | G6 | Done |
+| R | `beadloom-b9ll` | review — runs 1–3 CHANGES REQUIRED; 4th run OK with minors | P1 | T, F1–F3, W5, G1–G6, W6–W8 | Done |
+| G7 | `beadloom-2mj3.19` | review fix: Rich markup escaped (added 2026-09-29) | P1 | R | Done |
+| W | `beadloom-7u77` | tech-writer | P2 | R, G7 | Done |
+| V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | In progress |
 
 > **Status is as of 2026-09-28 and is copied from the tracker by hand.** The tracker (`bd list --all --parent beadloom-2mj3`) and ACTIVE.md, which a pre-commit hook reconciles from it, are authoritative; this column is not. Rows B4, W1–W3 and the edges from B4 were added during the run and are recorded in ACTIVE.md and CONTEXT.md.
 

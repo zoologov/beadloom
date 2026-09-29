@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 18 — `beadloom-2mj3.19` (the debt report escapes Rich markup, review m-4-1), then W `beadloom-7u77`, V `beadloom-paze`, PR 3.
-**Goal:** the last review minor fixed; the docs the change made false corrected and the testing guide written.
-**Done when:** `beadloom-2mj3.19` closed; W and V closed; PR 3 green on the nine checks.
+**Bead:** V `beadloom-paze` — the per-change job, the weekly sample and the ai-techwriter cache on PR 3's CI. PR 3 open.
+**Goal:** the CI jobs measured on a real pull request; the nine required checks green.
+**Done when:** V records the per-change job's time and population, the cache miss, and 9/9; the owner agrees to merge.
+
+**Wave 18 closed (2026-09-29):** `beadloom-2mj3.19` `22190efd`, `067df32a` — Rich markup escaped in the debt report, and the same bug fixed in `why` (edges printed `----`), `diff`, `docs audit` and the `init` wizard; TUI filed as `beadloom-uvgy`. W `beadloom-7u77` `ab029338`, `8e61f069` — 12 stale → 0; missing test paths named in docs/ 143 of 276 → 6 of 292 (six adopter examples); `docs/guides/testing.md`; the declared surface re-recorded 493 → 519. V local part `0a59e935` — the ai-techwriter cache key hashes `tests/**` and `.beadloom/*.yml`; old test paths outside docs/ 17 → 0. Owner ruled `sync-check` and `version-surface` (docstring-only edits) into the axes. Suite on the tree: 11 589 passed, 0 failed; `beadloom ci` rc 0 with 0 scope warnings.
 
 **Wave 17 (2026-09-29): review fourth run OK with minors** (`beadloom-b9ll` closed) — 0 major, 2 minor, 1 nit; every earlier finding resolved or left open on purpose. m-4-1 (Rich drops `[jt]` from the Jest defaults in `status --debt-report`; a `[/x]` pattern crashes it) → `beadloom-2mj3.19`; m-4-2 (the PRD's NG1 sentence omitted `__tests__/`) corrected by the coordinator. Suite on the tree: 13 643 passed, 0 failed. Filed outside the epic: `beadloom-qhxr` (the review release gate keys on the first run's verdict).
 
@@ -52,7 +54,7 @@
 - [x] Beads created: epic `beadloom-2mj3` + 16, one plan, 20 edges confirmed against the titles; swarm valid, 11 waves
 - [x] Phase A — isolation and the self-check triage (PR 1 opened 2026-09-27)
 - [x] Phase B — layout (PR 2 opened 2026-09-28)
-- [ ] Phases C, D, E — binding, rules, per-change mutation, pilot, standards (PR 3)
+- [x] Phases C, D, E — binding, rules, per-change mutation, pilot, standards (PR 3 opened 2026-09-29)
 
 ## Results
 
@@ -94,7 +96,7 @@
 | `beadloom-75pl` | T test | ✓ done | PRD criteria on the tree (a8663b8a): met 10, not met 4, not measurable 2; not met: 3a (101 self-check files neither bound nor exempted), 6 (216 of 227 clear-node files in their node folder), 7 (execution half unchecked, 3 never-executed tags unresolved), 8a (36 marked self-checks + 7 scenarios outside the three outcomes; 66 folder files read the live tree); not measurable: 4a per-change on the runner (locally 394 s, V), 9b third PR; tracer 0 contacts outside self-checks (parent + 395 children); ctx rule-engine 740 tests in 36 files; pilot 886 tests, 96.0%, kill rate from E1 + 60/60 spot check; self-checks 682 / 173.9 s / 26.9%. Gate owner wave 9: 11 198 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0 |
 | `beadloom-b9ll` | R review | ✓ done | review |
 | `beadloom-7u77` | W tech-writer | ✓ done | 12 stale pairs → 0 (11 by edit, cli-commands attested by pair); test paths under `docs/` that do not exist 143 of 276 → 6 of 292 (all illustrative adopter paths); the no-root clause re-quoted in 8 places; 16 moved-path mentions outside `docs/` listed on the bead, not edited; README pair 12 → 15 authoring keys; `architecture.md` test tables; new `docs/guides/testing.md`, linked from both READMEs and Getting Started; 9 watched docs re-attested, declared surface re-recorded 493 → 519 pairs (+28 from 14 new modules, −2 from `test_mapper.py`); `ab029338`. On the tree: sync-check rc 0 at the fixpoint, docs audit 0 stale, docs quality rc 0, lint --strict rc 0, `tests/self_check/docs` 70 passed, `-m self_check` 709 passed, `beadloom ci` rc 0 |
-| `beadloom-paze` | V verify | ready | the jobs on CI |
+| `beadloom-paze` | V verify | in progress | the jobs on CI |
 
 ## Notes
 
