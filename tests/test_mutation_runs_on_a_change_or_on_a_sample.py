@@ -476,3 +476,34 @@ class TestASampledScoreIsHeldToItsFloorByItsInterval:
     ) -> None:
         code, output = self._run(tmp_path, 172, 28)
         assert code == 1, output
+
+
+class TestTheSampleOptionNamesItsPopulation:
+    """``--sample-of N`` takes the size of the POPULATION the sample was drawn from.
+
+    The sample's own size is read from the counters, and the weekly job passes
+    ``$POPULATION`` (`beadloom-uk2e.2`). A help that calls ``N`` the sample size
+    tells a reader to pass 150 where the run needs 6992, and the report then
+    names a sample of 150 of 150 mutants: the whole scope, which it is not.
+    """
+
+    @staticmethod
+    def _option_help() -> str:
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        result = CliRunner().invoke(main, ["mutation", "--help"], terminal_width=200)
+        assert result.exit_code == 0, result.output
+        flat = " ".join(result.output.split())
+        start = flat.index("--sample-of")
+        end = flat.index(" --", start + len("--sample-of"))
+        return flat[start:end]
+
+    def test_the_help_names_the_population_the_sample_was_drawn_from(self) -> None:
+        text = self._option_help()
+        assert "population" in text, text
+
+    def test_the_help_does_not_call_the_number_the_sample_size(self) -> None:
+        text = self._option_help()
+        assert "sample of this many" not in text, text

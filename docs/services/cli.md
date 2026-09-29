@@ -2067,11 +2067,12 @@ is how a slice with no tests scores 100%.
 - `--survivors FILE` — a JSON list of `{path, mutant}` objects, printed as `Survivors: N over
   K node(s)` and one line per node, each file placed under the node that owns it. An empty
   list prints `Survivors: none`. It reads the index.
-- `--sample-of N` — the counters are a random sample of `N` mutants. Prints `Sample: a random
-  sample of S of N mutants; 95% interval L% to H% (Wilson)`. With `--min-score` the floor is
-  missed only when the WHOLE interval lies under it: a sample of 150 from a scope at 0.89
-  reads under 0.88 about a third of the time, and a floor that fails on that is a coin.
-  Requires `--stats`.
+- `--sample-of N` — the counters are a random sample drawn from a population of `N` mutants.
+  `N` is the population, not the sample: the sample's size `S` is what the counters scored.
+  Prints `Sample: a random sample of S of N mutants; 95% interval L% to H% (Wilson)`. With
+  `--min-score` the floor is missed only when the WHOLE interval lies under it: a sample of
+  150 from a scope at 0.89 reads under 0.88 about a third of the time, and a floor that fails
+  on that is a coin. Requires `--stats`.
 - `--json` — the same facts as the human report: `declared`, `not_judged`, `covered`,
   `tool`, `room`, `score`, `counters`, `missing_counters`, `min_score`, `below_floor` and
   `findings`, plus `change`, `survivors_by_node` and `sample`, each `null` when its option
