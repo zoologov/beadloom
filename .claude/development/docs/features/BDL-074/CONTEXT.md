@@ -1,6 +1,6 @@
 # CONTEXT: BDL-074 — Tests that belong to the graph
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-28
 > **Last updated:** 2026-09-28
 
@@ -101,4 +101,5 @@ the rule engine in full; every other file with a clear node relocated.
 
 ## Current Phase
 
-Development — PRD, RFC, CONTEXT and PLAN approved (2026-09-28); beads created from the approved PLAN.
+Done (2026-09-29). Three PRs merged: #83 (phase A, `4890f28c`), #84 (phase B, `7cbc1874`), #86 (phases C–E
+and every review fix, `45a3c2fc`). The follow-ups this work filed are in ACTIVE.md's Outcome.

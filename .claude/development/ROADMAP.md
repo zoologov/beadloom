@@ -36,6 +36,9 @@
 | **v4.0.0** (09-10) | **MAJOR.** BDL-068, six slices, 86 beads: the flow's rules became instruments. `impact` / `axes` / `scope-check` answer a change's blast radius from the source; `mutation`, `rooms`, `typed-surface`, `bd-calls`, `clean-room`, `issue-number` each replace a convention with a measurement; `waves --parent` derives wave membership from the tracker. Breaking: a sixth guard verdict `unresolved` that warns and permits where `error` blocked, `guard --liveness --json` as an object, and the firing record no longer storing command lines — 1 927 of 1 999 firings held one. Every check now names the boundary of its own knowledge: what it did not run, whose finding it is, and the population it did not reach. |
 | **v5.0.0** (09-13) | **MAJOR.** BDL-069 and BDL-070 Release A, published from `release/5.0.0` at `d6eaee60` and never `main`'s version. `architecture-layers` states how many live `depends_on` edges it judged, and changes none of its verdicts. Four checks that reported over an empty, partial or unnamed population were fixed, and two of those fixes move a verdict: a virgin `init` project passes `beadloom ci`, and a misdeclared `issue_log:` blocks. Breaking: `issue-number check --json` widens `declared` to `bool \| null`. Verified on the wheel downloaded from PyPI (sha256 `08085970bb2dbb8c…`, publish run 34784341146): the release harness exited 0, `lint --strict` returned 0, and a `layer_populations` entry carries eight keys. |
 | **v6.0.0** (09-13) | **MAJOR.** BDL-070 Release B, published from `main` at `058ef59e`, the squash merge of PR #75. `architecture-layers` decides on the population 5.0.0 reported: an end takes its layer through `part_of`, so verdicts change on a graph nobody edited. Over this repository's carried-forward index the rule judges 357 of 365 edges, where it judged 16. Breaking: that verdict change, and a `layer_populations` entry that loses three JSON keys and one porcelain field. Verified on the wheel downloaded from PyPI (sha256 `09668b53e0b60b6d…`, publish run 34788772241): the release harness exited 0, `lint --strict` returned 1 on a violation visible only through an inherited layer, and a `layer_populations` entry carries five keys. |
+| **BDL-072** (09-19) | the nightly mutation job scored 0 of 7187 mutants for nine nights: four guards derived their scan root from their own `__file__` and read mutmut's mutated copy. `tests/package_under_test.py` now resolves the package and declines mutmut's injected definitions. PR #78, closed out in #80. No version bump |
+| **BDL-073** (09-27) | the mutation duty: five gaps in `graph/rules` closed by tests each seen red against its mutant; the rule loader's twelve-branch dispatch became one table and `init` parses the rules once; two mutmut children. The runner still killed the whole-scope nightly, so the owner retired it the same day (BDL-UX #303, `beadloom-5isv` superseded). PR #81, closed out in #82. No version bump |
+| **BDL-074** (09-29) | **tests that belong to the graph.** Every test runs in an empty directory under a contact guard, and self-checks read a session snapshot: live-index contacts 98 → 0, the shared-index flake `beadloom-qq6m` closed. Unit and integration tests mirror the code, acceptance tests live one folder per node, and shared helpers live in `tests/support`. A test binds to a node by the mirror, by sitting beside the code, or through `tests:`, never by a guess; 23 of the retired mapper's 32 conventions are proven no worse than main, and 9 are ruled out as PRD non-goals. Four suite rules state their populations. The rule-engine pilot went from 765 to 886 tests and from 79.3% to 82.0% kill rate. The nightly is replaced by `mutation-per-change` on every PR and a weekly sample of 150; the first sample scored 82.0% [75.1, 87.3], under the 0.88 floor, issue #85. Four review runs; BDL-UX #304 records why. PRs #83, #84, #86, closed out in #87. No version bump; adopters see the change in the next release (roles, population wording, `tests.*` config) |
 
 ---
 
@@ -269,6 +272,46 @@ this item, not a separate observation.
 
 ## What is being worked on now
 
+### P1 — three lessons of BDL-074 belong in the shipped flow, not in one agent's memory
+
+**Not yet a bead. Needs `/task-init`.** Owner decision 2026-09-29, after BDL-074 closed. Every rule
+below is stack-neutral, and every one reaches an adopter only if it is in the shipped templates
+(`src/beadloom/onboarding/templates/…`, then `beadloom setup-agentic-flow`). Today it lives in the
+coordinator's personal memory, which is visible to no other project and no other agent.
+
+**Measured on BDL-074.** The review of `beadloom-b9ll` took four runs. Three of them found the same
+adopter regression: tests laid out differently from ours read "worse than main" after the old
+name-guessing mapper was replaced. It was found one ecosystem at a time: Go, then JVM/Swift, then
+Jest's `__tests__/`, then a top-level `__tests__/`. The class closed only when `beadloom-2mj3.15`
+enumerated the retired mapper's 32 conventions from its source and proved each against main's
+measured output. One of the three findings was the coordinator's own: its question to the owner
+named two of the three places an agent had reported, so the owner ruled on less than was found. And
+the first review's withheld-accounts protocol was defeated by the coordinator's launch prompt, which
+carried its own observations (BDL-UX #304).
+
+**The three rules, and where each belongs:**
+
+1. **Before replacing a component, enumerate what it did.** When a change replaces a component, the
+   RFC carries a *Replaced behaviour* section. It lists everything the old component recognised or
+   produced, derived from its source rather than from recollection. For each row it names the test
+   that proves the new component no worse, or the owner ruling that drops it. This goes in the RFC
+   template (`/templates`) and in the explore role's deliverable. An RFC that says it replaces
+   something and has no such section is a `docs quality` finding, the way `missing_sections` already
+   reports a section missing that its peers carry. This rule is the one that can be checked.
+2. **A question to the owner carries every option the agent found.** This belongs in `/coordinator`,
+   because the coordinator is the one who relays. It stays prose: a question is not an artifact any
+   check can read.
+3. **A withheld-accounts review gets a clean launch prompt.** In `/coordinator`, the prompt lists only
+   the documents the reviewer may read and adds no observation of the coordinator's own. In the
+   `review` role, the reviewer reports whether its prompt carried such an observation; the BDL-074
+   reviewers already did this unasked. Declare both halves as a duty (`beadloom:duty` markers, as for
+   `landing-lock` and `clean-room`), so that `config-check` stops on a role that loses it. The prompt
+   itself stays uninspected, and the check says so: "the coordinator's launch prompt — not inspected".
+
+**Done when** the three rules are in the shipped core and compose into every adopter's roles, and
+an RFC that replaces a component without a *Replaced behaviour* section is reported. BDL-074 then
+reads as the first work item those rules would have shortened, not the last one they describe.
+
 ### P1 — four populations are called "stale docs", and one indicator shows two of them
 
 **`beadloom-r9t5` · its own work item · not started — the next step is `/task-init`.**
@@ -398,7 +441,14 @@ editing, no check prints a remediation that cannot clear the reason it printed, 
 carrying a duplicate `ref_id` is reported rather than silently reduced.
 
 
-### P1 — the mutation duty shipped, and its nightly has been scoring nothing since it shipped
+### P1 — the mutation duty shipped, and its nightly has been scoring nothing since it shipped — FIXED by BDL-072, then SUPERSEDED by BDL-074
+
+**State on `main`, 2026-09-29.** BDL-072 fixed the guard, and the run then reached verdicts. The
+runner still killed the whole-scope nightly at 93–262 min, and nobody identified what killed it.
+BDL-073 retired the nightly. BDL-074 replaced it with `mutation-per-change` on every pull request
+and a weekly sample of 150. The first sample completed in 25 min and scored 82.0% [75.1, 87.3],
+under the 0.88 floor. The owner kept the floor: issue #85 stays open, and `beadloom-inmv` holds the
+survivors outside the rule engine. The text below is kept as the record of why the item was ranked.
 
 **`beadloom-ey4m` (BDL-UX #289) · found 2026-09-12 while verifying `main` after BDL-069 landed.**
 

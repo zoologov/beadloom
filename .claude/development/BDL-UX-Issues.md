@@ -35,6 +35,26 @@
 
 ## Open Issues
 
+304. [2026-09-29] [HIGH] a replacement for a heuristic was proven "no worse than main" one ecosystem at a time, so the review found the same regression three times
+
+    **Severity:** high (an adopter whose tests sat in a layout the old name-guessing mapper read would, on
+    upgrade, see `ctx` report 0 tests and the debt report count every covered node untested — a false
+    score, not a missing feature)
+    **Command:** `beadloom reindex`, `beadloom ctx`, `beadloom status --debt-report`
+    **Context:** BDL-074 replaced `test_mapper`'s guesses with a declared binding (the mirror, beside the
+    code, `tests:`). Each fix proved "no worse than main" on the layouts it had in front of it.
+    **Issue:** the review found the regression for Go (run 1), then Java/Kotlin/Swift (after an owner
+    question), then Jest's `__tests__/` (run 2), then a top-level `__tests__/` (run 3 — the coordinator's
+    question to the owner had omitted one of three places the agent named). Each was real; each was found
+    by sampling.
+    **Expected:** when a component that *guessed* is replaced by one that *declares*, first enumerate
+    everything the old one recognised — from its source, not from memory — and prove each row against the
+    old one's measured output. `beadloom-2mj3.15` did exactly that (32 conventions: 23 proven no worse, 9
+    ruled out as guessing, NG2–NG4 in the PRD) and closed the class; it should have been the first step.
+    **Also:** a question put to the owner must carry every option the agent named, or the owner rules on
+    less than was found.
+    **Tracker:** `beadloom-2mj3` (closed). Fixed in BDL-074 (`beadloom-2mj3.11`, `.13`, `.15`, `.17`).
+
 303. [2026-09-19] [HIGH] the nightly mutation job is killed by its runner at 93-100 minutes, so the declared scope has had no aggregate score since 2026-09-09 even now that the run works
 
     **Severity:** high (the guard defect BDL-UX #289 records is fixed and the chain is proven, but the duty this project declares — an aggregate mutation score over fifteen declared targets, held against two floors — has still never been measured on the runner that is supposed to hold it, and nothing in the pipeline says that out loud)
@@ -66,6 +86,12 @@
     sampler — is recorded on `beadloom-5isv` and deliberately not run. Side finding, external: mutmut
     3.7.0's timeout thread catches only `ProcessLookupError`, so a `PermissionError` on Linux would stop
     wall-clock timeouts silently.
+
+    **AMENDED 2026-09-29 — the duty restated, and now measured.** BDL-074 D1 replaced the whole-scope
+    nightly with `mutation-per-change` on pull requests and a weekly `mutation-sample` of 150. The first
+    weekly sample on CI completed in 25 min and scored 82.0% [75.1, 87.3] under the 0.88 floor, which the
+    owner kept (issue #85 open; `beadloom-inmv`). On PR #86 the per-change job ran 1578 mutants in 632 s
+    and, after 213 survivors were killed and 45 recorded equivalent, scored 97.1%.
 
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
@@ -145,6 +171,9 @@
     **Tracker:** `beadloom-jorg`. (Written empty at first, and repaired — see the empty-holder entry above.)
     **Folded 2026-09-14 into `beadloom-qq6m`** by owner decision, with #293: one bead for the suite's shared live index. `beadloom-jorg` is closed with a pointer, and its description remains this entry's specification.
     **Related:** #293 — the same shared live index under a full run, with a different symptom (file corruption, 18 failures) and a different mechanism, and itself contradicted by later runs. This entry is evidence for that family, not a duplicate of it.
+
+    **AMENDED 2026-09-29 — see #293's amendment:** the guard's read now goes to the snapshot, not the live
+    index (BDL-074 A2/A3).
 
 297. [2026-09-13] [MEDIUM] `beadloom review-brief --release` keeps withholding when the verdict lives on a separate review bead, and `bd show` defeats the withholding anyway
 
@@ -314,6 +343,13 @@
     reported passed. Two things this adds: the family has a second symptom, so a triage that matches
     only `malformed` misses it; and the CLI told the reader `index cannot be read (disk I/O error) —
     it predates the current schema. Run beadloom reindex`, naming a schema cause for an I/O failure.
+
+    **AMENDED 2026-09-29 — the cause removed by BDL-074 (`beadloom-qq6m` closed).** Every test now starts
+    in an empty temporary directory and a contact guard fails any test that opens this repository's live
+    index, tracker or history; the self-checks read a session snapshot instead. A tracer over parent and
+    child processes found 0 live-index contacts (98 before). The `--cov` legs of PRs #83, #84 and #86 ran
+    green with it. Kept open here only until the next few weeks of PRs confirm it; close on the first
+    month without a `malformed` or `disk I/O error` signature.
 
 292. [2026-09-12] [LOW] the TUI lint panel branches on a severity the rule vocabulary does not contain, so its warning count is always zero
 
