@@ -275,11 +275,15 @@ graph TD
 
 ## Beads
 
-| ID | Name | Priority | Depends On | Status |
-|----|------|----------|------------|--------|
-| BEAD-01 | [Name] | P0 | - | Pending |
-| BEAD-02 | [Name] | P0 | 01 | Pending |
-| BEAD-03 | [Name] | P1 | 01 | Pending |
+Status lives in ACTIVE.md, reconciled from the tracker by the pre-commit active-sync, so this
+table names the plan and carries no status. The Tracker cell holds `-` until the beads are
+created, and then the id the tracker answered.
+
+| ID | Tracker | Name | Priority | Depends On |
+|----|---------|------|----------|------------|
+| BEAD-01 | - | [Name] | P0 | - |
+| BEAD-02 | - | [Name] | P0 | 01 |
+| BEAD-03 | - | [Name] | P1 | 01 |
 
 ## Bead Details
 

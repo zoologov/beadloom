@@ -157,6 +157,9 @@ Draft  →  Approved  →  Done
      wave. Confirm the result with `bd dep tree <parent-id>`. The bulk `--file` form of
      the same command prints `✓ Added 2 dependencies` and no titles at all, so it buys
      speed by discarding the check; wire by key inside the plan instead.
+   - Fill each bead's `Tracker` cell in PLAN.md with the id the tracker answered. The PLAN
+     table carries no status: the bead's state lives in ACTIVE.md, which the pre-commit
+     active-sync reconciles from the tracker.
 7. **Immediately proceed to Step 4** (no additional approval needed)
 
 **Process gate:** Do NOT create beads before PLAN is Approved. If PLAN is rejected or modified, no stale beads to clean up.
