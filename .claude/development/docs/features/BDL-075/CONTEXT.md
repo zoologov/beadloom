@@ -1,6 +1,6 @@
 # CONTEXT: BDL-075 — Release 7.0.0 with the documentation current
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-29
 > **Last updated:** 2026-09-29
 
@@ -95,6 +95,5 @@ the RFC's Axes. The audits are in the coordinator's scratchpad: `audit_readme.md
 
 ## Current Phase
 
-- **Phase:** Development, publish pending. The release series is on `features/BDL-075`, reviewed OK
-  with minors on its second run (`beadloom-bz48`); P (`beadloom-vgst`) is next.
-- **Blockers:** none.
+Done (2026-09-29). 7.0.0 is on PyPI, published from `main` at `e02c347e` (PR #88) and verified on
+the downloaded wheel. The close-out is in ACTIVE.md's Outcome.
