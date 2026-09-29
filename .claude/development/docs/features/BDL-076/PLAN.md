@@ -16,7 +16,10 @@ the project, our own site through the same path, and fixtures for every claimed 
 
 ```mermaid
 graph TD
-    A0[A0 our site under beadloom] --> A1[A1 data file v2]
+    J1[J1 relative JS/TS imports] --> J2[J2 no false edges from a foreign scan path]
+    J3[J3 .vue parsed] --> A0[A0 step 2: our site under beadloom]
+    J2 --> A0
+    A0 --> A1[A1 data file v2]
     A0 --> A2[A2 viewer core]
     A1 --> A3[A3 selection modes + card]
     A2[A2 viewer core] --> A3
@@ -38,10 +41,11 @@ graph TD
     W2 --> P2[P2 owner looks, PR 2]
 ```
 
-**Critical path:** A0 → A2 → A3 → A5 → T1 → R1 → W1 → P1 → B1 → B3 → T2 → R2 → W2 → P2
+**Critical path:** J1 → J2 → A0 → A2 → A3 → A5 → T1 → R1 → W1 → P1 → B1 → B3 → T2 → R2 → W2 → P2
 
 **Waves:**
-0. A0
+-1. J1 ∥ J3 (import_resolver against code_indexer; disjoint files), then J2 (the same resolver as J1)
+0. A0 step 2
 1. A1 ∥ A2 (Python against JS; disjoint files)
 2. A3 ∥ A4
 3. A5
@@ -58,6 +62,9 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 
 | ID | Tracker | Name | Priority | Depends On |
 |---|---|---|---|---|
+| J1 | `beadloom-hjr1` | dev: relative JS/TS imports resolve to the files and nodes they name (owner, 2026-09-30) | P0 | A0 step 1 |
+| J2 | `beadloom-g9fb` | dev: a non-Python scan path adds no false `depends_on` edges (owner, 2026-09-30) | P0 | J1 |
+| J3 | `beadloom-tmxa` | dev: `.vue` script blocks parsed with line offsets; `export const` and `import()` read (owner, 2026-09-30) | P0 | A0 step 1 |
 | A0 | `beadloom-kcwz` | dev: this repository's site under beadloom — is `.vue` read; the viewer's nodes, docs and bound tests | P0 | - |
 | A1 | `beadloom-o2ua` | dev: the data file v2 — node card fields, edge kinds, layers, a `url` for every kind | P0 | A0 |
 | A2 | `beadloom-iehv` | dev: the viewer core — navigation, colours, edges, filters, URL state, toolbar, full screen, panel | P0 | A0 |
@@ -77,6 +84,18 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 | P2 | `beadloom-la3t` | coordinator: the owner's browser look, PR 2 | P0 | W2 |
 
 ## Bead Details
+
+### J1, J2, J3: beadloom reads JS/TS/Vue honestly (owner, 2026-09-30)
+
+The scope is in the RFC's approach ("First: …"). Every bead is test-first, on fixtures that are not
+this repository: a TS package with relative imports, a Vue app, and a mixed Python + JS repository.
+J1 and J3 run in parallel. J2 follows J1, because both edit `import_resolver.py`.
+
+**Done when:**
+- on the fixtures, `why` finds the dependents a relative import names;
+- `.vue` symbols appear in `ctx` with their correct lines;
+- a mixed repository's edge count equals the edges its imports name;
+- this repository's Python graph is unchanged (379 `depends_on` edges before and after).
 
 ### A0: our site under beadloom (owner, 2026-09-30)
 

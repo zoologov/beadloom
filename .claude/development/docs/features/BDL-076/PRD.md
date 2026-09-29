@@ -107,7 +107,25 @@ when copied it names our project.
 
   They run in CI, first as a non-required job, over this repository and over adopter fixtures.
 
-## Delivery
+## Amendment (owner, 2026-09-30, after A0's measurement)
+
+A0 measured that beadloom cannot see this repository's own viewer, and that the same gaps reach
+every JS/TS adopter:
+- `.vue` single-file components are hashed and never parsed (`beadloom-tmxa`);
+- relative JS/TS imports are never resolved, so a JS/TS project gets no dependency edges between
+  its own files (`beadloom-hjr1`);
+- a non-Python scan path turns unresolvable Python imports into false `depends_on` edges
+  (`beadloom-g9fb`).
+
+The owner folded all three into this epic, **before the viewer work**. Two reasons: the viewer
+would show an adopter's JS/TS graph as unconnected nodes, and our own site cannot come under the
+graph without them. Added goal:
+
+- [ ] **beadloom reads JS/TS/Vue honestly.** Relative imports resolve to the files they name.
+      `.vue` script blocks are parsed with their line offsets. A non-Python scan path adds no edge
+      that no import names. This is proven on a Vue/TS fixture and on this repository's site, which
+      then comes under the one graph (A0 step 2).
+
 
 Two slices, each its own pull request:
 

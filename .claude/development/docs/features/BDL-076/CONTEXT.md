@@ -98,6 +98,7 @@ it.
 | 2026-09-30 | Two slices: the viewer for the team, then the portal for adopters | Owner. |
 | 2026-09-30 | An impact mode, by the graph, in slice 1; code-level impact deferred to `beadloom-ikj6` | Owner. |
 | 2026-09-30 | This repository's site comes under its own beadloom first (A0): one graph, the viewer's nodes, docs and bound tests; `.vue` support measured first | Owner: the viewer is today a blind spot of the tool, and our own JS is the honest first test of the JS/TS claim. |
+| 2026-09-30 | The three JS/TS/Vue fixes (`beadloom-hjr1`, `beadloom-g9fb`, `beadloom-tmxa`) join BDL-076 before the viewer work | Owner, after A0 step 1: an adopter's JS/TS graph would show as unconnected nodes, and our site cannot join the graph without them. |
 | 2026-09-30 | Keep VitePress and Cytoscape | RFC: every defect was measured as configuration. |
 
 ## Related Files

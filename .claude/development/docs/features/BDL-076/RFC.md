@@ -75,6 +75,8 @@ and apply to every row of that node across the sections.
 | callers | ai-techwriter | `ai_techwriter/runner.py:110` | 2 | no | Reads the architecture view for its own prompt; the keys it reads are kept. |
 | co-writers | agent-prime, doc-generator, doc-sync, graph-layout, reindex, graph-loader, cli-commands (`index_ops`) | YAML writers reached through the shared sink | none | no | Blast radius of the YAML sink, not of the viewer. |
 | callers | agentic-flow-setup, ai-techwriter-setup, role-adapters, tui | callers of the shared writer | 4 (`tui/styles/*.tcss`) | no | Same sink; the TUI stylesheets are unrelated. |
+| — (A0 measurement) | import-resolver | `graph/import_resolver.py:153-155` (relative imports skipped), `:737-765` (walk-up to a scan path) | none | **yes** | Owner, 2026-09-30: `beadloom-hjr1`, `beadloom-g9fb` — the viewer's graph for a JS/TS adopter depends on it. |
+| — (A0 measurement) | code-indexer | `context_oracle/code_indexer.py:246-264` (no `.vue` parser); `application/reindex/models.py:69` | none | **yes** | Owner, 2026-09-30: `beadloom-tmxa` — extract `<script>`/`<script setup>` with its line offset and feed the existing JS/TS parser. |
 | — (not derived) | debt-report | `debt_report/scoring.py:53` `compute_top_offenders`, `models.py:79` `NodeDebt` | none | **yes (read only)** | The card's debt comes from here. The generator reads it; the debt report does not change. |
 | — (not derived) | — | `.github/workflows/ci.yml` (`site-build`), `deploy-site.yml` | — | **yes** | A browser-test job; slice 2's deploy through `docs site`. |
 | — (not derived) | — | `pyproject.toml` packaging | — | **yes (slice 2)** | The scaffold ships as package data. |
@@ -82,6 +84,21 @@ and apply to every row of that node across the sections.
 ## Proposed Solution
 
 ### Approach
+
+**First: beadloom reads JS/TS/Vue honestly (owner, 2026-09-30).**
+- *Relative imports (`beadloom-hjr1`).* In `import_resolver`, a relative JS/TS specifier (`./x`,
+  `../y/z`) is resolved against the importing file's directory. Extension and index resolution
+  (`.js`, `.ts`, `.jsx`, `.tsx`, `.vue`, `.mjs`, `/index.*`) is applied, and the result is mapped to
+  the node whose `source:` most specifically covers that file, by the same rule ownership uses.
+  An import that resolves to no file is reported as unresolved, not dropped silently.
+- *The walk-up (`beadloom-g9fb`).* A Python import that cannot be resolved is never prefixed with
+  a scan path of another language, and the walk-up stops at the scan path's own root. A test with a
+  mixed Python + JS repository asserts that the edge count equals the edges the imports name.
+- *`.vue` (`beadloom-tmxa`).* The indexer extracts `<script>` and `<script setup>` blocks, choosing
+  `lang="ts"` or JS, and parses them with the existing tree-sitter JS/TS parser. Symbol lines are
+  offset to their place in the `.vue` file. The template and style are not indexed. `export const`
+  and dynamic `import()` in JS/TS are read too.
+- *A0 step 2* then brings `site/.vitepress/theme` into the graph, split into nodes.
 
 **The shared core (`GraphViewer.vue` plus composables)**
 

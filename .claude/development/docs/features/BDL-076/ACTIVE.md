@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** PAUSED by the owner on 2026-09-30, after A0's exploration. A0 `beadloom-kcwz` stays in progress: step 1 (the measurement) is done, step 2 (the graph split) waits for the owner's decision below.
-**Goal:** the viewer stops being a blind spot of the tool before the work on it starts.
-**Done when:** the owner decides how A0 proceeds; then A0 step 2, then A1 ∥ A2.
+**Bead:** Wave −1 — `beadloom-hjr1` (J1, relative JS/TS imports) ∥ `beadloom-tmxa` (J3, `.vue` parsed); then `beadloom-g9fb` (J2, no false edges; same resolver as J1). Then A0 step 2 (`beadloom-kcwz`).
+**Goal:** beadloom reads JS/TS/Vue honestly, so that the viewer has a truthful graph for a JS/TS adopter and our site can join the graph.
+**Done when:** on non-repository fixtures, `why` sees relative-import dependents, `.vue` symbols appear in `ctx` at their lines, and a mixed repository's edge count equals what its imports name; this repository's Python graph is unchanged.
+
+**Resumed 2026-09-30:** the owner folded the three fixes into BDL-076 before the viewer work (PRD amendment, RFC axes rows `import-resolver` and `code-indexer`, PLAN J1–J3).
 
 **A0 step 1 — measured (2026-09-30, beadloom 7.0.0, the `languages` extra, a `git archive` copy and a separate Vue fixture; details on `beadloom-kcwz`):**
 - **`.vue` is not read.** All 10 theme components and the fixture give 0 symbols and 0 imports, `<script setup>` included. `.vue` is a code extension (`application/reindex/models.py:69`) with no parser (`context_oracle/code_indexer.py:246-264`), so it is only hashed. A probe that fed the extracted script blocks to the existing JS parser found 39 functions and 14 package imports: the parser works, and extracting the block is what is missing → `beadloom-tmxa`.
@@ -38,7 +40,10 @@
 | Bead | Role | Status | Details |
 |---|---|---|---|
 | `beadloom-ujzb` | epic | ready | BDL-076 parent |
-| `beadloom-kcwz` | A0 dev | in progress | our site under beadloom; `.vue` measured first |
+| `beadloom-hjr1` | J1 dev | ready | relative JS/TS imports resolve |
+| `beadloom-g9fb` | J2 dev | blocked | no false edges from a foreign scan path |
+| `beadloom-tmxa` | J3 dev | ready | `.vue` parsed; `export const`, `import()` |
+| `beadloom-kcwz` | A0 dev | blocked | our site under beadloom; `.vue` measured first |
 | `beadloom-o2ua` | A1 dev | blocked | the data file v2 |
 | `beadloom-iehv` | A2 dev | blocked | the viewer core |
 | `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |
