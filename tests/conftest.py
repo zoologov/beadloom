@@ -62,8 +62,9 @@ _SESSION_CONTACTS: list[tuple[str, str, str, bool]] = []
 #: The ``self_check`` marker: set on every test under ``tests/self_check/`` and on
 #: every test that reads the self-check snapshot, by
 #: :func:`pytest_collection_modifyitems`, never by hand — one fact, stated once.
-#: The one exception is a parametrize row whose twin is a product test of the
-#: shipped template: that row carries the mark in its ``pytest.param`` (BDL-074 A3).
+#: BDL-074 A3 left one exception: a live row of a live/template parametrization,
+#: marked in its ``pytest.param``. F3 moved those rows under ``tests/self_check/``,
+#: so no test is marked by hand.
 _SELF_CHECK_FIXTURE = "self_check_snapshot"
 _SELF_CHECK_DIR = TESTS_ROOT / "self_check"
 _SELF_CHECK_MARKER = (

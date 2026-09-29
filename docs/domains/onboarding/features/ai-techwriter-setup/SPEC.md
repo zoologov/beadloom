@@ -41,5 +41,5 @@ Module `src/beadloom/onboarding/ai_techwriter_setup.py`:
 
 ## Testing
 
-Tests: `tests/test_cli_setup_ai_techwriter.py`,
-`tests/test_ai_techwriter_cli.py`
+Tests: `tests/integration/onboarding/ai_techwriter_setup/test_cli_setup_ai_techwriter.py`,
+`tests/integration/ai_agents/ai_techwriter/test_ai_techwriter_cli.py`

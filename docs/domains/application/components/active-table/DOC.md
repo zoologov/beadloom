@@ -304,16 +304,15 @@ no-op contract.
 
 ## Testing
 
-The pure core is covered by `tests/test_active_table.py` and
-`tests/test_active_table_hardening.py` (table primitives, the `bd`-status map,
-and the reconcile core's drift / no-op / byte-preservation cases);
-`tests/test_active_table_id_forms.py` covers the two forms of an id, and
-`tests/test_active_reconcile.py` plus
-`tests/acceptance/features/active_reconcile.feature` cover the decoration a
-document wraps an id in, the five unresolved shapes, the unlisted beads and the
-staging decision; `tests/test_active_row_named_beads.py` covers the split between
-a bead no row names and a bead a row names and this run could not read. The
-`active-sync` command's check / fix / no-op paths are covered by
-`tests/test_cli_active_sync.py` and `tests/test_cli_active_sync_hardening.py`,
-the pre-commit hook wiring by `tests/test_cli_hooks.py`, and the re-exported S4
-updater by `tests/test_mcp_process_tools.py`.
+The pure core is covered by `tests/integration/application/active_table/test_active_table.py` and
+`tests/integration/application/active_table/test_active_table_hardening.py` (table primitives, the
+`bd`-status map, and the reconcile core's drift / no-op / byte-preservation cases);
+`tests/integration/application/active_table/test_active_table_id_forms.py` covers the two forms of
+an id, and `tests/unit/application/active_table/test_active_reconcile.py` plus
+`tests/acceptance/application/active-table/active_reconcile.feature` cover the decoration a document
+wraps an id in, the five unresolved shapes, the unlisted beads and the staging decision;
+`tests/integration/application/active_table/test_active_row_named_beads.py` covers the split between
+a bead no row names and a bead a row names and this run could not read. The `active-sync` command's
+check / fix / no-op paths are covered by `tests/test_cli_active_sync.py` and
+`tests/test_cli_active_sync_hardening.py`, the pre-commit hook wiring by `tests/test_cli_hooks.py`,
+and the re-exported S4 updater by `tests/integration/services/mcp_server/test_mcp_process_tools.py`.

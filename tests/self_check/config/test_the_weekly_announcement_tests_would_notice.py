@@ -57,7 +57,7 @@ class Break:
     spelling: type[Exception]
 
 
-#: The five edits, each on a line the announcement's behaviour rests on. `old`
+#: The nine edits, each on a line the announcement's behaviour rests on. `old`
 #: is required to occur EXACTLY once, so an edit that silently matched nothing —
 #: which would make every assertion below pass over an unchanged workflow — is a
 #: failure of this file rather than a pass of the suite.
@@ -108,6 +108,45 @@ BREAKS: tuple[Break, ...] = (
         case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
         "test_a_judged_run_closes_the_issue_the_outage_opened",
         notices="a stale watch issue would stay open and get muted",
+        spelling=AssertionError,
+    ),
+    Break(
+        name="a verdict under the floor is announced as no verdict",
+        old='if [ "$VERDICT" = "judged" ] && [ "$FLOOR" = "under" ]; then',
+        new="if false; then",
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_a_failed_job_that_judged_its_sample_is_a_verdict_under_the_floor",
+        notices="a judged sample under its floor would be titled 'no verdict' again (review M1)",
+        spelling=AssertionError,
+    ),
+    Break(
+        name="the under-floor issue loses its score and interval",
+        old="'```text' \"$report\" '```' \\",
+        new="'```text' '```' \\",
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_a_failed_job_that_judged_its_sample_is_a_verdict_under_the_floor",
+        notices="the issue would say the floor was missed without the score that missed it",
+        spelling=AssertionError,
+    ),
+    Break(
+        name="an open issue keeps the title of another state",
+        old='gh issue edit "$number" -R "$REPO" --title "$title"',
+        new='gh issue view "$number" -R "$REPO"',
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_an_open_issue_is_retitled_to_the_state_of_the_week",
+        notices="issue #85 would keep saying 'no verdict' over a verdict under the floor",
+        spelling=StopIteration,
+    ),
+    Break(
+        name="a recovered floor closes its issue in the words of the other state",
+        old=(
+            "This week's sample's interval reaches its floor, "
+            "so its score is no longer shown to be under it."
+        ),
+        new="This week's job judged its sample again.",
+        case="TestTheAnnouncementTakesTheBranchTheRunCallsFor::"
+        "test_a_run_back_over_its_floor_closes_the_under_floor_issue_saying_so",
+        notices="a sample judged every week would be said to have 'reached a verdict again'",
         spelling=AssertionError,
     ),
 )
@@ -242,8 +281,8 @@ class TestTheAnnouncementsTestsGoRedWhenItIsBroken:
 
     def test_the_population_of_breaks_is_not_empty(self) -> None:
         """A parametrisation that collected nothing reports no tests and no red."""
-        assert len(BREAKS) >= 5
-        assert len(CASES) >= 4
+        assert len(BREAKS) >= 9
+        assert len(CASES) >= 7
         assert all(hasattr(announcement, item.case.partition("::")[0]) for item in BREAKS)
 
 

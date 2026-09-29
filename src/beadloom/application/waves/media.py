@@ -71,14 +71,16 @@ injective, so the reason fires exactly when two beads declare the same node —
 which ``conflict_between`` already reports as ``shared_node``. It was noise on a
 single-file graph and it is redundant on a split one, and there is no layout
 between the two where it is neither. Measured in
-``tests/test_the_graph_is_one_file_per_node.py``,
+``tests/self_check/architecture/test_the_graph_is_one_file_per_node.py``,
 ``TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful``.
 
 **And the population is still wider than these seven.** Two of `beadloom-0mdo.59`'s
 four artifacts are answered here and two are not.
-``tests/test_bead77_kind_and_root_disagree.py`` carries hand-maintained
-population literals any node-adding bead must bump: one derivable fact with two
-homes, whose answer is to remove the copy rather than to serialise around it.
+``test_bead77_kind_and_root_disagree.py`` carried hand-maintained population
+literals any node-adding bead had to bump: one derivable fact with two homes,
+whose answer is to remove the copy rather than to serialise around it. BDL-068
+S6 removed them, and the relation that replaced them is in
+``tests/self_check/docs/test_every_document_of_this_repository_is_in_one_space.py``.
 ``docs/services/components/cli-commands/DOC.md`` is owned by node
 ``cli-commands``, whose source covers both colliding beads' files and which
 neither declared — so ``shared_node`` would have fired had either declared it,

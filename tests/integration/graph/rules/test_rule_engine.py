@@ -571,6 +571,25 @@ class TestEvaluateRequireRules:
         assert v.rule_type == "require"
         assert v.from_ref_id == "users-svc"
 
+    def test_a_finding_carries_the_description_of_its_rule(
+        self, db_with_data: sqlite3.Connection
+    ) -> None:
+        """The description is what a reader is told the rule is FOR; the finding keeps it."""
+        # Arrange
+        rule = RequireRule(
+            name="svc-needs-domain",
+            description="Every service must be part of a domain",
+            for_matcher=NodeMatcher(kind="service"),
+            has_edge_to=NodeMatcher(kind="domain"),
+            edge_kind="part_of",
+        )
+
+        # Act
+        violations = evaluate_require_rules(db_with_data, [rule])
+
+        # Assert
+        assert [v.rule_description for v in violations] == [rule.description]
+
     def test_no_violation_edge_exists(self, db_with_data: sqlite3.Connection) -> None:
         """Service with correct edge does not trigger violation."""
         # Add edge for users-svc too
@@ -2449,6 +2468,41 @@ class TestEvaluateCardinalityRules:
         assert len(violations) == 1
         assert violations[0].from_ref_id == "auth"
         assert "3 files" in violations[0].message
+
+    def test_a_max_files_finding_carries_the_description_of_its_rule(
+        self, cardinality_db: sqlite3.Connection
+    ) -> None:
+        # Arrange
+        rule = CardinalityRule(
+            name="file-limit",
+            description="Max 2 files",
+            for_matcher=NodeMatcher(kind="domain"),
+            max_files=2,
+        )
+
+        # Act
+        violations = evaluate_cardinality_rules(cardinality_db, [rule])
+
+        # Assert
+        assert [v.rule_description for v in violations] == ["Max 2 files"]
+
+    def test_a_check_for_one_ref_id_judges_that_node_alone(
+        self, cardinality_db: sqlite3.Connection
+    ) -> None:
+        """``for: {ref_id: auth}`` selects auth by its id, and nothing else."""
+        # Arrange
+        rule = CardinalityRule(
+            name="auth-sym-limit",
+            description="auth stays under 3 symbols",
+            for_matcher=NodeMatcher(ref_id="auth"),
+            max_symbols=3,
+        )
+
+        # Act
+        violations = evaluate_cardinality_rules(cardinality_db, [rule])
+
+        # Assert
+        assert [v.from_ref_id for v in violations] == ["auth"]
 
     def test_min_doc_coverage_not_met(self, cardinality_db: sqlite3.Connection) -> None:
         rules = [

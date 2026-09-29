@@ -116,8 +116,9 @@ also four paths in five, and the count beside the verdict is the only thing that
 
 ## Tests
 
-- `tests/acceptance/features/declared_axes.feature` — the scenarios.
-- `tests/acceptance/features/commit_gate_verdict.feature` — what the gate says it compared.
+- `tests/acceptance/doc-sync/scope-check/declared_axes.feature` — the scenarios.
+- `tests/acceptance/doc-sync/scope-check/commit_gate_verdict.feature` — what the gate says it
+  compared.
 - `tests/test_a_commit_is_judged_against_the_declared_axes.py` — the cases.
 - `tests/test_the_commit_gate_states_what_it_compared.py` — the exempt set, kept executable
   over the commits the decision was taken on.

@@ -7,10 +7,15 @@ make — and this script is where those answers meet mutmut 3.7, as it is:
 
 ``select``
     Write the per-run ``pytest_add_cli_args_test_selection`` into
-    ``pyproject.toml`` — the tests bound to the changed nodes, plus the old
-    pool's files the binding places under no node: the FALLBACK, which shrinks
-    as tests are laid out and is empty once every file is placed — then prepare
-    the mutants and take the EXACT names of the changed functions' mutants from
+    ``pyproject.toml``, each kind of test file chosen by what it is (BDL-074 G1):
+    the files the binding ties to the changed nodes; the acceptance step files
+    whose loaded scenarios carry a changed node's ``@node:`` tag; and the pool's
+    UNPLACED files — the FALLBACK, for files outside every kind folder that may
+    exercise the node while the binding cannot say. Self-checks are never chosen:
+    they test this repository's files, not the changed code. The fallback shrinks
+    as unplaced files are laid out and is empty once none is left in the pool
+    (59 of the 167 unplaced files were in it on 2026-09-28, measured). Then prepare the
+    mutants and take the EXACT names of the changed functions' mutants from
     ``mutants/*.meta`` (a glob ending ``__mutmut_*`` makes mutmut's clean run
     fall back to the whole selection, BDL-073).
 ``sample``
@@ -121,16 +126,22 @@ class PickedNames:
     counts: tuple[tuple[str, str, int], ...]
 
 
+#: The recorded kind of a self-check file in the plan's ``other_kinds`` counts.
+_SELF_CHECK_KIND = "self_check"
+
+
 @dataclass(frozen=True)
 class ChosenTests:
     """The tests a per-change run is given, and where each part came from."""
 
     bound: tuple[str, ...]
+    acceptance: tuple[str, ...]
     fallback: tuple[str, ...]
+    unplaced: int
 
     @property
     def files(self) -> tuple[str, ...]:
-        return tuple(sorted({*self.bound, *self.fallback}))
+        return tuple(sorted({*self.bound, *self.acceptance, *self.fallback}))
 
 
 @dataclass(frozen=True)
@@ -189,18 +200,33 @@ def names_for_functions(
 
 
 def tests_for_change(plan: Mapping[str, object], pool: Sequence[str]) -> ChosenTests:
-    """The bound tests of the changed nodes, plus the pool's files bound to no node."""
-    bound = sorted(
-        {
-            str(test)
-            for node in _json_list(plan.get("nodes"))
-            if isinstance(node, dict)
-            for test in _json_list(node.get("bound_tests"))
-        }
+    """The changed nodes' bound and tag-selected tests, plus the pool's unplaced files."""
+    nodes = [node for node in _json_list(plan.get("nodes")) if isinstance(node, dict)]
+    bound = {str(test) for node in nodes for test in _json_list(node.get("bound_tests"))}
+    acceptance = {
+        str(test) for node in nodes for test in _json_list(node.get("acceptance_tests"))
+    } - bound
+    unplaced = {str(test) for test in _json_list(plan.get("unplaced_tests"))}
+    fallback = {test for test in pool if test in unplaced} - bound - acceptance
+    return ChosenTests(
+        bound=tuple(sorted(bound)),
+        acceptance=tuple(sorted(acceptance)),
+        fallback=tuple(sorted(fallback)),
+        unplaced=len(unplaced),
     )
-    unbound = {str(test) for test in _json_list(plan.get("unbound_tests"))}
-    fallback = sorted(test for test in pool if test in unbound)
-    return ChosenTests(bound=tuple(bound), fallback=tuple(fallback))
+
+
+def describe_tests(chosen: ChosenTests, plan: Mapping[str, object]) -> str:
+    """The population line: every kind chosen, and the self-checks left out."""
+    kinds = plan.get("other_kinds")
+    self_checks = kinds.get(_SELF_CHECK_KIND, 0) if isinstance(kinds, dict) else 0
+    return (
+        f"Tests: {len(chosen.files)} file(s) — {len(chosen.bound)} bound to the changed "
+        f"node(s), {len(chosen.acceptance)} acceptance step file(s) by the @node tags of "
+        f"their scenarios, {len(chosen.fallback)} of {chosen.unplaced} unplaced file(s) "
+        f"from the pool as the FALLBACK; {self_checks} self-check file(s) excluded, "
+        f"because they test this repository's files rather than the changed code"
+    )
 
 
 def _json_list(value: object) -> list[object]:
@@ -371,16 +397,13 @@ def _select(args: argparse.Namespace) -> int:
     if not chosen.files:
         _say(
             "Refused: no test to run the change's mutants against — the binding ties "
-            "no test to the changed nodes and no pool file is left unbound. An empty "
-            "selection would run the whole suite, which does not fit mutants/."
+            "no test to the changed nodes, no scenario names them, and no pool file "
+            "is left unplaced. An empty selection would run the whole suite, which "
+            "does not fit mutants/."
         )
         return 1
     pyproject.write_text(with_selection(text, chosen.files), encoding="utf-8")
-    _say(
-        f"Tests: {len(chosen.files)} file(s) — {len(chosen.bound)} bound to the changed "
-        f"node(s), {len(chosen.fallback)} from the pool as the FALLBACK for files the "
-        f"binding places under no node"
-    )
+    _say(describe_tests(chosen, plan))
     picked = names_for_functions(plan["functions"], read_metas(prepare_mutants(root)))
     for path, function, count in picked.counts:
         _say(f"  {function} ({path}): {count} mutant(s)")

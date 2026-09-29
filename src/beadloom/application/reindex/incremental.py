@@ -297,6 +297,7 @@ def incremental_reindex(
     tests = index_test_files(project_root, conn, code_files=code_paths(current_files))
     result.test_files_indexed = tests.total
     result.test_files_unplaced = tests.unplaced
+    result.warnings.extend(tests.warnings)
 
     # Update meta.
     now = datetime.now(tz=timezone.utc).isoformat()

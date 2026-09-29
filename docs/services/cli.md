@@ -151,7 +151,7 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
-On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node, and how many are `unplaced` — not yet under `tests/unit/` or `tests/integration/` — plus the `unowned` and "bound by other means" (acceptance, self-check) counts when non-zero. On this repository, measured 2026-09-27: `Tests:   462 files (0 bound to a node, 392 unplaced, 70 bound by other means)`. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28 at `909a0098`: `Tests:   620 files (275 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
@@ -168,17 +168,27 @@ beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] 
 Outputs Markdown by default. `--json` for machine-readable format.
 
 The Markdown `Tests:` line counts the test files BOUND to the node by the
-[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). When any of the
-project's test files is unplaced — not under `tests/unit/` or `tests/integration/`, so bound
-to no node — one more line follows it (BDL-074 C2), so a count of 0 does not read as
-"nobody tested this":
+[test binding](../domains/context-oracle/features/test-mapping/SPEC.md). Its framework is
+named from the patterns the node's bound files matched (`pytest`, `go_test`, `jest`, `junit`,
+`xctest`). When any of the project's test files is unplaced — reached by no mirror, no place
+beside the code and no `tests:` declaration, so bound to no node — one more line follows it
+(BDL-074 C2), so a count of 0 does not read as "nobody tested this". The folders it names
+are those of the test layout the index recorded (BDL-074 G2), and `, nor inside a node's
+source` follows them when tests beside the code are read. A last line follows every time
+(`beadloom-2mj3.15`): which paths a test file is read under, the patterns of each framework
+group and the roots, because a file outside every root, test tree and node source is not read
+at all and a count of bound files is a count of the files those patterns matched. On this
+repository, measured on 2026-09-28 at `909a0098`:
 
 ```
-Tests: pytest, 0 tests in 0 files (low coverage)
-  U of N test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+Tests: pytest, 100 tests in 10 files (high coverage)
+  167 of 620 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
+  A test file is read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests
 ```
 
-`--json` carries the same counts as `test_placements`, test files by placement.
+`--json` carries the same counts as `test_placements`, test files by placement, the
+sentence itself as `test_unplaced` (`null` when no file is unplaced) and the last line's
+clause as `test_recognition` (`null` for an index with no recorded test layout).
 
 The bundle carries an **Intent (TO-BE)** section: the epics whose planning
 documents declared this node, with the document and line to read the reason at.
@@ -268,7 +278,14 @@ The debt score formula combines four categories:
   unplaced file binds to no node and a node with no bound test may still be tested by it
   (BDL-074 C2). The Rich report prints the reason under Test Gaps, and `--json` carries it as
   `test_population`: either what the count was taken over or `not counted: ...` with the
-  unplaced share.
+  unplaced share. Whenever the index recorded a test layout, the population ends with what a
+  test file is read by (BDL-074 G2; every time since `beadloom-2mj3.15`): under the default
+  layout `a test file is read when its path matches a pattern of go_test (*_test.go), jest
+  (...), junit (...), pytest (test_*.py, *_test.py) or xctest (...) under ...`, where each
+  `(...)` names that group's patterns and `...` names the roots and test trees that exist,
+  followed by `or beside a node's code`. With none of them, and tests beside the code read,
+  the clause ends `and it lies beside a node's code, since none of the roots tests, test,
+  spec, __tests__ exists` (`beadloom-2mj3.17`, reworded by `beadloom-2mj3.19`).
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 
@@ -720,7 +737,7 @@ The clause is printed at FULL reach as well as partial, because a population is 
 
 **A deny rule can only check a file it can place.** An import's source end is attributed to a node by annotation OR by ownership — the same most-specific-`source` rule that derives the `depends_on` edges — so a file with no annotation, or one written where the extractor could not read it, is no longer invisible to every deny rule (measured before the fix on this repository: 22 of 128 import-source files, BDL-061.50). What still belongs to no node is counted rather than skipped: `Files: N scanned, M imports resolved, K attributable to no node` on the rich header, `summary.files_unattributed` in `--format json`, and the same clause on the no-violations summary line. The clause is absent when K is zero. A deny rule that never saw a file did not clear it.
 
-**A rule that cannot check anything reports itself.** All 12 authoring keys the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding. A partial inertness is `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — while a rule that could check NONE of its population reports at the severity the project declared, because at that point a pass and a no-op are the same output (BDL-062 `.9`; `doc_area_coherence` only, so far — BDL-UX #197). Either way it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up one warning per rule. Two rule types state their own diagnosis instead of the generic one, because a generic "cannot fire" cannot name which glob or which leg did it: `forbid_import` reports from the import scan it already runs, and `scenario_coverage` reports per leg. `scenario_coverage` is still COUNTED in `summary.rules_inert` — the report and the count are two questions, and one predicate answers both so they cannot disagree (BDL-061.66).
+**A rule that cannot check anything reports itself.** All 15 authoring keys the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding. A partial inertness is `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — while a rule that could check NONE of its population reports at the severity the project declared, because at that point a pass and a no-op are the same output (BDL-062 `.9`; `doc_area_coherence` only, so far — BDL-UX #197). Either way it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up one warning per rule. Two rule types state their own diagnosis instead of the generic one, because a generic "cannot fire" cannot name which glob or which leg did it: `forbid_import` reports from the import scan it already runs, and `scenario_coverage` reports per leg. `scenario_coverage` is still COUNTED in `summary.rules_inert` — the report and the count are two questions, and one predicate answers both so they cannot disagree (BDL-061.66). The three suite rules of BDL-074 C3 (`test_binding`, `test_import_boundary`, `scenario_binding`) report their own liveness per leg in the same way, are counted through the same kind of shared predicate, and add one `suite_population` finding (`warn`, an advisory `--fail-on-warn` does not exit on) on every run, stating how much of the suite each judged.
 
 **Behaviour bound to an executable claim (BDL-061 S4).** `lint` also evaluates the
 `scenario_coverage` rule: a behaviour-bearing node with no scenario, a scenario naming no bead,
@@ -2032,7 +2049,16 @@ is how a slice with no tests scores 100%.
   edits count and untracked files do not. The report states its POPULATION: the files
   changed, those inside the declared scope, the functions touched there (a top-level
   function or `Class.method`), the node owning each, the test files the binding ties to that
-  node, and how many test files the binding places under no node. Changed lines outside any
+  node whatever placement bound them, the acceptance step files whose loaded scenarios carry
+  that node's `@node:` tag (BDL-074 G1, printed as `, N acceptance step file(s) by tag` on the
+  node's line), and the test files bound to no node stated by why (BDL-074 F1): the unplaced
+  count `ctx` and the debt report state, over the folders of the test layout the index
+  recorded (`beadloom-2mj3.15`), then the unowned files, then each other kind by its
+  count. That `Binding:` line is printed only when some test file is bound to no node, and
+  `--json` carries the counts as the change's `test_placements` and `other_kinds`, each node's
+  `acceptance_tests`, and the `unplaced_tests` list the runner falls back to. `unplaced_tests`
+  replaced `unbound_tests` in BDL-074 G1: it holds the `unplaced` files only, never a
+  self-check or an acceptance step file. Changed lines outside any
   function are counted, and a file that is not parseable Python is named as not read. With
   `--stats` the run is taken to cover the changed files, `--target` is not needed, and the
   declared targets print as `Judged by this run: the functions above — a change covers
@@ -2058,17 +2084,21 @@ invocation cannot be answered: `--stats` without `--target` or `--changed-since`
 `git` cannot read, a survivor list that is not one, `--sample-of` without `--stats`, a sample
 larger than its population, or no index for an option that reads it.
 
-**A change's population, and a sample's interval, measured on this tree** (2026-09-27,
-features/BDL-074 at `61f416cd`). The branch changes no function of the declared scope, so
-its population is empty and says so. The binding line is the state before the test files are
-laid out under nodes:
+**A change's population, and a sample's interval, measured on this tree** (2026-09-28,
+features/BDL-074 at `d8b1790d`). The branch changes 56 functions of the declared scope, all
+owned by `rule-engine`; the function list is elided below. A change that touches no function of
+the scope prints `Population: empty — the change touches no function of the declared scope, so
+there is nothing to mutate and no score` instead. The binding line states the unplaced count
+`ctx` states, and names the acceptance step files and self-checks beside it by their own count:
 
 ```
 $ beadloom mutation --changed-since main
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · locale utf-8
-Change since main: 371 file(s) changed, 0 of them in the declared scope
-Population: empty — the change touches no function of the declared scope, so there is nothing to mutate and no score
-Binding: 554 of 554 test file(s) are placed under no node, so the tests bound to a node can be short of the tests that exercise it
+Change since main: 704 file(s) changed, 12 of them in the declared scope
+Population: 56 function(s) in 11 file(s) of the declared scope, over 1 node(s): rule-engine
+  rule-engine: _remediation_for, evaluate_all, … ; 36 test file(s) bound
+600 changed line(s) in the declared scope lie outside any function, where no mutant exists
+Binding: 170 of 597 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node; 72 acceptance step and 103 self-check file(s) bind to no node by their kind — so the tests bound to a node can be short of the tests that exercise it
 Declared scope: …
 Judged by this run: the functions above — a change covers functions, not declared targets
 No run was reported: the population above is what a runner is given.
@@ -2163,32 +2193,49 @@ jobs:
   target with `--sample-of`, the floor `0.88` held against the interval.
 - `announce` speaks for the sample, and is described below.
 
-**The workflow is disabled.** Its state is `disabled_manually` since 2026-09-27, so neither
-job runs on any event. Enabling it is the owner's decision, after the verification bead
-(`beadloom-paze`, open) has read one run of each job: `gh workflow enable mutation.yml`, then
+**The workflow is enabled.** The owner enabled it on 2026-09-28, after PR #84 merged, and
+dispatched one sample by hand (run 36373061140). It had been disabled through the API on
+2026-09-27 (state `disabled_manually`), and a disabled workflow runs neither job on any event.
+Reading one run of each job is the verification bead's work (`beadloom-paze`, open). Should
+the workflow be disabled again: `gh workflow enable mutation.yml`, then
 `gh workflow run mutation.yml` for one sample by hand.
 
 **Neither job is a required status check.** The sample is scheduled and produces no check-run
 on a pull request, so requiring its context would make `main` unmergeable. The per-change job
-does report on a pull request once the workflow is enabled, and it is still not required: a
-disabled workflow reports nothing, and its budget is not met.
+does report on a pull request, and it is still not required: a disabled workflow reports
+nothing, and its budget has not yet been measured on the runner.
 `tests/self_check/config/test_mutation_ci_job.py` fails if a job of this workflow becomes one
 of the contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names.
 
-**What a per-change run selects, and the fallback.** The tests a change is run against are the
-test files the binding ties to the changed nodes, PLUS the files of the coverage-derived pool
-in `pyproject.toml` that the binding places under no node. The second part is the fallback,
-and today it is the whole selection: when D1 landed, the binding bound none of the 464 files
-in the test index to a node, so every changed function runs against the whole pool of 202 files. It shrinks only as test
-files are laid out under the nodes they test, which is later BDL-074 work and has not landed.
+**What a per-change run selects, and the fallback.** The adapter
+(`.github/scripts/mutmut_adapter.py`) chooses each kind of test file by what it is
+(BDL-074 G1), from the population `--changed-since` states:
 
-**The per-change budget is 10 minutes on `ubuntu-latest`, and it is NOT met.** Measured on
-2026-09-27 on a one-function change to the rule engine (`liveness._cycle_reasons`; Darwin
-arm64, 10 cores, CPython 3.13.7, mutmut 3.7.0): selecting took 496 s, nearly all of it
-mutmut's stats pass over the 202-file pool, and the four exact mutants then ran in 37 s
-(3 killed, 1 survived). That is about 9 minutes locally and a projected ~15 on the runner at
-the 1.63 factor below, before install. The projection is not a runner measurement. The job
-prints its own time against the 600 s budget and warns when it is over; its
+- **bound** — the files the binding ties to the changed node;
+- **acceptance** — the step files whose loaded scenarios carry the node's `@node:` tag;
+- **fallback** — the files of the coverage-derived pool in `pyproject.toml` that are
+  `unplaced`, because they may exercise the node and the binding cannot say;
+- **excluded** — every self-check, because it tests this repository's files rather than the
+  changed code.
+
+The select step prints all four: `Tests: N file(s) - B bound, A acceptance step file(s) by the
+@node tags of their scenarios, F of U unplaced file(s) from the pool as the FALLBACK; S
+self-check file(s) excluded`. Only the fallback is a guess, and it empties as unplaced files
+are laid out. Measured on 2026-09-28 by `beadloom-2mj3.10` on a one-line change to
+`liveness._cycle_reasons` (rule-engine): 36 bound + 10 acceptance by tag + 60 fallback = 106
+files, 103 self-checks excluded. The selection it replaced took every pool file bound to no
+node: 36 bound + 134 fallback = 170 files, and when D1 landed the binding bound none of the 464 files
+in the test index, so the fallback was the whole pool of 202 files.
+
+**The per-change budget is 10 minutes on `ubuntu-latest`, and it has not been measured on the
+runner.** Its largest cost is mutmut's stats pass over the selection, so it moves with the
+selection. Measured locally on the same one-line change (Darwin arm64, 10 cores,
+CPython 3.13.7, mutmut 3.7.0, other agents' suites running on the machine): the select step took 180 s
+over the 106 files and 342 s over the 170. D1's first measurement was 496 s over the 202-file
+pool, after which the four exact mutants ran in 37 s (3 killed, 1 survived). At the 1.63
+runner factor below, 180 s projects to about 5 minutes on the runner before install. That is
+a projection, not a runner measurement: no pull request has run this job on the runner yet.
+The job prints its own time against the 600 s budget and warns when it is over; its
 `timeout-minutes: 30` is above the budget so that an over-budget run still ends with its
 numbers.
 
@@ -2207,14 +2254,27 @@ stated an interval of 30.0% to 90.3%. No sample has run on a runner yet.
 BDL-072 the workflow speaks outside the Actions tab.** Between 2026-09-10 and 2026-09-18 the
 retired nightly reached a verdict on 0 of 7 187 mutants nine nights in a row and nothing said
 so. 643 mutants entered the declared scope while it was dead. The job `announce` holds
-`issues: write` and opens ONE issue labelled `mutation-weekly`, titled `Mutation weekly
-sample: no verdict`, when a weekly sample produces no verdict or one under its floor. While
-that issue is open each further failed week adds a comment to it instead of a new issue, so
-the comment count is the length of the outage, and the first run that judges its sample
-comments and closes it. A pull request's run is not announced, because its red is on the pull
-request. The job reads two things rather than the job status alone, because a dead run can be
-green: `needs.mutation-sample.result` for the shape where a step exits non-zero, and the
-`verdict` output of the adapter's `judge` step for the shape where every step succeeds. `judge`
+`issues: write` and opens ONE issue labelled `mutation-weekly` when a weekly sample produces
+no verdict or one under its floor, and its title says which (BDL-074 G1):
+`Mutation weekly sample: no verdict` when the job ended before it judged and scored every
+mutant it drew, and `Mutation weekly sample: under its floor` when every drawn mutant was
+judged and the whole interval of the score lies below the floor. The under-floor body carries
+the score, the interval, the sample size and the survivors by node. Both states fail the job,
+so the job result cannot tell them apart: the score step names its floor verdict as the
+output `floor` (`held`, `under` or `unscored`) and hands on its whole report as `report`. While
+that issue is open each further failed week adds a comment to it instead of a new issue, and
+retitles it to that week's state, so the comment count is the length of the outage. The first
+run whose sample is judged and HOLDS its floor comments and closes it, with the comment worded
+by the state it ends. Held means the sample's interval reaches the floor, since the command
+fails only when the whole interval lies under it, so a held week can still show a score under
+the floor (84.0% [77.4, 88.9] holds 0.88). The close comment, the log line and the issue footer
+therefore say that the interval reaches the floor, never that the score is at or above it
+(`beadloom-2mj3.15`). A pull request's run is not announced, because its red is on the pull
+request. The job reads three things rather than the job status alone, because a dead run can
+be green and a judged run can be red: `needs.mutation-sample.result` for the shape where a step
+exits non-zero, the `verdict` output of the adapter's `judge` step for the shape where every
+step succeeds, and the score step's `floor` output to tell a verdict under the floor from no
+verdict. `judge`
 compares the counters with the names that were drawn: every drawn mutant must carry a verdict,
 or the run is silent and says how many never ran.
 
@@ -2224,13 +2284,18 @@ them is a scheduled run that never starts: GitHub disables a scheduled workflow 
 without repository activity, and a run that does not happen runs no job that could speak. The
 workflow header is the list, and this page does not keep a second copy of it.
 `tests/self_check/config/test_mutation_weekly_announcement.py` runs the announcement's shell
-over six run states against a stubbed `gh` that records the calls, and
-`tests/self_check/config/test_mutation_adapter.py` runs `judge` over its counter shapes. No
-test reaches `gh` itself. Two of its three paths were measured on GitHub by the nightly's last
+in twelve tests against a stubbed `gh` that records the calls, among them a failed job that
+judged its sample, which is titled `under its floor`, and the score step against a stubbed
+`uv`. `tests/self_check/config/test_mutation_adapter.py` runs `judge` over its counter shapes.
+No test reaches `gh` itself. Two of its three paths were measured on GitHub by the nightly's last
 two killed runs (`beadloom-e8m4`): the first opened issue #79, and the second commented on #79
 instead of opening another. The close path — a run that judges its scope — has never run,
-because no nightly ever scored. #79 was closed as not planned when the nightly was retired;
-under the new label the announcement has opened nothing yet.
+because no nightly ever scored. #79 was closed as not planned when the nightly was retired.
+Under the new label the announcement opened issue #85 on 2026-09-28, titled `Mutation weekly
+sample: no verdict` for a sample whose verdict was under its floor: that misnaming is what
+BDL-074 G1 corrected. The issue is still open under that title. The next failing run
+retitles it when its week's state differs, and the next run whose interval reaches its floor
+closes it.
 
 **The whole-scope nightly, BDL-068 S3.1 to 2026-09-27.** What follows is its record, in the
 past tense, because the floor, the runner factor and the sample size above were derived from
@@ -3126,4 +3191,29 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`. Two commands carry their command-level tests outside that naming, beside the application tests they render: `test_mutation_command.py` (with `test_mutation_score.py`, `test_mutation_phantom_gate.py`, `test_mutation_runner_scope.py` and `test_mutation_ci_job.py`) and `test_rooms_command.py` (with `test_verdict_room_derivation.py`, `test_verdict_room_census.py`, `test_verdict_room_population.py` and `test_gate_verdict_room.py`).
+CLI is tested via `click.testing.CliRunner`, and a command's tests are named
+`test_cli_<command>.py`. Where such a file tests one node it lives under that node's mirrored
+path (BDL-074): `test_cli_status.py`, `test_cli_diff.py`, `test_cli_why.py` and
+`test_cli_snapshot.py` under `tests/integration/infrastructure/console_streams/`, and
+`test_cli_docs.py` under `tests/integration/onboarding/doc_generator/`. The rest still sit at the
+top of `tests/`, unplaced, until their mixed contents are split by node: `test_cli_reindex.py`,
+`test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`,
+`test_cli_hooks.py`, `test_cli_link.py`, `test_cli_mcp.py`, `test_cli_watch.py`,
+`test_cli_lint.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`,
+`test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`,
+`test_cli_review_brief.py`. `init` is tested by the `tests/test_init_*.py` files.
+
+Two commands carry their command-level tests outside that naming, beside the application tests
+they render. `mutation`: `tests/test_mutation_command.py` and
+`tests/test_mutation_phantom_gate.py`, with
+`tests/integration/application/mutation_scope/test_mutation_score.py`; the workflow checks
+`test_mutation_runner_scope.py`, `test_mutation_ci_job.py` and the phantom-gate pins are
+self-checks under `tests/self_check/config/`. `rooms`:
+`tests/integration/application/rooms/test_rooms_command.py`, with
+`tests/integration/application/rooms/test_verdict_room_derivation.py`,
+`tests/unit/application/rooms/test_verdict_room_census.py`,
+`tests/test_verdict_room_population.py` and `tests/test_gate_verdict_room.py`; their checks
+against this repository's own CI legs are under `tests/self_check/config/`.
+
+`beadloom ctx <ref-id>` prints, on its `Tests:` line, the files bound to a node and how many of
+the project's test files are unplaced.

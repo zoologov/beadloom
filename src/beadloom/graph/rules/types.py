@@ -42,6 +42,12 @@ LIVE_EDGE_LIFECYCLES: frozenset[str] = frozenset({"active"})
 #: rule evaluation already runs).
 LIVENESS_RULE_TYPE = "rule_liveness"
 
+#: ``rule_type`` of the statement each suite rule (``test_binding``,
+#: ``test_import_boundary``, ``scenario_binding``) prints on every run: how much of
+#: the suite it judged and how much it could not. It decides nothing, so it is an
+#: advisory (:mod:`.advisories`) and ``--fail-on-warn`` does not exit on it.
+SUITE_POPULATION_RULE_TYPE = "suite_population"
+
 
 #: What each side of a ``forbid_import`` rule is matched against. Stated on every
 #: liveness finding because the mismatch it describes is invisible otherwise: a
@@ -112,6 +118,15 @@ class NodeMatcher:
         if self.kind is not None and self.kind != node_kind:
             return False
         return not (self.tag is not None and tags is not None and self.tag not in tags)
+
+    def describe(self) -> str:
+        """How the matcher reads in a finding, so an author can see what selected nothing."""
+        parts = [
+            f"{field}={value}"
+            for field, value in (("ref_id", self.ref_id), ("kind", self.kind), ("tag", self.tag))
+            if value is not None
+        ]
+        return ", ".join(parts) if parts else "everything"
 
 
 @dataclass(frozen=True)
@@ -483,6 +498,115 @@ class SummaryFactsRule:
     severity: str = "error"
 
 
+@dataclass(frozen=True)
+class ListedExemption:
+    """Named test files, feature files or nodes a suite rule excuses, why, and what retires them.
+
+    The counterpart of :class:`ImportExemption` for the rules that judge the test
+    suite (BDL-074 C3), and required the same way: ``reason`` and ``until`` are
+    mandatory, because an exclusion with neither is how a gate is switched off
+    without saying so (BDL-061 CONTEXT).
+
+    It LISTS its entries rather than holding one glob, so each entry is judged on
+    its own: an entry that excuses nothing is reported by name. That per-entry
+    report is the exit condition firing — a test file listed as not yet split is
+    reported the run after it moves to its node's folder, and a glob covering a
+    whole folder could not say which of its files had moved.
+    """
+
+    #: Path globs (``fnmatch``) over repository-relative files, or node ``ref_id``
+    #: values — which of the two is decided by the key the rule read them from.
+    entries: tuple[str, ...]
+    reason: str
+    until: str
+
+
+@dataclass(frozen=True)
+class TestBindingRule:
+    """A test file bound to no node, and a node bound to no test file (BDL-074 C3).
+
+    The binding is the one the reindex records in ``test_files``: a test file's
+    node follows from the mirror of its path or from a node's ``tests:`` list.
+    Two legs, each run only when declared:
+
+    - ``files`` (a path glob) — every indexed test file it matches that binds to
+      no node is reported. A file a kind folder places is outside the judged
+      population and counted by its recorded kind: an acceptance step file, whose
+      scenarios bind by their ``@node:`` tags, and a self-check, which tests the
+      project's own files and binds to no node by design.
+    - ``for`` (a node matcher) — every matched node with no bound test file, its
+      own or a ``part_of`` descendant's, is reported.
+
+    ``severity`` defaults to ``warn``: a project's tests are unplaced until it
+    adopts the mirrored layout, and an ``error`` would turn every adopter red on
+    the upgrade that ships the rule.
+    """
+
+    __test__ = False  # a product type, not a pytest test class
+
+    name: str
+    description: str
+    for_matcher: NodeMatcher | None = None
+    files: str | None = None
+    exempt_files: tuple[ListedExemption, ...] = ()
+    exempt_nodes: tuple[ListedExemption, ...] = ()
+    severity: str = "warn"
+
+
+@dataclass(frozen=True)
+class TestImportBoundaryRule:
+    """``forbid_import`` over the imports of TEST files, narrowed by their binding.
+
+    ``from_glob`` and ``to_glob`` are matched exactly as :class:`ImportBoundaryRule`
+    matches them — the repository-relative file path and the dotted import path
+    with dots turned into slashes — against the ``test_imports`` the reindex
+    records rather than ``code_imports``, which holds no test file. ``of_matcher``,
+    when set, keeps only the test files bound to a node it matches, that node or
+    one of its ``part_of`` containers: "a unit test OF a domain node".
+    """
+
+    __test__ = False  # a product type, not a pytest test class
+
+    name: str
+    description: str
+    from_glob: str
+    to_glob: str
+    of_matcher: NodeMatcher | None = None
+    severity: str = "error"
+    exempt: tuple[ImportExemption, ...] = ()
+
+    def as_import_rule(self) -> ImportBoundaryRule:
+        """The same boundary as the rule ``forbid_import``'s evaluator reads."""
+        return ImportBoundaryRule(
+            name=self.name,
+            description=self.description,
+            from_glob=self.from_glob,
+            to_glob=self.to_glob,
+            severity=self.severity,
+            exempt=self.exempt,
+        )
+
+
+@dataclass(frozen=True)
+class ScenarioBindingRule:
+    """A scenario's ``@node:`` tag names the folder its feature file sits in (BDL-074 C3).
+
+    The suite is laid out one folder per node, so the folder that holds a feature
+    file names the node its scenarios bind to, and a folder above it that names a
+    node names one of that node's ``part_of`` containers. Whether a scenario's
+    steps EXECUTE its node is the other half of the binding, and it is not judged:
+    it needs a runtime trace this rule does not have (see :mod:`.scenario_binding`).
+
+    ``severity`` defaults to ``warn``, for the reason :class:`TestBindingRule`'s does.
+    """
+
+    name: str
+    description: str
+    features: str = DEFAULT_FEATURE_GLOB
+    exempt: tuple[ListedExemption, ...] = ()
+    severity: str = "warn"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -496,6 +620,9 @@ Rule = (
     | ScenarioCoverageRule
     | DocAreaCoherenceRule
     | SummaryFactsRule
+    | TestBindingRule
+    | TestImportBoundaryRule
+    | ScenarioBindingRule
 )
 
 
@@ -584,4 +711,28 @@ def liveness_finding(
         to_ref_id=None,
         message=message,
         remediation=remediation,
+    )
+
+
+def population_finding(*, rule_name: str, rule_description: str, message: str) -> Violation:
+    """The statement a suite rule prints of what it judged — always ``warn``, never a verdict.
+
+    Printed on every run, clean or not, because a green count is not a checked
+    count: "0 test files bound to no node" means something only beside the number
+    of files the rule looked at and the number it could not.
+    """
+    return Violation(
+        rule_name=rule_name,
+        rule_description=rule_description,
+        rule_type=SUITE_POPULATION_RULE_TYPE,
+        severity="warn",
+        file_path=None,
+        line_number=None,
+        from_ref_id=None,
+        to_ref_id=None,
+        message=message,
+        remediation=(
+            "nothing to fix: this states the rule's reach, so a count of findings "
+            "can be read as a fraction of what was judged"
+        ),
     )

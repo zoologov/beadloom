@@ -158,6 +158,9 @@ opened, and both of those used to read as a clean bill of health (BDL-UX #173).
   the absent marker as a denial compared `git 2.49.0` against this project's own version in
   every clean room (BDL-UX #266). The line appears only when something was declined, so a run
   in a git working tree is unchanged.
+- Document paths, fact values, mention values and exclusion reasons are escaped before Rich
+  reads a line as markup, so a path such as `docs/app/[slug]/[draft].md` prints as written
+  rather than as `docs/app//.md` (`beadloom-2mj3.19`). The JSON output was never affected.
 - `--json` gains `coverage`, `verified_facts`, `unverified_facts`, `not_applicable`,
   `unjudged_versions`, `unresolved_version_subjects` and `scan_surface` beside the existing
   arrays, and six counts under `summary` (`declared_fact_count`, `verified_fact_count`,
@@ -186,7 +189,7 @@ Module `src/beadloom/onboarding/scanner/` (package; public surface re-exported f
 - `generate_agents_md(project_root)` -- generate `.beadloom/AGENTS.md` with the MCP tool list (from `MCP_TOOL_CATALOG`, currently 18 tools) and rules; preserves content between `<!-- beadloom:custom-start -->` / `<!-- beadloom:custom-end -->` HTML comment markers (auto-migrates old `## Custom` format)
 - `prime_context(project_root, *, fmt="markdown")` -> `str | dict[str, Any]` -- compact project context for AI agent injection (static + dynamic layers, <=2K tokens); returns markdown string or JSON dict depending on *fmt*
 - `MAX_LISTED_FINDINGS = 10` (BDL-061 S4) -- how many findings of a kind `prime` LISTS. The COUNT is never truncated; only the list is, and the cut line names how many are not shown and the command that shows them. Measured: opting this repository into `scenario-coverage` (68 findings) grew the output from 2.6 KB to 13.1 KB, which is a context budget spent on one rule's backlog
-- `interactive_init(project_root, *, reindex)` -- interactive wizard with re-init detection, mode selection, review table, auto-reindex
+- `interactive_init(project_root, *, reindex)` -- interactive wizard with re-init detection, mode selection, review table, auto-reindex. What the scan found (manifests, source dirs, languages, preset, the import folder, the edit path) and the review table with its ` [high]` / ` [low]` confidence tags are escaped before Rich reads them as markup (`beadloom-2mj3.19`)
 - `non_interactive_init(project_root, *, reindex, mode="bootstrap", force=False)` -- non-interactive init for CI/scripts; supports bootstrap/import/both modes, force-deletes existing .beadloom/ when force=True, auto-links docs, and runs its steps in the wizard's order — bootstrap, import, doc skeletons — then reindexes **after** every block that writes a graph file (`generate_skeletons` is one: it patches a `docs:` field into the graph YAML). The reindex sat inside the bootstrap block until BDL-067 `.14`, so on `--mode both` the import step wrote `imported.yml` after it and the verdict — which reads the index without re-indexing — judged a graph the command had not finished writing. **`reindex` is handed in and is required** (BDL-070 `beadloom-46am`): the re-index is an application use case and onboarding is a domain, so the domain declares what it needs -- `scanner/reindex_port.py`, a callable taking a project root and reporting `symbols_indexed` / `imports_indexed` / `edges_loaded` / `docs_indexed` -- and `services/commands/setup.py`, a service above both, supplies `application.reindex.reindex`. The two function-local imports it replaces were the only import in this repository that ran against the declared direction -- the count is a moving measurement and lives in the bead (`beadloom-46am`) rather than here, where it would go stale on the next commit. Required rather than defaulted: a default meaning "do not re-index" would let a caller take its verdict over an index the run never refreshed, which is the `.14` defect with a different cause
 - `auto_link_docs(project_root, nodes)` -- fuzzy-match existing docs/ files to graph nodes by ref_id (exact path, stem, partial match); patches docs: field in services.yml via _patch_docs_field; returns count of linked docs
 
@@ -326,11 +329,28 @@ Module `src/beadloom/onboarding/config_reader.py`:
 
 ## Testing
 
-Tests: `tests/test_onboarding.py`, `tests/test_presets.py`, `tests/test_doc_generator.py`, `tests/test_cli_docs.py`, `tests/test_integration_onboarding.py`, `tests/test_bead06_misc_fixes.py`, `tests/test_config_reader.py`, `tests/test_auto_link_docs.py`, `tests/test_init_doc_generation.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_refresh_claude_md.py`, `tests/test_config_sync.py`, `tests/test_cli_config_check.py`, `tests/test_cli_setup_ai_techwriter.py`, `tests/test_cli_setup_agentic_flow.py`, `tests/test_branch_protection.py`
+Tests: `tests/integration/onboarding/scanner/test_onboarding.py`,
+`tests/unit/onboarding/test_presets.py`,
+`tests/integration/onboarding/doc_generator/test_doc_generator.py`,
+`tests/integration/onboarding/doc_generator/test_cli_docs.py`,
+`tests/test_integration_onboarding.py`,
+`tests/integration/onboarding/scanner/test_bead06_misc_fixes.py`,
+`tests/integration/onboarding/test_config_reader.py`, `tests/test_auto_link_docs.py`,
+`tests/test_init_doc_generation.py`, `tests/integration/graph/snapshot/test_snapshot.py`,
+`tests/integration/infrastructure/console_streams/test_cli_snapshot.py`,
+`tests/integration/onboarding/scanner/test_refresh_claude_md.py`, `tests/test_config_sync.py`,
+`tests/test_cli_config_check.py`,
+`tests/integration/onboarding/ai_techwriter_setup/test_cli_setup_ai_techwriter.py`,
+`tests/test_cli_setup_agentic_flow.py`,
+`tests/integration/onboarding/branch_protection/test_branch_protection.py`
 
 The composition and its guard (BDL-061 S3): `tests/test_flow_composition.py`,
 `tests/test_role_configurator.py`, `tests/test_role_configurator_hardening.py`,
-`tests/test_s3_config_check_residual.py` (the adversarial half — the guard cannot be
-silently disabled, a suppression must earn its place, an overlay survives an upgrade of the
-CORE underneath it), `tests/test_bead57_config_check_sight.py`, `tests/test_ignore_block.py`,
-`tests/test_guard_hook_adapter.py`.
+`tests/test_s3_config_check_residual.py` (the adversarial half — the guard cannot be silently
+disabled, a suppression must earn its place, an overlay survives an upgrade of the CORE underneath
+it), `tests/test_config_check_names_what_it_could_not_verify.py`,
+`tests/integration/onboarding/ignore_block/test_ignore_block.py`,
+`tests/integration/onboarding/guard_hooks/test_guard_hook_adapter.py`. The checks of this
+repository's own tree that were in `test_onboarding.py` and `test_guard_hook_adapter.py` are
+self-checks since BDL-074 A3: `tests/self_check/architecture/test_onboarding.py` and
+`test_guard_hook_adapter.py` under `tests/self_check/{docs,process}/`.

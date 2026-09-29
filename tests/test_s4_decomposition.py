@@ -16,7 +16,9 @@ S3 pattern (``test_s3_decomposition.py``), it asserts that every name in each ne
 package's ``__all__`` still resolves via the OLD ``from beadloom.<pkg> import X``
 path, and that the hub re-exports the SAME objects as the responsibility
 submodules (identity, not just name presence — guarding against a future shim
-that rebinds a name to a divergent stub).
+that rebinds a name to a divergent stub). The reindex hub's own spot checks are
+the reindex's, under ``tests/unit/application/reindex/`` (split by node, BDL-074
+``beadloom-2mj3.7``).
 """
 
 from __future__ import annotations
@@ -101,43 +103,6 @@ class TestPublicSurfaceStability:
         # Sanity: the identity walk actually checked a meaningful chunk of the
         # surface (not silently zero because submodule discovery missed).
         assert verified, f"no exported symbol of {pkg_name} traced to a submodule"
-
-
-class TestReindexHubExports:
-    """Spot-check the reindex hub's headline public + infra re-exports."""
-
-    def test_orchestration_entrypoints_importable(self) -> None:
-        from beadloom.application.reindex import (
-            ReindexResult,
-            incremental_reindex,
-            reindex,
-        )
-
-        assert callable(reindex)
-        assert callable(incremental_reindex)
-        assert isinstance(ReindexResult, type)
-
-    def test_infra_reexports_bound_on_hub(self) -> None:
-        """The infra helpers are re-bound on the hub so ``patch(...)`` here works.
-
-        The ``__init__`` docstring promises ``analyze_git_activity`` /
-        ``supported_extensions`` / ``resolve_scan_paths`` are bound at package
-        level (so enrichment/change-detection patch them via this namespace).
-        """
-        import beadloom.application.reindex as rx
-        from beadloom.context_oracle.code_indexer import (
-            supported_extensions as ce_supported,
-        )
-        from beadloom.infrastructure.git_activity import (
-            analyze_git_activity as ga_analyze,
-        )
-        from beadloom.infrastructure.scan_paths import (
-            resolve_scan_paths as sp_resolve,
-        )
-
-        assert rx.analyze_git_activity is ga_analyze
-        assert rx.supported_extensions is ce_supported
-        assert rx.resolve_scan_paths is sp_resolve
 
 
 class TestScannerHubExports:

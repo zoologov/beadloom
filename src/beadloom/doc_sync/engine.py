@@ -280,7 +280,7 @@ REASON_MISSING_MODULES = "missing_modules"
 #: The stale reasons a re-attestation CLEARS, and nothing else. Each is a
 #: comparison against a recorded baseline, and attesting rewrites that baseline.
 #: Measured through the real reindex + ``attest_ref`` + ``check_sync`` pipeline
-#: rather than reasoned from the code (``tests/test_a_remediation_can_be_followed``):
+#: rather than reasoned from the code (``tests/test_a_remediation_can_be_followed.py``):
 #: these three moved, while ``untracked_files`` and ``missing_modules`` did not,
 #: because one needs a pair that does not exist yet and the other reads what the
 #: document says.

@@ -1,5 +1,14 @@
 """Test file reader: the test functions and the imports one test file holds.
 
+A Python file is parsed; a file in another language is counted by the one line
+its tests are written in (BDL-074 G2), and its imports are not read. The forms
+are the retired mapper's, so a Go or JS/TS count reads what it read on main:
+``func Test...(`` for Go, an ``it(`` or ``test(`` call for JS/TS, ``@Test`` for
+JUnit and ``func test...(`` for XCTest. Swift also counts a function Swift Testing
+marks ``@Test`` (the form the Xcode 16 templates generate), once, whatever it is
+named (``beadloom-2mj3.13``). A suffix with no form counts zero — a count this
+reader cannot take is not guessed.
+
 One ``ast`` parse answers both questions. Measured on this repository's 462 test
 files on 2026-09-28: the tree-sitter import extractor the code index uses took
 2.2 s for the imports alone, because it walks every token of every file; the
@@ -15,10 +24,12 @@ where the tree-sitter extractor drops an aliased import.
 
 # beadloom:domain=context-oracle
 # beadloom:feature=test-mapping
+# beadloom:component=test-file-reader
 
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -27,6 +38,23 @@ if TYPE_CHECKING:
 
 _TEST_FUNCTION_PREFIX = "test"
 _TEST_CLASS_PREFIX = "Test"
+
+_PYTHON_SUFFIX = ".py"
+
+#: The line a test is written in, by the suffix of the file that holds it.
+_GO_TEST = re.compile(r"^\s*func\s+Test\w*\s*\(", re.MULTILINE)
+_JS_TEST = re.compile(r"(?:^|\s)(?:test|it)\s*\(", re.MULTILINE)
+_JUNIT_TEST = re.compile(r"@Test\b")
+_XCTEST_TEST = re.compile(
+    r"(?:@Test\b[^\n]*\n?\s*func\s+\w+|^\s*func\s+test\w*)\s*\(", re.MULTILINE
+)
+_TEST_FORMS: dict[str, re.Pattern[str]] = {
+    ".go": _GO_TEST,
+    **dict.fromkeys((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"), _JS_TEST),
+    ".java": _JUNIT_TEST,
+    ".kt": _JUNIT_TEST,
+    ".swift": _XCTEST_TEST,
+}
 
 #: The fields through which a statement holds further statements (a handler and a
 #: match case are not statements, and hold them the same way).
@@ -43,14 +71,20 @@ class TestFileContents:
     imports: tuple[tuple[int, str], ...]
 
 
-def read_test_file(text: str) -> TestFileContents:
-    """The test functions pytest collects from *text*, and its absolute imports.
+def read_test_file(text: str, *, suffix: str = _PYTHON_SUFFIX) -> TestFileContents:
+    """The tests *text* defines, and its absolute imports when it is Python.
 
-    Module-level ``test*`` functions and ``test*`` methods of ``Test*`` classes,
-    sync or async, count. A parametrised function counts once: these are the
-    functions a file defines, not the cases a run collects. Text that does not
-    parse holds nothing.
+    For Python (*suffix* ``.py``, the default): module-level ``test*`` functions
+    and ``test*`` methods of ``Test*`` classes, sync or async, count. A
+    parametrised function counts once: these are the functions a file defines,
+    not the cases a run collects. Text that does not parse holds nothing. For
+    another suffix, see the module docstring.
     """
+    if suffix != _PYTHON_SUFFIX:
+        form = _TEST_FORMS.get(suffix)
+        return TestFileContents(
+            test_count=len(form.findall(text)) if form is not None else 0, imports=()
+        )
     try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError):

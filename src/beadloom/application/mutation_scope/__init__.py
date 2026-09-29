@@ -34,6 +34,7 @@ owns the ``guards:`` block the same way.
 
 from __future__ import annotations
 
+from beadloom.application.mutation_scope.acceptance import acceptance_files_by_node
 from beadloom.application.mutation_scope.change import (
     ChangedFunction,
     ChangePlan,
@@ -104,6 +105,7 @@ __all__ = [
     "SampleInterval",
     "Survivor",
     "TouchedFunctions",
+    "acceptance_files_by_node",
     "change_payload",
     "changed_lines",
     "check_mutation_scope",

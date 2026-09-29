@@ -87,10 +87,6 @@ NAMED_BY_WORK_ITEM: dict[str, str] = {
         "Four unrelated fixes (framework summaries, parenthesised ref ids, the "
         "parser fingerprint, the bootstrap skeleton count). " + _MIXED_SPLIT
     ),
-    "tests/test_bead15_s3b_coverage.py": (
-        "Module classification, directory-source depth and the freshness skip: "
-        "three behaviours. " + _MIXED_SPLIT
-    ),
     "tests/test_bead18_s5_relation.py": (
         "A slice's verification suite over the relation report, the tracker, the "
         "working declaration and the recorded findings. " + _MIXED_SPLIT
@@ -106,10 +102,6 @@ NAMED_BY_WORK_ITEM: dict[str, str] = {
     "tests/test_f3_gate_coverage.py": (
         "Coverage of the gate's error branches, the config-sync edges, "
         "determinism and failure parsing across several nodes. " + _MIXED_SPLIT
-    ),
-    "tests/test_s2_false_green_residue.py": (
-        "One question asked of seven checks (rules, sync-check, the gate, doctor, "
-        "lint, docs audit); each answer belongs to its check's node. " + _MIXED_SPLIT
     ),
     "tests/test_s2_lying_checks.py": (
         "Three checks that reported success without checking: incremental "
@@ -130,10 +122,6 @@ NAMED_BY_WORK_ITEM: dict[str, str] = {
     "tests/test_s3_config_check_residual.py": (
         "Six blind spots across the guard, suppression, the overlay upgrade and "
         "the composed artifact's states, over several onboarding nodes. " + _MIXED_SPLIT
-    ),
-    "tests/test_s3_decomposition.py": (
-        "Import-path stability of two split packages (federation, rule engine) "
-        "that belong to two nodes. " + _MIXED_SPLIT
     ),
     "tests/test_s4_decomposition.py": (
         "Import-path stability of four split packages (reindex, scanner, debt "

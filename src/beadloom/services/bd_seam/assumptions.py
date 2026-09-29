@@ -31,9 +31,9 @@ So an inherited claim is not a fact, a claim of one's own is not a fact either,
 and the module records **the release every verdict was taken against**. A
 derived population with no version is a measurement with no room, and an
 External defect a later ``bd`` fixes must fail loudly rather than quietly guard
-nothing:
-``tests/test_bd_call_sites.py`` compares :data:`BD_MEASURED_VERSION` against the
-``bd`` on PATH and fails when they differ, naming what has to be re-measured.
+nothing: ``tests/unit/services/bd_seam/test_bd_call_sites.py`` compares
+:data:`BD_MEASURED_VERSION` against the ``bd`` on PATH and fails when they differ,
+naming what has to be re-measured.
 
 **The four verdicts, because two are not enough.** The distinction this epic has
 now shipped seven times is that a site whose assumption nobody checks reads

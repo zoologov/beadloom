@@ -43,7 +43,8 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
     UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule,
-    DocAreaCoherenceRule, SummaryFactsRule.
+    DocAreaCoherenceRule, SummaryFactsRule, and the three suite rules
+    (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule).
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -58,6 +59,11 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         ScenarioCoverageRule,
         SummaryFactsRule,
         UnregisteredFeatureCandidateRule,
+    )
+    from beadloom.graph.rules import (
+        ScenarioBindingRule,
+        TestBindingRule,
+        TestImportBoundaryRule,
     )
 
     rule_def: dict[str, object]
@@ -208,9 +214,63 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         # whole rule and a reader of the `rules` table sees no less than runs.
         return ("summary_facts", {})
 
+    if isinstance(rule, (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule)):
+        return _serialize_suite_rule(rule)
+
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"
     raise TypeError(msg)
+
+
+def _listed(kind: str, exemptions: tuple[object, ...]) -> list[dict[str, object]]:
+    """A suite rule's exemptions as stored: each carries its entries, reason and exit."""
+    from beadloom.graph.rules import ListedExemption
+
+    return [
+        {kind: list(e.entries), "reason": e.reason, "until": e.until}
+        for e in exemptions
+        if isinstance(e, ListedExemption)
+    ]
+
+
+def _serialize_suite_rule(rule: object) -> tuple[str, dict[str, object]]:
+    """The three rules that judge the test suite (BDL-074 C3), stored whole.
+
+    Exemptions are stored with the rule for the reason ``forbid_import``'s are: a
+    reader of the ``rules`` table must not see a stricter rule than the one that
+    runs.
+    """
+    from beadloom.graph.rules import (
+        ScenarioBindingRule,
+        TestBindingRule,
+        TestImportBoundaryRule,
+    )
+
+    rule_def: dict[str, object] = {}
+    if isinstance(rule, TestBindingRule):
+        if rule.files is not None:
+            rule_def["files"] = rule.files
+        if rule.for_matcher is not None:
+            rule_def["for"] = _serialize_node_matcher(rule.for_matcher)
+        exempt = _listed("files", rule.exempt_files) + _listed("nodes", rule.exempt_nodes)
+        if exempt:
+            rule_def["exempt"] = exempt
+        return ("test_binding", rule_def)
+    if isinstance(rule, TestImportBoundaryRule):
+        rule_def = {"from_glob": rule.from_glob, "to_glob": rule.to_glob}
+        if rule.of_matcher is not None:
+            rule_def["of"] = _serialize_node_matcher(rule.of_matcher)
+        if rule.exempt:
+            rule_def["exempt"] = [
+                {"from": e.from_glob, "to": e.to_glob, "reason": e.reason, "until": e.until}
+                for e in rule.exempt
+            ]
+        return ("test_import_boundary", rule_def)
+    assert isinstance(rule, ScenarioBindingRule)
+    rule_def = {"features": rule.features}
+    if rule.exempt:
+        rule_def["exempt"] = _listed("files", rule.exempt)
+    return ("scenario_binding", rule_def)
 
 
 def _load_rules_into_db(

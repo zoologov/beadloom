@@ -372,4 +372,7 @@ Every run states what it did NOT reconcile, in three lists rather than one. Rows
 
 ## Testing
 
-Tests: `tests/test_sync_engine.py`, `tests/test_cli_sync_check.py`, `tests/test_cli_sync_update.py`, `tests/test_source_coverage.py`, `tests/test_doc_coverage.py`, `tests/test_surface.py`, `tests/test_reference_drift.py`, `tests/test_cli_reference_drift.py`
+Tests: `tests/test_sync_engine.py`, `tests/test_cli_sync_check.py`, `tests/test_cli_sync_update.py`,
+`tests/test_source_coverage.py`, `tests/test_doc_coverage.py`,
+`tests/integration/doc_sync/test_surface.py`, `tests/test_reference_drift.py`,
+`tests/test_cli_reference_drift.py`

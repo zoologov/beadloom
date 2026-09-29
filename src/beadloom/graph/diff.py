@@ -515,8 +515,10 @@ def _render_duplicates(diff: GraphDiff, console: Console) -> None:
     nothing wrong with it, and `No graph changes` is exactly the sentence that
     reading would end on.
     """
+    from rich.markup import escape
+
     for duplicate in diff.duplicates:
-        console.print(f"[yellow]{duplicate.describe()}[/yellow]")
+        console.print(f"[yellow]{escape(duplicate.describe())}[/yellow]")
     if diff.duplicates:
         console.print()
 
@@ -530,35 +532,45 @@ def render_diff(diff: GraphDiff, console: Console) -> None:
     - Nodes section with ``+`` (green), ``~`` (yellow), ``-`` (red) markers
     - Edges section with ``+`` (green), ``-`` (red) markers
     - Summary line with counts
+
+    The graph's own text is escaped before Rich reads a line as markup: an edge
+    kind is printed bracketed, ``--[uses]-->``, and Rich took it for a style tag
+    and printed ``---->``; a source path such as ``app/[slug]/`` lost its folder
+    (``beadloom-2mj3.19``).
     """
+    from rich.markup import escape
+
     _render_duplicates(diff, console)
+    since = escape(diff.since_ref)
     if not diff.has_changes:
-        console.print(f"No graph changes since {diff.since_ref}.")
+        console.print(f"No graph changes since {since}.")
         return
 
-    console.print(f"[bold]Graph diff (since {diff.since_ref}):[/bold]")
+    console.print(f"[bold]Graph diff (since {since}):[/bold]")
     console.print()
 
     # --- Nodes section ---
     if diff.nodes:
         console.print("[bold]Nodes:[/bold]")
         for node in diff.nodes:
+            ref_id, kind = escape(node.ref_id), escape(node.kind)
             if node.change_type == "added":
-                console.print(f"  [green]+ {node.ref_id}[/green] ({node.kind})")
+                console.print(f"  [green]+ {ref_id}[/green] ({kind})")
             elif node.change_type == "removed":
-                console.print(f"  [red]- {node.ref_id}[/red] ({node.kind})")
+                console.print(f"  [red]- {ref_id}[/red] ({kind})")
             elif node.change_type == "changed":
-                console.print(f"  [yellow]~ {node.ref_id}[/yellow] ({node.kind})")
+                console.print(f"  [yellow]~ {ref_id}[/yellow] ({kind})")
                 if node.old_summary != node.new_summary:
-                    console.print(f"    [dim]{node.old_summary}[/dim]")
-                    console.print(f"    [bold]{node.new_summary}[/bold]")
+                    console.print(f"    [dim]{escape(str(node.old_summary))}[/dim]")
+                    console.print(f"    [bold]{escape(str(node.new_summary))}[/bold]")
                 if node.old_source != node.new_source:
                     console.print(
-                        f"    source: {node.old_source or '(none)'}"
-                        f" \u2192 {node.new_source or '(none)'}"
+                        f"    source: {escape(node.old_source or '(none)')}"
+                        f" \u2192 {escape(node.new_source or '(none)')}"
                     )
                 if node.old_tags != node.new_tags:
-                    console.print(f"    tags: {list(node.old_tags)} \u2192 {list(node.new_tags)}")
+                    tags = f"{list(node.old_tags)} \u2192 {list(node.new_tags)}"
+                    console.print(f"    tags: {escape(tags)}")
                 if node.symbols_added or node.symbols_removed:
                     console.print(f"    symbols: +{node.symbols_added} -{node.symbols_removed}")
         console.print()
@@ -567,10 +579,11 @@ def render_diff(diff: GraphDiff, console: Console) -> None:
     if diff.edges:
         console.print("[bold]Edges:[/bold]")
         for edge in diff.edges:
+            line = escape(f"{edge.src} --[{edge.kind}]--> {edge.dst}")
             if edge.change_type == "added":
-                console.print(f"  [green]+ {edge.src} --[{edge.kind}]--> {edge.dst}[/green]")
+                console.print(f"  [green]+ {line}[/green]")
             elif edge.change_type == "removed":
-                console.print(f"  [red]- {edge.src} --[{edge.kind}]--> {edge.dst}[/red]")
+                console.print(f"  [red]- {line}[/red]")
         console.print()
 
     # --- Summary ---

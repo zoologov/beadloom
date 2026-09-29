@@ -98,6 +98,99 @@ Everything lives under `.beadloom/` in your repo.
 | `languages` | all supported | File extensions to parse (e.g. `[".py", ".ts"]`) |
 | `docs_dir` | `docs/` | Documentation root directory |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |
+| `tests` | see below | Where your tests are and which files are tests |
+
+#### `tests:` — where your tests are
+
+Beadloom binds each test file to the graph node it tests, and never by a guess at its name. A
+test binds in one of three ways:
+
+- **By the mirror of its path.** A file under `<root>/unit/` or `<root>/integration/` names the
+  code its path mirrors: `tests/unit/billing/test_invoice.py` names `billing/invoice.py` under
+  a scan path, or under a package directly beneath one.
+  A file in a build tool's test tree names the code tree beside it, with the language's test
+  affix taken off: `src/test/java/shop/BillingTest.java` names
+  `src/main/java/shop/Billing.java`, and `Tests/ShopTests/BillingTests.swift` names
+  `Sources/Shop/Billing.swift`. The node that owns that code binds the test.
+- **Beside the code.** A test inside a node's source, outside every root and test tree —
+  `billing_test.go` beside `billing.go`, `invoice.test.ts` beside `invoice.ts` — binds to that
+  node. It must lie under `scan_paths` in a language listed in `languages`.
+- **Through `tests:` in the graph.** A node may list path prefixes under `tests:` in its graph
+  YAML to claim tests its path does not mirror. A declaration wins over the other two, and a
+  prefix that covers no test file is a reindex warning.
+
+No test binds by a guess: not by its file name, not by what it imports, and not by a folder
+named after a node. A file under a root that none of the three reaches is `unplaced`: it binds
+to no node, and `beadloom reindex`, `ctx` and the debt report say how many there are. A file
+outside every root, every test tree and every node's source is not read at all, so `ctx` and
+the debt report always state the patterns and the roots a test file is read under. A file's
+path decides only WHETHER it is a test, by the patterns below. Every key is optional:
+
+| Key | Default | A declared value |
+|-----|---------|------------------|
+| `tests.roots` | `[tests, test, spec, __tests__]`, each read only where a folder of exactly that spelling exists | replaces the list |
+| `tests.kinds` | `unit`, `integration`, `acceptance`, `self_check`, each in a folder of its own name | replaces the folder of that one kind |
+| `tests.patterns` | the five groups below | replaces all five groups |
+| `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
+| `tests.beside_code` | `true` | `true` or `false` |
+
+| Language | Framework group | Default patterns |
+|----------|-----------------|------------------|
+| Python | `pytest` | `test_*.py`, `*_test.py` |
+| Go | `go_test` | `*_test.go` |
+| JavaScript, TypeScript | `jest` | `*.test.*`, `*.spec.*`, `__tests__/**/*.[jt]s`, `__tests__/**/*.[jt]sx` |
+| Java, Kotlin | `junit` | `*Test.java`, `*Tests.java`, `*TestCase.java`, `*IT.java`, `*ITCase.java`, `*Test.kt`, `*Tests.kt`, `src/test/**/*.java`, `src/test/**/*.kt` |
+| Swift | `xctest` | `*Tests.swift`, `*Tests/**/*.swift` |
+
+`ctx` and the debt report name only the roots that exist. A project with none of the four, and
+with tests read beside the code, sees a clause ending `and it lies beside a node's code, since
+none of the roots tests, test, spec, __tests__ exists`.
+
+A pattern without a `/` matches the file name. A pattern with a `/` matches the end of the
+file's path, folder by folder, and `**` stands for any number of folders: `__tests__/**` is
+every file under a `__tests__/` folder at any depth. Matching is case-sensitive.
+
+```yaml
+# .beadloom/config.yml — a Python project keeping its tests in test/
+tests:
+  roots: [test]
+  patterns:
+    pytest: ["test_*.py"]
+  beside_code: false
+```
+
+Declaring `patterns` states which frameworks the project has, so the Go, JS/TS, Java/Kotlin and
+Swift defaults are dropped. Switch `beside_code` off when your code has modules named like
+tests (`test_utils.py` under `src/`), because a file name cannot tell a test module from a
+module about tests. A key that cannot be used is a reindex warning and its default stands. A
+`roots` list naming the project itself or a folder outside it (`.`, `/`, `..`) is refused whole
+with a reindex warning, and the default roots stand.
+
+What is deliberately not bound, and the declaration that binds it:
+
+- **An Xcode test target** (`ShopTests/` beside `Shop/`) is not paired by default, because the
+  pairing depends on your project's name. Until you declare it, `ShopTests/` is not read: `ctx`
+  shows no bound tests and the debt report counts every covered node untested. One line binds
+  it by the mirror, `ShopTests/BillingTests.swift` to the node owning `Shop/Billing/`:
+
+  ```yaml
+  tests:
+    mirrors:
+      ShopTests: Shop
+  ```
+
+  Declared `mirrors` replace the three default trees, which an Xcode project does not use.
+- **A test named by what it imports, or kept in a folder named after a node**
+  (`tests/billing/test_flows.py`), is read and counted `unplaced`, and the debt report then withholds
+  its untested count. List the folder under the node's `tests:` in the graph to bind it.
+- **A marker file without a test file** (`conftest.py`, `jest.config.js`, an empty `src/test/`
+  or `ShopTests/`) names no framework: a project with no test file reads `none` and scores that.
+- **A flat `test/` or `spec/` folder, or a top-level `__tests__/`**, is a default root, so its
+  files are read without a declaration and counted `unplaced` unless a kind folder or a
+  node's `tests:` places them, and the debt report then withholds its untested count. List the
+  folder under the node's `tests:` in the graph to bind it.
+
+The full rule is in the [Test Mapping SPEC](domains/context-oracle/features/test-mapping/SPEC.md).
 
 ### `.beadloom/flow.yml` — the agentic dev flow
 
@@ -299,6 +392,7 @@ carries the sections its kind's peers carry. It never blocks. See
 - [Architecture](architecture.md) — system design, the node-kind model, the rules engine, the agentic-flow configurator.
 - [Executable acceptance scenarios](guides/bdd-scenarios.md) — Gherkin as the source of truth, and what `scenario-coverage` reports.
 - [Document kinds](guides/document-kinds.md) — required sections and the five writing-standard checks.
+- [Testing](guides/testing.md) — where a test lives, how it binds to a node, the suite rules, and mutation per change and weekly.
 - [Parallel waves](guides/parallel-waves.md) — what a wave of concurrent agents guarantees, and what it only reports.
 - [CI Setup](guides/ci-setup.md) — GitHub Actions / GitLab CI integration.
 - [VitePress Site](guides/vitepress-site.md) — publish the knowledge base.

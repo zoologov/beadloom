@@ -14,8 +14,11 @@ import json
 from typing import TYPE_CHECKING
 
 from beadloom.application.debt_report.models import DebtData, DebtWeights
-from beadloom.context_oracle.test_binding import describe_unplaced
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.context_oracle.test_binding import (
+    describe_test_file_recognition,
+    describe_unplaced,
+)
+from beadloom.infrastructure.repository import count_test_files_by_placement, read_test_layout
 
 if TYPE_CHECKING:
     import sqlite3
@@ -200,16 +203,43 @@ def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
     While any test file is unplaced the count is WITHHELD — 0, with the reason as
     the population — because an unplaced file binds to no node, so a node with no
     bound test may still be tested by one. Counting it would charge a project for
-    its layout, not its tests. The name-guessing mapper this replaces counted a
-    node only when it detected no test framework anywhere, so a project whose
-    framework it detected and whose tests are not laid out scores what it scored
-    before (0), and a project with no test file at all has every covered node
-    untested, before and after.
+    its layout, not its tests.
+
+    The name-guessing mapper this replaces counted a node only when it detected
+    no test framework anywhere, so it scored 0 for any project with a test file.
+    The binding scores 0 while any file is unplaced, and once every one is placed
+    it charges only the nodes none of them binds to. It reads the conventions
+    that mapper read, each in the place its ecosystem keeps it (``beadloom-2mj3.15``):
+    pytest, Go and Jest files beside the code or under a root, Jest's
+    ``__tests__/`` folders, every Java and Kotlin file in ``src/test/``, and every
+    Swift file in a ``*Tests`` folder — the five default groups of
+    :mod:`beadloom.context_oracle.test_layout`. A file the mapper bound only by its
+    name, in a ``tests/``, ``test/``, ``spec/`` or top-level ``__tests__/`` folder,
+    is read under those default roots and unplaced, so the count is withheld — 0,
+    as on main (the owner's NG1 ruling; ``beadloom-2mj3.15``, ``.17``). The debt
+    report's integration test ``test_an_adopter_scores_what_it_scored_before`` runs
+    that claim on one project per convention.
+
+    The limit it keeps: a test file outside every root, test tree and node source
+    is not read — an Xcode test target such as ``ShopTests/``, whose folder is
+    named after the project, until ``tests.mirrors`` declares it (NG2, accepted by
+    the owner) — and a marker such as ``conftest.py`` without a test file names no
+    framework (NG4). Such a project has every covered node counted where the mapper
+    counted 0. So the population ALWAYS ends with the patterns and the roots a test
+    file is read by, and "all N test file(s) placed" reads as "all N files those
+    patterns matched".
     """
     placements = count_test_files_by_placement(conn)
-    unplaced = describe_unplaced(placements)
+    layout = read_test_layout(conn)
+    recognition = "" if layout is None else f"; {describe_test_file_recognition(layout)}"
+    unplaced = describe_unplaced(placements, layout)
     if unplaced is not None:
-        return 0, [], f"not counted: {unplaced}, so a node with no bound test may still be tested"
+        return (
+            0,
+            [],
+            f"not counted: {unplaced}, so a node with no bound test may still be tested"
+            f"{recognition}",
+        )
 
     covered = 0
     untested_refs: list[str] = []
@@ -222,7 +252,7 @@ def _count_untested(conn: sqlite3.Connection) -> tuple[int, list[str], str]:
             untested_refs.append(str(row["ref_id"]))
     population = (
         f"counted over {covered} node(s) the test binding covers, "
-        f"all {sum(placements.values())} test file(s) placed"
+        f"all {sum(placements.values())} test file(s) placed{recognition}"
     )
     return len(untested_refs), untested_refs, population
 

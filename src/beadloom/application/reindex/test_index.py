@@ -2,17 +2,29 @@
 # beadloom:feature=reindex
 """Test index: record a project's test files in their own tables, bound to nodes.
 
-This module owns the reindex step that walks ``tests/``, binds each test file to a
-node by :mod:`beadloom.context_oracle.test_binding`, records it — path, kind, node,
-placement, test count, imports — in ``test_files`` / ``test_imports``, and rebuilds
-every node's ``extra["tests"]`` from that binding in the four-key shape its readers
-expect (``framework``, ``test_files``, ``test_count``, ``coverage_estimate``).
+This module owns the reindex step that finds a project's test files, binds each
+to a node by :mod:`beadloom.context_oracle.test_binding`, records it — path, kind,
+node, placement, test count, imports — in ``test_files`` / ``test_imports``, and
+rebuilds every node's ``extra["tests"]`` from that binding in the four-key shape its
+readers expect (``framework``, ``test_files``, ``test_count``, ``coverage_estimate``).
 
-Tests are never added to ``scan_paths``, ``code_symbols``, ``code_imports`` or
-``file_index``: they must not become code. Only ``tests/`` is walked, so a mutmut
-copy under ``mutants/`` is never a test of anything. A node's ``tests:`` YAML key
-is read ONCE, at a full reindex, into ``test_overrides``; the ``extra["tests"]``
-it arrived in is then rebuilt from the binding, which the declaration is part of.
+Where test files are and what makes a file one is the project's test layout
+(:mod:`beadloom.context_oracle.test_layout`, BDL-074 G2): the roots it declares
+are walked (``tests/`` by default), and when tests beside the code are read, the
+indexed code files whose paths match a test pattern are taken from the code scan
+— they are not walked again. The layout is recorded in the index
+(``meta.test_layout``), so the readers that state a count can say what it was
+recognised by.
+
+Tests under a root are never added to ``scan_paths``, ``code_symbols``,
+``code_imports`` or ``file_index``: they must not become code. A test beside the
+code was already indexed as code by the code scan, which this step does not
+change. Only the roots and the code scan are read, so a mutmut copy under
+``mutants/`` is never a test of anything unless a scan path covers it. A node's
+``tests:`` YAML key is read ONCE, at a full reindex, into ``test_overrides``; the
+``extra["tests"]`` it arrived in is then rebuilt from the binding, which the
+declaration is part of, and a declared prefix that covers no indexed test file is
+reported (review ``beadloom-b9ll`` m5).
 """
 
 from __future__ import annotations
@@ -20,32 +32,38 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, TypeGuard
 
 from beadloom.context_oracle.test_binding import (
-    FRAMEWORK_NONE,
-    FRAMEWORK_PYTEST,
+    PLACEMENT_BESIDE_CODE,
     PLACEMENT_MIRROR,
-    PLACEMENT_OTHER_KIND,
     PLACEMENT_OVERRIDE,
     PLACEMENT_UNOWNED,
     PLACEMENT_UNPLACED,
-    TEST_ROOT,
     BoundTestFile,
     bind_test_file,
-    is_test_file,
+    name_frameworks,
     summarize_tests,
     union_over_descendants,
 )
 from beadloom.context_oracle.test_file_reader import TestFileContents, read_test_file
+from beadloom.context_oracle.test_layout import TestLayout, load_test_layout
 from beadloom.graph.import_resolver import resolve_import_to_node
 from beadloom.infrastructure.db import get_meta, set_meta
-from beadloom.infrastructure.repository import count_test_files_by_placement
+from beadloom.infrastructure.repository import (
+    TEST_LAYOUT_KEY,
+    RecordedTestLayout,
+    count_other_kind_test_files,
+    count_test_files_by_placement,
+    label_test_kind,
+    source_covers,
+)
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable, Collection
+    from collections.abc import Callable, Collection, Iterable
     from pathlib import Path
 
 #: Meta key recording that the index holds the test tables. An index written
@@ -57,15 +75,17 @@ TEST_INDEX_VERSION = "1"
 #: The node key a ``tests:`` declaration is stored under by the graph loader.
 _TESTS_KEY = "tests"
 
-#: Directories under ``tests/`` that hold no test source.
-_SKIP_DIRS = frozenset({"__pycache__"})
+#: Directories that hold no test source: bytecode, jest snapshots (whose
+#: ``x.test.ts.snap`` names match ``*.test.*``) and installed packages.
+_SKIP_DIRS = frozenset({"__pycache__", "__snapshots__", "node_modules"})
 
 
 @dataclass(frozen=True)
 class IndexedTestFiles:
-    """What one indexing pass recorded, by placement."""
+    """What one indexing pass recorded, by placement, and what it could not use."""
 
     by_placement: dict[str, int] = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
 
     @property
     def total(self) -> int:
@@ -110,20 +130,84 @@ def _is_path_list(value: object) -> TypeGuard[list[str]]:
     )
 
 
-def discover_test_files(project_root: Path) -> dict[str, str]:
-    """Every test file under ``tests/``, by project-relative path, with its text."""
-    base = project_root / TEST_ROOT
-    if not base.is_dir():
-        return {}
+def discover_test_files(
+    project_root: Path,
+    layout: TestLayout | None = None,
+    *,
+    code_files: Iterable[str] = (),
+) -> dict[str, str]:
+    """Every test file the layout reads, by project-relative path, with its text.
+
+    The files under the layout's roots and the build tools' test trees it
+    mirrors whose paths match a test pattern, and — when it reads tests beside
+    the code — each of *code_files* (the code scan's paths) outside all of those
+    whose path matches one. A file anywhere else is not read, whatever its name:
+    binding it would take a guess at its node, which the owner's ruling of
+    2026-09-28 excludes, so ``ctx`` and the debt report say where a test file is
+    read instead (``beadloom-2mj3.15``). *layout* defaults to the one the project declares.
+    """
+    layout = layout if layout is not None else load_test_layout(project_root)[0]
     found: dict[str, str] = {}
-    for path in sorted(base.rglob("*.py")):
-        relative = path.relative_to(project_root)
-        if _SKIP_DIRS.intersection(relative.parts) or not is_test_file(path.name):
+    for root in (*layout.roots, *present_mirror_roots(project_root, layout)):
+        if not _is_folder_as_spelled(project_root, root):
             continue
-        if not path.is_file():
-            continue
-        found[relative.as_posix()] = path.read_text(encoding="utf-8", errors="replace")
+        for path in sorted((project_root / root).rglob("*")):
+            relative = path.relative_to(project_root).as_posix()
+            if _is_test_path(relative, layout) and path.is_file():
+                found[relative] = _read(path)
+    if layout.beside_code:
+        for code_file in sorted(code_files):
+            if code_file in found or _under_a_test_root(code_file, layout):
+                continue
+            path = project_root / code_file
+            if _is_test_path(code_file, layout) and path.is_file():
+                found[code_file] = _read(path)
     return found
+
+
+def present_mirror_roots(project_root: Path, layout: TestLayout) -> tuple[str, ...]:
+    """The build tools' test trees of *layout* this project has, spelled as declared."""
+    return tuple(
+        test_root
+        for test_root, _ in layout.mirrors
+        if _is_folder_as_spelled(project_root, test_root)
+    )
+
+
+def _recorded_layout(project_root: Path, layout: TestLayout) -> RecordedTestLayout:
+    """The layout as the index records it: the roots and test trees this project has."""
+    present_roots = tuple(
+        root for root in layout.roots if _is_folder_as_spelled(project_root, root)
+    )
+    return layout.recorded(present_mirror_roots(project_root, layout), present_roots)
+
+
+def _is_folder_as_spelled(project_root: Path, relative: str) -> bool:
+    """Whether *relative* is a folder under *project_root*, with exactly that spelling.
+
+    A case-insensitive disk (the macOS and Windows defaults) opens ``Tests/`` for
+    ``tests``, so a Swift package's test tree would be read twice, once under each
+    name, if existence were asked of the disk alone.
+    """
+    current = project_root
+    for part in PurePosixPath(relative).parts:
+        if not current.is_dir() or part not in {child.name for child in current.iterdir()}:
+            return False
+        current = current / part
+    return current.is_dir()
+
+
+def _under_a_test_root(path: str, layout: TestLayout) -> bool:
+    return layout.locate(path) is not None or layout.mirror_of(path) is not None
+
+
+def _is_test_path(relative: str, layout: TestLayout) -> bool:
+    parts = PurePosixPath(relative).parts
+    return not _SKIP_DIRS.intersection(parts) and layout.is_test_file(relative)
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def _hash(text: str) -> str:
@@ -131,11 +215,23 @@ def _hash(text: str) -> str:
 
 
 def is_test_index_current(project_root: Path, conn: sqlite3.Connection) -> bool:
-    """Whether ``test_files`` holds exactly the test files on disk, unchanged."""
-    on_disk = {path: _hash(text) for path, text in discover_test_files(project_root).items()}
+    """Whether the test index was built under today's layout and holds today's root files.
+
+    Asked only when no code file changed, so a test beside the code — read from
+    the code scan — is unchanged by construction; the files under the roots are
+    compared by hash, and the recorded layout against the one the config declares.
+    """
+    layout = load_test_layout(project_root)[0]
+    recorded = _recorded_layout(project_root, layout)
+    if get_meta(conn, TEST_LAYOUT_KEY) != recorded.encode():
+        return False
+    on_disk = {
+        path: _hash(text) for path, text in discover_test_files(project_root, layout).items()
+    }
     stored = {
         str(row["path"]): str(row["file_hash"])
         for row in conn.execute("SELECT path, file_hash FROM test_files").fetchall()
+        if _under_a_test_root(str(row["path"]), layout)
     }
     return on_disk == stored
 
@@ -154,7 +250,8 @@ def index_test_files(
     the one recorded is not parsed again: the incremental reindex runs this on
     every change, and re-reading an unchanged suite is the cost it must not pay.
     """
-    files = discover_test_files(project_root)
+    layout, problems = load_test_layout(project_root)
+    files = discover_test_files(project_root, layout, code_files=code_files)
     previous = _recorded_contents(conn)
     scan_paths = resolve_scan_paths(project_root)
     node_sources = [
@@ -169,7 +266,7 @@ def index_test_files(
             "SELECT ref_id, prefix FROM test_overrides ORDER BY ref_id, prefix"
         ).fetchall()
     ]
-    resolve = _memoised_resolver(project_root, conn, scan_paths)
+    resolve = _memoised_resolver(project_root, conn, scan_paths, layout.roots[0])
 
     conn.execute("DELETE FROM test_files")
     conn.execute("DELETE FROM test_imports")
@@ -178,13 +275,18 @@ def index_test_files(
     for path, text in files.items():
         digest = _hash(text)
         recorded = previous.get(path)
-        contents = recorded[1] if recorded and recorded[0] == digest else read_test_file(text)
+        contents = (
+            recorded[1]
+            if recorded and recorded[0] == digest
+            else read_test_file(text, suffix=PurePosixPath(path).suffix)
+        )
         binding = bind_test_file(
             path,
             code_files=code_files,
             scan_paths=scan_paths,
             node_sources=node_sources,
             overrides=overrides,
+            layout=layout,
         )
         counts[path] = contents.test_count
         conn.execute(
@@ -199,15 +301,40 @@ def index_test_files(
         )
         bound.append(binding)
 
-    framework = FRAMEWORK_PYTEST if files else FRAMEWORK_NONE
-    _rebuild_extra_tests(conn, bound, counts, framework=framework)
+    frameworks = {path: layout.framework_of(path) or "" for path in files}
+    _rebuild_extra_tests(conn, bound, counts, frameworks)
     set_meta(conn, TEST_INDEX_VERSION_KEY, TEST_INDEX_VERSION)
+    set_meta(conn, TEST_LAYOUT_KEY, _recorded_layout(project_root, layout).encode())
     conn.commit()
 
     by_placement: dict[str, int] = {}
     for binding in bound:
         by_placement[binding.placement] = by_placement.get(binding.placement, 0) + 1
-    return IndexedTestFiles(by_placement=by_placement)
+    return IndexedTestFiles(
+        by_placement=by_placement,
+        warnings=(*problems, *_declarations_binding_nothing(overrides, files)),
+    )
+
+
+def _declarations_binding_nothing(
+    overrides: Iterable[tuple[str, str]], files: Collection[str]
+) -> list[str]:
+    """A warning for each declared ``tests:`` prefix no indexed test file sits under.
+
+    Such a declaration is inert, and an inert declaration reads exactly like one
+    that works: ``tests/e2e`` without its trailing slash names one file of that
+    name, so the folder stays unplaced (review ``beadloom-b9ll`` m5).
+    """
+    warnings: list[str] = []
+    for ref_id, prefix in overrides:
+        if any(source_covers(prefix, path) for path in files):
+            continue
+        hint = "" if prefix.endswith("/") else " (a folder is declared with a trailing '/')"
+        warnings.append(
+            f"Node '{ref_id}': `tests:` prefix '{prefix}' covers no indexed test file, "
+            f"so it binds nothing{hint}"
+        )
+    return warnings
 
 
 def _recorded_contents(conn: sqlite3.Connection) -> dict[str, tuple[str, TestFileContents]]:
@@ -232,14 +359,14 @@ def _recorded_contents(conn: sqlite3.Connection) -> dict[str, tuple[str, TestFil
 
 
 def _memoised_resolver(
-    project_root: Path, conn: sqlite3.Connection, scan_paths: list[str]
+    project_root: Path, conn: sqlite3.Connection, scan_paths: list[str], root: str
 ) -> Callable[[str], str | None]:
     """Resolve a dotted import to its owning node, once per import path.
 
     A suite imports the same few hundred modules thousands of times, and the
     resolver's answer for a Python import depends on the import path alone.
     """
-    anchor = project_root / TEST_ROOT
+    anchor = project_root / root
     cache: dict[str, str | None] = {}
 
     def resolve(import_path: str) -> str | None:
@@ -256,10 +383,14 @@ def _rebuild_extra_tests(
     conn: sqlite3.Connection,
     bound: list[BoundTestFile],
     counts: dict[str, int],
-    *,
-    framework: str,
+    frameworks: dict[str, str],
 ) -> None:
-    """Write ``extra["tests"]`` for every node that has a source or declared tests."""
+    """Write ``extra["tests"]`` for every node that has a source or declared tests.
+
+    A node's framework is named from the patterns its bound files matched
+    (*frameworks*, by path); a node with no bound file states the project's.
+    """
+    project_framework = name_frameworks(fw for fw in frameworks.values() if fw)
     direct: dict[str, set[str]] = {}
     for binding in bound:
         if binding.ref_id is not None:
@@ -277,6 +408,8 @@ def _rebuild_extra_tests(
         if row["source"] is None and _TESTS_KEY not in extra:
             continue
         files = union.get(str(row["ref_id"]), frozenset())
+        own = name_frameworks(frameworks[path] for path in files if frameworks.get(path))
+        framework = own if files else project_framework
         extra[_TESTS_KEY] = summarize_tests(files, counts, framework=framework)
         conn.execute(
             "UPDATE nodes SET extra = ? WHERE ref_id = ?",
@@ -303,21 +436,30 @@ def placement_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return count_test_files_by_placement(conn)
 
 
+def kind_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many ``other_kind`` test files each recorded kind holds (BDL-074 F1)."""
+    return count_other_kind_test_files(conn)
+
+
 def needs_full_test_reindex(conn: sqlite3.Connection) -> bool:
     """Whether this index predates the test tables and must be rebuilt in full."""
     return get_meta(conn, TEST_INDEX_VERSION_KEY) != TEST_INDEX_VERSION
 
 
-def describe_placements(counts: dict[str, int]) -> str:
+def describe_placements(counts: dict[str, int], kinds: dict[str, int]) -> str:
     """One line stating how many test files there are and how each was placed.
 
     The bound and unplaced counts are always stated, so a repository whose tests
     are not laid out yet reads differently from one whose tests bind to nothing.
+    The ``other_kind`` files are named by their recorded kind (*kinds*), each with
+    its count: an acceptance step file and a self-check bind differently, and one
+    phrase over both was true of neither (BDL-074 F1).
     """
-    bound = counts.get(PLACEMENT_MIRROR, 0) + counts.get(PLACEMENT_OVERRIDE, 0)
-    parts = [f"{bound} bound to a node", f"{counts.get(PLACEMENT_UNPLACED, 0)} unplaced"]
+    beside = counts.get(PLACEMENT_BESIDE_CODE, 0)
+    bound = counts.get(PLACEMENT_MIRROR, 0) + counts.get(PLACEMENT_OVERRIDE, 0) + beside
+    bound_phrase = f"{bound} bound to a node" + (f" ({beside} beside the code)" if beside else "")
+    parts = [bound_phrase, f"{counts.get(PLACEMENT_UNPLACED, 0)} unplaced"]
     if counts.get(PLACEMENT_UNOWNED):
         parts.append(f"{counts[PLACEMENT_UNOWNED]} unowned")
-    if counts.get(PLACEMENT_OTHER_KIND):
-        parts.append(f"{counts[PLACEMENT_OTHER_KIND]} bound by other means")
+    parts.extend(f"{count} {label_test_kind(kind)}" for kind, count in sorted(kinds.items()))
     return f"{sum(counts.values())} files ({', '.join(parts)})"

@@ -169,8 +169,9 @@ layer up.
 `<root>/.beadloom/_graph/rules.yml`, so a project with the standard layout scores zero rule
 violations however many it has. It is recorded rather than repaired because the repair moves this
 repository's raw rule-violations score from 0 to the warning count `lint` reports, at the default
-`rule_warning` weight of 1.0. `tests/test_every_surface_past_lint_states_the_population.py` holds
-the current behaviour, so a repair fails there first.
+`rule_warning` weight of 1.0.
+`tests/integration/application/debt_report/test_the_debt_report_states_the_layer_population.py`
+holds the current behaviour, so a repair fails there first.
 
 They are carried UNWEIGHTED. A statement of how much of the graph a count covers is not itself
 debt, and scoring it would put a number in the score that measures the check rather than the code.
@@ -199,19 +200,64 @@ every node that carries that key, and a node whose `test_files` is empty is unte
 name-guessing mapper it replaced (`test_mapper.map_tests`, deleted in the same change)
 counted a node only when its `coverage_estimate` was `none`.
 
-While any test file is unplaced — not under `tests/unit/` or `tests/integration/` — the count
-is WITHHELD: `untested_count` is 0 and no node is marked `untested`. An unplaced file binds
-to no node, so a node with no bound test may still be tested by one, and counting it would
-charge a project for its layout rather than its tests. The population then reads
+While any test file is unplaced — not under a mirrored kind folder or a build tool's test tree, and
+not inside a node's source — the count is WITHHELD: `untested_count` is 0 and no node is marked
+`untested`. An unplaced file binds to no node, so a node with no bound test may still be tested by
+one, and counting it would charge a project for its layout rather than its tests. The population
+then reads
 `not counted: <describe_unplaced sentence>, so a node with no bound test may still be tested`,
-the sentence `ctx` prints under its `Tests:` line. Once every test file is placed the count is
-live and the population reads `counted over N node(s) the test binding covers, all M test
-file(s) placed`. The placement counts come from
+the sentence `ctx` prints under its `Tests:` line. Since BDL-074 G2 that sentence is stated
+against the test layout the reindex recorded (`infrastructure.repository.read_test_layout`), so it
+names the project's own folders. Once every test file is placed the count is live and the population
+reads `counted over N node(s) the test binding covers, all M test file(s) placed`. Whenever a layout
+is recorded, withheld and counted alike, the population ENDS with `; ` and what a test file is read
+by, from `describe_test_file_recognition()` (`beadloom-2mj3.15`; before it, only when the index held
+no test file). A file outside every root, test tree and node source is not read, so "all M test
+file(s) placed" means all M files those patterns matched. On this repository, measured at `067df32a`
+on 2026-09-29: `not counted: 167 of 623 test file(s) are unplaced (not under tests/integration/ or
+tests/unit/) and bind to no node, so a node with no bound test may still be tested; a test file is
+read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests`. Under
+the default layout the clause names each group with its patterns and the roots and test trees the
+project has, since the index records only the roots that exist (`beadloom-2mj3.17`). With none of
+them, and tests beside the code read, it ends `and it lies beside a node's code, since none of the
+roots tests, test, spec, __tests__ exists` (`beadloom-2mj3.19`). So a project whose tests match no
+pattern is charged for every covered node and the report says why. The placement counts come from
 `infrastructure.repository.count_test_files_by_placement`.
 
-Two cases score what the heuristic scored. A project whose tests are not laid out scores 0,
-as the heuristic did wherever it detected a framework (it estimated `low`, not `none`). A
-project with no test file has every covered node untested, before and after.
+The binding reads a test file by the project's layout — its roots, its patterns, the build
+tools' test trees and tests beside the code, each with a default (see the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#configuration-the-test-layout)) —
+so an adopter whose tests are not `tests/**/test_*.py` scores what the retired mapper scored.
+Measured by `beadloom-2mj3.11` and `beadloom-2mj3.13` on 2026-09-28, against `main` at
+`db5c3f28`: a Go module with a test beside each package scores `untested: 0` as on main, where
+the binding before G2 read 3; a Python project whose tests are mirrored under a declared
+`test/` root, or sit beside the code, scores as on main; a Maven, a Gradle-Kotlin and a SwiftPM
+project score `untested: 0` as on main. `beadloom-2mj3.15` added the conventions that were
+still worse than main — a Jest project with `__tests__/` folders, and JVM and SwiftPM test-tree
+files whose names carry no test affix — each now scoring as on main. A Python project whose
+tests sit flat under `test/`, a TypeScript project with flat `spec/*.spec.ts` files, or a Jest
+project with a top-level `__tests__/` folder (`beadloom-2mj3.17`), has them read under the
+default roots `tests`, `test`, `spec` and `__tests__` and unplaced, so its count is withheld
+(0, as on main).
+`tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py`
+runs those layouts, one project per convention.
+
+Three conventions of the retired mapper are non-goals, each stated in the
+[Test Mapping SPEC](../../../context-oracle/features/test-mapping/SPEC.md#what-is-not-bound-the-non-goals).
+Two of them change the score, because the file they concern is not read or names no
+framework, so nothing withholds the count:
+
+- NG2: an Xcode `ShopTests/` target is outside every root, test tree and node source, so it
+  is not read until `tests.mirrors` declares it, and every covered node counts untested where
+  main counted 0.
+- NG4: a marker file without a test file (`conftest.py`, `jest.config.*`) names no framework,
+  so a project with no test file has every covered node untested where main counted 0.
+
+NG3 does not change the score. A test bound on main only by its imports or by a folder named
+after a node, such as `tests/billing/test_x.py`, is read under its root and counted unplaced,
+because no kind folder, mirror or `tests:` list places it. The count is withheld: 0, as on
+main (`TestANameAFolderOrAnImportUnderARootIsNotAGuessAtItsNode` in
+`tests/integration/application/reindex/test_a_convention_main_reached_by_a_guess_is_stated_not_guessed.py`).
 
 The population is carried UNWEIGHTED, like `layer_populations`: under Test Gaps in the Rich
 report, and as `test_population` in `format_debt_json`.
@@ -297,6 +343,12 @@ way, so neither drops a field the report carries.
 - Category breakdown with per-item detail lines (tree-style prefixes); the
   `layer_populations` clauses under Rule Violations and `test_population` under Test Gaps
 - Top offenders table (rank, node, score, reasons)
+
+The declared text in those lines — the `layer_populations` phrases, `test_population` (which
+names the test-file patterns, such as Jest's `__tests__/**/*.[jt]s`) and each offender's `ref_id`
+and reasons — is passed through `rich.markup.escape` before Rich reads it as markup. Unescaped,
+the Jest pattern printed as `__tests__/**/*.s`, and a declared pattern holding `[/x]` raised a
+`MarkupError` (`beadloom-2mj3.19`). The JSON form carries the same text unchanged.
 
 **JSON (machine-readable)**:
 - `debt_score`: float
@@ -419,9 +471,13 @@ class DebtReport: ...
 
 ## Testing
 
-Test files: `tests/test_debt_report.py`, `tests/test_ctx_and_debt_report_read_the_test_binding.py`
-(the untested count read from the binding, withheld while files are unplaced, and the
-`--category` report keeping its population clauses), and
+Test files: `tests/integration/application/debt_report/test_debt_report.py`,
+`tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py` (the
+untested count read from the binding, withheld while files are unplaced, and the `--category` report
+keeping its population clauses),
+`tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py` (the
+count on a Go module, three Python layouts and the Maven, Gradle-Kotlin and SwiftPM layouts, and the
+population of a project with no test file), and
 `tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.
 
 Tests should cover the following scenarios:
@@ -436,4 +492,7 @@ Tests should cover the following scenarios:
 - **Trend computation**: Verify delta calculation when a snapshot exists, and `None` return when no snapshot exists.
 - **Format JSON**: Verify JSON serialization with and without category filter.
 - **Format Rich**: Verify that Rich output contains expected sections (header, score, categories, offenders).
+- **Declared text as written**: The Rich output carries `__tests__/**/*.[jt]s`, a layer phrase
+  and an offender's bracketed reason verbatim, and a pattern holding `[/x]` does not raise
+  (`tests/unit/application/debt_report/test_the_rich_report_prints_declared_text_as_written.py`).
 - **Category short names**: Verify that short names (`rules`, `docs`, `tests`) map correctly to internal names.

@@ -28,7 +28,7 @@ every result prose in a bead comment, and one of them — sent to audit another 
 
 BDL-074 D1 added a third question: **what a run covers when it covers less than the whole
 scope.** A run over one change or over a random sample is scored like any other run, and
-four modules state the part it covered — see
+five modules state the part it covered — see
 [A run over a change, or over a sample](#a-run-over-a-change-or-over-a-sample).
 
 ## The three findings
@@ -149,7 +149,8 @@ stays out of the product (CONTEXT Q5); this repository keeps it in its own repos
 | Module | Answers | Public API |
 |--------|---------|------------|
 | `touched.py` | which new-side lines a unified diff touched, and which functions they fall in | `changed_lines(diff_text)`, `touched_functions(source, lines)`, `TouchedFunctions` |
-| `change.py` | the population of a change: touched functions in the declared scope, each one's owning node, the tests the binding ties to that node | `diff_since(project_root, base)`, `plan_change(project_root, conn, diff_text, *, base)`, `describe_change`, `change_payload`, `ChangePlan`, `ChangedFunction`, `NodeSelection`, `MutationChangeError` |
+| `change.py` | the population of a change: touched functions in the declared scope, each one's owning node, the tests the binding ties to that node, the acceptance step files selected by its tag, and the unplaced files as the fallback | `diff_since(project_root, base)`, `plan_change(project_root, conn, diff_text, *, base)`, `describe_change`, `change_payload`, `ChangePlan`, `ChangedFunction`, `NodeSelection`, `MutationChangeError` |
+| `acceptance.py` | which acceptance step files run a node's scenarios, by the `@node:` tags of the features they load (BDL-074 G1) | `acceptance_files_by_node(project_root, step_files)` |
 | `survivors.py` | the survivors of a run, under the node owning their file | `read_survivors(path)`, `survivors_by_node(conn, survivors)`, `describe_survivors`, `survivors_payload`, `Survivor` |
 | `sample.py` | the interval a score measured on a random sample supports | `wilson_interval(successes, trials)`, `sample_interval(counters, *, population)`, `describe_sample`, `sample_payload`, `SampleInterval` |
 
@@ -174,13 +175,49 @@ Untracked files are not in a git diff. A missing `git` or a base that names no c
 
 **Every part of the population says what it covered.** `ChangePlan` carries the number of
 files the change touched, the ones inside the declared scope, the unread ones, the touched
-functions, the lines outside any function, one `NodeSelection` per node reached (its
-functions and its bound test files), and every test file the binding places under no node.
-A test file counts as bound only under the `mirror` or `override` placement, read through
-`infrastructure.repository.get_test_file_bindings`. While unplaced test files exist, a node's
-bound tests can be short of the tests that exercise it, and `describe_change` prints that
-count on its own line. An empty population is a statement too: a change touching no function
-of the declared scope has nothing to mutate and no score.
+functions, the lines outside any function, one `NodeSelection` per node reached, and the test
+files the runner falls back to. Each kind of test file is selected by what it is (BDL-074 G1):
+
+| Kind | Where the plan carries it | Selected when |
+|------|---------------------------|---------------|
+| bound | `NodeSelection.bound_tests` | the binding recorded the node for the file, whatever placement bound it (`mirror`, `beside_code`, `override`) |
+| acceptance step | `NodeSelection.acceptance_tests` (default `()`) | a scenario the step file loads carries the node's `@node:` tag |
+| unplaced | `ChangePlan.unplaced_tests` | always: the binding placed the file nowhere (placement `unplaced`), so it may exercise the node and the binding cannot say. This is the runner's fallback |
+| self-check, unowned | nowhere | never: a self-check tests the repository's own files rather than the changed code, and an unowned file names code no node owns |
+
+`unplaced_tests` replaced `unbound_tests` (every file bound to no node, whatever the reason) in
+BDL-074 G1, because that list held the acceptance step files and self-checks, which can never
+become bound, so the fallback could never empty. The test files are read through
+`graph.rules.suite_tables.read_test_files`, which carries each file's recorded kind.
+
+`acceptance_files_by_node` reads each step file as Python for the LITERAL paths it hands to
+pytest-bdd: every positional argument of `scenarios(...)` and the first of `scenario(...)`. A
+path is resolved from the step file's own folder, pytest-bdd's default, and a folder stands for
+every `.feature` beneath it. The `@node:` tags of the scenarios in those features name the
+nodes. A computed path, a `bdd_features_base_dir` setting, a step file that does not parse and
+a feature that cannot be read select nothing, because following them would be a guess that
+reads as a binding. A `scenario(...)` binding is credited with every tag of its feature, which
+can select a step file a little more widely than the one scenario it runs, never less.
+
+Since BDL-074 F1 the plan also carries `test_placements` (test files by placement) and
+`other_kinds` (the `other_kind` files by recorded kind), both defaulting to empty, and what it
+STATES about the files bound to no node is counted from those by reason. `describe_change`
+prints a `Binding:` line built by `context_oracle.test_binding.describe_unbound`: the unplaced
+sentence `ctx` and the debt report state, over the folders of `ChangePlan.test_layout` — the
+`RecordedTestLayout` the index recorded, read by `infrastructure.repository.read_test_layout`,
+`None` for an index with no record (`beadloom-2mj3.15`) — then the unowned files, then each kind by its own
+count, so the three surfaces state one number for "unplaced". The line is printed only when
+some test file is bound to no node. A node's line adds `, N acceptance step file(s) by tag`
+when N is non-zero. `change_payload` carries `unplaced_tests`, each node's `bound_tests` and
+`acceptance_tests`, plus `test_placements` and `other_kinds` as `{name: count}` objects. An
+empty population is a statement too: a change touching no function of the declared scope has
+nothing to mutate and no score.
+
+Measured by `beadloom-2mj3.10` on 2026-09-28, on a one-line change to
+`liveness._cycle_reasons` (rule-engine; Darwin arm64, CPython 3.13.7, mutmut 3.7.0): this
+repository's runner selected 36 bound + 10 acceptance by tag + 60 fallback = 106 files, with
+103 self-checks excluded, and its select step took 180 s. The selection before G1 was
+36 bound + 134 fallback = 170 files, in 342 s.
 
 **Survivors are placed by the graph's ownership rule.** The survivor list is a JSON list of
 `{path, mutant}` objects — names, not a tool. `survivors_by_node` asks
@@ -220,7 +257,9 @@ infrastructure seam that `onboarding` may not import (`onboarding-no-direct-infr
 `guards:` block the same way.
 
 Since BDL-074 D1 the change and survivor halves also read the index: `change.py` and
-`survivors.py` ask `infrastructure.repository` for a file's owning node and for the test
-binding, and `change.py` takes the `mirror` and `override` placement names from
-`context_oracle.test_binding`. `change.py` runs `git` as a subprocess; nothing here imports a
-mutation runner.
+`survivors.py` ask `infrastructure.repository` for a file's owning node, and `change.py` reads
+the test files with their binding and recorded kind through
+`graph.rules.suite_tables.read_test_files` and takes `describe_unbound` from
+`context_oracle.test_binding`. `acceptance.py` reads step files and features from disk, parsing
+a feature with `graph.scenarios.parse_feature`. `change.py` runs `git` as a subprocess;
+nothing here imports a mutation runner.

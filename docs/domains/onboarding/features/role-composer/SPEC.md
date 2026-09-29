@@ -119,6 +119,7 @@ Module `src/beadloom/onboarding/role_composer.py`:
 Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`,
 `tests/test_shared_writing_standard.py`, `tests/test_role_bdd_mutation_duties.py`,
 `tests/test_role_core_names_the_room.py` and
-`tests/test_the_explore_role_is_composed_like_the_others.py` (the shared
-fragments reaching every role), and `tests/test_s5_the_instruments_agree.py`
-(the `_landing` and `_tracker` texts against the behaviour they describe)
+`tests/test_the_explore_role_is_composed_like_the_others.py` (the shared fragments reaching every
+role), and
+`tests/integration/services/bd_seam/test_what_the_bd_seam_claims_holds_for_the_installed_bd.py` (the
+`_landing` and `_tracker` texts against the behaviour they describe)

@@ -49,24 +49,45 @@ nine green checks.
 
 ## Beads
 
-| ID | Name | Priority | Depends On | Status |
-|---|---|---|---|---|
-| A1 | the chdir guard and the contact guard, measured before the fix | P1 | - | Pending |
-| A2 | the self-check snapshot replaces `live_repo_reindexed` | P1 | A1 | Pending |
-| A3 | the self-check triage: 547 checks by what they guard, Gate duplicates removed | P1 | A2 | Pending |
-| B1 | `tests/support/` and one repository-root helper | P1 | A3 | Pending |
-| B2 | relocate the 227 clear-node files, collected set unchanged | P1 | B1 | Pending |
-| B3 | relocate acceptance by feature node, `@node:` matches | P1 | B1 | Pending |
-| C1 | index test files; the binding from the mirror, with a `tests:` override | P1 | - | Pending |
-| C2 | `ctx` and `debt-report` read the binding, shape kept | P1 | C1 | Pending |
-| C3 | the rules: `test_binding`, `test_import_boundary`, `scenario_binding` | P1 | C1, B2, B3 | Pending |
-| D1 | mutation per change and the weekly sample | P1 | C1 | Pending |
-| E1 | the rule-engine pilot, invariants before and after | P1 | C3, B3 | Pending |
-| E2 | test standards in the `test` role, and the checkable ones checked | P2 | B2 | Pending |
-| T | test: the invariants, measured | P1 | C2, D1, E1, E2 | Pending |
-| R | review | P1 | T | Pending |
-| W | tech-writer | P2 | R | Pending |
-| V | verify: the per-change and weekly jobs on CI | P1 | W | Pending |
+| ID | Tracker | Name | Priority | Depends On | Status |
+|---|---|---|---|---|---|
+| A1 | `beadloom-l67s` | the chdir guard and the contact guard, measured before the fix | P1 | - | Done |
+| A2 | `beadloom-kixx` | the self-check snapshot replaces `live_repo_reindexed` | P1 | A1 | Done |
+| A3 | `beadloom-2esy` | the self-check triage: 547 checks by what they guard, Gate duplicates removed | P1 | A2 | Done |
+| B1 | `beadloom-51yx` | `tests/support/` and one repository-root helper | P1 | A3 | Done |
+| B2 | `beadloom-1bd6` | relocate the 227 clear-node files, collected set unchanged | P1 | B1 | Done |
+| B3 | `beadloom-d0bp` | relocate acceptance by feature node, `@node:` matches | P1 | B1 | Done |
+| B4 | `beadloom-2mj3.4` | acceptance one folder per node (added 2026-09-28, owner ruling) | P1 | B3 | Done |
+| C1 | `beadloom-5qgt` | index test files; the binding from the mirror, with a `tests:` override | P1 | - | Done |
+| C2 | `beadloom-3z94` | `ctx` and `debt-report` read the binding, shape kept | P1 | C1 | Done |
+| C3 | `beadloom-kag9` | the rules: `test_binding`, `test_import_boundary`, `scenario_binding` | P1 | C1, B2, B3, B4 | Done |
+| D1 | `beadloom-vr0b` | mutation per change and the weekly sample | P1 | C1 | Done |
+| E1 | `beadloom-cs2o` | the rule-engine pilot, invariants before and after; the 15 rule-engine survivors (added 2026-09-28, owner) | P1 | C3, B3, B4 | Done |
+| E2 | `beadloom-kug7` | test standards in the `test` role, and the checkable ones checked | P2 | B2 | Done |
+| W1 | `beadloom-2mj3.1` | docs: the pairs C1 made stale (added 2026-09-27) | P1 | C1 | Done |
+| W2 | `beadloom-2mj3.2` | docs: the pairs C2 made stale (added 2026-09-27) | P1 | C2 | Done |
+| W3 | `beadloom-2mj3.3` | docs: the pairs D1 made stale (added 2026-09-28) | P1 | D1 | Done |
+| W4 | `beadloom-2mj3.5` | docs: the pairs C3 made stale (added 2026-09-28) | P1 | C3 | Done |
+| T | `beadloom-75pl` | test: the invariants, measured | P1 | C2, D1, E1, E2 | Done |
+| F1 | `beadloom-2mj3.6` | truthful suite numbers (added 2026-09-28, owner, after T) | P1 | T | Done |
+| F2 | `beadloom-2mj3.7` | reindex and test-mapping get bound tests (added 2026-09-28) | P1 | T | Done |
+| F3 | `beadloom-2mj3.8` | the three tags; self-checks and scenarios outside the outcomes (added 2026-09-28) | P1 | T | Done |
+| W5 | `beadloom-2mj3.9` | docs: the pairs the fix wave made stale (added 2026-09-28) | P1 | F1 | Done |
+| G1 | `beadloom-2mj3.10` | review fix: announcement states; fallback of unplaced files (added 2026-09-28) | P1 | R | Done |
+| G2 | `beadloom-2mj3.11` | review fix: tests beside the code bind; configurable roots and patterns (added 2026-09-28) | P1 | R | Done |
+| G3 | `beadloom-2mj3.12` | review fix: true reasons; two checks placed; stack-neutral test role (added 2026-09-28) | P1 | R | Done |
+| G4 | `beadloom-2mj3.13` | review fix: Java, Kotlin, Swift default patterns (added 2026-09-28, owner) | P1 | G2 | Done |
+| W6 | `beadloom-2mj3.14` | docs: the pairs the review fixes made stale (added 2026-09-28) | P1 | G1–G4 | Done |
+| G5 | `beadloom-2mj3.15` | review fix: every convention of the retired mapper, proven against main (added 2026-09-28) | P1 | R (2nd run) | Done |
+| W7 | `beadloom-2mj3.16` | docs: the pairs G5 made stale (added 2026-09-28) | P1 | G5 | Done |
+| G6 | `beadloom-2mj3.17` | review fix: a top-level __tests__/ is a default root (added 2026-09-28) | P1 | R (3rd run) | Done |
+| W8 | `beadloom-2mj3.18` | docs: the pairs G6 made stale (added 2026-09-28) | P1 | G6 | Done |
+| R | `beadloom-b9ll` | review — runs 1–3 CHANGES REQUIRED; 4th run OK with minors | P1 | T, F1–F3, W5, G1–G6, W6–W8 | Done |
+| G7 | `beadloom-2mj3.19` | review fix: Rich markup escaped (added 2026-09-29) | P1 | R | Done |
+| W | `beadloom-7u77` | tech-writer | P2 | R, G7 | Done |
+| V | `beadloom-paze` | verify: the per-change and weekly jobs on CI; the ai-techwriter index cache key (added 2026-09-28) | P1 | W | In progress |
+
+> **Status is as of 2026-09-28 and is copied from the tracker by hand.** The tracker (`bd list --all --parent beadloom-2mj3`) and ACTIVE.md, which a pre-commit hook reconciles from it, are authoritative; this column is not. Rows B4, W1–W3 and the edges from B4 were added during the run and are recorded in ACTIVE.md and CONTEXT.md.
 
 ## Bead Details
 

@@ -56,6 +56,16 @@ Rule type                        Inert when
                                  version the project computes a fact for, so there is no
                                  claim to check. Counted here, reported by
                                  :mod:`.summary_facts`
+``test_binding``                 the index holds no test-file table, or every declared
+                                 leg judges nothing (a ``files`` glob matching no test
+                                 file it judges, a ``for`` matcher selecting no node).
+                                 Counted here, reported by :mod:`.test_binding`
+``test_import_boundary``         no test import is recorded, or the ``from`` glob, the
+                                 ``of`` matcher or the ``to`` glob leaves nothing to
+                                 judge. Counted here, reported by
+                                 :mod:`.test_import_boundary`
+``scenario_binding``             the ``features`` glob matches 0 files. Counted here,
+                                 reported by :mod:`.scenario_binding`
 ===============================  =========================================================
 
 Two deliberate boundaries, named rather than left to be discovered:
@@ -108,8 +118,11 @@ from beadloom.graph.rules.types import (
     ModuleCoverageRule,
     NodeMatcher,
     RequireRule,
+    ScenarioBindingRule,
     ScenarioCoverageRule,
     SummaryFactsRule,
+    TestBindingRule,
+    TestImportBoundaryRule,
     UnregisteredFeatureCandidateRule,
     liveness_finding,
 )
@@ -430,6 +443,34 @@ def _summary_facts_reasons(conn: sqlite3.Connection, project_root: Path | None) 
     return [reason] if reason is not None else []
 
 
+def _suite_rule_reasons(
+    rule: TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule,
+    conn: sqlite3.Connection,
+    project_root: Path | None,
+) -> list[str]:
+    """Whether a suite rule can judge anything, asked of the module that owns it.
+
+    Delegated for the reason ``scenario_coverage`` is: each module's predicate IS
+    the selection its evaluator makes, and a second body here would be free to
+    say a rule fired on a run where it stood down (BDL-074 C3).
+    """
+    if isinstance(rule, TestBindingRule):
+        from beadloom.graph.rules.test_binding import test_binding_inert_reason
+
+        reason = test_binding_inert_reason(conn, rule)
+    elif isinstance(rule, TestImportBoundaryRule):
+        from beadloom.graph.rules.test_import_boundary import test_import_boundary_inert_reason
+
+        reason = test_import_boundary_inert_reason(conn, rule)
+    else:
+        if project_root is None:
+            return []
+        from beadloom.graph.rules.scenario_binding import scenario_binding_inert_reason
+
+        reason = scenario_binding_inert_reason(rule, project_root)
+    return [reason] if reason is not None else []
+
+
 def _reasons_for_rule(
     rule: Rule, facts: _GraphFacts, conn: sqlite3.Connection, project_root: Path | None
 ) -> list[str]:
@@ -463,6 +504,8 @@ def _reasons_for_rule(
         return _doc_area_reasons(rule, conn)
     if isinstance(rule, SummaryFactsRule):
         return _summary_facts_reasons(conn, project_root)
+    if isinstance(rule, (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule)):
+        return _suite_rule_reasons(rule, conn, project_root)
     # An unknown-ref_id diagnosis the loader can make about a rule kind this
     # module does not model yet is still worth printing: `validate_rules`
     # computes it, and dropping its return value is how #172 stayed open.
@@ -512,6 +555,9 @@ _SELF_REPORTING: tuple[type, ...] = (
     ScenarioCoverageRule,
     DocAreaCoherenceRule,
     SummaryFactsRule,
+    TestBindingRule,
+    TestImportBoundaryRule,
+    ScenarioBindingRule,
 )
 
 

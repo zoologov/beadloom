@@ -95,8 +95,9 @@ opens with a project-relative path, and no path opens with `# `.
 
 ## Tests
 
-- `tests/acceptance/features/declared_axes.feature` — the scenarios.
-- `tests/acceptance/features/commit_gate_verdict.feature` — what the gate says it compared.
+- `tests/acceptance/doc-sync/scope-check/declared_axes.feature` — the scenarios.
+- `tests/acceptance/doc-sync/scope-check/commit_gate_verdict.feature` — what the gate says it
+  compared.
 - `tests/test_a_commit_is_judged_against_the_declared_axes.py` — the cases.
 - `tests/test_the_commit_gate_states_what_it_compared.py` — the verdict's stream, and the
   exempt set measured over this branch's own commits.

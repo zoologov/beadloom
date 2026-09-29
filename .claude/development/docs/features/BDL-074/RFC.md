@@ -98,6 +98,8 @@ All measured on 2026-09-28 by the research agent unless marked inferred.
 | — (not derived; consumers) | docs-audit, doc-generator | `doc_sync/audit.py:941-975`, `onboarding/doc_generator.py:934-1045` | — | no | Read `extra["tests"]`, whose four-key shape this RFC keeps. |
 | — (not derived; C1) | db | `infrastructure/db.py` — the three test-file tables | — | **yes** | The test index needs its tables. Surfaced by PR #83's pre-push scope warning; ruled in by the owner on 2026-09-27. |
 | — (not derived; C1, C2) | repository | `infrastructure/repository.py` — `most_specific_owner`, `count_test_files_by_placement` | — | **yes** | `ctx` reads the placement count from the repository rather than importing the reindex. Surfaced by the same warning; ruled in by the owner on 2026-09-27. |
+| — (not derived; V) | sync-check | `doc_sync/engine.py` — a docstring naming a moved test | — | **yes** | Docstring only: the path of a test the layout moved. Surfaced by the pre-push scope warning; ruled in by the owner on 2026-09-29. |
+| — (not derived; V) | version-surface | `doc_sync/version_surface.py` — a docstring naming a moved test | — | **yes** | Docstring only: the path of a test the layout moved. Surfaced by the same warning; ruled in by the owner on 2026-09-29. |
 
 **Not derivable, and to rule with this RFC's approval.** `beadloom impact` reads Python under `src/`,
 so no row can name `tests/`, `.github/workflows/`, `pyproject.toml`, `.beadloom/*.yml` — every site of

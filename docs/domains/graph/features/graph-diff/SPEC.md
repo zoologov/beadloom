@@ -133,6 +133,10 @@ Renders a Rich-formatted diff to the console:
   - Source path change: `"source: <old> → <new>"` when source paths differ.
   - Tags change: `"tags: <old_list> → <new_list>"` when tags differ.
   - Symbols change: `"symbols: +<N> -<N>"` when `symbols_added` or `symbols_removed` are non-zero.
+- Every piece of the graph's own text — ref ids, kinds, summaries, source paths, tags, the
+  edge line `src --[kind]--> dst`, the duplicate lines and the `since` ref — is passed through
+  `rich.markup.escape` first. Unescaped, Rich took `[uses]` for a style tag and printed
+  `---->`, and a source such as `app/[slug]/` lost its folder (`beadloom-2mj3.19`).
 - Edges section: `+` (green) for added, `-` (red) for removed, formatted as `src --[kind]--> dst`.
 - Summary line: `"{N} added, {N} changed, {N} removed nodes; {N} added, {N} removed edges"`.
 
@@ -266,7 +270,11 @@ beadloom diff [--since REF] [--json] [--project DIR]
 
 ## Testing
 
-Test files: `tests/test_diff.py`, `tests/test_diff_enhanced.py`, `tests/test_cli_diff.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`
+Test files: `tests/integration/graph/diff/test_diff.py`,
+`tests/integration/graph/diff/test_diff_enhanced.py`,
+`tests/integration/infrastructure/console_streams/test_cli_diff.py`,
+`tests/integration/onboarding/doc_generator/test_symbol_diff_polish.py`,
+`tests/integration/graph/snapshot/test_snapshot.py`
 
 ### Unit Tests
 
@@ -287,6 +295,8 @@ Test files: `tests/test_diff.py`, `tests/test_diff_enhanced.py`, `tests/test_cli
 - **Rich output.** Capture console output with `Console(file=StringIO())`. Assert presence of `+`, `~`, `-` markers and summary line with correct counts.
 - **No-change output.** Assert the "No graph changes" message is printed.
 - **Changed-node rendering.** Assert that source path changes, tag changes, and symbol counts are rendered when present.
+- **Graph text as written.** Assert that the edge kind (`--[uses]-->`) and a bracketed source
+  path reach the Rich output unchanged (`beadloom-2mj3.19`).
 
 ### Integration Tests
 

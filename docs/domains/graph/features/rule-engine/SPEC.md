@@ -9,12 +9,12 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`. The `until:` grammar is no longer here: `exit_condition_deadline` moved to `infrastructure/exit_condition.py` in BDL-070 B2, because `onboarding` declares an exit condition too and was importing this peer domain to read what one is. `beadloom.graph.rules.exit_condition_deadline` still answers — `rules/__init__.py` re-exports it.
 - `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation); `AUTHORING_KEYS`, derived from the one dispatch table; the memo that lets one `init` parse `rules.yml` once, and `forget_parsed_rules()`.
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
-- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
+- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers. `evaluate_one_import_rule` — one `forbid_import` rule over a list of imports — is public since BDL-074 C3, because `test_import_boundary` runs it over test imports.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3).
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
-- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
+- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, and since BDL-074 C3 `suite_population`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings.
@@ -25,6 +25,11 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
 - `rules/summary_facts.py` — `summary_facts`: the numeric and version claims a node `summary` states, checked against the same fact the project computes. The extraction and the comparison are the documentation audit's, so there is no second notion of "a version" here (BDL-062 `.1`).
+- `rules/test_binding.py` — `test_binding`: a test file bound to no node (the `files` leg) and a node with no bound test file, its own or a `part_of` descendant's (the `for` leg), over the binding the reindex records in `test_files` (BDL-074 C3).
+- `rules/test_import_boundary.py` — `test_import_boundary`: chooses which recorded TEST imports a boundary judges, then hands them to `forbid_import`'s own evaluator (BDL-074 C3).
+- `rules/scenario_binding.py` — `scenario_binding`: a scenario's `@node:` tag against the node folder its feature file sits in. Whether the scenario's steps execute that node is NOT judged (see below) (BDL-074 C3).
+- `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules (`IndexedTestFile` carries each file's `path`, `ref_id`, `placement` and, since BDL-074 F1, its recorded `kind`), and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
+- `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). `excused` counts the subjects the entries excused in a run, and `exemptions_used` (BDL-074 F1) how many exemptions excused at least one, which the `files` leg states as `excused by K exemption(s)`. The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
@@ -33,7 +38,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Twelve** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, and BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`). This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Fifteen** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`), and BDL-074 C3 added `test_binding`, `test_import_boundary` and `scenario_binding`. This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -49,6 +54,9 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **scenario_coverage** | `scenario_coverage` | Bind behaviour-bearing nodes to executable scenarios, both ways |
 | **doc_area_coherence** | `doc_area_coherence` | Document a node where this graph's own convention documents nodes like it |
 | **summary_facts** | `summary_facts` | Check a number or version stated in a node `summary` against the project |
+| **test_binding** | `test_binding` | A test file bound to no node, and a node with no bound test file |
+| **test_import_boundary** | `test_import_boundary` | Forbid imports from test files, narrowed to the tests of matched nodes |
+| **scenario_binding** | `scenario_binding` | A scenario's `@node:` tag names the node folder its feature file sits in |
 
 ### Constants
 
@@ -64,14 +72,14 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset({
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
 # Every key a rule may declare to select its type. A rule declares exactly one.
-# The keys of the dispatch table below, plus `layers`: twelve.
+# The keys of the dispatch table below, plus `layers`: fifteen.
 AUTHORING_KEYS: frozenset[str] = frozenset({*_MAPPING_PARSERS, _KEY_READ_FROM_THE_RULE})
 ```
 
 `AUTHORING_KEYS` is the single definition of that set, and since BDL-073 B3 it is derived from
 the loader's dispatch table rather than listed beside it, so a rule type cannot be accepted by
 one and missing from the other. The dispatch is ONE table, `_MAPPING_PARSERS`, from authoring
-key to parser: the eleven keys whose value is a mapping, `forbid_cycles` among them. `layers`
+key to parser: the fourteen keys whose value is a mapping, `forbid_cycles` among them. `layers`
 stays explicit (`_KEY_READ_FROM_THE_RULE`), because a layer rule's `layers` is a list and
 `enforce`, `allow_skip`, `edge_kind` and `exempt` sit beside it, so its parser is handed the
 whole rule. It is the one key the table cannot hold.
@@ -205,7 +213,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live).
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live). The three suite rules of BDL-074 C3 report their own in `test_binding.py`, `test_import_boundary.py` and `scenario_binding.py`, and `liveness.py` counts each through that module's `*_inert_reason` predicate, so the finding and the count cannot disagree.
 
 **Reporting a rule and counting it are two questions, and for `scenario_coverage` and `doc_area_coherence` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate and `doc_area_coherence` through `doc_area_inert_reason` — not second copies of them — and does not report either a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
@@ -225,6 +233,9 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `scenario_coverage` | **per leg**: its `for` matcher selects **0** nodes (coverage leg) or a `references` glob matches **0** documents (reference leg). Its `features` glob matching **0** files is the exception — that stands **all four** legs down, and only that state is counted in `rules_inert` | reported by `scenario_coverage.py`, counted by `liveness.py` |
 | `doc_area_coherence` | **no** source area in the graph reaches the majority `threshold` over `min_support` observations, so the convention the rule enforces cannot be read off the graph at all — a flat docs tree, a project mid-migration, a graph too small to hold a convention | reported by `doc_area.py`, counted by `liveness.py` |
 | `summary_facts` | **no** node `summary` in the graph states a number or version the project computes a fact for, so there is no claim to check. A claim naming a fact the project DECLINED to compute is a separate report — that node is unverifiable while the rule as a whole is still live | reported by `summary_facts.py`, counted by `liveness.py` |
+| `test_binding` | the index holds no `test_files` table (it was written before test files were indexed), **or** every declared leg judges nothing: the `files` glob matches no test file the leg judges and the `for` matcher selects no node. One dead leg beside a live one is reported per leg and does not count the rule inert | reported by `test_binding.py`, counted by `liveness.py` |
+| `test_import_boundary` | no test import is recorded, **or** its `from` glob matches **0** test files with imports, its `of` matcher leaves no judged file, or its `to` glob matches **0** recorded test import paths — decided over every recorded test import, before any crossing | reported by `test_import_boundary.py`, counted by `liveness.py` |
+| `scenario_binding` | its `features` glob matches **0** feature files | reported by `scenario_binding.py`, counted by `liveness.py` when a `project_root` is given |
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -388,7 +399,10 @@ Enforces complexity limits per node (architectural smell detection).
 #### `Rule` (type alias)
 
 ```python
-Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule | CardinalityRule
+Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
+        | CardinalityRule | UnregisteredFeatureCandidateRule | ModuleCoverageRule
+        | ScenarioCoverageRule | DocAreaCoherenceRule | SummaryFactsRule
+        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule)
 ```
 
 #### `Violation`
@@ -397,7 +411,7 @@ Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule 
 |--------------------|----------------|-------------------------------------------------|
 | `rule_name`        | `str`          | Name of the violated rule.                      |
 | `rule_description` | `str`          | Description of the violated rule.               |
-| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
+| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, `"test_binding"`, `"test_import_boundary"`, `"scenario_binding"`, `"suite_population"` (a suite rule's population statement — see above), `"layer_population"`, `"layer_declaration"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
 | `severity`         | `str`          | `"error"` or `"warn"`.                          |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
@@ -530,6 +544,159 @@ sentence from the registry's *this project declined to compute it*.
 the project it describes is wrong in every house style, and the value sits in the adopter's own
 graph, so there is no house preference to respect.
 
+### The suite rules — `test_binding`, `test_import_boundary`, `scenario_binding` (BDL-074 C3)
+
+Three rule types judge the test suite against the graph. `test_binding` and
+`test_import_boundary` read the binding the reindex records (BDL-074 C1): the `test_files`
+table holds each test file's path, the node it binds to and its placement, and `test_imports`
+holds its imports. A test file binds to the node whose code its path mirrors, or to the node
+whose `tests:` list names it; the placement values are the `PLACEMENT_*` names
+`infrastructure/repository.py` defines. `scenario_binding` reads the acceptance suite through
+`graph/scenarios.py` ([`scenario-binding`](../scenario-binding/SPEC.md)) and parses no Gherkin
+itself.
+
+```yaml
+  - name: test-files-bind-to-a-node
+    severity: error                            # default: warn
+    test_binding:
+      files: "tests/**"                        # the file leg: a path glob over test files
+      exempt:
+        - files: [tests/test_mixed.py]         # path globs; or `nodes: [<ref_id>, ...]`
+          reason: "<why this file cannot be placed yet>"               # mandatory
+          until: "<a YYYY-MM-DD deadline, or the event that retires it>"  # mandatory
+
+  - name: features-have-bound-tests
+    test_binding:
+      for: { kind: feature }                   # the node leg: a NodeMatcher
+
+  - name: domain-unit-tests-import-no-infrastructure
+    test_import_boundary:                      # default severity: error
+      from: "tests/unit/**"                    # test file path glob
+      to: "pkg/infrastructure/**"              # dotted import path, dots -> slashes
+      of: { tag: layer-domain }                # optional: the test's node, or a container of it
+      exempt:                                  # forbid_import's entries: from/to, reason, until
+        - from: "tests/unit/test_fixture.py"
+          reason: "<why this crossing is tolerated>"
+          until: "<deadline or event>"
+
+  - name: scenarios-live-in-their-node-folder
+    scenario_binding:                          # default severity: warn
+      features: "tests/acceptance/**/*.feature"  # default: tests/acceptance/features/**/*.feature
+      exempt:
+        - files: [tests/acceptance/features/checkout.feature]         # `files` only
+          reason: "<why the file stays where it is>"
+          until: "<deadline or event>"
+```
+
+**`test_binding`** has two legs, and each runs only when it is declared. A block that names
+neither `files` nor `for` is refused at load time.
+
+- **The `files` leg** judges every indexed test file the glob matches, except those a kind
+  folder places (placement `other_kind`). Those are not judged, and the population statement
+  names them BY their recorded kind and count, never under one phrase (BDL-074 F1): an
+  acceptance step file runs scenarios that bind through their `@node:` tags, judged by the
+  project's `scenario_binding` rules, which the statement names; a self-check tests the
+  project's own files and binds to no node by design, a sanctioned outcome rather than a gap.
+  Any other recorded kind is named as bound to no node and not judged by this rule. A judged
+  file with no node is a finding that names its placement.
+- **Each kind states how it was recognised** (BDL-074 G2): by its folder in the test layout
+  the reindex recorded (`infrastructure.repository.read_test_layout`), and whether that folder
+  was declared in `.beadloom/config.yml` (`tests.kinds`) or is Beadloom's default, which no
+  `tests.kinds` entry replaces. The folder is trusted, not verified: what a file holds is never
+  checked against its kind, so a unit test dropped into `tests/self_check/` counts as a
+  self-check, and the statement says so rather than implying a check. An index that recorded
+  no layout says `recognised by its folder alone` and asks for a reindex. On this repository,
+  measured by `beadloom lint --strict --format json` on 2026-09-28, the rule
+  `test-files-bind-to-a-node` opens its statement with the counts and names the acceptance
+  step files by their folder (elided with `…`):
+
+  ```
+  test files: judged 438 of 615 indexed test file(s) matching `tests/**` (0 outside the glob): 271 bound to a node, 167 bound to none — 167 excused by 4 exemption(s), 0 reported; not judged by their path, by kind: 74 acceptance step file(s) — …, recognised by the folder `tests/acceptance/` declared in .beadloom/config.yml (`tests.kinds`) (the folder is trusted, not verified: what a file holds is not checked against its kind); 103 self-check file(s) — …
+  ```
+- **The `for` leg** judges every node the matcher selects. A node is bound when a test file
+  is bound to it or to one of its `part_of` descendants. Acceptance scenarios are not counted
+  here, because that binding is `scenario_coverage`'s population. A node with no bound test
+  file is not an untested node while any test file binds to no node, since the unbound file
+  may test it. Every node finding therefore states how many test files bind to no node.
+- **`exempt`** entries each list exactly one of `files` (`fnmatch` globs over paths) or `nodes`
+  (exact `ref_id` values), as a non-empty list, with a non-empty `reason` and `until`. A
+  `nodes` exemption on a rule without `for`, or a `files` exemption on a rule without
+  `files`, is refused.
+
+**`test_import_boundary`** is `forbid_import` run over the imports of test files. It takes
+`forbid_import`'s `from`, `to` and `exempt` keys, parsed by the same `_parse_import_boundary`,
+and matches them in the same two vocabularies. It adds `of`, a node matcher that keeps only the
+test files whose bound node it selects or is `part_of` a node it selects: "a unit test OF a
+domain node". Under `of`, a file bound to no node cannot be the test of a matched node, so it is
+not judged and it is counted. The `from` glob is matched against a test file's path with
+`fnmatchcase`, case-sensitively on every platform, as `test_binding` and the exemptions match
+(`beadloom-2mj3.15`): `fnmatch` folds case where the platform's `normcase` does, so a
+`Tests/Unit/**` glob would judge `tests/unit/...` on Windows and not on Linux.
+
+- The judging is `forbid_import`'s own `evaluate_one_import_rule`, over the chosen imports. A
+  crossing, an exemption that excuses nothing and an exemption past its date mean what they
+  mean for source code; the findings are restamped with `rule_type: test_import_boundary` and
+  get `forbid_import`'s remediation.
+- Liveness is decided first, over EVERY recorded test import. When no judged file imports the
+  target, only the stale-exemption findings are computed, because the evaluator handed only
+  the judged imports would report a clean boundary as a dead `to` glob.
+- The imports come from `test_imports`, whose reader keeps an aliased `import a as b` that the
+  code-import extractor drops. The population statement says so.
+- The population statement counts the crossings an exemption excused, because `lint`'s
+  `N crossings suppressed` clause reads `code_imports` only.
+
+**`scenario_binding`** judges the layout one folder per node,
+`<suite root>/<domain>/<node>/*.feature`. The suite root is the `features` glob's segments
+before its first wildcard, and no folder name is configured.
+
+- A feature file in the suite root, or in a folder that names no node, is one finding for the
+  whole file. A feature file that declares no scenario is judged by its place alone
+  (`beadloom-2mj3.15`): it is counted among the files the population statement names, so a
+  misplaced empty file is a finding like any other.
+- A folder between the suite root and the node folder that names a node must name a `part_of`
+  container of the node folder. A folder that names no node there (`services/` on a graph with
+  no `services` node) is not judged.
+- In a correctly placed file, every scenario must carry `@node:<folder>`. It may carry other
+  node tags beside it.
+- `exempt` entries list `files` only, with a `reason` and an `until`.
+
+**Not implemented: whether a scenario's steps EXECUTE the node its tag names.** The RFC asks
+for this second half, and it needs a runtime trace this rule does not have. A static stand-in
+was measured on this repository on 2026-09-28 and rejected: reading the imports of the step
+module that loads each feature, resolved to nodes and widened by `part_of` ancestors, found 59
+of the 81 (tag, step file) pairs the suite map's coverage run observed executing. It missed 22,
+six of them in feature files already in their correct node folder, because a step that drives
+the CLI executes far more than it imports. It never claimed a tag the run did not execute
+(0 of 59), so it is sound and far from complete. As a rule it would have reported 22 correct
+placements to find 4 real ones. Every population statement of this rule ends with
+`not judged: whether a scenario's steps execute the node it names, which needs a runtime trace`.
+
+#### What each suite rule states about its population (`suite_population`)
+
+Every run of each suite rule, clean or not, adds one `warn` finding of `rule_type:
+suite_population`, built by `types.population_finding()`. It states how much the rule judged
+and why the rest was not judged: files matched, outside the glob, bound and unbound, excused
+and by how many exemptions, reported, and the files a kind folder places, by kind. A count of findings is then readable as a fraction of a
+population. The type is in `advisories.ADVISORY_RULE_TYPES`, so `lint --fail-on-warn` does not
+exit 1 on it. Without that entry a project declaring any suite rule could never pass
+`--fail-on-warn` again.
+
+#### Listed exemptions (`ListedExemption`, `rules/listed_exemptions.py`)
+
+A `ListedExemption` holds `entries`, `reason` and `until`. It LISTS its entries rather than
+holding one glob, so `ExemptionLedger` judges each entry on its own:
+
+- **An entry that excuses nothing** is reported by name as a `rule_liveness` finding, "delete
+  it". A test file listed as not yet placed is therefore reported the run after it moves to its
+  node's folder, which a glob over a whole folder could not say.
+- **An exemption past the date its `until` leads with**, while it still excuses something, is
+  reported once with the count. Expiry is a finding and never re-enables anything: nothing
+  reappears at `error` because a day passed. The date grammar is the shared
+  `infrastructure/exit_condition.py` one.
+
+Every liveness finding the three rules make is `warn`, including a total stand-down, because
+none of them passes the declared severity to `liveness_finding`.
+
 ### rules.yml Schema
 
 Schema supports versions 1, 2, and 3. Version 3 ADDED an optional top-level `tags:` block described as bulk tag assignments; nothing ever applied it, and BDL-070 A6 withdrew `load_rules_with_tags`, the only function that read it. A node's tags are declared on the node, and a `rules.yml` still carrying such a block loads unchanged while the block assigns nothing.
@@ -615,7 +782,8 @@ rules:
 ```
 
 Each rule must contain exactly one key of `AUTHORING_KEYS` — the `Keyword` column of the table
-under Purpose. The sample above shows seven of the twelve.
+under Purpose. The sample above shows seven of the fifteen. The three suite rules are sampled under
+**The suite rules** above.
 
 ### Loading and Parsing
 
@@ -635,11 +803,12 @@ def load_rules(rules_path: Path) -> list[Rule]
    c. Resolve the severity BEFORE the rule type, so a rule wrong in both ways is reported for its
       severity. An omitted `severity` is `warn` when the rule's key is in
       `_KEYS_THAT_DEFAULT_TO_WARN` (`unregistered_feature_candidate`, `module_coverage`,
-      `scenario_coverage`, `doc_area_coherence`) and `error` otherwise.
+      `scenario_coverage`, `doc_area_coherence`, `test_binding`, `scenario_binding`) and `error`
+      otherwise.
    d. Take `AUTHORING_KEYS.intersection(rule)`. None or several raise `ValueError`:
       `rule '<name>' must have exactly one of <every authoring key, sorted>`.
    e. `layers` is handed, with the whole rule, to `_parse_layer_rule`. Any other key's value must
-      be a mapping — one message for all eleven, `Rule '<name>': '<key>' must be a mapping` — and
+      be a mapping — one message for all fourteen, `Rule '<name>': '<key>' must be a mapping` — and
       is handed to `_MAPPING_PARSERS[key]`.
 6. Remember `(text, tuple(rules))` under the resolved path and return the list. A file that raises
    is not remembered.
@@ -652,7 +821,7 @@ through `application/reindex/rules_loader.py`, the Gate's lint step through `gra
 `load_rules` therefore remembers, in the module-level `_PARSED`, the text it read and the rules
 it returned for each resolved path. `init --yes` and `init --bootstrap` each parse once where
 they parsed twice, measured by a counting stand-in for the loader's `yaml` in
-`tests/test_load_rules_parses_once.py`.
+`tests/integration/graph/rules/test_load_rules_parses_once.py`.
 
 - **An entry is trusted only while the file holds the same TEXT.** A path alone would serve old
   rules to the TUI, which refreshes in one long process while its user edits the file.
@@ -1099,13 +1268,13 @@ something other than an object leaves the node with no tags. One node at a time,
 have failed every tag question in the run and escaped `evaluate_all` as a traceback instead of a
 `LintError` (BDL-070 A8).
 
-**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS
-are compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and
-the other four rule kinds against the closure they each kept, both run against this repository's
-own index in the same process
-(`tests/test_the_layer_rule_states_the_population_it_judged.py`). Measured on this repository:
-`lint --strict` exits 0 before and after, no finding was removed, and the one finding added is the
-population statement.
+**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS are
+compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and the
+other four rule kinds against the closure they each kept, both run against this repository's own
+index in the same process
+(`tests/self_check/architecture/test_the_layer_rule_states_the_population_it_judged.py`). Measured
+on this repository: `lint --strict` exits 0 before and after, no finding was removed, and the one
+finding added is the population statement.
 
 #### Combined Evaluation
 
@@ -1113,7 +1282,7 @@ population statement.
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]
 ```
 
-Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, `CardinalityRule`, `UnregisteredFeatureCandidateRule`, and `ModuleCoverageRule` lists. Calls the corresponding `evaluate_*` function for each type. Enriches each `Violation` with a deterministic `remediation` hint (via `_remediation_for`, a post-pass), then concatenates and sorts by `(rule_name, file_path or "")`. `project_root` (default: cwd) roots the on-disk module enumeration the `module-coverage` rule uses.
+Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, `CardinalityRule`, `UnregisteredFeatureCandidateRule`, `ModuleCoverageRule`, `ScenarioCoverageRule`, `DocAreaCoherenceRule`, `SummaryFactsRule`, `TestBindingRule`, `TestImportBoundaryRule` and `ScenarioBindingRule` lists. Calls the corresponding `evaluate_*` function for each type. Enriches each `Violation` with a deterministic `remediation` hint (via `_remediation_for`, a post-pass), then concatenates and sorts by `(rule_name, file_path or "")`. `project_root` (default: cwd) roots the on-disk module enumeration the `module-coverage` rule uses, and the feature glob `scenario_binding` reads.
 
 ### Internal Helpers
 
@@ -1132,14 +1301,19 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 | `_parse_scenario_coverage_rule` | Parse a scenario_coverage block into a `ScenarioCoverageRule`.                       |
 | `_parse_doc_area_coherence_rule` | Parse a doc_area_coherence block into a `DocAreaCoherenceRule`.                     |
 | `_parse_summary_facts_rule` | Parse a summary_facts block into a `SummaryFactsRule`.                                   |
+| `_parse_import_boundary` | The `from`/`to` globs and the exemptions of an import boundary, shared by `forbid_import` and `test_import_boundary`; `key=` names the block in every message, so `forbid_import`'s messages are unchanged. |
+| `_parse_listed_exemptions` | Parse a suite rule's `exempt` list into `ListedExemption` entries: each lists exactly one of the allowed kinds (`files`, or for `test_binding` also `nodes`) as a non-empty list, with a non-empty `reason` and `until`. |
+| `_parse_test_binding_rule` | Parse a test_binding block into a `TestBindingRule`. |
+| `_parse_test_import_boundary_rule` | Parse a test_import_boundary block into a `TestImportBoundaryRule`. |
+| `_parse_scenario_binding_rule` | Parse a scenario_binding block into a `ScenarioBindingRule`. |
 | `_first_matching_source` | The most specific candidate a deny rule applies to, or `None`.                              |
 | `_get_node`           | Return `(ref_id, kind)` tuple for a node, or `None`.                                          |
 | `_edge_exists`        | Return `True` if an edge of any of the specified kinds exists between two nodes.               |
 
 The dispatch in `load_rules` reads three module-level names in `rules/loader.py`, none of them
-public: `_MAPPING_PARSERS` (authoring key to parser, eleven entries; every parser takes
+public: `_MAPPING_PARSERS` (authoring key to parser, fourteen entries; every parser takes
 `(name, description, block, *, severity)`), `_KEY_READ_FROM_THE_RULE` (`"layers"`) and
-`_KEYS_THAT_DEFAULT_TO_WARN` (the four advisory keys). The memo is `_PARSED`; nothing outside
+`_KEYS_THAT_DEFAULT_TO_WARN` (the six keys whose rules default to `warn`). The memo is `_PARSED`; nothing outside
 `rules/loader.py` reads it, and tests forget it through `forget_parsed_rules()`.
 
 ---
@@ -1161,6 +1335,11 @@ def evaluate_import_boundary_rules(conn: sqlite3.Connection, rules: list[ImportB
 def evaluate_forbid_edge_rules(conn: sqlite3.Connection, rules: list[ForbidEdgeRule]) -> list[Violation]: ...
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]: ...
 def evaluate_cardinality_rules(conn: sqlite3.Connection, rules: list[CardinalityRule]) -> list[Violation]: ...
+def evaluate_one_import_rule(rule: ImportBoundaryRule, imports: list[tuple[str, int, str]], *, file_count: int, target_count: int) -> list[Violation]: ...  # rules/evaluators.py
+def evaluate_test_binding_rules(conn: sqlite3.Connection, rules: list[TestBindingRule], *, scenario_rules: Sequence[str] = ()) -> list[Violation]: ...  # evaluate_all passes the scenario_binding rules' names
+def evaluate_test_import_boundary_rules(conn: sqlite3.Connection, rules: list[TestImportBoundaryRule]) -> list[Violation]: ...
+def evaluate_scenario_binding_rules(conn: sqlite3.Connection, rules: list[ScenarioBindingRule], *, project_root: Path | None = None) -> list[Violation]: ...
+def population_finding(*, rule_name: str, rule_description: str, message: str) -> Violation: ...  # rules/types.py; always warn
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 ```
 
@@ -1174,6 +1353,7 @@ class NodeMatcher:
     tag: str | None = None
     exclude: tuple[str, ...] | None = None
     def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool: ...
+    def describe(self) -> str: ...  # "ref_id=…, kind=…, tag=…", or "everything"
 
 @dataclass(frozen=True)
 class DenyRule:
@@ -1251,7 +1431,45 @@ class CardinalityRule:
     min_doc_coverage: float | None = None
     severity: str = "warn"
 
-Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule | CardinalityRule
+@dataclass(frozen=True)
+class ListedExemption:
+    entries: tuple[str, ...]   # path globs or ref_ids, by the key they were read from
+    reason: str
+    until: str
+
+@dataclass(frozen=True)
+class TestBindingRule:
+    name: str
+    description: str
+    for_matcher: NodeMatcher | None = None
+    files: str | None = None
+    exempt_files: tuple[ListedExemption, ...] = ()
+    exempt_nodes: tuple[ListedExemption, ...] = ()
+    severity: str = "warn"
+
+@dataclass(frozen=True)
+class TestImportBoundaryRule:
+    name: str
+    description: str
+    from_glob: str
+    to_glob: str
+    of_matcher: NodeMatcher | None = None
+    severity: str = "error"
+    exempt: tuple[ImportExemption, ...] = ()
+    def as_import_rule(self) -> ImportBoundaryRule: ...
+
+@dataclass(frozen=True)
+class ScenarioBindingRule:
+    name: str
+    description: str
+    features: str = DEFAULT_FEATURE_GLOB   # "tests/acceptance/features/**/*.feature"
+    exempt: tuple[ListedExemption, ...] = ()
+    severity: str = "warn"
+
+Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
+        | CardinalityRule | UnregisteredFeatureCandidateRule | ModuleCoverageRule
+        | ScenarioCoverageRule | DocAreaCoherenceRule | SummaryFactsRule
+        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule)
 
 @dataclass(frozen=True)
 class Violation:
@@ -1339,19 +1557,19 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 ### Dispatch and Memo Tests
 
-- **Codec and messages** (`tests/test_load_rules_pins_its_codec_and_messages.py`, BDL-073 B1).
-  Written before the dispatch became a table, so the table was proven against them: the UTF-8
-  codec under a non-UTF-8 locale, a file with no `rules:` key loading as no rules, the two
+- **Codec and messages** (`tests/unit/graph/rules/test_load_rules_pins_its_codec_and_messages.py`,
+  BDL-073 B1). Written before the dispatch became a table, so the table was proven against them: the
+  UTF-8 codec under a non-UTF-8 locale, a file with no `rules:` key loading as no rules, the two
   top-level messages in full, and the per-rule "must be a mapping" message for every key but
   `layers`. Each answered a `load_rules` mutant that survived the 2026-09-19 fan-out analysis.
-- **The table against the SPEC** (`tests/test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader`).
+- **The table against the SPEC** (`tests/self_check/docs/test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader`).
   The `Keyword` column under Purpose equals `AUTHORING_KEYS`, and the stated count is its size.
-- **The memo** (`tests/test_load_rules_parses_once.py`). One `init --yes` and one `init
-  --bootstrap` parse once; an unchanged file is parsed once; an edited file, and an edit of the
-  same size inside one timestamp tick, are parsed again; a file that fails is not remembered;
-  two paths are remembered side by side; one caller's change to its list does not reach the
-  next caller; the TUI's `LintDataProvider.refresh()` sees a rule renamed between two
-  refreshes; every test starts with nothing remembered.
+- **The memo** (`tests/integration/graph/rules/test_load_rules_parses_once.py`). One `init --yes`
+  and one `init --bootstrap` parse once; an unchanged file is parsed once; an edited file, and an
+  edit of the same size inside one timestamp tick, are parsed again; a file that fails is not
+  remembered; two paths are remembered side by side; one caller's change to its list does not reach
+  the next caller; the TUI's `LintDataProvider.refresh()` sees a rule renamed between two refreshes;
+  every test starts with nothing remembered.
 
 ### Deny Evaluation Tests
 
@@ -1370,20 +1588,31 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 - **Unknown ref_id warning.** Create rules referencing a `ref_id` not in `nodes`. Assert `validate_rules` returns a warning string.
 - **All ref_ids exist.** Assert empty warning list.
-- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity (`tests/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
+- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert
+  `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same
+  tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity
+  (`tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
 - **Every layer populated.** Assert both surfaces are silent.
 
-### Liveness Tests (`tests/test_rule_liveness_all_types.py`)
+### Liveness Tests (`tests/integration/graph/rules/test_rule_liveness_all_types.py`)
 
 One **pair** per rule type — an inert rule that must be reported, and a live rule of the same type on the same fixture that must not be. The live half is the non-vacuity guard: without it, "everything is inert" would satisfy every other assertion.
 
 - **Every rule type reports its own inertness.** Nine rules, one of each type, all inert on a populated graph. Assert the reported set equals all nine names — a gap says *which* type is missing rather than "some count differs".
 - **Exactly once.** Assert one finding per inert rule (an audit that affirms one fact twice is BDL-UX #173).
-- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The TOTAL stand-downs that carry the declared severity are `doc_area_coherence`'s, asserted in `tests/test_source_root_minority.py`, and `graph-summary-facts`'s, asserted in `tests/test_graph_summary_facts.py::TestATotalStandDownCarriesTheDeclaredSeverity` — both run the real linter and fail on `has_errors` being False. See the severity paragraph above.
+- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph.
+  Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant,
+  asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight
+  matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The
+  TOTAL stand-downs that carry the declared severity are `doc_area_coherence`'s, asserted in
+  `tests/integration/graph/rules/test_source_root_minority.py`, and `graph-summary-facts`'s,
+  asserted in
+  `tests/integration/graph/rules/test_graph_summary_facts.py::TestATotalStandDownCarriesTheDeclaredSeverity`
+  — both run the real linter and fail on `has_errors` being False. See the severity paragraph above.
 - **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
 - **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 
-### Exit-condition Tests (`tests/test_exit_condition_expiry.py`)
+### Exit-condition Tests (`tests/integration/infrastructure/exit_condition/test_exit_condition_expiry.py`)
 
 All three surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until`, `layers.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how they would drift into promising different things.
 
@@ -1394,6 +1623,23 @@ All three surfaces that require an exit condition are covered in ONE file on pur
 - **The count.** Two crossings behind one exemption count as two; a rule with no exemptions counts zero (the counter must be able to say zero); the clean summary line grows the clause only when the count is non-zero.
 - **The reviewer's probe, end to end.** A wildcard exemption dated `1999-01-01` over a real error-severity crossing: `lint --strict` exits **0** and the JSON payload carries the finding and `summary.violations_suppressed`; `--fail-on-warn` exits **1**. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 - **This repository's own entries.** Every `until:` in `.beadloom/_graph/rules.yml` that names a date is asserted to be in the future — the suite reddens the day one of our own baselines outlives its deadline.
+
+### Suite Rule Tests (BDL-074 C3)
+
+- **`test_binding`** (`tests/integration/graph/rules/test_a_test_file_binds_to_a_node_or_is_reported.py`,
+  and `tests/integration/graph/rules/test_a_kind_states_how_it_was_recognised.py` for the
+  recognition clause) and **`test_import_boundary`**
+  (`tests/integration/graph/rules/test_a_unit_test_of_a_domain_node_imports_no_infrastructure.py`)
+  run over temporary indexes built by `tests/support/suite_index.py`.
+- **`scenario_binding`** (`tests/integration/graph/rules/test_a_scenario_lives_in_the_folder_of_its_node.py`)
+  runs over temporary projects.
+- **End to end**: `tests/acceptance/graph/rule-engine/the_suite_is_judged_against_the_graph.feature`,
+  four scenarios under the feature tags `@bead:beadloom-kag9 @node:rule-engine`.
+- **This repository's own findings**
+  (`tests/self_check/architecture/test_this_repositorys_lint_findings_are_its_declared_debt.py`):
+  `suite_population` findings and the `features-have-bound-tests` node debt are excluded from
+  the undeclared findings, and two checks assert that each suite rule states its population and
+  that the feature debt still fires.
 
 ### Combined Evaluation Tests
 

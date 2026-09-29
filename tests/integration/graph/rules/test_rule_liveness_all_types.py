@@ -449,6 +449,24 @@ class TestCardinalityLiveness:
         assert [v.rule_name for v in findings] == ["dead-check"]
         assert "no-such-node" in findings[0].message
 
+    def test_the_finding_names_the_key_the_dead_matcher_was_written_under(
+        self, graph_db: sqlite3.Connection
+    ) -> None:
+        """A check's matcher is its ``for:`` key, and the finding says so in those words."""
+        # Arrange
+        rule = CardinalityRule(
+            name="dead-check",
+            description="size limit on a node that is not in the graph",
+            for_matcher=NodeMatcher(ref_id="no-such-node"),
+            max_symbols=10,
+        )
+
+        # Act
+        findings = _liveness(graph_db, [rule])
+
+        # Assert
+        assert "its `for` names ref_id 'no-such-node'" in findings[0].message
+
     def test_a_check_with_no_threshold_at_all_is_reported(
         self, graph_db: sqlite3.Connection
     ) -> None:

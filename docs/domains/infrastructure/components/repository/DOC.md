@@ -123,13 +123,58 @@ debt report's untested count. An index written before the test tables has no `te
 table; the `sqlite3.OperationalError` is caught and the answer is `{}`, because `ctx` opens
 such an index without creating the schema.
 
-**Test files with their binding** — `get_test_file_bindings(conn)` ->
-`list[tuple[str, str | None, str]]`: every indexed test file as `(path, ref_id, placement)`,
-ordered by path, with `ref_id` `None` where the file is bound to no node (BDL-074 D1). Its
-reader is `application.mutation_scope.change.plan_change`, which counts a file as bound only
-under the `mirror` or `override` placement: the files bound to a changed node are the tests a
-per-change mutation run selects, and the rest are the files the binding places under no node.
-The absent-table case answers `[]`, for the reason given above.
+**The placement vocabulary** — `PLACEMENT_MIRROR` (`"mirror"`, bound by the mirror of its
+path under a mirrored kind folder or a build tool's test tree), `PLACEMENT_BESIDE_CODE`
+(`"beside_code"`, BDL-074 G2: outside every test root, inside a node's source, bound to the
+node covering it — `foo_test.go` beside `foo.go`), `PLACEMENT_OVERRIDE` (`"override"`, bound by
+a node's `tests:` declaration), `PLACEMENT_UNOWNED` (`"unowned"`, under a mirrored kind folder
+or a test tree and no node owns the code its path names), `PLACEMENT_UNPLACED` (`"unplaced"`,
+reached by no mirror, no place beside the code and no declaration) and `PLACEMENT_OTHER_KIND`
+(`"other_kind"`, under a kind folder whose binding is not the mirror).
+They are the values `test_files.placement` holds. Defined here since BDL-074 C3, because two
+peer domains share them: `context_oracle.test_binding` assigns a placement and re-exports the
+names under its old import path, and `graph.rules.test_binding` judges it.
+
+**The kind vocabulary, and the count by kind** (BDL-074 F1) — `KIND_ACCEPTANCE`
+(`"acceptance"`, an acceptance step file whose scenarios bind by their `@node:` tag) and
+`KIND_SELF_CHECK` (`"self_check"`, a test of the project's own files and configuration, bound
+to no node by design) are the `test_files.kind` values an `other_kind` file carries.
+`KIND_UNRECORDED` (`"unrecorded"`) is stated for an `other_kind` row that recorded no kind.
+`label_test_kind(kind)` gives the words a count is stated in (`acceptance step`, `self-check`,
+otherwise the kind as recorded). `count_other_kind_test_files(conn)` -> `dict[str, int]` reads
+how many `other_kind` files each kind holds from `test_files`, `{}` for an index without the
+table. They sit beside the placement vocabulary for the same reason: `test_binding` assigns a
+kind, and the rule engine, the reindex `Tests:` line and `beadloom mutation --changed-since`
+name it, so a count by kind is read from the index rather than inferred from a folder. The two
+kinds bind to no node for different reasons, and a count that merged them would state neither.
+
+**The recorded test layout** (BDL-074 G2) — `TEST_LAYOUT_KEY` (`"test_layout"`) is the `meta`
+key the reindex records the test layout it read under. `RecordedTestLayout` is that record:
+`kind_prefixes` (each kind's folders under every root that exists, `tests/unit/`),
+`declared_kinds` (the kinds whose folder `.beadloom/config.yml` declares rather than
+defaults), `beside_code`, `roots` (the roots in force that exist on disk, since
+`beadloom-2mj3.17`), `frameworks` (the names of the pattern groups a file path is matched against),
+`mirror_roots` (the build tools' test trees the project has, `src/test/java`; BDL-074 G2b) and
+`patterns` (each group's patterns in the order they are matched, `beadloom-2mj3.15`; `()` in a
+record written before it, which named the groups alone) and `absent_roots` (the roots in force
+the project does not have, so a reader names the roots that exist and can say which were
+looked for, `beadloom-2mj3.17`; `()` in an older record). `encode()` gives the JSON the `meta`
+table holds, `patterns` as `[[name, [pattern, ...]], ...]` and `absent_roots` as a list, and a
+changed record forces one test re-index. `read_test_layout(conn)` ->
+`RecordedTestLayout | None` reads it back, `None` for an index written before G2 or a record
+that does not parse, so a reader states that the layout is unknown rather than a default. It
+sits beside the placement vocabulary for the same reason: `context_oracle.test_layout` writes
+it and the rule engine states it, and neither may import the other. Its readers are the
+builder's `test_unplaced` sentence and `test_recognition` clause, the debt report's population,
+the `test_binding` rule's recognition clause and, since `beadloom-2mj3.15`,
+`ChangePlan.test_layout` in `beadloom mutation --changed-since`.
+
+**Test files with their binding** — `get_test_file_bindings(conn)`, added in BDL-074 D1 to
+give `beadloom mutation --changed-since` every indexed test file as `(path, ref_id, placement)`,
+was removed by `beadloom-2mj3.13`. Since BDL-074 G1
+`application.mutation_scope.change.plan_change` reads the test files through
+`graph.rules.suite_tables.read_test_files`, which carries the recorded kind its selection
+needs, so the reader had no caller left.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 

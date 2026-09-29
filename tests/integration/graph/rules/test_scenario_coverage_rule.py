@@ -454,6 +454,30 @@ class TestNonBehavioural:
         assert len(violations) == 1
         assert "gone" in violations[0].message
 
+    def test_the_dead_declaration_finding_names_the_node_it_declared(
+        self, tmp_path: Path
+    ) -> None:
+        """The finding is ABOUT the declared node, so a reader filtering by node finds it."""
+        # Arrange
+        conn = _db(tmp_path, (("alpha", "feature"),))
+        _feature(
+            tmp_path,
+            "tests/acceptance/features/a.feature",
+            "@bead:proj-1 @node:alpha\nFeature: F\n  Scenario: S\n    Given a step\n",
+        )
+        rule = _rule(
+            non_behavioural=(NonBehaviouralNode(node="gone", reason="it was deleted"),)
+        )
+
+        # Act
+        try:
+            violations = evaluate_scenario_coverage_rules(conn, [rule], project_root=tmp_path)
+        finally:
+            conn.close()
+
+        # Assert
+        assert [v.from_ref_id for v in violations] == ["gone"]
+
     def test_a_declared_node_that_has_a_scenario_anyway_is_reported(
         self, tmp_path: Path
     ) -> None:

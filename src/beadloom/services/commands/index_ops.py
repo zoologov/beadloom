@@ -98,7 +98,11 @@ def _echo_tests_line(project_root: Path) -> None:
     """State the indexed test files and how they were placed (BDL-074 C1)."""
     import sqlite3
 
-    from beadloom.application.reindex.test_index import describe_placements, placement_counts
+    from beadloom.application.reindex.test_index import (
+        describe_placements,
+        kind_counts,
+        placement_counts,
+    )
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     if not db_path.exists():
@@ -107,11 +111,12 @@ def _echo_tests_line(project_root: Path) -> None:
     conn.row_factory = sqlite3.Row
     try:
         counts = placement_counts(conn)
+        kinds = kind_counts(conn)
     except sqlite3.OperationalError:
         return  # an index without the test tables states nothing about tests
     finally:
         conn.close()
-    click.echo(f"Tests:   {describe_placements(counts)}")
+    click.echo(f"Tests:   {describe_placements(counts, kinds)}")
 
 
 # beadloom:domain=doctor

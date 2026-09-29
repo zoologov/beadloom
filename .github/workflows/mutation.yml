@@ -13,10 +13,11 @@
 #   mutation-sample (weekly schedule, and by hand) — a seeded random sample of the
 #   whole declared scope, scored with the interval the sample supports.
 #
-# THE WORKFLOW IS DISABLED, and was left so on purpose. The nightly was disabled
-# through the API on 2026-09-27 (state `disabled_manually`); a disabled workflow
-# runs neither job, on any event. Enabling it is the owner's decision, after the
-# verification bead has read one run of each job:
+# THE WORKFLOW WAS ENABLED BY THE OWNER on 2026-09-28, after PR #84 merged, and
+# one sample was dispatched by hand (run 36373061140). It had been disabled
+# through the API on 2026-09-27 (state `disabled_manually`), and a disabled
+# workflow runs neither job, on any event. The commands, should it be disabled
+# again:
 #
 #     gh workflow enable mutation.yml
 #     gh workflow run mutation.yml            # one weekly sample, by hand
@@ -26,36 +27,50 @@
 # so a required context naming it never reports and `main` becomes unmergeable
 # under `strict: true`. The per-change job does report on a pull request, and it
 # is still not required: a disabled workflow reports nothing either, and its
-# budget is not yet met on this repository (see below). No job name here is one
-# of the nine contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names, and
+# budget has not yet been measured on the runner (see below). No job name here
+# is one of the nine contexts `DEFAULT_STATUS_CHECK_CONTEXTS` names, and
 # `tests/self_check/config/test_mutation_ci_job.py` fails if one ever becomes one.
 #
 # PER CHANGE — WHAT IS SELECTED, AND THE FALLBACK. `beadloom mutation
 # --changed-since` names the change's population: the functions touched in the
-# declared scope, the node owning each, the test files the binding ties to that
-# node, and how many test files the binding places under no node. The adapter
-# (`.github/scripts/mutmut_adapter.py`) turns those functions into mutmut's EXACT
-# mutant names — a glob ending `__mutmut_*` makes mutmut's clean run fall back to
-# the whole selection (BDL-073) — and writes the per-run
-# `pytest_add_cli_args_test_selection`: the bound tests, PLUS the old pool's files
-# the binding places under no node. That second part is the fallback, and it is
-# the whole selection today: when D1 landed, 0 of 464 test files were bound and
-# 393 were unplaced, so every changed function runs against the coverage-derived
-# pool in `pyproject.toml`. It shrinks as tests are laid out under
-# `tests/{unit,integration}/` and is empty once every pool file is bound.
+# declared scope, the node owning each, and the test files selected for that
+# node. The adapter (`.github/scripts/mutmut_adapter.py`) turns those functions
+# into mutmut's EXACT mutant names — a glob ending `__mutmut_*` makes mutmut's
+# clean run fall back to the whole selection (BDL-073) — and writes the per-run
+# `pytest_add_cli_args_test_selection`, each kind of test file chosen by what it
+# is (BDL-074 G1):
+#
+#   bound        the files the binding ties to the changed node
+#   acceptance   the step files whose loaded scenarios carry the node's @node tag
+#   fallback     the pool's UNPLACED files — outside every kind folder, so they
+#                may exercise the node and the binding cannot say
+#   excluded     every self-check: it tests this repository's files, not the
+#                changed code
+#
+# The select step prints all four counts. Only the fallback is a guess, and it
+# empties as unplaced files are laid out: it holds the pool's unplaced files and
+# nothing else, and the kinds that never bind by design are no longer in it.
+# MEASURED 2026-09-28 on a one-line change to `liveness._cycle_reasons`
+# (rule-engine): 36 bound + 10 acceptance by tag + 60 fallback = 106 files, 103
+# self-checks excluded. The rule that fallback replaced took every pool file
+# bound to no node: 36 bound + 134 fallback = 170 files, 74 of those 134 being
+# acceptance step and self-check files that could never become bound. 167
+# unplaced test files remain in the suite, 59 of them in the pool of 227
+# (measured 2026-09-28 on the index at beadloom-2mj3.17, after G3 placed three).
 #
 # PER CHANGE — THE BUDGET, and what is known about it. The PRD's budget is 10
-# minutes on `ubuntu-latest`, and it does NOT hold while the fallback is the
-# whole pool. MEASURED 2026-09-27 on a one-function change to the rule engine
-# (`liveness._cycle_reasons`, Darwin arm64, 10 cores, mutmut 3.7.0): selecting
-# took 496 s, nearly all of it mutmut's stats pass over the 202-file pool; the
-# four exact mutants then ran in 37 s (3 killed, 1 survived); reindex, population,
-# counters and score took under 10 s together. About 9 minutes locally, so about
-# 15 on the runner at the nightly's measured 1.63 factor, before install. The
-# stats pass shrinks with the selection, so the budget is met by laying tests
-# out, not by this file. The job states its own time against the budget and warns
-# when it is over; the timeout is well above the budget so that an over-budget
-# run still ends with its numbers rather than being cut off.
+# minutes on `ubuntu-latest`. Its largest cost is mutmut's stats pass over the
+# selection, so it moves with the selection. MEASURED on the same fixture in a
+# worktree of HEAD (Darwin arm64, 10 cores, CPython 3.13.7, mutmut 3.7.0, env
+# from uv.lock, other agents' suites running on the machine): the select step
+# took 342 s over the 170 files and 180 s over the 106. D1's first measurement
+# was 496 s over a 202-file pool, and the four exact mutants then ran in 37 s
+# (3 killed, 1 survived); reindex, population, counters and score take under
+# 10 s together. At the nightly's measured 1.63 runner factor, 180 s is about
+# 5 minutes on the runner before install; no pull request has run this job on
+# the runner yet, so that is a projection. The job states its own time against
+# the budget and warns when it is over; the timeout is well above the budget so
+# that an over-budget run still ends with its numbers rather than being cut off.
 #
 # WEEKLY SAMPLE — THE SIZE IS DERIVED, not chosen, and was re-derived once it
 # had been run (2026-09-27, Darwin arm64, 10 cores, mutmut 3.7.0):
@@ -173,7 +188,9 @@ jobs:
       - name: Run the selected mutants
         if: steps.select.outputs.mutants != '0'
         run: |
-          mapfile -t names < "$RUNNER_TEMP/names.txt"
+          # A file holding only a newline — a sample of size 0 — reads as one empty
+          # name, which the guard below would pass on; blank lines are no names.
+          mapfile -t names < <(grep -v '^[[:space:]]*$' "$RUNNER_TEMP/names.txt")
           if [ "${#names[@]}" -eq 0 ]; then
             echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
             exit 1
@@ -249,6 +266,8 @@ jobs:
     outputs:
       verdict: ${{ steps.judged.outputs.verdict }}
       detail: ${{ steps.judged.outputs.detail }}
+      floor: ${{ steps.score.outputs.floor }}
+      report: ${{ steps.score.outputs.report }}
     env:
       SAMPLE_SIZE: ${{ inputs.size || '150' }}
       SAMPLE_SEED: ${{ inputs.seed }}
@@ -284,7 +303,9 @@ jobs:
 
       - name: Run the sampled mutants
         run: |
-          mapfile -t names < "$RUNNER_TEMP/sample-names.txt"
+          # A file holding only a newline — a sample of size 0 — reads as one empty
+          # name, which the guard below would pass on; blank lines are no names.
+          mapfile -t names < <(grep -v '^[[:space:]]*$' "$RUNNER_TEMP/sample-names.txt")
           if [ "${#names[@]}" -eq 0 ]; then
             echo "::error::no mutant name was selected, and the runner given none mutates the whole declared scope"
             exit 1
@@ -299,30 +320,55 @@ jobs:
           --survivors-out mutants/sample-survivors.json
 
       - name: Score the sample over the whole declared scope
+        # The step fails the job when the floor is missed, and a failed job is
+        # also what a run that judged nothing looks like. So it NAMES which floor
+        # verdict it reached — `held`, `under` (the whole interval below the
+        # floor), or `unscored` — and hands its report on, so the announcement
+        # can tell a verdict under the floor from no verdict at all (BDL-074 G1).
+        id: score
         env:
           POPULATION: ${{ steps.sample.outputs.population }}
-        run: >-
-          uv run beadloom mutation
-          --stats mutants/sample-stats.json
-          --target src/beadloom/application/active_table/row_ids.py
-          --target src/beadloom/application/active_table/staging.py
-          --target src/beadloom/application/guards/shell_targets.py
-          --target src/beadloom/application/guards/surface.py
-          --target src/beadloom/application/waves/derivation.py
-          --target src/beadloom/application/waves/landing.py
-          --target src/beadloom/doc_sync/doc_quality.py
-          --target src/beadloom/doc_sync/doc_shape.py
-          --target src/beadloom/doc_sync/tables.py
-          --target src/beadloom/graph/rules/
-          --target src/beadloom/onboarding/role_duties.py
-          --target src/beadloom/services/bd_seam/answers.py
-          --target src/beadloom/services/bd_seam/assumptions.py
-          --target src/beadloom/services/bd_seam/creation.py
-          --target src/beadloom/services/bd_seam/invocations.py
-          --sample-of "$POPULATION"
-          --survivors mutants/sample-survivors.json
-          --tool "mutmut 3.7"
-          --min-score 0.88
+        run: |
+          set +e
+          uv run beadloom mutation \
+            --stats mutants/sample-stats.json \
+            --target src/beadloom/application/active_table/row_ids.py \
+            --target src/beadloom/application/active_table/staging.py \
+            --target src/beadloom/application/guards/shell_targets.py \
+            --target src/beadloom/application/guards/surface.py \
+            --target src/beadloom/application/waves/derivation.py \
+            --target src/beadloom/application/waves/landing.py \
+            --target src/beadloom/doc_sync/doc_quality.py \
+            --target src/beadloom/doc_sync/doc_shape.py \
+            --target src/beadloom/doc_sync/tables.py \
+            --target src/beadloom/graph/rules/ \
+            --target src/beadloom/onboarding/role_duties.py \
+            --target src/beadloom/services/bd_seam/answers.py \
+            --target src/beadloom/services/bd_seam/assumptions.py \
+            --target src/beadloom/services/bd_seam/creation.py \
+            --target src/beadloom/services/bd_seam/invocations.py \
+            --sample-of "$POPULATION" \
+            --survivors mutants/sample-survivors.json \
+            --tool "mutmut 3.7" \
+            --min-score 0.88 > "$RUNNER_TEMP/score.txt"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/score.txt"
+          cat "$RUNNER_TEMP/score.txt" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -eq 0 ]; then
+            floor=held
+          elif [ "$code" -eq 1 ] && grep -q "interval lies wholly under it" "$RUNNER_TEMP/score.txt"; then
+            floor=under
+          else
+            floor=unscored
+          fi
+          {
+            echo "floor=$floor"
+            echo "report<<MUTATION_SCORE_REPORT"
+            cat "$RUNNER_TEMP/score.txt"
+            echo "MUTATION_SCORE_REPORT"
+          } >> "$GITHUB_OUTPUT"
+          exit "$code"
 
       - name: Read what the run judged
         id: judged
@@ -377,73 +423,126 @@ jobs:
     permissions:
       issues: write
     steps:
-      - name: Say it where it is seen, once per outage and not once per week
+      - name: Say it where it is seen, once per state and not once per week
         # NINE IDENTICAL ISSUES ARE THE SAME SILENCE IN A LOUDER FORM, so there
         # is one issue and it is found by LABEL. The label survives a retitling,
         # where a marker in the title does not, and `gh label create --force` is
         # idempotent — the label need not exist before the first failure. While
         # an issue carrying it is open, each further week adds a comment naming
-        # that week's cause and its run; the comment count is then the length of
-        # the outage.
+        # that week's state and its run; the comment count is then the length of
+        # the episode.
+        #
+        # TWO STATES ARE ANNOUNCED, and the title names which (BDL-074 G1). NO
+        # VERDICT: the job ended before it judged every mutant it drew and
+        # scored them. UNDER THE FLOOR: every mutant drawn was judged, and the
+        # whole interval of the score lies below the floor — a verdict, whose
+        # body carries the score, the interval, the sample size and the
+        # survivors by node. Both fail the job, which is why the job result
+        # alone cannot tell them apart and the score step names its floor
+        # verdict. An open issue is retitled to the state of the week, so an
+        # issue opened in one state never speaks for the other.
         #
         # The owner is @-mentioned rather than assigned: a mention notifies
         # whether or not they watch all activity, and an invalid assignee would
         # fail this step under `set -e` and take the announcement with it.
         #
-        # A run that judges its sample CLOSES the open issue instead of staying
-        # quiet. A watch issue left open after the thing it watches recovered is
-        # a second silence, of the kind that gets muted.
+        # A run whose sample is judged and HELD its floor CLOSES the open issue
+        # instead of staying quiet, with a comment worded by the state it ends.
+        # Held means the sample's interval reaches the floor — `beadloom mutation`
+        # fails only when the whole interval lies under it — so a held week can
+        # still show a score under the floor (84.0% [77.4, 88.9] holds 0.88), and
+        # every close says "the interval reaches its floor", never that the score
+        # is at or above it (review `beadloom-b9ll` m-new-1). A watch issue left
+        # open after the thing it watches recovered is a second silence, of the
+        # kind that gets muted.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
           WATCH_LABEL: mutation-weekly
-          WATCH_TITLE: "Mutation weekly sample: no verdict"
+          TITLE_NO_VERDICT: "Mutation weekly sample: no verdict"
+          TITLE_UNDER_FLOOR: "Mutation weekly sample: under its floor"
           RESULT: ${{ needs.mutation-sample.result }}
           VERDICT: ${{ needs.mutation-sample.outputs.verdict }}
           DETAIL: ${{ needs.mutation-sample.outputs.detail }}
+          FLOOR: ${{ needs.mutation-sample.outputs.floor }}
+          REPORT: ${{ needs.mutation-sample.outputs.report }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
           gh label create "$WATCH_LABEL" -R "$REPO" --force \
             --color "B60205" \
-            --description "The weekly mutation sample reached no verdict"
+            --description "The weekly mutation sample reached no verdict, or a verdict under its floor"
 
-          number="$(gh issue list -R "$REPO" --state open \
-            --label "$WATCH_LABEL" --limit 50 --json number \
-            --jq '.[0].number // empty')"
+          open="$(gh issue list -R "$REPO" --state open \
+            --label "$WATCH_LABEL" --limit 50 --json number,title \
+            --jq '.[0] | select(. != null) | "\(.number)\t\(.title)"')"
+          number="${open%%$'\t'*}"
+          open_title="${open#*$'\t'}"
+          report="${REPORT:-the score step wrote no report}"
 
-          if [ "$RESULT" = "success" ] && [ "$VERDICT" = "judged" ]; then
+          if [ "$VERDICT" = "judged" ] && [ "$FLOOR" = "held" ]; then
             if [ -n "$number" ]; then
-              gh issue comment "$number" -R "$REPO" --body \
-                "The weekly sample reached a verdict again: ${DETAIL:-no detail}. Run: $RUN_URL"
+              if [ "$open_title" = "$TITLE_UNDER_FLOOR" ]; then
+                opening="This week's sample's interval reaches its floor, so its score is no longer shown to be under it."
+              else
+                opening="This week's job judged its sample, and the sample's interval reaches its floor."
+              fi
+              gh issue comment "$number" -R "$REPO" --body "$(printf '%s\n' \
+                "$opening" "" '```text' "$report" '```' "" "Run: $RUN_URL")"
               gh issue close "$number" -R "$REPO" --reason completed
             fi
-            echo "the weekly sample judged every mutant it drew; nothing to announce"
+            echo "the weekly sample was judged and its interval reaches its floor; nothing to announce"
             exit 0
           fi
 
-          if [ -n "${DETAIL:-}" ]; then
-            cause="$DETAIL"
-          else
-            cause="the job did not reach the step that reads its counters"
-          fi
+          footer="This issue is the one place the weekly sample speaks through: while it
+          is open, each further week that misses its floor or reaches no verdict adds a
+          comment here and retitles the issue to that week's state, and the first run
+          whose sample's interval reaches its floor closes it."
 
-          body="$(printf '%s\n' \
-            "@$OWNER — the weekly mutation sample reached no verdict, or one under its floor." \
-            "" \
-            "- **Job result:** \`$RESULT\`" \
-            "- **What the counters say:** $cause" \
-            "- **Run:** $RUN_URL" \
-            "" \
-            "This issue is the one place the weekly sample speaks through: while it" \
-            "is open, each further failed week adds a comment here instead of a new" \
-            "issue, and the first run that judges its sample closes it.")"
+          if [ "$VERDICT" = "judged" ] && [ "$FLOOR" = "under" ]; then
+            title="$TITLE_UNDER_FLOOR"
+            body="$(printf '%s\n' \
+              "@$OWNER — the weekly mutation sample was judged, and its score is under its floor: the whole interval lies below it." \
+              "" \
+              "- **State:** a verdict under the floor — every mutant drawn was judged" \
+              "- **Job result:** \`$RESULT\` — the score step fails the job when the floor is missed" \
+              "- **What the counters say:** $DETAIL" \
+              "- **Run:** $RUN_URL" \
+              "" \
+              "The score, its interval, the sample size and the survivors by node:" \
+              "" \
+              '```text' "$report" '```' \
+              "" \
+              "$footer")"
+          else
+            if [ "$VERDICT" = "judged" ]; then
+              cause="the counters judged every mutant drawn ($DETAIL), and the score step reported no floor verdict (floor: ${FLOOR:-not reached})"
+            elif [ -n "${DETAIL:-}" ]; then
+              cause="$DETAIL"
+            else
+              cause="the job did not reach the step that reads its counters"
+            fi
+            title="$TITLE_NO_VERDICT"
+            body="$(printf '%s\n' \
+              "@$OWNER — the weekly mutation sample reached no verdict: the job ended before it judged and scored every mutant it drew, so there is no score to hold against the floor." \
+              "" \
+              "- **State:** no verdict" \
+              "- **Job result:** \`$RESULT\`" \
+              "- **What went wrong:** $cause" \
+              "- **Run:** $RUN_URL" \
+              "" \
+              "$footer")"
+          fi
 
           if [ -n "$number" ]; then
             gh issue comment "$number" -R "$REPO" --body "$body"
+            if [ "$open_title" != "$title" ]; then
+              gh issue edit "$number" -R "$REPO" --title "$title"
+            fi
           else
             gh issue create -R "$REPO" --label "$WATCH_LABEL" \
-              --title "$WATCH_TITLE" --body "$body"
+              --title "$title" --body "$body"
           fi

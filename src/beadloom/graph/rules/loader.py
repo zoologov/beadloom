@@ -32,13 +32,17 @@ from beadloom.graph.rules.types import (
     LayerDef,
     LayerExemption,
     LayerRule,
+    ListedExemption,
     ModuleCoverageRule,
     NodeMatcher,
     NonBehaviouralNode,
     RequireRule,
     Rule,
+    ScenarioBindingRule,
     ScenarioCoverageRule,
     SummaryFactsRule,
+    TestBindingRule,
+    TestImportBoundaryRule,
     UnregisteredFeatureCandidateRule,
 )
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
@@ -226,6 +230,8 @@ def _parse_import_exemption(
     name: str,
     index: int,
     entry: object,
+    *,
+    key: str = "forbid_import",
 ) -> ImportExemption:
     """Parse one entry of ``forbid_import.exempt``.
 
@@ -233,7 +239,7 @@ def _parse_import_exemption(
     when it goes away: an exclusion with no reason and no exit condition is how
     a gate is switched off without saying so (BDL-061 CONTEXT).
     """
-    where = f"Rule '{name}': forbid_import.exempt[{index}]"
+    where = f"Rule '{name}': {key}.exempt[{index}]"
     if not isinstance(entry, dict):
         msg = f"{where} must be a mapping"
         raise ValueError(msg)
@@ -261,6 +267,35 @@ def _parse_import_exemption(
     )
 
 
+def _parse_import_boundary(
+    name: str, data: dict[str, object], *, key: str
+) -> tuple[str, str, tuple[ImportExemption, ...]]:
+    """The ``from``/``to`` globs and the exemptions of an import boundary, under *key*.
+
+    Shared by ``forbid_import`` and ``test_import_boundary``, which judge one
+    boundary over two import tables, so an entry means the same in both and each
+    message names the block it came from.
+    """
+    from_glob = data.get("from")
+    to_glob = data.get("to")
+
+    if from_glob is None or not isinstance(from_glob, str) or not from_glob.strip():
+        msg = f"Rule '{name}': {key}.from must be a non-empty string"
+        raise ValueError(msg)
+    if to_glob is None or not isinstance(to_glob, str) or not to_glob.strip():
+        msg = f"Rule '{name}': {key}.to must be a non-empty string"
+        raise ValueError(msg)
+
+    exempt_raw = data.get("exempt", [])
+    if not isinstance(exempt_raw, list):
+        msg = f"Rule '{name}': {key}.exempt must be a list"
+        raise ValueError(msg)
+    exempt = tuple(
+        _parse_import_exemption(name, i, entry, key=key) for i, entry in enumerate(exempt_raw)
+    )
+    return from_glob, to_glob, exempt
+
+
 def _parse_forbid_import_rule(
     name: str,
     description: str,
@@ -269,23 +304,7 @@ def _parse_forbid_import_rule(
     severity: str = "error",
 ) -> ImportBoundaryRule:
     """Parse the 'forbid_import' block of a rule."""
-    from_glob = forbid_data.get("from")
-    to_glob = forbid_data.get("to")
-
-    if from_glob is None or not isinstance(from_glob, str) or not from_glob.strip():
-        msg = f"Rule '{name}': forbid_import.from must be a non-empty string"
-        raise ValueError(msg)
-    if to_glob is None or not isinstance(to_glob, str) or not to_glob.strip():
-        msg = f"Rule '{name}': forbid_import.to must be a non-empty string"
-        raise ValueError(msg)
-
-    exempt_raw = forbid_data.get("exempt", [])
-    if not isinstance(exempt_raw, list):
-        msg = f"Rule '{name}': forbid_import.exempt must be a list"
-        raise ValueError(msg)
-    exempt = tuple(
-        _parse_import_exemption(name, i, entry) for i, entry in enumerate(exempt_raw)
-    )
+    from_glob, to_glob, exempt = _parse_import_boundary(name, forbid_data, key="forbid_import")
 
     return ImportBoundaryRule(
         name=name,
@@ -851,6 +870,174 @@ def _parse_non_behavioural(
     return NonBehaviouralNode(node=node, reason=reason)
 
 
+def _parse_listed_exemptions(
+    name: str, key: str, raw: object, *, kinds: tuple[str, ...]
+) -> dict[str, tuple[ListedExemption, ...]]:
+    """Parse ``<key>.exempt``: each entry lists ONE of *kinds*, with a reason and an exit.
+
+    *kinds* are the keys an entry may list its subjects under (``files``, and for
+    ``test_binding`` also ``nodes``). An entry must name exactly one, so a reader
+    never has to guess whether ``billing`` is a path or a node.
+    """
+    if raw is None:
+        raw = []
+    if not isinstance(raw, list):
+        msg = f"Rule '{name}': {key}.exempt must be a list"
+        raise ValueError(msg)
+    parsed: dict[str, list[ListedExemption]] = {kind: [] for kind in kinds}
+    for index, entry in enumerate(raw):
+        where = f"Rule '{name}': {key}.exempt[{index}]"
+        if not isinstance(entry, dict):
+            msg = f"{where} must be a mapping"
+            raise ValueError(msg)
+        listed = [kind for kind in kinds if kind in entry]
+        if len(listed) != 1:
+            allowed = ", ".join(f"'{kind}'" for kind in kinds)
+            msg = f"{where} must list exactly one of {allowed}"
+            raise ValueError(msg)
+        (kind,) = listed
+        values = entry[kind]
+        if not isinstance(values, list) or not values:
+            msg = f"{where}.{kind} must be a non-empty list"
+            raise ValueError(msg)
+        reason = str(entry.get("reason", "") or "").strip()
+        until = str(entry.get("until", "") or "").strip()
+        if not reason:
+            msg = f"{where} must carry a non-empty 'reason'"
+            raise ValueError(msg)
+        if not until:
+            msg = f"{where} must carry a non-empty 'until' (its exit condition)"
+            raise ValueError(msg)
+        parsed[kind].append(
+            ListedExemption(entries=tuple(str(v) for v in values), reason=reason, until=until)
+        )
+    return {kind: tuple(entries) for kind, entries in parsed.items()}
+
+
+def _parse_test_binding_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> TestBindingRule:
+    """Parse the 'test_binding' block of a rule.
+
+    YAML example::
+
+        - name: test-binding
+          test_binding:
+            files: "tests/**"          # the file leg: a test file binds to a node
+            for: { kind: feature }     # the node leg: a node has a bound test file
+            exempt:
+              - files: [tests/test_mixed.py]
+                reason: "tests several nodes; not yet split"
+                until: "split by node and placed by the mirror"
+
+    Each leg runs only when declared, so one rule can hold a file leg at
+    ``error`` and another a node leg at ``warn``. A block naming neither is
+    refused, and so is an exemption for a leg the rule does not run.
+    """
+    for_data = data.get("for")
+    files_raw = data.get("files")
+    if for_data is None and files_raw is None:
+        msg = f"Rule '{name}': test_binding names neither 'for' (nodes) nor 'files' (test files)"
+        raise ValueError(msg)
+    for_matcher: NodeMatcher | None = None
+    if for_data is not None:
+        if not isinstance(for_data, dict):
+            msg = f"Rule '{name}': test_binding.for must be a mapping"
+            raise ValueError(msg)
+        for_matcher = _parse_node_matcher(for_data, f"Rule '{name}' test_binding.for")
+    files = None if files_raw is None else str(files_raw)
+    exempt = _parse_listed_exemptions(
+        name, "test_binding", data.get("exempt"), kinds=("files", "nodes")
+    )
+    if exempt["nodes"] and for_matcher is None:
+        msg = f"Rule '{name}': test_binding exempts nodes but declares no 'for' node leg"
+        raise ValueError(msg)
+    if exempt["files"] and files is None:
+        msg = f"Rule '{name}': test_binding exempts files but declares no 'files' leg"
+        raise ValueError(msg)
+    return TestBindingRule(
+        name=name,
+        description=description,
+        for_matcher=for_matcher,
+        files=files,
+        exempt_files=exempt["files"],
+        exempt_nodes=exempt["nodes"],
+        severity=severity,
+    )
+
+
+def _parse_test_import_boundary_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> TestImportBoundaryRule:
+    """Parse the 'test_import_boundary' block: ``forbid_import``'s keys, plus ``of``.
+
+    YAML example::
+
+        - name: domain-unit-tests-no-infra
+          test_import_boundary:
+            from: "tests/unit/**"
+            to: "pkg/infrastructure/**"
+            of: { tag: layer-domain }   # the test's node, or a container of it
+    """
+    from_glob, to_glob, exempt = _parse_import_boundary(name, data, key="test_import_boundary")
+    of_data = data.get("of")
+    of_matcher: NodeMatcher | None = None
+    if of_data is not None:
+        if not isinstance(of_data, dict):
+            msg = f"Rule '{name}': test_import_boundary.of must be a mapping"
+            raise ValueError(msg)
+        of_matcher = _parse_node_matcher(of_data, f"Rule '{name}' test_import_boundary.of")
+    return TestImportBoundaryRule(
+        name=name,
+        description=description,
+        from_glob=from_glob,
+        to_glob=to_glob,
+        of_matcher=of_matcher,
+        severity=severity,
+        exempt=exempt,
+    )
+
+
+def _parse_scenario_binding_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> ScenarioBindingRule:
+    """Parse the 'scenario_binding' block of a rule.
+
+    YAML example::
+
+        - name: scenario-binding
+          scenario_binding:
+            features: "tests/acceptance/**/*.feature"
+            exempt:
+              - files: [tests/acceptance/features/checkout.feature]
+                reason: "its tag names the node its steps run through, not the folder's"
+                until: "the feature is rewritten against its node"
+    """
+    features = str(data.get("features", DEFAULT_FEATURE_GLOB))
+    exempt = _parse_listed_exemptions(
+        name, "scenario_binding", data.get("exempt"), kinds=("files",)
+    )
+    return ScenarioBindingRule(
+        name=name,
+        description=description,
+        features=features,
+        exempt=exempt["files"],
+        severity=severity,
+    )
+
+
 class _MappingParser(Protocol):
     """Read one rule type's mapping into its typed rule, severity already resolved."""
 
@@ -883,6 +1070,9 @@ _MAPPING_PARSERS: dict[str, _MappingParser] = {
     "scenario_coverage": _parse_scenario_coverage_rule,
     "doc_area_coherence": _parse_doc_area_coherence_rule,
     "summary_facts": _parse_summary_facts_rule,
+    "test_binding": _parse_test_binding_rule,
+    "test_import_boundary": _parse_test_import_boundary_rule,
+    "scenario_binding": _parse_scenario_binding_rule,
 }
 
 #: Every key a rule may declare to select its type. A rule declares exactly one.
@@ -903,6 +1093,8 @@ _KEYS_THAT_DEFAULT_TO_WARN: frozenset[str] = frozenset(
         "module_coverage",
         "scenario_coverage",
         "doc_area_coherence",
+        "test_binding",
+        "scenario_binding",
     }
 )
 

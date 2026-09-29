@@ -324,11 +324,19 @@ def _render_tree(
     tree_nodes: tuple[TreeNode, ...],
     parent: Tree,
 ) -> None:
-    """Recursively add TreeNode entries to a Rich Tree."""
+    """Recursively add TreeNode entries to a Rich Tree.
+
+    The graph's own text is escaped before Rich reads the label as markup: the
+    edge kind in ``--[part_of]--`` is bracketed, and Rich took it for a style tag
+    and printed ``----`` on every edge (``beadloom-2mj3.19``).
+    """
+    from rich.markup import escape
+
     for tnode in tree_nodes:
-        label = f"[bold]{tnode.ref_id}[/] ({tnode.kind}) [dim]--[{tnode.edge_kind}]--[/]"
+        edge = escape(f"--[{tnode.edge_kind}]--")
+        label = f"[bold]{escape(tnode.ref_id)}[/] ({escape(tnode.kind)}) [dim]{edge}[/]"
         if tnode.summary:
-            label += f" {tnode.summary}"
+            label += f" {escape(tnode.summary)}"
         child = parent.add(label)
         _render_tree(tnode.children, child)
 
@@ -343,11 +351,13 @@ def render_why(result: WhyResult, console: Console) -> None:
     console:
         Rich Console instance for output.
     """
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.tree import Tree
 
     # Header panel
-    header = f"[bold]{result.node.ref_id}[/] ({result.node.kind})\n{result.node.summary}"
+    node = result.node
+    header = f"[bold]{escape(node.ref_id)}[/] ({escape(node.kind)})\n{escape(node.summary)}"
     console.print(Panel(header, title="Impact Analysis", border_style="blue"))
 
     # Upstream tree

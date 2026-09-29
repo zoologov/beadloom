@@ -23,10 +23,8 @@ from beadloom.onboarding.ignore_block import (
     GENERATED_WORKING_SET,
     IgnoreEntry,
     ignore_block_findings,
-    undeclared_patterns,
 )
 from beadloom.services.cli import main
-from tests.support.package_under_test import SHIPPED_FROM
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -100,23 +98,9 @@ def _generator_grows(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> 
     world["added"] = added
 
 
-@given("the .gitignore of the project this flow ships from")
-def _this_repositorys_ignore_file(world: dict[str, Any]) -> None:
-    path = SHIPPED_FROM / ".gitignore"
-    # Asserted rather than skipped: a room without the file is a checkout this
-    # scenario cannot be taken in, and the claim is the same in every room.
-    assert path.is_file(), f"no .gitignore beside the package under test at {SHIPPED_FROM}"
-    world["text"] = path.read_text(encoding="utf-8")
-
-
 @when("the ignore block is checked")
 def _check(world: dict[str, Any]) -> None:
     world["findings"] = ignore_block_findings(world["root"])
-
-
-@when("its declared patterns are checked against the generator")
-def _check_text(world: dict[str, Any]) -> None:
-    world["findings"] = undeclared_patterns(world["text"])
 
 
 @when("the agent-config check runs")

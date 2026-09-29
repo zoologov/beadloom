@@ -268,14 +268,15 @@ channel was populated and printed nowhere, which left the document silently abse
 
 ## Testing
 
-`tests/test_doc_quality.py` — every check proved on a document that violates it and one that does
-not, the CLI and gate surfaces, and a class that fires all five at this repository's own planning
-documents and fails if any of them reads nothing.
+`tests/integration/doc_sync/doc_quality/test_doc_quality.py` — every check proved on a document
+that violates it and one that does not, and the CLI and gate surfaces.
+`tests/self_check/docs/test_doc_quality.py` (`TestOnThisRepositorysOwnDocuments`) fires all five
+at this repository's own planning documents and fails if any of them reads nothing.
 
-`tests/test_decision_table_classification.py` — the table boundary and the `not classified`
-verdict, on the two-table section BDL-UX #213 was measured on. Both legs are proved able to fail:
-a declared decision table with an empty reason cell is still reported, and an undeclared one with
-the same empty cell is not.
+`tests/unit/doc_sync/doc_quality/test_decision_table_classification.py` — the table boundary and the
+`not classified` verdict, on the two-table section BDL-UX #213 was measured on. Both legs are proved
+able to fail: a declared decision table with an empty reason cell is still reported, and an
+undeclared one with the same empty cell is not.
 
 The per-kind rows are proved on a two-kind corpus where every check reads something and one kind
 is still entered by none — so `checks_that_read_nothing == ()` and `kinds_that_read_nothing` is

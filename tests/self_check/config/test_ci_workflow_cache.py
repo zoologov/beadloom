@@ -4,8 +4,10 @@ The job's LOGIC / TRIGGER / loop-guard / AI_TW_PAT must stay unchanged; S5 only
 ADDS caching. These structural checks parse ``.github/workflows/ci.yml`` and pin:
 
 * ``setup-uv`` has its dependency cache enabled;
-* the index DB is cached, keyed on a ``hashFiles`` of the graph + src + docs, so
-  any of those changing rotates the key (stale → miss → reindex);
+* the index DB is cached, keyed on a ``hashFiles`` of every input reindex reads —
+  the graph, src, docs, tests (the test-file tables and the binding, BDL-074) and
+  the ``.beadloom/*.yml`` config (``tests.*`` roots and patterns) — so any of
+  those changing rotates the key (stale → miss → reindex);
 * the reindex step is gated on a cache MISS;
 * the unchanged invariants survive: ``fetch-depth: 0``, the loop-guard, and the
   ``AI_TW_PAT`` checkout token.
@@ -42,16 +44,23 @@ def test_setup_uv_cache_enabled() -> None:
     assert step.get("with", {}).get("enable-cache") is True
 
 
-def test_index_cache_keyed_on_graph_src_docs() -> None:
+# Every input the reindex reads. Since BDL-074 it reads ``tests/`` (the test-file
+# tables and the binding) and ``.beadloom/*.yml`` (``tests.roots``, ``patterns``,
+# kinds); a key without either lets a tests-only or config-only pull request hit
+# the cache, and the tech-writer then reads the previous tree's test tables.
+_INDEX_INPUTS = (".beadloom/_graph/**", "src/**", "docs/**", "tests/**", ".beadloom/*.yml")
+
+
+def test_index_cache_keyed_on_every_index_input() -> None:
     step = _step("Cache the Beadloom index")
     assert step["uses"].startswith("actions/cache@")
     with_ = step["with"]
     assert with_["path"] == ".beadloom/beadloom.db"
     key = with_["key"]
-    # The key is a hashFiles over exactly the three index inputs, so changing any
-    # of graph/src/docs rotates the key -> a stale cache misses (full reindex).
-    for glob in (".beadloom/_graph/**", "src/**", "docs/**"):
-        assert glob in key
+    # The key is a hashFiles over every index input, so changing any of them
+    # rotates the key -> a stale cache misses (full reindex).
+    missing = [glob for glob in _INDEX_INPUTS if f"'{glob}'" not in key]
+    assert missing == [], f"index cache key omits {missing}: {key}"
     assert "hashFiles(" in key
 
 

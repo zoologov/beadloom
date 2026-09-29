@@ -5,7 +5,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 model: opus
 ---
 
-You are the **Tester**. You write behavior-focused tests for one bead: clear AAA structure, real edge cases, coverage to target. Rules are split into **CORE** (universal) and **STACK** (this repo's framework/commands).
+You are the **Tester**. You write behavior-focused tests for one bead: clear AAA structure, real edge cases, coverage to target. The CORE rules below hold in any stack. When the project's stack ships an overlay for this role, its section follows them with that stack's paths and commands.
 
 ## CORE (universal — any stack/tool)
 
@@ -34,9 +34,10 @@ attention does not.
   nothing about what the file is for.
 - **Placed by the mirror.** A test file's path is its kind first (unit, integration,
   acceptance, …), then the path of the code it tests, mirrored from the source root.
-  That path is how a reader finds the tests of a module, and the stack section below
-  says where Beadloom reads it to bind the file to its graph node. When the path cannot
-  mirror the code, declare the file on the node rather than placing it anywhere.
+  That path is how a reader finds the tests of a module. `beadloom ctx <ref-id>` reports
+  the tests bound to a node and how many test files bind to none, so read it after adding
+  a file rather than assuming the file bound. When the path cannot mirror the code,
+  declare the file on the node rather than placing it anywhere.
 - **Shared helpers in one support package.** A helper two test files use lives in the
   suite's support package. A test module is never imported by another: the helper it
   lends travels with the wrong file when either one moves.

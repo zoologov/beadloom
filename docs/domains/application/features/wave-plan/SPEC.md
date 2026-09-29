@@ -386,10 +386,10 @@ reach all of it.** Measured in the same slice by `beadloom-0mdo.59`: three beads
 whose code scopes are disjoint shared four artifacts —
 `.claude/development/docs/features/BDL-068/ACTIVE.md`,
 `docs/services/components/cli-commands/DOC.md`,
-`tests/test_bead77_kind_and_root_disagree.py` and `.beadloom/_graph/services.yml`
-(one file per node since `beadloom-0mdo.80`).
-Two of those are not documents: one is a test carrying hand-maintained population
-literals that any bead adding a node has to bump, and the other is the graph this
+`test_bead77_kind_and_root_disagree.py` (then at the top of `tests/`) and
+`.beadloom/_graph/services.yml` (one file per node since `beadloom-0mdo.80`).
+Two of those are not documents: one was a test carrying hand-maintained population
+literals that any bead adding a node had to bump, and the other is the graph this
 plan derives its scopes FROM.
 
 **Why `graph-files` is a medium and not a serialisation either (BDL-UX #261,
@@ -403,16 +403,15 @@ from: both colliding beads were ADDING nodes, and a node being added is in no
 graph the plan can read. The condition named for reopening it was a graph split
 across files, pinned as a test that goes red when it holds.
 
-**The condition was met, and the answer did not change — for the opposite
-reason.** `beadloom-0mdo.80` split this repository's graph into one file per node
-(BDL-UX #265). Under that layout the node-to-file map is INJECTIVE, so "two beads
-whose declared nodes are defined in one graph file" holds exactly when the two
-beads declare the same node — which `conflict_between` already reports as
-`shared_node`. The reason was noise on a single-file graph and is redundant on a
+**The condition was met, and the answer did not change — for the opposite reason.**
+`beadloom-0mdo.80` split this repository's graph into one file per node (BDL-UX #265). Under that
+layout the node-to-file map is INJECTIVE, so "two beads whose declared nodes are defined in one
+graph file" holds exactly when the two beads declare the same node — which `conflict_between`
+already reports as `shared_node`. The reason was noise on a single-file graph and is redundant on a
 split one, and there is no layout between the two where it is neither.
 `TestTheSplitMakesTheSerialisationRedundantRatherThanMeaningful` in
-`tests/test_the_graph_is_one_file_per_node.py` is that measurement, and it goes
-red the day some file of this graph declares two nodes again.
+`tests/self_check/architecture/test_the_graph_is_one_file_per_node.py` is that measurement, and it
+goes red the day some file of this graph declares two nodes again.
 
 **What the medium says now depends on the layout, because the answer does.**
 While some file declares several nodes, the pass names it with the count it holds
@@ -438,12 +437,14 @@ the index. Nothing that was one pass became N. `graph-layout`
 shared write is still possible.
 
 **The two artifacts neither medium covers, and why each needs a different
-answer.** `tests/test_bead77_kind_and_root_disagree.py` carries hand-maintained
+answer.** `test_bead77_kind_and_root_disagree.py` carried hand-maintained
 population counts (`populations[SPACE_TO_BE] == 203`,
 `populations[SPACE_AS_IS] == 116`, `len(working_documents(REPO_ROOT)) == 58`)
-that any bead adding a node or a document has to bump — one derivable fact with
+that any bead adding a node or a document had to bump — one derivable fact with
 two homes, whose answer is to remove the copy, not to serialise around it. One
-writer per file does not apply: the file has one writer per bead already.
+writer per file did not apply: the file had one writer per bead already. BDL-068
+S6 removed the copy, and the relation that replaced the three counts is in
+`tests/self_check/docs/test_every_document_of_this_repository_is_in_one_space.py`.
 `docs/services/components/cli-commands/DOC.md` is not the ancestor-document case
 #261 guessed at, and the measurement says so: node `cli-commands` owns
 `src/beadloom/services/commands/` — both `setup.py`, which `beadloom-0mdo.59`
@@ -914,37 +915,33 @@ every scenario runs without a `bd` binary on the machine.
 
 ## Testing
 
-`tests/acceptance/features/wave_plan.feature` states the behaviour as executable
-scenarios; `tests/test_wave_plan.py` covers the reasons, the ordering and the
-override arithmetic; `tests/test_wave_media_checks.py` covers the medium
-verdicts and the title-against-id comparison;
-`tests/test_the_graph_a_plan_is_derived_from.py` covers the `graph-files`
-medium and holds the two mechanisms BDL-UX #261 sketched and this feature
-declined, each with the condition that reopens it;
-`tests/acceptance/features/landing_lock.feature` and
-`tests/test_landing_lock_sites.py` cover the landing-lock derivation and hold
-this repository's own instructions to it; `tests/test_cli_waves.py` covers
-the command's two output shapes, its three exit codes, and the population it
-reports having not been asked about;
+`tests/acceptance/application/wave-plan/wave_plan.feature` states the behaviour as executable
+scenarios; `tests/integration/application/waves/test_wave_plan.py` covers the reasons, the ordering
+and the override arithmetic; `tests/unit/application/waves/test_wave_media_checks.py` covers the
+medium verdicts and the title-against-id comparison;
+`tests/test_the_graph_a_plan_is_derived_from.py` covers the `graph-files` medium and holds the two
+mechanisms BDL-UX #261 sketched and this feature declined, each with the condition that reopens it;
+`tests/acceptance/application/wave-plan/landing_lock.feature` and `tests/test_landing_lock_sites.py`
+cover the landing-lock derivation and hold this repository's own instructions to it;
+`tests/test_cli_waves.py` covers the command's two output shapes, its three exit codes, and the
+population it reports having not been asked about;
 `tests/acceptance/features/wave_running_work.feature` and
-`tests/test_a_plan_is_compared_against_running_work.py` cover the comparison
-against beads already in progress, through a tracker double that answers in
-bd's own spelling, and read the real tracker where one is installed;
-`tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
-and owns the five findings BDL-061.22 measured;
-`tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6
-decisions fails in; `tests/test_wave_derivation.py` covers the four agreement
+`tests/integration/application/waves/test_a_plan_is_compared_against_running_work.py` cover the
+comparison against beads already in progress, through a tracker double that answers in bd's own
+spelling, and read the real tracker where one is installed;
+`tests/integration/application/waves/test_the_wave_guarantee_holds_both_its_clauses.py` holds the
+guarantee to both of its clauses and owns the five findings BDL-061.22 measured;
+`tests/test_each_decision_fails_in_its_stated_direction.py` pins the DIRECTION each of the two S6
+decisions fails in; `tests/unit/application/waves/test_wave_derivation.py` covers the four agreement
 verdicts, the per-wave gap and the remedies that read the work item's document;
-`tests/acceptance/features/clean_room.feature` states the room's ownership and
-its once-only build as executable scenarios;
-`tests/acceptance/features/room_environment.feature` states the interpreter it
-holds, over real environments, and `tests/test_room_environment.py` covers what
-those cannot reach — the second installer, a create step that fails, and the
-install spellings this repository's own workflows do not use.
-`tests/test_cli_clean_room.py`
-covers `beadloom clean-room`'s two output shapes and its three exit codes;
-`tests/acceptance/features/room_extras.feature` states that a room records the
-extras its interpreter has, and `tests/test_room_extras.py` covers the
+`tests/acceptance/application/wave-plan/clean_room.feature` states the room's ownership and its
+once-only build as executable scenarios; `tests/acceptance/features/room_environment.feature` states
+the interpreter it holds, over real environments, and `tests/test_room_environment.py` covers what
+those cannot reach — the second installer, a create step that fails, and the install spellings this
+repository's own workflows do not use. `tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
+two output shapes and its three exit codes;
+`tests/acceptance/application/verdict-room/room_extras.feature` states that a room records the
+extras its interpreter has, and `tests/integration/application/rooms/test_room_extras.py` covers the
 derivation those records come from.
 
 ## Related

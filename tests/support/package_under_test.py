@@ -25,12 +25,15 @@ function — which mutmut leaves under its own name, decorated — survives. On 
 unmutated tree there is nothing to prune and the helper is a plain parse, which
 is asserted in ``test_the_suite_reads_the_package_under_test.py``.
 
-Copy-safe ROOT idioms already existed in four places
-(``tests/acceptance/steps/doc-sync/docs-audit/test_audit_self_facts_steps.py:32``,
-``test_ignore_block_drift_steps.py:39``, ``test_package_description_steps.py:39``,
-``tests/test_rules_docstring_references.py:50``). None of them declines a
-generated name, which is why this module exists rather than a fifth copy of the
-first half.
+Copy-safe ROOT idioms already existed in four places when BDL-072 wrote this
+module: three acceptance step files that read this repository's own files
+(``test_audit_self_facts_steps.py``, ``test_ignore_block_drift_steps.py``,
+``test_package_description_steps.py``) and
+``tests/unit/graph/rules/test_rules_docstring_references.py:50``. None of them
+declines a generated name, which is why this module exists rather than a fifth
+copy of the first half. BDL-074 F3 took the three steps' reads of this
+repository out of the acceptance suite: each was a self-check, and each now
+lives, or already lived, under ``tests/self_check/``.
 """
 
 from __future__ import annotations

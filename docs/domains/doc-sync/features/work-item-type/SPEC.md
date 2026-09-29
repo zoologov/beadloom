@@ -83,5 +83,5 @@ carries, and `planning_report` publishes the folder count for these two checks a
 
 ## Tests
 
-- `tests/acceptance/features/work_item_type.feature` — the scenarios.
+- `tests/acceptance/doc-sync/work-item-type/work_item_type.feature` — the scenarios.
 - `tests/test_the_explore_role_is_composed_like_the_others.py` — the cases.

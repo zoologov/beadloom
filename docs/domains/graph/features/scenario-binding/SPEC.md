@@ -157,5 +157,5 @@ reporting belongs to `rule-engine`.
 
 | Suite | What it covers |
 |-------|----------------|
-| `tests/test_scenario_binding.py` | parsing, inheritance, dialects, references, dead globs, and a cross-check of Beadloom's own suite against `gherkin-official`, the parser `pytest-bdd` uses |
-| `tests/acceptance/features/scenario_binding.feature` | the binding stated as scenarios that run |
+| `tests/unit/graph/scenarios/test_scenario_binding.py` | parsing, inheritance, dialects, references, dead globs, and a cross-check of Beadloom's own suite against `gherkin-official`, the parser `pytest-bdd` uses |
+| `tests/acceptance/graph/scenario-binding/scenario_binding.feature` | the binding stated as scenarios that run |

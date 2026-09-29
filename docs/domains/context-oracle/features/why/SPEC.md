@@ -143,6 +143,10 @@ Rich terminal output consisting of:
 3. **Downstream Tree** (`Tree` with green label `"Downstream (dependents)"`): Same format. If empty, prints `"No downstream dependents."`.
 4. **Impact Summary Panel** (`border_style="yellow"`): Direct dependents, transitive dependents, doc coverage percentage, and a `Stale pairs:` row whose label is built from the noun the count carries.
 
+The graph's own text — `ref_id`, kind, summary and the bracketed edge kind — is passed through
+`rich.markup.escape` before Rich reads a label as markup. Unescaped, Rich took `[part_of]` for a
+style tag and printed `----` on every edge (`beadloom-2mj3.19`).
+
 ### JSON Serialization: `result_to_dict`
 
 ```python
@@ -277,7 +281,7 @@ def _tree_node_to_dict(tnode) -> dict[str, object]
 
 ## Testing
 
-Tests are located in `tests/test_why.py`. Key scenarios:
+Tests are located in `tests/integration/context_oracle/why/test_why.py`. Key scenarios:
 
 - **Basic analysis**: Create a small graph, call `analyze_node`, verify `WhyResult` structure, upstream and downstream trees, and impact counts.
 - **Unknown ref_id**: Verify `LookupError` is raised with suggestion text.
@@ -289,3 +293,5 @@ Tests are located in `tests/test_why.py`. Key scenarios:
 - **Stale count**: Insert stale sync_state rows, verify the count AND its noun in the impact summary.
 - **`result_to_dict` round-trip**: Verify JSON-serializable output matches expected structure.
 - **`render_why` smoke test**: Call with a mock console, verify no exceptions.
+- **Edge kinds as written**: The Rich output carries `--[part_of]--` and bracketed ref ids and
+  summaries verbatim (`beadloom-2mj3.19`).

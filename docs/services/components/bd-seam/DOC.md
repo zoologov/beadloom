@@ -100,17 +100,16 @@ of one per bead and one per edge.
 
 ## Invariants
 
-- **A verdict names the release it was measured on.** Every entry in the
-  assumption table was taken on bd 1.0.4 with the streams read separately and the
-  exit codes read without a pipe, and `BD_MEASURED_VERSION` records it.
-  `tests/test_bd_call_sites.py::test_the_recorded_release_is_the_one_installed`
-  fails when a different `bd` is installed, naming what has to be re-measured.
-  That is not ceremony: three premises BDL-068 S5 inherited were re-measured and
-  destroyed — BDL-UX #194 and #237 (`bd merge-slot` grants no exclusion; it does,
-  and 32 concurrent acquires produced exactly one winner per round) and
-  `beadloom-l2f2` (`bd import -i` does not exist; it does, as a documented legacy
-  alias, and imported 137 issues at exit 0). An External defect a later `bd` fixes
-  must fail loudly rather than quietly guard nothing.
+- **A verdict names the release it was measured on.** Every entry in the assumption table was taken
+  on bd 1.0.4 with the streams read separately and the exit codes read without a pipe, and
+  `BD_MEASURED_VERSION` records it.
+  `tests/unit/services/bd_seam/test_bd_call_sites.py::test_the_recorded_release_is_the_one_installed`
+  fails when a different `bd` is installed, naming what has to be re-measured. That is not ceremony:
+  three premises BDL-068 S5 inherited were re-measured and destroyed — BDL-UX #194 and #237 (`bd
+  merge-slot` grants no exclusion; it does, and 32 concurrent acquires produced exactly one winner
+  per round) and `beadloom-l2f2` (`bd import -i` does not exist; it does, as a documented legacy
+  alias, and imported 137 issues at exit 0). An External defect a later `bd` fixes must fail loudly
+  rather than quietly guard nothing.
 - **A withdrawal is a measurement too, and one shape is not enough.** BDL-UX #97
   was withdrawn in this module and the withdrawal was wrong. It rested on one
   dependency shape — a target with two blockers, one closed — where

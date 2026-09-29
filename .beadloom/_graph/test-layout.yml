@@ -1,0 +1,18 @@
+# A module of the test binding, and a part of its feature (review `beadloom-b9ll`
+# m-new-4, `beadloom-2mj3.15`). A node's `source` names one path, and the binding's
+# modules sit beside unrelated ones in `context_oracle/`, so each is its own node:
+# without one, the ownership rule placed it under `context-oracle`, and its unit
+# tests bound there instead of to the feature.
+nodes:
+  - ref_id: test-layout
+    kind: component
+    summary: "Test layout — where a project keeps its tests and which paths are tests: roots, patterns by framework (a name or the end of a path), build-tool test trees, kind folders and tests beside the code, read from `tests:` in .beadloom/config.yml"
+    source: src/beadloom/context_oracle/test_layout.py
+    docs_absent: >-
+      Documented in the test-mapping SPEC, the feature it is a part of, beside the
+      binding it configures: the loader keeps a document for one node only, and a
+      DOC.md of its own would restate its "Configuration: the test layout" section.
+edges:
+  - src: test-layout
+    dst: test-mapping
+    kind: part_of

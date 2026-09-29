@@ -279,7 +279,7 @@ rules:
       to:   "beadloom/infrastructure/**"
 ```
 
-Правило объявляет ровно один из 12 ключей: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence` и `summary_facts`. Полный справочник — в [docs/architecture.md](docs/architecture.md).
+Правило объявляет ровно один из 15 ключей: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence`, `summary_facts`, `test_binding`, `test_import_boundary` и `scenario_binding`. Полный справочник — в [docs/architecture.md](docs/architecture.md).
 
 Правило, которое **не может ни с чем совпасть**, сообщает об этом само: матчер, не выбирающий ни одного узла, опечатка в шаблоне пути, исключение, которое ничего не подавляет. В итоговой строке `lint` появляется их число, поэтому объявленное количество правил не может обещать больше, чем проверено.
 
@@ -343,6 +343,7 @@ Beadloom дополняет [Beads](https://github.com/steveyegge/beads): аге
 | [Исполняемые приёмочные сценарии](docs/guides/bdd-scenarios.md) | Gherkin как источник истины и что сообщает `scenario-coverage` |
 | [Параллельные волны](docs/guides/parallel-waves.md) | Что гарантирует волна параллельных агентов и что здесь не проверяется ничем |
 | [Виды документов](docs/guides/document-kinds.md) | Обязательные разделы и пять проверок стандарта письма |
+| [Тестирование](docs/guides/testing.md) | Где живёт тест, как он привязывается к узлу графа, что о наборе тестов сообщает `lint` и как читать мутационную оценку |
 | [CI Setup](docs/guides/ci-setup.md) | Интеграция с GitHub Actions / GitLab CI |
 | [VitePress Site](docs/guides/vitepress-site.md) | Публикация базы знаний на VitePress |
 | **Домены** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |

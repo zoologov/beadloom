@@ -344,7 +344,7 @@ def _dead_glob_finding(
     )
 
 
-def _evaluate_one_import_rule(
+def evaluate_one_import_rule(
     rule: ImportBoundaryRule,
     imports: list[tuple[str, int, str]],
     *,
@@ -450,7 +450,7 @@ def evaluate_import_boundary_rules(
     violations: list[Violation] = []
     for rule in rules:
         violations.extend(
-            _evaluate_one_import_rule(
+            evaluate_one_import_rule(
                 rule, imports, file_count=file_count, target_count=target_count
             )
         )

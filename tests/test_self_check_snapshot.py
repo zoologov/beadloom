@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import os
 import subprocess
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+from tests.support.repository_root import TESTS_ROOT
 from tests.support.self_check_snapshot import build_snapshot, working_tree_files
 
 if TYPE_CHECKING:
@@ -161,20 +162,42 @@ class TestADirectoryThatIsNotARepository:
 
 
 class TestTheSessionSnapshot:
-    """The fixture every self-check reads instead of the live index."""
+    """The marking rule for the fixture every self-check reads instead of the live index.
 
-    def test_it_is_not_this_repository(self, self_check_snapshot: Path) -> None:
-        assert self_check_snapshot.resolve() != _REPO_ROOT.resolve()
-        assert not self_check_snapshot.resolve().is_relative_to(_REPO_ROOT.resolve())
-
-    def test_it_carries_an_index_of_its_own(self, self_check_snapshot: Path) -> None:
-        assert (self_check_snapshot / ".beadloom" / "beadloom.db").is_file()
-        assert (self_check_snapshot / ".beadloom" / "_graph" / "rules.yml").is_file()
+    What the session snapshot holds is checked against the snapshot itself, in
+    ``tests/self_check/process/test_self_check_snapshot.py``: those two tests read
+    this repository's copy, so they are self-checks (BDL-074 F3). The two here
+    read no snapshot, and stay beside the helper's product tests.
+    """
 
     def test_a_test_that_reads_it_is_marked_a_self_check(
-        self, self_check_snapshot: Path, request: pytest.FixtureRequest
+        self, request: pytest.FixtureRequest
     ) -> None:
-        assert request.node.get_closest_marker("self_check") is not None
+        """The collection hook marks an item that asks for the snapshot.
+
+        The item is this test's own -- outside ``tests/self_check/``, so the folder
+        cannot be what marks it -- with the snapshot added to what it asks for.
+        Until BDL-074 F3 this test asked for the real session snapshot, which made
+        it a self-check outside the self-check folder; moving it into that folder
+        would have made it pass whatever the rule did.
+
+        The hook is the conftest's own, taken from the plugin manager that
+        registered it: a test module does not import another suite module
+        (``test_the_suite_shares_helpers_through_support.py``).
+        """
+        conftest = request.config.pluginmanager.get_plugin(str(TESTS_ROOT / "conftest.py"))
+        assert conftest is not None, "the suite's conftest is not registered under its path"
+
+        marks: list[str] = []
+        asks_for_the_snapshot = SimpleNamespace(
+            path=request.node.path,
+            fixturenames=[*request.node.fixturenames, "self_check_snapshot"],
+            add_marker=lambda mark: marks.append(mark.name),
+        )
+
+        conftest.pytest_collection_modifyitems([asks_for_the_snapshot])
+
+        assert marks == ["self_check"]
 
     def test_a_test_that_does_not_read_it_is_not(self, request: pytest.FixtureRequest) -> None:
         assert request.node.get_closest_marker("self_check") is None

@@ -98,6 +98,22 @@ tests → the strength of those tests**.
 - Removing the self-check tests. They are how this project dogfoods its own gates; they become an
   isolated, named category rather than a hidden side effect.
 - Settling what killed the whole-scope nightly's runner. That question was closed as superseded.
+- **Binding a test by a guess** (owner, 2026-09-28, after the second review; `beadloom-2mj3.15`
+  enumerated 32 conventions of the retired mapper, proved 23 no worse than main and ruled out 9).
+  A test binds by the mirror, by its place beside the code, or through `tests:` — nothing else:
+  - *NG2* — an Xcode sibling test target (`ShopTests/` beside `Shop/`) is not paired by default,
+    because the pairing depends on the project's own name; one line of `tests.mirrors` restores
+    main's figures.
+  - *NG3* — a test is not bound by what it imports, nor by a folder named after a node: an import
+    names fixtures, helpers and collaborators as well as the subject. Such a file is read and counted
+    unplaced, and the untested count is withheld, so the debt score does not move.
+  - *NG4* — a framework is not named from a marker file without a test file (`conftest.py`,
+    `jest.config.*`, an empty test folder). A project with no test says so and scores that.
+  - NG1 was **not** accepted as a non-goal: `test/`, `spec/` and `__tests__/` join `tests/` as default
+    roots, read only when present, so a flat test folder is read (unplaced) without a declaration.
+    NG1 named all three places; the coordinator's question to the owner named only `test/` and
+    `spec/`, and `__tests__/` was added under the same ruling in `beadloom-2mj3.17` after the third
+    review found it unread.
 
 ## User Stories
 
@@ -135,3 +151,29 @@ nothing, the same way it tells me which features have no documentation.
   `tests/self_check/<category>/` against the isolated snapshot, or kept as a recorded finding; the
   self-check share of suite time (145.5 s, 28%, measured 2026-09-27) is re-measured and reported.
 - `beadloom ci` rc 0 and the nine required checks green on every pull request of the epic.
+
+### Corrections (2026-09-28, after T measured every criterion — `beadloom-75pl`)
+
+T found 10 criteria met, 4 not met, 2 not measurable before PR 3. The owner ruled on each:
+
+- **Every test file bound or exempt.** The 101 self-check files bind to no node and are named in no
+  exemption; the rule reported them under a phrase that was not true. Fixed in this epic:
+  `beadloom-2mj3.6` makes the self-check and acceptance kinds outcomes the rule names by kind and
+  count, corrects six false exemption reasons, and gives `ctx` and `beadloom mutation` one unplaced
+  count.
+- **The 227 clear-node files.** 216 sit in their node's folder. The other 11 are accounted for: one
+  was retired with its module (C2), one became mixed, and nine acceptance step files follow the
+  folder of the node their `@node:` tag names — the owner's layout ruling of 2026-09-28 — rather than
+  the map's node. The criterion is read as "placed by the rule in force", not as 227 literally.
+- **Every `@node:` tag names a node the scenario executes.** The folder half holds. The execution half
+  is **not delivered by this epic**: a static stand-in found 59 of 81 executed pairs, too weak to be a
+  rule. It moves to `beadloom-o9rl` (a coverage run of the acceptance suite). The three tags that
+  name never-executed nodes are resolved here, in `beadloom-2mj3.8`.
+- **Every self-check in one of three outcomes, against the snapshot.** The 36 marked self-checks and
+  7 scenarios kept outside the three outcomes are placed in `beadloom-2mj3.8`. "Against the isolated
+  snapshot" is read as **no contact with the live index, tracker or history**; 66 self-check files
+  read files of the working tree, which the snapshot copies unchanged, and are not moved.
+- **Also in this epic:** `reindex` and `test-mapping`, two of the nine kept nodes, had 0 bound tests;
+  `beadloom-2mj3.7` splits their mixed files.
+- **Not measurable before PR 3:** the per-change job's time on `ubuntu-latest` (locally 394 s, about
+  642 s projected before setup — at risk) and the checks on PR 3 are V's (`beadloom-paze`).

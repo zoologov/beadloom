@@ -52,4 +52,7 @@ Module `src/beadloom/context_oracle/route_extractor.py`:
 
 ## Testing
 
-Tests: `tests/test_route_extractor.py`, `tests/test_reindex_routes.py`
+Tests: `tests/integration/context_oracle/route_extractor/test_route_extractor.py`,
+`tests/integration/application/reindex/test_reindex_routes.py` (the reindex storing routes) and
+`tests/integration/context_oracle/builder/test_the_context_bundle_carries_routes.py` (the bundle
+reading them). BDL-074 F2 split the last two out of one file, so each is bound to its own node.

@@ -595,9 +595,9 @@ Module `src/beadloom/doc_sync/surface.py`:
 ## Testing
 
 Tests: `tests/test_sync_engine.py`, `tests/test_sync_since.py`,
-`tests/test_surface.py`, `tests/test_reference_drift.py`,
+`tests/integration/doc_sync/test_surface.py`, `tests/test_reference_drift.py`,
 `tests/test_cli_reference_drift.py`,
 `tests/test_integration_reference_freshness.py`,
 `tests/test_e2e_sync_honest.py`, `tests/test_s2_lying_checks.py`,
 `tests/test_a_remediation_can_be_followed.py` (the allow-list measured reason by
-reason, over `tests/stale_pair_project.py`)
+reason, over `tests/support/stale_pair_project.py`)

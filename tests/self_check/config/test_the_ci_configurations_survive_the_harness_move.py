@@ -2,18 +2,39 @@
 
 Moved out of ``tests/test_s2_move_regression.py``;
 the product tests of the same code stay there.
+The live rows of that module's ``TestCiConfigsModulePath`` -- the same
+assertion over this repository's own ``ci.yml`` and ``.gitlab-ci.yml`` -- moved
+into the class of that name here in BDL-074 F3, under their ids; the bodies are
+in :mod:`tests.support.ci_pipeline_properties`.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
+from tests.support import ci_pipeline_properties as properties
 from tests.support.ci_workflows import GH_CI, GL_CI
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+#: This repository's own two pipelines.
+_LIVE_CONFIGS = (GH_CI, GL_CI)
 
 
 class TestCiConfigsModulePath:
+    @pytest.mark.parametrize("cfg", _LIVE_CONFIGS, ids=lambda p: p.name)
+    def test_references_new_module_not_tools(self, cfg: Path) -> None:
+        properties.references_new_module_not_tools(cfg)
+
+    @pytest.mark.parametrize("cfg", _LIVE_CONFIGS, ids=lambda p: p.name)
+    def test_is_valid_yaml(self, cfg: Path) -> None:
+        properties.ci_config_is_valid_yaml(cfg)
+
     @pytest.mark.parametrize(
         "marker",
         [

@@ -500,9 +500,9 @@ Module `src/beadloom/onboarding/config_sync.py`:
 
 Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 `tests/test_cli_config_check.py`, `tests/test_s3_config_check_residual.py`
-(the adversarial half), `tests/test_bead57_config_check_sight.py`,
+(the adversarial half), `tests/test_config_check_names_what_it_could_not_verify.py`,
 `tests/acceptance/features/ignore_block_drift.feature` for the ignore block, and
-`tests/acceptance/features/orphaned_adapters.feature` +
+`tests/acceptance/onboarding/config-check/orphaned_adapters.feature` +
 `tests/test_orphaned_adapters.py` for the adapters of a dropped tool.
 
 ## What is still not checked, measured

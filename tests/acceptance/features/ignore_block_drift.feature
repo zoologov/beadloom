@@ -59,10 +59,7 @@ Feature: the ignore block on disk still declares what this version generates
     Then every ignore-block finding carries severity "warn"
     And no ignore-block finding offers --fix as its remedy
 
-  # The drift this bead exists for was in this repository's own file, so the
-  # repository is a subject of the check and not only its author.
-
-  Scenario: this repository's own .gitignore declares every pattern this version emits
-    Given the .gitignore of the project this flow ships from
-    When its declared patterns are checked against the generator
-    Then no ignore-block finding is reported
+  # The drift this bead exists for was in this repository's own file. The check
+  # of that file is a self-check and lives with the others, in
+  # tests/self_check/config/test_this_repositorys_gitignore_declares_the_generated_patterns.py
+  # (BDL-074 F3, `beadloom-2mj3.8`). Every scenario here judges a project on disk.

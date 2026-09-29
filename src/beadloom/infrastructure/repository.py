@@ -20,12 +20,13 @@ the :mod:`beadloom.application.graph_reads` facade, never directly — the
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Mapping
 
 
 @dataclass(frozen=True)
@@ -382,6 +383,124 @@ def most_specific_owner(
     return best[1] if best is not None else None
 
 
+#: The ``placement`` values ``test_files`` holds (BDL-074 C1). Defined here, below
+#: both domains that read them: ``context_oracle.test_binding`` assigns a placement
+#: and ``graph.rules.test_binding`` judges it, and a vocabulary two peers share
+#: belongs below both rather than in whichever wrote it down first (C3).
+#: Bound by the mirror of its path.
+PLACEMENT_MIRROR = "mirror"
+#: Bound by a node's ``tests:`` declaration.
+PLACEMENT_OVERRIDE = "override"
+#: Under a mirrored kind folder, and no node owns the code its path names.
+PLACEMENT_UNOWNED = "unowned"
+#: Not under a kind folder: the layout has not reached it, so it binds to nothing.
+PLACEMENT_UNPLACED = "unplaced"
+#: Under a kind folder whose binding is not the mirror.
+PLACEMENT_OTHER_KIND = "other_kind"
+#: Inside a node's source, outside every test root: bound to the node covering it
+#: (BDL-074 G2) — ``foo_test.go`` beside ``foo.go``, ``test_x.py`` beside ``x.py``.
+PLACEMENT_BESIDE_CODE = "beside_code"
+
+#: The ``kind`` values an ``other_kind`` file carries, beside the placement vocabulary
+#: for the same reason (BDL-074 F1): the binding assigns them and the rule engine names
+#: them, so a count by kind is read from the index rather than inferred from a folder.
+#: An acceptance step file runs scenarios, which bind to a node by their ``@node:`` tag.
+KIND_ACCEPTANCE = "acceptance"
+#: A self-check tests the project's own files and configuration, and binds to no node
+#: by design: a sanctioned kind, not a file the layout has yet to reach.
+KIND_SELF_CHECK = "self_check"
+
+#: How a kind is named in a sentence; a kind without an entry is named as recorded.
+_KIND_LABELS = {KIND_ACCEPTANCE: "acceptance step", KIND_SELF_CHECK: "self-check"}
+#: The kind stated for an ``other_kind`` row that recorded none.
+KIND_UNRECORDED = "unrecorded"
+
+
+def label_test_kind(kind: str) -> str:
+    """The words a count of *kind* files is stated in: ``3 self-check file(s)``."""
+    return _KIND_LABELS.get(kind, kind)
+
+
+#: The ``meta`` key the reindex records its test layout under (BDL-074 G2).
+TEST_LAYOUT_KEY = "test_layout"
+
+
+@dataclass(frozen=True)
+class RecordedTestLayout:
+    """The layout a reindex recognised test files by, as it recorded it in the index.
+
+    Kept beside the placement vocabulary for the same reason: the binding writes it
+    and the rule engine states it, and neither may import the other. *kind_prefixes*
+    are each kind's folders under every root (``tests/unit/``); *declared_kinds* the
+    kinds whose folder the project's config declares rather than defaults;
+    *frameworks* the names of the pattern groups a file path is matched against;
+    *mirror_roots* the build tools' test trees the project has (``src/test/java``);
+    *patterns* each group's patterns, in the order they are matched — empty in a
+    record written before ``beadloom-2mj3.15``, which named the groups alone;
+    *absent_roots* the roots in force the project does not have, so a reader names
+    the roots that exist and can say which were looked for (``beadloom-2mj3.17``).
+    """
+
+    kind_prefixes: Mapping[str, tuple[str, ...]]
+    declared_kinds: frozenset[str]
+    beside_code: bool
+    roots: tuple[str, ...]
+    frameworks: tuple[str, ...]
+    mirror_roots: tuple[str, ...] = ()
+    patterns: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    absent_roots: tuple[str, ...] = ()
+
+    def encode(self) -> str:
+        """The record as the JSON the ``meta`` table holds."""
+        return json.dumps(
+            {
+                "kind_prefixes": {kind: list(p) for kind, p in sorted(self.kind_prefixes.items())},
+                "declared_kinds": sorted(self.declared_kinds),
+                "beside_code": self.beside_code,
+                "roots": list(self.roots),
+                "frameworks": list(self.frameworks),
+                "mirror_roots": list(self.mirror_roots),
+                "patterns": [[name, list(group)] for name, group in self.patterns],
+                "absent_roots": list(self.absent_roots),
+            },
+            sort_keys=True,
+        )
+
+
+def read_test_layout(conn: sqlite3.Connection) -> RecordedTestLayout | None:
+    """The test layout the last reindex recorded, or ``None`` when it recorded none.
+
+    ``None`` for an index written before BDL-074 G2, or one whose record does not
+    parse: the reader then states that the layout is unknown rather than a default.
+    """
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (TEST_LAYOUT_KEY,)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None:
+        return None
+    try:
+        raw = json.loads(str(row[0]))
+        return RecordedTestLayout(
+            kind_prefixes={
+                str(kind): tuple(str(p) for p in prefixes)
+                for kind, prefixes in raw["kind_prefixes"].items()
+            },
+            declared_kinds=frozenset(str(kind) for kind in raw["declared_kinds"]),
+            beside_code=bool(raw["beside_code"]),
+            roots=tuple(str(root) for root in raw["roots"]),
+            frameworks=tuple(str(name) for name in raw["frameworks"]),
+            mirror_roots=tuple(str(root) for root in raw.get("mirror_roots", ())),
+            patterns=tuple(
+                (str(name), tuple(str(pattern) for pattern in group))
+                for name, group in raw.get("patterns", ())
+            ),
+            absent_roots=tuple(str(root) for root in raw.get("absent_roots", ())),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+        return None
+
+
 def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     """How many indexed test files each placement holds, read from ``test_files``.
 
@@ -398,28 +517,22 @@ def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     return {str(row["placement"]): int(row["n"]) for row in rows}
 
 
-def get_test_file_bindings(
-    conn: sqlite3.Connection,
-) -> list[tuple[str, str | None, str]]:
-    """Every indexed test file as ``(path, bound ref_id or None, placement)``, by path.
+def count_other_kind_test_files(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many ``other_kind`` test files each recorded kind holds, from ``test_files``.
 
-    Empty for an index written before the test tables existed, for the reason
-    :func:`count_test_files_by_placement` gives.
+    The files no mirror binds, by what they are: an acceptance step file and a
+    self-check bind to no node for different reasons, and a count that merged them
+    would state neither. Empty for an index without the test tables, as
+    :func:`count_test_files_by_placement` is.
     """
     try:
         rows = conn.execute(
-            "SELECT path, ref_id, placement FROM test_files ORDER BY path"
+            "SELECT kind, count(*) FROM test_files WHERE placement = ? GROUP BY kind",
+            (PLACEMENT_OTHER_KIND,),
         ).fetchall()
     except sqlite3.OperationalError:
-        return []
-    return [
-        (
-            str(row["path"]),
-            None if row["ref_id"] is None else str(row["ref_id"]),
-            str(row["placement"]),
-        )
-        for row in rows
-    ]
+        return {}
+    return {KIND_UNRECORDED if row[0] is None else str(row[0]): int(row[1]) for row in rows}
 
 
 def get_owning_ref_id(

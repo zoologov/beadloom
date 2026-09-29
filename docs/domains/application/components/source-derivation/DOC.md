@@ -108,11 +108,12 @@ caller and read off the product's own function objects so that a rename fails at
 seed with `bodies_calling` and `names_reached_from`, its branches with `call_sites_in`, and its
 exit forms with `exit_forms` over `stdlib_names_of`.
 
-`tests/test_init_branches_that_reach_the_bootstrap.py`, `tests/test_one_parent_post_condition_over_every_writer.py`,
+`tests/unit/application/source_derivation/test_init_branches_that_reach_the_bootstrap.py`,
+`tests/test_one_parent_post_condition_over_every_writer.py`,
 `tests/test_graph_files_are_read_under_one_policy.py` and
 `tests/test_every_caller_of_the_skeleton_writer.py` hold the derivations to their shape: each
-supplies the synthetic bodies the code has to report or refuse, and those bodies are the tree
-each derivation goes red on.
+supplies the synthetic bodies the code has to report or refuse, and those bodies are the tree each
+derivation goes red on.
 
 ## Layering
 

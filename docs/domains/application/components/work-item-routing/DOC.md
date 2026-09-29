@@ -88,8 +88,9 @@ smaller corpus.
 
 ## Tests
 
-- `tests/acceptance/features/work_item_type.feature` — the scenarios.
-- `tests/acceptance/features/work_item_routing.feature` — the table boundary's scenarios.
+- `tests/acceptance/doc-sync/work-item-type/work_item_type.feature` — the scenarios.
+- `tests/acceptance/application/work-item-routing/work_item_routing.feature` — the table boundary's
+  scenarios.
 - `tests/test_the_explore_role_is_composed_like_the_others.py` — the cases.
 - `tests/test_the_routing_table_is_one_table.py` — the boundary, and the regression set that
   states no route this reader reads today disappears.

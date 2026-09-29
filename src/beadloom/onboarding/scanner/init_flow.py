@@ -173,8 +173,14 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
     :mod:`beadloom.onboarding.scanner.reindex_port`.
 
     Returns dict with summary of what was done.
+
+    What the scan and the bootstrap found — folder names, node sources, the
+    review table's `` [high]`` confidence tags — is escaped before Rich reads a
+    line as markup, which took each bracketed word for a style tag and dropped
+    it (``beadloom-2mj3.19``).
     """
     from rich.console import Console
+    from rich.markup import escape
     from rich.prompt import Prompt
 
     console = Console()
@@ -200,12 +206,12 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
     scan = scan_project(project_root)
     console.print("\n[bold]Project scan:[/bold]")
     if scan["manifests"]:
-        console.print(f"  Manifests: {', '.join(scan['manifests'])}")
+        console.print(f"  Manifests: {escape(', '.join(scan['manifests']))}")
     if scan["source_dirs"]:
-        console.print(f"  Source dirs: {', '.join(scan['source_dirs'])}")
+        console.print(f"  Source dirs: {escape(', '.join(scan['source_dirs']))}")
     console.print(f"  Code files: {scan['file_count']}")
     if scan["languages"]:
-        console.print(f"  Languages: {', '.join(scan['languages'])}")
+        console.print(f"  Languages: {escape(', '.join(scan['languages']))}")
 
     # Check for existing docs.
     docs_dir = project_root / "docs"
@@ -258,13 +264,13 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
         nodes = bs_result.get("nodes", [])
         edges = bs_result.get("edges", [])
         preset_name = bs_result.get("preset", "monolith")
-        console.print(f"  Preset: {preset_name}")
+        console.print(f"  Preset: {escape(str(preset_name))}")
         console.print(f"  Generated {len(nodes)} nodes, {len(edges)} edges")
 
         # Interactive review. The graph is on disk already: the answers below
         # decide what happens NEXT, not whether anything was written.
         if nodes:
-            console.print(f"\n{_format_review_table(nodes, edges)}")
+            console.print(f"\n{escape(_format_review_table(nodes, edges))}")
             console.print("")
             review = Prompt.ask(
                 "Proceed with this graph?",
@@ -292,7 +298,7 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
                 # soft_wrap: rich hard-wraps at the console width and would
                 # split an absolute path mid-token, handing the adopter a path
                 # they cannot copy out of the message that exists to name it.
-                console.print(f"\n[bold]Edit:[/bold] {graph_path}", soft_wrap=True)
+                console.print(f"\n[bold]Edit:[/bold] {escape(str(graph_path))}", soft_wrap=True)
                 console.print("Edit the file, then run [bold]beadloom reindex[/bold].")
                 result["review"] = "edit"
                 # Generate AGENTS.md before early return.
@@ -316,12 +322,12 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
             import_dir = docs_dir
 
         if import_dir.is_dir():
-            console.print(f"\n[bold]Importing docs from {import_dir.name}/...[/bold]")
+            console.print(f"\n[bold]Importing docs from {escape(import_dir.name)}/...[/bold]")
             docs_result = import_docs(project_root, import_dir)
             result["import"] = docs_result
             console.print(f"  Classified {len(docs_result)} documents")
         else:
-            console.print(f"[red]Directory {import_dir} does not exist.[/red]")
+            console.print(f"[red]Directory {escape(str(import_dir))} does not exist.[/red]")
 
     # Generate AGENTS.md.
     generate_agents_md(project_root)

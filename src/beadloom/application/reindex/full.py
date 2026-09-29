@@ -208,6 +208,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     tests = index_test_files(project_root, conn, code_files=code_paths(current_files))
     result.test_files_indexed = tests.total
     result.test_files_unplaced = tests.unplaced
+    result.warnings.extend(tests.warnings)
 
     # 4. Build initial sync state.
     _build_initial_sync_state(
