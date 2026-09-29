@@ -10,6 +10,7 @@ from io import StringIO
 import pytest
 
 from beadloom.graph.diff import (
+    EdgeChange,
     GraphDiff,
     NodeChange,
     _node_view,
@@ -318,6 +319,38 @@ class TestComputeDiffFromSnapshot:
 
 class TestRenderDiffEnhanced:
     """Test render_diff shows source/tag/symbol changes."""
+
+    def test_graph_text_prints_as_written(self) -> None:
+        """Rich read ``--[uses]-->`` as a style tag and printed ``---->`` on every edge,
+        dropped ``[slug]`` from a Next.js source path, and raised a MarkupError on a
+        summary holding ``[/x]`` (``beadloom-2mj3.19``)."""
+        diff = GraphDiff(
+            since_ref="main",
+            nodes=(
+                NodeChange(ref_id="app-[slug]", kind="feature", change_type="added"),
+                NodeChange(
+                    ref_id="pages",
+                    kind="domain",
+                    change_type="changed",
+                    old_summary="Routes [beta]",
+                    new_summary="Routes [/x]",
+                    old_source="app/[slug]/",
+                    new_source="app/[id]/",
+                ),
+            ),
+            edges=(EdgeChange(src="app-[slug]", dst="pages", kind="uses", change_type="added"),),
+        )
+        from rich.console import Console
+
+        buf = StringIO()
+        render_diff(diff, Console(file=buf, force_terminal=False, no_color=True, width=200))
+        output = buf.getvalue()
+
+        assert "+ app-[slug] (feature)" in output
+        assert "Routes [beta]" in output
+        assert "Routes [/x]" in output
+        assert "source: app/[slug]/ \u2192 app/[id]/" in output
+        assert "+ app-[slug] --[uses]--> pages" in output
 
     def test_shows_source_change(self) -> None:
         diff = GraphDiff(

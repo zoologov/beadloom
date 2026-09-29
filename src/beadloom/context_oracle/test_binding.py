@@ -389,19 +389,21 @@ def describe_test_file_recognition(layout: RecordedTestLayout) -> str:
         if layout.patterns
         else sorted(layout.frameworks)
     )
+    matches = f"a test file is read when its path matches a pattern of {_either(groups)}"
     all_roots = (*layout.roots, *layout.mirror_roots)
-    roots = ", ".join(all_roots)
     if all_roots:
+        roots = ", ".join(all_roots)
         where = f"the root {roots}" if len(all_roots) == 1 else f"the roots {roots}"
-        beside = " or beside a node's code"
-    else:
-        looked_for = ", ".join(layout.absent_roots)
-        where = f"no root, since none of {looked_for} exists" if looked_for else "no root"
-        beside = ", or beside a node's code"
-    return (
-        f"a test file is read when its path matches a pattern of {_either(groups)} "
-        f"under {where}{beside if layout.beside_code else ''}"
-    )
+        beside = " or beside a node's code" if layout.beside_code else ""
+        return f"{matches} under {where}{beside}"
+    # With no root to read, the clause says where a file IS read and then why
+    # nowhere else is, in that order (fourth review of ``beadloom-b9ll``, nit):
+    # "matches a pattern ... under no root, since ..., or beside" did not parse.
+    looked_for = ", ".join(layout.absent_roots)
+    no_root = f"none of the roots {looked_for} exists" if looked_for else "no root is recorded"
+    if layout.beside_code:
+        return f"{matches} and it lies beside a node's code, since {no_root}"
+    return f"{matches} under a root, and {no_root}"
 
 
 def describe_unbound(

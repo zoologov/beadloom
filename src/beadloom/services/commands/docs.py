@@ -562,8 +562,14 @@ def _docs_audit_rich(
     verbose: bool,
     project_root: Path | None = None,
 ) -> None:
-    """Emit docs audit results with Rich formatting."""
+    """Emit docs audit results with Rich formatting.
+
+    A document's path and what was read from it are escaped before Rich reads a
+    line as markup: a path such as ``docs/app/[slug]/`` printed as ``docs/app//``
+    (``beadloom-2mj3.19``).
+    """
     from rich.console import Console
+    from rich.markup import escape
 
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
 
@@ -572,7 +578,7 @@ def _docs_audit_rich(
     _root = (project_root or Path.cwd()).resolve()
 
     def _rel_path(file_path: Path) -> str:
-        """Return path relative to project root, falling back to name.
+        """Return path relative to project root, falling back to name, escaped for Rich.
 
         Resolved first: the scanner hands back paths as they were globbed
         (relative when the project root is relative), and comparing those to an
@@ -580,9 +586,9 @@ def _docs_audit_rich(
         identical ``SPEC.md`` lines that named nothing.
         """
         try:
-            return str(file_path.resolve().relative_to(_root))
+            return escape(str(file_path.resolve().relative_to(_root)))
         except ValueError:
-            return str(file_path.name)
+            return escape(str(file_path.name))
 
     console = Console()
 
@@ -605,7 +611,7 @@ def _docs_audit_rich(
     for name, fact in sorted(result.facts.items()):
         label = name.replace("_", " ") + _fact_suffixes.get(name, "")
         console.print(
-            f"  {label}: [cyan]{fact.value}[/cyan]"
+            f"  {label}: [cyan]{escape(str(fact.value))}[/cyan]"
             f"  {_coverage_note(result.coverage.get(name))}"
         )
     console.print()
@@ -623,8 +629,8 @@ def _docs_audit_rich(
             console.print(
                 f"  {fname}:{finding.mention.line:<12}"
                 f" {finding.mention.fact_name:<16}"
-                f' [red]"{finding.mention.value}"[/red]'
-                f" -> {finding.fact.value}"
+                f' [red]"{escape(str(finding.mention.value))}"[/red]'
+                f" -> {escape(str(finding.fact.value))}"
             )
         console.print()
         console.print(
@@ -647,7 +653,7 @@ def _docs_audit_rich(
             console.print(
                 f"  {fname}:{finding.mention.line:<12}"
                 f" {finding.mention.fact_name:<16}"
-                f' [green]"{finding.mention.value}"[/green]'
+                f' [green]"{escape(str(finding.mention.value))}"[/green]'
                 f" [green]{tol_label}[/green]"
             )
         console.print()
@@ -662,7 +668,7 @@ def _docs_audit_rich(
             console.print("[dim]" + "-" * 50 + "[/dim]")
             for entry in surface.excluded:
                 console.print(
-                    f"  [dim]{_rel_path(entry.path)} -- {entry.reason}[/dim]"
+                    f"  [dim]{_rel_path(entry.path)} -- {escape(entry.reason)}[/dim]"
                 )
             console.print()
         if surface.count_suppressed:
@@ -683,7 +689,7 @@ def _docs_audit_rich(
             fname = _rel_path(mention.file)
             console.print(
                 f"  [dim]{fname}:{mention.line:<12}"
-                f' "{mention.value}" -- no keyword match (skipped)[/dim]'
+                f' "{escape(str(mention.value))}" -- no keyword match (skipped)[/dim]'
             )
         console.print()
 

@@ -148,11 +148,18 @@ class TestOnlyTheRootsThatExistAreNamed:
         layout, _ = layout_from_config({})
         recorded = layout.recorded(present_roots=())
         assert describe_test_file_recognition(recorded).endswith(
-            "under no root, since none of tests, test, spec, __tests__ exists, "
-            "or beside a node's code"
+            "and it lies beside a node's code, "
+            "since none of the roots tests, test, spec, __tests__ exists"
         )
         assert describe_unplaced({PLACEMENT_UNPLACED: 1}, recorded) == (
             "1 of 1 test file(s) are unplaced (inside no node's source) and bind to no node"
+        )
+
+    def test_a_project_reading_neither_a_root_nor_the_code_is_told_so(self) -> None:
+        layout, _ = layout_from_config({"tests": {"beside_code": False}})
+        recorded = layout.recorded(present_roots=())
+        assert describe_test_file_recognition(recorded).endswith(
+            "under a root, and none of the roots tests, test, spec, __tests__ exists"
         )
 
     def test_a_present_test_tree_alone_is_named_as_the_root(self) -> None:

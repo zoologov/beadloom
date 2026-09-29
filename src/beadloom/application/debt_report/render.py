@@ -148,6 +148,7 @@ def format_debt_report(report: DebtReport) -> str:
     from io import StringIO
 
     from rich.console import Console
+    from rich.markup import escape
     from rich.table import Table
     from rich.text import Text
 
@@ -196,11 +197,16 @@ def format_debt_report(report: DebtReport) -> str:
         # they qualify and nowhere else, because a denominator belongs beside
         # its numerator: `36 errors` reads the same whether the rule judged 16
         # edges or all 363 (BDL-070 A4).
+        #
+        # Both lines carry declared text — rule and layer names, and the test
+        # file patterns — so it is escaped before Rich reads the line as markup:
+        # the default Jest ``__tests__/**/*.[jt]s`` printed as ``*.s``, and a
+        # pattern holding ``[/x]`` raised a MarkupError (``beadloom-2mj3.19``).
         if cat.name == "rule_violations":
             for phrase in report.layer_populations:
-                console.print(f"  [dim]counted over: {phrase}[/dim]")
+                console.print(f"  [dim]counted over: {escape(phrase)}[/dim]")
         if cat.name == "test_gaps" and report.test_population:
-            console.print(f"  [dim]{report.test_population}[/dim]")
+            console.print(f"  [dim]{escape(report.test_population)}[/dim]")
         console.print()
 
     # -- Top Offenders --
@@ -219,9 +225,9 @@ def format_debt_report(report: DebtReport) -> str:
             pts_label = "pt" if offender.score == 1.0 else "pts"
             table.add_row(
                 f"{idx}.",
-                offender.ref_id,
+                escape(offender.ref_id),
                 f"{offender.score:.0f} {pts_label}",
-                reasons_str,
+                escape(reasons_str),
             )
 
         console.print(table)

@@ -55,8 +55,8 @@ DEFAULT_PATTERNS_STATED = (
 #: every population; ``.17``: only the roots that exist are named).
 READ_BY_DEFAULT = (
     f"a test file is read when its path matches a pattern of {DEFAULT_PATTERNS_STATED} "
-    "under no root, since none of tests, test, spec, __tests__ exists, or beside a "
-    "node's code"
+    "and it lies beside a node's code, since none of the roots tests, test, spec, "
+    "__tests__ exists"
 )
 
 
@@ -176,6 +176,6 @@ class TestWhatTheCountStillSays:
         _, _, population = _untested(root)
         assert population.endswith(
             "a test file is read when its path matches a pattern of junit (*Test.java) "
-            "under no root, since none of tests, test, spec, __tests__ exists, or beside a "
-            "node's code"
+            "and it lies beside a node's code, since none of the roots tests, test, spec, "
+            "__tests__ exists"
         )

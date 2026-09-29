@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 #: Where the binding reads a test file under Beadloom's defaults, as the debt
 #: report and ``ctx`` end their statement of it, for a project with no test root.
 _READ_WHERE_NO_ROOT = (
-    "under no root, since none of tests, test, spec, __tests__ exists, or beside a node's code"
+    "and it lies beside a node's code, since none of the roots tests, test, spec, __tests__ exists"
 )
 
 

@@ -366,6 +366,25 @@ class TestRenderWhy:
         output = buf.getvalue()
         assert "ALONE" in output
 
+    def test_edge_kinds_and_graph_text_print_as_written(self, conn: sqlite3.Connection) -> None:
+        """Rich read ``--[part_of]--`` as a style tag and printed ``----`` on every edge;
+        a summary holding ``[/x]`` raised a MarkupError (``beadloom-2mj3.19``)."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        _insert_node(conn, "app-[slug]", "domain", "Routes [beta] and [/x]")
+        _insert_node(conn, "FEAT", "feature", "Pages under app/[slug]/")
+        _insert_edge(conn, "FEAT", "app-[slug]", "part_of")
+        result = analyze_node(conn, "app-[slug]")
+        buf = StringIO()
+        render_why(result, Console(file=buf, no_color=True, width=200))
+        output = buf.getvalue()
+
+        assert "app-[slug] (domain)" in output
+        assert "Routes [beta] and [/x]" in output
+        assert "FEAT (feature) --[part_of]-- Pages under app/[slug]/" in output
+
 
 # --- result_to_dict ---
 
