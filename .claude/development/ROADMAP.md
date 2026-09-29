@@ -1,8 +1,13 @@
 # Beadloom Roadmap
 
-> **Current version: 7.0.0** (the BDL-075 release pull request from `features/BDL-075`, cut
-> 2026-09-29 and NOT yet verified on the downloaded wheel — BDL-075 records that verification
-> when it has been made). The release before it is 6.0.0 (PyPI, published 2026-09-13 from `main`
+> **Current version: 7.0.0** (PyPI, published 2026-09-29 from `main` at `e02c347e`, the squash
+> merge of PR #88, publish run 36624707476, and verified on the wheel downloaded from PyPI — sha256
+> `22b2c9e284f5…`, not on the local build). What was checked there rather than assumed: `beadloom
+> --version`, `__version__` and the distribution metadata read 7.0.0 in a fresh environment; on a
+> project that is not this repository, `reindex` prints a `Tests:` line, `ctx` shows tests bound by
+> the mirror with a node's counts the union over its descendants, `mutation --changed-since` states
+> the functions a change touched, the debt report carries `test_population`, and a suite rule
+> states how much of the suite it judged. The same harness fails on 6.0.0 from PyPI, 7 of 7. The release before it is 6.0.0 (PyPI, published 2026-09-13 from `main`
 > at `058ef59e` and verified on the wheel downloaded from PyPI — not on the local build). What
 > was checked there rather than assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
 > 6.0.0 in a fresh environment; `lint --strict` exits 1 on a layer violation the rule sees only

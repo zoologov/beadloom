@@ -1,15 +1,20 @@
 # ACTIVE: BDL-075 — Release 7.0.0 with the documentation current
 
 > **Last updated:** 2026-09-29
-> **Phase:** Development
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** P `beadloom-vgst` — PR, merge (owner), tag `v7.0.0`, GitHub release (owner), publish, verify the wheel downloaded from PyPI with V1's harness, close-out.
-**Goal:** 7.0.0 on PyPI, shown on the downloaded artifact.
-**Done when:** the harness exits 0 on `beadloom==7.0.0` from PyPI; ROADMAP's version line marked verified; the documents Done.
+**Bead:** none — every bead of BDL-075 is closed, and the epic closes with this commit.
+
+## Outcome
+
+- **7.0.0 on PyPI**, published 2026-09-29 from `main` at `e02c347e` (PR #88, 9/9 checks green), GitHub release `v7.0.0`, publish run 36624707476 (tests 3.10–3.13, release gates, build, test-install, TestPyPI, PyPI all green).
+- **Verified on the downloaded wheel** (`beadloom-7.0.0-py3-none-any.whl`, sha256 `22b2c9e284f5…`): the V1 harness, exit 0, 7 of 7 checks, on a project that is not this repository; the first attempt met PyPI's CDN lag (exit 3, the index did not yet serve 7.0.0 though `/pypi/beadloom/7.0.0/json` did) and passed on the next.
+- **Documents:** README pair (12 defects, a section on tests bound to the graph), ROADMAP (findings corrected, ranking 1–11, federation deferred, the version line verified here), issue log (Open 133 → 79, structure repaired), PLAN and BRIEF templates without a status column, the `--sample-of` help naming the population.
+- **Filed on the way:** `beadloom-phjj`, `beadloom-tu41`, `beadloom-s34t`.
 
 **V1 and R closed (2026-09-29):** V1 `beadloom-adbg` — the harness fails on 6.0.0 from PyPI (7 of 7) and on three forged artifacts, passes on the built 7.0.0 wheel; every first-run step of both READMEs ran as written; suite 11 718 passed. R `beadloom-bz48` — first run CHANGES REQUIRED (1 major: ROADMAP behind the tracker after the coordinator's tracker changes; 5 minors) → F1 `beadloom-uk2e.1` `ace157ad`; the owner added F2 `beadloom-uk2e.2` `a5e54033` (the `--sample-of` help named the sample size, it is the population); second run OK with minors, fixed by the coordinator (PLAN's DAG and dependencies, ROADMAP's release sentence, `cli.md`'s sample sentence, CONTEXT's phase, the PRD's non-goal). Filed on the way: `beadloom-phjj`, `beadloom-tu41`, `beadloom-s34t`.
 
@@ -29,7 +34,7 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-uk2e` | epic | ready | BDL-075 parent |
+| `beadloom-uk2e` | epic | ✓ done | BDL-075 parent |
 | `beadloom-nxf7` | R1 dev | done | 7.0.0 on every current-version site and `[7.0.0]` in CHANGELOG; no ignore triple needed; `beadloom-tu41` filed |
 | `beadloom-10er` | T1 dev | done | the PLAN template without a status column; BRIEF's twin filed as `beadloom-3nwz` |
 | `beadloom-3nwz` | T1b dev | done | the BRIEF template without a status column |
@@ -38,4 +43,4 @@
 | `beadloom-o2z4` | D3 tech-writer | done | BDL-UX-Issues.md: Open 133→79, Improvements 20→17, Excluded 7→6, Closed 117→175; no number both open and closed; `beadloom-s34t` filed |
 | `beadloom-adbg` | V1 test | ✓ done | the built wheel; the README's steps |
 | `beadloom-bz48` | R review | ✓ done | review |
-| `beadloom-vgst` | P publish | ready | publish and verify |
+| `beadloom-vgst` | P publish | ✓ done | publish and verify |

@@ -1,6 +1,6 @@
 # PRD: BDL-075 — Release 7.0.0 with the documentation current
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-09-29
 
 ---
