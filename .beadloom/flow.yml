@@ -71,3 +71,11 @@ mutation:
   - src/beadloom/services/bd_seam/assumptions.py
   - src/beadloom/services/bd_seam/creation.py
   - src/beadloom/services/bd_seam/invocations.py
+
+waves:
+  overrides:
+  - beads: [beadloom-2mj3.21, beadloom-2mj3.22, beadloom-2mj3.23]
+    decision: parallel
+    reason: "BDL-074 wave 19: kill PR #86's per-change survivors. All three name rule-engine, which is why they serialise, but they only ADD tests, split by the module under test: each writes under tests/unit/graph/rules/<its modules>/ or tests/integration/graph/rules/<its modules>/ and nowhere else, and runs mutmut in its own git worktree so no two share a mutants/ directory. src/ is not edited by any of them."
+    until: "2026-11-15"
+
