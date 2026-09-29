@@ -100,6 +100,22 @@ and apply to every row of that node across the sections.
   and dynamic `import()` in JS/TS are read too.
 - *A0 step 2* then brings `site/.vitepress/theme` into the graph, split into nodes.
 
+**Frontend layout: Feature-Sliced Design (owner, 2026-09-30).** The theme moves to FSD under
+`site/.vitepress/theme/`:
+- `app/`: the theme entry, `index.js`;
+- `pages/`: the architecture page, the landscape page, the node-page embed;
+- `widgets/`: `graph-viewer` (toolbar, canvas, panel), `node-card`, and the dashboard widgets;
+- `features/`: `filter-graph`, `select-neighbourhood`, `impact-view`, `fullscreen`, `url-state`,
+  `search`, `arrange-nodes`;
+- `entities/`: `graph-node`, `graph-edge`, `layer`, `architecture-data`, `landscape-data`;
+- `shared/`: `cytoscape` (the library wrapper and layout), `theme-tokens` (colour resolution),
+  `ui`, `lib`.
+
+Each slice exposes a public `index.js`, and cross-slice imports go through it. The site's graph
+nodes in A0 step 2 follow the slices. The FSD direction (a layer imports only layers below it) is
+declared in `rules.yml` for the site's nodes, so our frontend is judged the way an FSD adopter's
+is. The names used below (`GraphViewer`, `useViewerStyle`, …) are placed into these layers.
+
 **The shared core (`GraphViewer.vue` plus composables)**
 
 - **Layout of the viewer's own space**: a toolbar at the top, the canvas, and a side panel that is
