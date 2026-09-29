@@ -259,6 +259,220 @@ class TestPopulationAndLiveness:
         assert inert == set()
 
 
+#: A file in the suite root, one in a folder naming no node, and one under a folder that
+#: names a node the folder's own node is not part of.
+MISPLACED = [
+    pytest.param("specs/a.feature", id="in the suite root"),
+    pytest.param("specs/ledger/nowhere/a.feature", id="in a folder naming no node"),
+    pytest.param("specs/vault/billing/a.feature", id="under the wrong container"),
+]
+
+MOVE_HINT = (
+    "move the file to the folder of the node its scenarios bind to, "
+    "`specs/<domain>/<node>/`; a file whose tag cannot be settled yet is exempted by path, "
+    "with a reason and an exit condition"
+)
+
+
+class TestWhatAMisplacedFileIsToldToDo:
+    @pytest.mark.parametrize("path", MISPLACED)
+    def test_it_is_reported_at_its_own_path(self, tmp_path: Path, path: str) -> None:
+        write_feature(tmp_path, path, _feature("@node:billing", "Scenario: S"))
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert finding.file_path == path
+
+    @pytest.mark.parametrize("path", MISPLACED)
+    def test_it_is_told_to_move_under_the_suite_root(self, tmp_path: Path, path: str) -> None:
+        write_feature(tmp_path, path, _feature("@node:billing", "Scenario: S"))
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert finding.remediation == MOVE_HINT
+
+    def test_under_the_wrong_container_it_is_reported_against_its_folder_node(
+        self, tmp_path: Path
+    ) -> None:
+        write_feature(
+            tmp_path, "specs/vault/billing/a.feature", _feature("@node:billing", "Scenario: S")
+        )
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert finding.from_ref_id == "billing"
+
+    def test_every_enclosing_folder_is_judged_not_only_the_first(self, tmp_path: Path) -> None:
+        write_feature(
+            tmp_path,
+            "specs/services/vault/billing/a.feature",
+            _feature("@node:billing", "Scenario: S"),
+        )
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert finding.message.startswith("the folder `vault` names a node")
+
+
+class TestWhatAMistaggedScenarioIsToldToDo:
+    def test_the_finding_names_every_node_the_scenario_carries(self, tmp_path: Path) -> None:
+        write_feature(
+            tmp_path,
+            "specs/ledger/billing/a.feature",
+            _feature("@node:invoicing @node:vault", "Scenario: S"),
+        )
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert "names `@node:invoicing`, `@node:vault`, but" in finding.message
+
+    def test_it_is_told_to_take_its_folder_node_tag_or_move(self, tmp_path: Path) -> None:
+        write_feature(
+            tmp_path, "specs/ledger/billing/a.feature", _feature("@node:vault", "Scenario: S")
+        )
+
+        (finding,) = _findings(_evaluate(tmp_path, _rule()))
+
+        assert finding.remediation == (
+            "tag the scenario `@node:billing` if it binds there, or move it to the folder "
+            "of the node it binds to"
+        )
+
+
+class TestEveryFindingCarriesTheRuleDescription:
+    @pytest.mark.parametrize(
+        ("path", "text", "exempt", "rule_type"),
+        [
+            pytest.param(
+                "specs/a.feature", "@node:billing", (), SCENARIO_BINDING_RULE_TYPE, id="file"
+            ),
+            pytest.param(
+                "specs/ledger/billing/a.feature",
+                "@node:vault",
+                (),
+                SCENARIO_BINDING_RULE_TYPE,
+                id="scenario",
+            ),
+            pytest.param(
+                "specs/ledger/billing/a.feature",
+                "@node:billing",
+                ("specs/ledger/billing/a.feature",),
+                LIVENESS_RULE_TYPE,
+                id="dead exemption entry",
+            ),
+            pytest.param(
+                "specs/ledger/billing/a.feature",
+                "@node:billing",
+                (),
+                SUITE_POPULATION_RULE_TYPE,
+                id="population",
+            ),
+        ],
+    )
+    def test_on_a_suite_it_judged(
+        self,
+        tmp_path: Path,
+        path: str,
+        text: str,
+        exempt: tuple[str, ...],
+        rule_type: str,
+    ) -> None:
+        write_feature(tmp_path, path, _feature(text, "Scenario: S"))
+        exemptions = (ListedExemption(entries=exempt, reason="r", until="u"),) if exempt else ()
+
+        violations = _evaluate(tmp_path, _rule(exempt=exemptions))
+
+        (finding,) = _of_type(violations, rule_type)
+        assert finding.rule_description == "a scenario lives in the folder of its node"
+
+    def test_on_a_suite_it_could_not_find(self, tmp_path: Path) -> None:
+        (liveness,) = _of_type(_evaluate(tmp_path, _rule()), LIVENESS_RULE_TYPE)
+
+        assert liveness.rule_description == "a scenario lives in the folder of its node"
+
+
+class TestWhatAnExemptionExcusesAndHowItIsCounted:
+    def test_a_glob_entry_excuses_every_file_it_matches(self, tmp_path: Path) -> None:
+        for name in ("a", "b"):
+            write_feature(
+                tmp_path,
+                f"specs/features/{name}.feature",
+                _feature("@node:billing", "Scenario: S"),
+            )
+        exemption = ListedExemption(entries=("specs/features/*.feature",), reason="r", until="u")
+
+        violations = _evaluate(tmp_path, _rule(exempt=(exemption,)))
+
+        (population,) = _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+        assert "2 in 2 file(s) excused by an exemption, 0 reported" in population.message
+
+    def test_only_the_disagreeing_scenarios_of_an_excused_file_are_counted_excused(
+        self, tmp_path: Path
+    ) -> None:
+        write_feature(
+            tmp_path,
+            "specs/ledger/billing/a.feature",
+            "Feature: F\n\n"
+            "  @node:billing\n  Scenario: S1\n    Given a step\n\n"
+            "  @node:vault\n  Scenario: S2\n    Given a step\n",
+        )
+        exemption = ListedExemption(
+            entries=("specs/ledger/billing/a.feature",), reason="r", until="u"
+        )
+
+        violations = _evaluate(tmp_path, _rule(exempt=(exemption,)))
+
+        (population,) = _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+        assert (
+            "1 agree with their folder, 1 do not — 1 in 1 file(s) excused by an exemption, "
+            "0 reported" in population.message
+        )
+
+    def test_an_excused_file_does_not_stop_the_files_after_it_being_judged(
+        self, tmp_path: Path
+    ) -> None:
+        write_feature(
+            tmp_path, "specs/features/a.feature", _feature("@node:billing", "Scenario: S")
+        )
+        write_feature(
+            tmp_path, "specs/ledger/invoicing/b.feature", _feature("@node:billing", "Scenario: S")
+        )
+        exemption = ListedExemption(entries=("specs/features/a.feature",), reason="r", until="u")
+
+        violations = _evaluate(tmp_path, _rule(exempt=(exemption,)))
+
+        assert [f.file_path for f in _findings(violations)] == ["specs/ledger/invoicing/b.feature"]
+
+    def test_a_dead_entry_is_reported_by_the_rule_as_excusing_no_feature_file(
+        self, tmp_path: Path
+    ) -> None:
+        write_feature(
+            tmp_path, "specs/ledger/billing/a.feature", _feature("@node:billing", "Scenario: S")
+        )
+        exemption = ListedExemption(
+            entries=("specs/ledger/billing/a.feature",), reason="r", until="u"
+        )
+
+        violations = _evaluate(tmp_path, _rule(exempt=(exemption,)))
+
+        (dead,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert dead.message.startswith(
+            "Rule 'scenario-binding': the exemption entry `specs/ledger/billing/a.feature` "
+            "excuses no feature file — "
+        )
+
+
+def test_an_absent_suite_is_told_to_point_features_at_it_or_delete_the_rule(
+    tmp_path: Path,
+) -> None:
+    (liveness,) = _of_type(_evaluate(tmp_path, _rule()), LIVENESS_RULE_TYPE)
+
+    assert liveness.remediation == (
+        "point `features:` at the acceptance suite, or delete the rule — an absent suite "
+        "is not a correctly placed one"
+    )
+
+
 class TestTheRuleIsDeclaredInRulesYml:
     def test_the_block_parses(self, tmp_path: Path) -> None:
         path = write_rules(
