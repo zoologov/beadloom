@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 1 — `beadloom-nxf7` (R1, the version and the change log) and `beadloom-10er` (T1, the PLAN template), in parallel.
-**Goal:** 7.0.0 on the tree with its change log; the shipped PLAN template without a status column.
-**Done when:** `test_version_surface.py` green, `beadloom ci` rc 0, the suite green; the composed template has no status column.
+**Bead:** V1 `beadloom-adbg` — the release harness on the built 7.0.0 wheel, on a project that is not this repository; the README's steps followed literally.
+**Goal:** what 7.0.0 publishes is shown on the artifact, not on the tree.
+**Done when:** the harness tells 6.0.0 from 7.0.0 and exits 0 on 7.0.0; every README step runs as written.
+
+**Waves 1–3 closed (2026-09-29):** T1 `5e64acf6` (PLAN template), `beadloom-3nwz` `c2bc090d` (BRIEF template, added by the owner); R1 `12d33f0c` (7.0.0 in 7 checked places, `[7.0.0]`, no ignore triple needed; `beadloom-tu41` filed); D1 `4507481e` (README pair: 12 defects, a section on tests bound to the graph, a `readme-pair` row; 118 blocks, 0 findings); D2 `16fa318e` (ROADMAP: 27 findings, open work ranked 1–11 in the owner's order, federation deferred; `beadloom-txeq` closed); D3 `f8b65c6a` (issue log: Open 133 → 79, Closed 117 → 175, no number in two sections; `beadloom-s34t` filed). Tracker: the nine federation beads deferred, molecule `beadloom-9lcb` closed, `beadloom-cxal` P1 → P2.
 
 ## Progress
 
