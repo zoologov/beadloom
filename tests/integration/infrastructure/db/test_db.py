@@ -271,19 +271,23 @@ class TestCreateSchema:
         assert row is not None
         assert row[0] is None
 
-    def test_code_symbols_check_kind(self, conn: sqlite3.Connection) -> None:
-        conn.execute(
-            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, "
-            "file_hash) VALUES (?, ?, ?, ?, ?, ?)",
-            ("src/a.py", "foo", "function", 1, 10, "hash"),
-        )
-        conn.commit()
-        with pytest.raises(sqlite3.IntegrityError):
+    def test_code_symbols_kind_is_the_indexers_vocabulary(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """Symbol ``kind`` is free-form (BDL-076 J3): the indexer owns the vocabulary.
+
+        The CHECK that stood here repeated the kinds the indexer produces, so a new
+        kind (``variable``, for ``export const``) failed on every existing index.
+        """
+        for name, kind in (("foo", "function"), ("A", "variable")):
             conn.execute(
                 "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, "
                 "file_hash) VALUES (?, ?, ?, ?, ?, ?)",
-                ("src/b.py", "bar", "invalid_kind", 1, 5, "hash"),
+                ("src/a.js", name, kind, 1, 10, "hash"),
             )
+        conn.commit()
+        kinds = {r[0] for r in conn.execute("SELECT kind FROM code_symbols")}
+        assert kinds == {"function", "variable"}
 
     def test_sync_state_check_status(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -1015,3 +1019,70 @@ class TestForeignEdgesTable:
         }
         assert "foreign_edges" in names
         c.close()
+
+
+class TestSymbolKindCheckDropMigration:
+    """BDL-076 J3: `code_symbols.kind` is free-form, so `variable` is stored.
+
+    The CHECK enumerated the symbol kinds a second time, beside the indexer that
+    produces them, the shape BDL-038 U1 and BDL-061 S4 removed from `nodes`,
+    `edges` and `rules`. Reading `export const` needs a kind the CHECK lacked.
+    """
+
+    def test_a_variable_symbol_is_accepted_by_the_code_symbols_table(
+        self, tmp_path: Path
+    ) -> None:
+        conn = open_db(tmp_path / "beadloom.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end,"
+            " file_hash) VALUES ('a.js', 'A', 'variable', 1, 1, 'h')"
+        )
+        assert conn.execute("SELECT kind FROM code_symbols").fetchone()[0] == "variable"
+        conn.close()
+
+    def test_an_index_with_the_old_kind_check_accepts_it_after_migration(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        conn = open_db(tmp_path / "legacy.db")
+        conn.executescript(
+            "CREATE TABLE code_symbols ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  file_path TEXT NOT NULL,"
+            "  symbol_name TEXT NOT NULL,"
+            "  kind TEXT NOT NULL CHECK(kind IN ("
+            "    'function','class','type','route','component'"
+            "  )),"
+            "  line_start INTEGER NOT NULL,"
+            "  line_end INTEGER NOT NULL,"
+            "  annotations TEXT DEFAULT '{}',"
+            "  file_hash TEXT NOT NULL"
+            ");"
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end,"
+            "  annotations, file_hash) VALUES ('a.py', 'f', 'function', 1, 2, '{}', 'h');"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start,"
+                " line_end, file_hash) VALUES ('a.js', 'A', 'variable', 1, 1, 'h')"
+            )
+        ensure_schema_migrations(conn)
+        ensure_schema_migrations(conn)
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end,"
+            " file_hash) VALUES ('a.js', 'A', 'variable', 1, 1, 'h')"
+        )
+        rows = conn.execute(
+            "SELECT id, file_path, symbol_name, kind FROM code_symbols ORDER BY id"
+        ).fetchall()
+        assert [tuple(r) for r in rows] == [
+            (1, "a.py", "f", "function"),
+            (2, "a.js", "A", "variable"),
+        ]
+        indexes = {
+            r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        }
+        assert "idx_symbols_file" in indexes
+        conn.close()

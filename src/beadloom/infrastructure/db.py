@@ -125,9 +125,7 @@ CREATE TABLE IF NOT EXISTS code_symbols (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path   TEXT NOT NULL,
     symbol_name TEXT NOT NULL,
-    kind        TEXT NOT NULL CHECK(kind IN (
-        'function','class','type','route','component'
-    )),
+    kind        TEXT NOT NULL,
     line_start  INTEGER NOT NULL,
     line_end    INTEGER NOT NULL,
     annotations TEXT DEFAULT '{}',
@@ -590,8 +588,14 @@ def _migrate_edges_contract_kinds(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+#: Tables whose ``kind`` column once carried a CHECK and is now free-form.
+#: ``code_symbols`` joined in BDL-076 J3: its CHECK repeated the symbol kinds the
+#: indexer produces, and reading ``export const`` needs one it lacked.
+_KIND_CHECK_TABLES = ("nodes", "edges", "code_symbols")
+
+
 def _migrate_drop_kind_checks(conn: sqlite3.Connection) -> None:
-    """Drop the DDD-only ``kind`` CHECK on ``nodes`` / ``edges`` (BDL-038 U1).
+    """Drop the ``kind`` CHECK on ``nodes`` / ``edges`` / ``code_symbols`` (BDL-038 U1).
 
     The original schema restricted ``kind`` to DDD-preset values, which silently
     rejected paradigm-agnostic graphs (e.g. FSD ``page`` / ``repository`` nodes)
@@ -602,10 +606,9 @@ def _migrate_drop_kind_checks(conn: sqlite3.Connection) -> None:
     via ``sqlite_master.sql``), copies every row verbatim, and is a no-op once
     applied (so it does not need a ``SCHEMA_VERSION`` gate).
     """
-    if _table_exists(conn, "nodes") and _kind_has_check(conn, "nodes"):
-        _rebuild_table_without_kind_check(conn, "nodes")
-    if _table_exists(conn, "edges") and _kind_has_check(conn, "edges"):
-        _rebuild_table_without_kind_check(conn, "edges")
+    for table in _KIND_CHECK_TABLES:
+        if _table_exists(conn, table) and _kind_has_check(conn, table):
+            _rebuild_table_without_kind_check(conn, table)
 
 
 def _migrate_drop_rule_type_check(conn: sqlite3.Connection) -> None:
@@ -706,6 +709,19 @@ _REBUILD_DDL: dict[str, str] = {
     ),
     # foreign_edges has no FK (a foreign endpoint cannot satisfy the local-node FK)
     # and no index — only the lifecycle rebuild (v4) ever touches it.
+    # The symbol kinds belong to the indexer that produces them (BDL-076 J3).
+    "code_symbols": (
+        "CREATE TABLE code_symbols ("
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  file_path   TEXT NOT NULL,"
+        "  symbol_name TEXT NOT NULL,"
+        "  kind        TEXT NOT NULL,"
+        "  line_start  INTEGER NOT NULL,"
+        "  line_end    INTEGER NOT NULL,"
+        "  annotations TEXT DEFAULT '{}',"
+        "  file_hash   TEXT NOT NULL"
+        ")"
+    ),
     "foreign_edges": (
         "CREATE TABLE foreign_edges ("
         "  src_ref_id TEXT NOT NULL,"
@@ -727,6 +743,9 @@ _REBUILD_COLUMNS: dict[str, str] = {
     # ``id`` is copied too: a rebuild that renumbered the rows would silently
     # change what any stored reference to a rule row points at.
     "rules": "id, name, description, rule_type, rule_json, enabled",
+    "code_symbols": (
+        "id, file_path, symbol_name, kind, line_start, line_end, annotations, file_hash"
+    ),
 }
 
 # Indexes to recreate after rebuilding each table (the rebuild drops them).
@@ -738,6 +757,7 @@ _REBUILD_INDEXES: dict[str, str] = {
     ),
     "foreign_edges": "",
     "rules": "",
+    "code_symbols": "CREATE INDEX IF NOT EXISTS idx_symbols_file ON code_symbols(file_path);",
 }
 
 

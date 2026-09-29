@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from tree_sitter import Language, Parser
+
+from beadloom.context_oracle.vue_sfc import script_blocks
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -52,6 +54,34 @@ class LangConfig:
     #: way comments are.  Empty for every language whose module-level
     #: documentation IS a comment; only Python has a docstring statement.
     docstring_types: frozenset[str] = frozenset()
+    #: Declarations whose names an ``export`` wrapper binds (``export const``,
+    #: ``export let``, ``export var``), read together with ``export default``.
+    #: Empty for every language without JS/TS export statements.
+    exported_binding_types: frozenset[str] = frozenset()
+
+
+#: The JS/TS declarations an ``export`` statement binds names with.
+_JS_BINDING_TYPES = frozenset({"lexical_declaration", "variable_declaration"})
+
+#: The kind of symbol a JS/TS value is, for the value types that are not data.
+#: An exported binding holding any other value is a ``variable``.
+_JS_VALUE_KINDS: dict[str, str] = {
+    "arrow_function": "function",
+    "function_expression": "function",
+    "function": "function",
+    "generator_function": "function",
+    "class": "class",
+}
+_VARIABLE_KIND = "variable"
+
+#: The name a module's default export is imported by, and so the name of an
+#: ``export default`` whose value declares none.
+_DEFAULT_EXPORT = "default"
+
+#: Single-file-component extensions, each mapped to the script extension whose
+#: grammar must be installed for the component's script blocks to be read.
+_SFC_SCRIPT_EXTENSIONS: dict[str, str] = {".vue": ".js"}
+_COMPONENT_KIND = "component"
 
 
 # ---- Language loaders (lazy, handle ImportError) ----
@@ -85,6 +115,7 @@ def _load_typescript() -> LangConfig:
             "type_alias_declaration": "type",
         },
         wrapper_types=frozenset({"export_statement"}),
+        exported_binding_types=_JS_BINDING_TYPES,
     )
 
 
@@ -101,6 +132,7 @@ def _load_tsx() -> LangConfig:
             "type_alias_declaration": "type",
         },
         wrapper_types=frozenset({"export_statement"}),
+        exported_binding_types=_JS_BINDING_TYPES,
     )
 
 
@@ -283,13 +315,19 @@ def get_lang_config(extension: str) -> LangConfig | None:
     return config
 
 
+def _can_parse(extension: str) -> bool:
+    """True when a file with *extension* can be read for symbols here.
+
+    A single-file component has no grammar of its own: it is readable when the
+    grammar of its script blocks is installed.
+    """
+    return get_lang_config(_SFC_SCRIPT_EXTENSIONS.get(extension, extension)) is not None
+
+
 def supported_extensions() -> frozenset[str]:
     """Return the set of file extensions with available grammars."""
-    available: set[str] = set()
-    for ext in _EXTENSION_LOADERS:
-        if get_lang_config(ext) is not None:
-            available.add(ext)
-    return frozenset(available)
+    candidates = (*_EXTENSION_LOADERS, *_SFC_SCRIPT_EXTENSIONS)
+    return frozenset(ext for ext in candidates if _can_parse(ext))
 
 
 def clear_cache() -> None:
@@ -310,7 +348,7 @@ def check_parser_availability(extensions: Iterable[str]) -> dict[str, bool]:
     dict[str, bool]
         Mapping of extension to ``True`` if a parser is installed, ``False`` otherwise.
     """
-    return {ext: get_lang_config(ext) is not None for ext in extensions}
+    return {ext: _can_parse(ext) for ext in extensions}
 
 
 def parse_annotations(line: str) -> dict[str, str]:
@@ -414,96 +452,177 @@ def _unwrap_node(node: TSNode, config: LangConfig) -> TSNode | None:
     return None
 
 
+def _value_kind(value: TSNode) -> str:
+    """The symbol kind of a JS/TS value: a function, a class, or a variable."""
+    return _JS_VALUE_KINDS.get(value.type, _VARIABLE_KIND)
+
+
+def _declarator_symbol(declarator: TSNode) -> tuple[str, str, TSNode] | None:
+    """The ``(name, kind, span)`` a ``variable_declarator`` binds, if it names one."""
+    if declarator.type != "variable_declarator":
+        return None
+    name = declarator.child_by_field_name("name")
+    if name is None or name.type != "identifier" or not name.text:
+        return None
+    value = declarator.child_by_field_name("value")
+    kind = _value_kind(value) if value is not None else _VARIABLE_KIND
+    return name.text.decode("utf-8"), kind, declarator
+
+
+def _exported_bindings(export: TSNode, config: LangConfig) -> list[tuple[str, str, TSNode]]:
+    """The ``(name, kind, span)`` of each name an ``export`` statement binds.
+
+    Covers what is not a declaration of a symbol type: ``export const/let/var``,
+    one symbol per declarator whose target is a plain identifier (a destructuring
+    pattern names no single symbol), and ``export default <value>``, named
+    ``default`` because that is the name it is imported by.
+    """
+    if not config.exported_binding_types:
+        return []
+    for child in export.children:
+        if child.type in config.exported_binding_types:
+            declared = (_declarator_symbol(d) for d in child.children)
+            return [symbol for symbol in declared if symbol is not None]
+    value = export.child_by_field_name("value")
+    if value is not None and any(child.type == _DEFAULT_EXPORT for child in export.children):
+        return [(_DEFAULT_EXPORT, _value_kind(value), export)]
+    return []
+
+
+def _statement_symbols(child: TSNode, config: LangConfig) -> list[tuple[str, str, TSNode]]:
+    """The ``(name, kind, span)`` of each symbol one top-level statement declares."""
+    actual = child
+    if child.type in config.wrapper_types:
+        unwrapped = _unwrap_node(child, config)
+        if unwrapped is None:
+            return _exported_bindings(child, config)
+        actual = unwrapped
+    kind = config.symbol_types.get(actual.type)
+    if kind is None:
+        return []
+    name = _get_symbol_name(actual)
+    if name is None:
+        return []
+    # A wrapper's span is the symbol's span: decorators and ``export`` included.
+    return [(name, kind, child)]
+
+
+@dataclass
+class _SymbolWalk:
+    """One file's symbols, and what its walk carries from statement to statement.
+
+    A file is walked as one module even when it is several parse trees, as a
+    Vue component with two script blocks is: an annotation written before the
+    first symbol of the file applies to every symbol in it.
+    """
+
+    file_hash: str
+    module_annotation: dict[str, str] = field(default_factory=dict)
+    found_first_symbol: bool = False
+    symbols: list[dict[str, Any]] = field(default_factory=list)
+
+    def scan(self, root: TSNode, config: LangConfig, *, first_line: int = 1) -> None:
+        """Read the top-level statements of *root*, whose row 0 is *first_line*."""
+        pending_annotation: dict[str, str] = {}
+        for child in root.children:
+            # Check for comment with beadloom annotation.
+            if child.type in config.comment_types:
+                text = child.text.decode("utf-8") if child.text else ""
+                ann = parse_annotations(text)
+                if ann:
+                    pending_annotation = ann
+                    if not self.found_first_symbol:
+                        self.module_annotation.update(ann)
+                continue
+
+            # A module docstring may carry the module-level annotation. It is not
+            # a comment node, so it needs its own strict reader (BDL-061.50).
+            docstring = _docstring_node_text(child, config)
+            if docstring is not None:
+                ann = parse_docstring_annotations(docstring)
+                if ann and not self.found_first_symbol:
+                    self.module_annotation.update(ann)
+                continue
+
+            declared = _statement_symbols(child, config)
+            if declared:
+                self.found_first_symbol = True
+                # Module-level annotations apply to all symbols; symbol-specific
+                # annotations (pending) take precedence via dict merge order.
+                merged = {**self.module_annotation, **pending_annotation}
+                for name, kind, span in declared:
+                    self._add(name, kind, span, merged, first_line)
+            # Any non-comment statement ends what a pending annotation applies to.
+            pending_annotation = {}
+
+    def _add(
+        self, name: str, kind: str, span: TSNode, annotations: dict[str, str], first_line: int
+    ) -> None:
+        # tree-sitter rows are 0-based within the parsed text.
+        self.symbols.append(
+            {
+                "symbol_name": name,
+                "kind": kind,
+                "line_start": first_line + span.start_point.row,
+                "line_end": first_line + span.end_point.row,
+                "annotations": dict(annotations),
+                "file_hash": self.file_hash,
+            }
+        )
+
+
+def _component_symbols(file_path: Path, content: str, walk: _SymbolWalk) -> list[dict[str, Any]]:
+    """The symbols of a single-file component: the component, then its scripts'.
+
+    Each script block is parsed by the grammar its ``lang`` names, and each symbol
+    is placed on its line in the component file. The template and the style are
+    not code and are not read. The component is itself a symbol, named after its
+    file as Vue names it, and it stands for the component's default export, so
+    the ``export default`` of a ``<script>`` block is not a second symbol.
+    """
+    for block in script_blocks(content):
+        config = get_lang_config(block.extension)
+        if config is None:
+            continue
+        tree = Parser(config.language).parse(block.text.encode("utf-8"))
+        walk.scan(tree.root_node, config, first_line=block.file_line(0))
+    component = {
+        "symbol_name": file_path.stem,
+        "kind": _COMPONENT_KIND,
+        "line_start": 1,
+        "line_end": len(content.splitlines()),
+        "annotations": dict(walk.module_annotation),
+        "file_hash": walk.file_hash,
+    }
+    body = [s for s in walk.symbols if s["symbol_name"] != _DEFAULT_EXPORT]
+    return [component, *body]
+
+
 def extract_symbols(file_path: Path) -> list[dict[str, Any]]:
     """Extract top-level symbols from a source file using tree-sitter.
 
     Detects language by file extension.  Returns empty list if the language
-    is not supported or the grammar package is not installed.
+    is not supported or the grammar package is not installed.  A Vue
+    single-file component is read through its script blocks.
 
     Returns a list of symbol dicts with: ``symbol_name``, ``kind``,
     ``line_start``, ``line_end``, ``annotations``, ``file_hash``.
     """
-    config = get_lang_config(file_path.suffix)
-    if config is None:
+    suffix = file_path.suffix
+    if not _can_parse(suffix):
         return []
 
     content = file_path.read_text(encoding="utf-8")
     if not content.strip():
         return []
 
-    file_hash = hashlib.sha256(content.encode()).hexdigest()
-    content_bytes = content.encode("utf-8")
+    walk = _SymbolWalk(file_hash=hashlib.sha256(content.encode()).hexdigest())
+    if suffix in _SFC_SCRIPT_EXTENSIONS:
+        return _component_symbols(file_path, content, walk)
 
-    parser = Parser(config.language)
-    tree = parser.parse(content_bytes)
-
-    symbols: list[dict[str, Any]] = []
-    pending_annotation: dict[str, str] = {}
-    module_annotation: dict[str, str] = {}
-    found_first_symbol = False
-
-    for child in tree.root_node.children:
-        # Check for comment with beadloom annotation.
-        if child.type in config.comment_types:
-            text = child.text.decode("utf-8") if child.text else ""
-            ann = parse_annotations(text)
-            if ann:
-                pending_annotation = ann
-                if not found_first_symbol:
-                    module_annotation.update(ann)
-            continue
-
-        # A module docstring may carry the module-level annotation. It is not a
-        # comment node, so it needs its own strict reader (BDL-061.50).
-        docstring = _docstring_node_text(child, config)
-        if docstring is not None:
-            ann = parse_docstring_annotations(docstring)
-            if ann and not found_first_symbol:
-                module_annotation.update(ann)
-            continue
-
-        # Check if this is a wrapper type that needs unwrapping.
-        actual = child
-        if child.type in config.wrapper_types:
-            unwrapped = _unwrap_node(child, config)
-            if unwrapped is None:
-                pending_annotation = {}
-                continue
-            actual = unwrapped
-        elif child.type not in config.symbol_types:
-            # Non-symbol, non-comment -- reset pending annotation.
-            pending_annotation = {}
-            continue
-
-        kind = config.symbol_types.get(actual.type)
-        if kind is None:
-            pending_annotation = {}
-            continue
-
-        name = _get_symbol_name(actual)
-        if name is None:
-            pending_annotation = {}
-            continue
-
-        found_first_symbol = True
-        # tree-sitter uses 0-based rows; we want 1-based lines.
-        line_start = child.start_point.row + 1
-        line_end = child.end_point.row + 1
-
-        # Module-level annotations apply to all symbols; symbol-specific
-        # annotations (pending) take precedence via dict merge order.
-        merged = {**module_annotation, **pending_annotation}
-
-        symbols.append(
-            {
-                "symbol_name": name,
-                "kind": kind,
-                "line_start": line_start,
-                "line_end": line_end,
-                "annotations": merged,
-                "file_hash": file_hash,
-            }
-        )
-        pending_annotation = {}
-
-    return symbols
+    config = get_lang_config(suffix)
+    if config is None:  # pragma: no cover - _can_parse said the grammar is there
+        return []
+    tree = Parser(config.language).parse(content.encode("utf-8"))
+    walk.scan(tree.root_node, config)
+    return walk.symbols
