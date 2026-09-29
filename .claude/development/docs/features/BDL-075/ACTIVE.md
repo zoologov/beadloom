@@ -28,6 +28,7 @@
 | `beadloom-uk2e` | epic | ready | BDL-075 parent |
 | `beadloom-nxf7` | R1 dev | ready | the version to 7.0.0 and the `[7.0.0]` change log |
 | `beadloom-10er` | T1 dev | done | the PLAN template without a status column; BRIEF's twin filed as `beadloom-3nwz` |
+| `beadloom-3nwz` | T1b dev | done | the BRIEF template without a status column |
 | `beadloom-fdvz` | D1 tech-writer | blocked | README.ru.md, then README.md |
 | `beadloom-n5w5` | D2 tech-writer | blocked | ROADMAP.md |
 | `beadloom-o2z4` | D3 tech-writer | blocked | BDL-UX-Issues.md |

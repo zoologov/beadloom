@@ -225,6 +225,10 @@ graph LR
 
    The title carries the work-item key and never a bead number — the number is
    allocated at creation, so a title written before it is a second copy of one fact.
+
+   Fill each bead's `Tracker` cell in BRIEF.md with the id the tracker answered. The BRIEF
+   table carries no status: the bead's state lives in ACTIVE.md, which the pre-commit
+   active-sync reconciles from the tracker.
 5. Show to user
 6. **WAIT for explicit approval**
 7. Update `Status: Approved`

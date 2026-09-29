@@ -385,9 +385,13 @@ node owns that the derivation could not read; a count there is a question to ans
 
 ## Beads
 
-| ID | Name | Priority | Status |
-|----|------|----------|--------|
-| BEAD-01 | [Name] | P0 | Pending |
+Status lives in ACTIVE.md, reconciled from the tracker by the pre-commit active-sync, so this
+table names the beads and carries no status. The Tracker cell holds `-` until the beads are
+created, and then the id the tracker answered.
+
+| ID | Tracker | Name | Priority |
+|----|---------|------|----------|
+| BEAD-01 | - | [Name] | P0 |
 
 ## Acceptance Criteria
 
