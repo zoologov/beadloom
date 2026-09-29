@@ -5,6 +5,154 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.0.0] - 2026-09-29
+
+**This release binds tests to graph nodes instead of guessing, and so it changes two answers on
+a project nobody edited.** 6.0.0 guessed which node a test file belonged to from the file's name.
+7.0.0 binds a test file by where it sits: its path mirrors the code it tests, it sits beside that
+code, or a node names it under `tests:`. The debt report's untested count and the `tests` object
+`ctx` returns for a node now come from that binding. The version is major for the two changes
+stated under Breaking: the debt score can move under `status --fail-if score>N` on an unedited
+graph, and the values in a node's `tests` object take a wider value set. The Python module the
+binding replaces is removed, as stated under Removed.
+
+BDL-074 carries every change below except the PLAN and BRIEF templates, which are BDL-075's.
+BDL-072 and BDL-073 change no command, key or verdict. BDL-072 repaired this repository's nightly
+mutation job, whose guard tests read mutmut's mutated copy and scored 0 of 7187 mutants for nine
+nights. BDL-073 closed five test gaps in the rule loader, turned its twelve-branch dispatch into
+one table, and made `init` parse the rules it generates once; it measured 0 differences from the
+previous loader over 1904 generated rules files.
+
+### Upgrading — what to check
+
+1. **Reindex.** An index written by 6.0.0 has no test tables. The first incremental `reindex`
+   notices that and runs a full one, once. The `Tests:` line `reindex` prints says how many test
+   files bind to a node and how many are unplaced. Measured on this repository on 2026-09-29:
+   `633 files (287 bound to a node, 167 unplaced, 76 acceptance step, 103 self-check)`.
+2. **If a CI step runs `status --debt-report --fail-if score>N`, read `test_population` first.**
+   `status --debt-report --json` and the MCP `get_debt_report` tool carry it. While it starts with
+   `not counted:`, some test file is unplaced and the untested count is 0, which is also what
+   6.0.0 reported on any project with a test file. Once it starts with `counted over`, every test
+   file is placed, and each node the binding covers with no bound test file adds its
+   `untested_domain` weight (1.0 by default) to `debt_score`. A project that places its last
+   unplaced file, or that upgrades with every file already placed, can see its score rise and
+   its gate turn red with no graph edit. Bind the missing tests, or raise `N` deliberately.
+3. **If you read a node's `tests` object**, accept a `+`-joined `framework` such as
+   `go_test+pytest`, and expect `test_files` and `test_count` on a parent node to include every
+   descendant's files.
+4. **If your tests are not under `tests/`, `test/`, `spec/` or a top-level `__tests__/`, or are
+   named outside the default patterns**, declare them under `tests:` in `.beadloom/config.yml`.
+   A test file outside every root, test tree and node source is not read at all, so a project
+   whose only tests sit there has every covered node counted as untested, where 6.0.0 counted 0.
+   An Xcode test target named after the project is the known case: declare it in
+   `tests.mirrors`.
+5. **If your code imports `beadloom.context_oracle.test_mapper` or `_store_test_mappings`**, the
+   import fails. Read the binding through `beadloom ctx --json` or the MCP `get_context` tool.
+6. **Rerun `beadloom setup-agentic-flow`** to receive the new `test` role text and the PLAN and
+   BRIEF templates. A file you edited by hand is kept and reported, and `--force` adopts the
+   composed body over it.
+
+The three new rule types fire only where a rules file declares them, and `init` generates none of
+them, so upgrading adds no finding to `beadloom lint` on its own.
+
+### Breaking
+
+- **The debt report's untested count comes from the test binding, and is withheld while any test
+  file is unplaced.** 6.0.0 counted a node as untested when the name-guessing mapper estimated
+  its coverage as `none`, which the mapper never returned once it detected a test framework
+  anywhere in the project, so the count was 0 on any project with a test file. 7.0.0 counts the
+  nodes the binding covers that no test file binds to. While any test file is unplaced it
+  reports 0 and states why in `test_population`, because an unplaced file binds to no node and
+  may still test one. Once every file is placed the count is real, so
+  `status --debt-report --fail-if score>N` can change its verdict on a graph nobody edited. On
+  this repository the count is withheld: 167 of 633 test files are unplaced, measured
+  2026-09-29.
+- **A node's `tests` object keeps its four keys, and their values change.** The object
+  `beadloom ctx --json` and the MCP `get_context` tool return under `tests`, read from the node's
+  `extra.tests`, still carries `framework`, `test_files`, `test_count` and `coverage_estimate`.
+  `framework` can now be a `+`-joined name such as `go_test+pytest`, where 6.0.0 held one name or
+  `none`. `test_files` and `test_count` are the union over the node and every descendant, where
+  6.0.0 aggregated descendants only for a parent with no test file of its own.
+  `coverage_estimate` keeps its four labels and its thresholds, now counted over bound files.
+
+### Removed
+
+- **The Python module `beadloom.context_oracle.test_mapper`** (629 lines), the name-guessing
+  mapper the binding replaces, **and the `_store_test_mappings` export of
+  `beadloom.application.reindex`.** No command, MCP tool or configuration key named either, so
+  only code that imports them is affected.
+
+### Added
+
+- **Tests bound to graph nodes, by three routes and nothing guessed.** A test file binds by the
+  mirror, kind first and then the path of the code it tests
+  (`tests/unit/<path under the source root>/test_<module>.py`, and the same under
+  `integration/`); beside the code, inside a node's source; or through `tests:` in a node's graph
+  YAML, a list of path prefixes that overrides the mirror. A `tests:` value that is not a list of
+  paths, or an entry that binds nothing, is a `reindex` warning. An acceptance scenario binds by
+  its `@node:` tag, and a self-check binds to no node by its kind. A file none of these places is
+  `unplaced`, and every report that counts tests says how many are.
+- **`tests:` in `.beadloom/config.yml`, with defaults per language.** Every key is optional:
+  `roots` (default `tests`, `test`, `spec`, `__tests__`, each read only where it exists), `kinds`
+  (the folder of `unit`, `integration`, `acceptance` and `self_check`), `patterns` (default
+  groups `pytest`, `go_test`, `jest`, `junit` and `xctest`), `mirrors` (default
+  `src/test/java`, `src/test/kotlin` and SwiftPM's `Tests`, each onto its code tree) and
+  `beside_code` (default `true`). A key that cannot be used is a `reindex` warning, and its
+  default stands.
+- **Rules over the suite.** Three rule types: `test_binding` (every test file binds to a node,
+  or, with `for:`, every node of a kind has a bound test file), `test_import_boundary` (a test
+  under a glob, testing a node of a given layer, imports nothing under another glob) and
+  `scenario_binding` (a scenario's `@node:` tag names the node folder its feature file sits in).
+  Each states on every run how much of the suite it judged, as an advisory line that does not
+  trip `--fail-on-warn`. Each takes an `exempt:` list whose entries carry a `reason` and an
+  `until`.
+- **`beadloom mutation --changed-since <ref>`, `--survivors <path>` and `--sample-of <n>`.**
+  `--changed-since` covers the change since the merge base with the ref: the functions it touched
+  in the declared scope, by node, with the tests bound to each, and it accepts `--stats` without
+  `--target`. `--survivors` lists surviving mutants by node. `--sample-of` reads the counters as
+  a random sample of that many mutants and prints the score's interval; with `--min-score`, the
+  floor is missed only when the whole interval lies under it. `--json` gains `change`,
+  `survivors_by_node` and `sample`, each `null` when its flag is not given. An unreadable change,
+  survivor list or sample exits 2.
+- **Keys and lines that state the test population.** `beadloom ctx --json` and the MCP
+  `get_context` tool gain `test_placements`, `test_unplaced` and `test_recognition`; the human
+  `ctx` output gains the unplaced share and the patterns and roots a test file is read by.
+  `status --debt-report --json` and the MCP `get_debt_report` tool gain `test_population`.
+  `reindex` prints a `Tests:` line. No existing key is removed.
+- **Three index tables: `test_files`, `test_imports` and `test_overrides`.** Test files live in
+  their own tables and never in `code_symbols`, `code_imports` or `file_index`, so a test never
+  becomes code, gains symbols or owns a node. No existing table or column changes.
+- **`docs/guides/testing.md`**: what a test is, the layout, the three binding routes, the
+  `tests:` configuration, the suite rules, exemptions, and per-change and sampled mutation.
+- **A stack-neutral `test` role.** The core `test` role states what a test is — one behaviour
+  per test, arrange-act-assert, no shared mutable state, named by the behaviour, placed by the
+  mirror, shared helpers in one support package, the root found one way, explicit roots — for
+  any stack. The Python overlay replaces "Tests live in `tests/` (flat, no subdirs)" with the kind
+  and mirror layout. The `review` and `tech-writer` roles say which parts hold in any stack and
+  where the stack's overlay follows.
+- **The PLAN and BRIEF templates carry the tracker id, and no status column** (`beadloom-10er`,
+  `beadloom-3nwz`). PLAN's bead table is `| ID | Tracker | Name | Priority | Depends On |` and
+  BRIEF's is `| ID | Tracker | Name | Priority |`. A bead's status lives only in ACTIVE.md, which
+  the pre-commit active-sync reconciles from the tracker, and `/task-init` fills the Tracker cell
+  when it creates the beads.
+
+### Fixed
+
+- **Bracketed graph and document text is no longer read as Rich markup** in `why`, `diff`,
+  `docs audit`, the `init` wizard and the human debt report. An edge printed as `--[part_of]--`
+  showed `----`, a path such as `app/[slug]/` lost its folder, the Jest default pattern
+  `__tests__/**/*.[jt]s` lost its `[jt]`, and a pattern holding `[/x]` raised `MarkupError`. The
+  fix changes human output only.
+- **`layer_populations` is kept in the debt report under MCP `get_debt_report` with `trend`, and
+  under the human `status --debt-report --category`.** 6.0.0 rebuilt the report by hand on both
+  paths and dropped the field. Both now copy the report and change only the field they set, so
+  `test_population` is kept as well.
+- **The index cache key of this repository's `ai-techwriter` CI job reads `tests/**` and
+  `.beadloom/*.yml`.** The key hashed the graph, `src` and `docs` only, so a pull request that
+  changed only tests hit the cache and the tech-writer read the previous tree's test tables. No
+  shipped template carries this key. A project that copied it from this repository's
+  `.github/workflows/ci.yml` should widen its own.
+
 ## [6.0.0] - 2026-09-14
 
 **This release decides `architecture-layers` on the population 5.0.0 reported, and so it changes

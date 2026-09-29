@@ -1,8 +1,10 @@
 # Beadloom Roadmap
 
-> **Current version: 6.0.0** (PyPI, published 2026-09-13 from `main` at `058ef59e` and verified
-> on the wheel downloaded from PyPI — not on the local build). What was checked there rather than
-> assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
+> **Current version: 7.0.0** (the BDL-075 release pull request from `features/BDL-075`, cut
+> 2026-09-29 and NOT yet verified on the downloaded wheel — BDL-075 records that verification
+> when it has been made). The release before it is 6.0.0 (PyPI, published 2026-09-13 from `main`
+> at `058ef59e` and verified on the wheel downloaded from PyPI — not on the local build). What
+> was checked there rather than assumed: `beadloom --version`, the module's `__version__` and the distribution metadata all read
 > 6.0.0 in a fresh environment; `lint --strict` exits 1 on a layer violation the rule sees only
 > through inheritance, which 5.0.0 did not report; and a `layer_populations` entry carries five
 > keys. That is 6.0.0's verdict change and its narrowed population contract, read out of the
