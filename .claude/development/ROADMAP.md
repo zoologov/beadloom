@@ -612,7 +612,7 @@ Gate (BDL-UX #144, #157, #159, and dropped `uses` edges). All four were found by
 a node and asking whether it was true. The bead turns those hand audits into `doctor` checks: an
 island, an unexplained leaf, a claim without evidence.
 
-### 10. The follow-ups BDL-074 and this release filed (P2, one P3)
+### 10. The follow-ups BDL-074 and this release filed (P2, two P3)
 
 The weekly sample reaches its floor since issue #85 closed, so none of these is a red. Each is
 quality work:
@@ -632,18 +632,23 @@ quality work:
   than once — the same organ as rule 3 of item 5.
 - `beadloom-tu41`: `docs audit` gives a version to the product named earlier on the line, across
   code spans. Filed by this release's version bump.
+- `beadloom-s34t`: `issue-number check` reads only column-0 entries. A number written a second time
+  as a `- N.` bullet is not reported as a duplicate, and a number that is only mentioned in prose
+  counts as stated. This release repaired the issue log by hand around that blind spot.
 - `beadloom-uvgy` (P3): TUI notifications and labels may read graph text as markup. Not measured.
+- `beadloom-phjj` (P3): `ctx` prints an empty bold heading, `****`, for a document chunk that has
+  no heading. Found on the built 7.0.0 wheel on a fresh `init --bootstrap` project.
 
 `beadloom-10er` and `beadloom-3nwz`, the PLAN and BRIEF templates without a status column, closed
 on 2026-09-29 inside BDL-075.
 
-### 11. `beadloom-cxal` — the style guide, and Qwen as the writer of Russian documentation (P1 in the tracker)
+### 11. `beadloom-cxal` — the style guide, and Qwen as the writer of Russian documentation (P2)
 
-One bead, one thread. `beadloom-cxal` reads P1 in the tracker, last updated 2026-08-28. The owner
-ranks it eleventh because it serves neither use under *Vision* directly. The guide half of the
-thread has shipped as documentation: BDL-064 rewrote the multi-agent guide pair (PR #52, merged
-2026-08-28), and BDL-065 had Goose+Qwen rewrite the Russian guide (PR #54, 2026-08-28, and PR
-#56, 2026-08-31). BDL-065's role runtime has no bead and no work-item folder.
+One bead, one thread. `beadloom-cxal` is P2 in the tracker, lowered from P1 on 2026-09-29 to agree
+with this rank. The owner ranks it eleventh because it serves neither use under *Vision* directly.
+The guide half of the thread has shipped as documentation: BDL-064 rewrote the multi-agent guide
+pair (PR #52, merged 2026-08-28), and BDL-065 had Goose+Qwen rewrite the Russian guide (PR #54,
+2026-08-28, and PR #56, 2026-08-31). BDL-065's role runtime has no bead and no work-item folder.
 
 **`beadloom-cxal` · BDL-063 — speech style guide for all four roles.** Shipped as
 data, not prose in a role file, because it must reach a Claude adapter, a Goose
@@ -667,8 +672,8 @@ Not yet a bead of its own beyond the guide work. **Needs `/task-init`.**
 **Owner decision, 2026-09-29: federation is deferred until a need for it appears, and higher
 priorities go first.** It held P3 here, under a sentence that recorded its contradiction with the
 vision instead of resolving it. The nine beads — epic `beadloom-8qqp` and `8qqp.17` to `.24`, all
-P2 — have been untouched since 2026-06-17, the day they were created, and still read open in the
-tracker.
+P2 — were untouched from 2026-06-17, the day they were created, until 2026-09-29, when all nine
+were set to `deferred` in the tracker by the same decision.
 
 **S5** — live cross-repo `ctx`: an agent on service A sees `@repo-B:CONTRACT`.
 The F1 honesty debt: the claimed metric is not actually met, cross-repo identity
@@ -764,8 +769,9 @@ under its deferral.
 > **Two corrections on 2026-09-29, and a wider check.** `beadloom-uxqc` left this table for item 9
 > of the order. `beadloom-txeq` (BDL-064) read in_progress for 32 days after its PR #52 merged on
 > 2026-08-28. Its work is on `main`, so it was closed with that evidence. The check now covers
-> in-progress beads and swarm molecules as well as this table: molecule `beadloom-9lcb` still reads
-> open for the closed BDL-074 epic `beadloom-2mj3`, the shape `aa4bfad4` cleaned up on 2026-09-12.
+> in-progress beads and swarm molecules as well as this table: molecule `beadloom-9lcb` read open
+> for the closed BDL-074 epic `beadloom-2mj3`, the shape `aa4bfad4` cleaned up on 2026-09-12. It
+> was closed on 2026-09-29.
 
 > **Three rows left this table on 2026-09-10, and are named rather than silently dropped:**
 > `beadloom-iur5` (the vendored agents snapshot — removed in BDL-068, and the CHANGELOG's

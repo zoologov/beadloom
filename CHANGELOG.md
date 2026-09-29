@@ -110,10 +110,10 @@ them, so upgrading adds no finding to `beadloom lint` on its own.
   `--changed-since` covers the change since the merge base with the ref: the functions it touched
   in the declared scope, by node, with the tests bound to each, and it accepts `--stats` without
   `--target`. `--survivors` lists surviving mutants by node. `--sample-of` reads the counters as
-  a random sample of that many mutants and prints the score's interval; with `--min-score`, the
-  floor is missed only when the whole interval lies under it. `--json` gains `change`,
-  `survivors_by_node` and `sample`, each `null` when its flag is not given. An unreadable change,
-  survivor list or sample exits 2.
+  a random sample drawn from `<n>` mutants, the population the sample was taken from, and prints
+  the score's interval. With `--min-score`, the floor is missed only when the whole interval lies
+  under it. `--json` gains `change`, `survivors_by_node` and `sample`, each `null` when its flag
+  is not given. An unreadable change, survivor list or sample exits 2.
 - **Keys and lines that state the test population.** `beadloom ctx --json` and the MCP
   `get_context` tool gain `test_placements`, `test_unplaced` and `test_recognition`; the human
   `ctx` output gains the unplaced share and the patterns and roots a test file is read by.
@@ -124,7 +124,10 @@ them, so upgrading adds no finding to `beadloom lint` on its own.
   becomes code, gains symbols or owns a node. No existing table or column changes.
 - **`docs/guides/testing.md`**: what a test is, the layout, the three binding routes, the
   `tests:` configuration, the suite rules, exemptions, and per-change and sampled mutation.
-- **A stack-neutral `test` role.** The core `test` role states what a test is — one behaviour
+
+### Changed
+
+- **The `test` role is stack-neutral.** The core `test` role states what a test is — one behaviour
   per test, arrange-act-assert, no shared mutable state, named by the behaviour, placed by the
   mirror, shared helpers in one support package, the root found one way, explicit roots — for
   any stack. The Python overlay replaces "Tests live in `tests/` (flat, no subdirs)" with the kind
@@ -140,9 +143,8 @@ them, so upgrading adds no finding to `beadloom lint` on its own.
 
 - **Bracketed graph and document text is no longer read as Rich markup** in `why`, `diff`,
   `docs audit`, the `init` wizard and the human debt report. An edge printed as `--[part_of]--`
-  showed `----`, a path such as `app/[slug]/` lost its folder, the Jest default pattern
-  `__tests__/**/*.[jt]s` lost its `[jt]`, and a pattern holding `[/x]` raised `MarkupError`. The
-  fix changes human output only.
+  showed `----`, a path such as `app/[slug]/` lost its folder, and the `init` wizard dropped the
+  confidence tag, such as `[high]`, from every node. The fix changes human output only.
 - **`layer_populations` is kept in the debt report under MCP `get_debt_report` with `trend`, and
   under the human `status --debt-report --category`.** 6.0.0 rebuilt the report by hand on both
   paths and dropped the field. Both now copy the report and change only the field they set, so
