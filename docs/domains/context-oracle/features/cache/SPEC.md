@@ -164,7 +164,7 @@ class SqliteCache:
 
 ## Testing
 
-Tests are located in `tests/test_cache.py`. Key scenarios:
+Tests are located in `tests/integration/context_oracle/cache/test_cache.py`. Key scenarios:
 
 - **L1 hit/miss**: Verify `get()` returns the bundle after `put()`, and `None` for unknown keys.
 - **Mtime invalidation**: Verify that providing a newer `graph_mtime` or `docs_mtime` causes a miss and deletes the entry.

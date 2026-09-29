@@ -159,11 +159,12 @@ codeset `en_US.iso88591`, which `codecs.lookup` refuses; guessing a normalisatio
 component the owner of a spelling rule, and a spelling is what it is here to stop comparing. So
 the report states what the name resolved to and does not offer a candidate name.
 
-**The one CI dimension a developer machine can genuinely enter.** `tests/room_simulation.py`
+**The one CI dimension a developer machine can genuinely enter.** `tests/support/room_simulation.py`
 fabricates the platform and the interpreter and carries the locale through unchanged, because a
 laptop cannot be Ubuntu and can be under the leg's locale. `LC_ALL=C PYTHONUTF8=0
 PYTHONCOERCECLOCALE=0` plus the simulation enters `tests-locale (C)` for real, and
-`tests/test_room_locale.py::TestTheLegIsEnterableFromADeveloperMachine` asserts both arms of it.
+`tests/self_check/process/test_room_locale.py::TestTheLegIsEnterableFromADeveloperMachine`
+asserts both arms of it.
 The filesystem half of the dimension stays CI-only: CPython forces a UTF-8 filesystem encoding on
 macOS, so a defect in filename decoding is still invisible there.
 

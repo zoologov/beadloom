@@ -169,10 +169,10 @@ that a BRIEF quoting its own skeleton would be credited with every section the s
 
 ## Testing
 
-`tests/test_missing_sections.py` — the outlier, the convention, the tie, the phrase match, the
-honest limits, both wirings of `check_sync`, the gate and CLI surfaces, and an adopter project
-whose own project layer defines the sections.
+`tests/integration/infrastructure/doc_roots/test_missing_sections.py` — the outlier, the convention,
+the tie, the phrase match, the honest limits, both wirings of `check_sync`, the gate and CLI
+surfaces, and an adopter project whose own project layer defines the sections.
 `tests/test_the_axes_section_is_required_by_the_template.py` and
-`tests/acceptance/features/planning_document_shape.feature` — the same three population cases
-over planning documents, the empty section, the nested content that is not one, the fence that
+`tests/acceptance/doc-sync/doc-shape/planning_document_shape.feature` — the same three population
+cases over planning documents, the empty section, the nested content that is not one, the fence that
 is not a section, and the document kind no template describes.

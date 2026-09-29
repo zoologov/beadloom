@@ -136,7 +136,7 @@ switched off.
 
 ## Acceptance
 
-`tests/acceptance/features/role_duties.feature` — both directions, the dead role, the
+`tests/acceptance/onboarding/role-duties/role_duties.feature` — both directions, the dead role, the
 anti-vacuity case, the launch-prompt limit, the fragment no composition includes, the
 finding reaching `config-check`, and the composition no role file can receive. Boundary guards in `tests/test_role_duties.py`.
 

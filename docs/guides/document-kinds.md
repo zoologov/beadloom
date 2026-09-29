@@ -78,7 +78,7 @@ Files* heading (`beadloom-mr2l.17`); four directories then fell out for carrying
 `README.md`-only planning directory found a third route out (`beadloom-mr2l.19`, closed by
 `.77`). Three separate counts, each corrected and each still wrong. What holds now is the
 invariant, pinned by a test on this repository and on the TypeScript fixture in
-`tests/adopter_project.py`.
+`tests/support/adopter_project.py`.
 
 The finding is reported **once per kind** with a count, up to five example paths and the roots
 that failed to reach them: sixty directories following one convention are one decision to make,

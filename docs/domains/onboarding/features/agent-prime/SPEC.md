@@ -280,7 +280,7 @@ rendered:
   theirs, and the package scan fell back to looking for `src/beadloom/` inside
   the adopter's tree. Each read correct on this repository by coincidence.
   :mod:`beadloom.onboarding.scanner.project_facts` now owns every one of those
-  reads, and `tests/adopter_project.py` renders non-Beadloom fixtures so a
+  reads, and `tests/support/adopter_project.py` renders non-Beadloom fixtures so a
   coincidence cannot pass for a measurement again.
 - **`doc-language`** — the "ALL documents MUST be written in …" sentence,
   derived from `language:` in `.beadloom/flow.yml` (default `en`). The

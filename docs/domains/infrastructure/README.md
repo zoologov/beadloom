@@ -103,5 +103,5 @@ folder per component node (`db/test_db.py`, `health/test_health.py`,
 `git_activity/test_git_activity.py`, `repository/`, `scan_paths/` and the rest), each bound
 to its node by the mirror of its path. The reindex storing git activity is tested in
 `tests/integration/application/reindex/test_reindex_activity.py` and the bundle reading it in
-`tests/test_the_context_bundle_carries_git_activity.py`, both split from
-`tests/test_reindex_activity.py` by BDL-074 F2.
+`tests/integration/context_oracle/builder/test_the_context_bundle_carries_git_activity.py`.
+BDL-074 F2 split the two out of one file that tested both, so each is bound to its own node.

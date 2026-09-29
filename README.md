@@ -279,7 +279,7 @@ rules:
       to:   "beadloom/infrastructure/**"
 ```
 
-Each entry declares exactly one of 12 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence` and `summary_facts`. The full reference is in [docs/architecture.md](docs/architecture.md).
+Each entry declares exactly one of 15 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence`, `summary_facts`, `test_binding`, `test_import_boundary` and `scenario_binding`. The full reference is in [docs/architecture.md](docs/architecture.md).
 
 A rule that **cannot match anything** reports itself: a matcher that selects no node, a typo in a path pattern, an exemption that suppresses nothing. Their count appears in `lint`'s summary line, so the declared number of rules cannot promise more than was checked.
 
@@ -343,6 +343,7 @@ Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents
 | [Executable acceptance scenarios](docs/guides/bdd-scenarios.md) | Gherkin as the source of truth and what `scenario-coverage` reports |
 | [Parallel waves](docs/guides/parallel-waves.md) | What a wave of parallel agents guarantees and what nothing here checks |
 | [Document kinds](docs/guides/document-kinds.md) | Mandatory sections and the five writing-standard checks |
+| [Testing](docs/guides/testing.md) | Where a test lives, how it binds to a graph node, what `lint` reports about the suite and how to read the mutation score |
 | [CI Setup](docs/guides/ci-setup.md) | Integration with GitHub Actions / GitLab CI |
 | [VitePress Site](docs/guides/vitepress-site.md) | Publishing the knowledge base on VitePress |
 | **Domains** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |

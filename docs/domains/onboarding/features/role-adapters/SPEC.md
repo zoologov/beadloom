@@ -121,4 +121,4 @@ Writes are fingerprinted through `flow_manifest.record()`.
 
 Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`,
 `tests/test_orphaned_adapters.py`, and
-`tests/acceptance/features/orphaned_adapters.feature` for what an adopter is shown.
+`tests/acceptance/onboarding/config-check/orphaned_adapters.feature` for what an adopter is shown.

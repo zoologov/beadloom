@@ -75,14 +75,20 @@ that makes the `.feature` file authoritative.
 
 ## Where the suite lives
 
-The default layout is the one this repository uses:
+The default layout is:
 
 ```
 tests/acceptance/features/**/*.feature   # the scenarios
 tests/acceptance/steps/                  # the step implementations
 ```
 
-It is a default and not an imposition. The rule names its own glob, so a project with a
+This repository has declared its own since BDL-074. A scenario lives in the folder of the node
+it binds to, `tests/acceptance/<domain>/<node>/`, spelled as that node's `docs/` folder, and the
+rule reads `features: "tests/acceptance/**/*.feature"`. The
+[testing guide](testing.md#the-layout-kind-first-then-the-mirrored-path) describes that layout
+and the rule that checks a scenario's tag against its folder.
+
+The default is not an imposition. The rule names its own glob, so a project with a
 `qa/gherkin/` layout is read exactly as this one is:
 
 ```yaml
@@ -130,8 +136,8 @@ asserting nothing. That is why this repository ships `pytest-bdd` in its `dev` e
 executed scenarios to the project's own parser count, so a feature file with no step module
 reddens instead of quietly counting as coverage. The expected number is read from the suite
 rather than written into the test, so a slice that adds a scenario does not redden a test it
-has nothing to do with. The suite's current size is the one quoted below, measured on the same
-run: 92 scenarios in 20 files.
+has nothing to do with. The size quoted below was measured on the same run, on 2026-08-26: 92
+scenarios in 20 files. On 2026-09-29 `beadloom lint` judged 528 scenarios in 82 files.
 
 ## Work with no behaviour says so
 

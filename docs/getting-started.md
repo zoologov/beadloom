@@ -143,8 +143,8 @@ path decides only WHETHER it is a test, by the patterns below. Every key is opti
 | Swift | `xctest` | `*Tests.swift`, `*Tests/**/*.swift` |
 
 `ctx` and the debt report name only the roots that exist. A project with none of the four, and
-with tests read beside the code, sees a clause ending `under no root, since none of tests,
-test, spec, __tests__ exists, or beside a node's code`.
+with tests read beside the code, sees a clause ending `and it lies beside a node's code, since
+none of the roots tests, test, spec, __tests__ exists`.
 
 A pattern without a `/` matches the file name. A pattern with a `/` matches the end of the
 file's path, folder by folder, and `**` stands for any number of folders: `__tests__/**` is
@@ -392,6 +392,7 @@ carries the sections its kind's peers carry. It never blocks. See
 - [Architecture](architecture.md) — system design, the node-kind model, the rules engine, the agentic-flow configurator.
 - [Executable acceptance scenarios](guides/bdd-scenarios.md) — Gherkin as the source of truth, and what `scenario-coverage` reports.
 - [Document kinds](guides/document-kinds.md) — required sections and the five writing-standard checks.
+- [Testing](guides/testing.md) — where a test lives, how it binds to a node, the suite rules, and mutation per change and weekly.
 - [Parallel waves](guides/parallel-waves.md) — what a wave of concurrent agents guarantees, and what it only reports.
 - [CI Setup](guides/ci-setup.md) — GitHub Actions / GitLab CI integration.
 - [VitePress Site](guides/vitepress-site.md) — publish the knowledge base.

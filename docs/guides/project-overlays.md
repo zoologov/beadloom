@@ -361,11 +361,13 @@ beadloom config-check          # rc 0, or a named finding per file
 ### The project layer's prose is not judged
 
 `config-check` reports that a project layer is in effect and names each fragment. It
-does **not** read what the fragment says:
+does **not** read what the fragment says. On this repository, which has carried a `test` role
+fragment since BDL-074 (measured 2026-09-29):
 
 ```
-! .beadloom/flow: project layer in effect (1 fragment(s):
-  .beadloom/flow/claude/CLAUDE.md). It composes AFTER the shipped core and cannot
+! .beadloom/flow: project layer in effect (2 fragment(s):
+  .beadloom/flow/claude/CLAUDE.md, .beadloom/flow/roles/test.md). It composes AFTER the
+  shipped core and cannot
   delete core text — but its prose is not judged, so a rule it contradicts is stood
   down without the reason, exit condition or notice `overlays.suppress` requires
 ```

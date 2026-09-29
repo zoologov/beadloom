@@ -821,7 +821,7 @@ through `application/reindex/rules_loader.py`, the Gate's lint step through `gra
 `load_rules` therefore remembers, in the module-level `_PARSED`, the text it read and the rules
 it returned for each resolved path. `init --yes` and `init --bootstrap` each parse once where
 they parsed twice, measured by a counting stand-in for the loader's `yaml` in
-`tests/test_load_rules_parses_once.py`.
+`tests/integration/graph/rules/test_load_rules_parses_once.py`.
 
 - **An entry is trusted only while the file holds the same TEXT.** A path alone would serve old
   rules to the TUI, which refreshes in one long process while its user edits the file.
@@ -1268,13 +1268,13 @@ something other than an object leaves the node with no tags. One node at a time,
 have failed every tag question in the run and escaped `evaluate_all` as a traceback instead of a
 `LintError` (BDL-070 A8).
 
-**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS
-are compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and
-the other four rule kinds against the closure they each kept, both run against this repository's
-own index in the same process
-(`tests/test_the_layer_rule_states_the_population_it_judged.py`). Measured on this repository:
-`lint --strict` exits 0 before and after, no finding was removed, and the one finding added is the
-population statement.
+**What did not change, and it is held by a test rather than argued.** The layer rule's DECISIONS are
+compared against a verbatim transcription of `evaluate_layer_rules` as it stood before, and the
+other four rule kinds against the closure they each kept, both run against this repository's own
+index in the same process
+(`tests/self_check/architecture/test_the_layer_rule_states_the_population_it_judged.py`). Measured
+on this repository: `lint --strict` exits 0 before and after, no finding was removed, and the one
+finding added is the population statement.
 
 #### Combined Evaluation
 
@@ -1557,19 +1557,19 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 ### Dispatch and Memo Tests
 
-- **Codec and messages** (`tests/test_load_rules_pins_its_codec_and_messages.py`, BDL-073 B1).
-  Written before the dispatch became a table, so the table was proven against them: the UTF-8
-  codec under a non-UTF-8 locale, a file with no `rules:` key loading as no rules, the two
+- **Codec and messages** (`tests/unit/graph/rules/test_load_rules_pins_its_codec_and_messages.py`,
+  BDL-073 B1). Written before the dispatch became a table, so the table was proven against them: the
+  UTF-8 codec under a non-UTF-8 locale, a file with no `rules:` key loading as no rules, the two
   top-level messages in full, and the per-rule "must be a mapping" message for every key but
   `layers`. Each answered a `load_rules` mutant that survived the 2026-09-19 fan-out analysis.
 - **The table against the SPEC** (`tests/self_check/docs/test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader`).
   The `Keyword` column under Purpose equals `AUTHORING_KEYS`, and the stated count is its size.
-- **The memo** (`tests/test_load_rules_parses_once.py`). One `init --yes` and one `init
-  --bootstrap` parse once; an unchanged file is parsed once; an edited file, and an edit of the
-  same size inside one timestamp tick, are parsed again; a file that fails is not remembered;
-  two paths are remembered side by side; one caller's change to its list does not reach the
-  next caller; the TUI's `LintDataProvider.refresh()` sees a rule renamed between two
-  refreshes; every test starts with nothing remembered.
+- **The memo** (`tests/integration/graph/rules/test_load_rules_parses_once.py`). One `init --yes`
+  and one `init --bootstrap` parse once; an unchanged file is parsed once; an edited file, and an
+  edit of the same size inside one timestamp tick, are parsed again; a file that fails is not
+  remembered; two paths are remembered side by side; one caller's change to its list does not reach
+  the next caller; the TUI's `LintDataProvider.refresh()` sees a rule renamed between two refreshes;
+  every test starts with nothing remembered.
 
 ### Deny Evaluation Tests
 
@@ -1588,20 +1588,31 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 - **Unknown ref_id warning.** Create rules referencing a `ref_id` not in `nodes`. Assert `validate_rules` returns a warning string.
 - **All ref_ids exist.** Assert empty warning list.
-- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity (`tests/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
+- **A layer tag no node carries.** Declare four layers over a graph populating three. Assert
+  `validate_rules` returns one warning naming the empty tag, and that the evaluator emits the same
+  tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity
+  (`tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
 - **Every layer populated.** Assert both surfaces are silent.
 
-### Liveness Tests (`tests/test_rule_liveness_all_types.py`)
+### Liveness Tests (`tests/integration/graph/rules/test_rule_liveness_all_types.py`)
 
 One **pair** per rule type — an inert rule that must be reported, and a live rule of the same type on the same fixture that must not be. The live half is the non-vacuity guard: without it, "everything is inert" would satisfy every other assertion.
 
 - **Every rule type reports its own inertness.** Nine rules, one of each type, all inert on a populated graph. Assert the reported set equals all nine names — a gap says *which* type is missing rather than "some count differs".
 - **Exactly once.** Assert one finding per inert rule (an audit that affirms one fact twice is BDL-UX #173).
-- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The TOTAL stand-downs that carry the declared severity are `doc_area_coherence`'s, asserted in `tests/test_source_root_minority.py`, and `graph-summary-facts`'s, asserted in `tests/test_graph_summary_facts.py::TestATotalStandDownCarriesTheDeclaredSeverity` — both run the real linter and fail on `has_errors` being False. See the severity paragraph above.
+- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph.
+  Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant,
+  asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight
+  matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The
+  TOTAL stand-downs that carry the declared severity are `doc_area_coherence`'s, asserted in
+  `tests/integration/graph/rules/test_source_root_minority.py`, and `graph-summary-facts`'s,
+  asserted in
+  `tests/integration/graph/rules/test_graph_summary_facts.py::TestATotalStandDownCarriesTheDeclaredSeverity`
+  — both run the real linter and fail on `has_errors` being False. See the severity paragraph above.
 - **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
 - **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 
-### Exit-condition Tests (`tests/test_exit_condition_expiry.py`)
+### Exit-condition Tests (`tests/integration/infrastructure/exit_condition/test_exit_condition_expiry.py`)
 
 All three surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until`, `layers.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how they would drift into promising different things.
 

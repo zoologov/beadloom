@@ -283,9 +283,9 @@ The debt score formula combines four categories:
   layout `a test file is read when its path matches a pattern of go_test (*_test.go), jest
   (...), junit (...), pytest (test_*.py, *_test.py) or xctest (...) under ...`, where each
   `(...)` names that group's patterns and `...` names the roots and test trees that exist,
-  followed by `or beside a node's code`. With none of them the clause ends `under no root,
-  since none of tests, test, spec, __tests__ exists, or beside a node's code`
-  (`beadloom-2mj3.17`).
+  followed by `or beside a node's code`. With none of them, and tests beside the code read,
+  the clause ends `and it lies beside a node's code, since none of the roots tests, test,
+  spec, __tests__ exists` (`beadloom-2mj3.17`, reworded by `beadloom-2mj3.19`).
 
 Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
 
@@ -3191,4 +3191,29 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`. Two commands carry their command-level tests outside that naming, beside the application tests they render: `test_mutation_command.py` (with `test_mutation_score.py`, `test_mutation_phantom_gate.py`, `test_mutation_runner_scope.py` and `test_mutation_ci_job.py`) and `test_rooms_command.py` (with `test_verdict_room_derivation.py`, `test_verdict_room_census.py`, `test_verdict_room_population.py` and `test_gate_verdict_room.py`).
+CLI is tested via `click.testing.CliRunner`, and a command's tests are named
+`test_cli_<command>.py`. Where such a file tests one node it lives under that node's mirrored
+path (BDL-074): `test_cli_status.py`, `test_cli_diff.py`, `test_cli_why.py` and
+`test_cli_snapshot.py` under `tests/integration/infrastructure/console_streams/`, and
+`test_cli_docs.py` under `tests/integration/onboarding/doc_generator/`. The rest still sit at the
+top of `tests/`, unplaced, until their mixed contents are split by node: `test_cli_reindex.py`,
+`test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`,
+`test_cli_hooks.py`, `test_cli_link.py`, `test_cli_mcp.py`, `test_cli_watch.py`,
+`test_cli_lint.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`,
+`test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`,
+`test_cli_review_brief.py`. `init` is tested by the `tests/test_init_*.py` files.
+
+Two commands carry their command-level tests outside that naming, beside the application tests
+they render. `mutation`: `tests/test_mutation_command.py` and
+`tests/test_mutation_phantom_gate.py`, with
+`tests/integration/application/mutation_scope/test_mutation_score.py`; the workflow checks
+`test_mutation_runner_scope.py`, `test_mutation_ci_job.py` and the phantom-gate pins are
+self-checks under `tests/self_check/config/`. `rooms`:
+`tests/integration/application/rooms/test_rooms_command.py`, with
+`tests/integration/application/rooms/test_verdict_room_derivation.py`,
+`tests/unit/application/rooms/test_verdict_room_census.py`,
+`tests/test_verdict_room_population.py` and `tests/test_gate_verdict_room.py`; their checks
+against this repository's own CI legs are under `tests/self_check/config/`.
+
+`beadloom ctx <ref-id>` prints, on its `Tests:` line, the files bound to a node and how many of
+the project's test files are unplaced.

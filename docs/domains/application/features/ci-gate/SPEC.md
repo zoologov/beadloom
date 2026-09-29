@@ -562,8 +562,8 @@ Module `src/beadloom/application/gate_ownership.py`:
 
 ## Testing
 
-Tests: `tests/test_gate.py`, `tests/test_ci_gate.py`,
+Tests: `tests/test_gate.py`, `tests/integration/doc_sync/audit/test_ci_gate.py`,
 `tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
-`tests/test_f3_gate_coverage.py`, `tests/test_f3_gate_dogfood.py`,
+`tests/test_f3_gate_coverage.py`, `tests/test_the_gate_blocks_each_break_class.py`,
 `tests/test_a_remediation_can_be_followed.py`, `tests/test_a_stale_line_names_its_pair.py`;
 scenarios in `tests/acceptance/features/remediation_that_can_be_followed.feature`

@@ -185,7 +185,7 @@ reads as "nothing to say here", which is the wrong half of what zero means.
 
 ## Acceptance
 
-`tests/acceptance/features/role_map.feature` — both directions, the prose that is not a
+`tests/acceptance/onboarding/role-map/role_map.feature` — both directions, the prose that is not a
 designation, the severity split between a designation and an inferred roster, the
 not-judged population, the finding reaching `config-check`, and the shipped flow's own map
 checked against the roles it composes. Since `beadloom-0mdo.84`, also the tool axis: a
@@ -194,7 +194,7 @@ declared tool with no map artifact reported unreached rather than substituted, t
 population stated on a clean run, and the tool axis reaching the `config-check` output.
 
 `tests/test_the_flow_checks_an_arrangement_that_is_not_ours.py` holds the same questions
-against `tests/adopter_flow.py`'s cursor-only arrangement, which is where the defect was
+against `tests/support/adopter_flow.py`'s cursor-only arrangement, which is where the defect was
 invisible on this repository: Beadloom declares `claude` alone, so every verdict this
 project takes is about the one corpus that was never wrong.
 

@@ -619,9 +619,10 @@ class ExcludedDoc: ...
 
 ## Testing
 
-Test files: `tests/test_docs_audit_cli.py`, `tests/test_doc_scanner.py`,
-`tests/test_doc_scanner_tokenization.py`, `tests/test_docs_audit_coverage.py`,
-`tests/test_audit_ignore.py`
+Test files: `tests/integration/doc_sync/audit/test_docs_audit_cli.py`,
+`tests/integration/doc_sync/test_doc_scanner.py`,
+`tests/integration/doc_sync/test_doc_scanner_tokenization.py`, `tests/test_docs_audit_coverage.py`,
+`tests/integration/doc_sync/audit/test_audit_ignore.py`
 
 Key scenarios:
 

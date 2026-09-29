@@ -47,4 +47,5 @@ Module `src/beadloom/graph/snapshot.py`:
 
 ## Testing
 
-Tests: `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`
+Tests: `tests/integration/graph/snapshot/test_snapshot.py`,
+`tests/integration/infrastructure/console_streams/test_cli_snapshot.py`

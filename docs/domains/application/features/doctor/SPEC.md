@@ -226,7 +226,9 @@ class Check:
 
 ## Testing
 
-Test files: `tests/test_doctor.py`, `tests/test_doctor_drift.py`, `tests/test_doctor_instructions.py`
+Test files: `tests/integration/application/doctor/test_doctor.py`,
+`tests/integration/application/doctor/test_doctor_drift.py`,
+`tests/integration/application/doctor/test_doctor_instructions.py`
 
 Tests should cover the following scenarios:
 

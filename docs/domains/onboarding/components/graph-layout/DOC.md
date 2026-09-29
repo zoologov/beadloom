@@ -115,7 +115,9 @@ state the layout removes.
 
 ## Tests
 
-`tests/test_the_graph_is_one_file_per_node.py`. The unit half runs over synthetic
-directories; four pins run over this repository's own graph and go red the day a node is
-appended to another node's file, a node is declared in a file not named after it, an edge
-is declared under neither endpoint, or the injectivity above stops holding.
+`tests/integration/onboarding/graph_layout/test_the_graph_is_one_file_per_node.py` runs over
+synthetic directories. The four pins over this repository's own graph are self-checks, in
+`tests/self_check/architecture/test_the_graph_is_one_file_per_node.py` (`TestThisProjectsGraph`).
+They go red the day a node is appended to another node's file, a node is declared in a file not
+named after it, an edge is declared under neither endpoint, or the injectivity above stops
+holding.

@@ -69,4 +69,4 @@ Module `src/beadloom/onboarding/branch_protection.py`:
 
 ## Testing
 
-Tests: `tests/test_branch_protection.py`
+Tests: `tests/integration/onboarding/branch_protection/test_branch_protection.py`

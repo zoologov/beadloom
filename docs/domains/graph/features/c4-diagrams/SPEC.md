@@ -235,7 +235,7 @@ beadloom graph --format=c4 --level=component --scope=graph  # graph internals
 
 ## Testing
 
-Test file: `tests/test_c4.py`
+Test file: `tests/integration/graph/c4/test_c4.py`
 
 ### Unit Tests
 

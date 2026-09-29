@@ -536,8 +536,12 @@ when the mirrored folder holds no code.
   path matches a pattern of`, then names each framework group with its patterns in
   parentheses (the group names alone for a record written before the patterns were
   recorded) and the recorded roots or test trees, and ends `or beside a node's code` when
-  that is read. With none recorded it names the roots looked for: `under no root, since none
-  of tests, test, spec, __tests__ exists, or beside a node's code` (`beadloom-2mj3.17`).
+  that is read. With none recorded it says where a file is read and then names the roots
+  looked for: `and it lies beside a node's code, since none of the roots tests, test, spec,
+  __tests__ exists` (`beadloom-2mj3.17`; reworded by `beadloom-2mj3.19`). When tests beside the
+  code are not read it ends `under a root, and none of the roots ... exists`, and with no
+  absent root recorded `no root is recorded` stands in place of `none of the roots ...
+  exists`.
   `ctx` and the debt report state it every time (`beadloom-2mj3.15`).
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   (BDL-074 F1) -- every test file bound to no node, stated by why: `describe_unplaced()`'s
@@ -687,7 +691,9 @@ Perform impact analysis on a node. When `reverse=True`, upstream traversal uses 
 def render_why(result: WhyResult, console: Console) -> None
 ```
 
-Render a WhyResult using Rich panels and trees.
+Render a WhyResult using Rich panels and trees. The ref ids, kinds, summaries and the bracketed
+edge kind are escaped with `rich.markup.escape`, so `--[part_of]--` prints as written rather than
+as `----` (`beadloom-2mj3.19`).
 
 ```python
 def render_why_tree(result: WhyResult) -> str
@@ -720,10 +726,10 @@ Tests are located in:
 
 | Test file | Module under test | Key scenarios |
 |-----------|-------------------|---------------|
-| `tests/test_context_builder.py` | `builder.py` | BFS traversal, chunk collection, bundle assembly, ref_id validation, suggestions |
-| `tests/test_cache.py` | `cache.py` | L1 get/put, mtime invalidation, clear, clear_ref, stats |
-| `tests/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
-| `tests/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
+| `tests/integration/context_oracle/builder/test_context_builder.py` | `builder.py` | BFS traversal, chunk collection, bundle assembly, ref_id validation, suggestions |
+| `tests/integration/context_oracle/cache/test_cache.py` | `cache.py` | L1 get/put, mtime invalidation, clear, clear_ref, stats |
+| `tests/integration/context_oracle/code_indexer/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
+| `tests/integration/context_oracle/route_extractor/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
 | `tests/unit/context_oracle/test_binding/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py` | Mirror, declaration, placements, deepest root, union over descendants |
 | `tests/unit/context_oracle/test_binding/test_the_unplaced_share_is_one_sentence.py` | `test_binding.py` | `describe_unplaced()` |
 | `tests/unit/context_oracle/test_file_reader/test_a_test_file_is_read_for_its_tests_and_imports.py` | `test_file_reader.py` | Test counting and imports |
@@ -741,6 +747,6 @@ Tests are located in:
 | `tests/unit/services/commands/test_the_ctx_markdown_prints_the_bundles_unplaced_sentence.py` | `services/commands` (ctx) | The bundle's `test_unplaced`, and the fallback for a cached bundle |
 | `tests/unit/services/commands/test_the_ctx_markdown_says_which_files_count_as_tests.py` | `services/commands` (ctx) | The bundle's `test_recognition` under `Tests:`, every time |
 | `tests/integration/application/debt_report/test_the_debt_report_reads_the_test_binding.py` | `application/debt_report` | The debt report's untested count |
-| `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
-| `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
-| `tests/test_cli_why.py` | `services/commands/query.py` (why) | CLI why command, --reverse flag, --format tree, --json output |
+| `tests/integration/context_oracle/search/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
+| `tests/integration/context_oracle/why/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
+| `tests/integration/infrastructure/console_streams/test_cli_why.py` | `services/commands/query.py` (why) | CLI why command, --reverse flag, --format tree, --json output |

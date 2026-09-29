@@ -174,10 +174,10 @@ Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it b
 ```
 
 `beadloom reindex` prints the placement counts after the other totals, on both the changed and
-the `nothing_changed` branch:
+the `nothing_changed` branch. On this repository, measured at `067df32a` on 2026-09-29:
 
 ```
-Tests:   615 files (271 bound to a node, 167 unplaced, 74 acceptance step, 103 self-check)
+Tests:   623 files (278 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)
 ```
 
 The bound and unplaced counts are always printed. The bound count covers the `mirror`,
@@ -583,4 +583,9 @@ Tests should cover the following scenarios:
 - **Test index**: Verify `index_test_files()` records test files in `test_files` / `test_imports`, never in `code_symbols` or `file_index`, skips `mutants/`, rebuilds `nodes.extra["tests"]` in the four-key shape, and that a test-only change is picked up by an incremental reindex.
 - **Git activity**: Verify `_store_git_activity()` populates `nodes.extra["activity"]`.
 - **Route extraction**: Verify `_extract_and_store_routes()` populates `nodes.extra["routes"]`.
-- **Route attribution**: `tests/test_a_file_lies_under_a_source_by_one_rule.py` runs one table of source shapes against the route store, `docs polish` and git activity, and withdraws a stale route through a real incremental reindex. `tests/acceptance/features/routes_under_source.feature` runs `init`, `reindex` and `docs polish` end to end.
+- **Route attribution**:
+  `tests/integration/infrastructure/node_source/test_a_file_lies_under_a_source_by_one_rule.py` runs
+  one table of source shapes against the route store, `docs polish` and git activity, and withdraws
+  a stale route through a real incremental reindex.
+  `tests/acceptance/features/routes_under_source.feature` runs `init`, `reindex` and `docs polish`
+  end to end.

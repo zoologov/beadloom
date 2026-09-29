@@ -107,6 +107,15 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `graph_snapshots` | id (PK), label, created_at, nodes_json, edges_json | Point-in-time architecture graph captures for drift detection |
 | `foreign_edges` | src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key | Declared cross-repository edges. Separate from `edges` because a foreign endpoint cannot satisfy the FK to local nodes; `beadloom export` unions them into the federation artifact |
 
+**Test tables (3, BDL-074 C1):** test files are indexed apart from code, so they never become
+code symbols, module coverage or code ownership.
+
+| Table | Key columns | Description |
+|-------|-------------|-------------|
+| `test_files` | path (PK), kind, ref_id, placement, test_count, file_hash | Every test file the recorded layout reads, the node it binds to and how: `placement` is `mirror`, `override` or `beside_code` when bound, and `unowned`, `unplaced` or `other_kind` when not |
+| `test_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id | A test file's imports, in the shape of `code_imports`, read by `test_import_boundary` |
+| `test_overrides` | ref_id, prefix (composite PK) | The `tests:` path prefixes a node declares in its graph YAML |
+
 ### BFS Algorithm
 
 Context Oracle uses BFS with edge prioritization:

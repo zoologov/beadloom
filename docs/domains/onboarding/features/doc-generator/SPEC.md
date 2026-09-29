@@ -143,15 +143,14 @@ by name, with `_`-prefixed names excluded. `_symbols_on_disk` parses them with
   wizard `docs/` trees differed in exactly the two tables, and `beadloom ci` was rc 0
   on both, because no rule reads the table. The order `init` runs its steps in was
   not changed: skeletons still precede the reindex that loads their `docs:` patch.
-- **The population is the index's, with one stated difference.** `extract_symbols`
-  returns nothing for an extension it has no grammar for, before it reads the file,
-  so the same files yield rows. A directory source is walked, which takes the files
-  the index reader `_symbols_for_node` takes by path component. The node's source is
-  read wherever it is, where the index holds only the configured scan paths.
-  `tests/test_the_init_skeleton_carries_its_public_api.py` builds an index with the
-  real reindex and compares the two readers over one tree, and
-  `tests/test_polish_symbols_match_the_source_by_path_component.py` compares them
-  over a tree holding prefix-sharing siblings, for every shape of source.
+- **The population is the index's, with one stated difference.** `extract_symbols` returns nothing
+  for an extension it has no grammar for, before it reads the file, so the same files yield rows. A
+  directory source is walked, which takes the files the index reader `_symbols_for_node` takes by
+  path component. The node's source is read wherever it is, where the index holds only the
+  configured scan paths. `tests/test_the_init_skeleton_carries_its_public_api.py` builds an index
+  with the real reindex and compares the two readers over one tree, and
+  `tests/integration/onboarding/doc_generator/test_polish_symbols_match_the_source_by_path_component.py`
+  compares them over a tree holding prefix-sharing siblings, for every shape of source.
 - **Parsed only for a document that will be written, and each file once.** A node
   whose document already exists is skipped before rendering, and one run memoises
   its parses by path, so a feature nested in a domain costs no second parse.
@@ -204,8 +203,10 @@ Every node document also carries a **Dependencies** section: the `depends_on` an
 
 ## Testing
 
-- `tests/test_doc_generator.py` — unit tests for skeletons, mermaid, polish data, docs: writeback, SQLite edges, text format (37 tests)
-- `tests/test_cli_docs.py` — CLI `docs generate` / `docs polish` (8 tests)
+- `tests/integration/onboarding/doc_generator/test_doc_generator.py` — unit tests for skeletons,
+  mermaid, polish data, docs: writeback, SQLite edges, text format (37 tests)
+- `tests/integration/onboarding/doc_generator/test_cli_docs.py` — CLI `docs generate` / `docs
+  polish` (8 tests)
 - `tests/test_integration_onboarding.py` — end-to-end pipeline with idempotency (13 tests)
 
 ## Parent

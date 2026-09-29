@@ -189,7 +189,7 @@ DEFAULT_DEBOUNCE_MS: int = 500
 
 ## Testing
 
-Test files: `tests/test_watcher.py`
+Test files: `tests/unit/application/watcher/test_watcher.py`
 
 Tests should cover the following scenarios:
 

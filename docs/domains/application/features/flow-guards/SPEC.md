@@ -619,8 +619,8 @@ measured.** `rejection_reason` and `resolve_edit_path` take a `PathFlavour` — 
 stdlib's parser for a platform, the separator spellings that platform declares,
 and whether its name layer rewrites names — defaulting to the one derived from
 `os.sep`. Every rule above is therefore exercised for both platforms on whatever
-machine runs the suite, in `tests/test_windows_dimension.py` and in
-`tests/acceptance/features/guard_path_shape.feature`, and the Windows answers are
+machine runs the suite, in `tests/unit/application/guards/test_windows_dimension.py` and in
+`tests/acceptance/application/flow-guards/guard_path_shape.feature`, and the Windows answers are
 measurements rather than predictions. There is no `tests-windows` leg and there
 will not be one; what the substitution cannot reach is written down under
 *Windows: unverified by decision* below.
@@ -703,20 +703,18 @@ state, and it is written here because the other two would both be lies: this is
 not *verified*, and it is not *known broken* either.
 
 What **is** measured, without a Windows kernel and on every run of the suite
-(`tests/test_windows_dimension.py`): `PureWindowsPath` implements Windows path
-parsing on every platform, and `pathlib.Path` *is* that class on a real Windows
-build. So `os.path.join("src", "app.py")` there is `src\app.py`, which names
-exactly the file a Windows writer would touch. Since `beadloom-0mdo.33` the
-platform is also an **argument** rather than an ambient fact — a `PathFlavour`
-carrying that platform's parser, its declared separator spellings and whether its
-name layer rewrites names — so every rule of the shape gate is exercised for both
-platforms on whatever machine runs the suite: the separator rule in both
-directions, the trailing dot and space, all twenty-two reserved device names, the
-case-insensitivity of that match, and the names that merely start with a device
-name and must **not** be refused. `src/` contains no `sys.platform` and no
-`os.name` branch anywhere, asserted through the module's syntax tree rather than
-its text, which is what keeps the flavour a value the suite can substitute rather
-than a branch only a Windows runner could enter.
+(`tests/unit/application/guards/test_windows_dimension.py`): `PureWindowsPath` implements Windows
+path parsing on every platform, and `pathlib.Path` *is* that class on a real Windows build. So
+`os.path.join("src", "app.py")` there is `src\app.py`, which names exactly the file a Windows writer
+would touch. Since `beadloom-0mdo.33` the platform is also an **argument** rather than an ambient
+fact — a `PathFlavour` carrying that platform's parser, its declared separator spellings and whether
+its name layer rewrites names — so every rule of the shape gate is exercised for both platforms on
+whatever machine runs the suite: the separator rule in both directions, the trailing dot and space,
+all twenty-two reserved device names, the case-insensitivity of that match, and the names that
+merely start with a device name and must **not** be refused. `src/` contains no `sys.platform` and
+no `os.name` branch anywhere, asserted through the module's syntax tree rather than its text, which
+is what keeps the flavour a value the suite can substitute rather than a branch only a Windows
+runner could enter.
 
 **What this replaced, recorded because the defect is more instructive than the
 fix.** Until that bead the gate refused every backslash unconditionally, so on a

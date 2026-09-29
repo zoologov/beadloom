@@ -143,8 +143,9 @@ Module `src/beadloom/application/site.py`:
 
 ## Testing
 
-Tests: `tests/test_site_generator.py`, `tests/test_site_about.py`,
-`tests/test_site_dashboard.py`, `tests/test_site_landscape.py`,
-`tests/test_site_mermaid_guard.py`, `tests/test_site_metrics_history.py`,
-`tests/test_site_nav.py`, `tests/test_site_published_docs.py`,
+Tests: `tests/test_site_generator.py`, `tests/unit/application/test_site_about.py`,
+`tests/test_site_dashboard.py`, `tests/integration/application/test_site_landscape.py`,
+`tests/unit/application/test_site_mermaid_guard.py`,
+`tests/integration/application/test_site_metrics_history.py`,
+`tests/integration/application/test_site_nav.py`, `tests/test_site_published_docs.py`,
 `tests/test_site_coverage_edges.py`

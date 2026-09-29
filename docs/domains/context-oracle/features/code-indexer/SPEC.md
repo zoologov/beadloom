@@ -107,7 +107,7 @@ Module `src/beadloom/context_oracle/code_indexer.py`:
 
 ## Testing
 
-Tests: `tests/test_code_indexer.py`,
-`tests/test_s3_owns_nothing.py::TestDocstringAnnotationsAreRead` — the docstring
-form, including the two non-vacuity guards that keep a documented EXAMPLE from
-being read as a declaration.
+Tests: `tests/integration/context_oracle/code_indexer/test_code_indexer.py`,
+`tests/test_a_declaration_that_owns_nothing_is_reported.py::TestDocstringAnnotationsAreRead` — the
+docstring form, including the two non-vacuity guards that keep a documented EXAMPLE from being read
+as a declaration.

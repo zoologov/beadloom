@@ -321,7 +321,7 @@ Module `src/beadloom/tui/file_watcher.py`:
 TUI tests use Textual's headless pilot framework (`app.run_test()`).
 
 ```bash
-uv run pytest tests/test_tui.py -v
+uv run pytest tests/integration/tui/test_tui.py -v
 ```
 
 Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications.

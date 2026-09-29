@@ -24,8 +24,9 @@ example rather than a claim, and grepping for its twin found the same sentence i
 check reads.
 
 That is the argument for a derivation rather than a checklist, made against the checklist's own
-author. No place is named anywhere in the module, and `tests/test_version_surface.py` parses the
-source with its docstrings stripped and fails if one appears.
+author. No place is named anywhere in the module, and
+`tests/integration/doc_sync/version_surface/test_version_surface.py` parses the source with its
+docstrings stripped and fails if one appears.
 
 ### Why the instruments are named and the places are not
 

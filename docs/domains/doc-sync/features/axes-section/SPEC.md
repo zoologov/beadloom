@@ -177,4 +177,4 @@ caller's question: this domain has no filesystem and no index to ask.
 `tests/test_the_axes_section_is_required_by_the_template.py` — the grammar in both directions,
 the wrapped seed field, the offered-but-undecided cell, the stated absence of a seed, the
 dedupe in `refs:`, and the round trip. The scenarios are
-`tests/acceptance/features/axes_section.feature`.
+`tests/acceptance/doc-sync/axes-section/axes_section.feature`.

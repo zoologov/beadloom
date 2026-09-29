@@ -59,8 +59,12 @@ and `beadloom mutation` name only the roots a project has. A project with none o
 with tests read beside the code, is told which were looked for:
 
 ```
-a test file is read when its path matches a pattern of ... under no root, since none of tests, test, spec, __tests__ exists, or beside a node's code
+a test file is read when its path matches a pattern of ... and it lies beside a node's code, since none of the roots tests, test, spec, __tests__ exists
 ```
+
+When tests beside the code are not read, the clause ends `under a root, and none of the roots
+tests, test, spec, __tests__ exists`. A record that names no absent root says `no root is
+recorded` in place of `none of the roots ... exists` (`beadloom-2mj3.19`).
 
 A pattern matches the END of a file's project-relative path, case-sensitively
 (`test_layout.pattern_matches()`). A pattern without a `/` matches the file name. A pattern
@@ -308,17 +312,18 @@ Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it b
 
 ### The transition
 
-Measured on this repository by `beadloom reindex` on 2026-09-28 (`features/BDL-074` at
-`909a0098`): 620 test files, 275 bound to a node (74 under `tests/unit/` and 201 under
-`tests/integration/`, all by the mirror), 167 `unplaced`, 75 acceptance step and 103
-self-check. The five files over the 615 measured at `293db6b5` are `beadloom-2mj3.15`'s
-new test files, and the default roots `test/`, `spec/` and `__tests__/` changed nothing here,
-because this repository declares `roots: [tests]` and has none of those folders (`620 =
-275/167/75/103`, unchanged after `beadloom-2mj3.17`). None is bound beside the code, because this repository has
-`beside_code: false`. When the binding landed (BDL-074 C1, 2026-09-27) the same count
-read 462 test files, 0 bound, 392 `unplaced` and 70 `other_kind`. The heuristic it
-replaced gave the root node 882 files and bound 532 mutmut copies under `mutants/` to
-nodes.
+Measured on this repository by `beadloom reindex` on 2026-09-28 (`features/BDL-074` at `909a0098`):
+620 test files, 275 bound to a node (74 under `tests/unit/` and 201 under `tests/integration/`, all
+by the mirror), 167 `unplaced`, 75 acceptance step and 103 self-check. The five files over the 615
+measured at `293db6b5` are `beadloom-2mj3.15`'s new test files, and the default roots `test/`,
+`spec/` and `__tests__/` changed nothing here, because this repository declares `roots: [tests]` and
+has none of those folders (`620 = 275/167/75/103`, unchanged after `beadloom-2mj3.17`). At
+`067df32a` (2026-09-29) the count reads 623 test files, 278 bound, 167 `unplaced`, 75 acceptance
+step and 103 self-check: the three bound files over 620 are `beadloom-2mj3.19`'s new test files.
+None is bound beside the code, because this repository has `beside_code: false`. When the binding
+landed (BDL-074 C1, 2026-09-27) the same count read 462 test files, 0 bound, 392 `unplaced` and 70
+`other_kind`. The heuristic it replaced gave the root node 882 files and bound 532 mutmut copies
+under `mutants/` to nodes.
 
 A node with 0 bound tests is distinguishable from a repository whose tests are not
 laid out: `beadloom reindex` prints the placement counts on its `Tests:` line, and
@@ -326,28 +331,24 @@ the `test_files` table records each file's placement.
 
 ### Readers of the binding
 
-- **`ctx`.** The context bundle carries the focus node's `extra["tests"]` under
-  `tests` and, since BDL-074 C2, the project's test files by placement under
-  `test_placements` (`{placement: count}`, read by
-  `infrastructure.repository.count_test_files_by_placement`; `{}` for an index
-  older than the test tables). Since BDL-074 G2 the builder also states the unplaced
-  sentence into the bundle, as `test_unplaced` (a string, or `null` when no file is
-  unplaced), built by `describe_unplaced()` against the layout the index recorded. When
-  it is set, the Markdown output adds one line under `Tests:`. On this repository:
-  `167 of 620 test file(s) are unplaced (not under tests/integration/ or tests/unit/)
-  and bind to no node, so the count above can be short`. The folders are the recorded
-  roots' mirrored kind folders and the test trees present, and `, nor inside a node's
-  source` follows them when tests beside the code are read. Under the default roots the
-  sentence names the unit and integration folders of the roots that exist
-  (`beadloom-2mj3.17`). With no root and no test tree present it reads `(inside no node's
-  source)` when tests beside the code are read, and `(under no root)` when they are not. A
-  cached
-  bundle built before the key existed falls back to the default layout's sentence.
-  Since `beadloom-2mj3.15` the bundle also carries `test_recognition`, the
-  `describe_test_file_recognition()` clause (`null` without a recorded layout), and the
-  Markdown output prints it capitalised under `Tests:` every time, after the unplaced line
-  when there is one. On this repository: `A test file is read when its path matches a
-  pattern of pytest (test_*.py, *_test.py) under the root tests`.
+- **`ctx`.** The context bundle carries the focus node's `extra["tests"]` under `tests` and, since
+  BDL-074 C2, the project's test files by placement under `test_placements` (`{placement: count}`,
+  read by `infrastructure.repository.count_test_files_by_placement`; `{}` for an index older than
+  the test tables). Since BDL-074 G2 the builder also states the unplaced sentence into the bundle,
+  as `test_unplaced` (a string, or `null` when no file is unplaced), built by `describe_unplaced()`
+  against the layout the index recorded. When it is set, the Markdown output adds one line under
+  `Tests:`. On this repository, measured at `067df32a` on 2026-09-29: `167 of 623 test file(s) are
+  unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can
+  be short`. The folders are the recorded roots' mirrored kind folders and the test trees present,
+  and `, nor inside a node's source` follows them when tests beside the code are read. Under the
+  default roots the sentence names the unit and integration folders of the roots that exist
+  (`beadloom-2mj3.17`). With no root and no test tree present it reads `(inside no node's source)`
+  when tests beside the code are read, and `(under no root)` when they are not. A cached bundle
+  built before the key existed falls back to the default layout's sentence. Since `beadloom-2mj3.15`
+  the bundle also carries `test_recognition`, the `describe_test_file_recognition()` clause (`null`
+  without a recorded layout), and the Markdown output prints it capitalised under `Tests:` every
+  time, after the unplaced line when there is one. On this repository: `A test file is read when its
+  path matches a pattern of pytest (test_*.py, *_test.py) under the root tests`.
 - **Debt report.** `_count_untested()` in `application/debt_report/collect.py`
   counts a node as untested when it carries `extra["tests"]` with an empty
   `test_files`. While any test file is unplaced the count is withheld (0), and the
@@ -361,8 +362,9 @@ the `test_files` table records each file's placement.
   (test_*.py, *_test.py) or xctest (*Tests.swift, *Tests/**/*.swift) under ...`, where
   `...` names the roots and test trees that exist, followed by `or beside a node's code`, and
   every `junit` pattern is named where `(...)` stands here. With no root and no test tree it
-  ends `under no root, since none of tests, test, spec, __tests__ exists, or beside a node's
-  code` (`beadloom-2mj3.17`). A record written before the patterns were recorded names the groups alone.
+  ends `and it lies beside a node's code, since none of the roots tests, test, spec, __tests__
+  exists` (`beadloom-2mj3.17`, reworded by `beadloom-2mj3.19`). A record written before the
+  patterns were recorded names the groups alone.
   See the [debt report](../../../application/features/debt-report/SPEC.md).
 - **Lint.** Since BDL-074 C3 the rule engine judges the binding: `test_binding` reports a
   test file bound to no node and a node with no bound test file, and
@@ -473,9 +475,11 @@ Module `src/beadloom/context_oracle/test_binding.py`:
   makes a file a test file this index reads, in one clause: `a test file is read when its
   path matches a pattern of`, each group with its patterns in parentheses (the group names
   alone for a record without patterns), the recorded roots and test trees, and `or beside a
-  node's code` when that is read. With none recorded it says `under no root, since none of
-  <absent roots> exists` (`beadloom-2mj3.17`). `ctx` and the debt report state it every time
-  (`beadloom-2mj3.15`).
+  node's code` when that is read. With none recorded it says `and it lies beside a node's
+  code, since none of the roots <absent roots> exists`, or `under a root, and none of the roots
+  <absent roots> exists` when tests beside the code are not read; with no absent root recorded,
+  `no root is recorded` replaces `none of the roots ... exists` (`beadloom-2mj3.17`, reworded
+  by `beadloom-2mj3.19`). `ctx` and the debt report state it every time (`beadloom-2mj3.15`).
 - `describe_unbound(counts: Mapping[str, int], kinds: Mapping[str, int], layout: RecordedTestLayout | None = None) -> str | None`
   (BDL-074 F1) — every test file bound to no node, stated by why: `describe_unplaced()`'s
   sentence over *layout*, then `W unowned (under a mirrored folder whose code no node owns)` when non-zero,
