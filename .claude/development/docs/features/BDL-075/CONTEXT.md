@@ -15,7 +15,8 @@ ranked on what is open, and an issue log whose Open section holds only what is o
 ## Key Constraints
 
 - **No product code change** beyond the version literal and the PLAN and BRIEF templates
-  (`beadloom-10er`, `beadloom-3nwz`, both added by the owner on 2026-09-29). A defect found on the way is filed, not fixed.
+  (`beadloom-10er`, `beadloom-3nwz`, both added by the owner on 2026-09-29), and the `--sample-of`
+  help text (owner, 2026-09-29: a new flag must not ship with a false description). A defect found on the way is filed, not fixed.
 - **A green publish run is not evidence.** The build reads its version from `__init__.py`, nothing
   checks it against the tag, and the upload uses `skip-existing: true`. The evidence is
   `beadloom --version` on the downloaded wheel.
@@ -81,6 +82,7 @@ ranked on what is open, and an issue log whose Open section holds only what is o
 | 2026-09-29 | Federation deferred until a need for it appears | Owner: higher priorities first. |
 | 2026-09-29 | Issue log: fixed entries move to Closed with evidence, and the structure is repaired; the chronology is historical up to 2026-08-26 | Owner. |
 | 2026-09-29 | PLAN's bead table carries tracker ids and no status | `beadloom-10er` (owner, 2026-09-28): status lives in ACTIVE.md only. |
+| 2026-09-29 | The `--sample-of` help text is corrected in this release | Owner, after F1 found `mutation --help`, its docstring and `cli.md` calling the value the sample size — it is the population the sample is drawn from. |
 | 2026-09-29 | The shipped BRIEF template changes in this release too | Owner, after T1 found the same hand-kept status column in BRIEF: `beadloom-3nwz` joins BDL-075 before R1. |
 | 2026-09-29 | The shipped PLAN template changes in this release | Owner, approving CONTEXT and PLAN: `beadloom-10er` joins BDL-075 as bead T1, so 7.0.0 ships the template with no status column. |
 

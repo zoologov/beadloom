@@ -45,6 +45,7 @@ plan.
 | V1 | `beadloom-adbg` | test: the release harness on the built wheel; the README's steps followed literally | P1 | T1, D1, D2, D3 |
 | R | `beadloom-bz48` | review: authors' accounts withheld, clean launch prompt — first run CHANGES REQUIRED | P1 | V1 |
 | F1 | `beadloom-uk2e.1` | tech-writer: the review's findings in ROADMAP, CHANGELOG and the issue log (added 2026-09-29) | P1 | R |
+| F2 | `beadloom-uk2e.2` | dev: the `--sample-of` help names the population (added 2026-09-29, owner) | P1 | F1 |
 | P | `beadloom-vgst` | publish: merge, tag, release; verify the downloaded wheel; close-out | P1 | R |
 
 ## Bead Details
