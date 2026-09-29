@@ -26,6 +26,7 @@ from beadloom.graph.rules import (
     is_advisory,
     load_rules,
 )
+from beadloom.graph.rules.liveness import inert_rules
 from tests.support.suite_index import SuiteFile, SuiteIndex, SuiteNode, write_rules
 
 if TYPE_CHECKING:
@@ -181,9 +182,7 @@ class TestThePopulationNamesEveryKindItDoesNotJudge:
             "configuration, bound to no node by design: a sanctioned outcome, not a gap"
         ) in population
 
-    def test_acceptance_names_the_scenario_rule_that_judges_its_tags(
-        self, tmp_path: Path
-    ) -> None:
+    def test_acceptance_names_the_scenario_rule_that_judges_its_tags(self, tmp_path: Path) -> None:
         conn = _suite_of_every_kind().build(tmp_path)
         try:
             violations = evaluate_test_binding_rules(
@@ -231,9 +230,7 @@ class TestThePopulationNamesEveryKindItDoesNotJudge:
         assert len(stated) == 1
         assert "judged by `scenarios-in-their-folder`" in stated[0]
 
-    def test_the_kind_is_the_one_the_index_recorded_not_the_folder(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_kind_is_the_one_the_index_recorded_not_the_folder(self, tmp_path: Path) -> None:
         """A file's kind is read from the index, so no folder name is assumed here."""
         index = _suite_of_every_kind(
             SuiteFile(
@@ -248,9 +245,7 @@ class TestThePopulationNamesEveryKindItDoesNotJudge:
         assert "3 acceptance step file(s)" in population
         assert "3 self-check file(s)" in population
 
-    def test_a_kind_the_rule_has_no_statement_for_is_still_named(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_kind_the_rule_has_no_statement_for_is_still_named(self, tmp_path: Path) -> None:
         index = _suite_of_every_kind(
             SuiteFile("tests/smoke/test_boot.py", placement="other_kind", kind="smoke")
         )
@@ -503,3 +498,246 @@ def test_the_rule_survives_being_written_to_the_index() -> None:
     assert payload["files"] == "tests/**"
     assert payload["for"] == {"kind": "feature"}
     assert payload["exempt"] == [{"files": ["tests/test_a.py"], "reason": "r", "until": "u"}]
+
+
+_FILE_REMEDIATION = (
+    "place it where its path mirrors the code it tests, or name it in the "
+    "`tests:` list of the node it belongs to; a file that cannot be placed yet "
+    "is exempted by path, with a reason and an exit condition"
+)
+_NO_TABLE_REMEDIATION = (
+    "reindex so the test files are recorded, or point `files:` / `for:` at "
+    "what the project has — a leg that judges nothing reads exactly like one "
+    "that found nothing wrong"
+)
+
+
+def _node_rule(**kwargs: object) -> TestBindingRule:
+    """A rule with only the node leg, over the `feature` nodes of the fixture."""
+    return _rule(files=None, for_matcher=NodeMatcher(kind="feature"), **kwargs)
+
+
+def _index_without_billing_tests() -> SuiteIndex:
+    index = _index()
+    index.files = [f for f in index.files if f.ref_id != "billing"]
+    return index
+
+
+class TestAFindingCarriesItsRuleAndItsRemedy:
+    """A finding is read on its own, away from the rule that made it."""
+
+    def test_a_file_finding_carries_the_description_of_its_rule(self, tmp_path: Path) -> None:
+        # Act
+        violations = _evaluate(tmp_path, _rule(files="tests/unit/**"))
+
+        # Assert
+        (finding,) = _of_type(violations, TEST_BINDING_RULE_TYPE)
+        assert finding.rule_description == "a test file binds to a node"
+
+    def test_a_file_finding_says_how_to_place_the_file(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule(files="tests/unit/**"))
+
+        (finding,) = _of_type(violations, TEST_BINDING_RULE_TYPE)
+        assert finding.remediation == _FILE_REMEDIATION
+
+    def test_a_node_finding_says_how_to_place_a_test_of_that_node(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _node_rule(), _index_without_billing_tests())
+
+        (finding,) = _of_type(violations, TEST_BINDING_RULE_TYPE)
+        assert finding.remediation == (
+            "place a test of `billing` where its path mirrors the node's code, or name "
+            "the file in the node's `tests:` list; a node that is not tested yet is "
+            "exempted by name, with a reason and an exit condition"
+        )
+
+    def test_the_population_carries_the_description_of_its_rule(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule())
+
+        (population,) = _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+        assert population.rule_description == "a test file binds to a node"
+
+
+class TestAnExemptionIsMatchedTheWayItsLegNamesThings:
+    def test_a_file_entry_is_a_glob_over_the_path(self, tmp_path: Path) -> None:
+        # Arrange
+        rule = _rule(
+            files="tests/unit/**",
+            exempt_files=(
+                ListedExemption(entries=("tests/unit/vault/*",), reason="r", until="u"),
+            ),
+        )
+
+        # Act
+        violations = _evaluate(tmp_path, rule)
+
+        # Assert
+        assert _of_type(violations, TEST_BINDING_RULE_TYPE) == []
+
+    def test_a_node_entry_names_one_node_exactly_and_is_no_glob(self, tmp_path: Path) -> None:
+        rule = _node_rule(
+            exempt_nodes=(ListedExemption(entries=("bill*",), reason="r", until="u"),),
+        )
+
+        violations = _evaluate(tmp_path, rule, _index_without_billing_tests())
+
+        reported = [v.from_ref_id for v in _of_type(violations, TEST_BINDING_RULE_TYPE)]
+        assert reported == ["billing"]
+
+    def test_a_dead_file_entry_carries_the_description_of_its_rule(self, tmp_path: Path) -> None:
+        rule = _rule(
+            exempt_files=(
+                ListedExemption(entries=("tests/test_moved_away.py",), reason="r", until="u"),
+            )
+        )
+
+        violations = _evaluate(tmp_path, rule)
+
+        (dead,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert dead.rule_description == "a test file binds to a node"
+
+    def test_a_dead_node_entry_names_its_rule_and_what_it_excuses(self, tmp_path: Path) -> None:
+        rule = _node_rule(
+            exempt_nodes=(ListedExemption(entries=("vault",), reason="r", until="u"),),
+        )
+
+        violations = _evaluate(tmp_path, rule)
+
+        (dead,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert (dead.rule_name, dead.rule_description) == (
+            "test-binding",
+            "a test file binds to a node",
+        )
+        assert dead.message.startswith(
+            "Rule 'test-binding': the exemption entry `vault` excuses no node — "
+        )
+
+
+class TestThePopulationSentenceCountsEachPart:
+    def test_a_file_leg_with_no_other_kind_ends_at_its_reported_count(
+        self, tmp_path: Path
+    ) -> None:
+        """Five files, three under `tests/unit/`: two bound, one unbound, nothing else."""
+        # Act
+        population = _population(_evaluate(tmp_path, _rule(files="tests/unit/**")))
+
+        # Assert
+        assert population == (
+            "test files: judged 3 of 5 indexed test file(s) matching `tests/unit/**` "
+            "(2 outside the glob): 2 bound to a node, 1 bound to none — "
+            "0 excused by 0 exemption(s), 1 reported"
+        )
+
+    def test_the_bound_count_is_the_judged_files_less_the_unbound(self, tmp_path: Path) -> None:
+        population = _population(_evaluate(tmp_path, _rule()))
+
+        assert "judged 4 of 5" in population
+        assert ": 2 bound to a node, 2 bound to none — " in population
+
+    def test_an_excused_node_is_taken_off_the_reported_count(self, tmp_path: Path) -> None:
+        rule = _node_rule(
+            exempt_nodes=(ListedExemption(entries=("billing",), reason="r", until="u"),),
+        )
+
+        population = _population(_evaluate(tmp_path, rule, _index_without_billing_tests()))
+
+        assert "1 without — 1 excused by an exemption, 0 reported;" in population
+
+    def test_two_legs_are_stated_in_one_line_separated_by_a_semicolon(
+        self, tmp_path: Path
+    ) -> None:
+        rule = _rule(files="tests/unit/**", for_matcher=NodeMatcher(kind="feature"))
+
+        population = _population(_evaluate(tmp_path, rule))
+
+        assert "1 reported; nodes: judged 2 node(s) (kind=feature)" in population
+
+    def test_every_scenario_rule_is_named_separated_by_a_comma(self, tmp_path: Path) -> None:
+        conn = _suite_of_every_kind().build(tmp_path)
+        try:
+            violations = evaluate_test_binding_rules(
+                conn, [_rule()], scenario_rules=("in-their-folder", "tagged-by-node")
+            )
+        finally:
+            conn.close()
+
+        assert "judged by `in-their-folder`, `tagged-by-node`, recognised" in _population(
+            violations
+        )
+
+    def test_no_scenario_rule_is_stated_between_the_tags_and_the_recognition(
+        self, tmp_path: Path
+    ) -> None:
+        population = _population(_evaluate(tmp_path, _rule(), _suite_of_every_kind()))
+
+        assert (
+            "@node: tags, judged by no `scenario_binding` rule of this project, recognised"
+        ) in population
+
+    def test_two_kinds_are_separated_by_a_semicolon(self, tmp_path: Path) -> None:
+        population = _population(_evaluate(tmp_path, _rule(), _suite_of_every_kind()))
+
+        assert "reindex to record it); 3 self-check file(s) — " in population
+
+    def test_a_node_selected_by_its_ref_id_is_judged(self, tmp_path: Path) -> None:
+        """The matcher is asked about each node under that node's own id."""
+        rule = _rule(files=None, for_matcher=NodeMatcher(ref_id="invoicing"))
+
+        population = _population(_evaluate(tmp_path, rule))
+
+        assert "nodes: judged 1 node(s) (ref_id=invoicing): 1 with a bound test file" in (
+            population
+        )
+
+
+class TestARuleThatCannotJudgeSaysWhy:
+    def test_both_dead_legs_are_named_in_one_reason(self, tmp_path: Path) -> None:
+        # Arrange
+        rule = _rule(files="nowhere/**", for_matcher=NodeMatcher(kind="adr"))
+        conn = _index().build(tmp_path)
+
+        # Act
+        try:
+            inert = inert_rules(conn, [rule])
+        finally:
+            conn.close()
+
+        # Assert
+        assert [reason for _rule, reason in inert] == [
+            (
+                "its `files` glob `nowhere/**` matches no indexed test file it judges; "
+                "its `for` matcher (kind=adr) selects no node"
+            )
+        ]
+
+    def test_an_index_without_the_test_table_is_one_finding_saying_reindex(
+        self, tmp_path: Path
+    ) -> None:
+        conn = _index().build(tmp_path)
+        conn.execute("DROP TABLE test_files")
+        try:
+            violations = evaluate_test_binding_rules(conn, [_rule()])
+        finally:
+            conn.close()
+
+        (finding,) = violations
+        assert (finding.rule_type, finding.rule_name, finding.message) == (
+            LIVENESS_RULE_TYPE,
+            "test-binding",
+            "Rule 'test-binding' cannot judge a leg: the index holds no test-file table — "
+            "it was written before test files were indexed, so no binding was judged",
+        )
+
+    def test_the_finding_for_a_missing_table_carries_the_rule_and_the_remedy(
+        self, tmp_path: Path
+    ) -> None:
+        conn = _index().build(tmp_path)
+        conn.execute("DROP TABLE test_files")
+        try:
+            (finding,) = evaluate_test_binding_rules(conn, [_rule()])
+        finally:
+            conn.close()
+
+        assert (finding.rule_description, finding.remediation) == (
+            "a test file binds to a node",
+            _NO_TABLE_REMEDIATION,
+        )

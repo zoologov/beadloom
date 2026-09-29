@@ -11,6 +11,7 @@ folder is trusted, what a file holds is not checked against its kind.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules import (
@@ -91,3 +92,32 @@ class TestTheRecognitionIsStated:
             "recognised by its folder alone (the index records no test layout, so where "
             "that folder was declared is not stated: reindex to record it)"
         ) in population
+
+    def test_a_kind_found_under_two_folders_names_both(self, tmp_path: Path) -> None:
+        # Arrange
+        layout = replace(
+            _LAYOUT,
+            kind_prefixes={
+                **_LAYOUT.kind_prefixes,
+                "acceptance": ("tests/e2e/", "tests/stories/"),
+            },
+        )
+
+        # Act
+        population = _population(tmp_path, layout)
+
+        # Assert
+        assert (
+            "recognised by the folders `tests/e2e/`, `tests/stories/` declared in "
+            ".beadloom/config.yml (`tests.kinds`)"
+        ) in population
+
+    def test_a_kind_no_recorded_folder_names_says_so(self, tmp_path: Path) -> None:
+        layout = replace(
+            _LAYOUT,
+            kind_prefixes={k: v for k, v in _LAYOUT.kind_prefixes.items() if k != "self_check"},
+        )
+
+        population = _population(tmp_path, layout)
+
+        assert population.endswith("not a gap, a kind no folder of the recorded test layout names")

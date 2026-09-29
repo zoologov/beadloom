@@ -285,3 +285,150 @@ def test_the_rule_survives_being_written_to_the_index() -> None:
         "to_glob": "vaultpkg/infrastructure/**",
         "of": {"tag": "layer-domain"},
     }
+
+
+_DESCRIPTION = "a unit test of a domain node does not import infrastructure"
+_MATCHING_FORM = (
+    "`from:` is matched against the repo-relative test file path as indexed (e.g. "
+    "`tests/unit/pkg/test_app.py`); `to:` against the dotted import path with dots "
+    "replaced by slashes (e.g. `pkg/infrastructure/db`); `of:` against the node the "
+    "test file is bound to and that node's `part_of` containers"
+)
+
+
+def _index_with_two_of_each_left_out() -> SuiteIndex:
+    """One judged file, and two files each for every reason a file is not judged."""
+    index = _index()
+    index.files = [
+        *index.files,
+        SuiteFile("tests/unit/infrastructure/test_pool.py", ref_id="store", imports=(INFRA_DB,)),
+        SuiteFile("tests/unit/vault/test_stray.py", placement="unplaced", imports=(INFRA_DB,)),
+    ]
+    return index
+
+
+def _population(violations: list[Violation]) -> str:
+    (population,) = _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+    return population.message
+
+
+class TestWhatIsJudgedAndWhatIsLeftOut:
+    def test_a_file_bound_to_the_selected_node_itself_is_judged(self, tmp_path: Path) -> None:
+        """`of` selects `ledger`; a test bound to `ledger` is inside it, not only its parts."""
+        # Arrange
+        index = _index()
+        index.files.append(
+            SuiteFile("tests/unit/ledger/test_ledger.py", ref_id="ledger", imports=(INFRA_DB,))
+        )
+
+        # Act
+        violations = _evaluate(tmp_path, _rule(), index)
+
+        # Assert
+        paths = sorted(
+            v.file_path or "" for v in _of_type(violations, TEST_IMPORT_BOUNDARY_RULE_TYPE)
+        )
+        assert paths == ["tests/unit/ledger/test_billing.py", "tests/unit/ledger/test_ledger.py"]
+
+    def test_every_file_bound_to_no_node_is_counted(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule(), _index_with_two_of_each_left_out())
+
+        assert ", 2 bound to no node, " in _population(violations)
+
+    def test_every_file_bound_to_a_node_outside_of_is_counted(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule(), _index_with_two_of_each_left_out())
+
+        assert ", 2 bound to a node outside `of`." in _population(violations)
+
+    def test_a_crossing_no_exemption_excuses_is_not_counted_as_excused(
+        self, tmp_path: Path
+    ) -> None:
+        violations = _evaluate(tmp_path, _rule())
+
+        assert "(3 import(s), 0 crossing(s) excused by an exemption)" in _population(violations)
+
+    def test_the_population_carries_the_description_of_its_rule(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule())
+
+        (population,) = _of_type(violations, SUITE_POPULATION_RULE_TYPE)
+        assert population.rule_description == _DESCRIPTION
+
+
+class TestARuleThatCannotFireSaysWhy:
+    def test_a_from_glob_matching_nothing_states_how_many_files_it_missed(
+        self, tmp_path: Path
+    ) -> None:
+        # Act
+        violations = _evaluate(tmp_path, _rule(from_glob="tests/nowhere/**"))
+
+        # Assert
+        (liveness,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert "its `from` glob 'tests/nowhere/**' matches 0 of 4 test file(s) with imports" in (
+            liveness.message
+        )
+
+    def test_an_index_with_no_test_import_says_so(self, tmp_path: Path) -> None:
+        index = SuiteIndex(
+            nodes=[SuiteNode("ledger", kind="domain", tags=("layer-domain",))],
+            files=[SuiteFile("tests/unit/ledger/test_ledger.py", ref_id="ledger")],
+        )
+
+        violations = _evaluate(tmp_path, _rule(), index)
+
+        (liveness,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert liveness.message == (
+            "Rule 'domain-unit-tests-no-infra' cannot fire: the index records no test "
+            "import — no test file was read, or none imports. It is counted as evaluated "
+            "but checks nothing"
+        )
+
+    def test_the_finding_carries_its_rule_and_the_matching_forms(self, tmp_path: Path) -> None:
+        violations = _evaluate(tmp_path, _rule(from_glob="tests/nowhere/**"))
+
+        (liveness,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert (liveness.rule_description, liveness.remediation) == (
+            _DESCRIPTION,
+            _MATCHING_FORM,
+        )
+
+
+class TestAJudgedSuiteThatImportsNoTarget:
+    """The target is imported, but only by a file the rule does not judge."""
+
+    def test_the_boundary_holds_and_an_exemption_excusing_nothing_is_reported(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        index = _index()
+        index.files = [
+            SuiteFile(
+                "tests/unit/ledger/test_billing.py",
+                ref_id="billing",
+                imports=("vaultpkg.ledger.billing",),
+            ),
+            SuiteFile(
+                "tests/unit/infrastructure/test_store.py", ref_id="store", imports=(INFRA_DB,)
+            ),
+        ]
+        rule = _rule(
+            exempt=(
+                ImportExemption(
+                    from_glob="tests/unit/ledger/test_billing.py",
+                    to_glob="vaultpkg/infrastructure/db",
+                    reason="opens an index",
+                    until="moved to integration",
+                ),
+            )
+        )
+
+        # Act
+        violations = _evaluate(tmp_path, rule, index)
+
+        # Assert
+        assert [v.rule_type for v in violations] == [
+            LIVENESS_RULE_TYPE,
+            SUITE_POPULATION_RULE_TYPE,
+        ]
+        assert "from 'tests/unit/ledger/test_billing.py' suppresses nothing" in (
+            violations[0].message
+        )
