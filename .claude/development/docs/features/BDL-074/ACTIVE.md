@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** PAUSED by the owner before the review's fourth run. Next: `beadloom-b9ll` (R, fourth run, clean prompt), then W `beadloom-7u77`, V `beadloom-paze`, PR 3.
-**Goal:** an independent verdict on the whole change and on each finding of the first three runs.
-**Done when:** OK or OK with minors; else another fix wave.
+**Bead:** Wave 18 — `beadloom-2mj3.19` (the debt report escapes Rich markup, review m-4-1), then W `beadloom-7u77`, V `beadloom-paze`, PR 3.
+**Goal:** the last review minor fixed; the docs the change made false corrected and the testing guide written.
+**Done when:** `beadloom-2mj3.19` closed; W and V closed; PR 3 green on the nine checks.
+
+**Wave 17 (2026-09-29): review fourth run OK with minors** (`beadloom-b9ll` closed) — 0 major, 2 minor, 1 nit; every earlier finding resolved or left open on purpose. m-4-1 (Rich drops `[jt]` from the Jest defaults in `status --debt-report`; a `[/x]` pattern crashes it) → `beadloom-2mj3.19`; m-4-2 (the PRD's NG1 sentence omitted `__tests__/`) corrected by the coordinator. Suite on the tree: 13 643 passed, 0 failed. Filed outside the epic: `beadloom-qhxr` (the review release gate keys on the first run's verdict).
 
 **Wave 16 closed (2026-09-28):** `beadloom-2mj3.17` `48853754`, `a7b888a8` — a top-level `__tests__/` is a default root beside `tests`, `test`, `spec` (the coordinator's NG1 question had omitted it; the owner's ruling applied); only existing roots are named; the third review's minors and nits fixed. Docs `beadloom-2mj3.18` `466b9039` (10 stale → 0; the debt-report SPEC says only NG2 and NG4 change the score). Suite on the tree at `48853754`: 11 580 passed, 0 failed; `beadloom ci` rc 0 with the docs.
 
@@ -89,7 +91,7 @@
 | `beadloom-cs2o` | E1 dev | ✓ done | rule-engine pilot, before → after on one selection: tests 765 → 886, line coverage of `graph/rules/` 95.1% → 96.0%, kill rate on a fixed 600-mutant sample (seed 74) 79.3% [75.9, 82.4] → 82.0% [78.7, 84.9], 0 kills lost; 8 unplaced files split by node or moved (test-binding exemptions −8), unit layer for loader/layer reach/node tags, 10 features rewritten with `Rule:`/Outlines over `tests/support/rule_engine_driver.py` + `rule_engine_vocabulary.py`, 7 moved to `graph/rule-engine/` (scenario exemptions −7); weekly survivors: 11 killed, 4 equivalent; open for the owner: an Outline counts once in lint (522) and runs per row (536); `1f7b8a34`, `20104798`. Gate owner wave 8 on the tree: 11 198 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0 |
 | `beadloom-kug7` | E2 dev | ✓ done | test role core states 8 standards (stack-neutral), Python overlay the layout, project layer `.beadloom/flow/roles/test.md`; recomposed, config-check rc 0; B1's lock green on the relocated tree; new lock `self_check/architecture/test_a_test_file_is_named_by_its_behaviour.py`: 45 of 819 names carried an id (0 in acceptance), 22 renamed, 23 exempt with reason and exit; renamed set 302 ids identical; green in a clean room over 36 files (11 036 passed, 0 failed); `55ccf52f` |
 | `beadloom-75pl` | T test | ✓ done | PRD criteria on the tree (a8663b8a): met 10, not met 4, not measurable 2; not met: 3a (101 self-check files neither bound nor exempted), 6 (216 of 227 clear-node files in their node folder), 7 (execution half unchecked, 3 never-executed tags unresolved), 8a (36 marked self-checks + 7 scenarios outside the three outcomes; 66 folder files read the live tree); not measurable: 4a per-change on the runner (locally 394 s, V), 9b third PR; tracer 0 contacts outside self-checks (parent + 395 children); ctx rule-engine 740 tests in 36 files; pilot 886 tests, 96.0%, kill rate from E1 + 60/60 spot check; self-checks 682 / 173.9 s / 26.9%. Gate owner wave 9: 11 198 passed, 0 failed, 14 skipped, 13 xfailed; `beadloom ci` rc 0 |
-| `beadloom-b9ll` | R review | ready | review |
+| `beadloom-b9ll` | R review | ✓ done | review |
 | `beadloom-7u77` | W tech-writer | blocked | docs and the testing guide |
 | `beadloom-paze` | V verify | blocked | the jobs on CI |
 

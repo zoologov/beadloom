@@ -109,8 +109,11 @@ tests → the strength of those tests**.
     unplaced, and the untested count is withheld, so the debt score does not move.
   - *NG4* — a framework is not named from a marker file without a test file (`conftest.py`,
     `jest.config.*`, an empty test folder). A project with no test says so and scores that.
-  - NG1 was **not** accepted as a non-goal: `test/` and `spec/` join `tests/` as default roots, read
-    only when present, so a flat test folder is read (unplaced) without a declaration.
+  - NG1 was **not** accepted as a non-goal: `test/`, `spec/` and `__tests__/` join `tests/` as default
+    roots, read only when present, so a flat test folder is read (unplaced) without a declaration.
+    NG1 named all three places; the coordinator's question to the owner named only `test/` and
+    `spec/`, and `__tests__/` was added under the same ruling in `beadloom-2mj3.17` after the third
+    review found it unread.
 
 ## User Stories
 
