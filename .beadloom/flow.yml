@@ -74,8 +74,8 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-kcwz, beadloom-ujzb.1]
+  - beads: [beadloom-o2ua, beadloom-iehv]
     decision: parallel
-    reason: "BDL-076: A0 step 2 adds site/.vitepress/theme to the scan paths in .beadloom/config.yml and writes the vitepress-site node's document; beadloom-ujzb.1 refreshes the 18 doc pairs J1-J3 made stale (context-oracle README, code-indexer and import-resolver SPECs, graph README, infrastructure README, db DOC). Ownership rule handed to both prompts: the vitepress-site document and .beadloom/* are A0's; the 18 listed docs are the docs bead's; neither edits the other's files."
+    reason: "BDL-076 wave 1. beadloom-o2ua edits Python only: application/architecture_view.py, site.py, site_pages.py (url field), landscape_view.py keys, and its tests. beadloom-iehv edits the theme only (site/.vitepress/theme/** restructured into FSD), adds the site's graph nodes (.beadloom/_graph/*.yml for the FSD slices), the FSD layer rule in .beadloom/_graph/rules.yml, their docs, and site/e2e/. Ownership rule handed to both prompts: A1 does not touch site/ or .beadloom/_graph; A2 does not touch src/. The contract between them is RFC's data-file v2: A2 reads only v1 keys plus schema_version; A3 consumes v2."
     until: "2026-11-15"
 

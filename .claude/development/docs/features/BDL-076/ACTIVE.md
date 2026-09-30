@@ -7,9 +7,12 @@
 
 ## Current Bead
 
-**Bead:** Wave −1 — `beadloom-hjr1` (J1, relative JS/TS imports) ∥ `beadloom-tmxa` (J3, `.vue` parsed); then `beadloom-g9fb` (J2, no false edges; same resolver as J1). Then A0 step 2 (`beadloom-kcwz`).
-**Goal:** beadloom reads JS/TS/Vue honestly, so that the viewer has a truthful graph for a JS/TS adopter and our site can join the graph.
-**Done when:** on non-repository fixtures, `why` sees relative-import dependents, `.vue` symbols appear in `ctx` at their lines, and a mixed repository's edge count equals what its imports name; this repository's Python graph is unchanged.
+**Bead:** Wave 1 — `beadloom-o2ua` (A1, the data file v2) ∥ `beadloom-iehv` (A2, the viewer core in FSD, with the site's nodes per slice and the FSD layer rule).
+**Goal:** the data the card needs, and the core the team works in.
+**Done when:** A1's schema tests pass and `docs site` writes v2; A2's core renders the architecture page with every A2 behaviour, laid out in FSD, and its Playwright cases are written.
+
+**Wave −1 and 0 closed (2026-09-30):** J1 `beadloom-hjr1` `f91f8762` (relative JS/TS imports resolve; 379 edges unchanged); J3 `beadloom-tmxa` `2b00507d` (`.vue` script blocks parsed at their lines; `export const`/`default` as symbols — new kind `variable`, `db` axis row added); J2 `beadloom-g9fb` `09d33310` (a Python import looks only in Python scan paths; the walk-up stops below a scan root; `.vue` imports and literal `import()` extracted); docs `beadloom-ujzb.1` `c797d7d7` (18 stale → 0); A0 step 2 `beadloom-kcwz` `10bb2bfc` (the theme scanned under `vitepress-site`, 80 symbols indexed, 380 edges byte-identical, 0 Python imports into the site; the node's document `docs/services/vitepress-site.md`; Playwright tests under `site/e2e` bind to the node). Gate owner A0 on the combined tree: 11 822 passed, 0 failed; `beadloom ci` rc 0.
+- Still true after A0: `ctx` attaches a symbol only through a `beadloom:` annotation, so the theme's symbols show under no node until A2 annotates the slices; `impact` reads Python only (`beadloom-j1ke`, P2); annotating one file of a node drops the sync pairs of its other files because the backstop reads only `*.py` (`beadloom-oo4m`, P1 — A2 annotates whole slices); the git hooks' global `beadloom` lacks the `languages` extra and empties the theme's symbols (`beadloom-v4ql`, P2). Filed outside: `beadloom-95jv` (first full reindex misses an edge).
 
 **Resumed 2026-09-30:** the owner folded the three fixes into BDL-076 before the viewer work (PRD amendment, RFC axes rows `import-resolver` and `code-indexer`, PLAN J1–J3).
 
@@ -44,9 +47,9 @@
 | `beadloom-g9fb` | J2 dev | ✓ done | no false edges from a foreign scan path; `.vue` imports and `import()` read |
 | `beadloom-tmxa` | J3 dev | ✓ done | `.vue` symbols at their lines; `export const`/`default` read; `.vue` imports and `import()` NOT done (resolver file, see bead) |
 | `beadloom-ujzb.1` | tech-writer | ✓ done | 6 docs refreshed for J1-J3; sync-check 18 stale → 0 |
-| `beadloom-kcwz` | A0 dev | in progress | our site under beadloom; `.vue` measured first |
-| `beadloom-o2ua` | A1 dev | blocked | the data file v2 |
-| `beadloom-iehv` | A2 dev | blocked | the viewer core |
+| `beadloom-kcwz` | A0 dev | ✓ done | our site under beadloom; `.vue` measured first |
+| `beadloom-o2ua` | A1 dev | ready | the data file v2 |
+| `beadloom-iehv` | A2 dev | ready | the viewer core |
 | `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | blocked | node pages; landscape mode |
 | `beadloom-rjp1` | A5 test | blocked | browser tests; `site-e2e` |
