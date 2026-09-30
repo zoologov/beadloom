@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-ujzb.12` (Vue interpolation and raw HTML in project text), then `beadloom-ujzb.13` (adopter defaults, owner), then `beadloom-hmqn` (B3) and `beadloom-ujzb.8` (B4), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-ujzb.13` (adopter defaults, owner), then `beadloom-hmqn` (B3) and `beadloom-ujzb.8` (B4), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**`beadloom-ujzb.12` closed (2026-09-30):** `a5add19d` — measured on VitePress 1.6.4: `{{ … }}` fails the build in prose, inline code, indented blocks, tables and headings (fences are safe), `List<String>` in prose and an unclosed `<details>` fail, `<script>`/`<style>` break or restyle the page. One path for all project text (`project_text.py`): links rebased first, then `v-pre` only where Vue would read the text; only balanced README-style HTML kept, the rest shown as text; raw `href`/`src` follow the link rule. Our portal: 928 of 930 dist files byte-identical, the two data files differ only in timestamp and metrics. 135 tests, red first. Behaviour change for adopters: Vue components written in their docs (e.g. `<Badge>`) now show as text. Images outside `docs/` still go to `blob/main` → B4.
 
 **B2 closed (2026-09-30):** `beadloom-qki6` `df3b0b20` — `/site/` gitignored whole; our `site:` block in config; the workflows already ran `docs site` then build; `docs site --pages-workflow` writes `.github/workflows/beadloom-portal.yml` (pinned beadloom version, Node from `engines.node`, default branch read at run time, a base check against the Pages path; marked, a hand edit kept). Built at `c133e0a5` and at HEAD: 930 files each; 81 differ after normalising, every one from content or B1's intended changes; identity pages, theme and styles identical. 31 tests, red first; Playwright 99 passed under `/beadloom/`. Open for the owner: the scaffold's `engines.node >=20` (Node 20 end of life 2026-04-30); no local warning for the default base `/`; `init` does not gitignore `site/`.
 
@@ -103,8 +105,8 @@
 | `beadloom-hmqn` | B3 test | blocked | adopter fixtures, six stacks |
 | `beadloom-ujzb.8` | B4 dev | ready | self-hosted forge links (owner) |
 | `beadloom-ujzb.11` | fix | ✓ done | a relative link in a summary breaks the build |
-| `beadloom-ujzb.12` | fix | in progress | Vue interpolation and raw HTML in project text |
-| `beadloom-ujzb.13` | dev | blocked | adopter defaults: Node 22, init gitignore, base warning (owner) |
+| `beadloom-ujzb.12` | fix | ✓ done | Vue interpolation and raw HTML in project text |
+| `beadloom-ujzb.13` | dev | in progress | adopter defaults: Node 22, init gitignore, base warning (owner) |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
