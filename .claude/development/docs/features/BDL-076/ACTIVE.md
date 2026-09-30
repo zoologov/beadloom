@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-dfwt` (B1, the scaffold in the wheel), then `beadloom-ujzb.8` (B4, self-hosted forge links; serialised: both write the config schema), then B2, B3, T2, R2, W2, P2. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** Slice 2 — `beadloom-dfwt` (B1, the scaffold in the wheel), then `beadloom-ujzb.8` (B4, self-hosted forge links; serialised: both write the config schema), then B2, B3, T2, R2, W2, P2.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
