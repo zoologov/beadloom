@@ -9,14 +9,17 @@ layer rule are described in [the site's page](../vitepress-site.md).
 
 ## Overview
 
-The layers of the architecture graph, read from the data file rather than named in code. The
-layers are the `layer_rank` values that occur, top to bottom, each named by the nodes that declare
-that layer. A layer's colour is a theme tone chosen by its position in the order, so a project whose
-layers are called differently is coloured the same way.
+The layers of the architecture graph, read from the data file rather than named in code. A
+version 2 file declares the project's layers at its top level, `layers: [{ name, rank, tag,
+token }]`, and those names are what the legend, the Layer filter, the card and the impact
+summary show. A file that declares none, version 1 among them, gives the layers as the
+`layer_rank` values that occur, each named by the `layer` token of a node that declares it. A
+layer's colour is a theme tone chosen by its position in the order, so a project whose layers are
+called differently is coloured the same way. A node in no layer is grey.
 
 ## Public API
 
-- `layersOf(nodes)` returns `[{ rank, name, tone }]`.
+- `layersOf(nodes, declared)` returns `[{ rank, name, tone }]`, top to bottom.
 - `layerOfNode(node, layers)`, `layerToneOf(node, layers)`, `LAYER_TONES`, `UNLAYERED_TONE`.
 - `LayerLegend` (Vue component): prop `layers`.
 

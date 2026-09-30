@@ -15,11 +15,18 @@ passes a drag on it through to the viewport, so dragging never moves a node. "Ar
 deliberate gesture for moving nodes: it makes the leaves grabbable, while a drag inside a box still
 pans.
 
+Fitting and centring leave out the part of the canvas something lies over. In the page the
+viewer's panel covers the canvas's right edge, and a graph fitted to the whole canvas would put
+what the reader asked for under it, so the caller reports that inset. A fit zooms in no closer
+than `FIT_MAX_ZOOM`, so a lone node is framed rather than filling the canvas.
+
 ## Public API
 
-- `NAVIGATION_OPTIONS`, `ZOOM_STEP`, `FIT_PADDING`.
-- `useGraphNavigation(getCy)` returns `arranging`, `applyArrangePolicy()`, `zoomIn()`, `zoomOut()`,
-  `fit()`, `centre(id)` and `toggleArrange()`.
+- `NAVIGATION_OPTIONS`, `ZOOM_STEP`, `FIT_PADDING`, `FIT_MAX_ZOOM`.
+- `useGraphNavigation(getCy, { getInset })` returns `arranging`, `applyArrangePolicy()`,
+  `zoomIn()`, `zoomOut()`, `fit(selector)`, `centre(id)` and `toggleArrange()`. `fit` fits the
+  visible elements the selector names, or everything visible; `centre` centres on a node, or on
+  what is visible when no node is named. `getInset()` returns `{ right }` in pixels.
 - `NavigationControls` (Vue component): prop `arranging`; events `zoom-in`, `zoom-out`, `fit`,
   `centre`, `arrange`.
 

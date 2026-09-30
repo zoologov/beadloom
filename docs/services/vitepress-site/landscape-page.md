@@ -9,13 +9,22 @@ layer rule are described in [the site's page](../vitepress-site.md).
 
 ## Overview
 
-`LandscapeMap`, the component the generated `landscape.md` mounts: the interactive map of the
-contracts between services, drawn with Cytoscape and ELK, with protocol and verdict filters and a
-contract card. `lib/landscapeTheme.js` holds its colours, geometry and layout options.
+`LandscapeMap`, the component the generated `landscape.md` mounts: the map of the contracts
+between services. Since BDL-076 A4 it is a thin page over the graph viewer in its `landscape`
+mode, 560 pixels high. The viewer owns the toolbar, with the protocol, verdict and "Only problems"
+filters in the mode's slot, the neighbourhood and impact modes, navigation, full screen and URL
+state. The page puts `LandscapeCard` in the viewer's panel.
 
-It is not built on the graph viewer yet, and its stylesheet still hands Cytoscape `var(--vp-…)`
-colours for the neutral chrome. Both change when the landscape becomes the viewer's second mode
-(BDL-076 A4).
+`LandscapeCard` is the service card. It shows the service's kind, its health, the number of
+contracts it takes part in and a link to its page, and then every contract it produces or
+consumes. A declared contract shows its protocol, verdict, routing (AMQP exchange, routing key
+and message type, or the GraphQL schema), its surface (the fields each side names, or the AMQP
+body the producer declares) and, under "Breaking", the references the consumer makes that the
+producer does not serve. A surface that was not
+declared reads "undeclared", never an invented field. A contract with no declared protocol is
+shown as a plain dependency with its verdict. Each contract lists its producers and consumers,
+and a click on one selects that service. There is no edge card: a contract is reached from the
+card of either of its ends.
 
 ## Public API
 
@@ -23,4 +32,9 @@ colours for the neutral chrome. Both change when the landscape becomes the viewe
 
 ## Depends on
 
+- `site-graph-viewer` (widgets).
 - `site-landscape-data` (entities).
+
+## Tests
+
+`site/e2e/landscape.spec.js` drives this page.

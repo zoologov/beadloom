@@ -35,7 +35,7 @@ Each feature has its own `SPEC.md`:
 - **watcher.py** — `watch()` monitors project files (graph YAML, docs, source) and auto-triggers reindex on changes using `watchfiles`. Graph changes trigger full reindex; other changes trigger incremental. `WatchEvent` frozen dataclass captures per-event metadata. `DEFAULT_DEBOUNCE_MS` constant (500ms).
 - **site/** — package: the portal, everything `beadloom docs site` writes. It is owned by the
   [Site Generation](features/site-generation/SPEC.md) feature, which describes its modules,
-  the `architecture.data.json` contract and their API. BDL-076 K1 moved the portal's modules
+  the `architecture.data.json` and `landscape.data.json` contracts and their API. BDL-076 K1 moved the portal's modules
   here from this directory (`site.py` became `site/generate.py`, `site_pages.py` became
   `site/node_pages.py`, `site_dashboard/` became `site/dashboard/`, and so on; no shim was
   left), because their symbols counted against this domain: 183 against a limit of 180 after

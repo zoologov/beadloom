@@ -12,11 +12,8 @@ nodes:
     tests:
       - site/e2e/impact.spec.js
       - site/e2e/landscape-impact.spec.js
-    docs_absent: >-
-      Written by the documentation bead that follows A3 (BDL-076 W1,
-      `beadloom-qlii`), beside the other slice pages under
-      docs/services/vitepress-site/; A3 does not edit documents. Replace this
-      reason with the page when it exists.
+    docs:
+      - docs/services/vitepress-site/impact-view.md
 edges:
   - src: site-impact-view
     dst: vitepress-site

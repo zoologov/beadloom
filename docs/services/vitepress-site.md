@@ -38,22 +38,25 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | Layer | Slice (node) | What it is |
 |-------|--------------|------------|
 | `app` | [`site-app`](vitepress-site/app.md) | The theme: registers the pages and widgets the generated Markdown mounts. |
-| `pages` | [`site-architecture-page`](vitepress-site/architecture-page.md) | `ArchitectureMap`: the graph viewer with the node card in its panel. |
-| `pages` | [`site-landscape-page`](vitepress-site/landscape-page.md) | `LandscapeMap`: the map of contracts between services. |
-| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas and panel. |
+| `pages` | [`site-architecture-page`](vitepress-site/architecture-page.md) | `ArchitectureMap`: the viewer in architecture mode with the node card, on the architecture page and every node page. |
+| `pages` | [`site-landscape-page`](vitepress-site/landscape-page.md) | `LandscapeMap`: the viewer in landscape mode with the service card. |
+| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes. |
+| `widgets` | [`site-node-card`](vitepress-site/node-card.md) | The architecture card: everything the data file says about one node. |
 | `widgets` | [`site-dashboard`](vitepress-site/dashboard.md) | The dashboard's panels. |
 | `widgets` | [`site-diagram-viewer`](vitepress-site/diagram-viewer.md) | Pan, zoom and full screen over Mermaid diagrams. |
-| `features` | [`site-filter-graph`](vitepress-site/filter-graph.md) | Which nodes the viewer shows. |
+| `features` | [`site-filter-graph`](vitepress-site/filter-graph.md) | Which nodes the viewer shows: the architecture's filters and the landscape's. |
+| `features` | [`site-select-neighbourhood`](vitepress-site/select-neighbourhood.md) | A selected node's neighbourhood: depth, direction, dim or hide. |
+| `features` | [`site-impact-view`](vitepress-site/impact-view.md) | The impact mode: everything that depends on the selected node, and its summary. |
 | `features` | [`site-navigate-graph`](vitepress-site/navigate-graph.md) | Pan, zoom, fit, centre and Arrange. |
 | `features` | [`site-fullscreen`](vitepress-site/fullscreen.md) | Full screen with a CSS fallback. |
 | `features` | [`site-url-state`](vitepress-site/url-state.md) | A view's state in the query string. |
 | `entities` | [`site-architecture-data`](vitepress-site/architecture-data.md) | `architecture.data.json` and its schema version. |
-| `entities` | [`site-landscape-data`](vitepress-site/landscape-data.md) | `landscape.data.json`. |
+| `entities` | [`site-landscape-data`](vitepress-site/landscape-data.md) | `landscape.data.json`, its contracts' health, and which are verified. |
 | `entities` | [`site-dashboard-data`](vitepress-site/dashboard-data.md) | `dashboard.data.json`. |
-| `entities` | [`site-graph-node`](vitepress-site/graph-node.md) | A node's status, container and card. |
-| `entities` | [`site-graph-edge`](vitepress-site/graph-edge.md) | Edge kinds, their styles and the legend. |
-| `entities` | [`site-layer`](vitepress-site/layer.md) | The layers read from the data, and their colours. |
-| `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, theme tokens, Cytoscape and ECharts. |
+| `entities` | [`site-graph-node`](vitepress-site/graph-node.md) | A node's status, its risks and its container. |
+| `entities` | [`site-graph-edge`](vitepress-site/graph-edge.md) | Edge kinds, their styles, the legend, and which edges a walk follows. |
+| `entities` | [`site-layer`](vitepress-site/layer.md) | The declared layers, and their colours. |
+| `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, ECharts and the copy button. |
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
 re-exports the `app` layer; `site/.vitepress/config.mjs`; `site/package.json`; and `site/scripts/`.
@@ -78,10 +81,16 @@ relative imports between theme files, which resolve to the files they name.
 
 ## Browser tests
 
-The Playwright tests live under `site/e2e/` and bind to this node through its `tests:` list.
-`.beadloom/config.yml` declares `site/e2e` as a test root and names the `playwright` pattern group.
-They drive the built portal: `site/e2e/support/serve.mjs` runs `vitepress build` and then
+The Playwright tests live under `site/e2e/`. `.beadloom/config.yml` declares `site/e2e` as a test
+root and names the `playwright` pattern group. This node declares the whole directory, and each
+spec is also declared in the `tests:` list of the one slice it drives, which is where it binds:
+a test file binds to one node, and a node does not inherit its ancestors' tests. The eighteen
+specs bind to sixteen slices. No spec drives `site-app`, `site-dashboard`, `site-dashboard-data`
+or `site-landscape-data`, so those four report no bound tests.
+
+The tests drive the built portal: `site/e2e/support/serve.mjs` runs `vitepress build` and then
 `vitepress preview`, after `beadloom docs site --out site` has written the content. Run them from
 `site/` with `npm run test:e2e`, under the Node.js version the workflows pin: Playwright does not
-run on the older releases the site build still accepts. The tests read the viewer's
-state through its test handle, `window.__beadloomViewer`, which exists only under automation.
+run on the older releases the site build still accepts. The advisory `site-e2e` CI job runs them
+after `site-build`; it is not a required check. The tests read the viewer's state through its
+test handle, `window.__beadloomViewer`, which exists only under automation.
