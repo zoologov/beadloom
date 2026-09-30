@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-srrn` (P1: the owner's look in a browser, then PR 1). Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** Slice 2 — `beadloom-dfwt` (B1, the scaffold in the wheel), then `beadloom-ujzb.8` (B4, self-hosted forge links; serialised: both write the config schema), then B2, B3, T2, R2, W2, P2. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** the owner has looked at the viewer and said so; PR 1 is open and green; merged on the owner's word.
+**Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**Slice 1 shipped (2026-09-30):** the owner looked in a browser — "Мне все нравится! Можно сливать"; visuals and extra features after the team's feedback. PR #90 green on every check (the advisory `site-e2e` passed on its first GitHub run), squash-merged as `c133e0a5`, merged back tree-identical (`92f0690d`). Filed after the look: `beadloom-rcnz` (P2 spike: ELK routes around blocks, line jumps, JointJS against Cytoscape).
 
 **W1 closed (2026-09-30):** `beadloom-qlii` `35343379` — 24 files: the site-generation SPEC as at HEAD, the slice pages, three new pages (neighbourhood, impact view, node card), the user's guide section "The architecture viewer"; stale 69 → 0 (615 pairs), surface re-recorded 590 → 615; pytest 12 107 passed, 0 failed; `beadloom ci` rc 0. Left: 10 surface-drift warnings (the README pair, architecture, getting-started, five guides, cli) — warnings, not stale pairs.
 
@@ -56,7 +58,7 @@
 - [x] Docs folder, the Explore axes and the facts (`axes.md`, 2026-09-30)
 - [x] PRD (with the impact mode), RFC, CONTEXT and PLAN approved (2026-09-30); A0 added by the owner
 - [x] Beads created: epic `beadloom-ujzb` + 17 from one plan
-- [ ] Slice 1 — the viewer for the team (PR 1)
+- [x] Slice 1 — the viewer for the team (PR #90, `c133e0a5`, 2026-09-30)
 - [ ] Slice 2 — the portal for adopters (PR 2)
 
 ## Results
@@ -89,11 +91,11 @@
 | `beadloom-ujzb.9` | review | ✓ done | re-review of M1, M2 |
 | `beadloom-ujzb.10` | fix | ✓ done | the re-review's residue |
 | `beadloom-qlii` | W1 tech-writer | ✓ done | site SPEC, guide, data contract |
-| `beadloom-srrn` | P1 PR 1 | in progress | owner's look; PR 1 |
-| `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |
+| `beadloom-srrn` | P1 PR 1 | ✓ done | owner's look; PR 1 |
+| `beadloom-dfwt` | B1 dev | in progress | scaffold in the wheel |
 | `beadloom-qki6` | B2 dev | blocked | our site through the same path |
 | `beadloom-hmqn` | B3 test | blocked | adopter fixtures, six stacks |
-| `beadloom-ujzb.8` | B4 dev | blocked | self-hosted forge links (owner) |
+| `beadloom-ujzb.8` | B4 dev | ready | self-hosted forge links (owner) |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
