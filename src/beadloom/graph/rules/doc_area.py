@@ -51,6 +51,24 @@ How the two sides of a pair are reduced to one comparable segment:
   finding carries ends ``"; N sit outside the source root"``. Under the old
   unanimity rule either one held a veto over the entire derivation; now each
   holds a count.
+
+  **A second source tree large enough to hold a convention is read as a tree**
+  (BDL-076 K3, ``beadloom-5o48``). A frontend of two or more nodes beside a
+  backend is a supported second way down, so the descent forks at the very top
+  and the root comes out empty. Read as it stands, the areas are then the tree
+  names, no document names a tree, and the rule checked none of the pairs — 126
+  of 126 on this repository once its site became 17 slice nodes. A fork at the
+  top is ambiguous: a repository of top-level packages has its AREAS begin there,
+  a backend beside a frontend has its TREES begin there, and the sources alone
+  cannot tell which. So :func:`_readings` derives both — one root for the whole
+  graph, and one root per supported top-level segment — and
+  :func:`derive_convention` keeps the reading under which more pairs fall under a
+  dominant mapping, which is the reading the documents corroborate. A tie keeps
+  the single reading, and a graph whose root is not empty never reaches the
+  second one, so a project with one source tree is read exactly as before. In
+  the per-tree reading each area is qualified by its tree (two trees' ``shared``
+  stay two areas), and :class:`SourceTree` gives the population line one clause
+  per tree, because a total over two trees can hide one of them checking nothing.
 * **The docs area** is the doc-path segment at the *area depth*, and the area
   depth is itself derived. It is NOT the segment below the common prefix of the
   doc paths, and the reason is measured: on this repository documents sit at
@@ -66,7 +84,10 @@ How the two sides of a pair are reduced to one comparable segment:
   rule see a document filed under a directory that names no source area at all,
   the commonest shape of the drift it exists to catch. A doc path too short to
   have a segment at that depth yields no comparison and is COUNTED as such (see
-  :attr:`Convention.unnamed`), never treated as agreement.
+  :attr:`Convention.unnamed`), never treated as agreement. Read per tree, each
+  tree votes with its own areas; a tree whose documents name none of them is
+  read at the depth the whole docs tree votes for, because one docs tree serves
+  every source tree.
 
 A mapping ``source area -> docs area`` is **dominant** when it covers at least
 ``threshold`` of the pairs observed for that source area *and* rests on at least
@@ -104,6 +125,9 @@ if TYPE_CHECKING:
 
 #: ``rule_type`` of every non-liveness finding this module produces.
 DOC_AREA_RULE_TYPE = "doc_area_coherence"
+
+#: One node/doc pair as the index holds it: ``(ref_id, source, doc_path)``.
+Pair = tuple[str, str, str]
 
 #: What to do about a node whose doc contradicts the graph's own convention.
 DOC_AREA_HINT = (
@@ -169,7 +193,7 @@ def _source_root(
     stopping on it would be the same veto in a different costume.
 
     A source that falls outside the returned root is never silently discarded:
-    :func:`_placements` counts it, and :meth:`Convention.population` states it.
+    :func:`_tree` counts it, and :meth:`Convention.population` states it.
     """
     root: list[str] = []
     cluster = [segments for segments in sources if segments]
@@ -198,6 +222,22 @@ class Placement:
     doc_path: str
     source_area: str
     docs_area: str
+    #: The source tree the pair was read in, by its root; empty when the graph
+    #: was read as one tree.
+    tree: str = ""
+
+
+@dataclass(frozen=True)
+class SourceTree:
+    """One top-level source tree's share of the pairs, for the population line.
+
+    Only the pairs it was handed are stored; what compared, what fell under a
+    dominant mapping and what agreed are read off the convention's placements, so
+    the per-tree clause and the totals cannot disagree.
+    """
+
+    root: str
+    examined: int
 
 
 @dataclass(frozen=True)
@@ -234,6 +274,9 @@ class Convention:
     #: otherwise tell a graph with no outliers from one whose outliers vanished
     #: (BDL-062 `.9`).
     outside_root: int = 0
+    #: The source trees the graph was read as, when it was read as more than one.
+    #: Empty for a graph with one source tree, whose population reads as it did.
+    trees: tuple[SourceTree, ...] = ()
 
     @property
     def sampled(self) -> int:
@@ -271,7 +314,29 @@ class Convention:
             f"(majority {self.threshold:.2f} over at least {self.min_support} "
             f"observations) and {agreeing} of those agree; "
             f"{self.outside_root} sit outside the source root"
-        )
+        ) + self._per_tree()
+
+    def _per_tree(self) -> str:
+        """The population of each source tree, or nothing for a single-tree graph.
+
+        A total over two trees can hide one of them checking nothing — which is
+        the shape this rule had on this repository once its site became a tree —
+        so each tree states its own share beside the total.
+        """
+        if not self.trees:
+            return ""
+        shares = []
+        for tree in self.trees:
+            compared = [p for p in self.placements if p.tree == tree.root]
+            checked = [p for p in compared if p.source_area in self.dominant]
+            agreeing = [
+                p for p in checked if self.dominant[p.source_area].docs_area == p.docs_area
+            ]
+            shares.append(
+                f"`{tree.root}`: {len(compared)} of {tree.examined} pairs compare, "
+                f"{len(checked)} under a dominant mapping, {len(agreeing)} agree"
+            )
+        return "; per source tree, " + "; ".join(shares)
 
     def unverifiable_reason(self) -> str:
         """Why nothing could be checked, stated in the terms that would change it."""
@@ -282,22 +347,21 @@ class Convention:
                 f"the source root, {self.outside_root} sit outside it, and "
                 f"{self.unnamed} have a doc path with no segment "
                 f"at the depth this project names areas"
-            )
+            ) + self._per_tree()
         areas = len({p.source_area for p in self.placements})
         return (
             f"no source area reaches a {self.threshold:.2f} majority over at least "
             f"{self.min_support} observations ({self.sampled} pairs across "
             f"{areas} source areas)"
-        )
+        ) + self._per_tree()
 
 
-def _area_depth(doc_segments: list[tuple[str, ...]], vocabulary: set[str]) -> int | None:
-    """The depth at which this project's doc paths name an area, or ``None``.
+def _area_votes(doc_segments: Sequence[tuple[str, ...]], vocabulary: set[str]) -> Counter[int]:
+    """Where in each doc path a source area is named, tallied by depth.
 
     The first of the two passes described in the module docstring. Each doc path
-    is asked where in it a source area is named; the depth that wins the vote is
-    the one the second pass reads for every path. Ties break to the shallower
-    depth, which is the one a project that names an area twice means.
+    is asked where in it a source area is named; :func:`_area_depth` turns the
+    tally into the one depth the second pass reads for every path.
     """
     depths: Counter[int] = Counter()
     for segments in doc_segments:
@@ -307,21 +371,22 @@ def _area_depth(doc_segments: list[tuple[str, ...]], vocabulary: set[str]) -> in
         )
         if match is not None:
             depths[match] += 1
-    if not depths:
-        return None
-    return min(depths, key=lambda index: (-depths[index], index))
+    return depths
 
 
-def _placements(
-    conn: sqlite3.Connection, *, min_support: int
-) -> tuple[list[Placement], int, int, int]:
-    """Every comparable node/doc pair in the index, plus what could not compare.
+def _area_depth(votes: Counter[int]) -> int | None:
+    """The depth that won the vote, or ``None`` when no doc path named an area.
 
-    Returns the comparable placements and the three populations that are not
-    comparable and must not be silently dropped: pairs whose source sits
-    ``outside_root``, pairs that are ``rootless``, and pairs whose doc path is
-    ``unnamed`` at the area depth.
+    Ties break to the shallower depth, which is the one a project that names an
+    area twice means.
     """
+    if not votes:
+        return None
+    return min(votes, key=lambda index: (-votes[index], index))
+
+
+def _pairs(conn: sqlite3.Connection) -> list[Pair]:
+    """Every node/doc pair the index holds, as ``(ref_id, source, doc_path)``."""
     rows = conn.execute(
         "SELECT n.ref_id, n.source, d.path FROM nodes n "
         "JOIN docs d ON d.ref_id = n.ref_id "
@@ -329,68 +394,173 @@ def _placements(
         "AND d.path IS NOT NULL AND d.path != '' "
         "ORDER BY n.ref_id, d.path"
     ).fetchall()
-    pairs = [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
+    return [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
 
-    sources = {source: _directory_segments(source) for _, source, _ in pairs}
-    root = _source_root(sorted(sources.values()), min_support=min_support)
-    source_depth = len(root)
 
-    rooted: list[tuple[str, str, str]] = []
+@dataclass(frozen=True)
+class _Tree:
+    """One set of pairs, split against the source root derived from them alone."""
+
+    #: The tree as the population line names it; empty in the single reading.
+    label: str
+    root: tuple[str, ...]
+    #: Pairs whose source has a segment below the root, so an area to compare.
+    rooted: tuple[Pair, ...]
+    rootless: int
+    outside_root: int
+
+    def area_of(self, source_segments: tuple[str, ...]) -> str:
+        """The area a rooted source belongs to, spelled the way doc paths compare."""
+        return _normalise(source_segments[len(self.root)])
+
+    def key_of(self, source_segments: tuple[str, ...]) -> str:
+        """The area qualified by its tree, so two trees' ``shared`` stay two areas."""
+        area = self.area_of(source_segments)
+        return f"{self.label}/{area}" if self.label else area
+
+
+def _tree(
+    pairs: Sequence[Pair],
+    sources: dict[str, tuple[str, ...]],
+    *,
+    min_support: int,
+    named: bool,
+) -> _Tree:
+    """Derive the source root of *pairs* and sort every pair by where its source sits.
+
+    The root is derived over the DISTINCT sources, as it always was, so a node
+    documented twice does not count twice towards a way down. A *named* tree is
+    labelled by its root; the single reading is not named, so nothing it prints
+    changes.
+    """
+    distinct = dict.fromkeys(source for _, source, _ in pairs)
+    root = _source_root(sorted(sources[source] for source in distinct), min_support=min_support)
+    depth = len(root)
+    rooted: list[Pair] = []
     outside_root = 0
     rootless = 0
-    for ref_id, source, doc_path in pairs:
-        segments = sources[source]
-        if segments[:source_depth] != root:
+    for pair in pairs:
+        segments = sources[pair[1]]
+        if segments[:depth] != root:
             outside_root += 1
-        elif len(segments) > source_depth:
-            rooted.append((ref_id, source, doc_path))
+        elif len(segments) > depth:
+            rooted.append(pair)
         else:
             rootless += 1
+    label = "/".join(root) if named else ""
+    return _Tree(label, root, tuple(rooted), rootless, outside_root)
 
-    # Built from the ROOTED sources alone. A source outside the root contributes
-    # no area, and letting it into the vocabulary is how a single `site/` used to
-    # decide the area depth for every doc path in the graph.
-    vocabulary = {_normalise(sources[source][source_depth]) for _, source, _ in rooted}
 
-    docs = {doc_path: _directory_segments(doc_path) for _, _, doc_path in rooted}
-    depth = _area_depth([docs[doc_path] for _, _, doc_path in rooted], vocabulary)
-    if depth is None:
-        # No doc path names any source area, so there is no depth at which this
-        # project writes an area down. Nothing compares — which is a fact the
-        # caller reports, not one it rounds down to "everything is fine".
-        return [], rootless, len(rooted), outside_root
+@dataclass(frozen=True)
+class _Reading:
+    """One way of cutting the sources into areas, and every pair accounted for."""
 
+    placements: tuple[Placement, ...]
+    rootless: int
+    unnamed: int
+    outside_root: int
+    trees: tuple[SourceTree, ...] = ()
+
+
+def _read(
+    trees: Sequence[_Tree],
+    sources: dict[str, tuple[str, ...]],
+    docs: dict[str, tuple[str, ...]],
+    *,
+    outside_root: int,
+) -> _Reading:
+    """Place every rooted pair of *trees*, each tree read at its own area depth.
+
+    A tree whose documents name none of its areas is read at the depth the
+    project's documents as a whole name areas at: one docs tree serves every
+    source tree, so the depth the other trees' documents establish is the
+    project's own convention for it. This repository's site is that case — its
+    slices are all documented in one directory named after no slice.
+    """
+    votes = [
+        _area_votes(
+            [docs[doc] for _, _, doc in tree.rooted],
+            {tree.area_of(sources[source]) for _, source, _ in tree.rooted},
+        )
+        for tree in trees
+    ]
+    pooled = _area_depth(sum(votes, Counter()))
     placements: list[Placement] = []
     unnamed = 0
-    for ref_id, source, doc_path in rooted:
-        segments = docs[doc_path]
-        if len(segments) <= depth:
-            unnamed += 1
-            continue
-        placements.append(
+    shares: list[SourceTree] = []
+    for tree, tree_votes in zip(trees, votes, strict=True):
+        own = _area_depth(tree_votes)
+        depth = own if own is not None else pooled
+        placed = [
             Placement(
                 ref_id=ref_id,
                 source=source,
                 doc_path=doc_path,
-                source_area=_normalise(sources[source][source_depth]),
-                docs_area=_normalise(segments[depth]),
+                source_area=tree.key_of(sources[source]),
+                docs_area=_normalise(docs[doc_path][depth]),
+                tree=tree.label,
             )
-        )
-    return placements, rootless, unnamed, outside_root
+            for ref_id, source, doc_path in tree.rooted
+            if depth is not None and len(docs[doc_path]) > depth
+        ]
+        # A doc path too short to have a segment at the depth, or a tree read at
+        # no depth at all, compares nothing — counted, never taken for agreement.
+        unnamed += len(tree.rooted) - len(placed)
+        placements.extend(placed)
+        examined = len(tree.rooted) + tree.rootless + tree.outside_root
+        shares.append(SourceTree(root=tree.label, examined=examined))
+    return _Reading(
+        placements=tuple(placements),
+        rootless=sum(tree.rootless for tree in trees),
+        unnamed=unnamed,
+        outside_root=outside_root + sum(tree.outside_root for tree in trees),
+        # The single reading's one tree is unnamed and states no per-tree clause.
+        trees=tuple(share for share in shares if share.root),
+    )
 
 
-def derive_convention(
-    conn: sqlite3.Connection, *, threshold: float, min_support: int
-) -> Convention:
-    """Read the graph's own source-to-docs convention out of the index.
+def _readings(pairs: Sequence[Pair], *, min_support: int) -> list[_Reading]:
+    """The one reading every graph gets, and the per-tree reading where it applies.
 
-    Pure derivation: nothing here knows a directory name, and the same call on a
-    feature-sliced graph learns that graph's areas instead.
+    The per-tree reading exists only when the descent forks at the very top —
+    two or more top-level segments each carrying ``min_support`` sources. That
+    fork is ambiguous: a repository of top-level packages has its AREAS begin
+    there, and a backend beside a frontend has its SOURCE TREES begin there. The
+    sources cannot tell the two apart, so both readings are derived and
+    :func:`derive_convention` lets the documents decide. A graph whose root is
+    not empty never reaches this second reading, and is read exactly as before.
     """
-    placements, rootless, unnamed, outside_root = _placements(conn, min_support=min_support)
+    sources = {source: _directory_segments(source) for _, source, _ in pairs}
+    docs = {doc: _directory_segments(doc) for _, _, doc in pairs}
+    single = _tree(pairs, sources, min_support=min_support, named=False)
+    readings = [_read([single], sources, docs, outside_root=0)]
+    if single.root:
+        return readings
 
+    by_top: dict[str, list[Pair]] = {}
+    for pair in pairs:
+        segments = sources[pair[1]]
+        by_top.setdefault(segments[0] if segments else "", []).append(pair)
+    supported = sorted(
+        top
+        for top, members in by_top.items()
+        if top and len({source for _, source, _ in members}) >= min_support
+    )
+    if len(supported) < 2:
+        return readings
+
+    trees = [
+        _tree(by_top[top], sources, min_support=min_support, named=True) for top in supported
+    ]
+    minority = sum(len(members) for top, members in by_top.items() if top not in supported)
+    readings.append(_read(trees, sources, docs, outside_root=minority))
+    return readings
+
+
+def _convention(reading: _Reading, *, threshold: float, min_support: int) -> Convention:
+    """The dominant mappings of one reading, and the reading's counts beside them."""
     observed: dict[str, Counter[str]] = {}
-    for placement in placements:
+    for placement in reading.placements:
         observed.setdefault(placement.source_area, Counter())[placement.docs_area] += 1
 
     dominant: dict[str, DominantMapping] = {}
@@ -404,14 +574,36 @@ def derive_convention(
         )
 
     return Convention(
-        placements=tuple(placements),
+        placements=reading.placements,
         dominant=dominant,
         threshold=threshold,
         min_support=min_support,
-        rootless=rootless,
-        unnamed=unnamed,
-        outside_root=outside_root,
+        rootless=reading.rootless,
+        unnamed=reading.unnamed,
+        outside_root=reading.outside_root,
+        trees=reading.trees,
     )
+
+
+def derive_convention(
+    conn: sqlite3.Connection, *, threshold: float, min_support: int
+) -> Convention:
+    """Read the graph's own source-to-docs convention out of the index.
+
+    Pure derivation: nothing here knows a directory name, and the same call on a
+    feature-sliced graph learns that graph's areas instead.
+
+    Where :func:`_readings` offers two readings, the one under which more pairs
+    fall under a dominant mapping is kept — the one the documents corroborate —
+    and then the one under which more pairs compare. A tie keeps the single
+    reading, which is how the rule read every graph before source trees existed.
+    """
+    conventions = [
+        _convention(reading, threshold=threshold, min_support=min_support)
+        for reading in _readings(_pairs(conn), min_support=min_support)
+    ]
+    # `max` returns the FIRST of equal candidates, and the single reading is first.
+    return max(conventions, key=lambda convention: (len(convention.checked), convention.sampled))
 
 
 def doc_area_inert_reason(conn: sqlite3.Connection, rule: DocAreaCoherenceRule) -> str | None:

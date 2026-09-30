@@ -41,6 +41,9 @@ htmlcov/
 site/.vitepress/dist/
 site/.vitepress/cache/
 site/node_modules/
+# BDL-076 A2: Playwright's run output (the browser tests under site/e2e).
+site/test-results/
+site/playwright-report/
 
 # BDL-056: the generated VitePress content tree is a build artifact, regenerated
 # by `beadloom docs site` in both the site-build CI job and deploy-site.yml, so it

@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.landscape_view — the interactive G2 landscape.
+"""Tests for beadloom.application.site.landscape_view — the interactive G2 landscape.
 
 The interactive Cytoscape+ELK landscape is fed a renderer-agnostic data
 artifact (``landscape.data.json``) built from the SAME contract reconciliation
@@ -14,12 +14,12 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING
 
-from beadloom.application.landscape_view import (
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.landscape_view import (
     build_landscape_view_data,
     render_landscape_view_md,
     serialize_landscape_view,
 )
-from beadloom.application.site import generate_site
 from beadloom.infrastructure.db import create_schema
 
 if TYPE_CHECKING:

@@ -28,7 +28,12 @@ from beadloom.infrastructure.doc_roots import (
     resolve_doc_spaces,
     resolve_docs_dir,
 )
-from beadloom.infrastructure.repository import covering_prefix, get_owned_code_files
+from beadloom.infrastructure.repository import (
+    covering_prefix,
+    get_node_sources,
+    get_owned_code_files,
+    most_specific_owner,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -95,21 +100,59 @@ def _annotated_files_by_ref(conn: sqlite3.Connection) -> dict[str, list[tuple[st
     return by_ref
 
 
+# Excluded filenames — boilerplate, not doc-worthy. Read by the coverage
+# backstop, and by the pairing of a node's unannotated files, so a document is
+# never newly held to a file the backstop says it need not describe.
+_COVERAGE_EXCLUDE = frozenset({"__init__.py", "conftest.py", "__main__.py"})
+
+
+def _code_files_of(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    annotated_here: list[tuple[str, str]],
+    annotated_anywhere: Collection[str],
+) -> list[tuple[str, str]]:
+    """The ``(path, hash)`` files a node's document is held to.
+
+    An annotation claims a file for the node it names. A file that carries no
+    annotation belongs to the node whose ``source`` owns it, whatever its
+    siblings carry: before ``beadloom-oo4m`` the annotated files REPLACED the
+    owned ones, so one ``// beadloom:component=`` line in one ``.vue`` file took
+    the site theme's node from 17 pairs to 1 and nothing said so. A node that
+    claims nothing by annotation keeps every file it owns, annotated elsewhere
+    or not (the #146 fallback, unchanged). Boilerplate (``_COVERAGE_EXCLUDE``)
+    joins only through that fallback, as before.
+    """
+    owned = get_owned_code_files(conn, ref_id)
+    if not annotated_here:
+        return owned
+    held = {path for path, _hash in annotated_here}
+    unclaimed = [
+        (path, file_hash)
+        for path, file_hash in owned
+        if path not in held
+        and path not in annotated_anywhere
+        and Path(path).name not in _COVERAGE_EXCLUDE
+    ]
+    return [*annotated_here, *unclaimed]
+
+
 # beadloom:domain=doc-sync
 def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
     """Build sync pairs for every node that has a linked doc AND indexed code.
 
-    A node's code files are found first through symbol annotations
-    (``# beadloom:<kind>=<ref>``) and, when those yield nothing, through the
-    files the node's declared ``source`` OWNS. The fallback is the fix for
-    BDL-UX #146: pairing keyed on annotations alone meant a node whose
-    annotation sat somewhere tree-sitter does not read it as a comment — or
-    which simply declared ``source:`` without annotating — contributed no pairs
-    at all, and a freshness gate with no pairs reports "clean" for files it
-    never opened.
+    A node's code files are the ones whose symbols carry its annotation
+    (``# beadloom:<kind>=<ref>``) together with the files its declared
+    ``source`` OWNS that carry no annotation at all (:func:`_code_files_of`).
+    Pairing through ``source`` is the fix for BDL-UX #146: pairing keyed on
+    annotations alone meant a node whose annotation sat somewhere tree-sitter
+    does not read it as a comment — or which simply declared ``source:``
+    without annotating — contributed no pairs at all, and a freshness gate with
+    no pairs reports "clean" for files it never opened.
 
     Nodes that still yield no pair are not silently dropped: see
-    :func:`find_unchecked_doc_nodes`, which names them.
+    :func:`find_unchecked_doc_nodes`, which names them. A file that no pair
+    holds is named by :func:`check_source_coverage`.
     """
     doc_rows = conn.execute(
         "SELECT ref_id, path, hash FROM docs WHERE ref_id IS NOT NULL"
@@ -118,11 +161,12 @@ def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
         return []
 
     annotated = _annotated_files_by_ref(conn)
+    annotated_anywhere = {path for files in annotated.values() for path, _hash in files}
     pairs: list[SyncPair] = []
 
     for doc_row in doc_rows:
         ref_id = str(doc_row["ref_id"])
-        code_files = annotated.get(ref_id) or get_owned_code_files(conn, ref_id)
+        code_files = _code_files_of(conn, ref_id, annotated.get(ref_id, []), annotated_anywhere)
         pairs.extend(
             SyncPair(
                 ref_id=ref_id,
@@ -1338,9 +1382,6 @@ def mark_reference_synced(
     return count
 
 
-# Excluded filenames — boilerplate, not doc-worthy
-_COVERAGE_EXCLUDE = frozenset({"__init__.py", "conftest.py", "__main__.py"})
-
 # File-level beadloom annotation in a source comment, e.g.
 #   # beadloom:domain=core   or   # beadloom:feature=docs-audit
 # Captures the ref_id value regardless of the key (domain/feature/...).
@@ -1457,6 +1498,25 @@ def _symbol_paths_by_ref_id(conn: sqlite3.Connection) -> dict[str, set[str]]:
     return symbol_paths
 
 
+def _indexed_code_paths_by_owner(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Prefetch the indexed code files grouped by the node that OWNS each one.
+
+    Read from ``file_index``, which holds every file the reindex read as code,
+    in every language it reads, so this module keeps no list of extensions of
+    its own to fall behind the indexer's (``beadloom-oo4m``). Ownership is the
+    most-specific-source rule every other reader applies, so a file under a
+    nested node is that node's, not its container's.
+    """
+    sources = sorted(get_node_sources(conn).items())
+    by_owner: dict[str, set[str]] = {}
+    for row in conn.execute("SELECT path FROM file_index WHERE kind = 'code'"):
+        path = str(row["path"])
+        owner = most_specific_owner(sources, path)
+        if owner is not None:
+            by_owner.setdefault(owner, set()).add(path)
+    return by_owner
+
+
 def check_source_coverage(
     conn: sqlite3.Connection,
     project_root: Path,
@@ -1464,8 +1524,12 @@ def check_source_coverage(
     """Check if all source files in a node's directory are tracked in sync_state.
 
     For each node with a ``source`` field ending in ``/`` (a directory),
-    compares actual Python files on disk against code_paths tracked in
-    sync_state for that ref_id.
+    compares its files against code_paths tracked in sync_state for that
+    ref_id. Its files are the Python files on disk directly inside the
+    directory, which catches one added since the last reindex, and every code
+    file the index holds that the node owns, at any depth and in every language
+    the reindex reads. Before ``beadloom-oo4m`` only the first set was read, so
+    a ``.vue`` or ``.js`` file that lost its pair was never named.
 
     Returns list of dicts with ``ref_id``, ``doc_path``, ``untracked_files``
     for nodes that have gaps.
@@ -1486,6 +1550,7 @@ def check_source_coverage(
     children_by_parent = _children_by_parent(conn)
     sync_paths_by_ref = _sync_paths_by_ref_id(conn)
     symbol_paths_by_ref = _symbol_paths_by_ref_id(conn)
+    indexed_by_owner = _indexed_code_paths_by_owner(conn)
 
     results: list[dict[str, Any]] = []
 
@@ -1504,13 +1569,13 @@ def check_source_coverage(
             # No linked doc — skip, nothing to mark stale
             continue
 
-        # 4. List *.py files on disk (non-recursive), excluding boilerplate
-        disk_files: set[str] = set()
-        for py_file in source_dir.glob("*.py"):
-            if py_file.name in _COVERAGE_EXCLUDE:
-                continue
-            relative = str(py_file.relative_to(project_root))
-            disk_files.add(relative)
+        # 4. The node's files, excluding boilerplate: *.py on disk directly in
+        #    the directory, and every indexed code file the node owns.
+        disk_files = {
+            str(py_file.relative_to(project_root)) for py_file in source_dir.glob("*.py")
+        }
+        disk_files |= indexed_by_owner.get(ref_id, set())
+        disk_files = {f for f in disk_files if Path(f).name not in _COVERAGE_EXCLUDE}
 
         if not disk_files:
             continue

@@ -27,15 +27,15 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
-from beadloom.application.architecture_view import (
+from beadloom.application.site.architecture_view import (
     build_architecture_view_data,
     serialize_architecture_view,
 )
-from beadloom.application.landscape_view import (
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.landscape_view import (
     build_landscape_view_data,
     serialize_landscape_view,
 )
-from beadloom.application.site import generate_site
 from beadloom.infrastructure.db import create_schema
 from tests.support.site_links import iter_data_links, link_target_exists
 
@@ -111,7 +111,7 @@ _ARCH_NODES: tuple[tuple[str, str, str | None, str | None], ...] = (
     ("application", "domain", "src/beadloom/application/", "layer-application"),
     ("graph", "domain", "src/beadloom/graph/", "layer-domain"),
     ("infrastructure", "domain", "src/beadloom/infrastructure/", "layer-infra"),
-    ("site-generation", "feature", "src/beadloom/application/site.py", None),
+    ("site-generation", "feature", "src/beadloom/application/site/generate.py", None),
 )
 
 _ARCH_EDGES: tuple[tuple[str, str, str], ...] = (

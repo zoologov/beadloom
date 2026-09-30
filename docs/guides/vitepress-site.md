@@ -8,9 +8,9 @@ humans *and* agents. It is the F4 "Living Knowledge Base + Visual Landscape"
 deliverable of Strategy 3.
 
 > **Beadloom produces, VitePress renders.** Beadloom emits a deterministic
-> Markdown/config content tree (plus a `dashboard.data.json` data file);
-> committed Vue/ECharts components and VitePress (a static site generator) render
-> it client-side. There is no live server, no SaaS, and no LLM in this path —
+> Markdown/config content tree plus three data files (`architecture.data.json`,
+> `landscape.data.json`, `dashboard.data.json`); the committed theme (Vue, Cytoscape
+> with ELK, ECharts) and VitePress (a static site generator) render it client-side. There is no live server, no SaaS, and no LLM in this path —
 > freshness comes from rebuilding on push, the same way `beadloom ci` keeps the
 > graph honest.
 
@@ -32,10 +32,12 @@ Reading the graph **read-only**, the command writes the following under `--out`
 |--------|----------|------------|
 | `index.md` | — | **About** — the home page (`/`), generated from `README.md` with links rebased so they resolve on the site (see [Information architecture](#information-architecture)). Falls back to the architecture overview if no README. |
 | `ru/index.md` | — | **About (RU)** — the `/ru/` page, generated from `README.ru.md` by the same transform. The bilingual entry is an in-page cross-link, NOT VitePress locales (see below). |
-| `architecture.md` | Architecture | Architecture overview (`/architecture`): node counts, the top-level C4/Mermaid diagram, a health summary line. (This is the page that used to be `index.md`.) |
-| `domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md` | Architecture | One page per node: summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as links, linked docs, an embedded scoped C4/Mermaid diagram. |
+| `architecture.md` + `public/architecture.data.json` | Architecture | The architecture viewer (`/architecture`): the interactive graph described in [the architecture viewer](#the-architecture-viewer), with a static count summary for a reader without JavaScript. |
+| `architecture-diagram.md` | Architecture | The Mermaid fallback: node counts, the top-level C4 diagram, a health summary line. |
+| `domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md`, `other/<ref>.md` | Architecture | One page per node of every kind: summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as links, linked docs, and the viewer opened on the node. |
 | `dashboard.md` + `dashboard.data.json` | **A — metrics dashboard** | An interactive ECharts dashboard: a critical-first alert banner + status cards, gauges, category charts, honest trends, and a recommendations panel. |
-| `landscape.md` | **B — 🌟 landscape map** | The contract graph as an interactive (pan/zoom/fullscreen) Mermaid diagram. |
+| `landscape.md` + `public/landscape.data.json` | **B — 🌟 landscape map** | The contract graph in the viewer's landscape mode. |
+| `landscape-diagram.md` | **B — 🌟 landscape map** | The same contract graph as a Mermaid diagram with pan, zoom and full screen. |
 | `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, copied verbatim, with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
 | `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the committed scaffold. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
 
@@ -79,9 +81,10 @@ with — it is the gate, rendered. The widgets never invent a figure the
 
 ### The generation-time Mermaid guard
 
-Every Mermaid diagram Beadloom emits (the top-level and per-node C4 diagrams, the
-landscape map) is run through a structural validity guard
-(`application/site_mermaid_guard.validate_mermaid`) **before the page is written**.
+Every Mermaid diagram Beadloom emits (the top-level C4 diagram on
+`architecture-diagram.md`, the landscape diagram on `landscape-diagram.md`) is run
+through a structural validity guard (`application/site/mermaid_guard.validate_mermaid`)
+**before the page is written**.
 The guard is a targeted set of structural validators (not a full Mermaid parser)
 covering the two F4 render bug classes:
 
@@ -103,14 +106,15 @@ keeps the bug classes from regressing.
 
 All rendered Mermaid SVGs get pan + wheel-zoom + reset (via `svg-pan-zoom`) and a
 Fullscreen toggle, applied by a global `DiagramViewer` theme component that scans
-each page (and re-scans on route change, since Mermaid renders async). It is
-SSR-safe and renders no markup of its own, so a JS-disabled viewer still gets the
-static diagram.
+each page (and re-scans on route change, since Mermaid renders async, and whenever a
+theme switch renders a diagram again). It is SSR-safe and renders no markup of its
+own, so a JS-disabled viewer still gets the static diagram.
 
 ### Showcase B — 🌟 the cross-repo landscape map
 
-`landscape.md` renders the **contract graph** as a **Mermaid** diagram (with
-pan/zoom/fullscreen, like every diagram on the site):
+`landscape.md` renders the **contract graph** in the viewer's landscape mode (see
+[the landscape](#the-landscape)), and `landscape-diagram.md` renders the same graph
+as a **Mermaid** diagram (with pan/zoom/fullscreen, like every diagram on the site):
 
 - **Without `--federated` (default — the local contract graph):** the map is the
   *repo's own* contract reality, not its structural arch. It reads the local
@@ -127,18 +131,17 @@ pan/zoom/fullscreen, like every diagram on the site):
   each carrying the hub's verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER`
   / `UNDECLARED_PRODUCER` / `EXTERNAL` / `DRIFT` / …) verbatim.
 
-Edges are labelled by their verdict; a Mermaid `classDef` health overlay colours
-nodes (green = healthy, red = broken, grey = external/expected) and broken edges
-get a red `linkStyle`.
+The `--federated` artifact reaches the Mermaid diagram (and the dashboard) only; the
+viewer's landscape always reads the project's own contract graph.
+
+In the Mermaid diagram edges are labelled by their verdict; a `classDef` health
+overlay colours nodes (green = healthy, red = broken, grey = external/expected) and
+broken edges get a red `linkStyle`.
 
 **Safe clicks (no 404s).** A node is clickable to its intra-repo page ONLY when a
-page was actually generated for it (`existing_page_urls` maps page-bearing kinds —
-`service` / `domain` / `feature` — to `/<dir>/<ref>`). A node with no page (a
-`site` node, or a foreign federated repo) renders without a click, so the map
-never links to a dead URL.
-
-This is the *thin slice*: Mermaid only (clickable). A richer JS graph library
-(Cytoscape / D3) is a follow-up — no schema bump was needed for the Mermaid map.
+page was actually generated for it. Every node of the project's own graph has one,
+under `other/` for a kind with no directory of its own; a foreign federated repo has
+none and renders without a click, so the map never links to a dead URL.
 
 ### Showcase C — published validated documentation
 
@@ -158,11 +161,159 @@ structure, and injects a per-doc validation badge into the **copy only**:
 mutated; there is no AI prose-rewriting (that is the deferred F4.1 follow-up).
 Badges come from `doc_sync`, not from a model.
 
+## The architecture viewer
+
+The viewer is one component in three places, and it draws only what the data files say:
+
+- **`/architecture`** shows the whole architecture graph.
+- **Every node page** has a **Graph** section: the same viewer, 60% of the window high, opened
+  with the page's node selected, its neighbourhood one step deep and its card open. From there
+  every control works as on `/architecture`, and the selection can move anywhere.
+- **`/landscape`** shows the contracts between services, in the viewer's landscape mode.
+
+The viewer reads the data file of the last `beadloom docs site` run. It does not query the index,
+so a picture is as current as the build that published it.
+
+### Reading the picture
+
+- **Boxes and lanes.** Domains and services are boxes around their features and components. The
+  lanes are the layers the project declares, top to bottom, and a node's border and a box's tint
+  are its layer's colour. The layer names come from the project's own declaration, so an adopter
+  sees its own names.
+- **Node status.** A node carries at most one status, in this order: a solid red border is a rule
+  violation (a finding of severity `error`, what `beadloom lint --strict` fails on); a solid
+  yellow border is stale docs; a double yellow border is a rule warning (findings of severity
+  `warn` only). A node with none keeps its layer's colour.
+- **Edges.** Each kind has its own line: `depends_on` solid (an import), `uses` dotted (a declared
+  runtime use), `consumes` and `produces` dashed with different dashes. A `depends_on` edge the
+  layer rule finds against is red, dashed and thicker, exactly when `beadloom lint` reports it.
+  The arrow is at the target, and the line is lighter at its source end. An edge's label shows on
+  hover and on the selected node's edges.
+- **The legend** under the canvas lists the layers, the node statuses and the edge kinds that are
+  actually drawn, so it never names something the canvas does not show.
+
+### Moving around
+
+A drag pans the canvas, inside a box too, and the scroll wheel zooms. Nodes do not move when
+dragged; **Arrange** in the toolbar turns dragging on for the leaves. The toolbar also has zoom
+in and out, **Fit** (the visible graph), **Centre** (on the selection), **Panel** (show or hide the
+panel) and **Full screen**. With focus in the viewer, `+` and `-` zoom, `0` fits, `f` toggles full
+screen and `Esc` clears the selection. Fit and centre leave out the part of the canvas the open
+panel covers.
+
+### Filters
+
+On the architecture: **Kind**, **Domain** (the domain and everything inside it), **Layer**, a
+search box (id or label, ignoring case) and **Only flagged** (nodes with a status). The boxes
+that hold a shown node stay, so a filtered feature is still drawn inside its domain. On the
+landscape: **Protocol**, **Verdict** (problems, healthy or neutral) and **Only problems**; a
+service is shown when it takes part in a shown contract.
+
+### The neighbourhood
+
+A click on a node selects it: its card opens in the panel and its neighbourhood is marked. Three
+toolbar controls set the neighbourhood:
+
+- **Depth:** 1 to 5 steps, or `all`.
+- **Direction:** `outgoing` follows the arrows (what the node depends on, uses, consumes or
+  produces), `incoming` goes against them (what reaches the node), `both` is the two together.
+  "Both" does not turn round on the way: a walk that could would reach nearly the whole graph at
+  depth 2.
+- **Hide the rest:** hide what the neighbourhood leaves out instead of dimming it. The boxes
+  around what it reached stay.
+
+A click on the empty canvas, or `Esc`, clears the selection and shows the whole graph again.
+
+### Impact on the architecture
+
+**Impact** in the toolbar answers "what does a change to this node reach?". It walks from the
+selected node to everything that depends on it, then to what depends on those, with no depth
+limit, backwards along `depends_on`, `uses` and `consumes`. Each reached node is filled with the
+colour of its distance: direct dependents are ring 1, theirs ring 2, and so on. The panel then
+shows:
+
+- how many nodes depend on the selected one, and how many at each distance;
+- the domains and the services that hold them;
+- each crossing between two layers on the walked edges, with a count;
+- the risky nodes, each with its reasons, also marked on the canvas with a dashed red outline:
+  **no bound tests**, **stale docs** (a doc compared and found out of date), **docs not checked**
+  (a doc with no sync pair, or whose pair could not be compared), **open findings**. A click on
+  one selects it;
+- `beadloom why <ref>` and, when the node has a source, `beadloom impact <source>`, to copy.
+
+What it does not claim: it is the graph's view, and the panel says so. The edges come from
+imports and declarations; the walk says nothing about how the code behind a node uses what it
+imports, and it does not follow `produces`. The two commands are the code-level answer.
+
+### The landscape
+
+On `/landscape` a service is a node and a contract is an edge from its producer to its consumer.
+A service's border is its health: green healthy, red broken, grey neutral. A contract edge is
+drawn by its health: healthy solid green, drifting dashed yellow, broken dashed red and thicker
+with its verdict as a badge, neutral dotted grey (external, expected, dead or unmapped). The
+neighbourhood controls work here as on the architecture.
+
+**Impact on the landscape** walks each contract from its producer to its consumers, then to their
+consumers, with no depth limit and whatever the protocol. A change to a service reaches the
+consumers of what it produces, never its producers. The panel shows how many services are
+reached and at which distance, the contracts crossed, their protocols, the broken contracts on
+the path, and each reached service at risk: one that takes part in a **broken contract** or an
+**unverified contract**. A contract is unverified when it is not broken and its verdict was not
+decided by comparing the two sides' declared surface (its `verdict_basis` is not `surface`), for
+example a plain dependency whose verdict only says that both sides exist. The commands to copy are
+`beadloom why <ref>` and `beadloom ctx <ref>`.
+
+What it does not claim: it follows the contracts as the reconciler recorded them. It does not
+read either side's code, and it does not say that a consumer uses the part of a contract a change
+touches. On this repository the one contract, `site-data:site-bundle` from `beadloom` to
+`vitepress-site`, is confirmed on the presence of both sides only, so its consumer shows as at
+risk through an unverified contract.
+
+### The two cards
+
+The panel shows a card for the selected node, one kind per mode.
+
+- **The architecture card:** the node's id and summary; kind, lifecycle, tags; its layer and
+  whether that is its own tag or inherited from its container; its source; its activity (commits
+  in 30 days and a level); its debt with the reasons; its docs, each with its sync status and a
+  link to the published copy when there is one; its bound tests with their count, placement
+  and the files bound to the node itself; its first 50 public symbols and how many more there
+  are; its edges by kind and direction, where a click selects the other end; its rule
+  findings with their severity; a link to its page; `beadloom ctx <ref>` and
+  `beadloom why <ref>` to copy. "None" means the data file holds nothing for the field; "not
+  recorded" means the file does not carry the field at all.
+- **The source link** points at the source as it was in the commit the site was generated from.
+  The generator writes it for a public forge it recognises by the host of the project's `origin`:
+  GitHub, GitLab, Bitbucket, Gitea, Codeberg and Azure DevOps. For any other host, a self-hosted
+  forge included, the card shows the source as plain text, because a guessed address would be a
+  dead link. Nothing else from the git remote is published.
+- **The service card** on the landscape: the service's kind, health, number of contracts and page,
+  then every contract it produces or consumes, with its verdict, protocol, routing, the fields or
+  the message body each side declares ("undeclared" when a side declared none) and, for a
+  breaking contract, the references the producer does not serve. A click on a producer or a
+  consumer selects it. A contract with no declared protocol is shown as a plain dependency.
+
+### Full screen
+
+**Full screen**, or `f`, takes the whole viewer to full screen: the toolbar, the canvas, the panel
+and the legend. In the page the panel lies over the canvas's right edge; in full screen it sits
+beside the canvas. Where the browser refuses the Fullscreen API, the viewer is pinned over the
+window instead, and `Esc` with nothing selected leaves it.
+
+### Links to a view
+
+The viewer keeps its state in the page's query string, so the address in the browser is a link
+to the view as it is: the filters (`kind`, `domain`, `layer`, `violations`, `q` on the
+architecture; `protocol`, `verdict`, `problems` on the landscape), the selection (`focus`),
+`depth`, `dir`, `hide`, and `view=impact`. Only values that differ from the defaults are written,
+and changing the view adds no browser history entry. On a node page a cleared selection is
+written as `focus=`, so a reload does not select the page's node again.
+
 ## Information architecture
 
 The portal (reshaped in BDL-046) leads with **About = the README as the landing
 page** and a single ordered EN sidebar; there is **no top nav**. All of this is
-emitted by `application/site_nav.py` into `.vitepress/config.generated.mjs`
+emitted by `application/site/nav.py` into `.vitepress/config.generated.mjs`
 (deterministic, sorted, byte-stable, link-safe — no dead entries).
 
 ### Left sidebar — exact order
@@ -194,7 +345,7 @@ Documentation    → group, collapsed: false  (EXPANDED)
 
 ### About = README landing (EN `/`, RU `/ru/`)
 
-`application/site_about.render_about()` turns the `README.md` into the `/` home
+`application/site/about.render_about()` turns the `README.md` into the `/` home
 page (and `README.ru.md` into `/ru/`), **rebasing** repo-relative links so they
 resolve on the published site:
 
@@ -275,12 +426,14 @@ drives per-SPEC freshness.)
 
 The committed VitePress **scaffold** (`site/package.json`,
 `site/.vitepress/config.mjs`, and the custom theme under
-`site/.vitepress/theme/` — `DiagramViewer` + the ECharts dashboard widgets, with
-`echarts` / `vue-echarts` / `svg-pan-zoom` pinned to exact versions) renders the
-generated content tree. The build output (`site/.vitepress/dist/`), the VitePress
-cache, and `site/node_modules/` are gitignored — only the scaffold and the
-generated, deterministic Markdown/config/data are committed. The Python generator
-and the Mermaid guard stay fully pytest-testable without Node.
+`site/.vitepress/theme/`, laid out in Feature-Sliced Design and described in
+[the VitePress site page](../services/vitepress-site.md), with Cytoscape, ELK,
+ECharts and `svg-pan-zoom` pinned to exact versions) renders the generated content
+tree. The generated tree itself, the build output (`site/.vitepress/dist/`), the
+VitePress cache and `site/node_modules/` are gitignored: only the scaffold is
+committed, and CI regenerates the content with `beadloom docs site`. The Python
+generator and the Mermaid guard stay fully pytest-testable without Node; the
+viewer's Playwright tests run from `site/` with `npm run test:e2e`.
 
 ```bash
 # 1. Generate the content tree from the indexed graph (run `beadloom reindex` first).
@@ -293,7 +446,7 @@ cd site && npm install && npm run docs:build
 npm run docs:preview          # or `npm run docs:dev` for a live-reload dev server
 ```
 
-For the landscape map (Showcase B), feed a federation artifact:
+For the federated landscape diagram (Showcase B), feed a federation artifact:
 
 ```bash
 beadloom federate service-a.json service-b.json   # writes .beadloom/federated.json
@@ -312,14 +465,16 @@ This repo is served as a **GitHub project page** at `https://zoologov.github.io/
 
 ## Determinism
 
-Identical graph → byte-identical tree: pages are sorted, frontmatter is stable,
-and no wall-clock value lands in the diffed output (the published-doc badge uses
-the stored `sync_state.synced_at`, not "now"; the dashboard's `dashboard.data.json`
-— including `trends` and `recommendations` — and the generated Mermaid are sorted
-and byte-stable; the only wall-clock read is the metrics-history point appended to
-`.beadloom/metrics_history.json`, which never lands in a diffed dashboard field).
-This makes the generated tree safe to commit and to diff in review, and makes a
-rebuilt site reproducible.
+Identical graph, commit and run instant → byte-identical tree: pages are sorted,
+frontmatter is stable, and the published-doc badge uses the stored
+`sync_state.synced_at`, not "now"; the dashboard's `dashboard.data.json` —
+including `trends` and `recommendations` — the data files and the generated
+Mermaid are sorted and byte-stable. The run's instant (`now_ts`) is the only
+wall-clock read. It lands in the metrics-history point appended to
+`.beadloom/metrics_history.json` and in the `generated_at` field of
+`architecture.data.json`, and in no dashboard field. Each node's `source_url`
+names the commit the site was generated from. This makes a rebuilt site
+reproducible and the generated tree diffable in review.
 
 ## Where this fits — TUI vs VitePress
 
@@ -355,9 +510,16 @@ rebuilt site reproducible.
   commits into. It is not part of this generator: the published-docs showcase
   still does **not** rewrite prose, and the badges are computed rather than
   generated. See the [AI tech-writer guide](./ai-techwriter.md).
-- **Deferred:** a richer JS graph library for the landscape map (Cytoscape / D3)
-  beyond the current clickable Mermaid thin slice; REST/OpenAPI + gRPC contracts
-  in the federated map.
+- **The architecture viewer (BDL-076, slice 1):** one Cytoscape and ELK viewer for
+  the architecture and the landscape, with the neighbourhood, impact on both, the
+  architecture and service cards, node pages opened on their node, full screen and
+  URL state, and Playwright browser tests in the advisory `site-e2e` CI job. It
+  replaced the Mermaid-only landscape and the per-node Mermaid diagrams; the
+  landscape diagram and the top-level C4 diagram stay as fallbacks on
+  `landscape-diagram.md` and `architecture-diagram.md`.
+- **Deferred:** the portal scaffold shipped for adopters with their own identity and
+  a declared self-hosted forge (BDL-076 slice 2); REST/OpenAPI + gRPC contracts in
+  the federated map.
 
 See the [`beadloom docs site` CLI reference](../services/cli.md#beadloom-docs-site),
 the [application domain README](../domains/application/README.md) for the

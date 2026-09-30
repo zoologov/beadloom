@@ -459,6 +459,23 @@ Nothing is in progress except the release in item 4. The order below is the owne
 `bd show <id>` is where its state is checked. Every open P0 and P1 bug is named in this section,
 either inside an item or in the unranked list at its end.
 
+### 0. BDL-076 — the architecture graph viewer, made a working tool (P0, owner 2026-09-29/30)
+
+**Epic `beadloom-ujzb`, work item `.claude/development/docs/features/BDL-076/`.** Ranked above
+`beadloom-jwfc` by the owner: the team asked for a graph viewer they can work in, and the graph is
+the product's foundation. Measured by explore, 2026-09-30:
+- panning grabs the domain box under the pointer, because every node is grabbable;
+- every theme colour reaches Cytoscape as `var(--vp-…)`, which it rejects and turns grey;
+- a filter that hides a parent also hides its children;
+- full screen leaves the controls out;
+- the node card is thin;
+- node pages carry an unrelated Mermaid diagram;
+- `beadloom docs site` writes no scaffold at all, so an adopter has no portal.
+
+The work is two slices: the viewer for the team first, then the portal for adopters on every
+claimed stack. It starts with this repository's own site coming under its own beadloom (A0).
+Code-level impact in the viewer is a separate item, `beadloom-ikj6`.
+
 ### 1. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0 bug, BDL-UX #226)
 
 The only open P0. `beadloom ci` writes its whole report through one `click.echo()`. Under

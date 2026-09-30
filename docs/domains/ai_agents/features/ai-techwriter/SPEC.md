@@ -82,7 +82,9 @@ data).
 - **commands.py** — patchable wrappers around `beadloom` / `git` subprocess
   calls.
 - **models.py** — typed, immutable harness data structures.
-- **runs_store.py** — append-only run-record store.
+- **runs_store.py** — append-only run-record store (`.beadloom/ai_techwriter_runs.json`), built
+  like the site's metrics-history store (`application/site/metrics_history.py`): a JSON array
+  appended to and never interpolated, with each record's `ts` injected by the caller.
 - **cli.py** / **__main__.py** — the thin Click entrypoint CI invokes.
 
 ## Configuration

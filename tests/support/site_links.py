@@ -74,7 +74,7 @@ def dead_links(out: Path) -> list[tuple[str, str]]:
                 continue
             # Strip inline code spans (`` `...` `` / ``` ``...`` ```) — link-like
             # syntax inside them is illustrative, not a real link (mirrors the
-            # code-span protection in application/site_about.render_about).
+            # code-span protection in application/site/about.render_about).
             line = re.sub(r"``[^`]+``|`[^`]+`", "", line)
             for url in _LINK_RE.findall(line):
                 resolved = _resolve_target(out, md, url)

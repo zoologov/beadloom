@@ -10,7 +10,7 @@ double proves the double.
 The steps used to call `build_architecture_view_data` directly, which the graph
 owns under `application` rather than `site-generation`, so a coverage run of the
 four scenarios executed no line of the node their tag names. They now call
-`generate_site` — the node's source, `application/site.py` — and read
+`generate_site` — the node's source, `application/site/generate.py` — and read
 `public/architecture.data.json`, the artifact `docs site` writes.
 
 The module is named ``test_*`` so default pytest collection picks the scenarios
@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from beadloom.application.site import generate_site
+from beadloom.application.site.generate import generate_site
 from beadloom.graph.linter import lint
 from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE
 from tests.support.tiered_project import TIERS, graph_with_peer_containers, write_tiered_project

@@ -1,0 +1,20 @@
+  # BDL-076 A3 (`beadloom-7091`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-impact-view
+    kind: component
+    summary: "The impact mode: every node that depends on the selected one, without a depth limit, in distance rings; over the architecture a summary of domains, services, layer boundaries crossed and risky nodes, over the landscape the contracts and protocols crossed, the broken ones and the services at risk; and the terminal commands to copy"
+    source: site/.vitepress/theme/features/impact-view/
+    tags: [fsd-features]
+    # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
+    # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
+    tests:
+      - site/e2e/impact.spec.js
+      - site/e2e/landscape-impact.spec.js
+    docs:
+      - docs/services/vitepress-site/impact-view.md
+edges:
+  - src: site-impact-view
+    dst: vitepress-site
+    kind: part_of

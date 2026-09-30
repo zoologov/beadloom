@@ -319,7 +319,7 @@ docs_refreshed[], input_tokens, output_tokens, model, gate (green/flagged),
 pr_url }`. Token counts come from the model API's `usage` field — **fact**.
 
 The VitePress dashboard renders an **"AI tech-writer activity"** widget
-(`AiTechwriterActivity`, built from `site_dashboard.build_dashboard_data`'s
+(`AiTechwriterActivity`, built from `application.site.dashboard.build_dashboard_data`'s
 `ai_techwriter` section): docs-refreshed over time + input/output token spend per
 run and cumulative, plus a `cost_estimate`. Only real recorded runs are shown
 (no interpolation — sparse-at-first is correct). **Tokens are a fact; any dollar

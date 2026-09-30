@@ -1,70 +1,7 @@
-// Custom VitePress theme for the Beadloom showcase site.
+// beadloom:component=vitepress-site
+// The entry point VitePress looks for, `.vitepress/theme/index.js`.
 //
-// Extends the VitePress default theme and mounts a global diagram viewer that
-// augments the Mermaid SVGs rendered by `vitepress-plugin-mermaid` with
-// pan / wheel-zoom / reset (svg-pan-zoom) and a fullscreen toggle.
-//
-// Beadloom produces, VitePress renders: the Python generator emits the
-// content + Mermaid; this theme only enhances the already-rendered output
-// client-side. Mermaid itself stays enabled via `withMermaid` in config.mjs.
-//
-// BEAD-04 registers the ECharts dashboard widgets (HealthGauges / CategoryChart
-// / TrendCharts / Recommendations) globally in `enhanceApp` below, alongside
-// DiagramViewer. They read the deterministic `dashboard.data.json` and render
-// client-side via `vue-echarts`; the dashboard page mounts them inside a
-// `<ClientOnly>` wrapper so the static honest summary remains the fallback.
+// The theme itself is the `app` layer of the Feature-Sliced layout under this
+// folder; this file only hands it to VitePress.
 
-import { h } from "vue";
-import DefaultTheme from "vitepress/theme";
-import DiagramViewer from "./components/DiagramViewer.vue";
-import AlertBanner from "./components/AlertBanner.vue";
-import StatusCards from "./components/StatusCards.vue";
-import HealthGauges from "./components/HealthGauges.vue";
-import CategoryChart from "./components/CategoryChart.vue";
-import TrendCharts from "./components/TrendCharts.vue";
-import AiTechwriterActivity from "./components/AiTechwriterActivity.vue";
-import Recommendations from "./components/Recommendations.vue";
-import LandscapeMap from "./components/LandscapeMap.vue";
-import ArchitectureMap from "./components/ArchitectureMap.vue";
-import "./custom.css";
-
-/** @type {import('vitepress').Theme} */
-export default {
-  extends: DefaultTheme,
-  // Wrap the default layout so the diagram viewer is mounted on every page; it
-  // scans the rendered document for `.mermaid` SVGs and enhances each one. The
-  // `doc-footer-before` slot keeps it inside the content area without altering
-  // the default layout chrome.
-  Layout() {
-    return h(DefaultTheme.Layout, null, {
-      "doc-footer-before": () => h(DiagramViewer),
-    });
-  },
-  enhanceApp({ app }) {
-    // Also expose it as a global component so pages can mount it explicitly.
-    app.component("DiagramViewer", DiagramViewer);
-    // Dashboard widgets — registered globally so the generated `dashboard.md`
-    // can mount them by name. Each reads `dashboard.data.json`. The critical-
-    // first banner + status cards (BEAD-10) lead; the ECharts widgets (BEAD-04)
-    // follow.
-    app.component("AlertBanner", AlertBanner);
-    app.component("StatusCards", StatusCards);
-    app.component("HealthGauges", HealthGauges);
-    app.component("CategoryChart", CategoryChart);
-    app.component("TrendCharts", TrendCharts);
-    // AI tech-writer activity (G9): run-record store -> docs refreshed + token
-    // spend (tokens fact, $ labeled estimate). SSR-safe under <ClientOnly>.
-    app.component("AiTechwriterActivity", AiTechwriterActivity);
-    app.component("Recommendations", Recommendations);
-    // Interactive landscape (BDL-060 S4, G2): Cytoscape + ELK map mounted by the
-    // generated `landscape.md`. Reads `landscape.data.json`; SSR-safe under
-    // <ClientOnly> (the static summary in the page is the JS-off fallback).
-    app.component("LandscapeMap", LandscapeMap);
-    // Interactive architecture graph (BDL-060 S4 ext): Cytoscape + ELK compound
-    // layout (domains as parent boxes) mounted by the generated `architecture.md`.
-    // Reads `architecture.data.json`; SSR-safe under <ClientOnly> (the static
-    // summary in the page is the JS-off fallback). Replaces the Mermaid top-level
-    // diagram as the primary architecture view (Mermaid demoted to a fallback).
-    app.component("ArchitectureMap", ArchitectureMap);
-  },
-};
+export { default } from "./app/index.js";

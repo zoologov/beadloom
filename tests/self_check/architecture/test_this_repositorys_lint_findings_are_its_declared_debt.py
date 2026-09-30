@@ -14,7 +14,14 @@ from typing import TYPE_CHECKING
 from click.testing import CliRunner
 
 from beadloom.graph.rule_engine import LAYER_POPULATION_RULE_TYPE
-from beadloom.graph.rules import SUITE_POPULATION_RULE_TYPE, TEST_BINDING_RULE_TYPE
+from beadloom.graph.rules import (
+    SUITE_POPULATION_RULE_TYPE,
+    TEST_BINDING_RULE_TYPE,
+    DocAreaCoherenceRule,
+    load_rules,
+)
+from beadloom.graph.rules.doc_area import derive_convention
+from beadloom.infrastructure.db import open_db
 from beadloom.services.cli import main
 from tests.support.repository_root import REPO_ROOT
 
@@ -72,6 +79,12 @@ class TestLintRecalibrationGuard:
         features no test file is bound to — measured debt at ``warn``, keyed on
         rule AND type, so an exemption that went dead (``rule_liveness``) or a
         file leg that fired would still fail here.
+
+        BDL-076 A2 added a fifth, ``doc-area-coherence`` stating that it checked
+        nothing once the site's slices made ``site/`` a second source tree, and
+        ``beadloom-5o48`` removed it again: the rule judges each source tree
+        against its own documents and is back at ``error``. Its other direction
+        is ``test_doc_area_coherence_blocks_and_judges_both_source_trees``.
         """
         findings = self._live_findings(self_check_snapshot)
         other = [
@@ -85,6 +98,37 @@ class TestLintRecalibrationGuard:
             )
         ]
         assert other == [], other
+
+    def test_doc_area_coherence_blocks_and_judges_both_source_trees(
+        self, self_check_snapshot: Path
+    ) -> None:
+        """The rule is at ``error`` and checks pairs in ``src/`` AND in ``site/``.
+
+        Silence from a rule is a pass only beside what it checked. From BDL-076 A2
+        until ``beadloom-5o48`` it checked none of this repository's pairs; a
+        regression to that, or to a reading that drops one tree, fails here even
+        though ``lint`` would print nothing.
+        """
+        (rule,) = [
+            r
+            for r in load_rules(self_check_snapshot / ".beadloom" / "_graph" / "rules.yml")
+            if r.name == "doc-area-coherence"
+        ]
+        assert isinstance(rule, DocAreaCoherenceRule)
+        assert rule.severity == "error"
+
+        conn = open_db(self_check_snapshot / ".beadloom" / "beadloom.db")
+        try:
+            convention = derive_convention(
+                conn, threshold=rule.threshold, min_support=rule.min_support
+            )
+        finally:
+            conn.close()
+        trees_checked = {p.tree for p in convention.checked}
+        assert sorted(trees_checked) == ["site/.vitepress/theme", "src/beadloom"], (
+            convention.population()
+        )
+        assert convention.contradicting == (), convention.population()
 
     def test_each_suite_rule_states_its_population(self, self_check_snapshot: Path) -> None:
         """The other direction for the suite rules: each says what it judged, every run."""
@@ -127,9 +171,13 @@ class TestLintRecalibrationGuard:
         """
         findings = self._live_findings(self_check_snapshot)
         population = [f for f in findings if f.get("rule_type") == LAYER_POPULATION_RULE_TYPE]
-        assert len(population) == 1, population
-        assert population[0]["severity"] == "warn"
-        assert population[0]["rule_name"] == "architecture-layers"
+        # One statement per layered rule: the package layers, and since BDL-076 A2
+        # the site theme's Feature-Sliced layers.
+        assert sorted(str(f["rule_name"]) for f in population) == [
+            "architecture-layers",
+            "site-fsd-layers",
+        ], population
+        assert {f["severity"] for f in population} == {"warn"}
 
     def test_the_scenario_debt_is_reported_and_blocks_nothing(
         self, self_check_snapshot: Path

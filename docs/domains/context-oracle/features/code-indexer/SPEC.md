@@ -2,7 +2,8 @@
 
 Tree-sitter code symbol indexer for the context-oracle domain.
 
-**Source:** `src/beadloom/context_oracle/code_indexer.py`
+**Source:** `src/beadloom/context_oracle/code_indexer.py`, which reads Vue components through
+`src/beadloom/context_oracle/vue_sfc.py` (owned by the context-oracle domain)
 
 ---
 
@@ -26,6 +27,58 @@ file extension; `supported_extensions` lists the registered extensions; and
 `check_parser_availability` reports which grammar packages are actually
 installed, so a missing optional grammar degrades gracefully rather than
 failing the index.
+
+Vue single-file components (BDL-076 J3) have no loader of their own:
+`get_lang_config(".vue")` is `None`. `.vue` is in `supported_extensions()`, and
+`check_parser_availability` reports it available, whenever the grammar of the
+`.js` loader (`tree_sitter_typescript`) is installed. That changes the parser
+fingerprint, so the first reindex after upgrade is a full code reindex.
+
+### Symbol kinds
+
+The indexer owns the symbol vocabulary: `function`, `class`, `type`,
+`component` and, since BDL-076 J3, `variable`. `code_symbols.kind` carries no
+CHECK constraint, so a new kind needs no schema change (see the
+[db component](../../../infrastructure/components/db/DOC.md)).
+
+### JS/TS export forms
+
+An `export` statement names symbols that are not declarations of a symbol type:
+
+- `export const`, `export let`, `export var`: one symbol per declarator whose
+  target is a plain identifier. The kind follows the value: `function` for an
+  arrow function, function expression or generator, `class` for a class
+  expression, `variable` for anything else or no value.
+- A destructuring declarator (`export const { a, b } = obj`) names no symbol.
+- An anonymous `export default <value>` is a symbol named `default`, the name
+  it is imported by. A named `export default function f` or `class F` is the
+  symbol `f` or `F`, as before.
+- A top-level `const`/`let`/`var` without `export` is not a symbol.
+
+### Vue single-file components
+
+`vue_sfc.script_blocks(source)` finds every `<script>` and `<script setup>`
+block, its 0-based `line_offset` in the file and its grammar by `lang`: `ts` →
+`.ts`, `tsx` → `.tsx`, `jsx` → `.jsx`, any other value or none → `.js`. A tag
+that only begins with `script` (`<script-docs>`) is not a script block.
+
+`extract_symbols` on a `.vue` file returns:
+
+1. a `component` symbol named after the file stem, spanning line 1 to the last
+   line, carrying the module annotations;
+2. the symbols of each block, parsed by the loader the block's extension names,
+   at their lines in the `.vue` file.
+
+The component symbol stands for the default export, so a block's
+`export default` is dropped rather than recorded as a second symbol. Inside
+`<script setup>` a top-level `function` declaration is a symbol, as in any JS
+module. The `<template>` and `<style>` are not read: a style-only edit changes
+the file hash but no symbol, and an annotation in a template-only component
+has no place to live, because HTML comments are not read.
+
+The blocks of one component are walked as one module (`_SymbolWalk`): an
+annotation written before the first symbol of the file applies to every symbol
+in both blocks.
 
 ### Annotation extraction
 
@@ -86,6 +139,10 @@ documentation IS a comment and is already read.
   symbol list rather than an error.
 - Each symbol carries the SHA-256 `file_hash` of its source file, which is what
   sync-check baselines against.
+- A `.vue` symbol's lines are lines of the `.vue` file, never of the script
+  block it was parsed from.
+- `.vue` is supported exactly when the `.js` loader's grammar is installed; the
+  whole component is never parsed as TypeScript.
 
 ## API
 
@@ -93,21 +150,39 @@ Module `src/beadloom/context_oracle/code_indexer.py`:
 
 - `extract_symbols(file_path: Path) -> list[dict[str, Any]]` — extract
   top-level symbols; each dict has `symbol_name`, `kind`, `line_start`,
-  `line_end`, `annotations`, `file_hash`.
+  `line_end`, `annotations`, `file_hash`. A `.vue` file yields its `component`
+  symbol first, then its script blocks' symbols.
 - `parse_annotations(line: str) -> dict[str, str]` — parse beadloom keys from a
   comment line.
 - `parse_docstring_annotations(text: str) -> dict[str, str]` — parse the strict
   declaration lines out of a module docstring (BDL-061.50).
 - `get_lang_config(extension: str) -> LangConfig | None` — resolve the
   tree-sitter configuration for a file extension.
-- `supported_extensions() -> frozenset[str]` — the registered extensions.
+- `supported_extensions() -> frozenset[str]` — the registered extensions whose
+  grammar is installed, plus `.vue` when the `.js` grammar is.
+- `script_blocks` — re-exported from `vue_sfc`, so the import resolver reads a
+  component's imports from the same blocks through its one declared crossing
+  into `code_indexer`.
 - `check_parser_availability(extensions) -> dict[str, bool]` — report which
   grammar packages are installed.
 - `clear_cache() -> None` — drop the cached `LangConfig` objects.
+- `LangConfig.exported_binding_types` — the declarations an `export` wrapper
+  binds names with; set for the TypeScript and TSX loaders only.
+
+Module `src/beadloom/context_oracle/vue_sfc.py`:
+
+- `script_blocks(source: str) -> tuple[ScriptBlock, ...]` — the script blocks
+  of a component, in file order. Parses nothing.
+- `ScriptBlock(text, line_offset, extension)` — frozen; `file_line(row)` maps a
+  0-based row of the block to the 1-based line of the file.
 
 ## Testing
 
 Tests: `tests/integration/context_oracle/code_indexer/test_code_indexer.py`,
+`tests/integration/context_oracle/code_indexer/test_javascript_exports.py` (the export forms),
+`tests/integration/context_oracle/code_indexer/test_vue_support.py` (script blocks, lines, `lang`,
+annotations across blocks, a missing grammar),
+`tests/acceptance/context-oracle/code-indexer/vue_single_file_components.feature` (4 scenarios),
 `tests/test_a_declaration_that_owns_nothing_is_reported.py::TestDocstringAnnotationsAreRead` — the
 docstring form, including the two non-vacuity guards that keep a documented EXAMPLE from being read
 as a declaration.

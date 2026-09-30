@@ -8,6 +8,7 @@ The three independent PR workflows (``beadloom-gate.yml``, ``tests.yml``,
       gate        (ubuntu)               beadloom ci
       tests       (ubuntu, 3.10-3.13)    pytest matrix, NO paths filter
       site-build  (ubuntu)               beadloom docs site + vitepress build
+      site-e2e    (ubuntu)               needs: site-build; Playwright, advisory
       ai-techwriter (self-hosted)        needs: [gate, tests, site-build]
 
 ``deploy-site.yml`` stays the ONLY ``push: main`` job (logic unchanged; only the
@@ -97,7 +98,10 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 
 
 def test_ci_has_the_declared_jobs() -> None:
-    """The consolidated four (BDL-050) plus the locale DIMENSION (BDL-061.38).
+    """The consolidated four (BDL-050), the locale DIMENSION (BDL-061.38) and site-e2e.
+
+    ``site-e2e`` (BDL-076 A5) is the one job here that is not a required check;
+    it is listed in ``tests.support.ci_workflows.ADVISORY_JOBS`` with its exit.
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
@@ -114,6 +118,7 @@ def test_ci_has_the_declared_jobs() -> None:
         "tests",
         "tests-locale",
         "site-build",
+        "site-e2e",
         "ai-techwriter",
     }
 
@@ -182,6 +187,51 @@ def test_ci_site_build_builds_vitepress_without_deploy() -> None:
     # The BUILD half only — no Pages deploy steps belong on a PR check.
     assert "configure-pages" not in "\n".join(uses)
     assert "deploy-pages" not in "\n".join(uses)
+
+
+def _site_e2e_steps() -> list[dict[str, object]]:
+    job = _load(CI)["jobs"]["site-e2e"]  # type: ignore[index]
+    assert isinstance(job, dict)
+    return [s for s in job["steps"] if isinstance(s, dict)]
+
+
+def _node_version(job_name: str) -> object:
+    job = _load(CI)["jobs"][job_name]  # type: ignore[index]
+    assert isinstance(job, dict)
+    for step in job["steps"]:
+        if isinstance(step, dict) and "actions/setup-node" in str(step.get("uses", "")):
+            return step["with"]["node-version"]
+    raise AssertionError(f"{job_name} sets up no Node")
+
+
+def test_ci_site_e2e_runs_after_site_build_on_ubuntu() -> None:
+    job = _load(CI)["jobs"]["site-e2e"]  # type: ignore[index]
+    assert isinstance(job, dict)
+    assert job["needs"] == ["site-build"]
+    assert job["runs-on"] == "ubuntu-latest"
+
+
+def test_ci_site_e2e_uses_the_node_major_site_build_uses() -> None:
+    assert _node_version("site-e2e") == _node_version("site-build")
+
+
+def test_ci_site_e2e_runs_the_browser_tests_over_the_generated_site() -> None:
+    runs = "\n".join(str(s.get("run", "")) for s in _site_e2e_steps())
+    for command in (
+        "beadloom reindex",
+        "beadloom docs site --out site",
+        "npm ci",
+        "npx playwright install --with-deps chromium",
+        "npm run test:e2e",
+    ):
+        assert command in runs, command
+
+
+def test_ci_site_e2e_uploads_the_playwright_report_on_failure() -> None:
+    uploads = [s for s in _site_e2e_steps() if "actions/upload-artifact" in str(s.get("uses", ""))]
+    assert len(uploads) == 1
+    assert uploads[0]["if"] == "failure()"
+    assert "site/playwright-report/" in str(uploads[0]["with"]["path"])  # type: ignore[index]
 
 
 # --------------------------------------------------------------------------- #

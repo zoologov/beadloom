@@ -28,7 +28,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each of the seven media every wave shares whatever its width, and hold each bead's declaration against the `## Axes` section its work item recorded, and build the clean room each bead measures in — derived from that bead and created rather than entered — a cohesion-split package
 - `review_brief/` — the reviewer's input behind `beadloom review-brief` (BDL-061 S6): assemble the assignment, the declared scope, the specification documents, the bound scenarios and the changed files, and withhold the bead's own comments until a verdict is recorded
-- the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
+- `site/` — the portal package behind `beadloom docs site`, owned by the `site-generation` feature since BDL-076 K1 moved it out of `application/`'s own modules: `generate.py` (orchestrator), `architecture_view.py` and `architecture_card.py` (`architecture.data.json`), `landscape_view.py`, `landscape_map.py`, `node_pages.py`, `nav.py`, `about.py`, `published_docs.py`, `mermaid_guard.py`, `metrics_history.py`, `dashboard/` (a cohesion-split package)
 
 **Interface layers:**
 - **Services** (`services/`) — **CLI** (`services/cli.py` is a thin Click registration shell; the command implementations live in the `services/commands/` package, one cohesive module per command group) and **MCP Server** (`services/mcp_server.py`, stdio server with 18 tools for AI agents — 14 graph read/write tools + four BDL-048 process-tools). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
@@ -139,7 +139,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
-**Rule types** — the 15 authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 19 rules across them:
+**Rule types** — the 15 authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 20 rules across them:
 
 | YAML key | Semantics | Example |
 |----------|-----------|---------|
@@ -161,7 +161,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / `doc_area_coherence` / `summary_facts` / `test_binding` / `test_import_boundary` / `scenario_binding` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 >
-> The two counts above differ because they count different things: 15 is how many keys the loader accepts, 19 is how many rules this repository declares. Only the second is checked by `docs audit` — the fact it is checked against is named `rule_type_count` and computes `SELECT COUNT(*) FROM rules`, which is the instance count, not the type count (BDL-UX #179).
+> The two counts above differ because they count different things: 15 is how many keys the loader accepts, 20 is how many rules this repository declares. Only the second is checked by `docs audit` — the fact it is checked against is named `rule_type_count` and computes `SELECT COUNT(*) FROM rules`, which is the instance count, not the type count (BDL-UX #179).
 
 **Evaluation:**
 - `deny` rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns

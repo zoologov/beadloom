@@ -25,10 +25,7 @@ from beadloom.graph.rules.evaluators import (
     evaluate_layer_rules,
     evaluate_require_rules,
 )
-from beadloom.graph.rules.layer_reach import (
-    LAYER_POPULATION_RULE_TYPE,
-    layer_rule_reach,
-)
+from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
@@ -41,6 +38,8 @@ from beadloom.graph.rules.types import (
 from tests.support.layer_rule import (
     DDD_LAYERS,
     ddd_layer_rule,
+    declared_layer_rules,
+    layer_coverage,
 )
 from tests.support.the_lint_path_before_release_a import (
     ClosureTags,
@@ -78,16 +77,19 @@ class TestTheReachIsReadableWithoutRunningTheRule:
     """`layer_rule_reach` — the numbers, for the readers that render them (A3/A4)."""
 
     def test_on_this_repository_the_rule_now_reaches_almost_every_edge(
-        self, live_graph: sqlite3.Connection
+        self, live_graph: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
         """The measurement this epic exists for, taken from the code rather than quoted.
 
-        16 of 362 at `aa4bfad4` by own tags; the figure below is what the rule
-        decides on since `beadloom-ku26`.
+        16 of 362 at `aa4bfad4` by own tags; the figure below is what the rules
+        decide on since `beadloom-ku26`. An edge counts as judged when any layer
+        rule the project declares judges it, over every live `depends_on` edge:
+        the site's edges are judged by `site-fsd-layers` (BDL-076 A2) and none
+        leaves the denominator (owner, 2026-09-30).
         """
-        reach = layer_rule_reach(live_graph, ddd_layer_rule())
-        assert reach.population.total > 300
-        assert reach.population.evaluated > reach.population.total * 9 // 10
+        coverage = layer_coverage(live_graph, declared_layer_rules(self_check_snapshot))
+        assert coverage.total > 300, str(coverage)
+        assert coverage.clears(), f"not more than 90%: {coverage}"
 
 
 class TestWhatTheDecisionsChangedTo:
@@ -220,7 +222,12 @@ class TestTheWholeLintRunIsUnchanged:
         assert after.error_count == before.error_count
         assert after.has_errors is before.has_errors
         assert after.rules_inert == before.rules_inert
-        assert after.warning_count == before.warning_count + 1
+        # One population statement per layered rule: `architecture-layers`, and
+        # since BDL-076 A2 `site-fsd-layers` over the site theme.
+        layered = load_rules(self_check_snapshot / ".beadloom" / "_graph" / "rules.yml")
+        layer_rules = [rule for rule in layered if isinstance(rule, LayerRule)]
+        assert len(layer_rules) == 2
+        assert after.warning_count == before.warning_count + len(layer_rules)
 
 
 class TestTheOtherFourRuleKindsAreUnchanged:

@@ -2,7 +2,8 @@
 
 The `docs site` VitePress content generator for the application domain.
 
-**Source:** `src/beadloom/application/site.py` (plus the `site_*.py` cluster)
+**Source:** `src/beadloom/application/site/` (the package; `generate_site` is re-exported from its
+`__init__`)
 
 ---
 
@@ -13,17 +14,82 @@ The `docs site` VitePress content generator for the application domain.
 Generate a complete VitePress content tree from the indexed graph. `docs site`
 reads the graph read-only and emits the About home page, the interactive
 architecture view (a canonical layered-lanes Cytoscape+ELK graph), per-node
-pages, the metrics dashboard (data and page), the cross-repo landscape map, the
-published `docs/` section, the nav/sidebar tree, and a generation-time Mermaid
-validity guard.
+pages that open that view on their node, the metrics dashboard (data and page),
+the cross-repo landscape map, the published `docs/` section, the nav/sidebar
+tree, and a generation-time Mermaid validity guard.
+
+### The package
+
+Since BDL-076 K1 (`beadloom-ujzb.2`) the portal is one package, `application/site/`, and this
+feature node owns it. The modules lived directly under `application/` before, where their
+symbols counted against the `application` domain: A1 took that domain to 183 symbols against a
+limit of 180, and the owner chose moving the portal over raising the limit. Measured by K1: the
+domain owns 14 symbols after the move, and `site-generation` owns 193 in 20 files. A feature is
+not judged by `domain-size-limit`. `repository_link.py` joined the package in BDL-076 A3.
+
+The move changed no behaviour and left no shim, so the old dotted paths
+(`beadloom.application.site_dashboard`, `beadloom.application.architecture_view`, …) no longer
+import. Module names dropped the `site_` prefix the package now carries:
+
+| Before | Now |
+|---|---|
+| `site.py` | `generate.py` |
+| `site_pages.py` | `node_pages.py` |
+| `site_landscape.py` | `landscape_map.py` |
+| `site_published.py` | `published_docs.py` |
+| `site_nav.py`, `site_about.py`, `site_mermaid_guard.py`, `site_metrics_history.py` | `nav.py`, `about.py`, `mermaid_guard.py`, `metrics_history.py` |
+| `site_dashboard/` | `dashboard/` |
+| `architecture_view.py`, `architecture_card.py`, `landscape_view.py` | unchanged names |
+
+`generate_site` is re-exported from the package, so `from beadloom.application.site import
+generate_site`, the entry the CLI uses, reads as it did before.
 
 ### Module cluster
 
 One feature node covers the cooperating modules below (all annotated
-`# beadloom:feature=site-generation`):
+`# beadloom:feature=site-generation`, all under `application/site/`):
 
-- `site.py` — orchestrator / use-case entry point (`generate_site`)
-- `architecture_view.py` — the interactive **architecture** data model
+- **generate.py** — `generate_site(conn, out_dir, *, project_root, federated=None,
+  now_ts=None)` is the `docs site` use-case: it reads the indexed graph read-only and writes a
+  VitePress content tree under `out_dir` (default `site/`) — an `index.md` **About home page**
+  rendered from the project `README.md` via `about.render_about` (link-rebased; falls back to
+  the architecture overview body when no `README.md`), a `ru/index.md` RU About page from
+  `README.ru.md` (omitted when absent; both About pages get the in-page bilingual cross-link
+  `/` ↔ `/ru/` via `cross_link_routes`), an `architecture.md` architecture page — the
+  interactive Cytoscape+ELK compound graph primary view (`public/architecture.data.json`,
+  delegated to `architecture_view.py`) plus the Mermaid counts/C4/health overview demoted to
+  the `architecture-diagram.md` fallback (the body that used to live at `index.md`, BDL-046;
+  the Mermaid graph was unreadable so the interactive view is now primary, BDL-060 S4 ext), a
+  `docs/index.md` Documentation overview (BDL-046 BEAD-11: a short intro + one `## <Group>`
+  heading per top-level docs group — Domains / Services / Guides / General — each followed by a
+  single sentence that **names** its members as inline human-labelled TEXT, **no link wall**,
+  since the full navigable tree is already the expanded Documentation sidebar), one page per
+  node (delegated to `node_pages.py`), the metrics dashboard (`dashboard.md` +
+  `dashboard.data.json`, delegated to the `dashboard/` package), the 🌟 landscape map — the
+  interactive Cytoscape+ELK primary view (`landscape.md` + `public/landscape.data.json`,
+  delegated to `landscape_view.py`) plus the Mermaid fallback (`landscape-diagram.md`,
+  delegated to `landscape_map.py`), and `.vitepress/config.generated.mjs` (nav/sidebar). Before
+  building the dashboard it backfills structural trend history from `graph_snapshots` and
+  records this run's honest metrics point (`metrics_history.append_metrics_point`) so the
+  emitted trend series includes "now"; `now_ts` is the injected ISO timestamp of the run
+  (deterministic in tests; defaults to the current UTC instant in production). It is the only
+  wall-clock read, and it lands in two places: the append-only history store and the
+  `generated_at` field of `architecture.data.json` (BDL-076 A1). No dashboard field carries it,
+  so a fixed `now_ts` regenerates the tree byte for byte. Since A1 the run also computes each
+  node's lint findings (`_lint_findings`, the same `beadloom lint` run the dashboard reports)
+  and debt (`_node_debt`, the debt report's scored offenders, read and never re-scored), hands
+  both to `architecture_view` as `NodeVerdicts`, links every node to its page through
+  `node_pages.node_page_urls` (both landscape views use the same map), and reads the
+  repository a node's source links into through `repository_link.repository_of`. Beadloom
+  produces, VitePress renders. Output is
+  deterministic (sorted, stable frontmatter) and never writes into the source `docs/`. Returns
+  a frozen `SiteResult` listing every written path. Reuses `graph/c4.py`
+  (`map_to_c4`/`filter_c4_nodes`/`render_c4_mermaid`) for diagrams; reimplements no graph
+  logic. Every emitted Markdown page is run through the Mermaid structural guard
+  (`mermaid_guard.validate_mermaid`) before writing — a structurally broken diagram raises
+  `MermaidValidationError` and fails generation (closing the "build green ≠ renders ok" gap)
+  instead of shipping a page that crashes the browser render.
+- **architecture_view.py** — the interactive **architecture** data model
   (`architecture.data.json`): each node carries its `layer`, its `layer_rank`
   (the partition index for the canonical layered-lanes layout — the index of the
   node's layer in the declared order, inherited from the nearest layered
@@ -52,13 +118,14 @@ One feature node covers the cooperating modules below (all annotated
   tagged nodes instead of drawing a stratification nobody declared.
 
   The `layer` field stays the short token — the declared tag with its
-  conventional `layer-` prefix removed — because those tokens are the
-  front-end's contract (`site/.vitepress/theme/architectureTheme.js` keys its
-  colors and lane labels by them). A tag that does not carry the prefix is used
-  verbatim and colors grey, which is the same honest degradation the rest of the
-  module follows. `layer` reads the node's OWN tag while `layer_rank` inherits:
-  the card states what the node declares, and the layout needs a lane for a
-  feature that declares nothing.
+  conventional `layer-` prefix removed — and a tag that does not carry the prefix
+  is used verbatim. Since BDL-076 A2 the viewer holds no table of those tokens:
+  its `site-layer` slice (`entities/layer/model/layers.js`) builds the layers
+  from the `layer_rank` values that occur, names each one by the `layer` of a
+  node that declares it, and colours it by its position in the order, so an
+  adopter whose layers are called differently gets its own names. `layer` reads
+  the node's OWN tag while `layer_rank` inherits: the card states what the node
+  declares, and the layout needs a lane for a feature that declares nothing.
 
   **The edge `violation` flag is the rule engine's verdict, asked of the rule
   (BDL-070 B4).** It was this module's own predicate — `dst_rank <= src_rank`,
@@ -98,54 +165,548 @@ One feature node covers the cooperating modules below (all annotated
   `cli uses <domain>` among them — was silently absent from the picture,
   and a node coupled only that way (`ai-techwriter`, which shells out to the CLI
   and hands the dashboard a run-record file) read as an island.
-- `landscape_view.py` — the interactive cross-service **landscape** data model
-  (`landscape.data.json`): contract edges with their reconciled verdict +
-  typed/body surface; plain (non-contract) dependencies carry no protocol.
-- `site_about.py` — README → About page transform (link-rebased)
-- `site_dashboard/` — metrics dashboard data + page (package, decomposed by cohesion in BDL-059 S4 into `_common`, `gate_metrics`, `ai_activity`, `recommendations`, `alerts`, `status_cards`, `assemble`; the package `__init__` re-exports the public surface)
-- `site_landscape.py` — cross-repo landscape map
-- `site_mermaid_guard.py` — generation-time Mermaid validity guard
-- `site_metrics_history.py` — append-only metrics-history store
-- `site_nav.py` — nav / sidebar tree builders
-- `site_pages.py` — per-node page rendering
-- `site_published.py` — published `docs/` section + per-doc badges (including
-  the `reference` badge for unpaired overview docs)
+
+  **Honest degradation**: a node with no doc gets EMPTY `doc_links` (no
+  fabricated link, and a link is emitted only for a slug that was published, so
+  it never 404s); no declared layer tag gives an empty `layer`; `lint_clean` and
+  `findings` are OMITTED when lint was not computed rather than reported clean.
+  `serialize_architecture_view(data)` is the byte-stable JSON (`sort_keys`), and
+  `render_architecture_view_md(data)` renders `architecture.md` — title, intro,
+  the `<ClientOnly><ArchitectureMap></ClientOnly>` mount, a static count summary
+  for a reader without JavaScript and a link to the `architecture-diagram`
+  Mermaid fallback. Since A1 its intro names the declared layers from the data
+  file (`The lanes are the declared layers, top to bottom: …`, or that the
+  project declares none) instead of a fixed list. Since A3 it also names the four
+  drawn edge kinds, the legend, the card, the neighbourhood's depth and direction,
+  **Impact**, the filters and the URL state. The file is written to
+  `site/public/architecture.data.json` for the runtime
+  `withBase("/architecture.data.json")` fetch. The rendering lives in the
+  VitePress theme: `ArchitectureMap.vue` is a thin page over the `graph-viewer`
+  widget and the `node-card` widget, described in [the site's
+  page](../../../../services/vitepress-site.md).
+- **architecture_card.py** — the node card of `architecture.data.json` (BDL-076
+  A1): what one node shows beyond its place in the graph. `card_sources(conn, *,
+  tags, verdicts)` reads the per-build inputs once — the test placements, the
+  owner of each test file the graph holds (`test_owners`), the `NodeVerdicts` the
+  site run computed and the `RepositoryLink` — and `card_fields(...)` projects one
+  node's `source`, `source_url`, `lifecycle`, `tags`, `docs`, `tests`,
+  `public_symbols` and `activity`, plus `findings` and `debt` when those were
+  computed. `architecture_view` merges the result into each node. `activity` is
+  narrowed to `CARD_ACTIVITY_KEYS` (`commits_30d`, `level`) by `card_activity`: the
+  reindex also records the names of a node's most frequent committers, and the data
+  file is published, so a key reaches it only by being listed there (BDL-076 R1
+  finding M2). The fields and their shapes are listed under the data file below.
+- **repository_link.py** — where a node's source can be read on the web (BDL-076 A3, reworked
+  by R1 finding M1 and the re-review's m1–m3). `repository_of(project_root)` reads the
+  project's own `origin` remote and the commit the site is generated from, and returns a
+  `RepositoryLink(url, ref)`, empty unless `project_root` is the top of its own git
+  repository. `web_url_of_remote(remote)` turns HTTP(S), `ssh://` and scp-like remotes into a
+  web address: credentials, user names, the SSH port and a trailing `.git` are dropped, and
+  Azure DevOps' `v3/<org>/<project>/<repo>` SSH form becomes its `_git` web address. A remote a
+  browser cannot open (a path on disk, `file://`), an Azure SSH remote in its legacy form, an
+  IPv6 host and a port that is not a number give `""`, never an error, because the link is an
+  extra of the site. `RepositoryLink.source_url(source)` builds the finished link to one path
+  at the recorded commit by the forge's own route; `forge_of(web_url)` recognises the forge by
+  its host: GitHub, GitLab, Bitbucket, Gitea and Codeberg, and Azure DevOps with its
+  `*.visualstudio.com` hosts. Any other host, a self-hosted forge included, gets no link,
+  because a guessed route is a 404 that looks like a link; a self-hosted forge is to be
+  declared in configuration in slice 2 (`beadloom-ujzb.8`). The remote reaches the data file
+  only as each node's `source_url`: no screen reads the address, and a remote can hold a
+  credential where no parser expects it.
+- **node_pages.py** — per-node page rendering for `generate.py` (split out to stay under the
+  domain-size limit). `render_all_pages(conn)` returns sorted `NodePage`s, one per node of every
+  kind; each page has summary, source, public symbols, a **Relationships** section, linked
+  hand-written docs (rooted at `/docs/` so they resolve to the published copy under
+  `site/docs/…`), and a **Graph** section that mounts
+  `<ArchitectureMap focus="<ref>" :depth="1" height="60vh" />` inside `<ClientOnly>`, the
+  architecture viewer opened on the page's node with its card (BDL-076 A4). It replaced the scoped C4/Mermaid diagram, which
+  stays on `architecture-diagram.md`; the `ref` is HTML-escaped into the attribute. The
+  Relationships section renders OUTGOING
+  `part_of`/`depends_on`/`uses` edges as Markdown links to other node pages, then INCOMING
+  relationships: **Used by** — the sorted, deduped union of incoming `uses`+`depends_on`
+  consumers (who consumes this node; no separate "Depended on by" section) — and **Parts** —
+  incoming `part_of` child nodes. Incoming refs are link-safe (a ref with a generated page
+  links to it, one without renders as plain text — never a dead link); self-edges are skipped;
+  an incoming section with no entries is omitted (a leaf shows neither). Deterministic
+  (sorted). `node_page_path(kind, ref_id)` is where a node's page is written (`<dir>/<ref>`,
+  under `other/` for a kind with no directory of its own), and `node_page_urls(conn)` maps
+  every node of every kind to `/<dir>/<ref>`. The architecture data file links each node
+  through it since BDL-076 A1, and both landscape views since A4, when the diagram viewer's
+  base-path rewrite learned `/other/`. The landscape map's own URL map, which covered three kinds
+  only, is removed.
+  `public_symbol_names(conn, ref_id)` lists the public names in the files the node owns; the
+  node page lists all of them and the node card the first 50.
+- **nav.py** — the generated VitePress nav/sidebar tree builders for `generate.py` (split out
+  to keep the generator small). `render_nav_config(conn, project_root)` emits the full
+  `.vitepress/config.generated.mjs` module exporting **only** `nav` + `sidebar` (BDL-046
+  BEAD-11 dropped VitePress `locales` — its global `/x↔/ru/x` mapping translated the whole menu
+  and 404'd off `/ru/` — so there is a single shared EN sidebar and no
+  `navRu`/`sidebarRu`/`render_sidebar_ru`). **Top nav is empty** (`render_nav` → `[]`; BDL-046)
+  — the VitePress default theme still renders the appearance toggle and local search
+  regardless. The **sidebar** (`render_sidebar(conn, *, docs_root, has_getting_started)`) is a
+  single ordered, link-safe tree: **About** (`/`) · **Getting Started**
+  (`/docs/getting-started`, emitted only if that page exists) · **Dashboard** (flat) ·
+  **Architecture** · **Landscape map** (flat) · **Documentation**. The **Architecture** group
+  is `collapsed: true` and a `part_of`-nested tree (service root → domains → features) with
+  **human-readable** labels via `human_label` (`context-oracle` → `Context Oracle`), roots
+  being nodes with no real `part_of` parent (a `root part_of root` self-edge is ignored so the
+  root service isn't dropped); an "Architecture overview" entry stays on top and links to
+  `/architecture` (the overview page). The **Documentation** group is `collapsed: false`
+  (expanded) and mirrors the `docs/` directory tree
+  (`render_documentation_group_from_dir(docs_dir, *, collapsed)`) as a nested, collapsible
+  structure (each subdir a group, each `.md` a leaf link rooted at `/docs/`), led by an
+  Overview link. Dashboard + Landscape map are plain `{ text, link }` entries (not one-child
+  groups). Deterministic (sorted, byte-stable); no dead nav links.
+- **about.py** — the README→About page transform (BDL-046). `render_about(readme_text, *,
+  published_doc_slugs, repo_url, cross_link_routes=None)` turns a project README's Markdown
+  into the VitePress About/home page body by **rebasing links** (prose untouched, pure,
+  deterministic, no I/O): a `docs/<x>.md` link whose slug is in `published_doc_slugs` → the
+  extension-less site link `/docs/<x>`; a `README.md`/`README.ru.md` cross-link → if its
+  lowercased basename is in `cross_link_routes` (a basename→route map, e.g. `{"readme.ru.md":
+  "/ru/", "readme.md": "/"}`), the link target is **rewritten to that route** (visible text
+  kept) — this is the in-page bilingual About toggle that replaced the dropped locale switcher
+  (BDL-046 BEAD-11); when no map is given the cross-link is dropped (text kept, back-compat);
+  any other internal/relative target → an absolute GitHub URL `{repo_url}/blob/main/<path>`;
+  already-absolute URLs, shields.io badges, and pure anchors are left untouched; the same rules
+  apply to image targets; links inside code spans / fenced blocks are never rewritten. This
+  lets the rewritten README be the bilingual front-door page (EN `/`, RU `/ru/`) without a
+  hand-maintained duplicate.
+- **dashboard/** — package (decomposed by cohesion in BDL-059 S4 into `_common`,
+  `gate_metrics`, `ai_activity`, `recommendations`, `alerts`, `status_cards`, `assemble`; the
+  package `__init__` re-exports the public surface). Showcase A, the AaC/DocAsCode metrics
+  dashboard. `build_dashboard_data(conn, *, project_root, federated=None)` returns a
+  deterministic, JSON-safe dict and `render_dashboard_md(data)` renders the human page from
+  that same dict (the front-end never invents a figure). Honest by construction: every number
+  comes from the SAME code path as its gate — `lint` (count + severity breakdown via
+  `graph/linter.lint`), `debt` (`debt_report.compute_debt_score` + `compute_debt_trend`,
+  serialized via `format_debt_json`), `docs` (coverage % + `sync_state` freshness % + stale
+  pair count, read-only), `doctor` (`doctor.run_checks` pass/fail summary), and an optional
+  `federated` rollup (per-service edge-verdict health + contract-verdict counts) reusing the
+  `federate` output verbatim. It also emits **`trends`** — the recorded time-series from
+  `metrics_history.read_history` (sorted by `ts`; ONLY real recorded points — no interpolation,
+  no fabricated samples; sparse at first is correct) — **`ai_techwriter`** — the honest "AI
+  tech-writer activity" section (G9) read independently from the append-only run-record store
+  `.beadloom/ai_techwriter_runs.json` the CI harness emits (absent/empty/corrupt → an
+  empty-but-present section, never an error): `runs[]` sorted by `ts` with per-run + cumulative
+  docs-refreshed and input/output token spend (ONLY real recorded runs — same no-interpolation
+  contract as `trends`), `totals`, and a `cost_estimate` (`{usd, rate_usd_per_1m,
+  is_estimate=True, label "est. @ $X/1M tokens"}`) — token counts are FACTS from each record
+  while the dollar figure is a clearly-labeled ESTIMATE at the configured `_USD_PER_1M_TOKENS`
+  rate, never a hard cost (rendered by the `AiTechwriterActivity` widget) — and
+  **`recommendations`** — a prioritized, actionable list built from the EXISTING gate data (one
+  item per lint violation, BREAKING/DRIFT contract risks from the `--federated` artifact, stale
+  docs from `sync_state`, and worst-debt nodes from `debt_report` top offenders); each item is
+  `{kind, severity, target, message, link}`, severity-ordered (errors first) with deterministic
+  tie-breaks, so the panel is honest by construction. For a **critical-first** UX it
+  additionally emits **`alerts`** — the attention-banner problems (`{kind, severity, message}`)
+  shown IFF there is something wrong (BREAKING contracts → `critical`, DRIFT contracts / lint
+  errors / doctor errors → `error`, stale doc-code pairs / high-debt → `warn`/`error`; the
+  stale alert reads `N stale pair(s)` since BDL-069 `beadloom-yn6i`, because its count is one
+  `sync_state` row per pair and the docs card beside it counts the same rows), severity-ordered
+  (BREAKING leads) with deterministic tie-breaks; an empty list is the all-clear state — and
+  **`status_cards`** — one threshold-colored card per metric group (`{group, label, status,
+  value, detail}` with `status` ∈ `ok`/`warn`/`error`, the severity computed deterministically
+  in Python so the front-end only paints the color). `render_dashboard_md` emits only the page
+  title + a short intro + the `<ClientOnly>` component mounts (no per-metric text dump, no
+  `<noscript>` fallback) — the cards/widgets are the single presentation surface and read the
+  honest figures from `dashboard.data.json` (`build_dashboard_data`, unchanged).
+- **landscape_map.py** — Showcase B, the 🌟 cross-repo landscape map.
+  `build_landscape_data(conn=None, *, federated=None)` returns a deterministic, JSON-safe dict
+  (`scope`/`nodes`/`edges`) and `render_landscape_md(data, *, pages=None)` renders a
+  **Mermaid** diagram from it (never hand-drawn). With a `federated.json` (the F2 `federate`
+  hub output) nodes are the satellites and edges are the cross-repo links carrying the hub's
+  `ContractVerdict`-style verdict verbatim; **without it the map is the LOCAL contract graph**
+  — `_local_landscape` reads the repo's own `produces`/`consumes` edges, reconciles them by
+  `contract_key` into `graph.contracts.Contract`s, classifies each to a `ContractVerdict`, and
+  renders one edge per producer→consumer coloured by that verdict (Beadloom's own site emits a
+  single `beadloom → vitepress-site` CONFIRMED edge; a repo with no contracts → an empty map).
+  This is the real contract reality, not the structural `depends_on`/`uses` arch (which stays
+  in the C4 overview). Edges are labelled by their verdict; a Mermaid `classDef` health overlay
+  colours nodes (green = healthy, red = broken, grey = external/expected) and broken edges get
+  a red `linkStyle`. **Clicks are page-aware**: a node emits `click <id> "/<dir>/<ref>"` ONLY
+  when `pages` (from `node_pages.node_page_urls(conn)`) has a real generated page for it. Every
+  node of this graph has one, `other/` included; a node with no page (a foreign federated repo)
+  renders without a click, so the map never links to a dead page. Every Mermaid id is
+  **prefixed** (`n_<sanitized>`) so it can never collide with a reserved keyword (a node named `graph` becomes `n_graph` — the label and click
+  route keep the real ref). Since BDL-060 S4 the Mermaid diagram is the **secondary/fallback**
+  view (`landscape-diagram.md`); the PRIMARY view is the interactive `landscape_view.py` map.
+- **landscape_view.py** — Showcase B PRIMARY view (BDL-060 S4, G2): the interactive
+  cross-service landscape. `build_landscape_view_data(conn, *, pages=None)` returns a
+  deterministic, renderer-agnostic, JSON-safe dict
+  (`schema_version`/`scope`/`nodes`/`edges`/`contracts`) reconciled from the SAME
+  `graph.contracts.reconcile_contracts` path the gate/report use — never a re-implemented
+  surface — by reconstructing the contract-bearing edge dicts from each edge's `extra.contract`
+  blob (mirroring the satellite-export path), so each contract carries its `ContractVerdict`,
+  protocol routing (AMQP exchange/routing_key/message_type, or GraphQL schema),
+  producer↔consumer endpoints, the named `missing` break paths, what decided the verdict
+  (`verdict_basis`, BDL-076 `beadloom-ujzb.6`), and the DEEP field surface: the GraphQL typed
+  Tier-A `fields` (`exposed`/`referenced`, S2) OR the AMQP body JSON-Schema
+  (`body.exposed`/`referenced`, S3). **Honest degradation**: a contract with no declared
+  surface carries an EMPTY `fields`/`body` block (the view renders *undeclared*) — never a
+  fabricated field. Nodes carry `kind`/`group`/`health` (worst incident verdict) + a page `url`
+  (non-empty only when a real page exists, so a click never resolves to a dead page).
+  `serialize_landscape_view(data)` is the byte-stable JSON (`sort_keys`);
+  `render_landscape_view_md(data)` renders `landscape.md` — the title + intro + the
+  `<ClientOnly><LandscapeMap></ClientOnly>` mount + a static count summary (JS-off fallback) +
+  a link to the `landscape-diagram` Mermaid fallback. Its intro names the service card, the
+  neighbourhood, **Impact** and the protocol and verdict filters. The rendering lives in the
+  VitePress theme: since BDL-076 A4 `LandscapeMap.vue` (the `site-landscape-page` slice) is the
+  graph viewer in its landscape mode with the service card in its panel, over the
+  `site-landscape-data` slice; see [the site's page](../../../../services/vitepress-site.md).
+  ELK runs with fixed seedless options, so layout is deterministic given the byte-stable data.
+  The artifact is emitted under `site/public/landscape.data.json` (VitePress copies `public/` to the dist root) for the
+  runtime `withBase("/landscape.data.json")` fetch.
+- **mermaid_guard.py** — the generation-time Mermaid validity guard (targeted structural
+  validators, NOT a full parser). `validate_mermaid(text)` returns a list of `MermaidIssue` for
+  the two F4 render bug classes: (1) a flowchart/`graph` node id that equals a reserved Mermaid
+  keyword or has an illegal charset; (2) a C4 `Rel(a, b, …)` whose endpoint is not a declared
+  `Container`/`Component`/`Person`/`System*` node (a Rel to the boundary/root crashes
+  `drawRels`). An extensible validator registry; deterministic (issues in source order).
+  `generate.generate_site` calls it on every emitted diagram and raises on any issue.
+- **metrics_history.py** — the metrics-history append-store backing honest dashboard trends. A
+  tiny additive JSON log at `.beadloom/metrics_history.json` of `MetricsPoint`s (`ts`,
+  `lint_violations`, `debt_score`, `coverage_pct`, `sync_pct`, `nodes`, `edges`, `symbols`).
+  `append_metrics_point(project_root, point)` records one point per `docs site` run (the `ts`
+  is supplied by the caller — never `now()` inside this module — so tests are deterministic;
+  appending an existing `ts` overwrites that point so a re-run does not double-count);
+  `read_history(project_root)` returns the series sorted by `ts` (only real recorded points,
+  never an interpolated one); `backfill_structural_history(conn, project_root)` seeds
+  structural counts (nodes/edges/symbols) from the existing `graph_snapshots` history so the
+  structural trend isn't empty on day one (idempotent; never overwrites a richer recorded
+  point). Additive append-state, NOT a versioned artifact — no schema bump.
+- **published_docs.py** — Showcase C, the published validated documentation.
+  `publish_docs(conn, out_dir, *, project_root)` copies the REAL `docs/**` tree into
+  `out_dir/docs/…` preserving structure (the source of truth, rendered as-is) and injects a
+  per-doc validation badge into the COPY only — the source `docs/` is NEVER mutated (no AI
+  prose-rewriting; that is the deferred F4.1). A generated `docs/index.md` landing page (sorted
+  links to every published doc) is also emitted so the `/docs/` nav target resolves.
+  `build_published_docs(conn, *, project_root)` returns the deterministic per-doc inputs
+  (`PublishedDoc`: `status`/`reason`/`synced_at`/`ref_id`/`coverage_pct`); the status comes
+  from the `doc_sync` engine via `check_sync` — the SAME code path `beadloom sync-check` runs —
+  so a doc the gate calls stale shows `stale` on the site. The badge head is `✅ fresh` /
+  `⚠️ stale — <reason>` for tracked docs; a doc tracked by NO doc-code pair is badged **neutrally**
+  as `📘 reference — overview/guide, not tied to a code symbol` (an overview/guide is not a
+  defect, so it is NOT called "untracked"). `inject_badge(prose, badge_body)` wraps the badge
+  between the stable `<!-- beadloom:badge-start -->` / `-end -->` markers so regeneration
+  overwrites ONLY the badge region and leaves the authored prose byte-for-byte intact;
+  `render_published_doc(doc, prose)` renders the badged Markdown. Fresh/stale badges show `last
+  synced` (the stored `sync_state.synced_at`, not wall-clock → deterministic) and the owning
+  node's read-only source-coverage %; the **reference** (untracked) badge deliberately omits
+  the coverage % line — that figure is the node's source coverage, unrelated to the prose, and
+  printing it next to a not-tracked doc reads as a contradiction.
 
 The dashboard's not-fresh count and a node's stale marker read
 `status IN ('stale','missing')`: a pair whose file is gone is not one less thing
 to worry about (BDL-UX #174).
 
+### The architecture data file, schema version 2
+
+`architecture.data.json` is a contract between this feature and the viewer. BDL-076 A1 raised
+its `schema_version` to 2 and kept every key of version 1 with its meaning. The viewer's
+`site-architecture-data` slice accepts versions 1 and 2 and refuses any other with a message on
+the page. Since A3 the viewer reads the version-2 fields: the declared layers, the node card, and
+the findings, tests and docs the node status and the impact mode read. The static site shows
+all of it without querying the index.
+
+**Top level.** `schema_version`, `scope` (`architecture`), `nodes` and `edges`, and since
+version 2:
+
+- `generated_at` — the run's `now_ts`, so a fixed instant regenerates byte for byte;
+- `beadloom_version`;
+- `layers` — the declared layers top to bottom, each `{name, rank, tag, token}`, where `token`
+  is what a node in that layer carries as its `layer`;
+- `layer_order` — the direction the declared layer rule enforces, `""` when none is declared.
+
+Nothing derived from the git remote is at the top level. A1 wrote a `project` name and A3 a
+`repository {url, ref}`; no screen read either, and a remote could carry a credential or a
+`?token=` into both, so the re-review removed them (`beadloom-ujzb.10`). The remote reaches the
+file only as each node's `source_url`.
+
+**Per node.** Version 1: `id`, `label`, `kind`, `summary`, `layer`, `layer_rank`, `group`,
+`symbols`, `doc_status`, `doc_links`, `url`, `parent`, `depends_on`, `depended_on_by`, `uses`,
+`used_by`, and `lint_clean` when lint ran. `url` comes from `node_pages.node_page_urls`, so every
+node links to its page, `other/` included. Version 2 adds the card:
+
+| Key | Shape | Absent or empty when |
+|---|---|---|
+| `source` | the declared source | `""` when the node declares none |
+| `source_url` | the finished link to `source` at the commit the site was generated from, by the forge's own route | `""` with no source, no git repository of the project's own, a remote a browser cannot open, or a host that is not a recognised public forge |
+| `lifecycle` | the node's lifecycle | — |
+| `tags` | sorted list | `[]` |
+| `docs` | `[{path, status}]` — the worst status of the doc's sync pairs (`missing`, `stale`, `unverified`, `ok`), `unpaired` for a doc with no pair | `[]` |
+| `tests` | `{files, file_count, count, placement}` | `null` when the test binding does not cover the node |
+| `public_symbols` | `{names, omitted}` — the first 50 public names and how many more | — |
+| `activity` | `{commits_30d, level}`, the keys of the activity the reindex recorded that the card shows | `null` when none was recorded |
+| `findings` | `[{rule, severity, message}]` from `beadloom lint` | omitted when lint did not run |
+| `debt` | `{score, reasons}` from the debt report | `{score: 0.0, reasons: []}` for a node the report does not score; omitted when not computed |
+
+`lint_clean` is now the version-1 reading of `findings`: true when the list is empty. The viewer
+draws a node as a violation only for a finding of severity `error`.
+
+**`activity` is an allow-list.** The reindex records the level, commits in 30 and 90 days, the
+last commit date and the names of the node's most frequent committers. The data file is
+published, and the card shows two of those, so `CARD_ACTIVITY_KEYS` names the two and nothing
+else reaches the file (BDL-076 R1 finding M2). The contract test pins the allow-list, and the
+`node_card_data` scenarios check that no generated file names the project's commit author and
+that a credential written into the remote reaches none.
+
+**A test file is listed at the node it is bound to (BDL-076 K4).** `tests.files` names only the
+files whose `test_files` owner is this node. A file whose owner the graph does not hold stays
+listed where it is counted, since no other node would list it. `file_count` (new in K4), `count`
+and `placement` are taken over the node and its `part_of` descendants, the same files
+`beadloom ctx` counts, so a container shows the numbers it showed before. Listed at every
+ancestor, the paths were the largest field of the file. Measured by K4 on this repository: the
+file went from 376,794 to 331,941 bytes (gzip 44,755 to 38,711), and the listings from 877 to
+299, one per distinct file. The schema version stayed 2.
+
+**Edges.** One per `part_of`, `depends_on`, `uses`, `consumes` and `produces` edge, sorted. A
+contract edge (`consumes`/`produces`, new in version 2) carries its `contract` key, so two
+contracts between one pair of nodes stay two edges. A `depends_on` edge carries `violation` when
+both ends have a rank. `touches_code` stays out: it points at a file, not at a node.
+
+### The landscape data file
+
+`landscape.data.json` is written by `landscape_view.py` and read by the viewer's
+`site-landscape-data` slice. Its `schema_version` is 1; `verdict_basis` was added to it without
+a bump, because a reader that does not know the key loses nothing.
+
+- **Top level:** `schema_version`, `scope` (`product`), `nodes`, `edges`, `contracts`.
+- **Node** (a contract's producers and consumers only): `id`, `label`, `kind`, `group`,
+  `health` (the worst verdict among its contracts: `broken`, `neutral` or `healthy`) and `url`,
+  the node's page from `node_page_urls`.
+- **Edge:** `src` (a producer), `dst` (a consumer), `verdict` and `contract_key`, one per
+  producer and consumer pair of each contract, a self-loop dropped.
+- **Contract:** `contract_key`, `protocol`, `name`, `verdict`, `verdict_basis`, `lifecycle`,
+  `routing`, `producers`, `consumers`, `missing`, `fields {exposed, referenced}` and
+  `body {exposed, referenced}`.
+
+`verdict_basis` states what decided the verdict. `lifecycle` is a verdict the declared lifecycle
+decides before any comparison (`external`, `dead`, `expected`). `surface` is a `breaking`
+verdict, or a `confirmed` one that compared the two sides: two AMQP bodies, typed GraphQL fields
+on both sides, or the names a GraphQL consumer references. Anything else is `presence`: only
+which sides exist was checked. A GraphQL comparison by name leaves no other trace in the file,
+so the generator, which ran the reconciliation, states it. The viewer calls a contract that is
+neither broken nor decided by its surface "unverified". This repository's one contract,
+`site-data:site-bundle` from `beadloom` to `vitepress-site`, is `confirmed` on `presence`.
+
 ### Output contract
 
 The generated `site/` tree is consumed by the VitePress site (the
 `vitepress-site` node) — a real producer → consumer contract. The source `docs/`
-is never written; output goes only under `--out` (default `site/`). The metrics
-point recorded each run takes its timestamp from `now_ts`, injected in tests for
-determinism and defaulting to the current UTC instant in production; it is the
-only wall-clock read and lands only in the append-only history store, never in a
-diffed dashboard field.
+is never written; output goes only under `--out` (default `site/`). The run's
+instant comes from `now_ts`, injected in tests for determinism and defaulting to
+the current UTC instant in production. It is the only wall-clock read, and it
+lands in two places: the metrics point recorded in the append-only history store
+and the `generated_at` field of `architecture.data.json`. No dashboard field
+carries it.
 
 ## Invariants
 
-- Generation is deterministic and read-only over the graph.
+- Generation is deterministic and read-only over the graph; a fixed `now_ts` regenerates the
+  tree byte for byte.
 - The source `docs/` is never modified; only `--out` is written.
 - The Mermaid guard validates every emitted diagram at generation time, so a
   broken diagram fails the build rather than the published site.
+- `architecture.data.json` version 2 keeps every key of version 1 with its meaning. The keys of
+  both versions are pinned by
+  `tests/integration/application/site/architecture_view/test_the_data_file_carries_the_node_card.py`.
+- A value the run did not compute is omitted, never reported clean.
+- Nothing from the git remote is published except each node's `source_url`, and a source link
+  is written only for a recognised public forge, never guessed.
+- `activity` in the data file carries only the keys in `CARD_ACTIVITY_KEYS`.
 
 ## API
 
-Module `src/beadloom/application/site.py`:
+Module `src/beadloom/application/site/generate.py`:
+- `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path)
+- `MermaidValidationError` — raised when a generated page fails the Mermaid guard (carries
+  `page` + `issues`)
+- `generate_site(conn, out_dir, *, project_root, federated=None, now_ts=None)` -> `SiteResult`
+  — deterministic VitePress tree generator; never writes into the source `docs/`; guards every
+  emitted diagram. Emits the About home `index.md` from `README.md` (fallback: architecture
+  overview), the architecture overview at `architecture.md`, a RU About `ru/index.md` from
+  `README.ru.md` (skipped when absent; both link to each other via the in-page `/` ↔ `/ru/`
+  cross-link), and a `docs/index.md` Documentation overview = intro + per-section named-members
+  descriptions, no link wall (BDL-046 BEAD-11). `now_ts` is the injected ISO-8601 instant of
+  the run: it stamps the metrics-history point and `architecture.data.json`'s `generated_at`
+  (deterministic in tests; defaults to the current UTC instant in production, the only
+  wall-clock read). The package `__init__` re-exports it, so `from beadloom.application.site
+  import generate_site` is the entry the CLI uses.
 
-- `generate_site(conn, out_dir, *, project_root, federated=None, now_ts=None) -> SiteResult`
-  — generate the content tree; returns the files written.
-- `SiteResult` — the outcome: `out_dir` and the sorted `written` files.
-- `MermaidValidationError` — raised when a generated diagram is invalid.
+Module `src/beadloom/application/site/mermaid_guard.py`:
+- `MermaidIssue` — frozen dataclass: `kind` (`reserved-id`/`charset`/`c4-rel-undeclared`),
+  `message`
+- `validate_mermaid(text)` -> `list[MermaidIssue]` — targeted structural guard for flowchart
+  reserved-id/charset + C4 Rel integrity (extensible, deterministic)
+
+Module `src/beadloom/application/site/dashboard/` (package; public surface re-exported from
+`__init__`):
+
+- `build_dashboard_data(conn, *, project_root, federated=None)` -> `dict` — deterministic
+  dashboard data (lint/debt/docs/doctor + optional federated rollup + critical-first `alerts` +
+  threshold-colored `status_cards` + `trends` time-series + prioritized `recommendations`);
+  honest by construction (reuses each gate's code path; trends are exactly the recorded points)
+- `render_dashboard_md(data)` -> `str` — render `dashboard.md` from the data dict: the page
+  title + a short intro + the `<ClientOnly>` block mounting the banner + status cards
+  (`<AlertBanner/>`/`<StatusCards/>`) and the committed ECharts widgets
+  (`<HealthGauges/>`/`<CategoryChart/>`/`<TrendCharts/>`/`<Recommendations/>`,
+  theme-registered, reading `dashboard.data.json`). No per-metric text dump, no `<noscript>`
+  fallback — the widgets are the single presentation surface (data honesty lives in
+  `dashboard.data.json`)
+- `serialize_dashboard_data(data)` -> `str` — deterministic JSON (sorted keys) for
+  `dashboard.data.json`
+
+Module `src/beadloom/application/site/metrics_history.py`:
+- `MetricsPoint` — frozen dataclass: `ts`, `lint_violations`, `debt_score`, `coverage_pct`,
+  `sync_pct`, `nodes`, `edges`, `symbols`
+- `history_path(project_root)` -> `Path` — `.beadloom/metrics_history.json`
+- `append_metrics_point(project_root, point)` — append/overwrite-by-ts and persist (injected
+  ts; idempotent per ts)
+- `read_history(project_root)` -> `list[MetricsPoint]` — the recorded series sorted by `ts`
+  (only real points, no fabrication)
+- `backfill_structural_history(conn, project_root)` — seed structural counts from
+  `graph_snapshots` (idempotent; never clobbers a recorded point)
+
+Module `src/beadloom/application/site/landscape_map.py`:
+- `build_landscape_data(conn=None, *, federated=None)` -> `dict` — deterministic landscape-map
+  data (`scope`/`nodes`/`edges`); federated when a `federate` artifact is given, else a
+  single-repo **contract** map from the local graph (`produces`/`consumes` edges reconciled by
+  `contract_key` into `Contract`s, classified to a `ContractVerdict`; one edge per
+  producer→consumer)
+- `render_landscape_md(data, *, pages=None)` -> `str` — render `landscape.md` as a Mermaid
+  diagram (verdict-labelled edges, `classDef` health overlay, clickable nodes); never
+  hand-drawn. `pages` is a `ref_id → existing page URL` map: a node emits a `click` ONLY when
+  it has a real generated page, so the map never links to a dead URL (a foreign federated repo
+  renders without a click)
+
+Module `src/beadloom/application/site/landscape_view.py`:
+- `build_landscape_view_data(conn, *, pages=None)` -> `dict` — deterministic, renderer-agnostic
+  interactive-landscape data (`schema_version`/`scope`/`nodes`/`edges`/`contracts`); contracts
+  reconciled via `graph.contracts.reconcile_contracts` from each edge's `extra.contract` blob,
+  carrying verdict/`verdict_basis`/routing/producers/consumers/`missing` + the GraphQL typed
+  `fields` (S2) or
+  AMQP `body` JSON-Schema (S3); empty surface → *undeclared* (no fabrication). `pages` gives a
+  node a non-empty `url` only when a real page exists
+- `serialize_landscape_view(data)` -> `str` — byte-stable JSON (`sort_keys`, 2-space, trailing
+  newline)
+- `render_landscape_view_md(data)` -> `str` — render the primary `landscape.md`: title + intro
+  + `<ClientOnly><LandscapeMap></ClientOnly>` mount + a static JS-off count summary + a link to
+  the `landscape-diagram` Mermaid fallback (pure function of `data`)
+
+Module `src/beadloom/application/site/node_pages.py`:
+- `NodeRow` / `NodePage` — frozen dataclasses for a graph node and its rendered page
+- `load_nodes(conn)` -> `list[NodeRow]`; `render_all_pages(conn)` -> sorted `list[NodePage]`,
+  one per node; `render_node_page(conn, node, kinds)` -> `NodePage`, whose last section mounts
+  `ArchitectureMap` focused on the node
+- `node_page_path(kind, ref_id)` -> `str` — the page's path without `.md`, `other/` for a kind
+  with no directory
+- `node_page_urls(conn)` -> `dict[str, str]` — every node's page URL, every kind included; the
+  architecture data file and both landscape views link through it
+- `public_symbol_names(conn, ref_id)` -> `list[str]` — the public names in the files the node
+  owns, sorted
+
+Module `src/beadloom/application/site/nav.py`:
+- `human_label(ref_id)` -> `str` — title-cased, hyphen→space label (`context-oracle` → `Context
+  Oracle`)
+- `render_architecture_group(conn)` -> `str` — the collapsed, `part_of`-nested Architecture
+  sidebar group (human labels; self-edge-safe roots; "Architecture overview" → `/architecture`)
+- `render_documentation_group(project_root)` -> `str` — the Documentation sidebar group
+  mirroring the `docs/` tree (nested, collapsible; `/docs/`-rooted leaf links)
+- `render_documentation_group_from_dir(docs_dir, *, collapsed)` -> `str` — the Documentation
+  group from a docs dir with an explicit `collapsed` flag (expanded on the site)
+- `render_nav()` -> `str` — the top-nav JS array, intentionally `"[]"` (BDL-046; theme keeps
+  appearance toggle + local search)
+- `render_sidebar(conn, *, docs_root, has_getting_started)` -> `str` — the full ordered,
+  link-safe sidebar (About / Getting Started / flat Dashboard / Architecture / flat Landscape
+  map / expanded Documentation)
+- `render_nav_config(conn, project_root)` -> `str` — the full deterministic
+  `.vitepress/config.generated.mjs` module: exports **only** `nav` (empty) + the single shared
+  `sidebar`. VitePress `locales` was dropped (BDL-046 BEAD-11), so there is no
+  `navRu`/`sidebarRu`/`render_sidebar_ru`
+
+Module `src/beadloom/application/site/about.py`:
+- `render_about(readme_text, *, published_doc_slugs, repo_url, cross_link_routes=None)` ->
+  `str` — pure, deterministic README→About transform: rebases doc links to `/docs/<slug>`;
+  rewrites `README.md`/`README.ru.md` cross-links to the route in `cross_link_routes` (the
+  in-page bilingual toggle `/` ↔ `/ru/`) or drops them when no map is given; rewrites other
+  internal targets to absolute GitHub URLs; leaves absolute URLs/badges/anchors and
+  code-span/fenced links untouched (EN `/`, RU `/ru/` front-door page)
+
+Module `src/beadloom/application/site/published_docs.py`:
+- `BADGE_START` / `BADGE_END` — stable markers delimiting the injected badge region
+- `PublishedDoc` — frozen dataclass: `doc_path`, `status`, `reason`, `synced_at`, `ref_id`,
+  `coverage_pct`
+- `build_published_docs(conn, *, project_root)` -> `list[PublishedDoc]` — per-doc validation
+  inputs from `check_sync` (same source as `sync-check`); a doc with no doc-code pair is
+  `untracked` and rendered as a neutral `📘 reference` badge (no coverage % line)
+- `inject_badge(prose, badge_body)` -> `str` — marker-delimited badge prefix; re-injection
+  overwrites only the badge region
+- `render_published_doc(doc, prose)` -> `str` — badged Markdown (badge + authored prose as-is)
+- `publish_docs(conn, out_dir, *, project_root)` -> `list[Path]` — copy `docs/**` into
+  `out_dir/docs/…` with badges (plus a generated `docs/index.md` landing page so the `/docs/`
+  nav target resolves); never mutates the source
+
+Module `src/beadloom/application/site/architecture_view.py`:
+- `ARCHITECTURE_SCHEMA_VERSION` — `2`
+- `build_architecture_view_data(conn, *, pages=None, published_doc_slugs=None, verdicts=None,
+  generated_at="", repository=None)` -> `dict` — the data file described above. `pages` gives a
+  node a non-empty `url` only when present; `published_doc_slugs` gates the doc links (`None`
+  skips the gate); a `verdicts` field left `None` is omitted from every node; `repository` is
+  the `RepositoryLink` each node's `source_url` is built from, and `None` gives every node an
+  empty link. Until A1 the lint input was `lint_violation_refs`, a set of node ids; it is
+  replaced by `verdicts`. The `project` parameter was removed with the top-level key.
+- `serialize_architecture_view(data)` -> `str` — byte-stable JSON (`sort_keys`)
+- `render_architecture_view_md(data)` -> `str` — the `architecture.md` page
+
+Module `src/beadloom/application/site/architecture_card.py`:
+- `PUBLIC_SYMBOL_CAP` — `50`; `DOC_UNPAIRED` — `"unpaired"`; `CARD_ACTIVITY_KEYS` —
+  `("commits_30d", "level")`
+- `NodeFinding` — frozen dataclass `rule`, `severity`, `message`; `as_dict()`
+- `NodeVerdicts` — frozen dataclass `findings`, `debt`; `None` means not computed
+- `CardSources` — frozen dataclass `tags`, `placements`, `test_owners`, `verdicts`,
+  `repository` (an empty `RepositoryLink` by default)
+- `card_sources(conn, *, tags, verdicts, repository=None)` -> `CardSources`
+- `card_fields(conn, ref_id, *, source, lifecycle, raw_extra, sources)` -> `dict`
+- `doc_pairs(conn, ref_id)` -> `list[dict]` — each doc of the node with its worst pair status
+- `bound_tests(extra, sources, ref_id)` -> `dict | None` — the `tests` field
+- `capped_public_symbols(conn, ref_id)` -> `dict` — `{names, omitted}`
+- `card_activity(recorded)` -> `dict | None` — the recorded activity narrowed to
+  `CARD_ACTIVITY_KEYS`; `None` when none was recorded
+
+Module `src/beadloom/application/site/repository_link.py`:
+- `RepositoryLink` — frozen dataclass `url`, `ref` (both `""` when nothing states them);
+  `source_url(source)` -> `str` — the forge's page for `source` at `ref`, `""` when there is no
+  repository, commit or path, or the host is not a recognised forge
+- `forge_of(web_url)` -> `str | None` — the forge serving `web_url`, by its host
+- `web_url_of_remote(remote)` -> `str` — the web address of a git remote, `""` when a browser
+  cannot open it or the remote cannot be parsed; never raises
+- `repository_of(project_root)` -> `RepositoryLink` — the project's `origin` and current
+  commit, empty unless `project_root` is the top of its own git repository
 
 ## Testing
 
-Tests: `tests/test_site_generator.py`, `tests/unit/application/test_site_about.py`,
-`tests/test_site_dashboard.py`, `tests/integration/application/test_site_landscape.py`,
-`tests/unit/application/test_site_mermaid_guard.py`,
-`tests/integration/application/test_site_metrics_history.py`,
-`tests/integration/application/test_site_nav.py`, `tests/test_site_published_docs.py`,
-`tests/test_site_coverage_edges.py`
+Tests bound to this node (the binding moved with the package in K1):
+`tests/integration/application/site/` — `test_architecture_view.py`,
+`test_the_view_flags_what_the_rule_finds.py`, `test_site_landscape.py`,
+`test_site_metrics_history.py`, `test_site_nav.py`,
+`test_a_node_page_opens_the_viewer_on_its_node.py` (A4),
+`test_every_landscape_node_links_to_its_page.py` (A4), and
+`architecture_view/test_the_data_file_carries_the_node_card.py` (A1, K4, the source link and
+the activity allow-list) and
+`architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py`;
+and `tests/unit/application/site/` — `test_site_about.py`, `test_site_mermaid_guard.py`,
+`test_a_remote_becomes_the_web_address_of_its_repository.py` and
+`test_a_source_links_to_its_forge_or_not_at_all.py` (the remote and the forge routes), and
+`test_a_contract_names_what_decided_its_verdict.py` (`verdict_basis`).
+
+Scenarios: `tests/acceptance/application/site-generation/node_card_data.feature` (the card, the
+source link per forge, no commit author and no credential in any generated file, an unreadable
+remote) and `layer_view_verdict.feature`, with their steps under
+`tests/acceptance/steps/application/site-generation/`.
+
+Unplaced, so bound to no node: `tests/test_site_generator.py`, `tests/test_site_dashboard.py`,
+`tests/test_site_published_docs.py`, `tests/test_site_coverage_edges.py`,
+`tests/test_site_viz_data_guards.py`, `tests/test_landscape_view.py`.
+
+The viewer's browser tests are under `site/e2e/` and bind to the theme's slices; see [the site's
+page](../../../../services/vitepress-site.md#browser-tests).

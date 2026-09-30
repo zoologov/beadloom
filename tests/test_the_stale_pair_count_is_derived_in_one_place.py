@@ -121,7 +121,7 @@ def _pair_count_query_sites() -> dict[str, list[int]]:
     The population is the one `count_stale_pairs` owns — rows whose status is
     `stale` — so a query over `status IN ('stale', 'missing')` is a different
     population and is not one of these sites. `application/status.py` and
-    `application/site.py` ask that wider question and are held on
+    `application/site/generate.py` ask that wider question and are held on
     `beadloom-r9t5`, which is where the decision about it lives.
     """
     found: dict[str, list[int]] = {}
@@ -250,7 +250,7 @@ class TestTheSurfacesThatReportThatCount:
         assert "### Stale Documents" not in report
 
     def test_the_dashboard_docs_card_names_what_it_counted(self) -> None:
-        from beadloom.application.site_dashboard import _docs_card
+        from beadloom.application.site.dashboard import _docs_card
 
         card = _docs_card({"stale": 2, "tracked_pairs": 5, "coverage_pct": 80.0})
         assert card["detail"] == "2 stale of 5 tracked pair(s)"

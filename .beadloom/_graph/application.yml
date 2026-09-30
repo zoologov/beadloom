@@ -12,7 +12,7 @@ edges:
     dst: beadloom
     kind: part_of
   # The harness writes the append-only run record `.beadloom/ai_techwriter_runs.json`;
-  # `application/site_dashboard/ai_activity.py` reads it. A file-format contract
+  # `application/site/dashboard/ai_activity.py` reads it. A file-format contract
   # between them, with no import in either direction.
   - src: application
     dst: ai-techwriter

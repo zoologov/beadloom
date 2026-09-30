@@ -55,6 +55,7 @@
 - **no-domain-depends-on-service** (deny): Domains must not have depends_on edges to services
 - **no-dependency-cycles** (forbid_cycles): No circular depends_on chains
 - **architecture-layers** (layers): Services → application → domains → infrastructure — not reverse
+- **site-fsd-layers** (layers): The site's Feature-Sliced layers import downward: app, pages, widgets, features, entities, shared
 - **domain-size-limit** (cardinality): Domains should not have too many symbols
 - **module-coverage** (module_coverage): Every src module must be a tracked node (feature/component/…) or explicitly exempt
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly

@@ -2,7 +2,7 @@
 # beadloom:feature=ai-techwriter
 """Append-only run-record store (G9): ``.beadloom/ai_techwriter_runs.json``.
 
-Mirrors the honest-by-construction ``site_metrics_history`` store: a JSON array
+Mirrors the honest-by-construction ``application.site.metrics_history`` store: a JSON array
 appended to, never interpolated. The record's ``ts`` is injected (not
 ``now()``) so emission is deterministic in tests.
 """

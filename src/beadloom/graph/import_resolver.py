@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import posixpath
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from tree_sitter import Parser
 
-from beadloom.context_oracle.code_indexer import get_lang_config
+from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
@@ -138,20 +139,58 @@ def _get_ts_import_source(node: TSNode) -> str | None:
     return None
 
 
+#: The delimiter tokens of a JS string or template string, which carry no text.
+_QUOTE_TOKENS = frozenset({"'", '"', "`"})
+
+
+def _dynamic_import_source(node: TSNode) -> str | None:
+    """The specifier of ``import('...')`` when it is a literal, else ``None``.
+
+    A dynamic import is a ``call_expression`` whose callee is the ``import``
+    keyword, not an ``import_statement``, so the statement match never saw it
+    and a lazily loaded module was invisible to the graph (BDL-076 J2). Only a
+    literal names a module: a string, or a template string with no ``${...}``.
+    A computed specifier (``import(name)``, ``import('./' + a)``) names nothing
+    this reader can know, and yields ``None``.
+    """
+    if node.type != "call_expression" or not node.children:
+        return None
+    if node.children[0].type != "import":
+        return None
+    arguments = node.child_by_field_name("arguments")
+    specifier = arguments.named_children[0] if arguments and arguments.named_children else None
+    if specifier is None or specifier.type not in ("string", "template_string"):
+        return None
+    parts = [sub for sub in specifier.children if sub.type not in _QUOTE_TOKENS]
+    if not parts or any(sub.type != "string_fragment" for sub in parts):
+        return None
+    return "".join(sub.text.decode("utf-8") for sub in parts if sub.text)
+
+
 def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
-    """Extract imports from a TypeScript/JavaScript AST root node."""
+    """Extract imports from a TypeScript/JavaScript AST root node.
+
+    A re-export (``export { X } from './x'``, ``export * from '../y'``) names a
+    module the same way an import does, and it is how an ``index.js`` facade
+    exposes its folder, so it is read too. An ``export`` without a ``from`` has
+    no source string among its direct children and yields nothing. A dynamic
+    ``import('...')`` with a literal specifier is read as well
+    (:func:`_dynamic_import_source`).
+
+    Relative specifiers are kept as written. They used to be skipped here, so a
+    JS/TS project got no ``depends_on`` edge between its own modules (BDL-076
+    J1, measured by A0); :func:`resolve_relative_import` now maps them to files.
+    """
     results: list[ImportInfo] = []
 
     for child in _walk(root):
-        if child.type != "import_statement":
+        if child.type in ("import_statement", "export_statement"):
+            source = _get_ts_import_source(child)
+        elif child.type == "call_expression":
+            source = _dynamic_import_source(child)
+        else:
             continue
-
-        source = _get_ts_import_source(child)
         if source is None:
-            continue
-
-        # Skip relative imports
-        if source.startswith(".") or source.startswith(".."):
             continue
 
         results.append(
@@ -653,22 +692,18 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
     Detects language by file extension.  Returns empty list if the language
     is not supported or the grammar package is not installed.
     """
+    if file_path.suffix == _VUE_EXTENSION:
+        return _extract_component_imports(file_path)
+
     config = get_lang_config(file_path.suffix)
     if config is None:
         return []
 
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    content = _read_source(file_path)
+    if content is None:
         return []
 
-    if not content.strip():
-        return []
-
-    content_bytes = content.encode("utf-8")
-    parser = Parser(config.language)
-    tree = parser.parse(content_bytes)
-    root = tree.root_node
+    root = Parser(config.language).parse(content.encode("utf-8")).root_node
 
     file_str = str(file_path)
     ext = file_path.suffix
@@ -693,6 +728,45 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
         return _extract_c_cpp_imports(root, file_str)
 
     return []
+
+
+_VUE_EXTENSION = ".vue"
+
+
+def _read_source(file_path: Path) -> str | None:
+    """A source file's text, or ``None`` when it is unreadable or blank."""
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return content if content.strip() else None
+
+
+def _extract_component_imports(file_path: Path) -> list[ImportInfo]:
+    """The imports of a Vue single-file component, at their lines in the ``.vue`` file.
+
+    Each ``<script>``/``<script setup>`` block is parsed by the JS/TS grammar its
+    ``lang`` names and read by the JS/TS extractor; the template and the style
+    are not code and are not read. The blocks come from the same finder the
+    symbol indexer uses (``script_blocks``, BDL-076 J3), so the two readers
+    cannot disagree on where a component's code is. Until BDL-076 J2 a
+    component yielded no import at all, and ``why`` on a composable a component
+    imported reported no dependents.
+    """
+    content = _read_source(file_path)
+    if content is None:
+        return []
+    results: list[ImportInfo] = []
+    for block in script_blocks(content):
+        config = get_lang_config(block.extension)
+        if config is None:
+            continue
+        root = Parser(config.language).parse(block.text.encode("utf-8")).root_node
+        results.extend(
+            replace(imp, line_number=block.file_line(imp.line_number - 1))
+            for imp in _extract_ts_imports(root, str(file_path))
+        )
+    return results
 
 
 def _import_path_to_file_paths(
@@ -734,6 +808,71 @@ def _normalize_ts_import(import_path: str) -> str | None:
     return None
 
 
+#: The order a relative JS/TS specifier is completed in (BDL-076 J1): the path
+#: as written, then each extension on it, then each extension on ``<path>/index``.
+#: A file therefore beats a folder of the same name, as it does for Node and for
+#: the bundlers. ``.mjs``/``.cjs`` and ``.vue`` need not be parseable here: the
+#: target only has to exist for its owning node to be named.
+_RELATIVE_EXTENSIONS: tuple[str, ...] = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue")
+
+#: TypeScript's ESM convention: a specifier carries the extension the file will
+#: have AFTER compilation, so ``./a.js`` in a source tree names ``a.ts``. Tried
+#: right after the path as written.
+_TS_SOURCES_OF_EMITTED: dict[str, tuple[str, ...]] = {
+    ".js": (".ts", ".tsx"),
+    ".jsx": (".tsx",),
+}
+
+
+def is_relative_specifier(specifier: str) -> bool:
+    """Whether a JS/TS module specifier is relative to the importing file."""
+    return specifier in (".", "..") or specifier.startswith(("./", "../"))
+
+
+def relative_import_candidates(specifier: str, importer: str) -> list[str]:
+    """The project-relative files a relative *specifier* may name, in resolution order.
+
+    *importer* is the importing file's project-relative POSIX path. A specifier
+    that climbs above the project root names nothing and yields ``[]``.
+
+    Not handled, each named so its absence reads as a decision: ``tsconfig``
+    ``paths``/``baseUrl`` beyond the two aliases in ``_TS_ALIAS_MAP``, a
+    folder's ``package.json`` ``main``/``exports``, ``.mts``/``.cts`` and
+    ``.d.ts`` targets, query suffixes (``./x.vue?raw``), CommonJS ``require()``.
+    """
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(importer), specifier))
+    if target == ".." or target.startswith("../"):
+        return []
+    stem, suffix = posixpath.splitext(target)
+    return [
+        target,
+        *(stem + ext for ext in _TS_SOURCES_OF_EMITTED.get(suffix, ())),
+        *(target + ext for ext in _RELATIVE_EXTENSIONS),
+        *(posixpath.join(target, f"index{ext}") for ext in _RELATIVE_EXTENSIONS),
+    ]
+
+
+def resolve_relative_import(
+    specifier: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+) -> str | None:
+    """Map a relative JS/TS *specifier* to the node that owns the file it names.
+
+    The first candidate of :func:`relative_import_candidates` that exists on
+    disk is the file; its owner is decided by the one ownership rule
+    (``get_owning_ref_id``, most specific source wins) — the rule the importing
+    side of an edge is attributed by. Returns ``None`` when the specifier names
+    no file, or names a file no node owns; the caller records either as an
+    unresolved import rather than dropping it.
+    """
+    for candidate in relative_import_candidates(specifier, importer):
+        if (project_root / candidate).is_file():
+            return get_owning_ref_id(conn, candidate)
+    return None
+
+
 def _find_node_by_source_prefix(
     dir_path: str,
     scan_paths: list[str],
@@ -743,15 +882,24 @@ def _find_node_by_source_prefix(
 
     Walks up the path hierarchy to find the deepest (most specific) node.
     Handles both ``source`` values with and without trailing slashes.
-    """
-    prefixes = [f"{p}/" for p in scan_paths]
-    prefixes.append("")  # bare path
 
-    for prefix in prefixes:
-        candidate = f"{prefix}{dir_path}"
+    The walk under a scan path stops BELOW that scan path's root: neither the
+    root nor anything above it is tried. A0 (BDL-076) measured what happened
+    otherwise: with ``site/.vitepress/theme`` as a scan path, every Python
+    import no file answered (``typing``, ``pathlib`` …, 1,318 of them) walked
+    up to ``site/`` and became one of 103 false edges into the node owning it.
+    A node whose source IS a scan root would catch every such import the same
+    way. The bare (no-prefix) reading keeps its walk to the first segment.
+    """
+    roots = [p.strip("/") for p in scan_paths]
+    roots.append("")  # bare path
+
+    for root in roots:
+        candidate = f"{root}/{dir_path}" if root else dir_path
         parts = candidate.split("/")
-        # Walk from deepest to shallowest.
-        for i in range(len(parts), 0, -1):
+        floor = len(root.split("/")) if root else 0
+        # Walk from deepest to shallowest, never reaching the scan root.
+        for i in range(len(parts), floor, -1):
             segment = "/".join(parts[:i])
             # Try with and without trailing slash.
             for source in (f"{segment}/", segment):
@@ -854,6 +1002,58 @@ def resolve_import_to_node(
         dir_path = import_path.replace(".", "/")
 
     return _find_node_by_source_prefix(dir_path, effective_scan, conn)
+
+
+#: Extensions whose files write their imports in one language, mapped to one
+#: representative extension of it. An extension not listed is its own language.
+_IMPORT_LANGUAGE: dict[str, str] = {
+    ".tsx": ".ts",
+    ".js": ".ts",
+    ".jsx": ".ts",
+    ".mjs": ".ts",
+    ".cjs": ".ts",
+    ".vue": ".ts",
+    ".kts": ".kt",
+    ".mm": ".m",
+    ".h": ".c",
+    ".cpp": ".c",
+    ".hpp": ".c",
+}
+
+
+def _import_language(extension: str) -> str:
+    """The language an *extension*'s files write their imports in."""
+    return _IMPORT_LANGUAGE.get(extension, extension)
+
+
+def scan_path_languages(
+    project_root: Path, scan_paths: Sequence[str], files: Sequence[Path]
+) -> dict[str, frozenset[str]]:
+    """The import languages each scan path holds files of, keyed by the scan path as given."""
+    return {
+        scan_path: frozenset(
+            _import_language(path.suffix)
+            for path in files
+            if path.is_relative_to(project_root / scan_path)
+        )
+        for scan_path in scan_paths
+    }
+
+
+def _scan_paths_for(
+    extension: str, scan_paths: list[str], languages: dict[str, frozenset[str]]
+) -> list[str]:
+    """The scan paths an import written in *extension*'s language is read through.
+
+    A Python import is never prefixed with a scan path that holds no Python, nor
+    a JS/TS one with a Python-only path: a module of one language cannot live
+    under a folder that holds none of that language (BDL-076 J2). An importer
+    whose language no scan path holds — a file outside every scan path — keeps
+    the full list, which is how it was read before.
+    """
+    language = _import_language(extension)
+    own = [path for path in scan_paths if language in languages.get(path, frozenset())]
+    return own or scan_paths
 
 
 def _collect_source_files(project_root: Path) -> list[Path]:
@@ -1003,17 +1203,23 @@ def _index_one_file(
         return 0
 
     file_hash = hashlib.sha256(content.encode()).hexdigest()
-    rel_path = str(file_path.relative_to(project_root))
+    relative = file_path.relative_to(project_root)
+    rel_path = str(relative)
     is_ts = file_path.suffix in _TS_EXTENSIONS
 
     for imp in imports:
-        resolved = resolve_import_to_node(
-            imp.import_path,
-            file_path,
-            conn,
-            scan_paths=scan_paths,
-            is_ts=is_ts,
-        )
+        if is_ts and is_relative_specifier(imp.import_path):
+            resolved = resolve_relative_import(
+                imp.import_path, relative.as_posix(), project_root, conn
+            )
+        else:
+            resolved = resolve_import_to_node(
+                imp.import_path,
+                file_path,
+                conn,
+                scan_paths=scan_paths,
+                is_ts=is_ts,
+            )
         conn.execute(
             "INSERT INTO code_imports"
             " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
@@ -1034,9 +1240,16 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     Returns the count of imports indexed.
     """
     scan_paths = resolve_scan_paths(project_root)
+    files = _collect_source_files(project_root)
+    languages = scan_path_languages(project_root, scan_paths, files)
     total = sum(
-        _index_one_file(file_path, project_root, conn, scan_paths)
-        for file_path in _collect_source_files(project_root)
+        _index_one_file(
+            file_path,
+            project_root,
+            conn,
+            _scan_paths_for(file_path.suffix, scan_paths, languages),
+        )
+        for file_path in files
     )
     conn.commit()
 
@@ -1071,13 +1284,19 @@ def reindex_file_imports(
         conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
 
     scan_paths = resolve_scan_paths(project_root)
+    languages = scan_path_languages(project_root, scan_paths, _collect_source_files(project_root))
     extensions = _supported_extensions()
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
         if file_path.suffix not in extensions or not file_path.is_file():
             continue
-        total += _index_one_file(file_path, project_root, conn, scan_paths)
+        total += _index_one_file(
+            file_path,
+            project_root,
+            conn,
+            _scan_paths_for(file_path.suffix, scan_paths, languages),
+        )
 
     conn.commit()
     refresh_import_edges(conn)

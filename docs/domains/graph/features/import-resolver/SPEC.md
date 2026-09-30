@@ -17,9 +17,14 @@ Extract import statements from source files using tree-sitter grammars, resolve 
 | Language              | File Extensions            | Import Syntax Handled                      | Skipped Imports                                 |
 |-----------------------|----------------------------|--------------------------------------------|-------------------------------------------------|
 | Python                | `.py`                      | `import X`, `from X import Y`              | Relative imports (`from . import`, `from ..`)   |
-| TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`| `import ... from 'path'`                   | Relative (`./`, `../`), npm packages            |
+| TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`| `import ... from 'path'`, `export ... from 'path'`, `import('literal')` | None at extraction; npm packages resolve to no node |
+| Vue component         | `.vue`                     | The TS/JS forms, inside each `<script>` / `<script setup>` block | As TypeScript/JavaScript                        |
 | Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Standard library (no `/` in path)               |
 | Rust                  | `.rs`                      | `use path::to::module`                     | Built-in crates (`std`, `core`, `alloc`), `self`, `super` |
+
+The table details four languages. The resolver also extracts Kotlin, Java, Swift, Objective-C
+and C/C++ imports (`_extract_kotlin_imports`, `_extract_java_imports`, `_extract_swift_imports`,
+`_extract_objc_imports`, `_extract_c_cpp_imports`); they are not described here.
 
 ### Constants
 
@@ -51,6 +56,7 @@ Frozen dataclass representing a single extracted import.
 def extract_imports(file_path: Path) -> list[ImportInfo]
 ```
 
+0. A `.vue` file goes to `_extract_component_imports` (see below) and skips the steps that follow.
 1. Detect language via file extension using `get_lang_config(suffix)`. Return empty list if unsupported.
 2. Read file content as UTF-8. Return empty list on `OSError`, `UnicodeDecodeError`, or empty content.
 3. Parse content with `tree_sitter.Parser` using the detected language grammar.
@@ -80,9 +86,29 @@ walk cannot double-count a single statement.
 - `import_from_statement`: checks for `relative_import` child; if present, skips. Otherwise extracts the first `dotted_name` as the module path.
 
 **TypeScript/JavaScript** (`_extract_ts_imports`):
-- Walks every `import_statement` node in the tree.
-- Extracts the string source via `_get_ts_import_source` (looks for `string` -> `string_fragment` children).
-- Skips imports starting with `"."` or `".."` (relative).
+- Walks every `import_statement` and `export_statement` node in the tree and
+  extracts the string source via `_get_ts_import_source` (looks for `string` ->
+  `string_fragment` children). A re-export (`export { X } from './x'`,
+  `export * from '../y'`) is read as an import, because that is how an
+  `index.js` facade exposes its folder. An `export` without `from` yields
+  nothing.
+- Walks every `call_expression` whose callee is the `import` keyword
+  (`_dynamic_import_source`, BDL-076 J2). The import is read only when the
+  first argument is a literal: a string, or a template string with no `${...}`.
+  A computed specifier (`import(name)`, `import('./' + a)`, a template with a
+  substitution) names nothing knowable and is not read.
+- Keeps every specifier as written, relative ones included. Until BDL-076 J1
+  relative specifiers were dropped here, so a JS/TS project got no `depends_on`
+  edge between its own modules.
+
+**Vue component** (`_extract_component_imports`, BDL-076 J2):
+- Finds the `<script>` and `<script setup>` blocks with `script_blocks`, the
+  same finder the symbol indexer uses, reached through `code_indexer`'s
+  re-export so the resolver keeps its one declared crossing into code-indexer.
+- Parses each block with the grammar its `lang` names (`ts`, `tsx`, `jsx`,
+  otherwise JavaScript) and runs `_extract_ts_imports` on it.
+- Moves each import's `line_number` to its line in the `.vue` file.
+- The `<template>` and `<style>` are not read.
 
 **Go** (`_extract_go_imports`):
 - Walks `import_declaration` nodes.
@@ -120,20 +146,96 @@ def resolve_import_to_node(
 
 **Resolution strategies (tried in order):**
 
-**Strategy 1 -- Code-symbols annotation lookup:**
-1. Convert the import path to candidate file paths via `_import_path_to_file_paths` (replaces `.` with `/`, prepends each scan_path prefix, generates both `.py` and `__init__.py` variants).
-2. For each candidate, query `code_symbols` for `annotations` JSON.
-3. Parse the annotations and look for keys `domain`, `service`, or `feature` whose values match a `nodes.ref_id` (constructed as `"{kind}:{value}"`).
-4. Return the first matching `ref_id`.
+Candidate files come from `_import_path_to_file_paths` (replaces `.` with `/`, prepends each
+scan_path prefix, generates both `.py` and `__init__.py` variants).
 
-**Strategy 2 -- Hierarchical source-prefix matching:**
+**Strategy 1 -- Ownership of the imported file:**
+1. For each candidate present in `code_symbols` or `file_index`, return its owner
+   (`infrastructure/repository.get_owning_ref_id`, most specific `source` wins) when it has one.
+   This is the rule the importing side is attributed by, so an edge connects the two nodes that
+   own the two files.
+
+**Strategy 2 -- Code-symbols annotation lookup:**
+1. For each candidate, query `code_symbols` for `annotations` JSON.
+2. Parse the annotations and look for keys `domain`, `service`, or `feature` whose values match a `nodes.ref_id` (constructed as `"{kind}:{value}"`).
+3. Return the first matching `ref_id`.
+
+**Strategy 3 -- Hierarchical source-prefix matching:**
 1. For TypeScript/JavaScript (`is_ts=True`): normalize the import path via `_normalize_ts_import`. Returns `None` for npm packages (non-aliased, non-relative paths), terminating resolution.
 2. For other languages: convert the dotted path to a directory path (replace `.` with `/`).
 3. Call `_find_node_by_source_prefix(dir_path, scan_paths, conn)`:
-   - Prepend each scan_path prefix (plus bare path).
-   - Split into path segments, walk from deepest to shallowest.
+   - Prepend each scan_path root (trailing `/` normalised), plus the bare path.
+   - Split into path segments, walk from deepest to shallowest, and **stop below the scan
+     path's root**: neither the root nor anything above it is tried (BDL-076 J2). The bare
+     reading walks down to its first segment, as before.
    - For each segment level, query `nodes.source` with and without trailing `/`.
    - Return the first matching `ref_id`.
+
+The floor exists because of a measurement. With `site/.vitepress/theme` as a scan path, every
+Python import no file answered (`typing`, `pathlib`, 1,318 of them) walked up to `site/` and
+became one of 103 false edges into the node owning it (A0, BDL-076). A node whose source IS a
+scan root would catch every such import the same way.
+
+### Relative JS/TS Imports
+
+```python
+def is_relative_specifier(specifier: str) -> bool
+def relative_import_candidates(specifier: str, importer: str) -> list[str]
+def resolve_relative_import(
+    specifier: str, importer: str, project_root: Path, conn: sqlite3.Connection
+) -> str | None
+```
+
+A specifier is relative when it is `.`, `..`, or starts with `./` or `../`. In a `.ts`, `.tsx`,
+`.js`, `.jsx` or `.vue` importer it is resolved by `resolve_relative_import`, never by
+`resolve_import_to_node` (BDL-076 J1). `relative_import_candidates` joins the specifier to the
+importer's directory, normalises it, and yields, in order:
+
+1. the path as written;
+2. for a written `.js`, the `.ts` then `.tsx` source; for a written `.jsx`, the `.tsx` source
+   (TypeScript's ESM convention writes the extension the file has after compilation);
+3. the path plus `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`;
+4. `<path>/index` plus the same extensions.
+
+A file therefore beats a folder of the same name. A specifier that climbs above the project root
+yields no candidate. The first candidate that is a file on disk is the target, and its node is
+`get_owning_ref_id` of that file. A `.mjs`, `.cjs` or `.vue` target only has to exist: it need
+not be parseable.
+
+A specifier that names no file, or names a file no node owns, is written to `code_imports` with
+`resolved_ref_id` NULL, like any unresolved import. It is never dropped.
+
+**Not handled** (each is a decision, named in the docstring):
+
+- `tsconfig` `paths`/`baseUrl` beyond the `@/` and `~/` aliases of `_TS_ALIAS_MAP`;
+- a folder's `package.json` `main`/`exports`;
+- `.mts`, `.cts` and `.d.ts` targets;
+- query suffixes (`./x.vue?raw`);
+- CommonJS `require()`;
+- `.mjs` and `.cjs` files as importers: they are not in `supported_extensions()`, so they are
+  resolution targets only and their own imports are not read.
+
+A `forbid_import` rule matches `code_imports.import_path`, so for a relative import it sees the
+raw specifier, not the resolved file.
+
+### Scan Paths per Import Language
+
+```python
+def scan_path_languages(
+    project_root: Path, scan_paths: Sequence[str], files: Sequence[Path]
+) -> dict[str, frozenset[str]]
+```
+
+`index_imports` and `reindex_file_imports` pass each file only the scan paths that hold files of
+its import language (`_scan_paths_for`, BDL-076 J2). `_IMPORT_LANGUAGE` groups extensions into
+one language: `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.vue`; `.kt`/`.kts`; `.m`/`.mm`;
+`.c`/`.h`/`.cpp`/`.hpp`. Every other extension is its own language. So a Python import is never
+prefixed with a scan path that holds no Python. An importer whose language no scan path holds (a
+file outside every scan path) keeps the full list.
+
+Limits: a scan path holding both languages is read for both, because the grouping is by
+extension. The onboarding scan and the test index still call `resolve_import_to_node` with every
+scan path: they get the walk-up floor, not the per-language filter.
 
 ### Internal Resolution Helpers
 
@@ -206,12 +308,14 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int
 ```
 
 1. Resolve scan paths via `resolve_scan_paths(project_root)` from config.
-2. Collect source files via `_collect_source_files(project_root)`, which uses `resolve_scan_paths` and `supported_extensions()` to enumerate files under each scan directory.
+2. Collect source files via `_collect_source_files(project_root)`, which uses `resolve_scan_paths` and `supported_extensions()` to enumerate files under each scan directory, then `scan_path_languages` over them.
 3. For each file:
    a. Call `extract_imports(file_path)`. Skip if empty.
    b. Read file content, compute SHA-256 hash, compute relative path.
    c. Determine `is_ts` flag from file extension (`.ts`, `.tsx`, `.js`, `.jsx`, `.vue`).
-   d. For each `ImportInfo`, call `resolve_import_to_node` to resolve it.
+   d. For each `ImportInfo`: a relative specifier from a TS/JS/Vue importer goes to
+      `resolve_relative_import`; every other import goes to `resolve_import_to_node` with the
+      scan paths of the file's import language.
    e. Upsert into `code_imports` with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE SET resolved_ref_id, file_hash`.
 4. Commit.
 5. Call `refresh_import_edges(conn)` to regenerate `depends_on` edges.
@@ -238,6 +342,17 @@ Default: `["src", "lib", "app"]`.
 
 ```python
 def extract_imports(file_path: Path) -> list[ImportInfo]: ...
+def is_relative_specifier(specifier: str) -> bool: ...
+def relative_import_candidates(specifier: str, importer: str) -> list[str]: ...
+def resolve_relative_import(
+    specifier: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+) -> str | None: ...
+def scan_path_languages(
+    project_root: Path, scan_paths: Sequence[str], files: Sequence[Path]
+) -> dict[str, frozenset[str]]: ...
 def resolve_import_to_node(
     import_path: str,
     file_path: Path,
@@ -278,7 +393,10 @@ class ImportInfo:
 - Each `(source_ref_id, target_ref_id)` pair generates at most one `depends_on` edge (deduplicated via `seen` set in `create_import_edges` and `INSERT OR IGNORE`).
 - Imports are upserted with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE`, ensuring idempotent reindexing.
 - `extract_imports` returns an empty list (never raises) for unsupported languages, unreadable files, or empty files.
-- Resolution strategies are tried in strict order: annotation lookup first, then source-prefix matching.
+- Resolution strategies are tried in strict order: file ownership, then annotation lookup, then source-prefix matching.
+- The source-prefix walk never tries a scan path's root or anything above it.
+- A relative JS/TS specifier is never dropped: it resolves to the owner of an existing file or is stored with `resolved_ref_id` NULL.
+- A `.vue` import's `line_number` is a line of the `.vue` file.
 - `_import_path_to_file_paths` always includes the bare (no-prefix) variant as the last set of candidates.
 
 ---
@@ -287,11 +405,11 @@ class ImportInfo:
 
 - Requires tree-sitter grammar packages for each supported language (e.g. `tree-sitter-python`, `tree-sitter-typescript`). Returns empty list if the grammar is not installed.
 - Only processes files located under directories listed in `scan_paths`.
-- Relative imports are always skipped (language-specific detection):
+- Relative and standard-library imports are skipped (language-specific detection):
   - Python: `relative_import` AST node presence.
-  - TypeScript/JavaScript: path starts with `"."` or `".."`.
   - Go: no `/` in path (stdlib heuristic).
   - Rust: root identifier is `self` or `super`.
+- TypeScript/JavaScript relative imports are NOT skipped since BDL-076 J1; see Relative JS/TS Imports.
 - npm packages (non-aliased, non-relative TypeScript/JavaScript imports) are skipped by `_normalize_ts_import` returning `None`.
 - The `code_symbols` table must be populated for annotation-based resolution to work (Strategy 1).
 - The `nodes` table must be populated for source-prefix resolution to work (Strategy 2).
@@ -304,7 +422,7 @@ class ImportInfo:
 ### Extraction Tests
 
 - **Python imports.** Parse a file with `import foo`, `from bar import baz`, and `from . import relative`. Assert the first two yield `ImportInfo` entries; the relative import is skipped.
-- **TypeScript imports.** Parse `import X from '@/components/Button'` and `import Y from './local'` and `import Z from 'react'`. Assert only the aliased import is extracted; relative and npm are skipped.
+- **TypeScript imports.** Relative specifiers are kept as written (`tests/test_import_resolver.py`, `tests/unit/graph/test_import_resolver.py`): candidate order, specifier classification, re-exports, six dynamic `import()` cases, two `.vue` cases.
 - **Go imports.** Parse `import ("fmt"; "github.com/org/pkg")`. Assert only the non-stdlib import is extracted.
 - **Rust imports.** Parse `use std::io; use my_crate::module; use super::sibling;`. Assert only `my_crate::module` is extracted.
 - **Unsupported extension.** Pass a `.txt` file. Assert empty list returned.
@@ -318,6 +436,16 @@ class ImportInfo:
 - **TS alias resolution.** Resolve `@/shared/utils` with `is_ts=True`. Assert it maps to `src/shared/utils` and matches the appropriate node.
 - **TS npm package skip.** Resolve `react` with `is_ts=True`. Assert `None` is returned.
 - **No match.** Resolve an import path with no corresponding annotation or node. Assert `None`.
+
+- **Relative resolution** (`tests/integration/graph/test_import_resolver.py`). Owner resolution, order preference, file beats folder index, a `.vue` target, a missing file, an unowned file, full and incremental reindex.
+- **Walk-up floor and per-language scan paths** (same file). A node above the scan path, a node at the scan root, a trailing slash, a package below the root still resolving, a mixed project, `scan_path_languages`.
+
+### Acceptance Scenarios
+
+`tests/acceptance/graph/import-resolver/`:
+- `relative_js_ts_imports.feature` (5 scenarios): a TS package and a JS package with `index.js`/`index.mjs` facades get exactly their real edges, and `beadloom why` lists the dependents.
+- `a_foreign_scan_path_adds_no_false_edges.feature` (3 scenarios): a Python service beside a JS theme scan path owned by a node above it gets no false edge.
+- `vue_and_dynamic_imports.feature` (2 scenarios): `why` on a composable lists the component, the import is on its `.vue` line, a lazy `import('../charts/bar')` is an edge.
 
 ### Edge Generation Tests
 

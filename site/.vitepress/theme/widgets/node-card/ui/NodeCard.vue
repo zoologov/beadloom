@@ -1,0 +1,316 @@
+<script setup>
+// beadloom:component=site-node-card
+// A node's card: everything the data file says about one node.
+//
+// Identity (kind, summary, lifecycle, tags), the layer it is in and whether
+// the tag is its own or inherited, its source linked to the address the data
+// file gives (the generator decides it per forge, and gives none for a host it
+// does not recognise, so the card knows no forge), its
+// docs each with its freshness, its bound tests, its public symbols, its edges
+// by kind and direction, its rule findings, its activity and its debt, then the
+// node's page and the `ctx` and `why` commands to copy.
+//
+// Every value comes from the data file. A field the file holds nothing for says
+// "none"; a field a version 1 file does not carry at all says "not recorded",
+// because the two are different answers. A click on an edge's other end asks the
+// viewer to select that node.
+
+import { computed } from "vue";
+import { withBase } from "vitepress";
+import { edgeGroupsOf } from "../../../entities/graph-edge/index.js";
+import { layerOfNode } from "../../../entities/layer/index.js";
+import { shellQuote } from "../../../shared/lib/index.js";
+import { CopyCommand } from "../../../shared/ui/index.js";
+
+const props = defineProps({
+  node: { type: Object, required: true },
+  edges: { type: Array, default: () => [] },
+  layers: { type: Array, default: () => [] },
+});
+const emit = defineEmits(["select", "close"]);
+
+const NOT_RECORDED = "not recorded";
+const NONE = "none";
+
+const layer = computed(() => layerOfNode(props.node, props.layers));
+const layerOrigin = computed(() => {
+  if (!layer.value) return "";
+  return props.node.layer ? "its own tag" : "inherited through part_of";
+});
+
+const sourceUrl = computed(() => props.node.source_url || "");
+
+// A doc's page, when the site published one: its served link ends with the doc's path.
+const docLinkOf = computed(() => {
+  const links = props.node.doc_links || [];
+  return (path) => links.find((link) => link.endsWith(`/${path.replace(/\.md$/, ".html")}`)) || "";
+});
+
+const edgeGroups = computed(() => edgeGroupsOf(props.node.id, props.edges));
+
+const placements = computed(() =>
+  Object.entries(props.node.tests?.placement || {}).sort(([a], [b]) => a.localeCompare(b))
+);
+</script>
+
+<template>
+  <article class="bl-card" data-testid="node-card" :aria-label="`Node ${node.id}`">
+    <button type="button" class="bl-card-close" aria-label="Close the card" @click="emit('close')">
+      ×
+    </button>
+    <h3>{{ node.id }}</h3>
+    <p class="bl-card-summary" data-card-field="summary">{{ node.summary || NONE }}</p>
+
+    <dl>
+      <dt>Kind</dt>
+      <dd data-card-field="kind">{{ node.kind || NONE }}</dd>
+      <dt>Lifecycle</dt>
+      <dd data-card-field="lifecycle">{{ node.lifecycle || (node.lifecycle === "" ? NONE : NOT_RECORDED) }}</dd>
+      <dt>Tags</dt>
+      <dd data-card-field="tags">
+        <template v-if="node.tags === undefined">{{ NOT_RECORDED }}</template>
+        <template v-else-if="!node.tags.length">{{ NONE }}</template>
+        <code v-for="tag in node.tags" v-else :key="tag" class="bl-card-tag">{{ tag }}</code>
+      </dd>
+      <dt>Layer</dt>
+      <dd data-card-field="layer">
+        <template v-if="layer">{{ layer.name }} <span class="bl-card-note">({{ layerOrigin }})</span></template>
+        <template v-else>{{ NONE }}</template>
+      </dd>
+      <dt>Source</dt>
+      <dd data-card-field="source">
+        <template v-if="!node.source">{{ node.source === undefined ? NOT_RECORDED : NONE }}</template>
+        <a v-else-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener"><code>{{ node.source }}</code></a>
+        <code v-else>{{ node.source }}</code>
+      </dd>
+      <dt>Activity</dt>
+      <dd data-card-field="activity">
+        <template v-if="!node.activity">{{ NOT_RECORDED }}</template>
+        <template v-else>
+          {{ node.activity.commits_30d ?? 0 }} commits in 30 days<template v-if="node.activity.level">, {{ node.activity.level }}</template>
+        </template>
+      </dd>
+      <dt>Debt</dt>
+      <dd data-card-field="debt">
+        <template v-if="node.debt === undefined">{{ NOT_RECORDED }}</template>
+        <template v-else-if="!node.debt">{{ NONE }}</template>
+        <template v-else>
+          {{ node.debt.score }}<template v-if="(node.debt.reasons || []).length"> ({{ node.debt.reasons.join(", ") }})</template>
+        </template>
+      </dd>
+    </dl>
+
+    <section data-card-field="docs">
+      <h4>Docs</h4>
+      <p v-if="node.docs === undefined" class="bl-card-none">{{ node.doc_status || NOT_RECORDED }}</p>
+      <p v-else-if="!node.docs.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="doc in node.docs" :key="doc.path">
+          <a v-if="docLinkOf(doc.path)" :href="withBase(docLinkOf(doc.path))">{{ doc.path }}</a>
+          <span v-else>{{ doc.path }}</span>
+          <span class="bl-card-status" :class="{ 'bl-card-warn': doc.status !== 'ok' }">{{ doc.status }}</span>
+        </li>
+      </ul>
+    </section>
+
+    <section data-card-field="tests">
+      <h4>Bound tests</h4>
+      <p v-if="!node.tests" class="bl-card-none">{{ NOT_RECORDED }}</p>
+      <template v-else>
+        <p class="bl-card-line" :class="{ 'bl-card-warn': node.tests.count === 0 }">
+          {{ node.tests.count }} tests in {{ node.tests.file_count ?? node.tests.files.length }} files
+        </p>
+        <p v-if="placements.length" class="bl-card-line">
+          <span v-for="[placement, count] in placements" :key="placement" class="bl-card-chip">{{ placement }}: {{ count }}</span>
+        </p>
+        <details v-if="node.tests.files.length">
+          <summary>{{ node.tests.files.length }} files bound to this node itself</summary>
+          <ul>
+            <li v-for="file in node.tests.files" :key="file"><code>{{ file }}</code></li>
+          </ul>
+        </details>
+      </template>
+    </section>
+
+    <section data-card-field="symbols">
+      <h4>Public symbols</h4>
+      <p v-if="!node.public_symbols" class="bl-card-none">{{ node.symbols ?? NOT_RECORDED }}</p>
+      <p v-else-if="!node.public_symbols.names.length" class="bl-card-none">{{ NONE }}</p>
+      <details v-else>
+        <summary>
+          {{ node.public_symbols.names.length + (node.public_symbols.omitted || 0) }} names<template v-if="node.public_symbols.omitted">, the first {{ node.public_symbols.names.length }} shown</template>
+        </summary>
+        <p class="bl-card-symbols">
+          <code v-for="name in node.public_symbols.names" :key="name">{{ name }}</code>
+        </p>
+      </details>
+    </section>
+
+    <section data-card-field="edges">
+      <h4>Edges</h4>
+      <p v-if="!edgeGroups.length" class="bl-card-none">{{ NONE }}</p>
+      <template v-for="group in edgeGroups" :key="`${group.kind}:${group.direction}`">
+        <h5>{{ group.title }}</h5>
+        <ul>
+          <li v-for="target in group.targets" :key="target.id">
+            <button
+              type="button"
+              class="bl-card-link"
+              :class="{ 'bl-card-violation': target.violation }"
+              :data-edge-kind="group.kind"
+              :data-edge-direction="group.direction"
+              :data-edge-target="target.id"
+              :title="target.violation ? 'Against the declared layers' : ''"
+              @click="emit('select', target.id)"
+            >
+              {{ target.id }}
+            </button>
+          </li>
+        </ul>
+      </template>
+    </section>
+
+    <section data-card-field="findings">
+      <h4>Rule findings</h4>
+      <p v-if="node.findings === undefined" class="bl-card-none">
+        {{ node.lint_clean === undefined ? NOT_RECORDED : node.lint_clean ? NONE : "violation" }}
+      </p>
+      <p v-else-if="!node.findings.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="(finding, index) in node.findings" :key="index">
+          <code>{{ finding.rule }}</code>
+          <span class="bl-card-severity" :class="{ 'bl-card-warn': finding.severity === 'error' }">{{ finding.severity }}</span>
+          {{ finding.message }}
+        </li>
+      </ul>
+    </section>
+
+    <section data-card-field="page">
+      <h4>Page</h4>
+      <p v-if="node.url"><a :href="withBase(node.url)">Open the node's page →</a></p>
+      <p v-else class="bl-card-none">{{ NONE }}</p>
+    </section>
+
+    <section data-card-field="commands">
+      <h4>In the terminal</h4>
+      <CopyCommand :command="`beadloom ctx ${shellQuote(node.id)}`" />
+      <CopyCommand :command="`beadloom why ${shellQuote(node.id)}`" />
+    </section>
+  </article>
+</template>
+
+<style scoped>
+.bl-card {
+  position: relative;
+  font-size: 13px;
+}
+.bl-card h3 {
+  margin: 0 28px 6px 0;
+  font-size: 15px;
+  word-break: break-word;
+}
+.bl-card h4 {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-2);
+}
+.bl-card h5 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+}
+.bl-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+}
+.bl-card dt {
+  font-weight: 700;
+  color: var(--vp-c-text-2);
+}
+.bl-card dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+.bl-card ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.bl-card p {
+  margin: 4px 0;
+}
+.bl-card code {
+  font-size: 12px;
+}
+.bl-card-summary {
+  color: var(--vp-c-text-2);
+}
+.bl-card-note {
+  color: var(--vp-c-text-3);
+}
+.bl-card-tag,
+.bl-card-chip {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+}
+.bl-card-chip {
+  padding: 0 6px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  font-size: 12px;
+}
+.bl-card-status,
+.bl-card-severity {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+}
+.bl-card-symbols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.bl-card details summary {
+  cursor: pointer;
+  color: var(--vp-c-text-2);
+}
+.bl-card-close {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--vp-c-text-2);
+}
+.bl-card-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--vp-font-family-mono);
+  font-size: 12px;
+  color: var(--vp-c-brand-1);
+  cursor: pointer;
+  text-align: left;
+}
+.bl-card-link:hover {
+  text-decoration: underline;
+}
+.bl-card-violation {
+  color: var(--vp-c-danger-1);
+}
+.bl-card-none {
+  color: var(--vp-c-text-3);
+  font-style: italic;
+}
+.bl-card-warn {
+  color: var(--vp-c-warning-1);
+  font-weight: 700;
+}
+</style>

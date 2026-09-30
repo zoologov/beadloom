@@ -513,7 +513,8 @@ Three decisions are worth reading off that line.
   offering re-attestation would be offering the bulk re-baseline the change exists to remove.
 
 Measured in two clean rooms differing only in this change, each run against its own code:
-appending one function to `application/architecture_view.py` produced **69 stale pairs, 67 of
+appending one function to `application/architecture_view.py` (now
+`application/site/architecture_view.py`) produced **69 stale pairs, 67 of
 them naming a file nobody touched**, and afterwards **2 stale plus 67
 `unverified`/`sibling_symbols_changed`**, every one carrying `details: architecture_view.py`.
 Both rooms exit 2. The gate still bites, on the two pairs somebody can act on.

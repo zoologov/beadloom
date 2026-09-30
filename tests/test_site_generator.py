@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site — the `docs site` generator (BDL-040 BEAD-01).
+"""Tests for beadloom.application.site.generate — the `docs site` generator (BDL-040 BEAD-01).
 
 Asserts the generator emits the expected files deterministically (re-generate ->
 byte-identical), node pages contain summary/symbols/edges-as-links + an embedded
@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.site import generate_site
+from beadloom.application.site.generate import generate_site
 from beadloom.infrastructure.db import create_schema
 from tests.support.site_links import (
     dead_links,
@@ -345,11 +345,13 @@ def test_node_page_edges_as_links(conn: sqlite3.Connection, tmp_path: Path) -> N
     assert "](../services/beadloom.md)" in text  # part_of -> beadloom service page
 
 
-def test_node_page_embedded_diagram(conn: sqlite3.Connection, tmp_path: Path) -> None:
+def test_node_page_embedded_viewer(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """The node page mounts the architecture viewer on its node (BDL-076 A4), not Mermaid."""
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
     text = (out / "domains" / "application.md").read_text(encoding="utf-8")
-    assert "```mermaid" in text
+    assert '<ArchitectureMap focus="application"' in text
+    assert "```mermaid" not in text
 
 
 def test_node_page_linked_docs_as_links(conn: sqlite3.Connection, tmp_path: Path) -> None:
