@@ -60,6 +60,11 @@ test("each edge kind has its own line style, and a violation is red, dashed and 
 test("hovering an edge shows its label, and only while it is hovered", async ({ page }) => {
   await openArchitecture(page);
   await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+  // Cytoscape reads where its canvas is on the page when the scroll event reaches
+  // it; a pointer that arrives before that frame is placed by the old position.
+  // Measured on a portal whose canvas starts below the fold: the first hover
+  // missed in 4 of 6 runs, and none after two frames.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   expect(await viewer(page, "shownEdgeLabels")).toEqual([]);
 
   // The pointer is over one edge, though not always the one whose midpoint it

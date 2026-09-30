@@ -162,14 +162,16 @@ export const SELECTED_VIEW = Object.freeze({
 
 /**
  * The data file with every drawn kind present: one `depends_on` edge marked as a
- * violation, and one `consumes` and one `produces` edge added, so the styles are
- * checked whether or not this repository's graph carries them today.
+ * violation, and one `uses`, one `consumes` and one `produces` edge added, so the
+ * styles are checked whether or not the served graph carries them. A project whose
+ * graph has only `depends_on` edges, as most do, still has every style read.
  */
 export async function serveEveryEdgeKind(page, request) {
   const data = await architectureData(request);
   const plain = data.edges.filter((e) => e.kind === "depends_on" && !e.violation);
   const [first, second] = plain;
   first.violation = true;
+  data.edges.push({ src: second.src, dst: second.dst, kind: "uses" });
   data.edges.push({ src: second.src, dst: second.dst, kind: "consumes" });
   data.edges.push({ src: second.dst, dst: second.src, kind: "produces" });
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));

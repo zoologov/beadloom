@@ -24,14 +24,22 @@ function pageOf(node) {
   return `${node.url.replace(/^\//, "")}.html`;
 }
 
-/** The node with a page whose one-step neighbourhood is largest, and which reaches out and in. */
+/**
+ * The node with a page whose one-step neighbourhood is largest, and which reaches
+ * out and in: under `prefix` when a node there qualifies, under any page otherwise.
+ * A graph need not hold the kind the prefix names; a Go service's packages, as
+ * `beadloom init` writes them, include no domain.
+ */
 function subjectOf(data, prefix) {
   const reach = (id) => neighbourhood(data, id, 1, "both").ids.length;
-  return data.nodes
-    .filter((n) => n.url && n.url.startsWith(prefix))
+  const qualifying = data.nodes
+    .filter((n) => n.url)
     .filter((n) => neighbourhood(data, n.id, 1, "out").ids.length > 1)
-    .filter((n) => neighbourhood(data, n.id, 1, "in").ids.length > 1)
-    .sort((a, b) => reach(b.id) - reach(a.id) || a.id.localeCompare(b.id))[0];
+    .filter((n) => neighbourhood(data, n.id, 1, "in").ids.length > 1);
+  const preferred = qualifying.filter((n) => n.url.startsWith(prefix));
+  return (preferred.length ? preferred : qualifying).sort(
+    (a, b) => reach(b.id) - reach(a.id) || a.id.localeCompare(b.id)
+  )[0];
 }
 
 test("a node page opens with its node selected, its neighbourhood marked and its card open", async ({

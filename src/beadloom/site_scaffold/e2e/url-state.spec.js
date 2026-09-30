@@ -11,8 +11,10 @@ import { architectureData, openArchitecture, viewer, waitForViewer } from "./sup
 
 test("a linked view opens in the state its query names", async ({ page, request }) => {
   const data = await architectureData(request);
-  const domain = data.nodes.find((n) => n.kind === "domain").id;
-  const focus = data.nodes.find((n) => n.parent === domain && n.kind === "feature").id;
+  // A feature directly inside a domain; the first domain need not hold one.
+  const kinds = new Map(data.nodes.map((n) => [n.id, n.kind]));
+  const feature = data.nodes.find((n) => n.kind === "feature" && kinds.get(n.parent) === "domain");
+  const [domain, focus] = [feature.parent, feature.id];
   const query = `?kind=feature&domain=${domain}&violations=1&focus=${focus}&depth=2&dir=in&view=impact`;
 
   await openArchitecture(page, query);

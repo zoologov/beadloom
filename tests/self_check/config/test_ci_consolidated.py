@@ -9,6 +9,7 @@ The three independent PR workflows (``beadloom-gate.yml``, ``tests.yml``,
       tests       (ubuntu, 3.10-3.13)    pytest matrix, NO paths filter
       site-build  (ubuntu)               beadloom docs site + vitepress build
       site-e2e    (ubuntu)               needs: site-build; Playwright, advisory
+      site-adopters (ubuntu)             adopter fixtures, the slow tests; advisory
       ai-techwriter (self-hosted)        needs: [gate, tests, site-build]
 
 ``deploy-site.yml`` stays the ONLY ``push: main`` job (logic unchanged; only the
@@ -100,8 +101,9 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 def test_ci_has_the_declared_jobs() -> None:
     """The consolidated four (BDL-050), the locale DIMENSION (BDL-061.38) and site-e2e.
 
-    ``site-e2e`` (BDL-076 A5) is the one job here that is not a required check;
-    it is listed in ``tests.support.ci_workflows.ADVISORY_JOBS`` with its exit.
+    ``site-e2e`` (BDL-076 A5) and ``site-adopters`` (B3) are the jobs here that are
+    not required checks; each is listed in ``tests.support.ci_workflows.ADVISORY_JOBS``
+    with its exit.
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
@@ -119,6 +121,7 @@ def test_ci_has_the_declared_jobs() -> None:
         "tests-locale",
         "site-build",
         "site-e2e",
+        "site-adopters",
         "ai-techwriter",
     }
 
