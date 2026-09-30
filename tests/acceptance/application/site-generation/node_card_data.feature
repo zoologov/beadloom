@@ -27,3 +27,13 @@ Feature: the architecture data file carries what a node card shows
     When the site is generated for the project
     Then the data file declares the layers "application, domain, infrastructure" in that order
     And the declared layers carry the tags "zone-app, zone-domain, zone-infra"
+
+  # BDL-076 K4 (`beadloom-ujzb.3`). Listing every test file at its node and again
+  # at each container made the test lists the largest field of the file. A file is
+  # listed once, where it is bound; a container keeps the counts it showed before.
+  @bead:beadloom-ujzb.3
+  Scenario: a test file is listed at its own node, and its container only counts it
+    Given a project whose storage pool imports the catalogue above it, with tests bound to the pool
+    When the site is generated for the project
+    Then the node "storage" lists no test file and counts 2 test files with 3 tests
+    And every test file of the project is listed at exactly one node

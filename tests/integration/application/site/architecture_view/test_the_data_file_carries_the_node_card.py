@@ -78,6 +78,11 @@ V2_NODE_KEYS = {
     "findings",
 }
 
+#: What a node's ``tests`` carries: the files bound to the node itself, and the
+#: counts over the node and its ``part_of`` descendants. A file is listed once,
+#: at the node that holds it; an ancestor counts it without repeating the path.
+TESTS_KEYS = {"files", "file_count", "count", "placement"}
+
 #: What a declared layer carries at the top level.
 LAYER_KEYS = {"name", "rank", "tag", "token"}
 
@@ -363,10 +368,12 @@ def test_public_symbols_are_capped_and_the_rest_counted(shop: sqlite3.Connection
     assert node["symbols"] == PUBLIC_SYMBOL_CAP + overflow + 1
 
 
-def test_the_tests_are_the_binding_with_the_placement_of_each_file(
-    shop: sqlite3.Connection,
-) -> None:
-    conn = shop
+def _bind_orders_and_pricing(conn: sqlite3.Connection) -> None:
+    """`orders` holds one file itself; its part `pricing` holds the other.
+
+    The reindex writes each node's ``extra["tests"]`` as the union over the node
+    and its ``part_of`` descendants, so `orders` names both files.
+    """
     _test_file(conn, "tests/unit/orders/test_a.py", "orders", "mirror")
     _test_file(conn, "tests/unit/orders/pricing/test_b.py", "pricing", "mirror")
     _set_extra(
@@ -384,16 +391,96 @@ def test_the_tests_are_the_binding_with_the_placement_of_each_file(
             },
         },
     )
+    _set_extra(
+        conn,
+        "pricing",
+        {
+            "tests": {
+                "framework": "pytest",
+                "test_files": ["tests/unit/orders/pricing/test_b.py"],
+                "test_count": 3,
+            },
+        },
+    )
     conn.commit()
-    nodes = _nodes(build_architecture_view_data(conn))
 
+
+def test_the_tests_object_carries_its_own_files_and_the_union_counts(
+    shop: sqlite3.Connection,
+) -> None:
+    _bind_orders_and_pricing(shop)
+    nodes = _nodes(build_architecture_view_data(shop))
+
+    for ref in ("orders", "pricing"):
+        tests = nodes[ref]["tests"]
+        assert isinstance(tests, dict)
+        assert set(tests) == TESTS_KEYS, ref
+
+
+def test_a_test_file_is_listed_at_its_own_node_and_counted_at_its_ancestors(
+    shop: sqlite3.Connection,
+) -> None:
+    _bind_orders_and_pricing(shop)
+    nodes = _nodes(build_architecture_view_data(shop))
+
+    # `orders` lists only the file bound to it, and still counts its part's file:
+    # the counts are what the card showed before, the list is not repeated.
     assert nodes["orders"]["tests"] == {
-        "files": ["tests/unit/orders/pricing/test_b.py", "tests/unit/orders/test_a.py"],
+        "files": ["tests/unit/orders/test_a.py"],
+        "file_count": 2,
         "count": 5,
         "placement": {"mirror": 2},
     }
+    assert nodes["pricing"]["tests"] == {
+        "files": ["tests/unit/orders/pricing/test_b.py"],
+        "file_count": 1,
+        "count": 3,
+        "placement": {"mirror": 1},
+    }
     # A node the binding does not cover says so, rather than claiming no tests.
     assert nodes["shop"]["tests"] is None
+
+
+def test_each_test_file_is_listed_at_exactly_one_node(shop: sqlite3.Connection) -> None:
+    _bind_orders_and_pricing(shop)
+    nodes = _nodes(build_architecture_view_data(shop))
+
+    listed = [
+        path
+        for node in nodes.values()
+        if isinstance(node["tests"], dict)
+        for path in node["tests"]["files"]
+    ]
+    assert sorted(listed) == [
+        "tests/unit/orders/pricing/test_b.py",
+        "tests/unit/orders/test_a.py",
+    ]
+
+
+def test_a_file_whose_owner_is_not_a_node_stays_listed_where_it_is_counted(
+    shop: sqlite3.Connection,
+) -> None:
+    conn = shop
+    # One file has no record at all, one names a node the graph does not hold:
+    # neither has another node to be listed at, so dropping it would lose it.
+    _test_file(conn, "tests/unit/orders/test_gone.py", "retired-node", "mirror")
+    _set_extra(
+        conn,
+        "orders",
+        {
+            "tests": {
+                "test_files": ["tests/unit/orders/test_gone.py", "tests/unit/orders/test_x.py"],
+                "test_count": 2,
+            },
+        },
+    )
+    conn.commit()
+    tests = _nodes(build_architecture_view_data(conn))["orders"]["tests"]
+
+    assert isinstance(tests, dict)
+    assert tests["files"] == ["tests/unit/orders/test_gone.py", "tests/unit/orders/test_x.py"]
+    assert tests["file_count"] == 2
+    assert tests["placement"] == {"mirror": 1}
 
 
 def test_the_activity_is_the_one_the_reindex_recorded(shop: sqlite3.Connection) -> None:

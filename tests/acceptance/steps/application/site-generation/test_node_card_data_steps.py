@@ -88,8 +88,33 @@ def _bound_tests(
     bound = world["nodes"][ref]["tests"]
     assert bound["files"] == sorted(ZONED_POOL_TESTS)
     assert len(bound["files"]) == files
+    assert bound["file_count"] == files
     assert bound["count"] == tests
     assert bound["placement"] == {placement: files}
+
+
+@then(
+    parsers.parse(
+        'the node "{ref}" lists no test file and counts {files:d} test files with {tests:d} tests'
+    )
+)
+def _counted_not_listed(world: dict[str, Any], ref: str, files: int, tests: int) -> None:
+    bound = world["nodes"][ref]["tests"]
+    assert bound is not None, f"the binding does not cover {ref}"
+    assert bound["files"] == []
+    assert bound["file_count"] == files
+    assert bound["count"] == tests
+
+
+@then("every test file of the project is listed at exactly one node")
+def _listed_once(world: dict[str, Any]) -> None:
+    listed = [
+        path
+        for node in world["nodes"].values()
+        if node["tests"] is not None
+        for path in node["tests"]["files"]
+    ]
+    assert sorted(listed) == sorted(ZONED_POOL_TESTS)
 
 
 @then(

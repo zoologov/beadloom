@@ -18,6 +18,9 @@ Honest degradation, as in the rest of the data file:
 
 - ``tests`` is ``None`` for a node the test binding does not cover, which is a
   different fact from a covered node with no test file.
+- ``tests`` lists a test file once, at the node it is bound to. A container
+  counts its parts' files without repeating their paths: listed at every
+  ancestor, the paths were the largest field of the file (BDL-076 K4).
 - ``activity`` is ``None`` when the reindex recorded none.
 - ``findings`` and ``debt`` are omitted entirely when the site run did not
   compute them, never reported as clean.
@@ -81,6 +84,8 @@ class CardSources:
 
     tags: Mapping[str, Collection[str]]
     placements: Mapping[str, str]
+    #: Test file path -> the node it is bound to, for owners the graph holds.
+    test_owners: Mapping[str, str]
     verdicts: NodeVerdicts
 
 
@@ -90,9 +95,19 @@ def card_sources(
     tags: Mapping[str, Collection[str]],
     verdicts: NodeVerdicts | None,
 ) -> CardSources:
-    """Read the per-build inputs of the card: the test placements, once."""
-    placements = {test.path: test.placement for test in read_test_files(conn) or []}
-    return CardSources(tags=tags, placements=placements, verdicts=verdicts or NodeVerdicts())
+    """Read the per-build inputs of the card: the test placements and owners, once."""
+    tests = read_test_files(conn) or []
+    nodes = {str(row[0]) for row in conn.execute("SELECT ref_id FROM nodes").fetchall()}
+    return CardSources(
+        tags=tags,
+        placements={test.path: test.placement for test in tests},
+        test_owners={
+            test.path: test.ref_id
+            for test in tests
+            if test.ref_id is not None and test.ref_id in nodes
+        },
+        verdicts=verdicts or NodeVerdicts(),
+    )
 
 
 def card_fields(
@@ -111,7 +126,7 @@ def card_fields(
         "lifecycle": lifecycle,
         "tags": sorted(sources.tags.get(ref_id, ())),
         "docs": doc_pairs(conn, ref_id),
-        "tests": bound_tests(extra, sources.placements),
+        "tests": bound_tests(extra, sources, ref_id),
         "public_symbols": capped_public_symbols(conn, ref_id),
         "activity": _mapping(extra.get("activity")),
     }
@@ -165,15 +180,18 @@ def _worst(statuses: set[str]) -> str:
 
 
 def bound_tests(
-    extra: Mapping[str, object], placements: Mapping[str, str]
+    extra: Mapping[str, object], sources: CardSources, ref_id: str
 ) -> dict[str, object] | None:
-    """The test files the binding attributes to the node, with how each is placed.
+    """The node's own test files, and the counts over the node and its parts.
 
     Read from ``extra["tests"]``, which the reindex rebuilds from the BDL-074
     binding over the node and its ``part_of`` descendants — the same files
-    ``beadloom ctx`` reports. ``placement`` counts those files by the placement
-    ``test_files`` records for each. ``None`` when the binding does not cover
-    the node.
+    ``beadloom ctx`` reports. ``file_count``, ``count`` and ``placement`` are
+    taken over all of those files, ``placement`` by what ``test_files`` records
+    for each. ``files`` lists only the ones bound to *ref_id* itself: a part's
+    file is listed at the part. A file whose owner the graph does not hold stays
+    listed here, since no other node would list it. ``None`` when the binding
+    does not cover the node.
     """
     tests = extra.get("tests")
     if not isinstance(tests, dict):
@@ -182,12 +200,13 @@ def bound_tests(
     files = sorted(str(path) for path in listed) if isinstance(listed, list) else []
     placement: dict[str, int] = {}
     for path in files:
-        where = placements.get(path)
+        where = sources.placements.get(path)
         if where is not None:
             placement[where] = placement.get(where, 0) + 1
     count = tests.get("test_count")
     return {
-        "files": files,
+        "files": [path for path in files if sources.test_owners.get(path, ref_id) == ref_id],
+        "file_count": len(files),
         "count": count if isinstance(count, int) else 0,
         "placement": dict(sorted(placement.items())),
     }
