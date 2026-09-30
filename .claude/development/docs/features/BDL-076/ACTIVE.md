@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-ujzb.4` (W0, docs); then A3 ∥ A4.
+**Bead:** Wave 3 — `beadloom-7091` (A3, neighbourhood, impact, the card) ∥ `beadloom-k0s6` (A4, node pages, landscape mode); then A5.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
-**Done when:** W0 brings every stale pair fresh; `beadloom ci` rc 0.
+**Done when:** the PRD's slice-1 criteria for the selection modes, the card and node pages hold in the browser tests; `beadloom ci` rc 0.
+
+**W0 closed (2026-09-30):** `beadloom-ujzb.4` `74bc8a95`, `4fb6c1c6`, `23661529` — 13 documents; stale pairs 43 → 0 (590 ok); `docs audit` 0; pytest 0 failed; `beadloom ci` rc 0. `.beadloom/sync-surface.json` re-recorded 568 → 590. The application README was attested whole (89 pairs, 71 sibling pairs marked not verified).
 
 **K4 closed (2026-09-30):** `beadloom-ujzb.3` `efe7bd10` — test files listed at their owning node only, ancestors keep counts and a new `file_count`; 376,794 → 331,941 bytes (gzip 44,755 → 38,711). The tests field was 87 KB, not most of the growth: the largest fields now are edges 63 KB, `public_symbols` 47 KB, tests 42 KB, `activity` 26 KB. Tree: 11 946 passed, 1 failed (the same 18 SPEC pairs → W0); `beadloom ci` rc 1 on sync-check only (43 stale).
 
@@ -55,9 +57,9 @@
 | `beadloom-oo4m` | K2 dev | ✓ done | JS/Vue sync pairs kept |
 | `beadloom-5o48` | K3 dev | ✓ done | `doc-area-coherence`, several trees |
 | `beadloom-ujzb.3` | K4 dev | ✓ done | tests listed at their node only |
-| `beadloom-ujzb.4` | W0 docs | in progress | stale pairs of A1, A2, K1–K4 |
-| `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |
-| `beadloom-k0s6` | A4 dev | blocked | node pages; landscape mode |
+| `beadloom-ujzb.4` | W0 docs | ✓ done | stale pairs of A1, A2, K1–K4 |
+| `beadloom-7091` | A3 dev | ready | neighbourhood, impact, the card |
+| `beadloom-k0s6` | A4 dev | ready | node pages; landscape mode |
 | `beadloom-rjp1` | A5 test | blocked | browser tests; `site-e2e` |
 | `beadloom-bp8n` | T1 test | blocked | slice 1 criteria |
 | `beadloom-arak` | R1 review | blocked | review slice 1 |
