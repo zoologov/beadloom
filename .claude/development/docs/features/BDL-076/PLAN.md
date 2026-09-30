@@ -99,6 +99,13 @@ J1 and J3 run in parallel. J2 follows J1, because both edit `import_resolver.py`
 
 ### A0: our site under beadloom (owner, 2026-09-30)
 
+**Re-scoped 2026-09-30, after J1–J3 and the owner's FSD rule.** Step 2 brings the theme into the scan
+and proves that the tools see it, under the existing `vitepress-site` node. It does not split the
+node. Splitting it now would name today's file layout, and A2 moves every file into FSD layers. So
+the node split, one node per FSD slice with a document and the FSD layer rule in `rules.yml`, moves
+into A2, where the slices are created.
+
+
 **Scope:**
 - Measure first whether beadloom reads `.vue` single-file components, and which parts of them it
   reads. It should be checked with the `languages` extra on this repository and on a two-file Vue
@@ -142,7 +149,7 @@ the core needs.
 **Done when:** the schema tests pass; `beadloom docs site` writes v2 on this repository and on a
 fixture.
 
-### A2: the viewer core
+### A2: the viewer core (restructured into FSD; creates the site's graph nodes per slice and the FSD layer rule — moved from A0)
 
 **Scope:** `GraphViewer.vue` plus the composables `useViewerStyle`, `useFilters` and `useUrlState`,
 and the theme token modules.

@@ -74,8 +74,8 @@ mutation:
 
 waves:
   overrides:
-  - beads: [beadloom-hjr1, beadloom-tmxa]
+  - beads: [beadloom-kcwz, beadloom-ujzb.1]
     decision: parallel
-    reason: "BDL-076 wave -1. Serialised only by the dependency edge import-resolver -> code-indexer; the files are disjoint: beadloom-hjr1 edits graph/import_resolver.py (relative JS/TS specifiers), beadloom-tmxa edits context_oracle/code_indexer.py and the reindex extension table (.vue script blocks, export const, import()). Interface handed to both prompts: tmxa emits a .vue file's imports in the same shape the JS/TS path already emits; hjr1 resolves a relative specifier that names a .vue file (extension list includes .vue). Their interplay is tested once both have landed, by beadloom-g9fb's fixtures and A0 step 2."
+    reason: "BDL-076: A0 step 2 adds site/.vitepress/theme to the scan paths in .beadloom/config.yml and writes the vitepress-site node's document; beadloom-ujzb.1 refreshes the 18 doc pairs J1-J3 made stale (context-oracle README, code-indexer and import-resolver SPECs, graph README, infrastructure README, db DOC). Ownership rule handed to both prompts: the vitepress-site document and .beadloom/* are A0's; the 18 listed docs are the docs bead's; neither edits the other's files."
     until: "2026-11-15"
 
