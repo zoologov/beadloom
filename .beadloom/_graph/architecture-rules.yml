@@ -13,10 +13,11 @@ nodes:
     summary: "The architecture rules this project is linted against: the layer declaration, the boundary rules and their exemptions, read from `.beadloom/_graph/rules.yml`"
     source: .beadloom/_graph/rules.yml
     docs_absent: >-
-      `.beadloom/_graph/` is outside `scan_paths` (`src`), so nothing here is
+      `.beadloom/_graph/` is outside `scan_paths`, so nothing here is
       indexed as a symbol and a document attached to this node could be held to
       the declaration by no sync pair -- it would be prose no check can reach,
-      which is the reason `vitepress-site` carries none either (BDL-UX #163).
+      the reason `vitepress-site` also carried none until BDL-076 A0 made its
+      theme a scan path (BDL-UX #163).
       The file documents itself instead: every rule carries a `description:`
       that `lint` prints beside its findings, and every exemption carries the
       reason it exists and the condition that retires it. What this node adds is

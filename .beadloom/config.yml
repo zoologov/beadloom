@@ -1,7 +1,21 @@
 languages:
 - .py
+# BDL-076 A0 (`beadloom-kcwz`). The VitePress theme is scanned so that the graph
+# viewer is not a blind spot of the tool that draws it: its `.vue` and `.js`
+# files are read for symbols and imports and belong to the `vitepress-site` node.
+# Only the theme is scanned, not `site/`: everything else under `site/` is
+# generated output or `node_modules`.
+#
+# `languages` stays `.py`: it states what mutmut, a Python mutator, can mutate,
+# and the mutation scope reads it for that. Reading `.vue` and `.js` needs the
+# `languages` extra (the TypeScript grammar). Without it, a reindex hashes the
+# theme files and records no symbol and no import from them, and prints no
+# warning, because the parser warning fires only when a reindex finds no symbol
+# at all (measured 2026-09-30: a `beadloom ci` run from a tool install without
+# the extra removed the theme's 80 symbols from this index).
 scan_paths:
 - src
+- site/.vitepress/theme
 sync:
   hook_mode: warn
 # BDL-074 G2 (`beadloom-2mj3.11`, review `beadloom-b9ll` M3 and m4). Where this
@@ -13,10 +27,17 @@ sync:
 # test_import_boundary.py, application/reindex/test_index.py) and a file name cannot
 # tell a test module from a module about tests. Every test here is under tests/.
 #
-# `patterns` names pytest only: this project is Python, and declaring the group
-# replaces the Go and JS/TS defaults rather than keeping them unused.
+# `patterns` names pytest and Playwright: declaring the groups replaces the Go and
+# JS/TS defaults rather than keeping them unused.
+#
+# BDL-076 A0 (`beadloom-kcwz`): `site/e2e` is the root of the site's Playwright
+# tests, which A5 writes. Their pattern group is Playwright's own default match
+# for JavaScript (the site has no TypeScript). A file directly under the root sits
+# in no kind folder, so it binds through the `tests:` list of `vitepress-site`.
+# Until the folder exists, the index records the root as absent and reads nothing
+# from it.
 tests:
-  roots: [tests]
+  roots: [tests, site/e2e]
   beside_code: false
   kinds:
     unit: unit
@@ -25,6 +46,7 @@ tests:
     self_check: self_check
   patterns:
     pytest: ["test_*.py", "*_test.py"]
+    playwright: ["*.spec.js", "*.test.js"]
 docs_audit:
   # Targeted false-positive suppressions (BDL-057.6). Each {path, fact, value}
   # triple silences exactly one keyword-proximity false match — it does NOT mask
