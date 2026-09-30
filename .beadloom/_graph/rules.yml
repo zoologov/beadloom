@@ -467,19 +467,15 @@ rules:
   # convention check that fails a green project's first run on its own house
   # style is a check that gets switched off.
   #
-  # TEMPORARILY `warn`, NOT `error` (BDL-076 A2, `beadloom-iehv`; defect
-  # `beadloom-5o48`). A2 split the site theme into seventeen FSD slice nodes under
-  # `site/`, and the rule's source-root derivation reads a second SUPPORTED source
-  # tree as the fork where areas begin: the root comes out empty, no document path
-  # names `src` or `site`, and the rule checks nothing, 126 of 126 pairs unnamed
-  # (measured 2026-09-30). No setting of `threshold` or `min_support` avoids it. At
-  # `warn` the "checked nothing" finding still prints on every lint run, so the gap
-  # is stated rather than silent; what is lost until the fix is that a misplaced
-  # document under `src/` no longer fails the Gate. Restore `error` when
-  # `beadloom-5o48` lands.
+  # This repository has two source trees, `src/` and `site/`, and each is judged
+  # against its own documents (`beadloom-5o48`, BDL-076 K3). From 2026-09-30 until
+  # that fix the site's seventeen slice nodes made the rule check none of 126
+  # pairs, and it sat at `warn`. Measured after the fix on the same graph: 117 of
+  # 126 pairs fall under a dominant mapping, 102 under `src/beadloom` and 15 under
+  # `site/.vitepress/theme`, and 0 contradict it.
   - name: doc-area-coherence
     description: "A node is documented where this graph documents nodes from its source area"
-    severity: warn
+    severity: error
     doc_area_coherence:
       threshold: 0.6
       min_support: 2

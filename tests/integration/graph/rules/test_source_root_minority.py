@@ -26,6 +26,9 @@ stands down without the Gate noticing.
 **FAKES PROVE FAKES.** Every graph here uses `platform/`, `atelier/`, `reference/`
 and `endpoints/` — none of which this repository has — so a rule that passed by
 recognising Beadloom's own tree would fail these.
+
+BDL-076 K3 (`beadloom-5o48`) added the last section: a SUPPORTED second tree,
+the case `.9` left open, with `storefront/web/` and `handbook/` as its fakes.
 """
 
 from __future__ import annotations
@@ -322,3 +325,238 @@ class TestATotalStandDownCarriesTheDeclaredSeverity:
 
         assert result.rules_inert == 1
         assert not result.has_errors
+
+
+# --------------------------------------------------------------------------- #
+# A SUPPORTED second source tree (BDL-076 K3, `beadloom-5o48`)
+# --------------------------------------------------------------------------- #
+#
+# `.9` fixed a MINORITY second tree. A second tree of two or more nodes is a
+# supported second way down, so the descent forks at the very top and the root
+# comes out empty; the areas became the tree names, no document named a tree, and
+# the rule checked none of the pairs. On this repository 17 slice nodes under
+# `site/` did that to all 126. Every two-tree test below was red before the fix:
+# the old derivation reported nothing on these graphs, or reported only the tree
+# whose documents happened to name the tree. The trees are `platform/` and
+# `storefront/web/`, documented under `reference/` and `handbook/`.
+
+#: The frontend tree's root: its areas begin two segments down.
+FRONTEND = "storefront/web"
+
+
+def _reported_sorted(violations: list[Violation]) -> list[str]:
+    return sorted(str(v.from_ref_id) for v in violations if v.rule_type == DOC_AREA_RULE_TYPE)
+
+
+def _backend(area: str, count: int, docs_area: str | None = None) -> list[Pair]:
+    target = docs_area or area
+    return [
+        (
+            f"{area}-{index}",
+            f"platform/{area}/{area}_{index}.py",
+            f"reference/{target}/{area}-{index}/SPEC.md",
+        )
+        for index in range(count)
+    ]
+
+
+def _frontend(area: str, count: int, docs_area: str | None = None) -> list[Pair]:
+    target = docs_area or area
+    return [
+        (
+            f"web-{area}-{index}",
+            f"{FRONTEND}/{area}/{area}-{index}/",
+            f"handbook/{target}/{area}-{index}/README.md",
+        )
+        for index in range(count)
+    ]
+
+
+def _two_trees() -> list[Pair]:
+    return (
+        _backend("orders", 5)
+        + _backend("billing", 4)
+        + _frontend("widgets", 3)
+        + _frontend("entities", 3)
+    )
+
+
+class TestEachTreeIsJudged:
+    def test_a_coherent_two_tree_graph_is_checked_and_clean_at_error(
+        self, tmp_path: Path
+    ) -> None:
+        """The failure this bead fixes: no finding, and no "checked nothing" either."""
+        conn = _graph(tmp_path, _two_trees())
+        assert evaluate_doc_area_coherence_rules(conn, [_rule(severity="error")]) == []
+
+        convention = derive_convention(conn, threshold=0.6, min_support=2)
+        assert convention.sampled == 15
+        assert len(convention.checked) == 15
+
+    def test_a_misplaced_document_in_each_tree_is_reported_sorted(self, tmp_path: Path) -> None:
+        pairs = [
+            *_two_trees(),
+            ("orders-stray", "platform/orders/stray.py", "reference/billing/stray/SPEC.md"),
+            ("web-stray", f"{FRONTEND}/widgets/stray/", "handbook/entities/stray/README.md"),
+        ]
+        conn = _graph(tmp_path, pairs)
+        violations = evaluate_doc_area_coherence_rules(conn, [_rule()])
+
+        assert _reported_sorted(violations) == ["orders-stray", "web-stray"]
+        assert _liveness(violations) == []
+
+    def test_the_finding_names_the_area_with_its_tree(self, tmp_path: Path) -> None:
+        pairs = [
+            *_two_trees(),
+            ("web-stray", f"{FRONTEND}/widgets/stray/", "handbook/entities/stray/README.md"),
+        ]
+        conn = _graph(tmp_path, pairs)
+        (finding,) = [
+            v
+            for v in evaluate_doc_area_coherence_rules(conn, [_rule()])
+            if v.rule_type == DOC_AREA_RULE_TYPE
+        ]
+        assert f"under `{FRONTEND}/widgets`" in finding.message
+        assert "3 of 4" in finding.message
+
+    def test_an_area_name_two_trees_share_is_two_areas(self, tmp_path: Path) -> None:
+        """`shared` in the backend and `shared` in the frontend keep separate conventions.
+
+        Keyed by the bare name, the two pool into one area documented half under
+        `shared` and half under `kit`, which no majority covers, and the stray
+        below would go unchecked.
+        """
+        pairs = [
+            *_backend("orders", 4),
+            *_backend("shared", 3),
+            *_frontend("widgets", 3),
+            *_frontend("shared", 3, docs_area="kit"),
+            ("web-shared-stray", f"{FRONTEND}/shared/stray/", "handbook/widgets/stray/README.md"),
+        ]
+        conn = _graph(tmp_path, pairs)
+
+        assert _reported_sorted(evaluate_doc_area_coherence_rules(conn, [_rule()])) == [
+            "web-shared-stray"
+        ]
+
+    def test_a_tree_whose_documents_name_no_area_is_read_at_the_projects_depth(
+        self, tmp_path: Path
+    ) -> None:
+        """This repository's site: every slice documented in one shared directory."""
+        frontend = [
+            (
+                f"web-{area}-{i}",
+                f"{FRONTEND}/{area}/{area}-{i}/",
+                f"reference/storefront/{area}-{i}.md",
+            )
+            for area in ("widgets", "entities")
+            for i in range(3)
+        ]
+        strays = [
+            ("web-stray", f"{FRONTEND}/widgets/stray/", "reference/orders/stray/SPEC.md"),
+            ("orders-stray", "platform/orders/stray.py", "reference/billing/stray/SPEC.md"),
+        ]
+        conn = _graph(
+            tmp_path, [*_backend("orders", 5), *_backend("billing", 4), *frontend, *strays]
+        )
+
+        # Read as two areas `platform` and `storefront`, only the frontend stray
+        # is caught: the backend's documents name no tree, so `platform` has no
+        # majority and its stray goes unchecked.
+        assert _reported_sorted(evaluate_doc_area_coherence_rules(conn, [_rule()])) == [
+            "orders-stray",
+            "web-stray",
+        ]
+
+
+class TestThePopulationPerTree:
+    def test_the_population_states_each_tree(self, tmp_path: Path) -> None:
+        conn = _graph(tmp_path, _two_trees())
+        population = derive_convention(conn, threshold=0.6, min_support=2).population()
+
+        assert "derived from 15 node/doc pairs: 15 compare" in population
+        assert "per source tree" in population
+        assert "`platform`: 9 of 9 pairs compare, 9 under a dominant mapping, 9 agree" in (
+            population
+        )
+        assert f"`{FRONTEND}`: 6 of 6 pairs compare, 6 under a dominant mapping, 6 agree" in (
+            population
+        )
+
+    def test_a_minority_third_tree_is_still_counted_outside(self, tmp_path: Path) -> None:
+        pairs = [*_two_trees(), ("atelier", "atelier/", "manual/atelier.md")]
+        conn = _graph(tmp_path, pairs)
+        convention = derive_convention(conn, threshold=0.6, min_support=2)
+
+        assert convention.outside_root == 1
+        assert convention.examined == len(pairs)
+        assert "1 sit outside" in convention.population()
+        assert _reported_sorted(evaluate_doc_area_coherence_rules(conn, [_rule()])) == []
+
+    def test_a_node_above_its_trees_root_is_counted_outside_that_tree(
+        self, tmp_path: Path
+    ) -> None:
+        """`site/` beside `site/.vitepress/theme/...`: the tree's own umbrella node."""
+        pairs = [*_two_trees(), ("storefront", "storefront/", "handbook/storefront.md")]
+        conn = _graph(tmp_path, pairs)
+        convention = derive_convention(conn, threshold=0.6, min_support=2)
+
+        assert convention.outside_root == 1
+        assert f"`{FRONTEND}`: 6 of 7 pairs compare" in convention.population()
+
+    def test_two_trees_too_small_for_a_convention_say_so_per_tree(
+        self, tmp_path: Path
+    ) -> None:
+        pairs = [
+            (f"b-{area}", f"platform/{area}/x.py", f"reference/{area}/x/SPEC.md")
+            for area in ("orders", "billing", "audit")
+        ] + [
+            (f"f-{area}", f"{FRONTEND}/{area}/x/", f"handbook/{area}/x/README.md")
+            for area in ("widgets", "entities", "pages")
+        ]
+        conn = _graph(tmp_path, pairs)
+        (liveness,) = _liveness(
+            evaluate_doc_area_coherence_rules(conn, [_rule(severity="error")])
+        )
+
+        assert liveness.severity == "error"
+        assert "6 pairs across 6 source areas" in liveness.message
+        assert "`platform`: 3 of 3 pairs compare" in liveness.message
+
+
+class TestOneTreeIsReadAsBefore:
+    def test_a_single_tree_population_is_the_same_sentence(self, tmp_path: Path) -> None:
+        pairs = [
+            *_backend("orders", 5),
+            *_backend("billing", 4),
+            ("atelier", "atelier/", "m/a.md"),
+        ]
+        conn = _graph(tmp_path, pairs)
+
+        assert derive_convention(conn, threshold=0.6, min_support=2).population() == (
+            "derived from 10 node/doc pairs: 9 compare, 9 fall under a dominant mapping "
+            "(majority 0.60 over at least 2 observations) and 9 of those agree; "
+            "1 sit outside the source root"
+        )
+
+    def test_top_level_packages_the_documents_name_stay_the_areas(
+        self, tmp_path: Path
+    ) -> None:
+        """A fork at the top that is where the areas begin, not where trees begin.
+
+        Read as trees, every node here sits at its tree's root and nothing
+        compares; read as areas, all eight compare. The documents name the
+        packages, so the second reading is the one kept.
+        """
+        pairs = [
+            (f"{area}-{i}", f"{area}/{area}_{i}.py", f"manual/{area}/{area}-{i}.md")
+            for area, count in (("ledger", 4), ("catalogue", 3))
+            for i in range(count)
+        ] + [("ledger-stray", "ledger/stray.py", "manual/catalogue/stray.md")]
+        conn = _graph(tmp_path, pairs)
+        convention = derive_convention(conn, threshold=0.6, min_support=2)
+
+        assert set(convention.dominant) == {"ledger", "catalogue"}
+        assert _reported_sorted(evaluate_doc_area_coherence_rules(conn, [_rule()])) == [
+            "ledger-stray"
+        ]
