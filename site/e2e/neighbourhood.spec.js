@@ -102,3 +102,32 @@ test("clearing the selection shows the whole graph again", async ({ page, reques
   await expect.poll(() => viewer(page, "dimmedIds")).toEqual([]);
   expect(await viewer(page, "neighbourhood")).toEqual({ ids: [], edges: [] });
 });
+
+// The rest of the graph is its nodes AND its edges: an edge the walk did not
+// take is dimmed, or hidden with "Hide the rest", and every edge it took is
+// shown at full strength.
+const OUTSIDE_LOOKS = [
+  { choice: "dimmed", query: "", outside: (look) => look.visible && look.opacity < 1 },
+  { choice: "hidden", query: "&hide=1", outside: (look) => !look.visible },
+];
+
+for (const { choice, query, outside: looksOutside } of OUTSIDE_LOOKS) {
+  test(`depth 2 outgoing shows only the walk's edges at full strength; every other edge is ${choice}`, async ({
+    page,
+    request,
+  }) => {
+    const data = await architectureData(request);
+    const subject = subjectOf(data);
+    const walked = new Set(neighbourhood(data, subject, 2, "out").edges);
+
+    await openArchitecture(page, `?focus=${subject}&depth=2&dir=out${query}`);
+    await expect.poll(async () => (await viewer(page, "neighbourhood")).edges.length).toBe(walked.size);
+
+    const looks = await viewer(page, "edgeLooks");
+    expect(looks.length).toBeGreaterThan(walked.size);
+    const wrong = looks.filter((look) =>
+      walked.has(look.key) ? !(look.visible && look.opacity === 1) : !looksOutside(look)
+    );
+    expect(wrong).toEqual([]);
+  });
+}

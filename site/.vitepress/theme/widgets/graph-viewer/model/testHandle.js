@@ -3,7 +3,8 @@
 //
 // The browser tests assert state rather than pixels, and read it here: the
 // visible node ids, the selection, node positions, the viewport, the colours
-// Cytoscape resolved, the edge styles it drew, and what a selection marked —
+// Cytoscape resolved, the edge styles it drew — each edge's arrows, the colours
+// along its line and its opacity — and what a selection marked —
 // the neighbourhood, the dimmed nodes, the impact rings and risks, and the
 // impact summary the panel shows. The handle exists only when
 // `navigator.webdriver` is true, which a real reader's browser never reports,
@@ -84,6 +85,23 @@ function readers(source) {
       if (!edge) return null;
       return { lineStyle: edge.style("line-style"), width: parseFloat(edge.style("width")), colour: edge.style("line-color") };
     },
+    // Every edge's look as drawn: its arrow ends, the colours along its line
+    // from the source end to the target end, and whether it is shown and how
+    // opaque. How direction reads, and what a selection leaves out, are here.
+    edgeLooks: () =>
+      cy()
+        .edges()
+        .map((edge) => ({
+          key: edge.data("key"),
+          styleKey: edge.data("styleKey"),
+          sourceArrow: edge.style("source-arrow-shape"),
+          targetArrow: edge.style("target-arrow-shape"),
+          lineColour: edge.style("line-color"),
+          stops: String(edge.style("line-gradient-stop-colors")).split(/\s+(?=rgb|#|hsl)/),
+          visible: edge.visible(),
+          opacity: parseFloat(edge.style("opacity")),
+        }))
+        .sort((a, b) => String(a.key).localeCompare(String(b.key))),
     shownEdgeLabels: () => cy().edges().filter((edge) => Boolean(edge.style("label"))).map((edge) => edge.id()),
     edgeMidpoint: () => {
       const r = rect();

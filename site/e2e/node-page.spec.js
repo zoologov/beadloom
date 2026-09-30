@@ -9,6 +9,7 @@ import {
   architectureData,
   flaggedIds,
   fullscreenView,
+  openArchitecture,
   parentMap,
   viewer,
   waitForViewer,
@@ -124,4 +125,54 @@ test("full screen on a node page shows its tools, its card and its legend", asyn
       fills: true,
       shown: { toolbar: true, canvas: true, card: true, legend: true },
     });
+});
+
+/** Each control of the viewer's toolbar, as its role and accessible name: `button "Fit"`. */
+async function toolbarControls(page) {
+  const snapshot = await page.locator("[role='toolbar']").first().ariaSnapshot();
+  return [...snapshot.matchAll(/- (button|combobox|checkbox|searchbox|radio|switch) "([^"]+)"/g)]
+    .map(([, role, name]) => `${role} "${name}"`)
+    .sort();
+}
+
+test("a node page's toolbar offers every control the architecture page's toolbar offers", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const node = subjectOf(data, "/domains/");
+  await openArchitecture(page, `?focus=${node.id}`);
+  const onArchitecturePage = await toolbarControls(page);
+
+  await page.goto(pageOf(node));
+  await waitForViewer(page);
+
+  expect(onArchitecturePage.length).toBeGreaterThan(10);
+  expect(await toolbarControls(page)).toEqual(onArchitecturePage);
+});
+
+test("on a node page the navigation buttons zoom and fit, and Arrange turns node dragging on", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const node = subjectOf(data, "/domains/");
+  await page.goto(pageOf(node));
+  await waitForViewer(page);
+  const fit = page.getByRole("button", { name: "Fit", exact: true });
+  const rounded = async () => Number((await viewer(page, "zoom")).toFixed(6));
+  await fit.click();
+  const fitted = await rounded();
+
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  const zoomedIn = await rounded();
+  await fit.click();
+  const refitted = await rounded();
+  await page.getByRole("button", { name: "Arrange", exact: true }).click();
+
+  expect({ zoomedIn: zoomedIn > fitted, refitted, arranging: await viewer(page, "arranging") }).toEqual({
+    zoomedIn: true,
+    refitted: fitted,
+    arranging: true,
+  });
 });

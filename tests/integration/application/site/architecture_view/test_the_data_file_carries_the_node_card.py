@@ -405,6 +405,28 @@ def test_public_symbols_are_capped_and_the_rest_counted(shop: sqlite3.Connection
     assert node["symbols"] == PUBLIC_SYMBOL_CAP + overflow + 1
 
 
+@pytest.mark.parametrize(
+    ("public", "listed", "omitted"),
+    [(49, 49, 0), (50, 50, 0), (51, 50, 1)],
+    ids=["below-the-cap", "at-the-cap", "one-over"],
+)
+def test_the_card_lists_at_most_fifty_public_names_and_counts_the_rest(
+    shop: sqlite3.Connection, public: int, listed: int, omitted: int
+) -> None:
+    # The RFC's figure, written out: a test that read the constant would pass
+    # whatever the constant became.
+    conn = shop
+    for index in range(public):
+        _symbol(conn, "src/orders/a.py", f"name_{index:03d}", index + 1)
+    conn.commit()
+
+    node = _nodes(build_architecture_view_data(conn))["orders"]
+
+    public_symbols = node["public_symbols"]
+    assert isinstance(public_symbols, dict)
+    assert (len(public_symbols["names"]), public_symbols["omitted"]) == (listed, omitted)
+
+
 def _bind_orders_and_pricing(conn: sqlite3.Connection) -> None:
     """`orders` holds one file itself; its part `pricing` holds the other.
 

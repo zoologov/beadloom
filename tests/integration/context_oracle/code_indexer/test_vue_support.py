@@ -24,13 +24,19 @@ from beadloom.context_oracle.code_indexer import (
 from beadloom.context_oracle.vue_sfc import ScriptBlock, script_blocks
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 pytest.importorskip("tree_sitter_typescript")
 
 
 @pytest.fixture(autouse=True)
-def _clear_lang_cache() -> None:
+def _clear_lang_cache() -> Iterator[None]:
+    # Cleared after the test as well: a test that swaps a grammar loader leaves
+    # the cache holding "no parser" for that extension, and a test in another
+    # file that runs next would read it.
+    clear_cache()
+    yield
     clear_cache()
 
 

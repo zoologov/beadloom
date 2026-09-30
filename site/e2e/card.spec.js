@@ -165,3 +165,59 @@ test("the card copies the ctx and why commands", async ({ page, request, context
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(command);
   }
 });
+
+// The data file carries at most 50 public names per node and counts the rest
+// (`PUBLIC_SYMBOL_CAP`, pinned by the Python tests). The card names the total,
+// says when it shows only the first names, and lists exactly the names it holds.
+const SYMBOL_CAP = 50;
+const SYMBOL_CASES = [
+  { omitted: 7, summary: `${SYMBOL_CAP + 7} names, the first ${SYMBOL_CAP} shown` },
+  { omitted: 0, summary: `${SYMBOL_CAP} names` },
+];
+
+for (const { omitted, summary } of SYMBOL_CASES) {
+  test(`the card lists the ${SYMBOL_CAP} names it holds and reads "${summary}" when ${omitted} are left out`, async ({
+    page,
+    request,
+  }) => {
+    const data = await architectureData(request);
+    const node = richest(data);
+    const names = Array.from({ length: SYMBOL_CAP }, (_, i) => `name_${String(i).padStart(3, "0")}`);
+    node.public_symbols = { names, omitted };
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+    await openArchitecture(page, `?focus=${node.id}`);
+    const symbols = field(page, "symbols");
+
+    await expect(symbols.locator("summary")).toHaveText(summary);
+    const listed = await symbols.locator("code").evaluateAll((items) => items.map((i) => i.textContent));
+    expect(listed).toEqual(names);
+  });
+}
+
+/** The node that holds the most entries of `listOf(node)`, the first by id on a tie. */
+function holdingMost(data, listOf) {
+  return [...data.nodes].sort(
+    (a, b) => listOf(b).length - listOf(a).length || a.id.localeCompare(b.id)
+  )[0];
+}
+
+// Two list fields the card's full-field case reads only by their "none": each
+// tag, and each test file bound to the node itself, are shown by name.
+const LISTED_FIELDS = [
+  { field: "tags", listOf: (node) => node.tags || [], read: (el) => el.locator("code") },
+  { field: "tests", listOf: (node) => node.tests?.files || [], read: (el) => el.locator("li code") },
+];
+
+for (const { field: name, listOf, read } of LISTED_FIELDS) {
+  test(`the card lists every entry of the node's ${name} by name`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    const node = holdingMost(data, listOf);
+    expect(listOf(node).length).toBeGreaterThan(0);
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    const shown = await read(field(page, name)).evaluateAll((items) => items.map((i) => i.textContent));
+    expect(shown).toEqual(listOf(node));
+  });
+}

@@ -4,7 +4,7 @@
 // line style that was never drawn.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, serveEveryEdgeKind, viewer } from "./support/viewer.js";
 
 /** The legend keys the data file calls for: each drawn edge kind, plus `violation`. */
 function expectedKeys(data) {
@@ -28,22 +28,6 @@ test("the legend lists exactly the edge kinds that are drawn", async ({ page, re
     .evaluateAll((items) => items.map((item) => item.dataset.legendEdge).sort());
   expect(legend).toEqual(drawn);
 });
-
-/**
- * The data file with every drawn kind present: one `depends_on` edge marked as a
- * violation, and one `consumes` and one `produces` edge added, so the styles are
- * checked whether or not this repository's graph carries them today.
- */
-async function serveEveryEdgeKind(page, request) {
-  const data = await architectureData(request);
-  const plain = data.edges.filter((e) => e.kind === "depends_on" && !e.violation);
-  const [first, second] = plain;
-  first.violation = true;
-  data.edges.push({ src: second.src, dst: second.dst, kind: "consumes" });
-  data.edges.push({ src: second.dst, dst: second.src, kind: "produces" });
-  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
-  return data;
-}
 
 test("each edge kind has its own line style, and a violation is red, dashed and thicker", async ({
   page,
@@ -87,3 +71,70 @@ test("hovering an edge shows its label, and only while it is hovered", async ({ 
   await page.mouse.move(2, 2);
   await expect.poll(() => viewer(page, "shownEdgeLabels")).toEqual([]);
 });
+
+/** `[r, g, b]` of an `rgb(...)` or `rgba(...)` string. */
+function rgbOf(colour) {
+  return String(colour).match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+}
+
+/** The Euclidean distance between two colours in rgb space. */
+function colourDistance(a, b) {
+  const [x, y] = [rgbOf(a), rgbOf(b)];
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
+/** The background the viewer draws its edges on: the viewer root's own background colour. */
+function viewerBackground(page) {
+  return page.evaluate(
+    () => getComputedStyle(document.querySelector("[data-fullscreen-fallback]")).backgroundColor
+  );
+}
+
+// Direction is read from two cues on every edge: an arrow at the target end
+// only, and a line that fades towards its source. Both themes, because the
+// fade is mixed with the theme's background.
+for (const colorScheme of ["light", "dark"]) {
+  test.describe(`in the ${colorScheme} theme`, () => {
+    test.use({ colorScheme });
+
+    test("every drawn edge carries an arrow at its target and none at its source", async ({
+      page,
+      request,
+    }) => {
+      await serveEveryEdgeKind(page, request);
+      await openArchitecture(page);
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+        colorScheme === "dark"
+      );
+
+      const looks = await viewer(page, "edgeLooks");
+      expect(new Set(looks.map((look) => look.styleKey))).toEqual(
+        new Set(["consumes", "depends_on", "produces", "uses", "violation"])
+      );
+      const wrong = looks.filter((look) => look.targetArrow === "none" || look.sourceArrow !== "none");
+      expect(wrong).toEqual([]);
+    });
+
+    test("every drawn edge fades towards its source and ends in its own colour at the target", async ({
+      page,
+      request,
+    }) => {
+      await serveEveryEdgeKind(page, request);
+      await openArchitecture(page);
+      const background = await viewerBackground(page);
+
+      const looks = await viewer(page, "edgeLooks");
+      expect(looks.length).toBeGreaterThan(0);
+      const wrong = looks.filter((look) => {
+        const source = look.stops[0];
+        const target = look.stops[look.stops.length - 1];
+        return (
+          look.stops.length < 2 ||
+          colourDistance(target, look.lineColour) !== 0 ||
+          colourDistance(source, background) >= colourDistance(target, background)
+        );
+      });
+      expect(wrong).toEqual([]);
+    });
+  });
+}
