@@ -152,7 +152,9 @@ def test_closing_the_card_clears_the_selection() -> None:
     viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
     assert "function clearSelection()" in viewer
     assert 'state.focus = "";' in viewer
-    assert "emit('close')" in _read("entities/graph-node/ui/NodeCard.vue")
+    # The card is a widget of its own since BDL-076 A3; the page composes it.
+    assert "emit('close')" in _read("widgets/node-card/ui/NodeCard.vue")
+    assert '@close="close"' in _read("pages/architecture/ui/ArchitectureMap.vue")
 
 
 def test_full_screen_covers_the_viewers_whole_space() -> None:

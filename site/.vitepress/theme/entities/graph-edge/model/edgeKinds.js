@@ -16,11 +16,16 @@ export const CONTAINMENT_KIND = "part_of";
 /** The key of the violation style in the legend and on the canvas. */
 export const VIOLATION_KEY = "violation";
 
-/** Each drawn kind: its label, legend text, line style, dash pattern, arrow and tone. */
+/**
+ * Each drawn kind: its label, legend text, line style, dash pattern, arrow and
+ * tone, and how the card titles its edges out of a node and into it.
+ */
 export const EDGE_STYLES = {
   depends_on: {
     label: "depends on",
     legend: "depends on (an import)",
+    outgoing: "Depends on",
+    incoming: "Depended on by",
     line: "solid",
     arrow: "triangle",
     tone: "text2",
@@ -28,6 +33,8 @@ export const EDGE_STYLES = {
   uses: {
     label: "uses",
     legend: "uses at runtime (declared)",
+    outgoing: "Uses at runtime (declared)",
+    incoming: "Used at runtime by (declared)",
     line: "dotted",
     arrow: "vee",
     tone: "indigo",
@@ -35,6 +42,8 @@ export const EDGE_STYLES = {
   consumes: {
     label: "consumes",
     legend: "consumes a contract",
+    outgoing: "Consumes",
+    incoming: "Consumed by",
     line: "dashed",
     dash: [6, 3],
     arrow: "triangle",
@@ -43,6 +52,8 @@ export const EDGE_STYLES = {
   produces: {
     label: "produces",
     legend: "produces a contract",
+    outgoing: "Produces",
+    incoming: "Produced by",
     line: "dashed",
     dash: [2, 3],
     arrow: "triangle",

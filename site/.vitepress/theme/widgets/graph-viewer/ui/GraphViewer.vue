@@ -4,20 +4,31 @@
 //
 // It renders `architecture.data.json` with Cytoscape.js and the ELK layout, in
 // compound mode: domains and services are boxes around their features and
-// components. It composes the features below it — filters, navigation, full
-// screen and URL state — and the entities it draws. Everything it shows comes
-// from the data file.
+// components. It composes the features below it — filters, navigation, the
+// neighbourhood, the impact mode, full screen and URL state — and the entities
+// it draws. Everything it shows comes from the data file.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
 // embedded view are one UI. The panel shows what the page puts in its `panel`
-// slot for the selected node; the page composes the card, so a richer card can
-// replace it without the viewer knowing.
+// slot for the selected node — the page composes the card, because a widget
+// does not import another — and, in impact mode, the impact summary above it.
+//
+// A selection is a walk from the selected node. In the neighbourhood it goes
+// to the chosen depth and direction; in impact mode it goes backwards along the
+// dependency edges without a limit. What the walk leaves out is dimmed, or
+// hidden when the reader asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useArchitectureData } from "../../../entities/architecture-data/index.js";
 import { parentMapOf } from "../../../entities/graph-node/index.js";
-import { EdgeLegend, legendKeysOf } from "../../../entities/graph-edge/index.js";
+import {
+  DEPENDENCY_KINDS,
+  EdgeLegend,
+  NEIGHBOURHOOD_KINDS,
+  adjacencyOf,
+  legendKeysOf,
+} from "../../../entities/graph-edge/index.js";
 import { LayerLegend, layerOfNode, layersOf } from "../../../entities/layer/index.js";
 import {
   FILTER_DEFAULTS,
@@ -30,8 +41,22 @@ import {
   NavigationControls,
   useGraphNavigation,
 } from "../../../features/navigate-graph/index.js";
+import {
+  NEIGHBOURHOOD_DEFAULTS,
+  NeighbourhoodControls,
+  neighbourhoodOf,
+} from "../../../features/select-neighbourhood/index.js";
+import {
+  IMPACT_VIEW,
+  ImpactButton,
+  ImpactSummary,
+  impactOf,
+  impactSummary,
+  ringOf,
+} from "../../../features/impact-view/index.js";
 import { FullscreenButton, useFullscreen } from "../../../features/fullscreen/index.js";
 import { useUrlState } from "../../../features/url-state/index.js";
+import { withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
@@ -39,22 +64,26 @@ import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 
+/** The selection's value for the neighbourhood, the default; the other is `IMPACT_VIEW`. */
+const NEIGHBOURHOOD_VIEW = "neighbourhood";
+
 const props = defineProps({
   mode: { type: String, default: "architecture" },
   focus: { type: String, default: "" },
-  depth: { type: [Number, String], default: 1 },
-  direction: { type: String, default: "both" },
+  depth: { type: [Number, String], default: NEIGHBOURHOOD_DEFAULTS.depth },
+  direction: { type: String, default: NEIGHBOURHOOD_DEFAULTS.dir },
   height: { type: String, default: "640px" },
 });
 
 // The view's state. The URL query overrides the props, and every change is
-// written back, so a view can be linked. Depth and direction are carried for
-// the neighbourhood selection that builds on this viewer.
+// written back, so a view can be linked.
 const state = useUrlState({
   ...FILTER_DEFAULTS,
   focus: props.focus,
   depth: String(props.depth),
   dir: props.direction,
+  hide: NEIGHBOURHOOD_DEFAULTS.hide,
+  view: NEIGHBOURHOOD_VIEW,
   mode: props.mode,
 });
 
@@ -64,6 +93,7 @@ const edges = computed(() => (Array.isArray(data.value?.edges) ? data.value.edge
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value));
+const repository = computed(() => data.value?.repository || null);
 const options = computed(() => filterOptions(nodes.value, layers.value));
 const legendKeys = computed(() =>
   legendKeysOf(
@@ -78,14 +108,59 @@ const selectedLayer = computed(() =>
   selectedNode.value ? layerOfNode(selectedNode.value, layers.value)?.name || "" : ""
 );
 
+const ids = computed(() => new Set(nodeById.value.keys()));
+const drawnAdjacency = computed(() => adjacencyOf(edges.value, NEIGHBOURHOOD_KINDS, ids.value));
+const dependencyAdjacency = computed(() => adjacencyOf(edges.value, DEPENDENCY_KINDS, ids.value));
+const impactMode = computed(() => state.view === IMPACT_VIEW);
+
+// The walk from the selected node, or null when nothing is selected.
+const walk = computed(() => {
+  if (!selectedNode.value) return null;
+  return impactMode.value
+    ? impactOf(state.focus, dependencyAdjacency.value)
+    : neighbourhoodOf(state.focus, drawnAdjacency.value, { depth: state.depth, dir: state.dir });
+});
+const summary = computed(() => {
+  if (!walk.value || !impactMode.value) return null;
+  return impactSummary(state.focus, walk.value, {
+    nodeById: nodeById.value,
+    parents: parents.value,
+    layers: layers.value,
+    edges: edges.value,
+  });
+});
+const selection = computed(() => {
+  if (!walk.value) return null;
+  const { distances, edges: walked } = walk.value;
+  return {
+    focus: state.focus,
+    distances,
+    edges: walked,
+    keep: withAncestors(distances.keys(), parents.value),
+    hide: Boolean(state.hide),
+    rings: summary.value
+      ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
+      : null,
+    risks: summary.value ? new Set(summary.value.risky.map((entry) => entry.id)) : null,
+  };
+});
+
 const root = ref(null);
 const container = ref(null);
+const panel = ref(null);
 // The panel opens when a node is selected; the toolbar's "Panel" button toggles it.
 const panelOpen = ref(Boolean(state.focus));
 const { tokens } = useThemeTokens(root);
 
-function select(id) {
-  if (nodeById.value.has(id)) state.focus = id;
+// A selection made anywhere but on the canvas — the URL, the card, the impact
+// list, the toolbar — is framed, so what the reader asked for is in view. A tap
+// on the canvas is not: the reader is already looking at the node.
+let frameNextSelection = true;
+
+function select(id, { frame = true } = {}) {
+  if (!nodeById.value.has(id) || state.focus === id) return;
+  frameNextSelection = frame;
+  state.focus = id;
 }
 function clearSelection() {
   state.focus = "";
@@ -93,11 +168,14 @@ function clearSelection() {
 function focusCanvas() {
   container.value?.focus({ preventScroll: true });
 }
+function toggleImpact() {
+  state.view = impactMode.value ? NEIGHBOURHOOD_VIEW : IMPACT_VIEW;
+}
 
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
   onNodeTap: (id) => {
-    select(id);
+    select(id, { frame: false });
     focusCanvas();
   },
   onBackgroundTap: () => {
@@ -105,7 +183,25 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
-const navigation = useGraphNavigation(() => canvas.cy.value);
+// How much of the canvas's right edge the panel lies over: in the page it
+// overlays the canvas, in full screen it sits beside it and covers nothing.
+function coveredRight() {
+  const over = panel.value;
+  const under = container.value;
+  if (!panelOpen.value || !over || !under) return 0;
+  const p = over.getBoundingClientRect();
+  const c = under.getBoundingClientRect();
+  if (!p.width || p.left >= c.right || p.right <= c.left) return 0;
+  return Math.max(0, c.right - p.left);
+}
+const navigation = useGraphNavigation(() => canvas.cy.value, {
+  getInset: () => ({ right: coveredRight() }),
+});
+
+/** Fit the selection's walk when there is one, else everything visible. */
+function frameSelection() {
+  nextTick(() => navigation.fit(selection.value ? ".in-walk" : undefined));
+}
 
 function refit() {
   nextTick(() => {
@@ -136,8 +232,8 @@ async function render() {
   if (!mounted) return;
   navigation.applyArrangePolicy();
   canvas.showOnly(visibleIds.value);
-  canvas.highlight(state.focus);
-  navigation.fit();
+  canvas.markSelection(selection.value);
+  frameSelection();
 }
 
 watch(data, render);
@@ -146,15 +242,20 @@ watch(tokens, (current, previous) => {
   if (!previous || !canvas.ready.value) render();
   else canvas.setStyle(buildStylesheet(current));
 });
-watch(visibleIds, (ids) => {
+watch(visibleIds, (visible) => {
   if (!canvas.ready.value) return;
-  canvas.showOnly(ids);
+  canvas.showOnly(visible);
   navigation.fit();
+});
+watch(selection, (current) => {
+  if (!canvas.ready.value) return;
+  canvas.markSelection(current);
+  if (current && frameNextSelection) frameSelection();
+  frameNextSelection = true;
 });
 watch(
   () => state.focus,
   (id) => {
-    canvas.highlight(id);
     if (id) panelOpen.value = true;
   }
 );
@@ -169,6 +270,7 @@ onMounted(() => {
     selection: () => state.focus,
     state: () => state,
     arranging: () => navigation.arranging.value,
+    impactSummary: () => summary.value,
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -190,6 +292,13 @@ onBeforeUnmount(() => disposeHandle());
 
     <div role="toolbar" aria-label="Graph viewer tools" class="bl-viewer-toolbar">
       <FilterControls :filters="state" :options="options" @change="(key, value) => (state[key] = value)" />
+      <NeighbourhoodControls
+        :depth="state.depth"
+        :dir="state.dir"
+        :hide="Boolean(state.hide)"
+        @change="(key, value) => (state[key] = value)"
+      />
+      <ImpactButton :active="impactMode" @toggle="toggleImpact" />
       <span class="bl-viewer-spacer" />
       <NavigationControls
         :arranging="navigation.arranging.value"
@@ -221,22 +330,33 @@ onBeforeUnmount(() => disposeHandle());
       />
       <aside
         v-show="panelOpen"
+        ref="panel"
         id="bl-viewer-panel"
         class="bl-viewer-panel"
         data-testid="viewer-panel"
         aria-label="Details"
       >
+        <ImpactSummary
+          v-if="summary"
+          :summary="summary"
+          :source="selectedNode?.source || ''"
+          @select="select"
+        />
         <slot
           v-if="selectedNode"
           name="panel"
           :node="selectedNode"
           :layer-name="selectedLayer"
+          :edges="edges"
+          :layers="layers"
+          :repository="repository"
           :select="select"
           :close="clearSelection"
         />
         <p v-else class="bl-viewer-hint">
-          Select a node to see its card. Drag to pan and scroll to zoom; "Arrange" lets you move
-          nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
+          Select a node to see its card and its neighbourhood; "Depth" and "Direction" choose how
+          far it reaches, and "Impact" shows everything that depends on it. Drag to pan and scroll
+          to zoom; "Arrange" lets you move nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
           <kbd>Esc</kbd> clear.
         </p>
       </aside>
@@ -331,7 +451,7 @@ onBeforeUnmount(() => disposeHandle());
   top: 8px;
   right: 8px;
   z-index: 2;
-  width: min(300px, 55%);
+  width: min(340px, 60%);
   max-height: calc(var(--bl-viewer-height) - 16px);
   box-sizing: border-box;
   overflow-y: auto;
@@ -344,7 +464,7 @@ onBeforeUnmount(() => disposeHandle());
 .bl-viewer:fullscreen .bl-viewer-panel,
 .bl-viewer.is-fallback-fullscreen .bl-viewer-panel {
   position: static;
-  flex: 0 0 340px;
+  flex: 0 0 380px;
   width: auto;
   max-height: none;
   box-shadow: none;

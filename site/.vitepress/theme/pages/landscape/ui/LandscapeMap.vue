@@ -3,7 +3,7 @@
 // LandscapeMap — the interactive cross-service landscape (BDL-060 S4, G2).
 //
 // Renders `landscape.data.json` (the renderer-agnostic artifact built in Python
-// by `beadloom.application.landscape_view`) with Cytoscape.js + the ELK layout
+// by `beadloom.application.site.landscape_view`) with Cytoscape.js + the ELK layout
 // (orthogonal edge routing + non-overlapping nodes — the readability the owner
 // requires; the built-in cose force layout is NOT used). ELK runs with FIXED,
 // seedless options (see landscapeTheme.ELK_OPTIONS) so the layout is

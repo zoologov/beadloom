@@ -5,17 +5,25 @@
 //
 // A thin page over the graph viewer: it shows the architecture mode and puts
 // the node card in the viewer's panel. The viewer owns the toolbar,
-// navigation, filters, full screen and URL state; the page decides what the
-// panel shows for a selected node.
+// navigation, filters, the neighbourhood and impact modes, full screen and URL
+// state; the page composes the two widgets, because a widget does not import
+// another.
 
 import { GraphViewer } from "../../../widgets/graph-viewer/index.js";
-import { NodeCard } from "../../../entities/graph-node/index.js";
+import { NodeCard } from "../../../widgets/node-card/index.js";
 </script>
 
 <template>
   <GraphViewer mode="architecture">
-    <template #panel="{ node, layerName, select, close }">
-      <NodeCard :node="node" :layer-name="layerName" @select="select" @close="close" />
+    <template #panel="{ node, edges, layers, repository, select, close }">
+      <NodeCard
+        :node="node"
+        :edges="edges"
+        :layers="layers"
+        :repository="repository"
+        @select="select"
+        @close="close"
+      />
     </template>
   </GraphViewer>
 </template>

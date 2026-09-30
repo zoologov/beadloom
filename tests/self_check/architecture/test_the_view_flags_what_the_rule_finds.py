@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.support.layer_rule import (
+    judged_by_another_layer_rule,
+    read_only_index,
     rule_flags,
+    rule_of,
     view_flags,
     view_verdicts,
 )
@@ -42,10 +45,13 @@ class TestOnThisRepository:
         the agreement above would also hold if the view had stopped flagging
         anything at all. What makes it a measurement is the population: the view
         renders a verdict on the edges the rule judges, and that is most of
-        them.
+        them. The site's edges are judged by `site-fsd-layers`, not by this
+        rule, and are left out of "them" (BDL-076 A3).
         """
         verdicts = view_verdicts(live)
         decided = [edge for edge, verdict in verdicts.items() if verdict is not None]
-        assert len(verdicts) > 300
-        assert len(decided) > len(verdicts) * 9 // 10
+        with read_only_index(live) as conn:
+            own = len(verdicts) - judged_by_another_layer_rule(conn, live, rule_of(live))
+        assert own > 300
+        assert len(decided) > own * 9 // 10
         assert view_flags(live) == set()

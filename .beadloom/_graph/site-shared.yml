@@ -4,7 +4,7 @@
 nodes:
   - ref_id: site-shared
     kind: component
-    summary: "The site's shared segments: browser checks, JSON loading, tree walks, theme tokens resolved to literal colours, the Cytoscape and ELK loader, and ECharts"
+    summary: "The site's shared segments: browser checks, JSON loading, tree walks and a breadth-first walk, theme tokens resolved to literal colours, the Cytoscape and ELK loader, ECharts, and a command to copy"
     source: site/.vitepress/theme/shared/
     tags: [fsd-shared]
     docs:

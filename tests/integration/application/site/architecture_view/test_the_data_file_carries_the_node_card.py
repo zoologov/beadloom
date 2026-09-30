@@ -12,6 +12,7 @@ changing is a contract change nobody reviewed.
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -30,6 +31,7 @@ from beadloom.application.site.architecture_view import (
 )
 from beadloom.application.site.generate import generate_site
 from beadloom.application.site.node_pages import node_page_urls, render_all_pages
+from beadloom.application.site.repository_link import RepositoryLink
 from tests.support.in_memory_graph import add_edge, add_node, open_graph
 
 if TYPE_CHECKING:
@@ -40,8 +42,16 @@ if TYPE_CHECKING:
 #: Every top-level key of schema version 1.
 V1_TOP_KEYS = {"schema_version", "scope", "nodes", "edges"}
 
-#: The top-level keys schema version 2 adds.
-V2_TOP_KEYS = {"generated_at", "beadloom_version", "project", "layers", "layer_order"}
+#: The top-level keys schema version 2 adds. `repository` joined in A3, for the
+#: card's link from a node's source to the repository (BDL-076 A3).
+V2_TOP_KEYS = {
+    "generated_at",
+    "beadloom_version",
+    "project",
+    "layers",
+    "layer_order",
+    "repository",
+}
 
 #: Every node key of schema version 1, with `lint_clean` present because lint ran.
 V1_NODE_KEYS = {
@@ -190,6 +200,17 @@ def _verdicts() -> NodeVerdicts:
     )
 
 
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(  # noqa: S603 - fixed git arguments written by this test
+        ["git", *args],  # noqa: S607 - the test drives the git on PATH, as the generator does
+        cwd=cwd,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 def _nodes(data: dict[str, object]) -> dict[str, dict[str, object]]:
     nodes = data["nodes"]
     assert isinstance(nodes, list)
@@ -254,6 +275,22 @@ def test_the_provenance_is_what_the_caller_states(shop: sqlite3.Connection) -> N
     assert data["generated_at"] == "2026-09-30T00:00:00+00:00"
     assert data["project"] == "shop"
     assert data["beadloom_version"] == __version__
+
+
+def test_the_repository_is_what_the_caller_states(shop: sqlite3.Connection) -> None:
+    data = build_architecture_view_data(
+        shop, repository=RepositoryLink(url="https://git.example/shop", ref="abc123")
+    )
+
+    assert data["repository"] == {"url": "https://git.example/shop", "ref": "abc123"}
+
+
+def test_a_repository_nobody_states_is_empty_rather_than_invented(
+    shop: sqlite3.Connection,
+) -> None:
+    data = build_architecture_view_data(shop)
+
+    assert data["repository"] == {"url": "", "ref": ""}
 
 
 def test_the_layers_are_the_declaration_in_its_order(shop: sqlite3.Connection) -> None:
@@ -574,6 +611,30 @@ def test_the_generator_stamps_the_file_with_its_run(generated: dict[str, object]
     assert generated["generated_at"] == "2026-09-30T00:00:00+00:00"
     assert generated["project"] == "shop"
     assert generated["beadloom_version"] == __version__
+
+
+def test_the_generator_names_no_repository_for_a_project_outside_git(
+    generated: dict[str, object],
+) -> None:
+    assert generated["repository"] == {"url": "", "ref": ""}
+
+
+def test_the_generator_reads_the_repository_from_the_projects_own_remote(
+    shop: sqlite3.Connection, tmp_path: Path
+) -> None:
+    project = tmp_path / "shop"
+    project.mkdir()
+    _git(project, "init", "-q")
+    _git(project, "remote", "add", "origin", "git@git.example:team/shop.git")
+    identity = ("-c", "user.name=t", "-c", "user.email=t@example")
+    _git(project, *identity, "commit", "-q", "--allow-empty", "-m", "first")
+    head = _git(project, "rev-parse", "HEAD")
+    out = tmp_path / "site"
+
+    generate_site(shop, out, project_root=project, now_ts="2026-09-30T00:00:00+00:00")
+
+    loaded = json.loads((out / "public" / "architecture.data.json").read_text("utf-8"))
+    assert loaded["repository"] == {"url": "https://git.example/team/shop", "ref": head}
 
 
 def test_the_generator_links_a_component_to_its_page(generated: dict[str, object]) -> None:

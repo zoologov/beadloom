@@ -4,7 +4,7 @@
 nodes:
   - ref_id: site-architecture-page
     kind: component
-    summary: "The architecture page's graph: the graph viewer in architecture mode with the node card in its panel"
+    summary: "The architecture page's graph: the graph viewer in architecture mode with the node card widget in its panel"
     source: site/.vitepress/theme/pages/architecture/
     tags: [fsd-pages]
     docs:

@@ -4,7 +4,7 @@
 nodes:
   - ref_id: site-graph-node
     kind: component
-    summary: "A node of the architecture graph: its status, its container and its card"
+    summary: "A node of the architecture graph: its status, its container, and the risks a change to it runs"
     source: site/.vitepress/theme/entities/graph-node/
     tags: [fsd-entities]
     docs:

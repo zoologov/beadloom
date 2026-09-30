@@ -1,6 +1,6 @@
 // beadloom:component=site-architecture-data
 // The architecture data file, `architecture.data.json`, as written by
-// `beadloom docs site` (`beadloom.application.architecture_view`).
+// `beadloom docs site` (`beadloom.application.site.architecture_view`).
 //
 // Python is the only source of the graph: the viewer never invents a node, an
 // edge, a layer or a dependency. The file carries a `schema_version`. Version 2

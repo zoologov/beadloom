@@ -4,7 +4,7 @@
 nodes:
   - ref_id: site-graph-viewer
     kind: component
-    summary: "The graph viewer core: toolbar, canvas and panel over the architecture data, with navigation, filters, full screen, URL state and the test handle"
+    summary: "The graph viewer core: toolbar, canvas and panel over the architecture data, with navigation, filters, the neighbourhood and impact modes, full screen, URL state and the test handle"
     source: site/.vitepress/theme/widgets/graph-viewer/
     tags: [fsd-widgets]
     docs:

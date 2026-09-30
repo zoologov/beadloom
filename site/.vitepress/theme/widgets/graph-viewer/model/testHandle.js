@@ -3,11 +3,17 @@
 //
 // The browser tests assert state rather than pixels, and read it here: the
 // visible node ids, the selection, node positions, the viewport, the colours
-// Cytoscape resolved, and the edge styles it drew. The handle exists only when
+// Cytoscape resolved, the edge styles it drew, and what a selection marked —
+// the neighbourhood, the dimmed nodes, the impact rings and risks, and the
+// impact summary the panel shows. The handle exists only when
 // `navigator.webdriver` is true, which a real reader's browser never reports,
 // so the tested bundle and the deployed one are the same bundle.
 
+import { DISTANCE_DATA } from "./useGraphCanvas.js";
+
 const HANDLE = "__beadloomViewer";
+
+const idsOf = (collection) => collection.map((element) => element.id()).sort();
 
 const COLOUR_PROPERTIES = {
   nodes: ["background-color", "border-color", "color"],
@@ -55,6 +61,23 @@ function readers(source) {
       );
     },
     colours: () => colourEntries(cy()),
+    neighbourhood: () => ({
+      ids: idsOf(cy().nodes(".in-walk")),
+      edges: [...new Set(cy().edges(".is-walk-edge").map((edge) => edge.data("key")))].sort(),
+    }),
+    dimmedIds: () => idsOf(cy().nodes(".is-dimmed")),
+    rings: () =>
+      Object.fromEntries(
+        cy()
+          .nodes()
+          .filter((node) => node.data(DISTANCE_DATA) !== undefined)
+          .map((node) => [node.id(), node.data(DISTANCE_DATA)])
+      ),
+    riskIds: () => idsOf(cy().nodes(".is-risk")),
+    impactSummary: () => {
+      const summary = source.impactSummary();
+      return summary ? JSON.parse(JSON.stringify(summary)) : null;
+    },
     drawnEdgeKinds: () => [...new Set(cy().edges().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
     edgeStyle: (key) => {
       const edge = cy().edges().filter((e) => e.data("styleKey") === key)[0];
@@ -87,8 +110,8 @@ function readers(source) {
 /**
  * Expose the handle over `source` when the browser is automated; return its disposer.
  *
- * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`
- * and `arranging()`.
+ * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
+ * `arranging()` and `impactSummary()`.
  */
 export function exposeTestHandle(source) {
   if (typeof window === "undefined" || navigator.webdriver !== true) return () => {};

@@ -1,0 +1,18 @@
+  # BDL-076 A3 (`beadloom-7091`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-select-neighbourhood
+    kind: component
+    summary: "A selected node's neighbourhood: its walk to a depth of 1 to 5 steps or all, outgoing, incoming or both, with what lies outside dimmed or hidden"
+    source: site/.vitepress/theme/features/select-neighbourhood/
+    tags: [fsd-features]
+    docs_absent: >-
+      Written by the documentation bead that follows A3 (BDL-076 W1,
+      `beadloom-qlii`), beside the other slice pages under
+      docs/services/vitepress-site/; A3 does not edit documents. Replace this
+      reason with the page when it exists.
+edges:
+  - src: site-select-neighbourhood
+    dst: vitepress-site
+    kind: part_of

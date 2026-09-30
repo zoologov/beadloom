@@ -2,9 +2,10 @@
 // The Cytoscape instance behind the viewer's canvas, and what the viewer does to it.
 //
 // It creates the graph, lays it out, reports taps, labels a hovered edge, shows
-// only a set of node ids, marks the selected node and its edges, and swaps the
-// stylesheet when the theme changes. It decides nothing about which nodes are
-// visible or selected: the viewer's state does.
+// only a set of node ids, marks a selection — the selected node, the nodes and
+// edges its walk reached, their distance rings and risks, and what lies outside
+// — and swaps the stylesheet when the theme changes. It decides nothing about
+// which nodes are visible or selected: the viewer's state does.
 
 import { onBeforeUnmount, ref, shallowRef } from "vue";
 import { LAYERED_LAYOUT, loadCytoscape } from "../../../shared/cytoscape/index.js";
@@ -17,7 +18,21 @@ function runLayout(cy) {
   });
 }
 
-/** `{ cy, ready, mount, setStyle, showOnly, highlight, resize }` over the container in `containerRef`. */
+/** Every class a selection puts on the canvas, removed before the next one is marked. */
+const SELECTION_CLASSES = [
+  "is-selected",
+  "is-selected-edge",
+  "in-walk",
+  "is-walk-edge",
+  "is-dimmed",
+  "is-outside",
+  "is-risk",
+];
+
+/** The node data the impact mode sets: the node's distance from the selection. */
+export const DISTANCE_DATA = "impactDistance";
+
+/** `{ cy, ready, mount, setStyle, showOnly, markSelection, resize }` over the container in `containerRef`. */
 export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap }) {
   const cy = shallowRef(null);
   const ready = ref(false);
@@ -66,15 +81,49 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     });
   }
 
-  function highlight(id) {
+  function markNode(node, selection, outside) {
+    const id = node.id();
+    const distance = selection.distances.get(id);
+    if (distance === undefined) {
+      if (!selection.keep.has(id)) node.addClass(outside);
+      return;
+    }
+    node.addClass("in-walk");
+    const ring = selection.rings?.get(id);
+    if (ring === undefined) return;
+    node.addClass(`ring-${ring}`);
+    node.data(DISTANCE_DATA, distance);
+    if (selection.risks?.has(id)) node.addClass("is-risk");
+  }
+
+  /**
+   * Mark `selection` on the canvas, or clear the marks when it is null.
+   *
+   * `selection` is `{ focus, distances, edges, keep, hide, rings, risks }`:
+   * the walk's nodes by distance and its edge keys; `keep`, the nodes that are
+   * not outside (the walk and its containers); `hide`, whether what is outside
+   * is hidden rather than dimmed; and, in impact mode, `rings` (id to ring) and
+   * `risks` (the ids to mark).
+   */
+  function markSelection(selection) {
     const instance = cy.value;
     if (!instance) return;
     instance.batch(() => {
-      instance.elements().removeClass("is-selected is-selected-edge");
-      const node = id ? instance.getElementById(id) : null;
-      if (node?.nonempty()) {
-        node.addClass("is-selected");
-        node.connectedEdges().addClass("is-selected-edge");
+      instance.elements().removeClass(SELECTION_CLASSES.join(" "));
+      instance.nodes().forEach((node) => {
+        node.removeClass(node.classes().filter((name) => name.startsWith("ring-")));
+        node.removeData(DISTANCE_DATA);
+      });
+      if (!selection) return;
+      const outside = selection.hide ? "is-outside" : "is-dimmed";
+      instance.nodes().forEach((node) => markNode(node, selection, outside));
+      instance.edges().forEach((edge) => {
+        edge.addClass(selection.edges.has(edge.data("key")) ? "is-walk-edge" : outside);
+      });
+      const focus = instance.getElementById(selection.focus);
+      if (focus.nonempty()) {
+        focus.addClass("is-selected");
+        focus.connectedEdges(".is-walk-edge").addClass("is-selected-edge");
       }
     });
   }
@@ -88,5 +137,5 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     destroy();
   });
 
-  return { cy, ready, mount, setStyle, showOnly, highlight, resize };
+  return { cy, ready, mount, setStyle, showOnly, markSelection, resize };
 }

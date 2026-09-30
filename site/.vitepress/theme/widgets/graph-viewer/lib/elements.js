@@ -6,7 +6,7 @@
 // without rebuilding it. Containment becomes Cytoscape's `parent`; every other
 // drawn kind becomes an edge with its style key.
 
-import { EDGE_STYLES, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
+import { EDGE_STYLES, edgeKeyOf, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
 import { statusOf } from "../../../entities/graph-node/index.js";
 import { layerToneOf } from "../../../entities/layer/index.js";
 
@@ -33,6 +33,8 @@ function edgeElement(edge, index) {
       source: edge.src,
       target: edge.dst,
       kind: edge.kind,
+      // The edge's key names it in a walk: the selection marks the keys it walked.
+      key: edgeKeyOf(edge),
       styleKey,
       label: EDGE_STYLES[styleKey].label,
     },

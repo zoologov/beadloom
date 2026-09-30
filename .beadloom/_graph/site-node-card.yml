@@ -1,0 +1,18 @@
+  # BDL-076 A3 (`beadloom-7091`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-node-card
+    kind: component
+    summary: "The node card: identity, layer, source linked to the repository, docs with their freshness, bound tests, public symbols, edges by kind, rule findings, activity, debt, the node's page and the ctx and why commands to copy"
+    source: site/.vitepress/theme/widgets/node-card/
+    tags: [fsd-widgets]
+    docs_absent: >-
+      Written by the documentation bead that follows A3 (BDL-076 W1,
+      `beadloom-qlii`), beside the other slice pages under
+      docs/services/vitepress-site/; A3 does not edit documents. Replace this
+      reason with the page when it exists.
+edges:
+  - src: site-node-card
+    dst: vitepress-site
+    kind: part_of

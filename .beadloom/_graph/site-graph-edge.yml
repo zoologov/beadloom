@@ -4,7 +4,7 @@
 nodes:
   - ref_id: site-graph-edge
     kind: component
-    summary: "The edge kinds the viewer draws, their line styles, and the legend derived from the drawn edges"
+    summary: "The edge kinds the viewer draws, their line styles, the legend derived from the drawn edges, and the edges a walk follows"
     source: site/.vitepress/theme/entities/graph-edge/
     tags: [fsd-entities]
     docs:

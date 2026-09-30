@@ -10,4 +10,11 @@ export {
   legendKeysOf,
   styleKeyOf,
 } from "./model/edgeKinds.js";
+export {
+  DEPENDENCY_KINDS,
+  NEIGHBOURHOOD_KINDS,
+  adjacencyOf,
+  edgeGroupsOf,
+  edgeKeyOf,
+} from "./model/adjacency.js";
 export { default as EdgeLegend } from "./ui/EdgeLegend.vue";

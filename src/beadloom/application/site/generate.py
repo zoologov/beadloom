@@ -87,6 +87,7 @@ from beadloom.application.site.node_pages import (
     render_all_pages,
 )
 from beadloom.application.site.published_docs import build_published_docs, publish_docs
+from beadloom.application.site.repository_link import repository_of
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 from beadloom.graph.federation import resolve_repo_name
 
@@ -527,6 +528,7 @@ def generate_site(
         ),
         generated_at=now_ts,
         project=resolve_repo_name(project_root),
+        repository=repository_of(project_root),
     )
     _write(
         out_dir / "public" / "architecture.data.json",

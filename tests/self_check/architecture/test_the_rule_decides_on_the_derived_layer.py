@@ -15,7 +15,7 @@ import pytest
 
 from beadloom.graph.rules.evaluators import evaluate_layer_rules
 from beadloom.graph.rules.layer_reach import layer_rule_reach
-from tests.support.layer_rule import rule_of
+from tests.support.layer_rule import judged_by_another_layer_rule, rule_of
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -39,10 +39,17 @@ class TestOnThisRepository:
     def test_the_rule_now_judges_the_ancestry_population(
         self, live: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
-        """16 of 365 by own tags before this bead; the ancestry figure is the claim now."""
-        reach = layer_rule_reach(live, rule_of(self_check_snapshot))
-        assert reach.population.total > 300
-        assert reach.population.evaluated > reach.population.total * 9 // 10
+        """16 of 365 by own tags before this bead; the ancestry figure is the claim now.
+
+        The population is the rule's own: the site's edges are judged by
+        `site-fsd-layers` and are subtracted (BDL-076 A3).
+        """
+        rule = rule_of(self_check_snapshot)
+        reach = layer_rule_reach(live, rule)
+        elsewhere = judged_by_another_layer_rule(live, self_check_snapshot, rule)
+        own = reach.population.total - elsewhere
+        assert own > 300
+        assert reach.population.evaluated > own * 9 // 10
 
     def test_it_decides_nothing_new_here_because_b1_and_b2_ran_first(
         self, live: sqlite3.Connection, self_check_snapshot: Path

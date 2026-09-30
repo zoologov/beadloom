@@ -9,10 +9,16 @@
 // Colour means the layer: a node's border, and a box's tint, are its layer's
 // tone. Status is a separate accent: a node with stale docs or a lint finding
 // gets a warning or danger ring. Each edge kind has its own line style.
+//
+// A selection adds three looks. Outside the neighbourhood or the impact set a
+// node or edge is dimmed, or hidden when the reader asks for it. In impact mode
+// a node's fill is its distance ring's tone, and a risky node carries a dashed
+// danger outline.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
 import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
+import { RING_TONES } from "../../../features/impact-view/index.js";
 
 export const GEOMETRY = Object.freeze({
   nodeWidth: 160,
@@ -20,7 +26,14 @@ export const GEOMETRY = Object.freeze({
   edgeWidth: 1.8,
   violationWidth: 3.2,
   selectedEdgeWidth: 3.6,
+  walkEdgeWidth: 2.8,
+  riskOutlineWidth: 4,
 });
+
+/** How much of a ring's tone a node's fill takes; the rest is the node's usual fill. */
+const RING_FILL_SHARE = 0.55;
+/** How visible a node or edge outside the selection stays when it is dimmed. */
+const DIMMED_OPACITY = 0.14;
 
 /** The edge curve style, chosen by measurement on this repository's graph (BDL-076 A2). */
 export const CURVE_STYLE = "bezier";
@@ -123,7 +136,40 @@ function edgeRules(tokens) {
   ];
 }
 
+function selectionRules(tokens) {
+  const rings = RING_TONES.flatMap((tone, ring) => [
+    {
+      selector: `node.ring-${ring}`,
+      style: { "background-color": mixRgb(tokens[tone], tokens.bgSoft, RING_FILL_SHARE) },
+    },
+    {
+      selector: `:parent.ring-${ring}`,
+      style: { "background-color": tokens[tone], "background-opacity": 0.16 },
+    },
+  ]);
+  return [
+    { selector: "edge.is-walk-edge", style: { width: GEOMETRY.walkEdgeWidth, "z-index": 9 } },
+    ...rings,
+    {
+      selector: "node.is-risk",
+      style: {
+        "outline-width": GEOMETRY.riskOutlineWidth,
+        "outline-color": tokens.danger,
+        "outline-style": "dashed",
+        "outline-offset": 3,
+        "outline-opacity": 1,
+      },
+    },
+    { selector: ".is-dimmed", style: { opacity: DIMMED_OPACITY } },
+  ];
+}
+
 /** The whole stylesheet for resolved `tokens` (see `shared/theme-tokens`). */
 export function buildStylesheet(tokens) {
-  return [...nodeRules(tokens), ...edgeRules(tokens), { selector: ".is-hidden", style: { display: "none" } }];
+  return [
+    ...nodeRules(tokens),
+    ...edgeRules(tokens),
+    ...selectionRules(tokens),
+    { selector: ".is-hidden, .is-outside", style: { display: "none" } },
+  ];
 }

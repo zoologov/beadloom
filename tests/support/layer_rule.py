@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from beadloom.application.site.architecture_view import build_architecture_view_data
 from beadloom.graph.rules.layer_edges import flagged_layer_edges
 from beadloom.graph.rules.layer_reach import (
+    layer_rule_reach,
     live_edges_of_kind,
     part_of_parents,
     reach_of,
@@ -38,6 +39,23 @@ def rule_of(project: Path) -> LayerRule:
         rule
         for rule in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
         if isinstance(rule, LayerRule)
+    )
+
+
+def judged_by_another_layer_rule(conn: sqlite3.Connection, project: Path, rule: LayerRule) -> int:
+    """How many edges the project's OTHER layered rules judge.
+
+    This repository declares two layer rules over two source trees: the DDD
+    order over `src/` and the Feature-Sliced order over the site's theme
+    (`site-fsd-layers`, BDL-076 A2). An edge between two site slices is judged
+    by the second and is outside the first by declaration, so a claim about
+    how much of its own population the first rule reaches subtracts them
+    rather than counting them as edges it failed to reach.
+    """
+    return sum(
+        layer_rule_reach(conn, other).population.evaluated
+        for other in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
+        if isinstance(other, LayerRule) and other.name != rule.name
     )
 
 

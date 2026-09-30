@@ -41,6 +41,7 @@ from beadloom.graph.rules.types import (
 from tests.support.layer_rule import (
     DDD_LAYERS,
     ddd_layer_rule,
+    judged_by_another_layer_rule,
 )
 from tests.support.the_lint_path_before_release_a import (
     ClosureTags,
@@ -78,16 +79,20 @@ class TestTheReachIsReadableWithoutRunningTheRule:
     """`layer_rule_reach` — the numbers, for the readers that render them (A3/A4)."""
 
     def test_on_this_repository_the_rule_now_reaches_almost_every_edge(
-        self, live_graph: sqlite3.Connection
+        self, live_graph: sqlite3.Connection, self_check_snapshot: Path
     ) -> None:
         """The measurement this epic exists for, taken from the code rather than quoted.
 
         16 of 362 at `aa4bfad4` by own tags; the figure below is what the rule
-        decides on since `beadloom-ku26`.
+        decides on since `beadloom-ku26`. The site's edges are judged by
+        `site-fsd-layers` and are not this rule's to reach (BDL-076 A3).
         """
-        reach = layer_rule_reach(live_graph, ddd_layer_rule())
-        assert reach.population.total > 300
-        assert reach.population.evaluated > reach.population.total * 9 // 10
+        rule = ddd_layer_rule()
+        reach = layer_rule_reach(live_graph, rule)
+        elsewhere = judged_by_another_layer_rule(live_graph, self_check_snapshot, rule)
+        own = reach.population.total - elsewhere
+        assert own > 300
+        assert reach.population.evaluated > own * 9 // 10
 
 
 class TestWhatTheDecisionsChangedTo:
