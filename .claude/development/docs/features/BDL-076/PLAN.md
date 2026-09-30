@@ -68,6 +68,11 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 | A0 | `beadloom-kcwz` | dev: this repository's site under beadloom — is `.vue` read; the viewer's nodes, docs and bound tests | P0 | - |
 | A1 | `beadloom-o2ua` | dev: the data file v2 — node card fields, edge kinds, layers, a `url` for every kind | P0 | A0 |
 | A2 | `beadloom-iehv` | dev: the viewer core — navigation, colours, edges, filters, URL state, toolbar, full screen, panel | P0 | A0 |
+| K1 | `beadloom-ujzb.2` | refactor: the portal's modules into `application/site/`, owned by site-generation (owner, 2026-09-30) | P0 | A1 |
+| K2 | `beadloom-oo4m` | fix: one annotation no longer drops a node's other JS/Vue sync pairs; the backstop reads every code extension (owner, 2026-09-30) | P0 | A2 |
+| K3 | `beadloom-5o48` | fix: `doc-area-coherence` works with more than one source tree; back to error (owner, 2026-09-30) | P0 | A2 |
+| K4 | `beadloom-ujzb.3` | fix: test files listed at their node only; ancestors carry counts (data size) | P0 | K1 |
+| W0 | `beadloom-ujzb.4` | docs: the pairs A1, A2 and K1–K4 made stale | P0 | K2, K3, K4 |
 | A3 | `beadloom-7091` | dev: neighbourhood (depth, direction), impact mode, the node card | P0 | A1, A2 |
 | A4 | `beadloom-k0s6` | dev: node pages focused on their node; landscape as the core's second mode | P0 | A1, A2 |
 | A5 | `beadloom-rjp1` | test: Playwright cases for every slice-1 goal, and the `site-e2e` CI job | P0 | A3, A4 |
