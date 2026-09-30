@@ -353,8 +353,8 @@ One feature node covers the cooperating modules below (all annotated
   `build_published_docs(conn, *, project_root)` returns the deterministic per-doc inputs
   (`PublishedDoc`: `status`/`reason`/`synced_at`/`ref_id`/`coverage_pct`); the status comes
   from the `doc_sync` engine via `check_sync` — the SAME code path `beadloom sync-check` runs —
-  so a doc the gate calls stale shows `stale` on the site. The badge head is `✅ fresh` / `⚠️
-  stale — <reason>` for tracked docs; a doc tracked by NO doc-code pair is badged **neutrally**
+  so a doc the gate calls stale shows `stale` on the site. The badge head is `✅ fresh` /
+  `⚠️ stale — <reason>` for tracked docs; a doc tracked by NO doc-code pair is badged **neutrally**
   as `📘 reference — overview/guide, not tied to a code symbol` (an overview/guide is not a
   defect, so it is NOT called "untracked"). `inject_badge(prose, badge_body)` wraps the badge
   between the stable `<!-- beadloom:badge-start -->` / `-end -->` markers so regeneration

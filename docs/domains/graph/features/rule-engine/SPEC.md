@@ -481,9 +481,9 @@ second, so a project with one source tree is read exactly as before. In the per-
   at the depth the whole docs tree votes for, because one docs tree serves every source tree;
 - pairs under a top-level segment with fewer than `min_support` sources count as outside the
   root;
-- the population sentence ends with one clause per tree, `` `<root>`: N of M pairs compare, K
-  under a dominant mapping, J agree ``, because a total over two trees can hide one of them
-  checking nothing.
+- the population sentence ends with one clause per tree,
+  `` `<root>`: N of M pairs compare, K under a dominant mapping, J agree ``, because a total
+  over two trees can hide one of them checking nothing.
 
 Measured by K3 on this repository: 117 of 126 pairs fall under a dominant mapping, 102 under
 `src/beadloom` and 15 under `site/.vitepress/theme`, and none contradicts it.
