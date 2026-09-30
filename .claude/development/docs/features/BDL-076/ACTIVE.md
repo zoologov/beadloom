@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-bp8n` (T1, every slice-1 acceptance criterion measured); then R1, W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-arak` (R1, review of slice 1, the authors' accounts withheld); then W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** each slice-1 criterion of the PRD has a measurement and a verdict.
+**Done when:** the review's findings are fixed or ruled on by the owner.
+
+**T1 closed (2026-09-30):** `beadloom-bp8n` `92f4cae7` — 34 slice-1 criteria met, 1 not met (`beadloom ci` rc 1 on 59 stale pairs → W1), 4 not measurable here (`site-e2e` on GitHub, the nine required checks, the owner's look). 17 tests added, each seen red; one read-only test-handle accessor `edgeLooks()`. Measured, no bound declared: data file 340,621 bytes (gzip 39,790; 31,095 on the wire); first render median 4,314 ms (Cytoscape/ELK chunks arrive at 3.5 s); fitted zoom 0.0515 on the page, 0.083–0.110 in full screen. Open for the owner: the landscape's own card vs the PRD's one card. Filed `beadloom-gvdy` (P2, test fixtures that leak a grammar swap).
 
 **A5 closed (2026-09-30):** `beadloom-rjp1` `7fe2912e` — 55 Playwright cases (39 → 55), each goal mapped to its cases on the bead; 16 new or strengthened cases seen red on one deliberately broken build; the advisory `site-e2e` job in `ci.yml` (after `site-build`, Node 22, report on failure), named in `ADVISORY_JOBS` in the CI self-checks, not a required context. Not covered: direction readable at a glance (the test handle exposes no arrow shape), the 50-name symbol cap. pytest 11 998 passed, 1 failed (stale pairs → W1).
 
@@ -68,8 +70,8 @@
 | `beadloom-k0s6` | A4 dev | ✓ done | node pages; landscape mode |
 | `beadloom-ujzb.5` | test | ✓ done | layer-coverage self-checks, strict (owner) |
 | `beadloom-rjp1` | A5 test | ✓ done | browser tests; `site-e2e` |
-| `beadloom-bp8n` | T1 test | in progress | slice 1 criteria |
-| `beadloom-arak` | R1 review | blocked | review slice 1 |
+| `beadloom-bp8n` | T1 test | ✓ done | slice 1 criteria |
+| `beadloom-arak` | R1 review | in progress | review slice 1 |
 | `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |
