@@ -84,7 +84,9 @@ test("a layer filter keeps every node in that layer, inherited or its own, with 
   expect(untagged(declared.layer_rank)).toBeGreaterThan(0);
 
   await openArchitecture(page);
-  await page.getByLabel("Layer", { exact: true }).selectOption(declared.layer);
+  // The filter offers the declared names, not the tag tokens (BDL-076 R1 finding m2).
+  const name = data.layers.find((layer) => layer.rank === declared.layer_rank).name;
+  await page.getByLabel("Layer", { exact: true }).selectOption(name);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
     sorted(withAncestors(members, parents))

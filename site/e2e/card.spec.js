@@ -121,7 +121,8 @@ for (const { origin, own } of LAYER_ORIGINS) {
     const node = data.nodes
       .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
       .sort((a, b) => a.id.localeCompare(b.id))[0];
-    const layer = data.nodes.find((n) => n.layer_rank === node.layer_rank && n.layer).layer;
+    // The declared name of the node's layer, not the tag token (BDL-076 R1 finding m2).
+    const layer = data.layers.find((l) => l.rank === node.layer_rank).name;
 
     await openArchitecture(page, `?focus=${node.id}`);
 

@@ -43,6 +43,8 @@ export const MODES = Object.freeze({
       nodes: list(data?.nodes),
       edges: list(data?.edges),
       contracts: [],
+      // The declared layers: the names the legend, the filter and the card show.
+      layers: list(data?.layers),
     }),
     filterDefaults: FILTER_DEFAULTS,
     filterControls: FilterControls,

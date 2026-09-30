@@ -77,6 +77,31 @@ test("from the node page every toolbar control works and the selection moves fre
   await expect.poll(async () => (await viewer(page, "impactSummary"))?.focus ?? null).toBe(next);
 });
 
+// On a node page the selection's default is the page's own node, so a cleared
+// selection has to be written to the URL, or a reload brings the node back
+// (BDL-076 R1 finding m1).
+test("a selection cleared on a node page stays cleared after a reload", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const node = subjectOf(data, "/domains/");
+
+  await page.goto(pageOf(node));
+  await waitForViewer(page);
+  expect(await viewer(page, "selection")).toBe(node.id);
+  await page.getByTestId("graph-canvas").focus();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => viewer(page, "selection")).toBe(null);
+
+  await page.reload();
+  await waitForViewer(page);
+
+  expect(await viewer(page, "selection")).toBe(null);
+  expect(await viewer(page, "neighbourhood")).toEqual({ ids: [], edges: [] });
+  await expect(page.locator(CARD)).toHaveCount(0);
+});
+
 test("a page under other/ opens focused on its node the same way", async ({ page, request }) => {
   const data = await architectureData(request);
   const node = data.nodes
