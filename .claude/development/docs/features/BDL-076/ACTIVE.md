@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-ujzb.6` (landscape impact, owner) ∥ a focused re-review of M1 and M2 (read-only); then W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-ujzb.6` (landscape impact, owner) ∥ `beadloom-ujzb.10` (the re-review's residue); then W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** impact on the landscape passes its browser cases; the re-review confirms M1 and M2.
+**Done when:** impact on the landscape passes its browser cases; nothing from the git remote is published unread, and no remote form crashes generation or yields a wrong link.
+
+**Re-review closed (2026-09-30):** `beadloom-ujzb.9` — M1 fixed with residue (52 remote forms probed), M2 fixed (no author name or email in any of 279 generated files; three leak mutations went red). Residue → `beadloom-ujzb.10`: a legacy Azure SSH remote gets a wrong link; an IPv6 or bad-port remote crashes `docs site`; `repository.url` is published unread and a malformed remote can put a credential in it; the author-data check reads one file only. My launch range excluded the fix commit by one; the reviewer corrected it.
 
 **Fixes closed (2026-09-30):** `beadloom-ujzb.7` `0bb8ce9a`…`8932ba3e` — M1 the generator writes each node's finished `source_url` per forge (GitHub, GitLab, Bitbucket, Gitea/Codeberg, Azure incl. SSH), none for an unknown host (a self-hosted host waits for B4); M2 `activity` narrowed to `commits_30d` and `level`, pinned; m1–m6 and n1–n4 fixed, each with a test seen red; the 17 browser specs bound to the slices they drive (4 slices honestly at 0). Playwright 93 passed; pytest 12 065 passed, 1 failed (stale pairs); `beadloom ci` rc 1 on 69 stale pairs → W1.
 
@@ -78,6 +80,8 @@
 | `beadloom-arak` | R1 review | ✓ done | review slice 1 |
 | `beadloom-ujzb.7` | fix | ✓ done | R1's findings M1, M2, m1–m6, n1–n5 |
 | `beadloom-ujzb.6` | dev | in progress | landscape impact mode (owner) |
+| `beadloom-ujzb.9` | review | ✓ done | re-review of M1, M2 |
+| `beadloom-ujzb.10` | fix | in progress | the re-review's residue |
 | `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |
