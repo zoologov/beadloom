@@ -36,10 +36,6 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.slow
 
 #: The defects B3 found, each filed under the epic; the reason names the bead.
-_GO_IMPORTS = (
-    "beadloom-ujzb.14: init matches a Go module path by its first segment naming a "
-    "cluster, so internal imports land on cmd/<module>; reindex resolves no Go import"
-)
 _JVM_LAYOUT = (
     "beadloom-ujzb.15: init on a Maven or Gradle layout makes nodes of src/main and "
     "src/main/<language>, not of the packages, and draws no depends_on edge"
@@ -110,7 +106,6 @@ def test_every_module_of_the_project_is_a_node(
     "stack",
     _stacks(
         {
-            "go": _GO_IMPORTS,
             "java": _JVM_LAYOUT,
             "kotlin": _JVM_LAYOUT,
             "swift": _SWIFTPM_LAYOUT,
@@ -132,7 +127,7 @@ def test_every_import_between_modules_is_a_depends_on_edge(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks({"go": _GO_IMPORTS}))
+@pytest.mark.parametrize("stack", _stacks())
 def test_no_depends_on_edge_joins_modules_the_code_does_not_join(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -178,16 +173,7 @@ def test_the_data_file_carries_the_declared_layers(
     assert layers == list(portal.fixture.layers)
 
 
-_GO_DENY = (
-    "beadloom-ujzb.14: a deny rule judges resolved imports, and no Go import resolves, "
-    "so the Go fixture's warn rule finds nothing"
-)
-
-
-@pytest.mark.parametrize(
-    "stack",
-    [pytest.param("go", marks=pytest.mark.xfail(reason=_GO_DENY, strict=True)), "typescript"],
-)
+@pytest.mark.parametrize("stack", ["go", "typescript"])
 def test_the_declared_warn_rule_finds_the_dependency_it_names(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:

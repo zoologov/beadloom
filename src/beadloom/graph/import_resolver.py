@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
+from beadloom.graph.go_modules import GoModules
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
@@ -35,8 +36,9 @@ _TS_ALIAS_MAP: dict[str, str] = {
     "~/": "src/",
 }
 
-# Go standard library packages have no '/' in their path (heuristic).
-# We skip those.
+# Go standard library packages with no '/' in their path are not recorded at
+# all (heuristic); the others are recorded and stay unresolved, because
+# ``resolve_go_import`` maps only the modules the project holds.
 
 
 @dataclass(frozen=True)
@@ -1004,6 +1006,44 @@ def resolve_import_to_node(
     return _find_node_by_source_prefix(dir_path, effective_scan, conn)
 
 
+#: The extension of a Go source file, and the suffix of a Go test file.
+_GO_EXTENSION = ".go"
+_GO_TEST_SUFFIX = "_test.go"
+
+
+def resolve_go_import(
+    import_path: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+    modules: GoModules,
+) -> str | None:
+    """Map a Go *import_path* to the node that owns the package it names (BDL-076 B5).
+
+    *importer* is the importing file's project-relative POSIX path. The package's
+    directory comes from the project's Go modules (:mod:`.go_modules`: the module
+    path stripped, the rest read under that module's ``go.mod``); its owner is
+    decided by the one ownership rule, applied to the package's first non-test
+    ``.go`` file in name order, so a node sourced at a directory or at a file of
+    the package are both found. ``None`` for the standard library, a module the
+    project does not hold, and a package directory that holds no Go file.
+
+    Go imports never go through :func:`resolve_import_to_node`: its dotted-path
+    reading turned ``net/http`` into a node whose source is ``net/``.
+    """
+    directory = modules.package_directory(import_path, importer)
+    if directory is None:
+        return None
+    package = project_root / directory
+    if not package.is_dir():
+        return None
+    files = sorted(p.name for p in package.glob(f"*{_GO_EXTENSION}") if p.is_file())
+    if not files:
+        return None
+    primary = next((name for name in files if not name.endswith(_GO_TEST_SUFFIX)), files[0])
+    return get_owning_ref_id(conn, posixpath.join(directory, primary))
+
+
 #: Extensions whose files write their imports in one language, mapped to one
 #: representative extension of it. An extension not listed is its own language.
 _IMPORT_LANGUAGE: dict[str, str] = {
@@ -1191,8 +1231,12 @@ def _index_one_file(
     project_root: Path,
     conn: sqlite3.Connection,
     scan_paths: list[str],
+    go_modules: GoModules,
 ) -> int:
-    """Index one source file's imports into ``code_imports``; return the count."""
+    """Index one source file's imports into ``code_imports``; return the count.
+
+    *go_modules* is read only when the file is Go, and only once per run.
+    """
     imports = extract_imports(file_path)
     if not imports:
         return 0
@@ -1208,7 +1252,11 @@ def _index_one_file(
     is_ts = file_path.suffix in _TS_EXTENSIONS
 
     for imp in imports:
-        if is_ts and is_relative_specifier(imp.import_path):
+        if file_path.suffix == _GO_EXTENSION:
+            resolved = resolve_go_import(
+                imp.import_path, relative.as_posix(), project_root, conn, go_modules
+            )
+        elif is_ts and is_relative_specifier(imp.import_path):
             resolved = resolve_relative_import(
                 imp.import_path, relative.as_posix(), project_root, conn
             )
@@ -1242,12 +1290,14 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     scan_paths = resolve_scan_paths(project_root)
     files = _collect_source_files(project_root)
     languages = scan_path_languages(project_root, scan_paths, files)
+    go_modules = GoModules(project_root)
     total = sum(
         _index_one_file(
             file_path,
             project_root,
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
+            go_modules,
         )
         for file_path in files
     )
@@ -1286,6 +1336,7 @@ def reindex_file_imports(
     scan_paths = resolve_scan_paths(project_root)
     languages = scan_path_languages(project_root, scan_paths, _collect_source_files(project_root))
     extensions = _supported_extensions()
+    go_modules = GoModules(project_root)
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
@@ -1296,6 +1347,7 @@ def reindex_file_imports(
             project_root,
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
+            go_modules,
         )
 
     conn.commit()

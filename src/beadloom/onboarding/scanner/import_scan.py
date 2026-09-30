@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.graph.go_modules import GoModules
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 
 if TYPE_CHECKING:
@@ -16,6 +17,44 @@ if TYPE_CHECKING:
 
 # Maximum number of import-based edges to avoid overwhelming the graph.
 _MAX_IMPORT_EDGES = 50
+
+_GO_EXTENSION = ".go"
+
+
+def _cluster_by_directory(
+    clusters: dict[str, ClusterEntry], cluster_refs: dict[str, str]
+) -> dict[str, str]:
+    """Each cluster's project-relative directory, mapped to the ref_id it was written under."""
+    return {
+        f"{info['source_dir']}/{name}".strip("/"): cluster_refs[name]
+        for name, info in clusters.items()
+    }
+
+
+def _go_import_cluster(
+    import_path: str, importer: str, modules: GoModules, by_directory: dict[str, str]
+) -> str | None:
+    """The cluster holding the package a Go import names, read through its module path.
+
+    BDL-076 B5: the module path ``go.mod`` declares is stripped first (see
+    :mod:`beadloom.graph.go_modules`), so ``cmd/<module-name>/`` — the standard
+    layout — no longer takes every import whose module path ends in its name.
+    The standard library and modules the project does not hold name no cluster.
+    """
+    directory = modules.package_directory(import_path, importer)
+    if directory is None:
+        return None
+    holders = [d for d in by_directory if directory == d or directory.startswith(f"{d}/")]
+    return by_directory[max(holders, key=len)] if holders else None
+
+
+def _segment_cluster(import_path: str, src_ref_id: str, by_name: dict[str, str]) -> str | None:
+    """The first cluster, other than the importer's, that a segment of *import_path* names."""
+    for part in import_path.replace(".", "/").split("/"):
+        dst_ref_id = by_name.get(_sanitize_ref_id(part))
+        if dst_ref_id is not None and dst_ref_id != src_ref_id:
+            return dst_ref_id
+    return None
 
 
 def _quick_import_scan(
@@ -52,6 +91,9 @@ def _quick_import_scan(
     for name in clusters:
         ref_by_sanitized_name.setdefault(_sanitize_ref_id(name), cluster_refs[name])
 
+    by_directory = _cluster_by_directory(clusters, cluster_refs)
+    go_modules = GoModules(project_root)
+
     seen_edges: set[tuple[str, str]] = set()
     edges: list[dict[str, str]] = []
 
@@ -72,25 +114,24 @@ def _quick_import_scan(
                 continue
 
             for imp in imports:
-                # Try to resolve the import path to a cluster.
-                # Strategy: convert dotted import path to path segments
-                # and check if any segment matches a cluster's directory name.
-                parts = imp.import_path.replace(".", "/").split("/")
-                for part in parts:
-                    dst_ref_id = ref_by_sanitized_name.get(_sanitize_ref_id(part))
-                    if dst_ref_id is not None and dst_ref_id != src_ref_id:
-                        edge_key = (src_ref_id, dst_ref_id)
-                        if edge_key not in seen_edges:
-                            seen_edges.add(edge_key)
-                            edges.append(
-                                {
-                                    "src": src_ref_id,
-                                    "dst": dst_ref_id,
-                                    "kind": "depends_on",
-                                }
-                            )
-                            if len(edges) >= _MAX_IMPORT_EDGES:
-                                return edges
-                        break  # One match per import is enough.
+                # A Go import is read through its module path; any other import
+                # by the first of its segments that names a cluster.
+                if abs_path.suffix == _GO_EXTENSION:
+                    dst_ref_id = _go_import_cluster(
+                        imp.import_path, rel_path, go_modules, by_directory
+                    )
+                else:
+                    dst_ref_id = _segment_cluster(
+                        imp.import_path, src_ref_id, ref_by_sanitized_name
+                    )
+                if dst_ref_id is None or dst_ref_id == src_ref_id:
+                    continue
+                edge_key = (src_ref_id, dst_ref_id)
+                if edge_key in seen_edges:
+                    continue
+                seen_edges.add(edge_key)
+                edges.append({"src": src_ref_id, "dst": dst_ref_id, "kind": "depends_on"})
+                if len(edges) >= _MAX_IMPORT_EDGES:
+                    return edges
 
     return edges

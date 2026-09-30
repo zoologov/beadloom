@@ -99,18 +99,10 @@ TITLES_NOT_RUN_BY_STACK: Mapping[str, Mapping[str, str]] = {
 
 #: Cases a known defect holds back on one stack, by title, with the bead that holds
 #: it. They are left out of the stack's run and run on their own as a strict xfail,
-#: so they are reported the day the defect is fixed.
-TITLES_HELD_BY_DEFECT: Mapping[str, Mapping[str, str]] = {
-    "go": {
-        "a node with warn findings only is drawn as a warning, not as a violation": (
-            "beadloom-ujzb.14: the fixture's warn rule is a deny rule, deny rules judge "
-            "resolved imports, and no Go import resolves, so no node is warned"
-        ),
-        "an error finding draws a violation, in a look apart from a warning's": (
-            "beadloom-ujzb.14: compares a violation with a warned node, and no Go node is warned"
-        ),
-    },
-}
+#: so they are reported the day the defect is fixed. Empty since BDL-076 B5
+#: (``beadloom-ujzb.14``) resolved Go imports: the Go fixture's warn rule now finds
+#: its dependency, and both cases it held run in the Go portal's own run.
+TITLES_HELD_BY_DEFECT: Mapping[str, Mapping[str, str]] = {}
 
 #: The characters a JavaScript regular expression reads as syntax.
 _REGEX_SYNTAX = frozenset("\\^$.|?*+()[]{}/")

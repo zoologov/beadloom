@@ -35,7 +35,8 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.slow
 
 #: A port per run, apart from the default 4178 the suite uses on our own portal.
-_PORTS = {"go": "4191", "typescript": "4192", "go-defect": "4193"}
+_PORTS = {"go": "4191", "typescript": "4192"}
+_DEFECT_PORT = "4193"
 
 
 def _playwright(
@@ -74,13 +75,23 @@ def test_the_browser_tests_pass_on_the_fixtures_portal(
     assert run.returncode == 0, _failures(run.stdout + run.stderr)
 
 
-@pytest.mark.xfail(reason=next(iter(TITLES_HELD_BY_DEFECT["go"].values())), strict=True)
-def test_a_warn_finding_is_drawn_as_a_warning_on_the_go_portal(
-    adopter_portals: Callable[[str], BuiltPortal],
+@pytest.mark.parametrize(
+    "stack",
+    [
+        pytest.param(
+            stack,
+            marks=pytest.mark.xfail(reason=next(iter(held.values())), strict=True),
+        )
+        for stack, held in sorted(TITLES_HELD_BY_DEFECT.items())
+    ],
+)
+def test_the_cases_a_defect_holds_back_run_on_their_own(
+    adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
-    portal = adopter_portals("go")
+    """None today: B5 (``beadloom-ujzb.14``) released the two Go cases into the Go run."""
+    portal = adopter_portals(stack)
     assert portal.failed_step() is None, portal.failed_step()
 
-    run = _playwright(portal, playwright_defect_selection("go"), _PORTS["go-defect"])
+    run = _playwright(portal, playwright_defect_selection(stack), _DEFECT_PORT)
 
     assert run.returncode == 0, _failures(run.stdout + run.stderr)

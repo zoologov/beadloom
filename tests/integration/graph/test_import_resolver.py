@@ -257,3 +257,113 @@ class TestAnImportIsReadOnlyThroughScanPathsOfItsLanguage:
             "src": frozenset({".py", ".ts"}),
             "web/theme/": frozenset({".ts"}),
         }
+
+
+def _go_available() -> bool:
+    try:
+        import tree_sitter_go  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+#: A Go service on the standard layout (BDL-076 B5): the entry point is named after
+#: the module, which is what drew every internal import onto it before B5.
+_GO_SERVICE: dict[str, str] = {
+    "go.mod": "module example.org/quay\n\ngo 1.22\n",
+    "cmd/quay/main.go": (
+        'package main\n\nimport (\n\t"fmt"\n\t"net/http"\n\n'
+        '\t"example.org/quay/internal/berths"\n\t"github.com/google/uuid"\n)\n'
+    ),
+    "internal/berths/berths.go": (
+        'package berths\n\nimport "example.org/quay/internal/berths/store"\n'
+    ),
+    "internal/berths/store/store.go": 'package store\n\nimport "encoding/json"\n',
+    "internal/ledger/ledger.go": (
+        'package ledger\n\nimport (\n\t"example.org/quay/internal/berths"\n'
+        '\t"github.com/acme/quay/internal/berths"\n)\n'
+    ),
+}
+
+
+@pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
+class TestGoImportsResolveThroughTheirModule:
+    """BDL-076 B5: a Go import reaches the node owning the package its module path names.
+
+    Measured by B3 on the Go adopter fixture: every Go import was recorded with no
+    node, because the ``go.mod`` module prefix was never stripped.
+    """
+
+    @pytest.fixture
+    def go_conn(self, tmp_path: Path) -> sqlite3.Connection:
+        c = open_db(tmp_path / "index.db")
+        create_schema(c)
+        for ref_id, source in (
+            ("quay", "cmd/quay/"),
+            ("berths", "internal/berths/"),
+            ("store", "internal/berths/store/"),
+            ("ledger", "internal/ledger/"),
+            ("net", "net/"),
+        ):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'service', '', ?)",
+                (ref_id, source),
+            )
+        c.commit()
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- cmd\n- internal\n", encoding="utf-8"
+        )
+        for rel_path, text in _GO_SERVICE.items():
+            _write(tmp_path, rel_path, text)
+        return c
+
+    def test_each_import_is_recorded_with_the_node_owning_its_package(
+        self, tmp_path: Path, go_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, go_conn)
+        assert _imports(go_conn) == {
+            ("cmd/quay/main.go", "net/http", None),
+            ("cmd/quay/main.go", "example.org/quay/internal/berths", "berths"),
+            ("cmd/quay/main.go", "github.com/google/uuid", None),
+            ("internal/berths/berths.go", "example.org/quay/internal/berths/store", "store"),
+            ("internal/berths/store/store.go", "encoding/json", None),
+            ("internal/ledger/ledger.go", "example.org/quay/internal/berths", "berths"),
+            ("internal/ledger/ledger.go", "github.com/acme/quay/internal/berths", None),
+        }
+
+    def test_the_edges_are_exactly_the_package_imports(
+        self, tmp_path: Path, go_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, go_conn)
+        assert _depends_on(go_conn) == {
+            ("quay", "berths"),
+            ("berths", "store"),
+            ("ledger", "berths"),
+        }
+
+    def test_an_incremental_reindex_resolves_the_same_way(
+        self, tmp_path: Path, go_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, go_conn)
+        _write(
+            tmp_path,
+            "internal/ledger/ledger.go",
+            'package ledger\n\nimport "example.org/quay/internal/berths/store"\n',
+        )
+        reindex_file_imports(tmp_path, go_conn, touched=["internal/ledger/ledger.go"], removed=[])
+        assert ("ledger", "store") in _depends_on(go_conn)
+        assert ("ledger", "berths") not in _depends_on(go_conn)
+
+    def test_an_import_of_a_package_the_tree_does_not_hold_names_no_node(
+        self, tmp_path: Path, go_conn: sqlite3.Connection
+    ) -> None:
+        _write(
+            tmp_path,
+            "internal/ledger/ledger.go",
+            'package ledger\n\nimport "example.org/quay/internal/gone"\n',
+        )
+        index_imports(tmp_path, go_conn)
+        assert ("internal/ledger/ledger.go", "example.org/quay/internal/gone", None) in _imports(
+            go_conn
+        )
