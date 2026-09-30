@@ -24,8 +24,11 @@ against the directory of the file the text came from, and then:
 - an image the portal publishes (a file under ``docs/``, which the portal copies)
   on a page outside that directory -> the copy, from where the page sits, when
   the page's place is known (``beadloom-ujzb.12``);
-- any other file in the repository -> the declared repository's copy of it, or,
-  with no repository declared, the link's own text (an image's alt text);
+- any other file in the repository -> the declared repository's page for it, and
+  for an image the file itself, at the commit the site was generated from and
+  under the forge's own route (``beadloom-ujzb.8``); with no repository
+  declared, no commit, or no forge known for its host, the link's own text (an
+  image's alt text);
 - a target outside the repository -> the link's text;
 - an absolute address (any scheme), a protocol-relative one, an anchor and an
   empty target -> left as written.
@@ -52,6 +55,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.application.site.markdown_code import code_regions
+from beadloom.application.site.repository_link import RepositoryLink
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -88,8 +92,9 @@ class PortalLinks:
 
     ``doc_slugs`` are the published documents, ``docs/``-relative without
     ``.md``; ``page_routes`` maps a lowercased project path that has a page of
-    its own (the README pair) to that page's route; ``repo_url`` is the declared
-    repository, ``""`` when none is; a lowercased project path in ``withheld``
+    its own (the README pair) to that page's route; ``repository`` is the
+    declared repository at the commit the site was generated from, empty when
+    none is declared; a lowercased project path in ``withheld``
     has no destination at all, so a link to it becomes its text. ``base`` is the
     path the portal is served under, which a raw HTML link needs spelled out;
     ``mirrored_files`` are the project paths of every file the portal publishes
@@ -99,7 +104,7 @@ class PortalLinks:
 
     doc_slugs: frozenset[str] = frozenset()
     page_routes: Mapping[str, str] = field(default_factory=dict)
-    repo_url: str = ""
+    repository: RepositoryLink = field(default_factory=RepositoryLink)
     withheld: frozenset[str] = frozenset()
     base: str = "/"
     mirrored_files: frozenset[str] | None = None
@@ -139,11 +144,20 @@ class PortalLinks:
         candidates = (path, f"{stem}.md", f"{path}/index.md")
         return any(candidate in self.mirrored_files for candidate in candidates)
 
-    def repository_url_of(self, path: str) -> str | None:
-        """The declared repository's copy of *path*, or ``None`` with no repository."""
-        if not self.repo_url:
+    def repository_url_of(self, path: str, *, image: bool = False) -> str | None:
+        """The declared repository's page for *path* (for an *image*, the file), or ``None``.
+
+        ``None`` with no repository, and when the repository cannot address a
+        path: no commit to link at, or no forge known for its host. The root is
+        the repository itself.
+        """
+        repository = self.repository
+        if not repository.url:
             return None
-        return f"{self.repo_url}/blob/main/{path}" if path else self.repo_url
+        if not path:
+            return repository.url
+        link = repository.raw_url(path) if image else repository.file_url(path)
+        return link or None
 
 
 @dataclass(frozen=True)
@@ -333,8 +347,15 @@ def _destination(url: str, origin: _Origin, *, image: bool = False) -> str | Non
     route = origin.portal.route_of(resolved)
     if route is not None:
         return route + suffix
-    in_repository = origin.portal.repository_url_of(resolved)
-    return None if in_repository is None else in_repository + suffix
+    in_repository = origin.portal.repository_url_of(resolved, image=image)
+    return None if in_repository is None else _with_suffix(in_repository, suffix)
+
+
+def _with_suffix(link: str, suffix: str) -> str:
+    """*link* with the target's ``?query``/``#fragment``; a query joins one *link* has."""
+    if suffix.startswith("?") and "?" in link:
+        return f"{link}&{suffix[1:]}"
+    return link + suffix
 
 
 def _resolve(path: str, source_dir: str) -> str | None:

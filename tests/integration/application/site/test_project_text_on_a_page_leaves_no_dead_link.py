@@ -17,6 +17,7 @@ import pytest
 from beadloom.application.site.generate import generate_site
 from beadloom.application.site.markdown_links import PortalLinks
 from beadloom.application.site.node_pages import NodeRow, render_all_pages, render_node_page
+from beadloom.application.site.repository_link import RepositoryLink
 from beadloom.infrastructure.db import create_schema
 from tests.support.site_links import dead_links
 
@@ -53,9 +54,10 @@ def test_a_summary_link_to_a_published_document_goes_to_its_page(
 
 
 def test_a_summary_link_goes_to_the_declared_repository(conn: sqlite3.Connection) -> None:
-    portal = PortalLinks(repo_url="https://gitlab.com/acme/shop")
+    ref = "fedcba9876543210fedcba9876543210fedcba98"
+    portal = PortalLinks(repository=RepositoryLink(url="https://gitlab.com/acme/shop", ref=ref))
     body = render_node_page(conn, _shop(), {"shop": "service"}, portal).body
-    assert "See [license](https://gitlab.com/acme/shop/blob/main/LICENSE) and" in body
+    assert f"See [license](https://gitlab.com/acme/shop/-/blob/{ref}/LICENSE) and" in body
 
 
 def test_with_no_portal_described_every_relative_summary_link_is_text(

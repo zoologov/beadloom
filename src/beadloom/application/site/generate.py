@@ -99,7 +99,7 @@ from beadloom.application.site.published_docs import (
     publish_docs,
     published_files,
 )
-from beadloom.application.site.repository_link import repository_of
+from beadloom.application.site.repository_link import RepositoryLink, repository_of
 from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
 from beadloom.application.site.site_config import render_site_module, site_config_of
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
@@ -304,20 +304,21 @@ _ABOUT_PAGES: tuple[tuple[str, str], ...] = (("README.md", "/"), ("README.ru.md"
 
 
 def _portal_links(
-    project_root: Path, slugs: set[str], repo_url: str, base: str
+    project_root: Path, slugs: set[str], repository: RepositoryLink, base: str
 ) -> PortalLinks:
     """What this portal publishes, for rebasing the links in the project's own text.
 
     A README of the pair is routed only when the file exists, since its About
     page is written only then: until BDL-076 (``beadloom-ujzb.11``) the toggle
     went to ``/ru/`` on a project with no ``README.ru.md``, a dead link.
-    *repo_url* is the repository link the project declares, ``""`` when none;
-    *base* is the path the portal is served under, which a raw HTML link needs.
+    *repository* is the repository the project declares, at the site's commit,
+    empty when none is declared; *base* is the path the portal is served under,
+    which a raw HTML link needs.
     """
     routes = {name: route for name, route in _ABOUT_PAGES if (project_root / name).is_file()}
     return portal_links_for(
         published_doc_slugs=slugs,
-        repo_url=repo_url,
+        repository=repository,
         cross_link_routes=routes,
         base=base,
         published_files=published_files(project_root),
@@ -539,6 +540,14 @@ def generate_site(
             cannot use. Raised before any file is written.
     """
     identity = site_config_of(project_root)
+    # One repository for every link: the declared one wins over the remote
+    # (``beadloom-ujzb.8``). The project's own text links only to a repository
+    # the project declared, since nothing from the remote is published except
+    # the card's source links (BDL-076 CONTEXT, the owner's ruling).
+    repository = repository_of(
+        project_root, declared_url=identity.repo_url, forges=identity.forges
+    )
+    text_repository = repository if identity.repo_url else RepositoryLink()
     nodes = load_nodes(conn)
     written: list[Path] = []
     now_ts = now_ts or _now()
@@ -546,7 +555,7 @@ def generate_site(
     # About home (EN) from README.md, with the architecture overview moved to
     # its own /architecture page. Falls back to the overview when no README.
     slugs = _published_doc_slugs(conn, project_root)
-    portal = _portal_links(project_root, slugs, identity.repo_url, identity.base)
+    portal = _portal_links(project_root, slugs, text_repository, identity.base)
     overview = _render_index(conn, nodes)
     about_en = _render_about_page(project_root / "README.md", portal, "")
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
@@ -568,7 +577,7 @@ def generate_site(
             debt=_node_debt(conn, project_root),
         ),
         generated_at=now_ts,
-        repository=repository_of(project_root),
+        repository=repository,
     )
     _write(
         out_dir / "public" / "architecture.data.json",

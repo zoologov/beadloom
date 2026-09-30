@@ -12,6 +12,10 @@
 # to any other file in the repository goes to the declared repository, or
 # becomes its own text when no repository is declared; an absolute address and
 # an anchor stay as they were.
+#
+# BDL-076 B4 (`beadloom-ujzb.8`): the repository's copy is its forge's page for
+# the file at the commit the site was generated from, so the project is
+# committed, and GitLab's route is `/-/blob/`, not GitHub's `/blob/main/`.
 
 @bead:beadloom-ujzb.11 @node:site-generation
 Feature: a link in a project's own text is a working link or plain text on its portal
@@ -25,8 +29,9 @@ Feature: a link in a project's own text is a working link or plain text on its p
   Scenario: with a repository declared, the link goes to the file in that repository
     Given a project whose README opens with "See [license](LICENSE)."
     And the project declares the repository "https://gitlab.com/acme/orders"
+    And the project is committed to git
     When the project is initialised and its site is generated
-    Then the root service's page links "license" to "https://gitlab.com/acme/orders/blob/main/LICENSE"
+    Then the root service's page links "license" to "https://gitlab.com/acme/orders/-/blob/{commit}/LICENSE"
     And no page of the portal holds a dead link
 
   Scenario: a published document that links out of the documentation tree

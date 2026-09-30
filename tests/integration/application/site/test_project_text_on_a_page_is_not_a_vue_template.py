@@ -20,6 +20,7 @@ from beadloom.application.site.generate import generate_site
 from beadloom.application.site.markdown_links import PortalLinks
 from beadloom.application.site.node_pages import NodeRow, render_node_page
 from beadloom.infrastructure.db import create_schema
+from tests.support.committed_project import commit_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,6 +84,8 @@ def test_the_generated_portal_shows_project_text_as_written(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     root = _project(tmp_path / "shop")
+    # Committed, so a repository path has a commit to be linked at (BDL-076 B4).
+    ref = commit_project(root)
     out = tmp_path / "site"
     generate_site(conn, out, project_root=root, now_ts=_NOW)
 
@@ -96,7 +99,7 @@ def test_the_generated_portal_shows_project_text_as_written(
     assert "&lt;details><summary>More</summary>" in guide
     assert f"Hidden <span v-pre>{_HELM}</span>." in guide
     assert '<img src="./logo.png" alt="logo"> gone' in guide
-    assert f'<a href="{_REPO}/blob/main/LICENSE">licence</a>' in guide
+    assert f'<a href="{_REPO}/-/blob/{ref}/LICENSE">licence</a>' in guide
     assert "```mermaid\ngraph LR\n  A --> B\n```" in guide
 
     service = (out / "services" / "shop.md").read_text(encoding="utf-8")

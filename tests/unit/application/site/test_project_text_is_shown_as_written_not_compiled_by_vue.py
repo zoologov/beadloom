@@ -25,6 +25,7 @@ import pytest
 
 from beadloom.application.site.markdown_links import PortalLinks
 from beadloom.application.site.project_text import render_project_text
+from beadloom.application.site.repository_link import RepositoryLink
 
 _NOWHERE = PortalLinks()
 
@@ -220,6 +221,8 @@ def test_a_line_with_several_forms_keeps_each_as_written() -> None:
 # -- a raw link and a raw image -----------------------------------------------
 
 _REPO = "https://gitlab.com/acme/orders"
+#: The commit the site was generated from (BDL-076 B4: links are at it, not at `main`).
+_REF = "fedcba9876543210fedcba9876543210fedcba98"
 _PORTAL = PortalLinks(
     doc_slugs=frozenset({"guide", "other"}),
     page_routes={"readme.md": "/"},
@@ -229,7 +232,7 @@ _PORTAL = PortalLinks(
 _WITH_REPO = PortalLinks(
     doc_slugs=_PORTAL.doc_slugs,
     page_routes=_PORTAL.page_routes,
-    repo_url=_REPO,
+    repository=RepositoryLink(url=_REPO, ref=_REF),
     base=_PORTAL.base,
     mirrored_files=_PORTAL.mirrored_files,
 )
@@ -241,7 +244,7 @@ def _doc(text: str, portal: PortalLinks = _PORTAL) -> str:
 
 def test_a_raw_link_to_a_repository_file_goes_to_the_declared_repository() -> None:
     out = _doc('<a href="../LICENSE">license</a>', _WITH_REPO)
-    assert out == f'<a href="{_REPO}/blob/main/LICENSE">license</a>'
+    assert out == f'<a href="{_REPO}/-/blob/{_REF}/LICENSE">license</a>'
 
 
 def test_a_raw_link_with_nowhere_to_go_keeps_its_text() -> None:
@@ -274,8 +277,8 @@ def test_a_picture_follows_the_rule_in_every_source() -> None:
     )
     assert _doc(text, _WITH_REPO) == (
         f'<picture><source media="(prefers-color-scheme: dark)" '
-        f'srcset="{_REPO}/blob/main/art/dark.png 2x">'
-        f'<img src="{_REPO}/blob/main/art/light.png" alt="Logo"></picture>'
+        f'srcset="{_REPO}/-/raw/{_REF}/art/dark.png 2x">'
+        f'<img src="{_REPO}/-/raw/{_REF}/art/light.png" alt="Logo"></picture>'
     )
     assert _doc(text) == '<picture><source media="(prefers-color-scheme: dark)">Logo</picture>'
 

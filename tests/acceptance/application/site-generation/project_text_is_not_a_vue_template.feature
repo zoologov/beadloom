@@ -36,6 +36,7 @@ Feature: a project's own text is shown as written, never compiled as a Vue templ
     Given a project whose README opens with "Takes orders."
     And the project declares the repository "https://gitlab.com/acme/orders"
     And the project's document "docs/guide.md" reads "<a href=\"../LICENSE\">license</a> and <img src=\"missing.png\" alt=\"a diagram\">"
+    And the project is committed to git
     When the project is initialised and its site is generated
-    Then the published guide links "license" in HTML to "https://gitlab.com/acme/orders/blob/main/LICENSE"
+    Then the published guide links "license" in HTML to "https://gitlab.com/acme/orders/-/blob/{commit}/LICENSE"
     And the published guide reads "a diagram" in place of the image

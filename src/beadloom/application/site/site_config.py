@@ -11,7 +11,9 @@ repository it links to are the project's, declared as::
       title: Acme Orders
       description: Orders, payments and stock
       base: /orders/
-      repo_url: https://gitlab.com/acme/orders
+      repo_url: https://git.acme.example/sales/orders
+      forges:
+        git.acme.example: gitlab
 
 Every key is optional. The title defaults to the project directory's name and
 the base to ``/``. The repository link has no default, by the owner's ruling
@@ -19,24 +21,40 @@ the base to ``/``. The repository link has no default, by the owner's ruling
 never from its git remote, and nothing from the remote is published except each
 node's ``source_url``. A project that declares no ``repo_url`` gets no link.
 
+``forges`` maps a host to the forge that serves it (``beadloom-ujzb.8``): a kind
+— ``github``, ``gitlab``, ``gitea``, ``bitbucket``, ``azure`` — whose routes are
+reused, or a mapping of URL templates over ``{url}``, ``{ref}`` and ``{path}``,
+``source:`` for the page of a path and ``raw:`` for the file itself, for a forge
+no kind describes. It is keyed by host because the forge is a property of the
+server: one entry covers every repository on it and every form of remote,
+HTTPS or SSH, with or without a port. Without it, a host is recognised only when
+it is a public forge's own, as before. The routes and the reading of one value
+are :mod:`beadloom.application.site.forge_routes`.
+
 A value the portal cannot use is refused where it was written — ``site.base`` —
 and a key the block does not read is refused by name, with the keys it does
 read. The refusals are the shape :mod:`beadloom.doc_sync.declarations` gives
 every declaration of this file, and they reach three readers: ``docs site``,
 which stops before it writes anything; ``beadloom config-check``; and the Gate's
 ``config-check`` step. The keys are one table, :data:`_FIELDS`, so a key added
-later (a forge per self-hosted host, ``beadloom-ujzb.8``) is one row and its
-reader, beside these.
+later is one row and its reader, beside these; ``forges`` is such a row.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from beadloom.application.site.repository_link import forge_of
+from beadloom.application.site.forge_routes import (
+    KNOWN_FORGES,
+    PLACEHOLDERS,
+    Forge,
+    forge_for,
+    read_forge,
+)
 from beadloom.doc_sync.declarations import (
     Refusal,
     describe_value,
@@ -45,7 +63,7 @@ from beadloom.doc_sync.declarations import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
 #: The key of ``.beadloom/config.yml`` this module reads.
@@ -63,6 +81,11 @@ _FORGE_ICONS = {
     "azure": "azuredevops",
 }
 _GENERIC_ICON = "git"
+
+#: A host name as ``site.forges`` is keyed by: labels of letters, digits and
+#: hyphens, no scheme, port, user or path.
+_HOST_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_HOST_RE = re.compile(rf"^{_HOST_LABEL}(?:\.{_HOST_LABEL})*$")
 
 
 class SiteConfigError(ValueError):
@@ -83,13 +106,15 @@ class SiteConfigError(ValueError):
 class SiteConfig:
     """The portal's identity, with every default applied.
 
-    ``repo_url`` is ``""`` when the project declares none.
+    ``repo_url`` is ``""`` when the project declares none; ``forges`` maps each
+    host the project declares a forge for, lower-case, to that forge.
     """
 
     title: str
     description: str
     base: str
     repo_url: str
+    forges: Mapping[str, Forge] = field(default_factory=dict, hash=False)
 
 
 def _text(value: object, where: str) -> Refusal | None:
@@ -147,12 +172,74 @@ def _repo_url_problem(value: object) -> str | None:
     return None
 
 
-#: Every key the block reads, with the reader that decides whether a value is usable.
-_FIELDS: dict[str, Callable[[object, str], Refusal | None]] = {
-    "title": _text,
-    "description": _text,
-    "base": _base,
-    "repo_url": _repo_url,
+def _forges(value: object, where: str) -> tuple[object, tuple[Refusal, ...]]:
+    """The forge each host is declared to be, and one refusal per host that names none."""
+    if not isinstance(value, dict):
+        return None, (
+            Refusal(
+                where=where,
+                why=f"`{where}` is {describe_value(value)}, not a mapping of host to forge",
+                remediation="write `forges:` as `<host>: <kind>`, e.g. `git.acme.example: gitlab`",
+            ),
+        )
+    forges: dict[str, Forge] = {}
+    refusals: list[Refusal] = []
+    for host, setting in value.items():
+        forge, problems = read_forge(setting)
+        remediations = [_FORGE_REMEDIATION] if problems else []
+        if not _is_host(host):
+            problems = ("is not keyed by a host name", *problems)
+            remediations.insert(0, _HOST_REMEDIATION)
+        entry = f"{where}[{host}]"
+        if problems:
+            refusals.append(
+                Refusal(
+                    where=entry,
+                    why=f"`{entry}` " + "; ".join(problems),
+                    remediation="; ".join(remediations),
+                )
+            )
+        elif forge is not None:
+            forges[str(host).lower()] = forge
+    return forges, tuple(refusals)
+
+
+_FORGE_REMEDIATION = (
+    "name the forge as one of "
+    + ", ".join(f"`{kind}`" for kind in sorted(KNOWN_FORGES))
+    + ", or write `source:` (and optionally `raw:`) as templates over "
+    + ", ".join(f"`{{{name}}}`" for name in PLACEHOLDERS)
+)
+_HOST_REMEDIATION = (
+    "key the entry by the host name alone, e.g. `git.acme.example`, with no scheme, "
+    "port or path"
+)
+
+
+def _is_host(host: object) -> bool:
+    return isinstance(host, str) and _HOST_RE.match(host) is not None
+
+
+def _checked(
+    check: Callable[[object, str], Refusal | None],
+) -> Callable[[object, str], tuple[object, tuple[Refusal, ...]]]:
+    """A reader that keeps the value when *check* refuses nothing."""
+
+    def read(value: object, where: str) -> tuple[object, tuple[Refusal, ...]]:
+        refusal = check(value, where)
+        return (None, (refusal,)) if refusal is not None else (value, ())
+
+    return read
+
+
+#: Every key the block reads, with the reader that returns the usable value (or
+#: ``None``) and every refusal.
+_FIELDS: dict[str, Callable[[object, str], tuple[object, tuple[Refusal, ...]]]] = {
+    "title": _checked(_text),
+    "description": _checked(_text),
+    "base": _checked(_base),
+    "repo_url": _checked(_repo_url),
+    "forges": _forges,
 }
 
 
@@ -192,24 +279,30 @@ def read_site_config(project_root: Path) -> tuple[SiteConfig, tuple[Refusal, ...
     if block is None:
         return defaults, refusals
     found: list[Refusal] = []
-    usable: dict[str, str] = {}
+    usable: dict[str, object] = {}
     for key, value in block.items():
         reader = _FIELDS.get(str(key))
         if reader is None:
             found.append(_unknown_key(str(key)))
             continue
-        refusal = reader(value, f"{SITE_KEY}.{key}")
-        if refusal is not None:
-            found.append(refusal)
-        elif isinstance(value, str):
-            usable[str(key)] = value
+        read, refusals = reader(value, f"{SITE_KEY}.{key}")
+        found.extend(refusals)
+        if read is not None:
+            usable[str(key)] = read
+    forges = usable.get("forges")
     config = SiteConfig(
-        title=usable.get("title", defaults.title),
-        description=usable.get("description", defaults.description),
-        base=usable.get("base", defaults.base),
-        repo_url=usable.get("repo_url", defaults.repo_url),
+        title=_text_of(usable, "title", defaults.title),
+        description=_text_of(usable, "description", defaults.description),
+        base=_text_of(usable, "base", defaults.base),
+        repo_url=_text_of(usable, "repo_url", defaults.repo_url),
+        forges=forges if isinstance(forges, dict) else {},
     )
     return config, tuple(found)
+
+
+def _text_of(usable: Mapping[str, object], key: str, default: str) -> str:
+    value = usable.get(key)
+    return value if isinstance(value, str) else default
 
 
 def site_config_of(project_root: Path) -> SiteConfig:
@@ -223,11 +316,16 @@ def site_config_of(project_root: Path) -> SiteConfig:
     return config
 
 
-def repo_icon_of(repo_url: str) -> str:
-    """The icon the portal draws beside its repository link; ``""`` when there is no link."""
+def repo_icon_of(repo_url: str, forges: Mapping[str, Forge] | None = None) -> str:
+    """The icon the portal draws beside its repository link; ``""`` when there is no link.
+
+    A host the project declares a forge kind for gets that kind's icon; one it
+    describes by template gets git's own mark.
+    """
     if not repo_url:
         return ""
-    return _FORGE_ICONS.get(forge_of(repo_url) or "", _GENERIC_ICON)
+    forge = forge_for(repo_url, forges)
+    return _FORGE_ICONS.get(forge.kind if forge else "", _GENERIC_ICON)
 
 
 def render_site_module(config: SiteConfig) -> str:
@@ -241,7 +339,7 @@ def render_site_module(config: SiteConfig) -> str:
         "description": config.description,
         "base": config.base,
         "repoUrl": config.repo_url,
-        "repoIcon": repo_icon_of(config.repo_url),
+        "repoIcon": repo_icon_of(config.repo_url, config.forges),
     }
     return (
         "// GENERATED by `beadloom docs site` from the `site:` block of .beadloom/config.yml.\n"

@@ -18,6 +18,7 @@ from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.services.cli import main
+from tests.support.committed_project import commit_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -80,6 +81,13 @@ def _document(world: dict[str, Any], rel: str, text: str) -> None:
     doc.write_text(f"# Guide\n\n{_unescape(text)}\n", encoding="utf-8")
 
 
+@given("the project is committed to git")
+def _committed(world: dict[str, Any]) -> None:
+    # A repository path is linked at the commit the site is generated from
+    # (BDL-076 B4, `beadloom-ujzb.8`); a project outside git has none.
+    world["ref"] = commit_project(world["root"])
+
+
 @when("the project is initialised and its site is generated")
 def _generate(world: dict[str, Any]) -> None:
     root = str(world["root"])
@@ -122,7 +130,8 @@ def _keeps_html(world: dict[str, Any], markup: str) -> None:
 @then(parsers.parse('the published guide links "{text}" in HTML to "{url}"'))
 def _links_in_html(world: dict[str, Any], text: str, url: str) -> None:
     body = _page(world, "docs/guide.md")
-    assert re.findall(rf'<a href="([^"]*)"[^>]*>{re.escape(text)}</a>', body) == [url], body
+    expected = url.replace("{commit}", world.get("ref", ""))
+    assert re.findall(rf'<a href="([^"]*)"[^>]*>{re.escape(text)}</a>', body) == [expected], body
 
 
 @then(parsers.parse('the published guide reads "{alt}" in place of the image'))

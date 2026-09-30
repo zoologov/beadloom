@@ -23,8 +23,11 @@ from __future__ import annotations
 import pytest
 
 from beadloom.application.site.markdown_links import PortalLinks, rebase_links
+from beadloom.application.site.repository_link import RepositoryLink
 
 _REPO = "https://gitlab.com/acme/orders"
+#: The commit the site was generated from (BDL-076 B4: links are at it, not at `main`).
+_REF = "fedcba9876543210fedcba9876543210fedcba98"
 
 #: What the portal publishes in these tests: two documents and the README pair.
 _PUBLISHED = PortalLinks(
@@ -32,7 +35,9 @@ _PUBLISHED = PortalLinks(
     page_routes={"readme.md": "/", "readme.ru.md": "/ru/"},
 )
 _WITH_REPO = PortalLinks(
-    doc_slugs=_PUBLISHED.doc_slugs, page_routes=_PUBLISHED.page_routes, repo_url=_REPO
+    doc_slugs=_PUBLISHED.doc_slugs,
+    page_routes=_PUBLISHED.page_routes,
+    repository=RepositoryLink(url=_REPO, ref=_REF),
 )
 
 
@@ -47,7 +52,7 @@ def test_a_link_to_an_unpublished_file_becomes_its_text(target: str) -> None:
 @pytest.mark.parametrize("target", ["LICENSE", "./LICENSE", "/LICENSE"])
 def test_a_link_to_an_unpublished_file_goes_to_the_declared_repository(target: str) -> None:
     out = rebase_links(f"See [license]({target}).", _WITH_REPO)
-    assert out == f"See [license]({_REPO}/blob/main/LICENSE)."
+    assert out == f"See [license]({_REPO}/-/blob/{_REF}/LICENSE)."
 
 
 def test_a_link_that_leaves_the_repository_becomes_its_text_even_with_a_repository() -> None:
@@ -56,12 +61,12 @@ def test_a_link_that_leaves_the_repository_becomes_its_text_even_with_a_reposito
 
 def test_a_link_keeps_its_fragment_when_it_goes_to_the_repository() -> None:
     out = rebase_links("[line](src/app.js#L10)", _WITH_REPO)
-    assert out == f"[line]({_REPO}/blob/main/src/app.js#L10)"
+    assert out == f"[line]({_REPO}/-/blob/{_REF}/src/app.js#L10)"
 
 
 def test_a_link_keeps_its_title() -> None:
     out = rebase_links('[license](LICENSE "The licence")', _WITH_REPO)
-    assert out == f'[license]({_REPO}/blob/main/LICENSE "The licence")'
+    assert out == f'[license]({_REPO}/-/blob/{_REF}/LICENSE "The licence")'
 
 
 def test_an_angle_bracketed_target_is_read_without_its_brackets() -> None:
@@ -121,7 +126,7 @@ def test_a_relative_image_becomes_its_alt_text() -> None:
 
 def test_a_relative_image_goes_to_the_declared_repository() -> None:
     out = rebase_links("![the flow](assets/flow.png)", _WITH_REPO)
-    assert out == f"![the flow]({_REPO}/blob/main/assets/flow.png)"
+    assert out == f"![the flow]({_REPO}/-/raw/{_REF}/assets/flow.png)"
 
 
 def test_a_badge_link_keeps_its_badge_when_its_target_is_dropped() -> None:
@@ -140,7 +145,7 @@ def test_a_reference_definition_to_a_published_document_is_rebased() -> None:
 def test_a_reference_definition_goes_to_the_declared_repository_with_its_title() -> None:
     text = 'See [the licence][lic].\n\n[lic]: ./LICENSE "MIT"\n'
     out = rebase_links(text, _WITH_REPO)
-    assert out == f'See [the licence][lic].\n\n[lic]: {_REPO}/blob/main/LICENSE "MIT"\n'
+    assert out == f'See [the licence][lic].\n\n[lic]: {_REPO}/-/blob/{_REF}/LICENSE "MIT"\n'
 
 
 def test_a_withdrawn_reference_becomes_its_text_in_every_form() -> None:

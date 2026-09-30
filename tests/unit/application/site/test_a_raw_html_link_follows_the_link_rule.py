@@ -24,8 +24,11 @@ from beadloom.application.site.markdown_links import (
     raw_html_destination,
     rebase_links,
 )
+from beadloom.application.site.repository_link import RepositoryLink
 
 _REPO = "https://gitlab.com/acme/orders"
+#: The commit the site was generated from (BDL-076 B4: links are at it, not at `main`).
+_REF = "fedcba9876543210fedcba9876543210fedcba98"
 _BASE = "/orders/"
 
 _PORTAL = PortalLinks(
@@ -39,7 +42,7 @@ _PORTAL = PortalLinks(
 _WITH_REPO = PortalLinks(
     doc_slugs=_PORTAL.doc_slugs,
     page_routes=_PORTAL.page_routes,
-    repo_url=_REPO,
+    repository=RepositoryLink(url=_REPO, ref=_REF),
     base=_BASE,
     mirrored_files=_PORTAL.mirrored_files,
 )
@@ -83,7 +86,7 @@ def test_a_raw_link_to_a_directory_index_goes_to_its_page() -> None:
 
 
 def test_a_raw_link_to_a_repository_file_goes_to_the_declared_repository() -> None:
-    assert _href("../LICENSE", _WITH_REPO, **_IN_DOCS) == f"{_REPO}/blob/main/LICENSE"
+    assert _href("../LICENSE", _WITH_REPO, **_IN_DOCS) == f"{_REPO}/-/blob/{_REF}/LICENSE"
 
 
 def test_a_raw_link_to_a_repository_file_has_nowhere_to_go_without_a_repository() -> None:
@@ -116,7 +119,7 @@ def test_a_raw_image_missing_from_the_mirrored_directory_has_nowhere_to_go() -> 
 
 def test_a_raw_image_outside_the_mirrored_directory_follows_the_markdown_image_rule() -> None:
     assert _src("assets/logo.png") is None
-    assert _src("assets/logo.png", _WITH_REPO) == f"{_REPO}/blob/main/assets/logo.png"
+    assert _src("assets/logo.png", _WITH_REPO) == f"{_REPO}/-/raw/{_REF}/assets/logo.png"
 
 
 # -- a Markdown link to a file missing from the mirrored directory ------------
@@ -177,7 +180,8 @@ def test_a_markdown_image_the_portal_publishes_is_referenced_from_where_the_page
 
 
 def test_a_link_to_a_published_file_that_is_not_an_image_is_not_rebased_as_one() -> None:
-    assert _href("docs/logo.png", _WITH_REPO, page_dir="") == f"{_REPO}/blob/main/docs/logo.png"
+    link = _href("docs/logo.png", _WITH_REPO, page_dir="")
+    assert link == f"{_REPO}/-/blob/{_REF}/docs/logo.png"
 
 
 def test_with_no_page_location_a_published_image_follows_the_markdown_image_rule() -> None:

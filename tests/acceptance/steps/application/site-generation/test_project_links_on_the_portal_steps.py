@@ -17,6 +17,7 @@ from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.services.cli import main
+from tests.support.committed_project import commit_project
 from tests.support.site_links import dead_links
 
 if TYPE_CHECKING:
@@ -73,6 +74,13 @@ def _document(world: dict[str, Any], rel: str, first: str, second: str) -> None:
     doc.write_text(f"# Guide\n\nSee {first} and {second}.\n", encoding="utf-8")
 
 
+@given("the project is committed to git")
+def _committed(world: dict[str, Any]) -> None:
+    # A repository path is linked at the commit the site is generated from
+    # (BDL-076 B4, `beadloom-ujzb.8`); a project outside git has none.
+    world["ref"] = commit_project(world["root"])
+
+
 @when("the project is initialised and its site is generated")
 def _generate(world: dict[str, Any]) -> None:
     root = str(world["root"])
@@ -94,7 +102,8 @@ def _reads(world: dict[str, Any], sentence: str) -> None:
 @then(parsers.parse('the root service\'s page links "{text}" to "{url}"'))
 def _links(world: dict[str, Any], text: str, url: str) -> None:
     body = _page(world, f"services/{_PROJECT}.md")
-    assert _link_targets(body, text) == [url], body
+    expected = url.replace("{commit}", world.get("ref", ""))
+    assert _link_targets(body, text) == [expected], body
 
 
 @then(parsers.parse('the published guide links "{text}" to "{url}"'))

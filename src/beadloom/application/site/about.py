@@ -22,9 +22,12 @@ states:
 - ``docs/<x>.md`` / ``docs/<x>`` whose slug ``<x>`` is published ->
   extension-less site link ``/docs/<x>``.
 - any other file in the repository (``LICENSE``, source paths, an unpublished
-  ``docs/<x>``) -> ``{repo_url}/blob/main/<path>``. With no ``repo_url`` — a
-  project that declares no repository link (BDL-076 B1) — there is nowhere true
-  to send it: a link keeps its text and an image its alt text.
+  ``docs/<x>``) -> the declared repository's page for it at the commit the site
+  was generated from, under its forge's route, and an image to the file itself
+  (BDL-076 ``beadloom-ujzb.8``). With no ``repo_url`` — a project that declares
+  no repository link (BDL-076 B1) — or no commit or forge to address a path by,
+  there is nowhere true to send it: a link keeps its text and an image its alt
+  text.
 - a target outside the repository (``../x``) -> its text.
 - absolute addresses (any scheme, including shields.io badges), protocol-relative
   ``//host`` addresses and pure anchors (``#section``) -> unchanged.
@@ -49,6 +52,8 @@ from beadloom.application.site.project_text import render_project_text
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from beadloom.application.site.repository_link import RepositoryLink
+
 #: The README pair, lowercased: the files an About page is rendered from.
 _README_CROSS_LINKS = frozenset({"readme.md", "readme.ru.md"})
 
@@ -56,7 +61,7 @@ _README_CROSS_LINKS = frozenset({"readme.md", "readme.ru.md"})
 def portal_links_for(
     *,
     published_doc_slugs: set[str] | frozenset[str],
-    repo_url: str,
+    repository: RepositoryLink,
     cross_link_routes: Mapping[str, str] | None = None,
     base: str = "/",
     published_files: frozenset[str] | None = None,
@@ -64,7 +69,8 @@ def portal_links_for(
     """What the portal publishes, with the README pair routed or withheld.
 
     A README of the pair that ``cross_link_routes`` does not route has no page,
-    so a link to it keeps its text rather than going to the repository. ``base``
+    so a link to it keeps its text rather than going to the repository.
+    ``repository`` is the declared repository at the site's commit. ``base``
     is the path the portal is served under; ``published_files`` are the project
     paths of the files it publishes under ``docs/``, ``None`` when unknown.
     """
@@ -72,7 +78,7 @@ def portal_links_for(
     return PortalLinks(
         doc_slugs=frozenset(published_doc_slugs),
         page_routes=routes,
-        repo_url=repo_url,
+        repository=repository,
         withheld=_README_CROSS_LINKS - routes.keys(),
         base=base,
         mirrored_files=published_files,
@@ -83,7 +89,7 @@ def render_about(
     readme_text: str,
     *,
     published_doc_slugs: set[str],
-    repo_url: str,
+    repository: RepositoryLink,
     cross_link_routes: dict[str, str] | None = None,
 ) -> str:
     """Transform README Markdown into the About-page body (links rebased, shown as written).
@@ -94,7 +100,7 @@ def render_about(
     """
     portal = portal_links_for(
         published_doc_slugs=published_doc_slugs,
-        repo_url=repo_url,
+        repository=repository,
         cross_link_routes=cross_link_routes,
     )
     return render_project_text(readme_text, portal)
