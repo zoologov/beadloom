@@ -63,7 +63,7 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 | ID | Tracker | Name | Priority | Depends On |
 |---|---|---|---|---|
 | J1 | `beadloom-hjr1` | dev: relative JS/TS imports resolve to the files and nodes they name (owner, 2026-09-30) | P0 | A0 step 1 |
-| J2 | `beadloom-g9fb` | dev: a non-Python scan path adds no false `depends_on` edges (owner, 2026-09-30) | P0 | J1 |
+| J2 | `beadloom-g9fb` | dev: a non-Python scan path adds no false `depends_on` edges; `.vue` imports and `import()` extracted (owner, 2026-09-30; the second half moved here from J3, same file) | P0 | J1 |
 | J3 | `beadloom-tmxa` | dev: `.vue` script blocks parsed with line offsets; `export const` and `import()` read (owner, 2026-09-30) | P0 | A0 step 1 |
 | A0 | `beadloom-kcwz` | dev: this repository's site under beadloom — is `.vue` read; the viewer's nodes, docs and bound tests | P0 | - |
 | A1 | `beadloom-o2ua` | dev: the data file v2 — node card fields, edge kinds, layers, a `url` for every kind | P0 | A0 |
