@@ -220,7 +220,12 @@ class TestTheWholeLintRunIsUnchanged:
         assert after.error_count == before.error_count
         assert after.has_errors is before.has_errors
         assert after.rules_inert == before.rules_inert
-        assert after.warning_count == before.warning_count + 1
+        # One population statement per layered rule: `architecture-layers`, and
+        # since BDL-076 A2 `site-fsd-layers` over the site theme.
+        layered = load_rules(self_check_snapshot / ".beadloom" / "_graph" / "rules.yml")
+        layer_rules = [rule for rule in layered if isinstance(rule, LayerRule)]
+        assert len(layer_rules) == 2
+        assert after.warning_count == before.warning_count + len(layer_rules)
 
 
 class TestTheOtherFourRuleKindsAreUnchanged:

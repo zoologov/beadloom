@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING
 from click.testing import CliRunner
 
 from beadloom.graph.rule_engine import LAYER_POPULATION_RULE_TYPE
-from beadloom.graph.rules import SUITE_POPULATION_RULE_TYPE, TEST_BINDING_RULE_TYPE
+from beadloom.graph.rules import (
+    LIVENESS_RULE_TYPE,
+    SUITE_POPULATION_RULE_TYPE,
+    TEST_BINDING_RULE_TYPE,
+)
 from beadloom.services.cli import main
 from tests.support.repository_root import REPO_ROOT
 
@@ -72,6 +76,12 @@ class TestLintRecalibrationGuard:
         features no test file is bound to — measured debt at ``warn``, keyed on
         rule AND type, so an exemption that went dead (``rule_liveness``) or a
         file leg that fired would still fail here.
+
+        BDL-076 A2 added one more, keyed on rule AND type the same way:
+        ``doc-area-coherence`` states that it checked nothing (``rule_liveness``,
+        at ``warn``) since the site's slices made ``site/`` a second supported
+        source tree (``beadloom-5o48``). Its other direction is
+        ``test_the_doc_area_gap_is_stated_until_its_fix_lands``.
         """
         findings = self._live_findings(self_check_snapshot)
         other = [
@@ -83,8 +93,30 @@ class TestLintRecalibrationGuard:
                 f.get("rule_name") == "features-have-bound-tests"
                 and f.get("rule_type") == TEST_BINDING_RULE_TYPE
             )
+            and not (
+                f.get("rule_name") == "doc-area-coherence"
+                and f.get("rule_type") == LIVENESS_RULE_TYPE
+            )
         ]
         assert other == [], other
+
+    def test_the_doc_area_gap_is_stated_until_its_fix_lands(
+        self, self_check_snapshot: Path
+    ) -> None:
+        """``doc-area-coherence`` is at ``warn``: it checks nothing here (``beadloom-5o48``).
+
+        When this fails because the finding is gone, the derivation has been
+        fixed: restore the rule's ``severity: error`` in ``rules.yml`` and delete
+        this test together with the exclusion above.
+        """
+        findings = self._live_findings(self_check_snapshot)
+        gap = [
+            f
+            for f in findings
+            if f.get("rule_name") == "doc-area-coherence"
+            and f.get("rule_type") == LIVENESS_RULE_TYPE
+        ]
+        assert [f["severity"] for f in gap] == ["warn"], gap
 
     def test_each_suite_rule_states_its_population(self, self_check_snapshot: Path) -> None:
         """The other direction for the suite rules: each says what it judged, every run."""
@@ -127,9 +159,13 @@ class TestLintRecalibrationGuard:
         """
         findings = self._live_findings(self_check_snapshot)
         population = [f for f in findings if f.get("rule_type") == LAYER_POPULATION_RULE_TYPE]
-        assert len(population) == 1, population
-        assert population[0]["severity"] == "warn"
-        assert population[0]["rule_name"] == "architecture-layers"
+        # One statement per layered rule: the package layers, and since BDL-076 A2
+        # the site theme's Feature-Sliced layers.
+        assert sorted(str(f["rule_name"]) for f in population) == [
+            "architecture-layers",
+            "site-fsd-layers",
+        ], population
+        assert {f["severity"] for f in population} == {"warn"}
 
     def test_the_scenario_debt_is_reported_and_blocks_nothing(
         self, self_check_snapshot: Path

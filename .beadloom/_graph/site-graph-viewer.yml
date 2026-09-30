@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-graph-viewer
+    kind: component
+    summary: "The graph viewer core: toolbar, canvas and panel over the architecture data, with navigation, filters, full screen, URL state and the test handle"
+    source: site/.vitepress/theme/widgets/graph-viewer/
+    tags: [fsd-widgets]
+    docs:
+      - docs/services/vitepress-site/graph-viewer.md
+edges:
+  - src: site-graph-viewer
+    dst: vitepress-site
+    kind: part_of

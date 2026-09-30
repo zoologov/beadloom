@@ -26,11 +26,17 @@ if TYPE_CHECKING:
 GRAPH_DIR = REPO_ROOT / ".beadloom" / "_graph"
 
 
+#: The layered rule over the Python packages. Since BDL-076 A2 the rules file also
+#: declares `site-fsd-layers` over the site theme, which has no Python source.
+PACKAGE_LAYER_RULE = "architecture-layers"
+
+
 def declared_layer_tags() -> list[str]:
-    """The layer tags the rules file declares, topmost first."""
+    """The layer tags the package layer rule declares, topmost first."""
     rules = yaml.safe_load((GRAPH_DIR / "rules.yml").read_text(encoding="utf-8"))
-    layered = [rule for rule in rules["rules"] if "layers" in rule]
-    assert len(layered) == 1, f"expected one layered rule, found {len(layered)}"
+    layered = [rule for rule in rules["rules"] if rule.get("name") == PACKAGE_LAYER_RULE]
+    assert len(layered) == 1, f"expected one rule named {PACKAGE_LAYER_RULE}, found {len(layered)}"
+    assert "layers" in layered[0], f"{PACKAGE_LAYER_RULE} declares no layers"
     return [layer["tag"] for layer in layered[0]["layers"]]
 
 

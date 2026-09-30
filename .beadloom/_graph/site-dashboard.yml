@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-dashboard
+    kind: component
+    summary: "The dashboard's panels: alert banner, status cards, health gauges, category and trend charts, recommendations and the AI tech-writer's runs"
+    source: site/.vitepress/theme/widgets/dashboard/
+    tags: [fsd-widgets]
+    docs:
+      - docs/services/vitepress-site/dashboard.md
+edges:
+  - src: site-dashboard
+    dst: vitepress-site
+    kind: part_of

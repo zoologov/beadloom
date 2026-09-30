@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-shared
+    kind: component
+    summary: "The site's shared segments: browser checks, JSON loading, tree walks, theme tokens resolved to literal colours, the Cytoscape and ELK loader, and ECharts"
+    source: site/.vitepress/theme/shared/
+    tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared.md
+edges:
+  - src: site-shared
+    dst: vitepress-site
+    kind: part_of

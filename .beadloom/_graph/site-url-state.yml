@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-url-state
+    kind: component
+    summary: "A view's state read from and written to the page's query string, so a view can be linked"
+    source: site/.vitepress/theme/features/url-state/
+    tags: [fsd-features]
+    docs:
+      - docs/services/vitepress-site/url-state.md
+edges:
+  - src: site-url-state
+    dst: vitepress-site
+    kind: part_of

@@ -49,11 +49,20 @@ class TestNoLayerTagIsWrittenDown:
     """A layer is whatever the declaration names one — in `src/`, nothing else."""
 
     def test_the_declaration_names_the_tags_this_scan_looks_for(self) -> None:
+        # The four package layers, and since BDL-076 A2 the six Feature-Sliced
+        # layers of the site theme (`site-fsd-layers`), which the scan below
+        # must not find written down in `src/` either.
         assert _declared_layer_tags() == {
             "layer-service",
             "layer-application",
             "layer-domain",
             "layer-infra",
+            "fsd-app",
+            "fsd-pages",
+            "fsd-widgets",
+            "fsd-features",
+            "fsd-entities",
+            "fsd-shared",
         }
 
     def test_no_module_holds_a_layer_tag_as_a_literal_outside_the_named_exemptions(

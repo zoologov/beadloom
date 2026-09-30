@@ -139,7 +139,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
-**Rule types** — the 15 authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 19 rules across them:
+**Rule types** — the 15 authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 20 rules across them:
 
 | YAML key | Semantics | Example |
 |----------|-----------|---------|
@@ -161,7 +161,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / `doc_area_coherence` / `summary_facts` / `test_binding` / `test_import_boundary` / `scenario_binding` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 >
-> The two counts above differ because they count different things: 15 is how many keys the loader accepts, 19 is how many rules this repository declares. Only the second is checked by `docs audit` — the fact it is checked against is named `rule_type_count` and computes `SELECT COUNT(*) FROM rules`, which is the instance count, not the type count (BDL-UX #179).
+> The two counts above differ because they count different things: 15 is how many keys the loader accepts, 20 is how many rules this repository declares. Only the second is checked by `docs audit` — the fact it is checked against is named `rule_type_count` and computes `SELECT COUNT(*) FROM rules`, which is the instance count, not the type count (BDL-UX #179).
 
 **Evaluation:**
 - `deny` rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns

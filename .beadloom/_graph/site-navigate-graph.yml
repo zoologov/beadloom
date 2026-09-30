@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-navigate-graph
+    kind: component
+    summary: "Moving around the graph: pan without grabbing nodes, zoom, fit, centre, and the Arrange toggle that makes nodes draggable"
+    source: site/.vitepress/theme/features/navigate-graph/
+    tags: [fsd-features]
+    docs:
+      - docs/services/vitepress-site/navigate-graph.md
+edges:
+  - src: site-navigate-graph
+    dst: vitepress-site
+    kind: part_of

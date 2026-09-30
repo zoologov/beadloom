@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-graph-node
+    kind: component
+    summary: "A node of the architecture graph: its status, its container and its card"
+    source: site/.vitepress/theme/entities/graph-node/
+    tags: [fsd-entities]
+    docs:
+      - docs/services/vitepress-site/graph-node.md
+edges:
+  - src: site-graph-node
+    dst: vitepress-site
+    kind: part_of

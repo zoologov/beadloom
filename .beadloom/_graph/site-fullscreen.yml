@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-fullscreen
+    kind: component
+    summary: "Full screen for the viewer's whole space, with a CSS fallback over the same element"
+    source: site/.vitepress/theme/features/fullscreen/
+    tags: [fsd-features]
+    docs:
+      - docs/services/vitepress-site/fullscreen.md
+edges:
+  - src: site-fullscreen
+    dst: vitepress-site
+    kind: part_of

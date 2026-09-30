@@ -1,0 +1,15 @@
+  # BDL-076 A2 (`beadloom-iehv`): one node per Feature-Sliced Design slice of the
+  # site theme. The slice carries its FSD layer as a tag, and `site-fsd-layers` in
+  # rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-app
+    kind: component
+    summary: "The theme entry of the VitePress site: extends the default theme and registers the pages and widgets the generated Markdown mounts"
+    source: site/.vitepress/theme/app/
+    tags: [fsd-app]
+    docs:
+      - docs/services/vitepress-site/app.md
+edges:
+  - src: site-app
+    dst: vitepress-site
+    kind: part_of
