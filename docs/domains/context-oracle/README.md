@@ -54,6 +54,7 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `test_binding` | `test_binding.py` | Which node a test file binds to: a `tests:` declaration, else the mirror of its path under a mirrored kind folder or a build tool's test tree, else its place inside a node's source; placements, the four-key `extra["tests"]` summary, and the unplaced-files sentence `ctx` and the debt report print |
 | `test_file_reader` | `test_file_reader.py` | One `ast` parse of a Python test file (its test-function count and absolute imports); a file in another language counted by the line its tests are written in |
 | `test_layout` | `test_layout.py` | The project's test layout, from the `tests:` block of `.beadloom/config.yml`: roots, kind folders, patterns by framework (a file name, or the end of a path), build-tool test trees and `beside_code`, each with a default (BDL-074 G2, `beadloom-2mj3.15`) |
+| `vue_sfc` | `vue_sfc.py` | The `<script>` and `<script setup>` blocks of a Vue single-file component: each block's text, the 0-based line of the `.vue` file it begins on, and the script extension whose grammar parses it (BDL-076 J3) |
 | `why` | `why.py` | Impact analysis via bidirectional BFS (upstream deps + downstream dependents) |
 
 ### BFS Algorithm
@@ -155,8 +156,8 @@ as a claim about that and has to be suppressed to stay green.
 | Extension(s) | Language | Symbol types |
 |-------------|----------|-------------|
 | `.py` | Python | function, class |
-| `.ts`, `.tsx` | TypeScript | function, class, type |
-| `.js`, `.jsx` | JavaScript | function, class, type (via TS parser) |
+| `.ts`, `.tsx` | TypeScript | function, class, type, variable (exported bindings) |
+| `.js`, `.jsx` | JavaScript | function, class, type, variable (via TS parser) |
 | `.go` | Go | function, type |
 | `.rs` | Rust | function, class (struct), type (enum, trait) |
 | `.kt`, `.kts` | Kotlin | class, function |
@@ -165,6 +166,26 @@ as a claim about that and has to be suppressed to stay green.
 | `.m`, `.mm` | Objective-C | class, type (protocol), function |
 | `.c`, `.h` | C | function, class (struct, enum), type |
 | `.cpp`, `.hpp` | C++ | function, class (struct, enum, namespace), type |
+
+**JS/TS exports** (BDL-076 J3). Besides declarations, an `export` statement names symbols:
+`export const`, `export let` and `export var` give one symbol per declarator whose target is a
+plain identifier, of kind `function` for an arrow or function value, `class` for a class value,
+and `variable` otherwise. A destructuring pattern (`export const { a, b } = obj`) names no
+symbol. An anonymous `export default <value>` is a symbol named `default`. A top-level `const`
+without `export` is not a symbol.
+
+**Vue single-file components** (BDL-076 J3). `.vue` is not in `_EXTENSION_LOADERS`, so
+`get_lang_config(".vue")` is `None`. It is a supported extension whenever the `.js` loader's
+grammar (`tree_sitter_typescript`) is installed, because a component is read through its script
+blocks: `vue_sfc.script_blocks` finds each `<script>` and `<script setup>` block, and each
+block is parsed by the TS/TSX loader its `lang` names (`ts` → `.ts`, `tsx` → `.tsx`, `jsx` → `.jsx`, anything else or no `lang` →
+`.js`). A component yields a `component` symbol named after the file stem, spanning the whole
+file, then the symbols of each block at their lines in the `.vue` file. The component symbol
+stands for the default export, so a block's `export default` is not a second symbol. The
+`<template>` and `<style>` are not read, so an annotation in a template-only component has no
+place to live. The two blocks are walked as one module: an annotation before the first symbol
+of the first block covers the second block too. Adding `.vue` to `supported_extensions()`
+changes the parser fingerprint, so the first reindex after upgrade is a full code reindex.
 
 Annotations are parsed from comments matching the pattern `# beadloom:<key>=<value>`. Module-level annotations (before the first symbol) apply to all symbols in the file; symbol-specific annotations (immediately before a definition) take precedence.
 
@@ -405,9 +426,13 @@ class LangConfig:
     comment_types: frozenset[str]
     symbol_types: dict[str, str]
     wrapper_types: frozenset[str]
+    docstring_types: frozenset[str] = frozenset()
+    exported_binding_types: frozenset[str] = frozenset()
 ```
 
-Frozen dataclass for tree-sitter language configuration.
+Frozen dataclass for tree-sitter language configuration. `exported_binding_types` names the
+declarations an `export` wrapper binds names with (`lexical_declaration`,
+`variable_declaration`); it is set for the TypeScript and TSX loaders only.
 
 ```python
 def get_lang_config(extension: str) -> LangConfig | None
@@ -419,7 +444,7 @@ Get language config for a file extension, or `None` if unsupported/unavailable.
 def supported_extensions() -> frozenset[str]
 ```
 
-Return the set of file extensions with available tree-sitter grammars.
+Return the set of file extensions with available tree-sitter grammars. `.vue` is included when the `.js` grammar is installed; `check_parser_availability` answers the same way.
 
 ```python
 def clear_cache() -> None
@@ -443,7 +468,38 @@ Parse a `beadloom:key=value` annotation from a comment line.
 def extract_symbols(file_path: Path) -> list[dict[str, Any]]
 ```
 
-Extract top-level symbols from a source file using tree-sitter. Returns list of dicts with `symbol_name`, `kind`, `line_start`, `line_end`, `annotations`, `file_hash`.
+Extract top-level symbols from a source file using tree-sitter. Returns list of dicts with `symbol_name`, `kind`, `line_start`, `line_end`, `annotations`, `file_hash`. A `.vue` file returns its `component` symbol first, then its script blocks' symbols at their `.vue` lines.
+
+```python
+script_blocks  # re-exported from beadloom.context_oracle.vue_sfc
+```
+
+Re-exported on purpose: the import resolver reads a component's imports from the same blocks and
+reaches tree-sitter facilities through `code_indexer` only, the one declared
+`import-resolver -> code-indexer` crossing.
+
+### vue_sfc.py -- Public Classes and Functions
+
+```python
+@dataclass(frozen=True)
+class ScriptBlock:
+    text: str
+    line_offset: int
+    extension: str
+    def file_line(self, row: int) -> int
+```
+
+One script block of a component: its verbatim text, the 0-based line of the file the text begins
+on, and the script extension (`.js`, `.ts`, `.tsx`, `.jsx`) whose grammar parses it.
+`file_line(row)` maps a 0-based row of the block to the 1-based line of the `.vue` file.
+
+```python
+def script_blocks(source: str) -> tuple[ScriptBlock, ...]
+```
+
+The script blocks of a component's source, in file order. A custom block whose tag only begins
+with `script` (`<script-docs>`) is not a script block. The module parses nothing: callers hand
+each block to the grammar they already hold.
 
 ### route_extractor.py -- Public Classes and Functions
 
@@ -729,6 +785,9 @@ Tests are located in:
 | `tests/integration/context_oracle/builder/test_context_builder.py` | `builder.py` | BFS traversal, chunk collection, bundle assembly, ref_id validation, suggestions |
 | `tests/integration/context_oracle/cache/test_cache.py` | `cache.py` | L1 get/put, mtime invalidation, clear, clear_ref, stats |
 | `tests/integration/context_oracle/code_indexer/test_code_indexer.py` | `code_indexer.py` | Symbol extraction, annotation parsing, language config loading |
+| `tests/integration/context_oracle/code_indexer/test_javascript_exports.py` | `code_indexer.py` | `export const/let/var`, anonymous `export default`, the `variable` kind |
+| `tests/integration/context_oracle/code_indexer/test_vue_support.py` | `vue_sfc.py`, `code_indexer.py` | Script blocks, their lines and `lang`, annotations across blocks, hash, a missing grammar |
+| `tests/acceptance/context-oracle/code-indexer/vue_single_file_components.feature` | `code_indexer.py` | `ctx` shows each component symbol at its `.vue` line; a script edit makes sibling pairs unverified, a style-only edit does not |
 | `tests/integration/context_oracle/route_extractor/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
 | `tests/unit/context_oracle/test_binding/test_a_test_file_binds_to_the_node_its_path_mirrors.py` | `test_binding.py` | Mirror, declaration, placements, deepest root, union over descendants |
 | `tests/unit/context_oracle/test_binding/test_the_unplaced_share_is_one_sentence.py` | `test_binding.py` | `describe_unplaced()` |
