@@ -9,8 +9,13 @@ commit the site was generated from, so a link shows the source the page
 describes rather than whatever the branch holds later.
 
 A remote git can reach but a browser cannot (a path on disk, ``file://``) gives
-no address, and the card then shows the source without a link. A credential
-written into an HTTPS remote is dropped: the data file is published.
+no address, and the card then shows the source without a link; so does a remote
+this module cannot parse (an IPv6 host in git's scp-like form, a port that is not
+a number), which never stops the site. A credential written into a remote is
+dropped. The address itself is not published: the data file carries only each
+node's finished link, because no screen reads the address and a remote git
+cannot use can still hold a credential in a place no parser expects (BDL-076
+re-review finding m3).
 
 The link to one path is decided here, per forge, and written finished into the
 data file (BDL-076 R1 finding M1): each forge serves a path at a revision under
@@ -38,11 +43,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _WEB_SCHEMES = frozenset({"http", "https"})
+
+#: An IPv6 host, written in brackets. No forge is recognised on an address, and
+#: the parser loses the brackets, so such a remote gives no web address.
+_IPV6_OPEN = "["
+_NO_IPV6 = "an IPv6 host is no forge's host"
 _SSH_SCHEME = "ssh"
 _GIT_SUFFIX = ".git"
 
 #: Azure DevOps serves SSH from these hosts, under ``v3/<org>/<project>/<repo>``,
-#: and its web pages from another host and another path.
+#: and its web pages from another host and another path. Its legacy SSH remotes
+#: (``<collection>/<project>/_ssh/<repo>``) are not mapped: they get no address
+#: rather than one on the SSH host that looks right (re-review finding m1).
 _AZURE_SSH_HOST = "ssh.dev.azure.com"
 _VSTS_SSH_HOST = "vs-ssh.visualstudio.com"
 _AZURE_SSH_PREFIX = "v3"
@@ -77,6 +89,9 @@ _PUBLIC_HOSTS = {
 #: Azure DevOps' older hosts, ``<organisation>.visualstudio.com``.
 _VSTS_SUFFIX = ".visualstudio.com"
 
+#: Azure DevOps' other hosts, web and SSH.
+_AZURE_HOSTS = frozenset({"dev.azure.com", _AZURE_SSH_HOST})
+
 
 @dataclass(frozen=True)
 class RepositoryLink:
@@ -88,10 +103,6 @@ class RepositoryLink:
 
     url: str = ""
     ref: str = ""
-
-    def as_dict(self) -> dict[str, str]:
-        """The data file's ``repository`` block."""
-        return {"url": self.url, "ref": self.ref}
 
     def source_url(self, source: str) -> str:
         """The page the forge serves for *source* at the recorded commit, or ``""``.
@@ -110,10 +121,18 @@ class RepositoryLink:
 
 def forge_of(web_url: str) -> str | None:
     """Which forge serves *web_url*, by its host; ``None`` when none is recognised."""
-    host = (urlsplit(web_url).hostname or "").lower()
-    if host.endswith(_VSTS_SUFFIX):
+    try:
+        host = (urlsplit(web_url).hostname or "").lower()
+    except ValueError:
+        return None
+    if host.endswith(_VSTS_SUFFIX) and host != _VSTS_SSH_HOST:
         return _AZURE
     return _PUBLIC_HOSTS.get(host)
+
+
+def _is_azure_host(host: str) -> bool:
+    """Whether Azure DevOps serves *host* (lower-case), on the web or over SSH."""
+    return host in _AZURE_HOSTS or host.endswith(_VSTS_SUFFIX)
 
 
 def _strip_suffix(path: str) -> str:
@@ -126,6 +145,8 @@ def _scp_like(remote: str) -> tuple[str, str] | None:
     if "://" in remote or ":" not in remote:
         return None
     host_part, path = remote.split(":", 1)
+    if _IPV6_OPEN in host_part:
+        raise ValueError(_NO_IPV6)
     host = host_part.rsplit("@", 1)[-1]
     # A one-letter "host" is a Windows drive (``C:\\repo``), which git reads as a path.
     if len(host) < 2 or "/" in host or not path:
@@ -138,16 +159,20 @@ def _ssh_web_url(host: str, path: str) -> str:
 
     HTTPS on the same host, except for Azure DevOps, whose SSH host and path
     (``ssh.dev.azure.com:v3/<org>/<project>/<repo>``) are not its web ones.
+    Any other SSH remote on an Azure host gives ``""``.
     """
+    lowered = host.lower()
+    if not _is_azure_host(lowered):
+        return f"https://{host}/{path}"
     parts = path.split("/")
-    azure = len(parts) == _AZURE_SSH_PARTS and parts[0] == _AZURE_SSH_PREFIX
-    if azure and host == _AZURE_SSH_HOST:
-        _, org, project, repo = parts
+    if len(parts) != _AZURE_SSH_PARTS or parts[0] != _AZURE_SSH_PREFIX:
+        return ""
+    _, org, project, repo = parts
+    if lowered == _AZURE_SSH_HOST:
         return f"https://dev.azure.com/{org}/{project}/_git/{repo}"
-    if azure and host == _VSTS_SSH_HOST:
-        _, org, project, repo = parts
+    if lowered == _VSTS_SSH_HOST:
         return f"https://{org}{_VSTS_SUFFIX}/{project}/_git/{repo}"
-    return f"https://{host}/{path}"
+    return ""
 
 
 def web_url_of_remote(remote: str) -> str:
@@ -155,9 +180,19 @@ def web_url_of_remote(remote: str) -> str:
 
     HTTP(S) keeps its scheme; SSH, in either spelling, becomes HTTPS on the same
     host without the port, or Azure DevOps' web address for its SSH remotes.
-    User names and credentials are dropped, and so is a trailing ``.git``.
+    User names and credentials are dropped, and so is a trailing ``.git``. A
+    remote that cannot be parsed gives ``""`` rather than an error, because the
+    link is an extra of the site and never a reason to stop it.
     """
-    remote = remote.strip()
+    try:
+        return _web_url(remote.strip())
+    except ValueError as exc:
+        # The remote is not logged: it can hold a credential.
+        logger.debug("the origin remote is not a readable address (%s)", type(exc).__name__)
+        return ""
+
+
+def _web_url(remote: str) -> str:
     if not remote:
         return ""
     scp = _scp_like(remote)
@@ -169,6 +204,8 @@ def web_url_of_remote(remote: str) -> str:
     path = _strip_suffix(parts.path)
     if not host or not path:
         return ""
+    if ":" in host:
+        raise ValueError(_NO_IPV6)
     if parts.scheme in _WEB_SCHEMES:
         port = f":{parts.port}" if parts.port else ""
         return f"{parts.scheme}://{host}{port}/{path}"

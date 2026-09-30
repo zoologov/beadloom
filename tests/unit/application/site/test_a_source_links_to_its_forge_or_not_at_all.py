@@ -66,6 +66,10 @@ def test_a_public_forge_links_the_source_at_the_commit(url: str, link: str) -> N
         # A host that merely contains a forge's name is not that forge.
         "https://notgithub.com/team/shop",
         "https://github.com.example/team/shop",
+        # Azure DevOps' SSH host serves no web pages (re-review finding m1).
+        "https://vs-ssh.visualstudio.com/DefaultCollection/sales/_ssh/shop",
+        # An address no parser can read gives no link rather than an error.
+        "https://[2001/db8::1]:team/shop",
     ],
 )
 def test_a_host_the_generator_does_not_recognise_gets_no_link(url: str) -> None:

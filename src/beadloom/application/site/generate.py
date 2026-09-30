@@ -88,7 +88,6 @@ from beadloom.application.site.node_pages import (
 from beadloom.application.site.published_docs import build_published_docs, publish_docs
 from beadloom.application.site.repository_link import repository_of
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
-from beadloom.graph.federation import resolve_repo_name
 
 if TYPE_CHECKING:
     import sqlite3
@@ -526,7 +525,6 @@ def generate_site(
             debt=_node_debt(conn, project_root),
         ),
         generated_at=now_ts,
-        project=resolve_repo_name(project_root),
         repository=repository_of(project_root),
     )
     _write(

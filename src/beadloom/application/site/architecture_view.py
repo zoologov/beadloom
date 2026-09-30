@@ -20,11 +20,12 @@ kinds ``consumes`` / ``produces``.
 
 Schema version 2 (BDL-076 A1) keeps every version-1 key and adds the node card
 (:mod:`beadloom.application.site.architecture_card`) and, at the top level, the
-run's provenance (``generated_at``, ``beadloom_version``, ``project``), the
-``repository`` a node's source links to (BDL-076 A3), and the declared
+run's provenance (``generated_at``, ``beadloom_version``) and the declared
 ``layers`` with their ``layer_order``, from which the viewer builds its palette
 instead of a vocabulary of its own. ``touches_code`` stays out: it
-points at files, not at nodes.
+points at files, not at nodes. Nothing derived from the git remote is published
+at the top level: the card needs it only as each node's finished ``source_url``,
+and a remote can carry a credential (BDL-076 re-review finding m3).
 
 Honest degradation (DATA-STRICTNESS): a node with no doc gets an EMPTY
 ``doc_links`` (the view shows none, never a fabricated link); a node with no
@@ -49,7 +50,6 @@ from beadloom.application.site.architecture_card import (
     card_sources,
 )
 from beadloom.application.site.node_pages import _KIND_DIR
-from beadloom.application.site.repository_link import RepositoryLink
 from beadloom.graph.rule_engine import (
     LayerDef,
     LayerExemption,
@@ -65,6 +65,8 @@ from beadloom.infrastructure.repository import count_symbols_owned_by_node
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Collection, Mapping
+
+    from beadloom.application.site.repository_link import RepositoryLink
 
 logger = logging.getLogger(__name__)
 
@@ -562,7 +564,6 @@ def build_architecture_view_data(
     published_doc_slugs: set[str] | None = None,
     verdicts: NodeVerdicts | None = None,
     generated_at: str = "",
-    project: str = "",
     repository: RepositoryLink | None = None,
 ) -> dict[str, object]:
     """Build the deterministic interactive-architecture data model.
@@ -582,15 +583,15 @@ def build_architecture_view_data(
             ``lint_clean``, and ``debt`` — rather than reported clean.
         generated_at: The instant the site run states for this file. The
             caller supplies it, so a fixed value regenerates byte-identically.
-        project: The project's name, as the caller resolves it.
         repository: The repository the card links a node's source to, as the
-            caller resolves it; ``None`` writes an empty link rather than one
-            nobody stated.
+            caller resolves it; ``None`` gives every node an empty link rather
+            than one nobody stated. It reaches the file only as each node's
+            ``source_url``.
 
     Returns:
         A JSON-safe dict with ``schema_version`` 2, ``scope``, ``nodes``,
-        ``edges``, ``generated_at``, ``beadloom_version``, ``project``,
-        ``repository``, ``layers`` and ``layer_order``, every section sorted for byte-stable
+        ``edges``, ``generated_at``, ``beadloom_version``, ``layers`` and
+        ``layer_order``, every section sorted for byte-stable
         serialization. Each node carries its ``layer_rank`` (the partition
         index for the layered-lanes layout) and each ``depends_on`` edge a
         ``violation`` flag when both ends have a rank.
@@ -613,8 +614,6 @@ def build_architecture_view_data(
         "scope": "architecture",
         "generated_at": generated_at,
         "beadloom_version": __version__,
-        "project": project,
-        "repository": (repository or RepositoryLink()).as_dict(),
         "layers": layers.declared(),
         "layer_order": layers.order,
         "nodes": [_node_dict(conn, row, inputs) for row in rows],

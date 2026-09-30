@@ -42,15 +42,15 @@ if TYPE_CHECKING:
 #: Every top-level key of schema version 1.
 V1_TOP_KEYS = {"schema_version", "scope", "nodes", "edges"}
 
-#: The top-level keys schema version 2 adds. `repository` joined in A3, for the
-#: card's link from a node's source to the repository (BDL-076 A3).
+#: The top-level keys schema version 2 adds. Nothing derived from the git remote
+#: is among them: A1 added `project` and A3 `repository`, no screen read either,
+#: and a remote can carry a credential (BDL-076 re-review finding m3). What the
+#: card needs from the remote reaches it as each node's finished `source_url`.
 V2_TOP_KEYS = {
     "generated_at",
     "beadloom_version",
-    "project",
     "layers",
     "layer_order",
-    "repository",
 }
 
 #: Every node key of schema version 1, with `lint_clean` present because lint ran.
@@ -237,9 +237,7 @@ def test_the_schema_version_is_2() -> None:
 def test_the_top_level_keys_are_version_1_plus_the_version_2_additions(
     shop: sqlite3.Connection,
 ) -> None:
-    data = build_architecture_view_data(
-        shop, verdicts=_verdicts(), generated_at="t", project="shop"
-    )
+    data = build_architecture_view_data(shop, verdicts=_verdicts(), generated_at="t")
 
     assert set(data) == V1_TOP_KEYS | V2_TOP_KEYS
     assert data["schema_version"] == 2
@@ -276,29 +274,26 @@ def test_edges_keep_their_version_1_keys(shop: sqlite3.Connection) -> None:
 
 
 def test_the_provenance_is_what_the_caller_states(shop: sqlite3.Connection) -> None:
-    data = build_architecture_view_data(
-        shop, generated_at="2026-09-30T00:00:00+00:00", project="shop"
-    )
+    data = build_architecture_view_data(shop, generated_at="2026-09-30T00:00:00+00:00")
 
     assert data["generated_at"] == "2026-09-30T00:00:00+00:00"
-    assert data["project"] == "shop"
     assert data["beadloom_version"] == __version__
 
 
-def test_the_repository_is_what_the_caller_states(shop: sqlite3.Connection) -> None:
-    data = build_architecture_view_data(
-        shop, repository=RepositoryLink(url="https://git.example/shop", ref="abc123")
-    )
-
-    assert data["repository"] == {"url": "https://git.example/shop", "ref": "abc123"}
-
-
-def test_a_repository_nobody_states_is_empty_rather_than_invented(
+def test_a_repository_the_card_cannot_link_to_leaves_no_trace_in_the_file(
     shop: sqlite3.Connection,
 ) -> None:
-    data = build_architecture_view_data(shop)
+    """The remote reaches the file only as a finished source link (re-review m3).
 
-    assert data["repository"] == {"url": "", "ref": ""}
+    A host no forge is recognised for gets no link, so nothing of it is published:
+    for a private self-hosted repository, the host and the path are internal.
+    """
+    repository = RepositoryLink(url="https://git.corp.example/team/shop", ref="abc123")
+
+    text = json.dumps(build_architecture_view_data(shop, repository=repository))
+
+    assert "git.corp.example" not in text
+    assert "abc123" not in text
 
 
 def test_the_layers_are_the_declaration_in_its_order(shop: sqlite3.Connection) -> None:
@@ -696,23 +691,22 @@ def generated(shop: sqlite3.Connection, tmp_path: Path) -> dict[str, object]:
 def test_the_generator_stamps_the_file_with_its_run(generated: dict[str, object]) -> None:
     assert generated["schema_version"] == 2
     assert generated["generated_at"] == "2026-09-30T00:00:00+00:00"
-    assert generated["project"] == "shop"
     assert generated["beadloom_version"] == __version__
 
 
-def test_the_generator_names_no_repository_for_a_project_outside_git(
+def test_the_generator_links_no_source_for_a_project_outside_git(
     generated: dict[str, object],
 ) -> None:
-    assert generated["repository"] == {"url": "", "ref": ""}
+    assert all(node["source_url"] == "" for node in _nodes(generated).values())
 
 
-def test_the_generator_reads_the_repository_from_the_projects_own_remote(
+def test_the_generator_links_sources_through_the_projects_own_remote(
     shop: sqlite3.Connection, tmp_path: Path
 ) -> None:
     project = tmp_path / "shop"
     project.mkdir()
     _git(project, "init", "-q")
-    _git(project, "remote", "add", "origin", "git@git.example:team/shop.git")
+    _git(project, "remote", "add", "origin", "git@github.com:team/shop.git")
     identity = ("-c", "user.name=t", "-c", "user.email=t@example")
     _git(project, *identity, "commit", "-q", "--allow-empty", "-m", "first")
     head = _git(project, "rev-parse", "HEAD")
@@ -721,7 +715,9 @@ def test_the_generator_reads_the_repository_from_the_projects_own_remote(
     generate_site(shop, out, project_root=project, now_ts="2026-09-30T00:00:00+00:00")
 
     loaded = json.loads((out / "public" / "architecture.data.json").read_text("utf-8"))
-    assert loaded["repository"] == {"url": "https://git.example/team/shop", "ref": head}
+    assert _nodes(loaded)["pricing"]["source_url"] == (
+        f"https://github.com/team/shop/tree/{head}/src/orders/pricing.py"
+    )
 
 
 def test_the_generator_links_a_component_to_its_page(generated: dict[str, object]) -> None:

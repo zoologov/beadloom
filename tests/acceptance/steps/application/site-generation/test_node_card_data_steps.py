@@ -39,6 +39,10 @@ _NOW = "2026-09-30T00:00:00+00:00"
 #: The one person who commits to the scenario's repository. The name is unusual
 #: enough that finding it anywhere in the data file can only mean it leaked.
 _AUTHOR = "Ada Quillfeather"
+_AUTHOR_EMAIL = "ada@example.invalid"
+
+#: The data files the site publishes, one per screen, under ``public/``.
+_DATA_FILES = ("architecture.data.json", "dashboard.data.json", "landscape.data.json")
 
 #: The activity keys the node card shows (BDL-076 R1 finding M2).
 _CARD_ACTIVITY_KEYS = {"commits_30d", "level"}
@@ -78,7 +82,7 @@ def _git_repository(world: dict[str, Any], remote: str) -> None:
     _git(project, "init", "-q")
     _git(project, "remote", "add", "origin", remote)
     _git(project, "add", "-A")
-    identity = ("-c", f"user.name={_AUTHOR}", "-c", "user.email=ada@example.invalid")
+    identity = ("-c", f"user.name={_AUTHOR}", "-c", f"user.email={_AUTHOR_EMAIL}")
     _git(project, *identity, "commit", "-q", "-m", "the shop")
     world["ref"] = _git(project, "rev-parse", "HEAD")
     # Reindexed after the commit, so the recorded activity names the author.
@@ -195,10 +199,31 @@ def _no_source_link(world: dict[str, Any], ref: str) -> None:
     assert node["source_url"] == ""
 
 
-@then("the data file does not contain the name of the project's commit author")
+def _files_containing(site: Path, needle: str) -> list[str]:
+    """Every generated file under *site* that holds *needle*, by its site path.
+
+    Every file is read, not only the architecture view: the site publishes a data
+    file per screen and a page per node, and a leak into any of them is published
+    (BDL-076 re-review finding m4). The scan states what it covered, so an empty
+    answer cannot come from a site that was not generated.
+    """
+    files = sorted(path for path in site.rglob("*") if path.is_file())
+    data_files = {path.name for path in files if path.parent == site / "public"}
+    assert set(_DATA_FILES) <= data_files, f"the site wrote {sorted(data_files)}"
+    assert any(path.suffix == ".md" for path in files), "the site wrote no page"
+    marker = needle.encode("utf-8")
+    return [str(path.relative_to(site)) for path in files if marker in path.read_bytes()]
+
+
+@then("no generated file names the project's commit author")
 def _no_author(world: dict[str, Any]) -> None:
-    text = (world["site"] / _VIEW_DATA).read_text(encoding="utf-8")
-    assert _AUTHOR not in text
+    for trace in (_AUTHOR, _AUTHOR_EMAIL):
+        assert _files_containing(world["site"], trace) == [], trace
+
+
+@then(parsers.parse('no generated file contains "{secret}"'))
+def _no_secret(world: dict[str, Any], secret: str) -> None:
+    assert _files_containing(world["site"], secret) == []
 
 
 @then(parsers.parse('the node "{ref}" carries only the activity the card shows'))

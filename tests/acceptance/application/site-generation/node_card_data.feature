@@ -72,5 +72,47 @@ Feature: the architecture data file carries what a node card shows
     Given a project whose storage pool imports the catalogue above it, with tests bound to the pool
     And the project is a git repository whose origin is "git@github.com:team/shop.git"
     When the site is generated for the project
-    Then the data file does not contain the name of the project's commit author
+    Then no generated file names the project's commit author
     And the node "storage-pool" carries only the activity the card shows
+
+  # BDL-076 re-review finding m3 (`beadloom-ujzb.10`). Nothing derived from the
+  # git remote is published unless a screen reads it: the finished source link
+  # is, and the remote itself is not. A credential written into the remote, in
+  # any of the places git lets one be written, reaches no generated file.
+  @bead:beadloom-ujzb.10
+  Scenario Outline: a credential written into the remote reaches no generated file
+    Given a project whose storage pool imports the catalogue above it, with tests bound to the pool
+    And the project is a git repository whose origin is "<remote>"
+    When the site is generated for the project
+    Then no generated file contains "hunter2-vx9q"
+
+    Examples:
+      | remote                                                          |
+      | https://x-access-token:hunter2-vx9q@github.com/team/shop.git    |
+      | https://oauth2:hunter2-vx9q@gitlab.com/team/sub/shop.git        |
+      | https://org:hunter2-vx9q@dev.azure.com/org/sales/_git/shop      |
+      | https://user:p@hunter2-vx9q@github.com/team/shop.git            |
+      | ssh://git:hunter2-vx9q@github.com/team/shop.git                 |
+      | https://github.com/team/shop.git?token=hunter2-vx9q             |
+      | https://github.com/team/shop.git#hunter2-vx9q                   |
+      | user:hunter2-vx9q@github.com:team/shop.git                      |
+
+  # BDL-076 re-review findings m1 and m2 (`beadloom-ujzb.10`). A legacy Azure
+  # DevOps SSH remote was given a web address on its SSH host, a link that looks
+  # right and is not; an IPv6 or a bad-port remote stopped the whole site. A
+  # remote the generator cannot turn into a forge's page gives no link, and the
+  # site is still generated.
+  @bead:beadloom-ujzb.10
+  Scenario Outline: a remote the generator cannot read gives no source link and stops nothing
+    Given a project whose storage pool imports the catalogue above it, with tests bound to the pool
+    And the project is a git repository whose origin is "<remote>"
+    When the site is generated for the project
+    Then the node "storage-pool" has no source link
+
+    Examples:
+      | remote                                                                  |
+      | ssh://org@vs-ssh.visualstudio.com:22/DefaultCollection/sales/_ssh/shop  |
+      | ssh://org@org.visualstudio.com:22/DefaultCollection/sales/_ssh/shop     |
+      | git@[2001:db8::1]:team/shop.git                                         |
+      | ssh://git@[2001:db8::1]:22/team/shop.git                                |
+      | https://github.com:https/team/shop.git                                  |
