@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-ujzb.6` (landscape impact, owner) ∥ `beadloom-ujzb.10` (the re-review's residue); then W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-qlii` (W1, the docs of slice 1); then P1 (the owner's look, PR 1). Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** impact on the landscape passes its browser cases; nothing from the git remote is published unread, and no remote form crashes generation or yields a wrong link.
+**Done when:** every stale pair fresh, the three new slices have their pages, `beadloom ci` rc 0.
+
+**A6 closed (2026-09-30):** `beadloom-ujzb.6` `de4a4c2b` — impact on the landscape: the same Impact toggle, rings with no depth limit, contracts and protocols crossed, broken contracts on the path, risk per service (broken or unverified contract), `why`/`ctx` to copy. The walk is generalised (`dependentsOf` takes, per edge kind, the end that depends): producer → consumer for amqp, graphql and plain dependency. Each landscape contract gains `verdict_basis`. Playwright 99 passed (7 new or changed, red first); pytest 1 failed (stale pairs); `beadloom ci` rc 1 on 69 stale pairs.
 
 **Residue closed (2026-09-30):** `beadloom-ujzb.10` `52c0bbe3` — the remote reaches the data file only as each node's `source_url`; the top-level `repository` and `project` keys are removed (both unread; `project` leaked `?token=` from a remote's basename); unparseable remotes give no link, never a crash; the author check scans every generated file. 30 tests, each seen red. Filed outside: `beadloom-147x` (P1, `beadloom export` publishes a remote's query or fragment in the repo name). CONTEXT row for the removal is pending until A6 commits its own rows.
 
@@ -81,10 +83,10 @@
 | `beadloom-bp8n` | T1 test | ✓ done | slice 1 criteria |
 | `beadloom-arak` | R1 review | ✓ done | review slice 1 |
 | `beadloom-ujzb.7` | fix | ✓ done | R1's findings M1, M2, m1–m6, n1–n5 |
-| `beadloom-ujzb.6` | dev | in progress | landscape impact mode (owner) |
+| `beadloom-ujzb.6` | dev | ✓ done | landscape impact mode (owner) |
 | `beadloom-ujzb.9` | review | ✓ done | re-review of M1, M2 |
 | `beadloom-ujzb.10` | fix | ✓ done | the re-review's residue |
-| `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
+| `beadloom-qlii` | W1 tech-writer | in progress | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |
 | `beadloom-qki6` | B2 dev | blocked | our site through the same path |
