@@ -2,19 +2,24 @@
 // Which edges a walk follows, and each node's edges read as neighbours.
 //
 // A neighbourhood follows every kind drawn as a line, in the direction the
-// arrow points. The impact walk follows only the kinds whose source depends on
-// its target — `depends_on`, `uses` and `consumes` — backwards, from a node to
-// what depends on it. `produces` points from the producer to what it produces,
-// which is not a dependency of the producer, so a change's reach does not
-// travel along it.
+// arrow points. The impact walk goes from a node to what depends on it, and a
+// table names, per edge kind it follows, the end that depends on the other
+// (`dependentsOf`). In the architecture graph that is the source of
+// `depends_on`, `uses` and `consumes`. `produces` points from the producer to
+// what it produces, which is not a dependency of the producer, and the
+// architecture's impact does not follow it; the landscape, whose every edge is
+// a contract from a producer to a consumer, names its own table.
 
 import { DRAWN_KINDS, EDGE_STYLES, isDrawnKind, isViolation } from "./edgeKinds.js";
 
 /** The kinds a neighbourhood walks: every kind drawn as a line. */
 export const NEIGHBOURHOOD_KINDS = DRAWN_KINDS;
 
-/** The kinds whose source depends on its target: what the impact walk follows. */
-export const DEPENDENCY_KINDS = Object.freeze(["depends_on", "uses", "consumes"]);
+/** The end of an edge that depends on the other, per kind: the source of each dependency kind. */
+export const DEPENDENT_ENDS = Object.freeze({ depends_on: "src", uses: "src", consumes: "src" });
+
+/** The kinds whose source depends on its target: what the architecture's impact walk follows. */
+export const DEPENDENCY_KINDS = Object.freeze(Object.keys(DEPENDENT_ENDS));
 
 /** The key of a drawn edge: its kind, source and target. Two contracts on one pair share it. */
 export function edgeKeyOf(edge) {
@@ -45,6 +50,25 @@ export function adjacencyOf(edges, kinds, ids) {
     append(into, edge.dst, { id: edge.src, key });
   }
   return { out, in: into };
+}
+
+/**
+ * For each node, what depends on it: `Map` of id to `[{ id, key }]`.
+ *
+ * `dependentEnds` names, per edge kind the walk follows, the end that depends
+ * on the other (`src` or `dst`); an edge of another kind is left out. As in
+ * `adjacencyOf`, only edges between two of `ids` count, and a loop is left out.
+ */
+export function dependentsOf(edges, dependentEnds, ids) {
+  const dependents = new Map();
+  for (const edge of edges) {
+    if (!Object.hasOwn(dependentEnds, edge.kind) || edge.src === edge.dst) continue;
+    const end = dependentEnds[edge.kind];
+    if (!ids.has(edge.src) || !ids.has(edge.dst)) continue;
+    const [dependent, dependency] = end === "src" ? [edge.src, edge.dst] : [edge.dst, edge.src];
+    append(dependents, dependency, { id: dependent, key: edgeKeyOf(edge) });
+  }
+  return dependents;
 }
 
 /**

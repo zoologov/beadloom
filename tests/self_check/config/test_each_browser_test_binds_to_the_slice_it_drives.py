@@ -38,6 +38,7 @@ SPEC_SLICE = {
     "fullscreen.spec.js": "site-fullscreen",
     "graph-viewer-instances.spec.js": "site-graph-viewer",
     "impact.spec.js": "site-impact-view",
+    "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
     "navigation.spec.js": "site-navigate-graph",

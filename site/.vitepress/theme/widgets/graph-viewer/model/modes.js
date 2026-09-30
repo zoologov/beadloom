@@ -8,17 +8,25 @@
 // full screen, the panel, the legend and URL state are the core's, the same in
 // both.
 //
-// The landscape offers no impact mode: impact walks the dependency edges
-// backwards and summarises domains, services and layer boundaries, and the
-// landscape has contracts between services, with no layers and no containers.
-// Its neighbourhood, one step both ways by default, is what its old "Focus"
-// control showed.
+// Both offer the impact mode (the landscape since `beadloom-ujzb.6`), and a
+// mode names its walk: which end of each edge kind depends on the other, and
+// the summary of what the walk reached. The architecture walks the dependency
+// edges backwards and summarises domains, services and layer boundaries; the
+// landscape walks each contract from its producer to its consumers and
+// summarises the contracts and protocols crossed and the broken ones. The
+// landscape's neighbourhood, one step both ways by default, is what its old
+// "Focus" control showed.
 //
 // The mode is the page's, not the URL's: the architecture page and the
 // landscape page are two pages, and a query cannot turn one into the other.
 
 import { useArchitectureData } from "../../../entities/architecture-data/index.js";
-import { landscapeGraphOf, useLandscapeData } from "../../../entities/landscape-data/index.js";
+import { DEPENDENT_ENDS } from "../../../entities/graph-edge/index.js";
+import {
+  CONTRACT_DEPENDENT_ENDS,
+  landscapeGraphOf,
+  useLandscapeData,
+} from "../../../entities/landscape-data/index.js";
 import {
   CONTRACT_FILTER_DEFAULTS,
   ContractFilterControls,
@@ -29,6 +37,7 @@ import {
   visibleContracts,
   visibleNodeIds,
 } from "../../../features/filter-graph/index.js";
+import { contractImpactSummary, impactSummary } from "../../../features/impact-view/index.js";
 
 const list = (value) => (Array.isArray(value) ? value : []);
 
@@ -53,7 +62,8 @@ export const MODES = Object.freeze({
       nodes: visibleNodeIds(graph.nodes, filters, context),
       contracts: null,
     }),
-    impact: true,
+    // The impact walk: the end of each edge kind that depends on the other, and its summary.
+    impact: Object.freeze({ dependentEnds: DEPENDENT_ENDS, summarise: impactSummary }),
   }),
   landscape: Object.freeze({
     label: "Landscape of contracts",
@@ -63,7 +73,7 @@ export const MODES = Object.freeze({
     filterControls: ContractFilterControls,
     filterOptions: (graph) => contractFilterOptions(graph.contracts),
     visible: (graph, filters) => visibleContracts(graph, filters),
-    impact: false,
+    impact: Object.freeze({ dependentEnds: CONTRACT_DEPENDENT_ENDS, summarise: contractImpactSummary }),
   }),
 });
 

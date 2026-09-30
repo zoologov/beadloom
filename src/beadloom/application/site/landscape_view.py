@@ -56,6 +56,16 @@ _NEUTRAL = "neutral"
 # Health severity ordering: broken poisons neutral poisons healthy.
 _SEVERITY = {_HEALTHY: 0, _NEUTRAL: 1, _BROKEN: 2}
 
+# What decided a contract's verdict (``verdict_basis``): a comparison of the
+# declared surface, only which sides exist, or a declared lifecycle intent.
+_BASIS_SURFACE = "surface"
+_BASIS_PRESENCE = "presence"
+_BASIS_LIFECYCLE = "lifecycle"
+_CONFIRMED = "confirmed"
+_BREAKING = "breaking"
+# The verdicts a declared lifecycle decides before any comparison (``classify``).
+_LIFECYCLE_VERDICTS = frozenset({"external", "dead", "expected"})
+
 
 def _health_class(verdict: str) -> str:
     """Map a verdict to its health bucket (healthy / broken / neutral)."""
@@ -185,10 +195,41 @@ def _routing(contract: Contract) -> dict[str, str]:
     return {}
 
 
+def _compares_surface(contract: Contract) -> bool:
+    """Whether reconciling *contract* compares what its consumer reads with its producer.
+
+    AMQP compares two bodies, so both sides must declare one. GraphQL compares
+    typed fields when both sides declare them, and otherwise the names a
+    consumer references against the names exposed, so any reference is a
+    comparison. Any other protocol has no surface the reconciler reads.
+    """
+    if contract.protocol == _AMQP:
+        return bool(contract.exposed_body and contract.referenced_body)
+    if contract.protocol == _GRAPHQL:
+        typed = bool(contract.exposed_fields and contract.referenced_fields)
+        return typed or bool(contract.references)
+    return False
+
+
+def _verdict_basis(contract: Contract, verdict: str) -> str:
+    """What decided *verdict*: the surface, the presence of the sides, or the lifecycle.
+
+    The viewer marks a contract nothing compared as unverified, and a GraphQL
+    comparison by name leaves no trace in the data file, so the generator,
+    which ran the reconciliation, states it (BDL-076, ``beadloom-ujzb.6``).
+    """
+    if verdict in _LIFECYCLE_VERDICTS:
+        return _BASIS_LIFECYCLE
+    if verdict == _BREAKING or (verdict == _CONFIRMED and _compares_surface(contract)):
+        return _BASIS_SURFACE
+    return _BASIS_PRESENCE
+
+
 def _contract_dict(contract: Contract) -> dict[str, object]:
     """Project one reconciled Contract to its JSON-safe pop-up payload.
 
-    Carries the producer↔consumer endpoints, the verdict, the protocol routing,
+    Carries the producer↔consumer endpoints, the verdict and what decided it
+    (``verdict_basis``), the protocol routing,
     the named ``missing`` break paths, and the deep field surface: the GraphQL
     typed ``fields`` (S2) OR the AMQP ``body`` JSON-Schema (S3). An absent surface
     is an EMPTY block (the view renders "undeclared") — never a fabricated field.
@@ -199,6 +240,7 @@ def _contract_dict(contract: Contract) -> dict[str, object]:
         "protocol": contract.protocol,
         "name": contract.name,
         "verdict": verdict,
+        "verdict_basis": _verdict_basis(contract, verdict),
         "lifecycle": contract.lifecycle,
         "routing": _routing(contract),
         "producers": sorted({e.ref_id for e in contract.producers}),
@@ -370,7 +412,10 @@ def render_landscape_view_md(data: dict[str, object]) -> str:
         "producer to its consumer and are coloured by health (verdict). Select a "
         "service for its card: every contract it produces or consumes, with the "
         "protocol, routing, producers and consumers, verdict and the field/type "
-        "surface, and its neighbourhood on the map. Filter by protocol and "
+        'surface, and its neighbourhood on the map. "Impact" shows every '
+        "service a change to the selected one reaches: the consumers of what it "
+        "produces, and theirs, with the contracts crossed and the services at "
+        "risk. Filter by protocol and "
         "verdict, or show only the problems. The deep field data degrades "
         "honestly to *undeclared* when a surface was not declared.",
         "",

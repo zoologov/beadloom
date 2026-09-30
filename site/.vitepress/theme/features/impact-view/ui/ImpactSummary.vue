@@ -3,20 +3,47 @@
 // The impact mode's summary in the viewer's panel.
 //
 // It states first that this is the graph's view, then the count, the rings by
-// distance in their colours, the domains and services, the layer boundaries
-// crossed and the risky nodes, and last the two terminal commands that give
-// the code-level answer. A click on a node in it asks the viewer to select it.
+// distance in their colours, what the walk crossed and the risky nodes, and
+// last the terminal commands for the answer beyond the graph. What the walk
+// crossed depends on the walk the summary reads: in the architecture, the
+// domains, services and layer boundaries (`impact.js`); on the landscape, the
+// contracts, their protocols and the broken ones (`contractImpact.js`). The
+// commands are those that take what was selected: a node's ref and its source
+// in the architecture, and a service's ref on the landscape, where `impact`,
+// which takes a path, has nothing to take. A click on a node in it asks the
+// viewer to select it.
 
+import { computed } from "vue";
 import { shellQuote } from "../../../shared/lib/index.js";
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
+import { CONTRACT_WALK } from "../lib/contractImpact.js";
 import { RING_TONES, ringOf } from "../model/rings.js";
 
-defineProps({
+const props = defineProps({
   summary: { type: Object, required: true },
   source: { type: String, default: "" },
 });
 const emit = defineEmits(["select"]);
+
+const overContracts = computed(() => props.summary.walk === CONTRACT_WALK);
+
+const commands = computed(() => {
+  const ref = shellQuote(props.summary.focus);
+  if (overContracts.value) return [`beadloom why ${ref}`, `beadloom ctx ${ref}`];
+  const commands = [`beadloom why ${ref}`];
+  if (props.source) commands.push(`beadloom impact ${shellQuote(props.source)}`);
+  return commands;
+});
+
+/** The words after the count of what the walk reached. */
+function reachLine(count) {
+  const one = count === 1;
+  if (overContracts.value) {
+    return one ? "service is reached through contracts." : "services are reached through contracts.";
+  }
+  return one ? "node depends on it." : "nodes depend on it.";
+}
 
 function swatch(distance) {
   return { background: `var(${TOKEN_VARIABLES[RING_TONES[ringOf(distance)]]})` };
@@ -26,7 +53,12 @@ function swatch(distance) {
 <template>
   <section class="bl-impact" data-testid="impact-summary" aria-label="Impact">
     <h3>Impact of {{ summary.focus }}</h3>
-    <p class="bl-impact-statement">
+    <p v-if="overContracts" class="bl-impact-statement">
+      This is the graph view — not a reading of the code. It follows the contracts the landscape
+      records, from each producer to its consumers, whatever the protocol: a service that consumes
+      what a changed service produces is reached, and so are its own consumers.
+    </p>
+    <p v-else class="bl-impact-statement">
       This is the graph view — not a reading of the code. It follows the
       <code>depends_on</code>, <code>uses</code> and <code>consumes</code> edges the index holds,
       which come from imports and declarations.
@@ -34,7 +66,7 @@ function swatch(distance) {
 
     <p class="bl-impact-count">
       <strong data-testid="impact-count">{{ summary.affected.length }}</strong>
-      {{ summary.affected.length === 1 ? "node depends" : "nodes depend" }} on it.
+      {{ reachLine(summary.affected.length) }}
     </p>
     <ul v-if="summary.byDistance.length" class="bl-impact-rings">
       <li v-for="ring in summary.byDistance" :key="ring.distance">
@@ -43,7 +75,21 @@ function swatch(distance) {
       </li>
     </ul>
 
-    <dl>
+    <dl v-if="overContracts">
+      <dt>Contracts crossed</dt>
+      <dd>
+        <strong data-testid="impact-contract-count">{{ summary.contracts.length }}</strong>
+        <template v-if="summary.contracts.length">: {{ summary.contracts.join(", ") }}</template>
+      </dd>
+      <dt>Protocols</dt>
+      <dd>{{ summary.protocols.join(", ") || "none" }}</dd>
+      <dt>Broken on the path</dt>
+      <dd>
+        <template v-if="!summary.broken.length">none</template>
+        <code v-for="key in summary.broken" v-else :key="key" class="bl-impact-broken" :data-broken-contract="key">{{ key }}</code>
+      </dd>
+    </dl>
+    <dl v-else>
       <dt>Domains</dt>
       <dd>{{ summary.domains.join(", ") || "none" }}</dd>
       <dt>Services</dt>
@@ -66,9 +112,8 @@ function swatch(distance) {
       </li>
     </ul>
 
-    <h4>The code-level answer</h4>
-    <CopyCommand :command="`beadloom why ${shellQuote(summary.focus)}`" />
-    <CopyCommand v-if="source" :command="`beadloom impact ${shellQuote(source)}`" />
+    <h4>{{ overContracts ? "In the terminal" : "The code-level answer" }}</h4>
+    <CopyCommand v-for="command in commands" :key="command" :command="command" />
   </section>
 </template>
 
@@ -130,8 +175,13 @@ function swatch(distance) {
   border-radius: 50%;
   vertical-align: -2px;
 }
-.bl-impact-boundary {
+.bl-impact-boundary,
+.bl-impact-broken {
   display: block;
+}
+.bl-impact-broken {
+  width: fit-content;
+  color: var(--vp-c-danger-1);
 }
 .bl-impact-risk {
   margin-left: 6px;

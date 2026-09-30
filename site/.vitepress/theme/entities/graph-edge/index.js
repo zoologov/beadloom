@@ -14,8 +14,10 @@ export {
 } from "./model/edgeKinds.js";
 export {
   DEPENDENCY_KINDS,
+  DEPENDENT_ENDS,
   NEIGHBOURHOOD_KINDS,
   adjacencyOf,
+  dependentsOf,
   edgeGroupsOf,
   edgeKeyOf,
 } from "./model/adjacency.js";

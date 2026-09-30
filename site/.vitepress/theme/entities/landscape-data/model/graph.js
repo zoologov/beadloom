@@ -13,6 +13,18 @@ import { HEALTH, healthOf, lookOf } from "./contracts.js";
 /** The kind a contract edge is drawn and walked as. */
 export const CONTRACT_EDGE_KIND = "produces";
 
+/**
+ * The end of a contract edge that depends on the other: the consumer, its target.
+ *
+ * Every protocol reads the same way. An AMQP consumer reads the body of the
+ * message its producer publishes, a GraphQL consumer calls the schema its
+ * producer serves, and a plain dependency is declared as `consumes` by the
+ * consumer; in each, the reconciler's `breaking` verdict is the producer
+ * breaking what the consumer reads. So a change to a service reaches the
+ * consumers of what it produces, along the edge, and never its producers.
+ */
+export const CONTRACT_DEPENDENT_ENDS = Object.freeze({ [CONTRACT_EDGE_KIND]: "dst" });
+
 const list = (value) => (Array.isArray(value) ? value : []);
 
 function nodeOf(node) {

@@ -18,17 +18,19 @@
 // does not import another — and, in impact mode, the impact summary above it.
 //
 // A selection is a walk from the selected node. In the neighbourhood it goes
-// to the chosen depth and direction; in impact mode it goes backwards along the
-// dependency edges without a limit. What the walk leaves out is dimmed, or
-// hidden when the reader asks; the containers of what it reached stay.
+// to the chosen depth and direction; in impact mode it goes to everything that
+// depends on the node, without a limit, by the mode's walk: backwards along the
+// dependency edges in the architecture, from a producer to its consumers on the
+// landscape. What the walk leaves out is dimmed, or hidden when the reader
+// asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-node/index.js";
 import {
-  DEPENDENCY_KINDS,
   EdgeLegend,
   NEIGHBOURHOOD_KINDS,
   adjacencyOf,
+  dependentsOf,
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
 import { LayerLegend, layerOfNode, layersOf } from "../../../entities/layer/index.js";
@@ -47,7 +49,6 @@ import {
   ImpactButton,
   ImpactSummary,
   impactOf,
-  impactSummary,
   ringOf,
 } from "../../../features/impact-view/index.js";
 import { FullscreenButton, useFullscreen } from "../../../features/fullscreen/index.js";
@@ -113,23 +114,27 @@ const selectedLayer = computed(() =>
 
 const ids = computed(() => new Set(nodeById.value.keys()));
 const drawnAdjacency = computed(() => adjacencyOf(edges.value, NEIGHBOURHOOD_KINDS, ids.value));
-const dependencyAdjacency = computed(() => adjacencyOf(edges.value, DEPENDENCY_KINDS, ids.value));
-const impactMode = computed(() => mode.impact && state.view === IMPACT_VIEW);
+// What depends on each node, by the mode's impact walk; empty where the mode offers none.
+const dependents = computed(() =>
+  mode.impact ? dependentsOf(edges.value, mode.impact.dependentEnds, ids.value) : new Map()
+);
+const impactMode = computed(() => Boolean(mode.impact) && state.view === IMPACT_VIEW);
 
 // The walk from the selected node, or null when nothing is selected.
 const walk = computed(() => {
   if (!selectedNode.value) return null;
   return impactMode.value
-    ? impactOf(state.focus, dependencyAdjacency.value)
+    ? impactOf(state.focus, dependents.value)
     : neighbourhoodOf(state.focus, drawnAdjacency.value, { depth: state.depth, dir: state.dir });
 });
 const summary = computed(() => {
   if (!walk.value || !impactMode.value) return null;
-  return impactSummary(state.focus, walk.value, {
+  return mode.impact.summarise(state.focus, walk.value, {
     nodeById: nodeById.value,
     parents: parents.value,
     layers: layers.value,
     edges: edges.value,
+    contracts: graph.value.contracts,
   });
 });
 const selection = computed(() => {

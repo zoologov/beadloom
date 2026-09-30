@@ -44,7 +44,8 @@ test("the landscape page draws every service of its data file in the viewer, in 
     await expect(toolbar.getByLabel(label, { exact: true })).toBeVisible();
   }
   await expect(toolbar.getByLabel("Kind", { exact: true })).toHaveCount(0);
-  await expect(toolbar.getByRole("button", { name: "Impact" })).toHaveCount(0);
+  // The owner's ruling after A4 (beadloom-ujzb.6): the landscape has an impact mode too.
+  await expect(toolbar.getByRole("button", { name: "Impact", exact: true })).toBeVisible();
 });
 
 test("the verdict filter keeps the services its edges touch, and the view survives a reload", async ({

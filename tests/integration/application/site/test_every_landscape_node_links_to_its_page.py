@@ -81,3 +81,17 @@ def test_the_landscape_page_describes_the_map_it_mounts(
     assert "click a node or edge" not in page
     assert "Select a service" in page
     assert "every contract it produces or consumes" in page
+
+
+def test_the_landscape_page_names_its_impact_mode(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """The landscape has an impact mode (beadloom-ujzb.6), and the page says what it walks."""
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+
+    page = (out / "landscape.md").read_text(encoding="utf-8")
+    assert (
+        '"Impact" shows every service a change to the selected one reaches: the consumers '
+        "of what it produces, and theirs" in page
+    )
