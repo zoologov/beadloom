@@ -12,19 +12,29 @@ These are the cheap structural guards that catch that class WITHOUT needing node
 1. Every runtime dependency the viz worker path needs is declared in
    ``site/package.json`` (``cytoscape`` / ``cytoscape-elk`` / ``elkjs`` /
    ``web-worker``) — the exact gap the dev-only crash slipped through.
-2. The committed Vue components reference only theme/composable modules that
-   actually exist (a broken relative import is a build/runtime crash, not a
-   Python failure) — the architecture view reuses the SAME Cytoscape+ELK stack.
+2. Every relative import in the committed theme points at a file that exists
+   (a broken relative import is a build/runtime crash, not a Python failure).
+
+BDL-076 A2 moved the theme into Feature-Sliced Design layers, so the structural
+guards below name the slice that now holds each piece of wiring. The behaviour
+itself is driven in a browser by the Playwright cases under ``site/e2e/``; these
+guards only catch a regression that drops the wiring, and each one FAILS rather
+than skips when its file is missing, because a skipped guard over a moved file
+reads exactly like a passing one.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _SITE = _REPO_ROOT / "site"
 _THEME = _SITE / ".vitepress" / "theme"
@@ -58,126 +68,114 @@ def test_viz_worker_deps_declared() -> None:
 
 
 def _local_imports(source: str) -> list[str]:
-    """Relative ``import ... from "./..."`` specifiers in a JS/Vue source."""
-    return re.findall(r"""import\s+[^;]*?from\s+["'](\.[^"']+)["']""", source)
+    """Relative ``import``/``export ... from "./..."`` specifiers in a JS/Vue source."""
+    return re.findall(r"""(?:import|export)\s+[^;]*?from\s+["'](\.[^"']+)["']""", source)
 
 
-@pytest.mark.parametrize("component", ["ArchitectureMap.vue", "LandscapeMap.vue"])
-def test_viz_component_local_imports_resolve(component: str) -> None:
-    """The viz component's relative theme/composable imports point at real files."""
-    path = _THEME / "components" / component
-    if not path.exists():
-        pytest.skip(f"{component} absent in this checkout")
-    source = path.read_text(encoding="utf-8")
-    for spec in _local_imports(source):
+def _theme_sources() -> list[Path]:
+    return sorted(
+        path for path in _THEME.rglob("*") if path.suffix in {".js", ".vue"} and path.is_file()
+    )
+
+
+def _read(relative: str) -> str:
+    path = _THEME / relative
+    assert path.exists(), f"{relative} is missing from the theme"
+    return path.read_text(encoding="utf-8")
+
+
+def test_the_theme_has_sources() -> None:
+    """The guards below read the theme; an empty theme would make them vacuous."""
+    assert len(_theme_sources()) > 30
+
+
+@pytest.mark.parametrize("path", _theme_sources(), ids=lambda p: str(p.relative_to(_THEME)))
+def test_every_relative_import_in_the_theme_resolves(path: Path) -> None:
+    """Each relative import of a theme file points at a real file."""
+    for spec in _local_imports(path.read_text(encoding="utf-8")):
         resolved = (path.parent / spec).resolve()
         assert resolved.exists(), (
-            f"{component} imports {spec!r} which does not resolve to a file "
+            f"{path.relative_to(_THEME)} imports {spec!r} which does not resolve to a file "
             f"({resolved}); a broken import is a dev/runtime crash."
         )
 
 
+def test_the_vitepress_entry_hands_over_the_app_layer() -> None:
+    """VitePress looks for `theme/index.js`; it re-exports the `app` layer."""
+    assert 'export { default } from "./app/index.js"' in _read("index.js")
+
+
 def test_architecture_component_registered_in_theme() -> None:
     """ArchitectureMap is registered globally so the generated page can mount it."""
-    index = _THEME / "index.js"
-    if not index.exists():
-        pytest.skip("theme/index.js absent in this checkout")
-    source = index.read_text(encoding="utf-8")
-    assert "ArchitectureMap" in source
-    assert 'app.component("ArchitectureMap"' in source
+    source = _read("app/index.js")
+    assert 'import { ArchitectureMap } from "../pages/architecture/index.js"' in source
+    assert "ArchitectureMap," in source
+    assert "app.component(name, component)" in source
 
 
-# ---------------------------------------------------------------------------
-# BDL-060 S4 rework — structural guards for the canonical layered-lanes view +
-# the four bug fixes + the landscape protocol-card fix. The interactive
-# behaviours run client-side (full visual check is the owner's re-review); these
-# guards catch a regression that drops the wiring entirely.
-# ---------------------------------------------------------------------------
+def test_the_layout_hands_each_node_its_lane() -> None:
+    """ELK partitioning is on, and each node's layer rank reaches ELK as its partition."""
+    layout = _read("shared/cytoscape/layout.js")
+    assert '"elk.partitioning.activate": "true"' in layout
+    assert '"elk.direction": "DOWN"' in layout
+    assert "nodeLayoutOptions: laneOf" in layout
+    assert '"elk.partitioning.partition"' in layout
+    elements = _read("widgets/graph-viewer/lib/elements.js")
+    assert "data.partition = node.layer_rank" in elements
 
 
-def _arch_theme() -> str:
-    path = _THEME / "architectureTheme.js"
-    if not path.exists():
-        pytest.skip("architectureTheme.js absent in this checkout")
-    return path.read_text(encoding="utf-8")
+def test_no_css_variable_reaches_cytoscape() -> None:
+    """Cytoscape rejects `var(...)` and draws its fallback grey; the stylesheet has none."""
+    code = re.sub(r"//[^\n]*", "", _read("widgets/graph-viewer/lib/stylesheet.js"))
+    assert "var(" not in code
+    assert "tokens.text1" in code
 
 
-def _arch_map() -> str:
-    path = _THEME / "components" / "ArchitectureMap.vue"
-    if not path.exists():
-        pytest.skip("ArchitectureMap.vue absent in this checkout")
-    return path.read_text(encoding="utf-8")
+def test_violation_edges_have_their_own_style() -> None:
+    """A depends_on the layer rule judged against the layers is drawn as a violation."""
+    kinds = _read("entities/graph-edge/model/edgeKinds.js")
+    assert 'edge.kind === "depends_on" && edge.violation === true' in kinds
+    assert "[VIOLATION_KEY]: {" in kinds
+    assert 'edge[styleKey = "violation"]' in _read("widgets/graph-viewer/lib/stylesheet.js")
 
 
-def _landscape_map() -> str:
-    path = _THEME / "components" / "LandscapeMap.vue"
-    if not path.exists():
-        pytest.skip("LandscapeMap.vue absent in this checkout")
-    return path.read_text(encoding="utf-8")
+def test_the_viewer_renders_a_legend_derived_from_the_data() -> None:
+    """The legend lists the layers and the drawn edge kinds, both read off the data."""
+    viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
+    assert '<LayerLegend :layers="layers" />' in viewer
+    assert '<EdgeLegend :keys="legendKeys" />' in viewer
+    assert "legendKeysOf(" in viewer
 
 
-def test_arch_theme_activates_elk_partitioning() -> None:
-    """The canonical layered-lanes layout is ELK partitioning (stable lanes)."""
-    theme = _arch_theme()
-    assert "elk.partitioning.activate" in theme
-    assert '"elk.direction": "DOWN"' in theme
-    # The four layer lanes drive the partition + the legend.
-    assert "LAYER_LANES" in theme
+def test_closing_the_card_clears_the_selection() -> None:
+    """Closing the card clears the selection (no highlight left behind)."""
+    viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
+    assert "function clearSelection()" in viewer
+    assert 'state.focus = "";' in viewer
+    assert "emit('close')" in _read("entities/graph-node/ui/NodeCard.vue")
 
 
-def test_arch_map_assigns_partition_from_layer_rank() -> None:
-    """Each node's partition = its layer_rank so ELK pins it into its lane."""
-    src = _arch_map()
-    assert "partition" in src
-    assert "layer_rank" in src
+def test_full_screen_covers_the_viewers_whole_space() -> None:
+    """The element that goes full screen is the viewer's root, with a CSS fallback."""
+    assert "requestFullscreen" in _read("features/fullscreen/model/useFullscreen.js")
+    viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
+    assert "useFullscreen(root" in viewer
 
 
-def test_arch_map_flags_violation_edges() -> None:
-    """An up/cross-cut depends_on edge is rendered as a layering concern."""
-    src = _arch_map()
-    assert "violation" in src
-    theme = _arch_theme()
-    assert "edge.violation" in theme
-
-
-def test_arch_map_renders_legend() -> None:
-    """A legend (layers + edge meaning) is rendered so structure reads at a glance."""
-    src = _arch_map()
-    assert "bl-arch-legend" in src
-    assert "layerLanes" in src
-    assert "edgeLegend" in src
-
-
-def test_arch_map_close_clears_focus() -> None:
-    """Closing the card clears the blast-radius focus (no grey-after-close)."""
-    src = _arch_map()
-    assert "function closeCard" in src
-    assert 'focusNode.value = ""' in src
-    # The close button + background tap both route through closeCard.
-    assert "@click=\"closeCard\"" in src
-
-
-def test_arch_map_has_fullscreen_toggle() -> None:
-    """A fullscreen toggle exists for the map stage."""
-    src = _arch_map()
-    assert "toggleFullscreen" in src
-    assert "requestFullscreen" in src
-
-
-def test_arch_map_filters_hide_not_remove_and_refit() -> None:
-    """Filters HIDE non-matching elements (display:none) + re-fit to the visible
-    set — never remove-and-relayout-into-emptiness."""
-    src = _arch_map()
-    assert 'toggleClass("hidden"' in src
-    assert 'cy.elements(":visible")' in src
-    # The `.hidden` class is display:none in the theme stylesheet.
-    assert 'display: "none"' in _arch_theme()
+def test_filters_hide_rather_than_remove_and_keep_containers() -> None:
+    """Filters HIDE nodes, keep the containers of shown nodes, and re-fit to what shows."""
+    canvas = _read("widgets/graph-viewer/model/useGraphCanvas.js")
+    assert 'toggleClass("is-hidden"' in canvas
+    assert 'display: "none"' in _read("widgets/graph-viewer/lib/stylesheet.js")
+    assert "withAncestors(" in _read("features/filter-graph/lib/visibleIds.js")
+    navigation = _read("features/navigate-graph/model/useGraphNavigation.js")
+    assert 'cy.elements(":visible")' in navigation
 
 
 def test_landscape_protocol_card_only_for_real_contracts() -> None:
     """A plain dependency edge gets a Dependency card with NO Protocol field;
     only a real amqp/graphql contract shows the protocol card (never 'unknown')."""
-    src = _landscape_map()
+    src = _read("pages/landscape/ui/LandscapeMap.vue")
     assert "isContractEdge" in src
     assert "amqp" in src and "graphql" in src
     # The simpler Dependency branch exists.

@@ -1,0 +1,129 @@
+// beadloom:component=site-graph-viewer
+// The Cytoscape stylesheet of the graph viewer, built from resolved theme tokens.
+//
+// Every colour here is a literal `rgb(...)` from `shared/theme-tokens`, never a
+// `var(--vp-…)`: Cytoscape rejects a CSS variable and draws its fallback grey.
+// The stylesheet is rebuilt whenever the tokens change, which is how the graph
+// follows VitePress's dark mode.
+//
+// Colour means the layer: a node's border, and a box's tint, are its layer's
+// tone. Status is a separate accent: a node with stale docs or a lint finding
+// gets a warning or danger ring. Each edge kind has its own line style.
+
+import { mixRgb } from "../../../shared/theme-tokens/index.js";
+import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
+import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
+
+export const GEOMETRY = Object.freeze({
+  nodeWidth: 160,
+  nodeHeight: 44,
+  edgeWidth: 1.8,
+  violationWidth: 3.2,
+  selectedEdgeWidth: 3.6,
+});
+
+/** The edge curve style, chosen by measurement on this repository's graph (BDL-076 A2). */
+export const CURVE_STYLE = "bezier";
+
+/** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */
+const SOURCE_END_SHARE = 0.35;
+
+function nodeRules(tokens) {
+  const tones = [...LAYER_TONES, UNLAYERED_TONE];
+  return [
+    {
+      selector: "node",
+      style: {
+        label: "data(label)",
+        "text-valign": "center",
+        "text-halign": "center",
+        color: tokens.text1,
+        "font-family": tokens.font,
+        "font-size": "12px",
+        "font-weight": 600,
+        width: GEOMETRY.nodeWidth,
+        height: GEOMETRY.nodeHeight,
+        shape: "round-rectangle",
+        "background-color": tokens.bgSoft,
+        "border-width": 3,
+        "border-color": tokens[UNLAYERED_TONE],
+        "text-wrap": "ellipsis",
+        "text-max-width": GEOMETRY.nodeWidth - 16,
+      },
+    },
+    ...tones.map((tone) => ({
+      selector: `node[tone = "${tone}"]`,
+      style: { "border-color": tokens[tone] },
+    })),
+    {
+      selector: ":parent",
+      style: {
+        "background-opacity": 0.07,
+        "text-valign": "top",
+        "text-halign": "center",
+        "font-weight": 700,
+        "border-style": "dashed",
+        padding: "12px",
+      },
+    },
+    ...tones.map((tone) => ({
+      selector: `:parent[tone = "${tone}"]`,
+      style: { "background-color": tokens[tone] },
+    })),
+    { selector: 'node[status = "stale"]', style: { "border-color": tokens.warning, "border-width": 5 } },
+    { selector: 'node[status = "violation"]', style: { "border-color": tokens.danger, "border-width": 5 } },
+    {
+      selector: "node.is-selected",
+      style: {
+        "background-color": tokens.bgAlt,
+        "border-width": 6,
+        "overlay-color": tokens.brand,
+        "overlay-opacity": 0.12,
+        "overlay-padding": 4,
+      },
+    },
+  ];
+}
+
+function edgeRules(tokens) {
+  const byKey = Object.entries(EDGE_STYLES).map(([key, look]) => {
+    const colour = tokens[look.tone];
+    const style = {
+      "line-style": look.line,
+      "line-color": colour,
+      "line-fill": "linear-gradient",
+      "line-gradient-stop-colors": [mixRgb(colour, tokens.bg, SOURCE_END_SHARE), colour],
+      "line-gradient-stop-positions": [0, 70],
+      "target-arrow-color": colour,
+      "target-arrow-shape": look.arrow,
+    };
+    if (look.dash) style["line-dash-pattern"] = look.dash;
+    return { selector: `edge[styleKey = "${key}"]`, style };
+  });
+  return [
+    {
+      selector: "edge",
+      style: {
+        width: GEOMETRY.edgeWidth,
+        "curve-style": CURVE_STYLE,
+        "arrow-scale": 1.1,
+        "font-family": tokens.font,
+        "font-size": "11px",
+        color: tokens.text1,
+        "text-background-color": tokens.bg,
+        "text-background-opacity": 0.9,
+        "text-background-padding": "2px",
+        "text-rotation": "autorotate",
+      },
+    },
+    ...byKey,
+    { selector: 'edge[styleKey = "violation"]', style: { width: GEOMETRY.violationWidth, "z-index": 8 } },
+    { selector: "edge.is-selected-edge", style: { width: GEOMETRY.selectedEdgeWidth, "z-index": 10 } },
+    { selector: "edge.is-selected-edge, edge.is-hovered", style: { label: "data(label)" } },
+  ];
+}
+
+/** The whole stylesheet for resolved `tokens` (see `shared/theme-tokens`). */
+export function buildStylesheet(tokens) {
+  return [...nodeRules(tokens), ...edgeRules(tokens), { selector: ".is-hidden", style: { display: "none" } }];
+}
