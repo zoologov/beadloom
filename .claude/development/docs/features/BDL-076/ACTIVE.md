@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-arak` (R1, review of slice 1, the authors' accounts withheld); then the fixes and `beadloom-ujzb.6` (landscape impact, owner), W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-ujzb.7` (the review's findings); then `beadloom-ujzb.6` (landscape impact, owner), W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** the review's findings are fixed or ruled on by the owner.
+**Done when:** M1, M2, m1–m6 and n1–n5 fixed, each with a test seen red; a focused re-review of M1 and M2.
+
+**R1 closed (2026-09-30):** `beadloom-arak` — ISSUES, 0 critical, 3 major. M1: source links use GitHub's route only (dead on Bitbucket, Gitea, Azure; the Azure SSH remote becomes a non-browsable address). M2: the data file publishes git author names (`top_contributors`) for every node, read by no screen. M3: 59 stale pairs (W1). Minor: m1 a cleared node-page selection comes back on reload; m2 the viewer shows layer tag tokens, not the declared names; m3 a URL case that cannot fail; m4 the risk oracle copies the viewer's function; m5 viewer slices marked "no bound tests"; m6 warn findings drawn as violations. Sound: FSD (42 imports all downward), the v1 keys, no HTML injection, CI advisory only, the layer-coverage change.
 
 **T1 closed (2026-09-30):** `beadloom-bp8n` `92f4cae7` — 34 slice-1 criteria met, 1 not met (`beadloom ci` rc 1 on 59 stale pairs → W1), 4 not measurable here (`site-e2e` on GitHub, the nine required checks, the owner's look). 17 tests added, each seen red; one read-only test-handle accessor `edgeLooks()`. Measured, no bound declared: data file 340,621 bytes (gzip 39,790; 31,095 on the wire); first render median 4,314 ms (Cytoscape/ELK chunks arrive at 3.5 s); fitted zoom 0.0515 on the page, 0.083–0.110 in full screen. Open for the owner: the landscape's own card vs the PRD's one card. Filed `beadloom-gvdy` (P2, test fixtures that leak a grammar swap).
 
@@ -71,7 +73,8 @@
 | `beadloom-ujzb.5` | test | ✓ done | layer-coverage self-checks, strict (owner) |
 | `beadloom-rjp1` | A5 test | ✓ done | browser tests; `site-e2e` |
 | `beadloom-bp8n` | T1 test | ✓ done | slice 1 criteria |
-| `beadloom-arak` | R1 review | in progress | review slice 1 |
+| `beadloom-arak` | R1 review | ✓ done | review slice 1 |
+| `beadloom-ujzb.7` | fix | in progress | R1's findings M1, M2, m1–m6, n1–n5 |
 | `beadloom-ujzb.6` | dev | blocked | landscape impact mode (owner) |
 | `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
