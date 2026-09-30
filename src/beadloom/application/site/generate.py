@@ -80,7 +80,6 @@ from beadloom.application.site.landscape_view import (
     render_landscape_view_md,
     serialize_landscape_view,
 )
-from beadloom.application.site.markdown_links import PortalLinks, rebase_links
 from beadloom.application.site.mermaid_guard import MermaidIssue, validate_mermaid
 from beadloom.application.site.metrics_history import (
     MetricsPoint,
@@ -94,7 +93,12 @@ from beadloom.application.site.node_pages import (
     node_page_urls,
     render_all_pages,
 )
-from beadloom.application.site.published_docs import build_published_docs, publish_docs
+from beadloom.application.site.project_text import render_project_text
+from beadloom.application.site.published_docs import (
+    build_published_docs,
+    publish_docs,
+    published_files,
+)
 from beadloom.application.site.repository_link import repository_of
 from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
 from beadloom.application.site.site_config import render_site_module, site_config_of
@@ -103,6 +107,8 @@ from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+    from beadloom.application.site.markdown_links import PortalLinks
 
 logger = logging.getLogger(__name__)
 
@@ -297,25 +303,36 @@ def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[st
 _ABOUT_PAGES: tuple[tuple[str, str], ...] = (("README.md", "/"), ("README.ru.md", "/ru/"))
 
 
-def _portal_links(project_root: Path, slugs: set[str], repo_url: str) -> PortalLinks:
+def _portal_links(
+    project_root: Path, slugs: set[str], repo_url: str, base: str
+) -> PortalLinks:
     """What this portal publishes, for rebasing the links in the project's own text.
 
     A README of the pair is routed only when the file exists, since its About
     page is written only then: until BDL-076 (``beadloom-ujzb.11``) the toggle
     went to ``/ru/`` on a project with no ``README.ru.md``, a dead link.
-    *repo_url* is the repository link the project declares, ``""`` when none.
+    *repo_url* is the repository link the project declares, ``""`` when none;
+    *base* is the path the portal is served under, which a raw HTML link needs.
     """
     routes = {name: route for name, route in _ABOUT_PAGES if (project_root / name).is_file()}
     return portal_links_for(
-        published_doc_slugs=slugs, repo_url=repo_url, cross_link_routes=routes
+        published_doc_slugs=slugs,
+        repo_url=repo_url,
+        cross_link_routes=routes,
+        base=base,
+        published_files=published_files(project_root),
     )
 
 
-def _render_about_page(readme_path: Path, portal: PortalLinks) -> str | None:
-    """The About-page body for *readme_path*, or None when the file is absent."""
+def _render_about_page(readme_path: Path, portal: PortalLinks, page_dir: str) -> str | None:
+    """The About-page body for *readme_path*, or None when the file is absent.
+
+    *page_dir* is the portal directory the page is written to.
+    """
     if not readme_path.is_file():
         return None
-    return rebase_links(readme_path.read_text(encoding="utf-8"), portal)
+    text = readme_path.read_text(encoding="utf-8")
+    return render_project_text(text, portal, page_dir=page_dir)
 
 
 def _render_docs_overview(slugs: set[str]) -> str:
@@ -529,9 +546,9 @@ def generate_site(
     # About home (EN) from README.md, with the architecture overview moved to
     # its own /architecture page. Falls back to the overview when no README.
     slugs = _published_doc_slugs(conn, project_root)
-    portal = _portal_links(project_root, slugs, identity.repo_url)
+    portal = _portal_links(project_root, slugs, identity.repo_url, identity.base)
     overview = _render_index(conn, nodes)
-    about_en = _render_about_page(project_root / "README.md", portal)
+    about_en = _render_about_page(project_root / "README.md", portal, "")
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
 
     # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
@@ -562,7 +579,7 @@ def generate_site(
     _write(out_dir / "architecture-diagram.md", overview, written)
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
-    about_ru = _render_about_page(project_root / "README.ru.md", portal)
+    about_ru = _render_about_page(project_root / "README.ru.md", portal, "ru")
     if about_ru is not None:
         _write(out_dir / "ru" / "index.md", about_ru, written)
 

@@ -38,6 +38,13 @@ left alone; a link to ``../README.md`` or ``../src/app.js`` would resolve beside
 the copy, where the portal publishes nothing, and fail ``vitepress build``. Such
 a link is rebased by :func:`beadloom.application.site.markdown_links.rebase_links`,
 the rule the About page and the node pages follow (BDL-076, ``beadloom-ujzb.11``).
+A link inside ``docs/`` to a file the portal does not publish becomes its text,
+since the build cannot resolve it (``beadloom-ujzb.12``).
+
+The other change is to how the prose is read, not to what it says. VitePress
+compiles a page as a Vue template, so an interpolation such as a Helm value or
+a tag Vue cannot compile is marked to be shown as written
+(:func:`beadloom.application.site.project_text.render_project_text`).
 """
 
 # beadloom:domain=application
@@ -49,7 +56,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.markdown_links import PortalLinks, rebase_links
+from beadloom.application.site.markdown_links import PortalLinks
+from beadloom.application.site.project_text import render_project_text
 
 if TYPE_CHECKING:
     import sqlite3
@@ -280,6 +288,31 @@ def _render_docs_index(published: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _published_sources(docs_dir: Path) -> list[Path]:
+    """Every file under *docs_dir* that is published, sorted.
+
+    Hidden and OS-junk files (``.DS_Store``) are skipped: they are
+    non-deterministic per machine and would pollute the published site.
+    """
+    return [
+        src
+        for src in sorted(docs_dir.rglob("*"))
+        if src.is_file()
+        and not any(part.startswith(".") for part in src.relative_to(docs_dir).parts)
+    ]
+
+
+def published_files(project_root: Path) -> frozenset[str]:
+    """The project paths (``docs/…``) of every file :func:`publish_docs` copies."""
+    docs_dir = project_root / "docs"
+    if not docs_dir.is_dir():
+        return frozenset()
+    return frozenset(
+        (_DOCS_DIR / src.relative_to(docs_dir).as_posix()).as_posix()
+        for src in _published_sources(docs_dir)
+    )
+
+
 def publish_docs(
     conn: sqlite3.Connection,
     out_dir: Path,
@@ -306,22 +339,18 @@ def publish_docs(
     published_md: list[str] = []
     links = portal or PortalLinks()
 
-    for src in sorted(docs_dir.rglob("*")):
-        if not src.is_file():
-            continue
+    for src in _published_sources(docs_dir):
         rel = src.relative_to(docs_dir)
-        # Skip hidden / OS-junk files (e.g. ``.DS_Store``): they are
-        # non-deterministic per machine and would pollute the published site.
-        if any(part.startswith(".") for part in rel.parts):
-            continue
         dst = out_docs / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix == ".md":
-            prose = rebase_links(
+            source_dir = (_DOCS_DIR / rel.as_posix()).parent.as_posix()
+            prose = render_project_text(
                 src.read_text(encoding="utf-8"),
                 links,
-                source_dir=(_DOCS_DIR / rel.as_posix()).parent.as_posix(),
+                source_dir=source_dir,
                 mirrored_dir=_DOCS_DIR.as_posix(),
+                page_dir=source_dir,
             )
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose

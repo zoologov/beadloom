@@ -101,6 +101,9 @@ class TestSiteGenerationCluster:
         the project's own text on a portal page: fifteen.
         BDL-076 B2 (``beadloom-qki6``) added ``pages_workflow.py``, the GitHub Pages
         workflow that publishes the portal: sixteen.
+        ``beadloom-ujzb.12`` added ``markdown_code.py``, where a project's Markdown
+        holds code, and ``project_text.py``, the one path project text takes onto a
+        page, shown as written rather than compiled as a Vue template: eighteen.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -108,7 +111,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 16, names
+        assert len(names) == 18, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

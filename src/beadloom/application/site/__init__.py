@@ -16,6 +16,9 @@ module keeps one responsibility:
 - :mod:`.nav` — the VitePress nav and sidebar trees;
 - :mod:`.about` — the README rendered as the About page;
 - :mod:`.markdown_links` — the links in a project's own text, rebased onto the portal;
+- :mod:`.markdown_code` — where a project's Markdown holds code, left as written;
+- :mod:`.project_text` — a project's own text on a page, shown as written rather
+  than compiled as a Vue template;
 - :mod:`.published_docs` — the ``docs/`` tree published with validation badges;
 - :mod:`.mermaid_guard` — the generation-time Mermaid validity guard;
 - :mod:`.metrics_history` — the append-store behind the dashboard's trends;

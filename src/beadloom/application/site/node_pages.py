@@ -11,9 +11,12 @@ stays on ``architecture-diagram.md``. All output is deterministic (sorted, no
 wall-clock).
 
 A node's summary is the project's own text — ``beadloom init`` takes the root
-service's from the README's first paragraph — so its links are rebased onto the
-portal by :func:`beadloom.application.site.markdown_links.rebase_links`, the rule
-the About page and the published documents follow (BDL-076, ``beadloom-ujzb.11``).
+service's from the README's first paragraph — so it goes onto the page by
+:func:`beadloom.application.site.project_text.render_project_text`, the path the
+About page and the published documents take: its links are rebased onto the
+portal (BDL-076, ``beadloom-ujzb.11``) and it is shown as written rather than
+compiled as a Vue template (``beadloom-ujzb.12``). The viewer the page mounts is
+the generator's own markup and is left to Vue.
 """
 
 # beadloom:domain=application
@@ -24,7 +27,8 @@ import html
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.markdown_links import PortalLinks, rebase_links
+from beadloom.application.site.markdown_links import PortalLinks
+from beadloom.application.site.project_text import render_project_text
 from beadloom.infrastructure.repository import get_owned_symbols
 
 if TYPE_CHECKING:
@@ -315,6 +319,8 @@ def render_node_page(
     incoming = _load_incoming_for(conn, node.ref_id, kinds)
     symbols = public_symbol_names(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
+    page_dir = _kind_dir(node.kind)
+    summary = render_project_text(node.summary, portal or PortalLinks(), page_dir=page_dir)
 
     lines: list[str] = [
         "---",
@@ -326,7 +332,7 @@ def render_node_page(
         "",
         f"**Kind:** {node.kind}",
         "",
-        rebase_links(node.summary, portal or PortalLinks()) or "_No summary._",
+        summary or "_No summary._",
         "",
     ]
     if node.source:

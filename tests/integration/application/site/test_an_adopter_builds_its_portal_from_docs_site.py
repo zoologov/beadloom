@@ -15,7 +15,9 @@ and Node 20 or later is on ``PATH``; otherwise it is skipped with the reason.
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import shutil
 import subprocess
 from typing import TYPE_CHECKING
@@ -181,3 +183,63 @@ def test_a_readme_that_opens_with_a_relative_link_builds(tmp_path: Path, npm: st
     # ``init`` names the root service after the project directory.
     service = site / ".vitepress" / "dist" / "services" / f"{root.name}.html"
     assert "See license." in service.read_text(encoding="utf-8")
+
+
+#: A Helm value, as a chart's README and its docs write it (BDL-076, ``beadloom-ujzb.12``).
+_HELM = "{{ .Values.image.tag }}"
+
+#: A one-pixel PNG, the logo the README and the guide show.
+_LOGO = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+_HELM_README = (
+    "# Acme Orders\n\n"
+    f"Deploys the image {_HELM}; set `{_HELM}` in values.yaml.\n\n"
+    '<p align="center"><img src="docs/logo.png" alt="Acme logo"></p>\n'
+)
+
+_HELM_GUIDE = (
+    "# Guide\n\n"
+    f"Pin {_HELM} before you upgrade, and keep `{_HELM}` in step.\n\n"
+    '<img src="./logo.png" alt="Guide logo">\n\n'
+    "Returns List<String> items.\n"
+)
+
+
+def test_project_text_with_a_helm_value_and_a_relative_image_builds_as_written(
+    tmp_path: Path, npm: str
+) -> None:
+    """VitePress compiled the README and the guide as Vue templates and the build failed.
+
+    Measured on this fixture before the fix: ``{{ .Values.image.tag }}`` in prose
+    or inline code is not an expression Vue can parse, and ``List<String>`` is an
+    element with no end tag. Now the build passes, the Helm value reads as written
+    on the About page, the root service's page and the guide, and both images show:
+    the README's reaches the copy of ``docs/logo.png`` the portal publishes.
+    """
+    root = tmp_path / "acme-orders"
+    _write_project(root)
+    (root / "README.md").write_text(_HELM_README, encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "guide.md").write_text(_HELM_GUIDE, encoding="utf-8")
+    (root / "docs" / "logo.png").write_bytes(_LOGO)
+    _beadloom("init", "--yes", "--project", str(root))
+    _beadloom("reindex", "--project", str(root))
+    _beadloom("docs", "site", "--project", str(root))
+
+    site = root / "site"
+    for command in ([npm, "ci", "--no-audit", "--no-fund"], [npm, "run", "docs:build"]):
+        built = subprocess.run(command, cwd=site, capture_output=True, encoding="utf-8")  # noqa: S603
+        assert built.returncode == 0, built.stdout + built.stderr
+
+    dist = site / ".vitepress" / "dist"
+    about = (dist / "index.html").read_text(encoding="utf-8")
+    guide = (dist / "docs" / "guide.html").read_text(encoding="utf-8")
+    service = (dist / "services" / f"{root.name}.html").read_text(encoding="utf-8")
+    for page in (about, guide, service):
+        assert page.count(_HELM) >= 2, page
+    assert "List&lt;String&gt; items" in guide
+    # The root service's summary is the README's first paragraph, which holds no image.
+    for page, alt in ((about, "Acme logo"), (guide, "Guide logo")):
+        assert re.search(rf'<img src="(data:image/png|/assets/)[^"]*" alt="{alt}"', page), page

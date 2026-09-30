@@ -31,7 +31,10 @@ states:
 
 Inline links, images, the badge-link idiom ``[![alt](img)](target)`` and
 reference definitions are all rebased; links inside inline code spans and
-fenced code blocks are never rewritten.
+fenced code blocks are never rewritten. The README then goes onto the page as
+every project text does, shown as written rather than compiled as a Vue template
+(:func:`beadloom.application.site.project_text.render_project_text`, BDL-076
+``beadloom-ujzb.12``).
 """
 
 # beadloom:domain=application
@@ -40,7 +43,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.markdown_links import PortalLinks, rebase_links
+from beadloom.application.site.markdown_links import PortalLinks
+from beadloom.application.site.project_text import render_project_text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -54,11 +58,15 @@ def portal_links_for(
     published_doc_slugs: set[str] | frozenset[str],
     repo_url: str,
     cross_link_routes: Mapping[str, str] | None = None,
+    base: str = "/",
+    published_files: frozenset[str] | None = None,
 ) -> PortalLinks:
     """What the portal publishes, with the README pair routed or withheld.
 
     A README of the pair that ``cross_link_routes`` does not route has no page,
-    so a link to it keeps its text rather than going to the repository.
+    so a link to it keeps its text rather than going to the repository. ``base``
+    is the path the portal is served under; ``published_files`` are the project
+    paths of the files it publishes under ``docs/``, ``None`` when unknown.
     """
     routes = {name.lower(): route for name, route in (cross_link_routes or {}).items()}
     return PortalLinks(
@@ -66,6 +74,8 @@ def portal_links_for(
         page_routes=routes,
         repo_url=repo_url,
         withheld=_README_CROSS_LINKS - routes.keys(),
+        base=base,
+        mirrored_files=published_files,
     )
 
 
@@ -76,7 +86,7 @@ def render_about(
     repo_url: str,
     cross_link_routes: dict[str, str] | None = None,
 ) -> str:
-    """Transform README Markdown into the About-page body (link rebasing).
+    """Transform README Markdown into the About-page body (links rebased, shown as written).
 
     ``cross_link_routes`` maps a lowercased README cross-link basename (e.g.
     ``"readme.ru.md"``) to the site route to rewrite it to (e.g. ``"/ru/"``).
@@ -87,4 +97,4 @@ def render_about(
         repo_url=repo_url,
         cross_link_routes=cross_link_routes,
     )
-    return rebase_links(readme_text, portal)
+    return render_project_text(readme_text, portal)

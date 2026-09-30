@@ -1,0 +1,132 @@
+"""Steps for `application/site-generation/project_text_is_not_a_vue_template.feature`.
+
+BDL-076 (`beadloom-ujzb.12`). A small JavaScript project, initialised by the real
+`beadloom init`, indexed by the real reindex and given its portal by the real
+generator. The scenarios read the pages `docs site` leaves in the output
+directory. Whether VitePress then builds them is the slow adopter case's
+question (`test_an_adopter_builds_its_portal_from_docs_site.py`); these read what
+the generator hands it.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import TYPE_CHECKING, Any
+
+import pytest
+from click.testing import CliRunner
+from pytest_bdd import given, parsers, scenarios, then, when
+
+from beadloom.services.cli import main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+scenarios("../../../application/site-generation/project_text_is_not_a_vue_template.feature")
+
+#: The project directory; ``init`` names the root service after it.
+_PROJECT = "acme"
+
+_MODULE = "src/api/handler.js"
+
+
+@pytest.fixture()
+def world(tmp_path: Path) -> dict[str, Any]:
+    root = tmp_path / _PROJECT
+    return {"root": root, "site": root / "site", "repo_url": ""}
+
+
+def _beadloom(*args: str) -> None:
+    result = CliRunner().invoke(main, list(args), catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+
+
+def _page(world: dict[str, Any], rel: str) -> str:
+    page: Path = world["site"] / rel
+    return page.read_text(encoding="utf-8")
+
+
+def _unescape(text: str) -> str:
+    """A Gherkin string's ``\\n`` and ``\\"`` as the characters they name."""
+    return text.replace("\\n", "\n").replace('\\"', '"')
+
+
+def _held_where_vue_does_not_read(body: str, text: str) -> tuple[int, int]:
+    """How often *body* holds *text*, and how often inside an element Vue skips (``v-pre``)."""
+    inert = re.findall(rf"<(\w+) v-pre>{re.escape(text)}</\1>", body)
+    return body.count(text), len(inert)
+
+
+@given(parsers.parse('a project whose README opens with "{paragraph}"'))
+def _project(world: dict[str, Any], paragraph: str) -> None:
+    root: Path = world["root"]
+    (root / "src" / "api").mkdir(parents=True)
+    (root / "package.json").write_text(
+        '{ "name": "acme", "version": "0.1.0", "type": "module" }\n', encoding="utf-8"
+    )
+    (root / "README.md").write_text(f"# Acme\n\n{_unescape(paragraph)}\n", encoding="utf-8")
+    (root / _MODULE).write_text("export function handle() {\n  return 1;\n}\n", encoding="utf-8")
+
+
+@given(parsers.parse('the project declares the repository "{url}"'))
+def _repository(world: dict[str, Any], url: str) -> None:
+    world["repo_url"] = url
+
+
+@given(parsers.parse('the project\'s document "{rel}" reads "{text}"'))
+def _document(world: dict[str, Any], rel: str, text: str) -> None:
+    doc: Path = world["root"] / rel
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(f"# Guide\n\n{_unescape(text)}\n", encoding="utf-8")
+
+
+@when("the project is initialised and its site is generated")
+def _generate(world: dict[str, Any]) -> None:
+    root = str(world["root"])
+    _beadloom("init", "--yes", "--project", root)
+    if world["repo_url"]:
+        config: Path = world["root"] / ".beadloom" / "config.yml"
+        block = f"site:\n  repo_url: {world['repo_url']}\n"
+        config.write_text(config.read_text(encoding="utf-8") + block, encoding="utf-8")
+    _beadloom("reindex", "--project", root)
+    _beadloom("docs", "site", "--project", root)
+
+
+@then(parsers.parse('the About page holds "{text}" twice, each where Vue does not read it'))
+def _about_holds(world: dict[str, Any], text: str) -> None:
+    body = _page(world, "index.md")
+    assert _held_where_vue_does_not_read(body, text) == (2, 2), body
+
+
+@then(
+    parsers.parse('the root service\'s page holds "{text}" twice, each where Vue does not read it')
+)
+def _service_holds(world: dict[str, Any], text: str) -> None:
+    body = _page(world, f"services/{_PROJECT}.md")
+    assert _held_where_vue_does_not_read(body, text) == (2, 2), body
+
+
+@then(parsers.parse('the published guide shows "{tag}" as text'))
+def _shows_as_text(world: dict[str, Any], tag: str) -> None:
+    body = _page(world, "docs/guide.md")
+    assert "&lt;" + tag[1:] in body, body
+    assert tag not in body, body
+
+
+@then(parsers.parse('the published guide keeps "{markup}" as HTML'))
+def _keeps_html(world: dict[str, Any], markup: str) -> None:
+    body = _page(world, "docs/guide.md")
+    assert markup in body, body
+
+
+@then(parsers.parse('the published guide links "{text}" in HTML to "{url}"'))
+def _links_in_html(world: dict[str, Any], text: str, url: str) -> None:
+    body = _page(world, "docs/guide.md")
+    assert re.findall(rf'<a href="([^"]*)"[^>]*>{re.escape(text)}</a>', body) == [url], body
+
+
+@then(parsers.parse('the published guide reads "{alt}" in place of the image'))
+def _image_as_text(world: dict[str, Any], alt: str) -> None:
+    body = _page(world, "docs/guide.md")
+    assert "<img" not in body, body
+    assert alt in body, body
