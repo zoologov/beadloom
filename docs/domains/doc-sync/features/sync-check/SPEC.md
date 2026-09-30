@@ -40,8 +40,8 @@ pairs reported "clean" for files it never opened (BDL-UX #146).
 
 **One annotation does not replace a node's other files (`beadloom-oo4m`, BDL-076
 K2).** Until K2 the annotated files were taken INSTEAD of the owned ones, so one
-`// beadloom:component=` line in one `.vue` file took the site theme's node from
-17 pairs to 1, and nothing said so. Now an annotated node also keeps a pair for
+`// beadloom:component=` line in one `.vue` file cut the pairs of the site theme
+from seventeen to one, and nothing said so. Now an annotated node also keeps a pair for
 every owned file that no annotation claims for any node. Boilerplate
 (`__init__.py`, `conftest.py`, `__main__.py`) joins only through the
 no-annotation fallback, as before. Measured by K2 on this repository: the site's

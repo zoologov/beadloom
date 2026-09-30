@@ -466,7 +466,7 @@ with no outliers from one whose outliers vanished.
 `beadloom-5o48`).** A frontend of two or more nodes beside a backend is a second *supported* way
 down, so the descent forks at the very top and the root comes out empty. Read as it stands, the
 areas are then the tree names, no document names a tree, and the rule checked none of the pairs:
-126 of 126 on this repository once its site became 17 slice nodes. The fork at the top is
+126 of 126 on this repository once its site became seventeen slice nodes. The fork at the top is
 ambiguous. A repository of top-level packages has its areas begin there, a backend beside a
 frontend has its trees begin there, and the sources alone cannot tell which.
 
