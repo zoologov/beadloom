@@ -1,7 +1,7 @@
 nodes:
   - ref_id: ignore-block
     kind: component
-    summary: "The generated working set under .beadloom/ and the one-time .gitignore block naming it (written by init, never rewritten)"
+    summary: "What init writes into a project's .gitignore: the one-time block naming the generated working set under .beadloom/ (never rewritten), and one line for the portal's output directory when no line names it"
     source: src/beadloom/onboarding/ignore_block.py
     docs:
       - docs/domains/onboarding/components/ignore-block/DOC.md

@@ -131,6 +131,7 @@ def docs_site(
     from beadloom.application.site.pages_workflow import PagesWorkflowError, site_dir_of
     from beadloom.application.site.site_config import SiteConfigError
     from beadloom.infrastructure.db import connection
+    from beadloom.onboarding.ignore_block import PORTAL_DIR
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -138,7 +139,8 @@ def docs_site(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
-    out = out_dir if out_dir is not None else project_root / "site"
+    # The default is the directory `init` names in .gitignore, read from one place.
+    out = out_dir if out_dir is not None else project_root / PORTAL_DIR
     if pages_workflow:
         try:
             site_dir_of(project_root, out)
@@ -156,8 +158,24 @@ def docs_site(
         sys.exit(1)
     click.echo(f"Generated {len(result.written)} files under {out}")
     _echo_scaffold_report(result.scaffold, out)
+    _warn_about_the_base(project_root)
     if pages_workflow:
         _write_pages_workflow(project_root, out)
+
+
+def _warn_about_the_base(project_root: Path) -> None:
+    """Warn on stderr when the base cannot match the project's GitHub Pages path.
+
+    The origin remote is read for this and for nothing else; the exit code is
+    the generation's own.
+    """
+    from beadloom.application.site.pages_base import base_warning
+    from beadloom.application.site.repository_link import origin_remote
+    from beadloom.application.site.site_config import site_config_of
+
+    warning = base_warning(site_config_of(project_root).base, origin_remote(project_root))
+    if warning is not None:
+        click.echo(warning, err=True)
 
 
 def _write_pages_workflow(project_root: Path, out: Path) -> None:

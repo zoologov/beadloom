@@ -81,7 +81,7 @@ def test_the_package_declares_its_node_version_and_an_exact_lock() -> None:
     shipped = shipped_files()
     package = json.loads(shipped["package.json"])
     lock = json.loads(shipped["package-lock.json"])
-    assert package["engines"]["node"] == ">=20"
+    assert package["engines"]["node"] == ">=22"
     assert lock["packages"][""]["engines"] == package["engines"]
     locked = lock["packages"][""]["dependencies"] | lock["packages"][""]["devDependencies"]
     declared = package["dependencies"] | package["devDependencies"]

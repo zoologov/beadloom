@@ -41,6 +41,22 @@ The patterns are the measured set: on this repository the only paths under
 ``.beadloom/`` that are not source are the ``.db`` family and the
 ``guard-firings*.jsonl`` pair; the graph and ``flow.yml`` are tracked and must
 stay committable.
+
+**The portal's output directory is one line apart from the block** (BDL-076
+``beadloom-ujzb.13``). ``beadloom docs site`` writes the portal into
+:data:`PORTAL_DIR` unless ``--out`` names another directory, and every file there
+is rebuilt from the project on each run. Init names that directory with one
+anchored line, ``/site/``, and only when no line of the file already covers it:
+it is not part of the block because it is not under ``.beadloom/``, and a
+project that ignores the directory its own way needs nothing added. Unlike the
+block it is checked on every run, which is what makes it idempotent. A line that
+un-ignores the directory (``!/site/``) is the project's statement that it wants
+the portal committed, so a file with one also gets nothing added. See
+:func:`ensure_portal_ignored`.
+
+**Both writers append bytes and never rewrite the file.** What the file held is
+kept byte for byte, its encoding included, and an appended line ends the way the
+file's first line ends, so a file with Windows line endings stays one.
 """
 
 from __future__ import annotations
@@ -49,9 +65,20 @@ import fnmatch
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 #: The project's ignore file, relative to the project root.
 IGNORE_RELPATH = Path(".gitignore")
+
+#: The directory ``beadloom docs site`` writes the portal into when ``--out`` names
+#: none, relative to the project root. ``docs site`` takes its default from here.
+PORTAL_DIR = "site"
+
+#: A leading part of an ignore pattern that matches at any depth, the top included.
+_ANY_DEPTH = "**/"
+
+#: Trailing parts of an ignore pattern that ignore everything under a directory.
+_CONTENTS = ("/**", "/*")
 
 #: The directory whose contents the block names; nothing generated, nothing to ignore.
 _WORKING_SET_DIR = Path(".beadloom")
@@ -239,6 +266,26 @@ def _git_root(project_root: Path) -> Path | None:
     return None
 
 
+def _decode(data: bytes) -> str:
+    """The ignore file as text; bytes that are not UTF-8 survive a round trip."""
+    return data.decode("utf-8", errors="surrogateescape")
+
+
+def _line_ending(data: bytes) -> bytes:
+    """The line ending the file's first line uses, or ``\\n`` for a file with none."""
+    first = data.find(b"\n")
+    return b"\r\n" if first > 0 and data[first - 1 : first] == b"\r" else b"\n"
+
+
+def _append_lines(path: Path, existing: bytes, lines: list[str]) -> None:
+    """Append *lines* after every byte of *existing*, in the file's own line ending."""
+    ending = _line_ending(existing)
+    lead = ending if existing and not existing.endswith(b"\n") else b""
+    body = ending.join(line.encode("utf-8") for line in lines) + ending
+    with path.open("ab") as handle:
+        handle.write(lead + body)
+
+
 def _declared_patterns(text: str) -> set[str]:
     """Every pattern the file already declares, comments and blanks excluded."""
     return {
@@ -275,7 +322,8 @@ def ensure_ignore_block(project_root: Path) -> IgnoreBlockResult:
         return result
 
     path = project_root / IGNORE_RELPATH
-    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    data = path.read_bytes() if path.is_file() else b""
+    existing = _decode(data)
     if BLOCK_MARKER in existing:
         result.path = path
         result.skipped_reason = (
@@ -291,9 +339,90 @@ def ensure_ignore_block(project_root: Path) -> IgnoreBlockResult:
         )
         return result
 
-    prefix = existing if not existing or existing.endswith("\n") else existing + "\n"
-    separator = "\n" if prefix else ""
-    path.write_text(prefix + separator + _render(missing), encoding="utf-8")
+    block = _render(missing).splitlines()
+    _append_lines(path, data, ["", *block] if data else block)
     result.path = path
     result.added = [entry.pattern for entry in missing]
     return result
+
+
+def _names_directory(pattern: str, directory: str) -> bool:
+    """Whether the ignore *pattern* matches *directory* at the ignore file's own level.
+
+    Git's rules, narrowed to one directory beside the file: a leading ``/``
+    anchors the pattern there, a leading ``**/`` matches at any depth including
+    that one, a trailing ``/`` limits it to directories, and a trailing ``/**`` or
+    ``/*`` ignores everything under it. What is left must be one path segment
+    that matches the name; a pattern with a slash inside names a deeper path.
+    """
+    core = pattern.removeprefix("/").removeprefix(_ANY_DEPTH)
+    for suffix in _CONTENTS:
+        if core.endswith(suffix):
+            core = core[: -len(suffix)]
+            break
+    core = core.removesuffix("/")
+    return bool(core) and "/" not in core and fnmatch.fnmatchcase(directory, core)
+
+
+def _deciding_line(text: str, directory: str) -> str | None:
+    """The last line of *text* that names *directory*, negated or not; ``None`` if none.
+
+    Git lets the last matching line decide, and strips trailing blanks but not
+    leading ones, so this reads the lines the same way.
+    """
+    deciding = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line or line.startswith("#"):
+            continue
+        if _names_directory(line.removeprefix("!"), directory):
+            deciding = line
+    return deciding
+
+
+def covers_directory(text: str, directory: str) -> bool:
+    """Whether the ignore file *text* ignores *directory*, which sits beside it."""
+    deciding = _deciding_line(text, directory)
+    return deciding is not None and not deciding.startswith("!")
+
+
+@dataclass(frozen=True)
+class PortalIgnoreResult:
+    """What :func:`ensure_portal_ignored` did with the project's ignore file.
+
+    ``covered_by`` is the project's own line that decided, when one did;
+    ``reason`` says why nothing was written when the file was not looked at.
+    """
+
+    outcome: Literal["created", "appended", "covered", "negated", "skipped"]
+    line: str
+    covered_by: str = ""
+    reason: str = ""
+
+
+def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
+    """Name the portal's output directory in *project_root*'s ``.gitignore``, once.
+
+    Creates the file when there is none and appends ``/<PORTAL_DIR>/`` when no line
+    names the directory. A line that already names it decides, whether it
+    ignores the directory or un-ignores it, and nothing is written. Outside a
+    git working tree nothing is written either, as for the working-set block.
+    """
+    line = f"/{PORTAL_DIR}/"
+    if _git_root(project_root) is None:
+        return PortalIgnoreResult(
+            outcome="skipped",
+            line=line,
+            reason="not inside a git working tree - no .gitignore written",
+        )
+    path = project_root / IGNORE_RELPATH
+    existed = path.is_file()
+    data = path.read_bytes() if existed else b""
+    deciding = _deciding_line(_decode(data), PORTAL_DIR)
+    if deciding is not None:
+        outcome: Literal["covered", "negated"] = (
+            "negated" if deciding.startswith("!") else "covered"
+        )
+        return PortalIgnoreResult(outcome=outcome, line=line, covered_by=deciding)
+    _append_lines(path, data, [line])
+    return PortalIgnoreResult(outcome="appended" if existed else "created", line=line)

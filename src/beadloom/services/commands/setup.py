@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         DeclinedRewrite,
         FixReport,
     )
+    from beadloom.onboarding.ignore_block import PortalIgnoreResult
     from beadloom.onboarding.role_map import RoleMapReport
 
 # beadloom:service=mcp-server
@@ -1413,6 +1414,24 @@ def _report_rules_that_would_not_load(step: GateStep) -> None:
     )
 
 
+def _echo_portal_ignore(result: PortalIgnoreResult | None, *, prefix: str) -> None:
+    """Say what init did with the portal's line in .gitignore, when it did anything.
+
+    A line the project already had is its own and goes unmentioned; a project
+    outside git is told that nothing was written, and why.
+    """
+    if result is None:
+        return
+    where = {"created": "in a new .gitignore", "appended": "appended to .gitignore"}
+    if result.outcome in where:
+        click.echo(
+            f"{prefix}Ignored: {result.line} (the portal `beadloom docs site` writes) "
+            f"{where[result.outcome]}"
+        )
+    elif result.outcome == "skipped":
+        click.echo(f"{prefix}Not ignored: {result.line} - {result.reason}")
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -1503,6 +1522,7 @@ def init(
                 f"  Graph: {bs['nodes_generated']} nodes, "
                 f"{bs['edges_generated']} edges (preset: {bs['preset']})"
             )
+            _echo_portal_ignore(bs.get("portal_ignore"), prefix="  ")
         if result.get("reindex"):
             ri = result["reindex"]
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
@@ -1581,6 +1601,7 @@ def init(
                 f"\u2713 Ignored: {len(result['ignore_added'])} generated path(s) "
                 "appended to .gitignore (yours to edit; never rewritten)"
             )
+        _echo_portal_ignore(result.get("portal_ignore"), prefix="\u2713 ")
         click.echo(
             f"\u2713 Index: {ri.symbols_indexed} symbols, "
             f"{ri.imports_indexed} imports"

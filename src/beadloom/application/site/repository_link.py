@@ -214,7 +214,11 @@ def _web_url(remote: str) -> str:
     return ""
 
 
-def _origin_remote(project_root: Path) -> str:
+def origin_remote(project_root: Path) -> str:
+    """The ``origin`` remote as git reports it, or ``""`` without git or a remote.
+
+    Never logged or published as it is: it can hold a credential.
+    """
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],  # noqa: S607 - the git on PATH, as every git read here
@@ -240,5 +244,5 @@ def repository_of(project_root: Path) -> RepositoryLink:
     ref = current_commit_sha(project_root)
     if ref is None:
         return RepositoryLink()
-    url = web_url_of_remote(_origin_remote(project_root))
+    url = web_url_of_remote(origin_remote(project_root))
     return RepositoryLink(url=url, ref=ref if url else "")

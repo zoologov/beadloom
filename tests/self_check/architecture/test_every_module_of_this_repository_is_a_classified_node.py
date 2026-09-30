@@ -104,6 +104,8 @@ class TestSiteGenerationCluster:
         ``beadloom-ujzb.12`` added ``markdown_code.py``, where a project's Markdown
         holds code, and ``project_text.py``, the one path project text takes onto a
         page, shown as written rather than compiled as a Vue template: eighteen.
+        ``beadloom-ujzb.13`` added ``pages_base.py``, whether the portal's base can
+        match the path GitHub Pages serves the project under: nineteen.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -111,7 +113,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 18, names
+        assert len(names) == 19, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 
