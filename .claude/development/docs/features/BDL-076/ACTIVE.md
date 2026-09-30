@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — waiting for the owner's decision on `beadloom-ujzb.14`/`.15`/`.16` (Go, Maven/Gradle, Swift); then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-ujzb.14` (Go), then `beadloom-ujzb.15` (Java/Kotlin), then `beadloom-ujzb.16` (Swift) — the owner folded them in on 2026-10-01; then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
@@ -113,7 +113,10 @@
 | `beadloom-ujzb.11` | fix | ✓ done | a relative link in a summary breaks the build |
 | `beadloom-ujzb.12` | fix | ✓ done | Vue interpolation and raw HTML in project text |
 | `beadloom-ujzb.13` | dev | ✓ done | adopter defaults: Node 22, init gitignore, base warning (owner) |
-| `beadloom-19l6` | T2 test | ready | slice 2 criteria |
+| `beadloom-ujzb.14` | fix | in progress | Go: init's false edges, no Go import resolved |
+| `beadloom-ujzb.15` | fix | blocked | Java/Kotlin: source-set nodes, no edges |
+| `beadloom-ujzb.16` | fix | blocked | Swift: init finds nothing |
+| `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
 | `beadloom-la3t` | P2 PR 2 | blocked | owner's look; PR 2 |
