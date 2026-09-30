@@ -13,6 +13,8 @@
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
 
+**B5 closed (2026-10-01):** `beadloom-ujzb.14` `0094bb93` — Go imports resolve through the governing `go.mod` (nearest above the file; `go.work` `use`, local `replace`; the longest module path wins; stdlib and third-party stay unresolved) in both `init`'s quick scan and `reindex`; the Go fixture gives 7 of 7 edges and none of the 3 false ones, and a deny rule fires on a Go import. This repository: 708 → 709 edges (the one new edge, `import-resolver -> graph`, comes from the new module). Four strict xfails removed. Filed `beadloom-jcng` (P2): an incremental reindex does not re-resolve Go imports when only `go.mod`/`go.work` changes.
+
 **B3 closed (2026-10-01):** `beadloom-hmqn` `983fbef2` — six fixtures, every portal builds (~17 s each); the advisory CI job `site-adopters` runs them (7 min 27 s locally). What an adopter's graph shows after `init`: Python 3/3 modules and 3/3 edges; TypeScript 6/6 and 7/7; Go 5/5 modules, 3/7 edges plus 3 false edges onto the entry point (`beadloom-ujzb.14`: the quick scan maps every internal import to `cmd/<module>`, and reindex resolves no Go import); Java and Kotlin 0 modules, 0 edges — init makes nodes of `src/main`, `src/test` (`beadloom-ujzb.15`); Swift 0 nodes and languages `[python]` (`beadloom-ujzb.16`). With hand-declared nodes the resolver finds the expected edges for Java, Kotlin and Swift. Each defect held by strict xfails. Browser suite passes on the Go and TypeScript portals (cases that need a landscape or a deeper graph left out, listed and self-checked). The self-hosted GitLab fixture (Java) passes all three link assertions.
 
 **B4 closed (2026-10-01):** `beadloom-ujzb.8` `b4c2ef11` — `site.forges` maps a host to a forge kind or to `source`/`raw` templates; one module (`forge_routes.py`) builds every repository link — card, project text, images (raw route) — at the generated commit, never `main`; a declared `repo_url` wins over the remote, and project text links only to a declared repository; refusals by name in `docs site`, `config-check` and the Gate. Our portal: 130 card links identical, four About links `blob/main` → `blob/<commit>`. Routes written from the forges' published forms, not opened live; Azure raw least certain. Playwright 99; `beadloom ci` rc 1 on 139 stale pairs.
@@ -113,8 +115,8 @@
 | `beadloom-ujzb.11` | fix | ✓ done | a relative link in a summary breaks the build |
 | `beadloom-ujzb.12` | fix | ✓ done | Vue interpolation and raw HTML in project text |
 | `beadloom-ujzb.13` | dev | ✓ done | adopter defaults: Node 22, init gitignore, base warning (owner) |
-| `beadloom-ujzb.14` | fix | in progress | Go: init's false edges, no Go import resolved |
-| `beadloom-ujzb.15` | fix | blocked | Java/Kotlin: source-set nodes, no edges |
+| `beadloom-ujzb.14` | fix | ✓ done | Go: init's false edges, no Go import resolved |
+| `beadloom-ujzb.15` | fix | in progress | Java/Kotlin: source-set nodes, no edges |
 | `beadloom-ujzb.16` | fix | blocked | Swift: init finds nothing |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
