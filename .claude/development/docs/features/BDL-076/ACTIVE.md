@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-ujzb.3` (K4, data size); then `beadloom-ujzb.4` (W0, docs); then A3 ∥ A4.
+**Bead:** `beadloom-ujzb.4` (W0, docs); then A3 ∥ A4.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
-**Done when:** the data file lists tests at their node only; W0 brings every stale pair fresh; `beadloom ci` rc 0.
+**Done when:** W0 brings every stale pair fresh; `beadloom ci` rc 0.
+
+**K4 closed (2026-09-30):** `beadloom-ujzb.3` `efe7bd10` — test files listed at their owning node only, ancestors keep counts and a new `file_count`; 376,794 → 331,941 bytes (gzip 44,755 → 38,711). The tests field was 87 KB, not most of the growth: the largest fields now are edges 63 KB, `public_symbols` 47 KB, tests 42 KB, `activity` 26 KB. Tree: 11 946 passed, 1 failed (the same 18 SPEC pairs → W0); `beadloom ci` rc 1 on sync-check only (43 stale).
 
 **Wave 2 closed (2026-09-30):** K1 `beadloom-ujzb.2` `2a3daa08` — the portal's modules in `application/site/` (53 files moved, no shims; `application` 183 → 14 owned symbols, `site-generation` 24 → 193 as a feature; 495 moved tests same ids; `docs site` output identical but for timestamps). K2 `beadloom-oo4m` `0e690d16` — a partly annotated node keeps a pair for every file, the backstop reads every indexed language (site pairs 45 → 64; Python 523 → 526). K3 `beadloom-5o48` `f61c8ab0` — `doc-area-coherence` reads one root per top-level tree when that matches more pairs; back at error, 117 of 126 pairs checked, 0 findings. Gate owner K1 on the combined tree (f61c8ab0): 11 937 passed, 1 failed (`test_all_new_node_pairs_are_fresh`: 18 `site-generation` SPEC pairs → W0), ruff and mypy clean, `lint --strict` 0; `beadloom ci` rc 1 on sync-check only (→ W0).
 
@@ -52,8 +54,8 @@
 | `beadloom-ujzb.2` | K1 dev | ✓ done | the portal package |
 | `beadloom-oo4m` | K2 dev | ✓ done | JS/Vue sync pairs kept |
 | `beadloom-5o48` | K3 dev | ✓ done | `doc-area-coherence`, several trees |
-| `beadloom-ujzb.3` | K4 dev | in progress | tests listed at their node only |
-| `beadloom-ujzb.4` | W0 docs | blocked | stale pairs of A1, A2, K1–K4 |
+| `beadloom-ujzb.3` | K4 dev | ✓ done | tests listed at their node only |
+| `beadloom-ujzb.4` | W0 docs | in progress | stale pairs of A1, A2, K1–K4 |
 | `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | blocked | node pages; landscape mode |
 | `beadloom-rjp1` | A5 test | blocked | browser tests; `site-e2e` |
