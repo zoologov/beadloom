@@ -62,6 +62,7 @@
 | `beadloom-ujzb.4` | W0 docs | ✓ done | stale pairs of A1, A2, K1–K4 |
 | `beadloom-7091` | A3 dev | ✓ done | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | in progress | node pages; landscape mode |
+| `beadloom-ujzb.5` | test | in progress | layer-coverage self-checks, strict (owner) |
 | `beadloom-rjp1` | A5 test | blocked | browser tests; `site-e2e` |
 | `beadloom-bp8n` | T1 test | blocked | slice 1 criteria |
 | `beadloom-arak` | R1 review | blocked | review slice 1 |
