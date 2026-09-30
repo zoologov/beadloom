@@ -118,3 +118,60 @@ test("the keys and the buttons zoom, fit and clear the selection", async ({ page
   await page.keyboard.press("Escape");
   expect(await viewer(page, "selection")).toBeNull();
 });
+
+/**
+ * Resolve once the page has not scrolled for 400 ms.
+ *
+ * Cytoscape ignores the wheel for 250 ms after the page scrolls, and lets it
+ * scroll the page instead, so a wheel event sent sooner tests the page and not
+ * the viewer.
+ */
+function scrollSettled(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        let timer = setTimeout(resolve, 400);
+        window.addEventListener(
+          "scroll",
+          () => {
+            clearTimeout(timer);
+            timer = setTimeout(resolve, 400);
+          },
+          { passive: true }
+        );
+      })
+  );
+}
+
+// A trackpad pinch reaches the page as a wheel event with Control held.
+const WHEEL_GESTURES = [
+  { gesture: "the mouse wheel", modifier: null },
+  { gesture: "a trackpad pinch", modifier: "Control" },
+];
+// Scrolling up (a negative delta) zooms in; scrolling down zooms out.
+const WHEEL_DIRECTIONS = [
+  { direction: "in", deltaY: -400, sign: 1 },
+  { direction: "out", deltaY: 400, sign: -1 },
+];
+
+for (const { gesture, modifier } of WHEEL_GESTURES) {
+  for (const { direction, deltaY, sign } of WHEEL_DIRECTIONS) {
+    test(`${gesture} over the canvas zooms ${direction} and moves no node`, async ({ page }) => {
+      await openArchitecture(page);
+      const canvas = page.getByTestId("graph-canvas");
+      await canvas.scrollIntoViewIfNeeded();
+      const area = await canvas.boundingBox();
+      await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+      await scrollSettled(page);
+      const zoomBefore = await viewer(page, "zoom");
+      const positions = await viewer(page, "positions");
+
+      if (modifier) await page.keyboard.down(modifier);
+      await page.mouse.wheel(0, deltaY);
+      if (modifier) await page.keyboard.up(modifier);
+
+      await expect.poll(async () => Math.sign((await viewer(page, "zoom")) - zoomBefore)).toBe(sign);
+      expect(await viewer(page, "positions")).toEqual(positions);
+    });
+  }
+}

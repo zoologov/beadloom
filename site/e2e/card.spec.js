@@ -71,15 +71,62 @@ test("the card shows every field the data file holds for the node", async ({ pag
   await expect(field(page, "commands")).toContainText(`beadloom why ${node.id}`);
 });
 
-test("a field the index holds nothing for says none", async ({ page, request }) => {
-  const data = await architectureData(request);
-  const bare = data.nodes.find((n) => !(n.tags || []).length && !(n.findings || []).length);
+/** The text of a card field without its heading, whitespace collapsed. */
+function fieldValue(page, name) {
+  return field(page, name).evaluate((element) =>
+    [...element.childNodes]
+      .filter((child) => !/^H\d$/.test(child.nodeName))
+      .map((child) => child.textContent)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
 
-  await openArchitecture(page, `?focus=${bare.id}`);
+/** For each field, how a node comes to hold nothing for it in a version 2 data file. */
+const EMPTIED = {
+  tags: (node) => Object.assign(node, { tags: [] }),
+  layer: (node) => Object.assign(node, { layer: "", layer_rank: null }),
+  docs: (node) => Object.assign(node, { docs: [] }),
+  symbols: (node) => Object.assign(node, { public_symbols: { names: [], omitted: 0 } }),
+  findings: (node) => Object.assign(node, { findings: [], lint_clean: true }),
+};
 
-  await expect(field(page, "tags")).toContainText("none");
-  await expect(field(page, "findings")).toContainText("none");
-});
+for (const [name, empty] of Object.entries(EMPTIED)) {
+  test(`the card says none where the data file holds no ${name} for the node`, async ({
+    page,
+    request,
+  }) => {
+    const data = await architectureData(request);
+    const node = richest(data);
+    empty(node);
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    expect(await fieldValue(page, name)).toBe("none");
+  });
+}
+
+/** How the card words where a node's layer comes from. */
+const LAYER_ORIGINS = [
+  { origin: "its own tag", own: true },
+  { origin: "inherited through part_of", own: false },
+];
+
+for (const { origin, own } of LAYER_ORIGINS) {
+  test(`the card names the node's layer and says it is ${origin}`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    const node = data.nodes
+      .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
+    const layer = data.nodes.find((n) => n.layer_rank === node.layer_rank && n.layer).layer;
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    expect(await fieldValue(page, "layer")).toBe(`${layer} (${origin})`);
+  });
+}
 
 test("every edge kind the node has is listed by direction, and a click moves the selection", async ({
   page,

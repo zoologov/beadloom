@@ -9,16 +9,20 @@ test("a linked view opens in the state its query names", async ({ page, request 
   const data = await architectureData(request);
   const domain = data.nodes.find((n) => n.kind === "domain").id;
   const focus = data.nodes.find((n) => n.parent === domain && n.kind === "feature").id;
-  const query = `?kind=feature&domain=${domain}&focus=${focus}&depth=2&dir=in&mode=architecture`;
+  const query =
+    `?kind=feature&domain=${domain}&violations=1&focus=${focus}&depth=2&dir=in` +
+    "&mode=architecture";
 
   await openArchitecture(page, query);
 
   await expect(page.getByLabel("Kind", { exact: true })).toHaveValue("feature");
   await expect(page.getByLabel("Domain", { exact: true })).toHaveValue(domain);
+  await expect(page.getByLabel("Only flagged", { exact: true })).toBeChecked();
   expect(await viewer(page, "selection")).toBe(focus);
   expect(await viewer(page, "state")).toMatchObject({
     kind: "feature",
     domain,
+    violations: true,
     focus,
     depth: "2",
     dir: "in",

@@ -5,24 +5,20 @@
 // its fallback grey, rgb(153,153,153).
 
 import { test, expect } from "@playwright/test";
-import { CYTOSCAPE_FALLBACK_COLOUR, openArchitecture, viewer } from "./support/viewer.js";
-
-function unresolved(colours) {
-  return colours.filter(
-    (c) => c.value.replace(/\s+/g, "") === CYTOSCAPE_FALLBACK_COLOUR || /var\(/.test(c.value)
-  );
-}
+import {
+  collectRejectedStyles,
+  openArchitecture,
+  unresolvedColours,
+  viewer,
+} from "./support/viewer.js";
 
 test("no drawn colour is Cytoscape's fallback, and no style is rejected", async ({ page }) => {
-  const rejected = [];
-  page.on("console", (message) => {
-    if (/style property .* is invalid/i.test(message.text())) rejected.push(message.text());
-  });
+  const rejected = collectRejectedStyles(page);
   await openArchitecture(page);
 
   const colours = await viewer(page, "colours");
   expect(colours.length).toBeGreaterThan(0);
-  expect(unresolved(colours)).toEqual([]);
+  expect(unresolvedColours(colours)).toEqual([]);
   expect(rejected).toEqual([]);
 });
 
@@ -37,5 +33,5 @@ test("switching to the dark theme rebuilds the colours from the dark tokens", as
   );
 
   const dark = await viewer(page, "colours");
-  expect(unresolved(dark)).toEqual([]);
+  expect(unresolvedColours(dark)).toEqual([]);
 });

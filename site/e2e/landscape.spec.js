@@ -6,7 +6,12 @@
 // fallback grey.
 
 import { test, expect } from "@playwright/test";
-import { CYTOSCAPE_FALLBACK_COLOUR, viewer, waitForViewer } from "./support/viewer.js";
+import {
+  collectRejectedStyles,
+  unresolvedColours,
+  viewer,
+  waitForViewer,
+} from "./support/viewer.js";
 import {
   contractNeighbourhood,
   contractsOf,
@@ -84,12 +89,14 @@ test("a selected service shows its neighbourhood and a card with every contract 
   }
 });
 
-test("the landscape resolves every colour it draws", async ({ page }) => {
+test("the landscape resolves every colour it draws, and no style is rejected", async ({ page }) => {
+  const rejected = collectRejectedStyles(page);
   await openLandscape(page);
 
   const colours = await viewer(page, "colours");
   expect(colours.length).toBeGreaterThan(0);
-  expect(colours.filter((entry) => entry.value === CYTOSCAPE_FALLBACK_COLOUR)).toEqual([]);
+  expect(unresolvedColours(colours)).toEqual([]);
+  expect(rejected).toEqual([]);
 });
 
 test("full screen holds the landscape's toolbar, canvas and card", async ({ page, request }) => {

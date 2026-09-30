@@ -41,6 +41,19 @@ VERIFY_JOBS = ("gate", "tests", "site-build")
 #: The job that carries the locale dimension.
 LOCALE_JOB = "tests-locale"
 
+#: Jobs ``ci.yml`` runs that are deliberately NOT required status checks, each
+#: with its reason and the exit that makes it required. The self-check that
+#: compares ``ci.yml`` with the required contexts leaves these out, and fails on
+#: an entry whose job no longer exists or that is also required, so the map only
+#: shrinks and never hides a lockout.
+ADVISORY_JOBS: dict[str, str] = {
+    "site-e2e": (
+        "the portal's browser tests (BDL-076 A5) stay non-required until they have "
+        "run clean on ten pull requests; the exit is to add 'site-e2e' to "
+        "DEFAULT_STATUS_CHECK_CONTEXTS in the change that removes this entry"
+    ),
+}
+
 #: The fallback expression the checkout token + GH_TOKEN must use on the PR path.
 PAT_FALLBACK_CHECKOUT = "secrets.AI_TW_PAT || github.token"
 PAT_FALLBACK_GH_TOKEN = "secrets.AI_TW_PAT || secrets.GITHUB_TOKEN"  # noqa: S105 - GH expression, not a secret

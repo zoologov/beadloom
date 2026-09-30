@@ -83,3 +83,79 @@ export function depthOf(id, parents) {
   for (let cursor = parents[id]; cursor; cursor = parents[cursor]) depth += 1;
   return depth;
 }
+
+/**
+ * The colour entries that did not resolve: Cytoscape's fallback grey, or a
+ * `var(...)` string that reached a style unresolved.
+ */
+export function unresolvedColours(colours) {
+  return colours.filter(
+    (c) => c.value.replace(/\s+/g, "") === CYTOSCAPE_FALLBACK_COLOUR || /var\(/.test(c.value)
+  );
+}
+
+/**
+ * Start collecting every style Cytoscape rejects on `page`; returns the live list.
+ *
+ * Cytoscape validates a stylesheet when it is applied and logs each value it
+ * cannot parse, then keeps the property's previous value. A rejected colour is
+ * therefore not always visible as the fallback grey, and this list is what
+ * shows it. Call it before the page loads.
+ */
+export function collectRejectedStyles(page) {
+  const rejected = [];
+  page.on("console", (message) => {
+    if (/style property .* is invalid/i.test(message.text())) rejected.push(message.text());
+  });
+  return rejected;
+}
+
+/** The nodes the "Only flagged" filter keeps: a rule violation, or stale docs. */
+export function flaggedIds(data) {
+  return data.nodes
+    .filter((n) => n.lint_clean === false || n.doc_status === "stale")
+    .map((n) => n.id);
+}
+
+/**
+ * What full screen shows, read from the element that is full screen now.
+ *
+ * `{ active, fills, shown }`: whether anything is full screen, whether it
+ * covers the viewport, and for each name of `selectors` whether its element is
+ * inside it and laid out on screen: not hidden, and not wholly outside the viewport.
+ */
+export function fullscreenView(page, selectors) {
+  return page.evaluate((wanted) => {
+    const element =
+      document.fullscreenElement || document.querySelector("[data-fullscreen-fallback='on']");
+    // Laid out and at least partly on screen: a long card scrolls inside its panel.
+    const inView = (rect) =>
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.left < window.innerWidth &&
+      rect.top < window.innerHeight &&
+      rect.right > 0 &&
+      rect.bottom > 0;
+    const shown = {};
+    for (const [name, selector] of Object.entries(wanted)) {
+      const target = document.querySelector(selector);
+      shown[name] = Boolean(
+        element && target && element.contains(target) && inView(target.getBoundingClientRect())
+      );
+    }
+    const box = element?.getBoundingClientRect();
+    return {
+      active: Boolean(element),
+      fills: Boolean(box && box.width >= window.innerWidth - 1 && box.height >= window.innerHeight - 1),
+      shown,
+    };
+  }, selectors);
+}
+
+/** What a reader of a selected node needs on screen: the tools, the canvas, the card, the legend. */
+export const SELECTED_VIEW = Object.freeze({
+  toolbar: "[role='toolbar']",
+  canvas: "[data-testid='graph-canvas']",
+  card: "[data-testid='node-card']",
+  legend: "[aria-label='Legend']",
+});

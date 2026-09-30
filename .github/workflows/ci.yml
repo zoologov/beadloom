@@ -6,6 +6,7 @@
 #             tests ─┼─(all green?)─► ai-techwriter ─► PR unblocked
 #        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
 #      tests-locale ──(the environment dimension; not in ai-techwriter's needs)
+#        site-build ──► site-e2e (browser tests; advisory, not a required check)
 #
 # gate / tests / tests-locale / site-build run in parallel on GitHub-hosted
 # runners; there is no platform dimension — it was built, priced and declined
@@ -342,6 +343,70 @@ jobs:
       - name: Build the VitePress site
         run: npm run docs:build
         working-directory: site
+
+  # ---------------------------------------------------------------------- #
+  # site-e2e — the portal's browser tests (BDL-076 A5). Playwright drives the
+  # BUILT portal in Chromium the way `npm run test:e2e` does locally: the
+  # config's web server runs `vitepress build`, then `vitepress preview`, and
+  # every case reads state through `window.__beadloomViewer`, never pixels.
+  #
+  # NOT a required check, on purpose: it stays out of
+  # DEFAULT_STATUS_CHECK_CONTEXTS and out of ai-techwriter's `needs` until it
+  # has run clean on ten pull requests (BDL-076 CONTEXT). The self-check that
+  # compares ci.yml with the required contexts names it as advisory, with that
+  # exit. `needs: site-build` so a portal that does not build is reported once,
+  # by the job whose purpose that is, and not again as forty browser failures.
+  # ---------------------------------------------------------------------- #
+  site-e2e:
+    needs: [site-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Reindex graph
+        run: uv run beadloom reindex
+
+      - name: Generate the site from the graph
+        run: uv run beadloom docs site --out site
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
+      # The browser at the version the locked @playwright/test expects, with
+      # the system libraries Chromium needs on the runner image.
+      - name: Install the Playwright Chromium browser
+        run: npx playwright install --with-deps chromium
+        working-directory: site
+
+      - name: Run the browser tests
+        run: npm run test:e2e
+        working-directory: site
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            site/playwright-report/
+            site/test-results/
+          retention-days: 14
 
   # ---------------------------------------------------------------------- #
   # ai-techwriter — runs ONLY after gate + tests + site-build are green, so a

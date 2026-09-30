@@ -4,7 +4,16 @@
 // its own pan and zoom and none of the viewer's navigation, filters or card.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, viewer, waitForViewer } from "./support/viewer.js";
+import {
+  SELECTED_VIEW,
+  architectureData,
+  flaggedIds,
+  fullscreenView,
+  parentMap,
+  viewer,
+  waitForViewer,
+  withAncestors,
+} from "./support/viewer.js";
 import { neighbourhood } from "./support/graph.js";
 
 const CARD = "[data-testid='node-card']";
@@ -79,4 +88,40 @@ test("a page under other/ opens focused on its node the same way", async ({ page
 
   expect(await viewer(page, "selection")).toBe(node.id);
   await expect.poll(() => viewer(page, "neighbourhood")).toEqual(neighbourhood(data, node.id, 1, "both"));
+});
+
+test("a filter on a node page keeps what it keeps on the architecture page", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const node = subjectOf(data, "/domains/");
+
+  await page.goto(pageOf(node));
+  await waitForViewer(page);
+  await page.getByLabel("Only flagged", { exact: true }).check();
+
+  await expect.poll(() => viewer(page, "visibleIds")).toEqual(
+    [...withAncestors(flaggedIds(data), parentMap(data))].sort()
+  );
+});
+
+test("full screen on a node page shows its tools, its card and its legend", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const node = subjectOf(data, "/domains/");
+
+  await page.goto(pageOf(node));
+  await waitForViewer(page);
+  await page.getByRole("button", { name: /full screen/i }).click();
+
+  await expect
+    .poll(() => fullscreenView(page, SELECTED_VIEW))
+    .toEqual({
+      active: true,
+      fills: true,
+      shown: { toolbar: true, canvas: true, card: true, legend: true },
+    });
 });

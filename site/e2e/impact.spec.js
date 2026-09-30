@@ -5,10 +5,10 @@
 
 import { test, expect } from "@playwright/test";
 import {
-  CYTOSCAPE_FALLBACK_COLOUR,
   architectureData,
   openArchitecture,
   parentMap,
+  unresolvedColours,
   viewer,
 } from "./support/viewer.js";
 import { DEPENDENCY_KINDS, impact, nearestOfKind, risksOf } from "./support/graph.js";
@@ -125,11 +125,7 @@ test("the rings are real colours, and leaving impact mode removes them", async (
 
   await openArchitecture(page, `?focus=${subject}&view=impact`);
   await expect.poll(async () => Object.keys(await viewer(page, "rings")).length).toBeGreaterThan(1);
-  const colours = await viewer(page, "colours");
-  const bad = colours.filter(
-    (c) => c.value.replace(/\s+/g, "") === CYTOSCAPE_FALLBACK_COLOUR || /var\(/.test(c.value)
-  );
-  expect(bad).toEqual([]);
+  expect(unresolvedColours(await viewer(page, "colours"))).toEqual([]);
 
   await page.getByRole("button", { name: "Impact", exact: true }).click();
   await expect.poll(() => viewer(page, "rings")).toEqual({});

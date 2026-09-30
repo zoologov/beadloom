@@ -8,6 +8,7 @@ import { test, expect } from "@playwright/test";
 import {
   architectureData,
   depthOf,
+  flaggedIds,
   openArchitecture,
   parentMap,
   subtreeOf,
@@ -65,4 +66,44 @@ test("the search box keeps the matching nodes and their containers", async ({ pa
   await page.getByRole("searchbox", { name: "Search nodes" }).fill(query);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(sorted(withAncestors(matches, parents)));
+});
+
+test("a layer filter keeps every node in that layer, inherited or its own, with its containers", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const parents = parentMap(data);
+  // The declared layer the most nodes are in without a tag of their own, so the
+  // case sees the inherited layer and not only the nodes that name it.
+  const untagged = (rank) => data.nodes.filter((n) => n.layer_rank === rank && !n.layer).length;
+  const declared = data.nodes
+    .filter((n) => n.layer && typeof n.layer_rank === "number")
+    .sort((a, b) => untagged(b.layer_rank) - untagged(a.layer_rank) || a.id.localeCompare(b.id))[0];
+  const members = data.nodes.filter((n) => n.layer_rank === declared.layer_rank).map((n) => n.id);
+  expect(untagged(declared.layer_rank)).toBeGreaterThan(0);
+
+  await openArchitecture(page);
+  await page.getByLabel("Layer", { exact: true }).selectOption(declared.layer);
+
+  await expect.poll(() => viewer(page, "visibleIds")).toEqual(
+    sorted(withAncestors(members, parents))
+  );
+});
+
+test("the flagged filter keeps every node with a violation or stale docs, with its containers", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const parents = parentMap(data);
+  const flagged = flaggedIds(data);
+  expect(flagged.some((id) => parents[id] && !flagged.includes(parents[id]))).toBe(true);
+
+  await openArchitecture(page);
+  await page.getByLabel("Only flagged", { exact: true }).check();
+
+  await expect.poll(() => viewer(page, "visibleIds")).toEqual(
+    sorted(withAncestors(flagged, parents))
+  );
 });

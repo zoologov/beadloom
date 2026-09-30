@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from tests.support import ci_pipeline_properties as properties
 from tests.support.ci_pipeline_properties import held_to
 from tests.support.ci_workflows import (
+    ADVISORY_JOBS,
     GH_CI,
     GH_TEMPLATE,
     GL_CI,
@@ -115,7 +116,9 @@ def test_required_contexts_match_ci_yml_check_runs() -> None:
     """
     from beadloom.onboarding.branch_protection import DEFAULT_STATUS_CHECK_CONTEXTS
 
-    derived = _derive_required_check_names(GH_CI)
+    # An advisory job reports a check that nothing requires, by decision; its
+    # reason and its exit are in ADVISORY_JOBS.
+    derived = _derive_required_check_names(GH_CI) - set(ADVISORY_JOBS)
     required = set(DEFAULT_STATUS_CHECK_CONTEXTS)
 
     missing = required - derived  # required but no such check-run -> lockout
@@ -126,3 +129,25 @@ def test_required_contexts_match_ci_yml_check_runs() -> None:
         f"  required but absent from ci.yml (LOCKOUT): {sorted(missing)}\n"
         f"  in ci.yml but not required:               {sorted(extra)}"
     )
+
+
+def test_every_advisory_job_is_a_ci_job() -> None:
+    """An advisory entry names a job ``ci.yml`` still runs.
+
+    An entry left behind after its job is renamed or removed would exempt a
+    future job of that name from the required-contexts comparison unseen.
+    """
+    jobs = set(load_yaml(GH_CI)["jobs"])  # type: ignore[arg-type]
+
+    assert set(ADVISORY_JOBS) - jobs == set()
+
+
+def test_no_advisory_job_is_also_required() -> None:
+    """A job is advisory or required, never both.
+
+    Promoting an advisory job is one change: its context enters
+    ``DEFAULT_STATUS_CHECK_CONTEXTS`` and its entry leaves ``ADVISORY_JOBS``.
+    """
+    from beadloom.onboarding.branch_protection import DEFAULT_STATUS_CHECK_CONTEXTS
+
+    assert set(ADVISORY_JOBS) & set(DEFAULT_STATUS_CHECK_CONTEXTS) == set()
