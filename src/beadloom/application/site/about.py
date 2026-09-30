@@ -7,52 +7,66 @@ resolve on the published VitePress site, while leaving prose, code spans, and
 fenced code blocks untouched. It is pure and deterministic: no I/O, no DB,
 same input -> same output.
 
-Rebasing rules (applied to both ``[text](target)`` links and
-``![alt](target)`` images):
+The rebasing itself is :func:`beadloom.application.site.markdown_links.rebase_links`,
+the rule every page that carries a project's own text uses since BDL-076
+(``beadloom-ujzb.11``): a node's summary and a published document follow it too.
+What is the About page's own is the README pair, which :func:`portal_links_for`
+states:
 
+- ``README.ru.md`` / ``README.md`` cross-links: if ``cross_link_routes`` maps
+  the (lowercased) target to a site route, the link target is REWRITTEN to that
+  route (visible text kept) — this is the bilingual About toggle
+  (``[Русский](README.ru.md)`` -> ``[Русский](/ru/)``). When no map is given (or
+  the target is absent from it) the link is dropped, keeping only the text: the
+  README has no page to go to.
 - ``docs/<x>.md`` / ``docs/<x>`` whose slug ``<x>`` is published ->
   extension-less site link ``/docs/<x>``.
-- ``README.ru.md`` / ``README.md`` cross-links: if ``cross_link_routes`` maps
-  the (lowercased) target basename to a site route, the link target is REWRITTEN
-  to that route (visible text kept) — this is the bilingual About toggle
-  (``[Русский](README.ru.md)`` -> ``[Русский](/ru/)``). When no map is given (or
-  the target is absent from it) the link is dropped, keeping only the text
-  (back-compat).
-- any other internal/relative target (``LICENSE``, source paths, an
-  unpublished ``docs/<x>``) -> absolute GitHub URL
-  ``{repo_url}/blob/main/<path>`` (a leading ``./`` is stripped). With no
-  ``repo_url`` — a project that declares no repository link (BDL-076 B1) — there
-  is nowhere true to send it: a link keeps its text and an image its alt text.
-- already-absolute URLs (http/https, including shields.io badges) and pure
-  anchors (``#section``) -> unchanged.
+- any other file in the repository (``LICENSE``, source paths, an unpublished
+  ``docs/<x>``) -> ``{repo_url}/blob/main/<path>``. With no ``repo_url`` — a
+  project that declares no repository link (BDL-076 B1) — there is nowhere true
+  to send it: a link keeps its text and an image its alt text.
+- a target outside the repository (``../x``) -> its text.
+- absolute addresses (any scheme, including shields.io badges), protocol-relative
+  ``//host`` addresses and pure anchors (``#section``) -> unchanged.
 
-Links inside inline code spans (``` `...` ```) and fenced code blocks
-(```` ``` ````) are never rewritten.
-
-The badge-link idiom ``[![alt](img)](target)`` (an image used as link text) is
-handled too: the OUTER link ``target`` is rebased by the rules above, and the
-INNER image is recursed through the same rules (so an absolute shields.io badge
-URL stays untouched while a relative inner target would also be rebased).
+Inline links, images, the badge-link idiom ``[![alt](img)](target)`` and
+reference definitions are all rebased; links inside inline code spans and
+fenced code blocks are never rewritten.
 """
 
 # beadloom:domain=application
 
 from __future__ import annotations
 
-import re
+from typing import TYPE_CHECKING
 
-# Inline link/image:  optional leading "!" (image), [text], (target).
-# The text group may itself contain a complete nested image — the badge-link
-# idiom ``[![alt](img)](target)`` — so we allow either plain text (no brackets)
-# or a whole ``![alt](url)`` token inside it. The target group stops at the
-# first ")" — sufficient for README-style targets (no parenthesised titles).
-_LINK_RE = re.compile(r"(!?)\[((?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*)\]\(([^)]*)\)")
+from beadloom.application.site.markdown_links import PortalLinks, rebase_links
 
-# Code spans and fenced blocks: protected regions we must not rewrite.
-# Fenced blocks first (greedier) so they win over inline-span matching.
-_PROTECT_RE = re.compile(r"(```.*?```|``.*?``|`[^`]*`)", re.DOTALL)
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
+#: The README pair, lowercased: the files an About page is rendered from.
 _README_CROSS_LINKS = frozenset({"readme.md", "readme.ru.md"})
+
+
+def portal_links_for(
+    *,
+    published_doc_slugs: set[str] | frozenset[str],
+    repo_url: str,
+    cross_link_routes: Mapping[str, str] | None = None,
+) -> PortalLinks:
+    """What the portal publishes, with the README pair routed or withheld.
+
+    A README of the pair that ``cross_link_routes`` does not route has no page,
+    so a link to it keeps its text rather than going to the repository.
+    """
+    routes = {name.lower(): route for name, route in (cross_link_routes or {}).items()}
+    return PortalLinks(
+        doc_slugs=frozenset(published_doc_slugs),
+        page_routes=routes,
+        repo_url=repo_url,
+        withheld=_README_CROSS_LINKS - routes.keys(),
+    )
 
 
 def render_about(
@@ -68,85 +82,9 @@ def render_about(
     ``"readme.ru.md"``) to the site route to rewrite it to (e.g. ``"/ru/"``).
     When ``None`` the cross-link is dropped (text kept) — back-compat.
     """
-    routes = cross_link_routes or {}
-    segments = _PROTECT_RE.split(readme_text)
-    # re.split with one capture group yields: prose, code, prose, code, ...
-    # even indices are prose (rewrite); odd indices are protected (keep).
-    out: list[str] = []
-    for index, segment in enumerate(segments):
-        if index % 2 == 1:
-            out.append(segment)
-        else:
-            out.append(_rewrite_prose(segment, published_doc_slugs, repo_url, routes))
-    return "".join(out)
-
-
-def _rewrite_prose(
-    prose: str,
-    published_doc_slugs: set[str],
-    repo_url: str,
-    routes: dict[str, str],
-) -> str:
-    def replace(match: re.Match[str]) -> str:
-        bang, text, target = match.group(1), match.group(2), match.group(3)
-        return _rebase_one(bang, text, target, published_doc_slugs, repo_url, routes)
-
-    return _LINK_RE.sub(replace, prose)
-
-
-def _rebase_one(
-    bang: str,
-    text: str,
-    target: str,
-    published_doc_slugs: set[str],
-    repo_url: str,
-    routes: dict[str, str],
-) -> str:
-    # Badge-link idiom: the visible text is itself a nested image. Rebase its
-    # (possibly relative) target by recursing through the prose rewriter so the
-    # inner and outer targets are both handled by the same rules.
-    if "![" in text:
-        text = _rewrite_prose(text, published_doc_slugs, repo_url, routes)
-
-    stripped = target.strip()
-    if _is_absolute_or_anchor(stripped):
-        return f"{bang}[{text}]({target})"
-
-    path = stripped[2:] if stripped.startswith("./") else stripped
-
-    if path.lower() in _README_CROSS_LINKS:
-        route = routes.get(path.lower())
-        if route is not None:
-            # Bilingual About: rewrite to the counterpart route, keep the text.
-            return f"{bang}[{text}]({route})"
-        # No route given: drop the link, keep the visible text (back-compat).
-        return text
-
-    site_link = _published_site_link(path, published_doc_slugs)
-    if site_link is not None:
-        return f"{bang}[{text}]({site_link})"
-
-    if not repo_url:
-        return text
-    return f"{bang}[{text}]({repo_url}/blob/main/{path})"
-
-
-def _is_absolute_or_anchor(target: str) -> bool:
-    return (
-        target.startswith(("http://", "https://"))
-        or target.startswith("#")
+    portal = portal_links_for(
+        published_doc_slugs=published_doc_slugs,
+        repo_url=repo_url,
+        cross_link_routes=cross_link_routes,
     )
-
-
-def _published_site_link(
-    path: str,
-    published_doc_slugs: set[str],
-) -> str | None:
-    """Return ``/docs/<slug>`` if ``path`` is a published docs link, else None."""
-    if not path.startswith("docs/"):
-        return None
-    rest = path[len("docs/") :]
-    slug = rest[: -len(".md")] if rest.endswith(".md") else rest
-    if slug in published_doc_slugs:
-        return f"/docs/{slug}"
-    return None
+    return rebase_links(readme_text, portal)

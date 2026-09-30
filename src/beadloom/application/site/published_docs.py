@@ -30,7 +30,14 @@ Badges are injected ONLY into the copied file under ``site/docs/…``; the sourc
 ``docs/`` prose is never rewritten (no AI authoring — that is the deferred
 F4.1). The badge is a stable, marker-delimited prefix between
 :data:`BADGE_START` / :data:`BADGE_END`, so regeneration overwrites ONLY the
-badge region and leaves the authored prose byte-for-byte intact.
+badge region and leaves the authored prose intact.
+
+One change reaches the prose of the copy: a link that leaves ``docs/``. The copy
+mirrors ``docs/``, so a link to another file under it resolves as written and is
+left alone; a link to ``../README.md`` or ``../src/app.js`` would resolve beside
+the copy, where the portal publishes nothing, and fail ``vitepress build``. Such
+a link is rebased by :func:`beadloom.application.site.markdown_links.rebase_links`,
+the rule the About page and the node pages follow (BDL-076, ``beadloom-ujzb.11``).
 """
 
 # beadloom:domain=application
@@ -39,7 +46,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
+
+from beadloom.application.site.markdown_links import PortalLinks, rebase_links
 
 if TYPE_CHECKING:
     import sqlite3
@@ -55,6 +65,9 @@ BADGE_END = "<!-- beadloom:badge-end -->"
 #: Boilerplate files excluded from per-node source-coverage counting (mirrors
 #: the doc_sync engine's exclusions).
 _COVERAGE_EXCLUDE = frozenset({"__init__.py", "__main__.py", "conftest.py"})
+
+#: The project directory the documentation is published from, as a path inside it.
+_DOCS_DIR = PurePosixPath("docs")
 
 
 @dataclass(frozen=True)
@@ -272,10 +285,13 @@ def publish_docs(
     out_dir: Path,
     *,
     project_root: Path,
+    portal: PortalLinks | None = None,
 ) -> list[Path]:
     """Copy ``docs/**`` into ``out_dir/docs/…`` with badges; return written paths.
 
     NEVER mutates the source ``docs/`` — badges are injected only into the copy.
+    A link in a copy that leaves ``docs/`` is rebased onto *portal*, what the
+    portal publishes; with none, such a link keeps only its text.
     Non-Markdown files are copied verbatim (no badge). A generated
     ``docs/index.md`` landing page is emitted so the ``/docs/`` nav target
     resolves. Deterministic.
@@ -288,6 +304,7 @@ def publish_docs(
     written: list[Path] = []
     out_docs = out_dir / "docs"
     published_md: list[str] = []
+    links = portal or PortalLinks()
 
     for src in sorted(docs_dir.rglob("*")):
         if not src.is_file():
@@ -300,7 +317,12 @@ def publish_docs(
         dst = out_docs / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix == ".md":
-            prose = src.read_text(encoding="utf-8")
+            prose = rebase_links(
+                src.read_text(encoding="utf-8"),
+                links,
+                source_dir=(_DOCS_DIR / rel.as_posix()).parent.as_posix(),
+                mirrored_dir=_DOCS_DIR.as_posix(),
+            )
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose
             dst.write_text(content, encoding="utf-8")

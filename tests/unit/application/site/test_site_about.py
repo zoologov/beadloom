@@ -8,7 +8,8 @@ Rebasing table:
 - ``docs/<x>.md`` (or ``docs/<x>``) with ``<x>`` published -> ``/docs/<x>``.
 - ``README.ru.md`` / ``README.md`` cross-links -> drop link, keep text.
 - other internal/relative targets -> ``{repo_url}/blob/main/<path>``.
-- absolute URLs (http/https, shields badges) + pure anchors -> unchanged.
+- absolute URLs (any scheme, ``//host``, shields badges) + pure anchors -> unchanged.
+- reference definitions follow the same rules (BDL-076 ``beadloom-ujzb.11``).
 """
 
 from __future__ import annotations
@@ -251,14 +252,13 @@ def test_github_and_external_outputs_are_round_trip_stable() -> None:
     assert twice == once
 
 
-def test_published_site_link_is_a_one_way_transform() -> None:
-    """``docs/<slug>.md`` -> ``/docs/<slug>`` is applied once, not round-trip-safe.
+def test_published_site_link_is_stable_under_a_second_pass() -> None:
+    """``docs/<slug>.md`` -> ``/docs/<slug>``, and a second pass leaves it there.
 
-    On a second pass the leading-``/`` ``/docs/<slug>`` is an absolute-internal
-    path (it does NOT start with ``docs/``), so it falls through to the GitHub
-    blob fallback. ``site.py`` applies the transform exactly once on the raw
-    README, so this is correct in practice — documented here so a refactor that
-    accidentally double-applies it is caught.
+    Until BDL-076 (``beadloom-ujzb.11``) the second pass sent ``/docs/<slug>`` to
+    ``{repo}/blob/main//docs/<slug>``, a URL with a doubled slash. A leading ``/``
+    is now the repository root, as a forge reads it in a README, so the site link
+    resolves to the same published document again.
     """
     once = render_about(
         "[guide](docs/getting-started.md)",
@@ -267,23 +267,22 @@ def test_published_site_link_is_a_one_way_transform() -> None:
     )
     assert once == "[guide](/docs/getting-started)"
     twice = render_about(once, published_doc_slugs={"getting-started"}, repo_url=_REPO)
-    assert twice == f"[guide]({_REPO}/blob/main//docs/getting-started)"
+    assert twice == once
 
 
 def test_already_rebased_site_link_is_left_untouched() -> None:
-    """A ``/docs/<slug>`` site link (no http scheme, starts with /) is not docs/-relative.
+    """A root-relative ``/docs/<slug>`` naming a published document stays its page.
 
-    It does not start with ``docs/`` (it starts with ``/docs/``), so it is an
-    unknown internal link — but it must NOT be doubled into the GitHub blob URL
-    on a second pass; the rebaser routes it to the GitHub fallback exactly once.
+    It used to fall through to the GitHub blob URL with a doubled slash
+    (``blob/main//docs/…``); since BDL-076 (``beadloom-ujzb.11``) a leading ``/``
+    is read from the repository root, where ``docs/<slug>`` is published.
     """
     out = render_about(
         "[guide](/docs/getting-started)",
         published_doc_slugs={"getting-started"},
         repo_url=_REPO,
     )
-    # Leading-/ absolute-internal links fall through to the GitHub blob URL.
-    assert out == f"[guide]({_REPO}/blob/main//docs/getting-started)"
+    assert out == "[guide](/docs/getting-started)"
 
 
 def test_readme_cross_link_image_drops_link_keeps_alt() -> None:
@@ -326,23 +325,26 @@ def test_nested_docs_subpath_published_slug() -> None:
     assert out == "[app](/docs/domains/application)"
 
 
-def test_reference_style_link_left_untouched() -> None:
-    """Reference-style links (``[text][ref]`` + a separate definition) are not
-    inline ``[text](target)`` links, so the rebaser leaves them verbatim."""
+def test_reference_style_definition_is_rebased() -> None:
+    """A reference definition is rebased like an inline link (BDL-076 ``beadloom-ujzb.11``).
+
+    It used to be left verbatim, so ``[gs]: LICENSE`` on the About page was a
+    dead link to ``./LICENSE`` exactly as an inline one had been.
+    """
     text = "See [the guide][gs].\n\n[gs]: docs/getting-started.md\n"
     out = render_about(text, published_doc_slugs={"getting-started"}, repo_url=_REPO)
+    assert out == "See [the guide][gs].\n\n[gs]: /docs/getting-started\n"
+
+
+def test_protocol_relative_url_is_left_as_written() -> None:
+    """A ``//host/...`` address is absolute to a browser and to VitePress.
+
+    It used to be rebased onto ``{repo}/blob/main///cdn…``, a URL that names no
+    file; since BDL-076 (``beadloom-ujzb.11``) it is left as written.
+    """
+    text = "[cdn](//cdn.example.com/x.png)"
+    out = render_about(text, published_doc_slugs=set(), repo_url=_REPO)
     assert out == text
-
-
-def test_protocol_relative_url_treated_as_internal() -> None:
-    """A ``//host/...`` URL has no http/https scheme, so it is rebased (defensive:
-    READMEs use explicit schemes; this documents the no-scheme behaviour)."""
-    out = render_about(
-        "[cdn](//cdn.example.com/x.png)",
-        published_doc_slugs=set(),
-        repo_url=_REPO,
-    )
-    assert out == f"[cdn]({_REPO}/blob/main///cdn.example.com/x.png)"
 
 
 def test_empty_input_returns_empty() -> None:

@@ -143,3 +143,41 @@ def test_an_adopter_builds_its_portal_from_docs_site(tmp_path: Path, npm: str) -
 
     data = json.loads((dist / "architecture.data.json").read_text(encoding="utf-8"))
     assert [layer["name"] for layer in data["layers"]] == list(_LAYERS)
+
+
+#: A README that opens with a relative link, as most do. ``init`` takes the root
+#: service's summary from this paragraph (BDL-076, ``beadloom-ujzb.11``).
+_LINKED_README = "# Acme Orders\n\nSee [license](LICENSE).\n"
+
+#: A document that links out of ``docs/``, to the README and to a module.
+_LINKED_GUIDE = (
+    "# Guide\n\nStart from [the readme](../README.md) and [the handler](../src/api/handler.js).\n"
+)
+
+
+def test_a_readme_that_opens_with_a_relative_link_builds(tmp_path: Path, npm: str) -> None:
+    """The root service's page, built from a README's first paragraph, has no dead link.
+
+    B1 measured the failure on this fixture: the summary ``See [license](LICENSE).``
+    was written onto ``services/<root>.md`` as it was, VitePress reported the
+    dead link ``./LICENSE`` and the build exited 1. The project declares no
+    repository, so the link becomes its text.
+    """
+    root = tmp_path / "acme-orders"
+    _write_project(root)
+    (root / "README.md").write_text(_LINKED_README, encoding="utf-8")
+    (root / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "guide.md").write_text(_LINKED_GUIDE, encoding="utf-8")
+    _beadloom("init", "--yes", "--project", str(root))
+    _beadloom("reindex", "--project", str(root))
+    _beadloom("docs", "site", "--project", str(root))
+
+    site = root / "site"
+    for command in ([npm, "ci", "--no-audit", "--no-fund"], [npm, "run", "docs:build"]):
+        built = subprocess.run(command, cwd=site, capture_output=True, encoding="utf-8")  # noqa: S603
+        assert built.returncode == 0, built.stdout + built.stderr
+
+    # ``init`` names the root service after the project directory.
+    service = site / ".vitepress" / "dist" / "services" / f"{root.name}.html"
+    assert "See license." in service.read_text(encoding="utf-8")

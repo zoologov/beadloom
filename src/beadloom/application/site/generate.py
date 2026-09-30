@@ -4,8 +4,8 @@
 
 Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``):
 - ``index.md`` — the About home page, rendered from the project ``README.md``
-  via :func:`beadloom.application.site.about.render_about` (link-rebased so
-  README links resolve on the site). Falls back to the architecture overview
+  with its links rebased (see :mod:`beadloom.application.site.about`) so README
+  links resolve on the site. Falls back to the architecture overview
   body when no ``README.md`` is present.
 - ``ru/index.md`` — the RU About page, rendered from ``README.ru.md`` the same
   way (omitted when that file is absent).
@@ -59,7 +59,7 @@ from beadloom.application.debt_report import (
     compute_top_offenders,
     load_debt_weights,
 )
-from beadloom.application.site.about import render_about
+from beadloom.application.site.about import portal_links_for
 from beadloom.application.site.architecture_card import NodeFinding, NodeVerdicts
 from beadloom.application.site.architecture_view import (
     build_architecture_view_data,
@@ -80,6 +80,7 @@ from beadloom.application.site.landscape_view import (
     render_landscape_view_md,
     serialize_landscape_view,
 )
+from beadloom.application.site.markdown_links import PortalLinks, rebase_links
 from beadloom.application.site.mermaid_guard import MermaidIssue, validate_mermaid
 from beadloom.application.site.metrics_history import (
     MetricsPoint,
@@ -289,29 +290,32 @@ def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[st
     return slugs
 
 
-#: README cross-link basename (lowercased) -> site route. Rewrites the README's
-#: ``[Русский](README.ru.md)`` / ``[English](README.md)`` toggle into an in-page
-#: cross-link between the EN About (``/``) and the RU About (``/ru/``) — replaces
-#: the dropped VitePress locale switcher (BDL-046 BEAD-11).
-_CROSS_LINK_ROUTES: dict[str, str] = {"readme.ru.md": "/ru/", "readme.md": "/"}
+#: Each README of the pair and the site route of its About page. The README's
+#: ``[Русский](README.ru.md)`` / ``[English](README.md)`` toggle becomes an
+#: in-page cross-link between the EN About (``/``) and the RU About (``/ru/``) —
+#: replaces the dropped VitePress locale switcher (BDL-046 BEAD-11).
+_ABOUT_PAGES: tuple[tuple[str, str], ...] = (("README.md", "/"), ("README.ru.md", "/ru/"))
 
 
-def _render_about_page(readme_path: Path, slugs: set[str], repo_url: str) -> str | None:
-    """The About-page body for *readme_path*, or None when the file is absent.
+def _portal_links(project_root: Path, slugs: set[str], repo_url: str) -> PortalLinks:
+    """What this portal publishes, for rebasing the links in the project's own text.
 
-    *repo_url* is the repository link the project declares, ``""`` when none:
-    until BDL-076 B1 it was this repository's URL, a constant, on every
-    project's About page.
+    A README of the pair is routed only when the file exists, since its About
+    page is written only then: until BDL-076 (``beadloom-ujzb.11``) the toggle
+    went to ``/ru/`` on a project with no ``README.ru.md``, a dead link.
+    *repo_url* is the repository link the project declares, ``""`` when none.
     """
+    routes = {name: route for name, route in _ABOUT_PAGES if (project_root / name).is_file()}
+    return portal_links_for(
+        published_doc_slugs=slugs, repo_url=repo_url, cross_link_routes=routes
+    )
+
+
+def _render_about_page(readme_path: Path, portal: PortalLinks) -> str | None:
+    """The About-page body for *readme_path*, or None when the file is absent."""
     if not readme_path.is_file():
         return None
-    readme_text = readme_path.read_text(encoding="utf-8")
-    return render_about(
-        readme_text,
-        published_doc_slugs=slugs,
-        repo_url=repo_url,
-        cross_link_routes=_CROSS_LINK_ROUTES,
-    )
+    return rebase_links(readme_path.read_text(encoding="utf-8"), portal)
 
 
 def _render_docs_overview(slugs: set[str]) -> str:
@@ -525,8 +529,9 @@ def generate_site(
     # About home (EN) from README.md, with the architecture overview moved to
     # its own /architecture page. Falls back to the overview when no README.
     slugs = _published_doc_slugs(conn, project_root)
+    portal = _portal_links(project_root, slugs, identity.repo_url)
     overview = _render_index(conn, nodes)
-    about_en = _render_about_page(project_root / "README.md", slugs, identity.repo_url)
+    about_en = _render_about_page(project_root / "README.md", portal)
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
 
     # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
@@ -557,11 +562,11 @@ def generate_site(
     _write(out_dir / "architecture-diagram.md", overview, written)
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
-    about_ru = _render_about_page(project_root / "README.ru.md", slugs, identity.repo_url)
+    about_ru = _render_about_page(project_root / "README.ru.md", portal)
     if about_ru is not None:
         _write(out_dir / "ru" / "index.md", about_ru, written)
 
-    for page in render_all_pages(conn):
+    for page in render_all_pages(conn, portal):
         _write(out_dir / page.rel_path, page.body, written)
 
     # Showcase A — the metrics dashboard (machine data + human page). Numbers
@@ -615,7 +620,7 @@ def generate_site(
     # site/docs/ preserving structure (source never mutated) and inject a
     # per-doc validation badge from the doc_sync engine (same source as
     # sync-check). Badges land only in the copy under out_dir.
-    published = publish_docs(conn, out_dir, project_root=project_root)
+    published = publish_docs(conn, out_dir, project_root=project_root, portal=portal)
     written.extend(published)
     # Replace the flat docs landing publish_docs emits with a grouped overview
     # (Domains / Services / Guides …). The path is already recorded by
