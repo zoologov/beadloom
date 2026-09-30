@@ -99,6 +99,8 @@ class TestSiteGenerationCluster:
         the portal's shipped files and its identity: fourteen.
         ``beadloom-ujzb.11`` added ``markdown_links.py``, the one rule for a link in
         the project's own text on a portal page: fifteen.
+        BDL-076 B2 (``beadloom-qki6``) added ``pages_workflow.py``, the GitHub Pages
+        workflow that publishes the portal: sixteen.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -106,7 +108,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 15, names
+        assert len(names) == 16, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

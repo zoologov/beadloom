@@ -100,11 +100,19 @@ def docs_polish(
     default=None,
     help="Project root (default: current directory).",
 )
+@click.option(
+    "--pages-workflow",
+    is_flag=True,
+    default=False,
+    help="Also write .github/workflows/beadloom-portal.yml, which publishes the portal "
+    "to GitHub Pages; a workflow beadloom did not write, or one edited by hand, is kept.",
+)
 def docs_site(
     *,
     out_dir: Path | None,
     federated: Path | None,
     project: Path | None,
+    pages_workflow: bool,
 ) -> None:
     """Generate the project's portal: a VitePress site built from the architecture graph.
 
@@ -115,8 +123,12 @@ def docs_site(
     package.json, lockfile, VitePress config, browser tests) from the installed
     package, never over a file it did not write, then copies .beadloom/site/
     last. Never writes into the source docs/ tree.
+
+    With --pages-workflow, also writes the GitHub Pages workflow that
+    regenerates, builds and deploys the portal under the declared base.
     """
     from beadloom.application.site import generate_site
+    from beadloom.application.site.pages_workflow import PagesWorkflowError, site_dir_of
     from beadloom.application.site.site_config import SiteConfigError
     from beadloom.infrastructure.db import connection
 
@@ -127,6 +139,12 @@ def docs_site(
         sys.exit(1)
 
     out = out_dir if out_dir is not None else project_root / "site"
+    if pages_workflow:
+        try:
+            site_dir_of(project_root, out)
+        except PagesWorkflowError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
     try:
         with connection(db_path) as conn:
             result = generate_site(conn, out, project_root=project_root, federated=federated)
@@ -138,6 +156,36 @@ def docs_site(
         sys.exit(1)
     click.echo(f"Generated {len(result.written)} files under {out}")
     _echo_scaffold_report(result.scaffold, out)
+    if pages_workflow:
+        _write_pages_workflow(project_root, out)
+
+
+def _write_pages_workflow(project_root: Path, out: Path) -> None:
+    """Write the Pages workflow for the portal at *out*, and say what became of it."""
+    from beadloom import __version__
+    from beadloom.application.site.pages_workflow import (
+        PagesWorkflowError,
+        write_pages_workflow,
+    )
+    from beadloom.application.site.site_config import site_config_of
+
+    try:
+        report = write_pages_workflow(
+            project_root,
+            out_dir=out,
+            base=site_config_of(project_root).base,
+            version=__version__,
+        )
+    except PagesWorkflowError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(
+        f"Pages workflow: {report.path} {report.outcome} (base {report.base}, "
+        f"Node {report.node_major}, portal {report.site_dir}/)"
+    )
+    if report.outcome == "kept":
+        click.echo(f"Kept {report.path}: it {report.reason}", err=True)
+        click.echo(f"  -> {report.remediation}", err=True)
 
 
 def _echo_scaffold_report(report: ScaffoldReport, out: Path) -> None:

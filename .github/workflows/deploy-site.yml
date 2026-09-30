@@ -2,11 +2,21 @@ name: Deploy VitePress site to GitHub Pages
 
 # Publishes the F4 VitePress showcase (dashboard + interactive architecture +
 # landscape + validated docs) as a GitHub project page at
-# https://zoologov.github.io/beadloom/ (base: '/beadloom/').
+# https://zoologov.github.io/beadloom/.
 #
 # Beadloom produces, VitePress renders: this workflow REGENERATES the site from
 # the graph each run (`beadloom docs site`) so the published site never drifts
 # from the code — then VitePress builds the static dist.
+#
+# Since BDL-076 B2 (`beadloom-qki6`) nothing under site/ is tracked: `docs site`
+# writes the scaffold (theme, VitePress config, package.json, lockfile) from the
+# package it runs from, and the identity — title, description, base '/beadloom/',
+# repository link — from the `site:` block of .beadloom/config.yml, which is the
+# path an adopter's portal takes. The workflow `beadloom docs site
+# --pages-workflow` writes for an adopter differs from this one: it installs
+# beadloom from PyPI at the version that wrote it, sets up the Node major the
+# scaffold's package.json declares, and fails when the declared base is not the
+# address Pages serves the repository under.
 
 on:
   push:

@@ -43,7 +43,7 @@ import shutil
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from importlib.abc import Traversable
@@ -99,6 +99,14 @@ class Marker:
 
 
 @dataclass(frozen=True)
+class Placement:
+    """What :func:`place_marked` did with one file, and why when it kept the file there."""
+
+    outcome: Literal["written", "updated", "unchanged", "kept"]
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class KeptFile:
     """A shipped path this run did not write, because the file there is not beadloom's."""
 
@@ -132,11 +140,18 @@ def _digest(body: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+def marker_line(body: str, version: str, note: str) -> str:
+    """The marker's text for *body*, written by *version*, followed by *note* for a reader.
+
+    The comment syntax around it is the caller's: this is the part every
+    generated file shares, and the part :func:`read_marker` reads back.
+    """
+    return f"beadloom:generated version={version} sha256={_digest(body)}; {note}"
+
+
 def _marker_text(rel: str, body: str, version: str) -> str:
-    return (
-        f"beadloom:generated version={version} sha256={_digest(body)}; "
-        f"written by `beadloom docs site`, a change belongs in {OVERRIDE_DIR.as_posix()}/{rel}"
-    )
+    note = f"written by `beadloom docs site`, a change belongs in {OVERRIDE_DIR.as_posix()}/{rel}"
+    return marker_line(body, version, note)
 
 
 def mark(rel: str, body: str, version: str) -> str:
@@ -227,31 +242,44 @@ def _kept(rel: str, out_dir: Path, reason: str) -> KeptFile:
     )
 
 
-def _place(rel: str, expected: str, out_dir: Path, tally: _Tally) -> None:
-    """Write one shipped file, or record why the file already there was kept."""
-    target = out_dir / rel
+def place_marked(target: Path, expected: str) -> Placement:
+    """Write *expected* at *target* unless the file already there is not beadloom's.
+
+    *expected* carries its marker. A file with an intact marker is beadloom's and
+    is rewritten when it differs; any other file is left exactly as it is, and
+    the returned :class:`Placement` says why.
+    """
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(expected, encoding="utf-8")
-        tally.written.append(rel)
-        return
+        return Placement("written")
     try:
         current = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        tally.kept.append(_kept(rel, out_dir, "could not be read as text, so it was not replaced"))
-        return
+        return Placement("kept", "could not be read as text, so it was not replaced")
     marker = read_marker(current)
     if marker is None:
-        reason = "carries no beadloom:generated marker, so it is not beadloom's to replace"
-        tally.kept.append(_kept(rel, out_dir, reason))
-    elif not marker.intact:
-        reason = "was edited by hand after beadloom wrote it, so it was not replaced"
-        tally.kept.append(_kept(rel, out_dir, reason))
-    elif current == expected:
-        tally.unchanged.append(rel)
-    else:
-        target.write_text(expected, encoding="utf-8")
-        tally.updated.append(rel)
+        return Placement(
+            "kept", "carries no beadloom:generated marker, so it is not beadloom's to replace"
+        )
+    if not marker.intact:
+        return Placement(
+            "kept", "was edited by hand after beadloom wrote it, so it was not replaced"
+        )
+    if current == expected:
+        return Placement("unchanged")
+    target.write_text(expected, encoding="utf-8")
+    return Placement("updated")
+
+
+def _place(rel: str, expected: str, out_dir: Path, tally: _Tally) -> None:
+    """Write one shipped file, or record why the file already there was kept."""
+    placed = place_marked(out_dir / rel, expected)
+    if placed.outcome == "kept":
+        tally.kept.append(_kept(rel, out_dir, placed.reason))
+        return
+    written = {"written": tally.written, "updated": tally.updated, "unchanged": tally.unchanged}
+    written[placed.outcome].append(rel)
 
 
 def _written_files(root: Path, prefix: str = "") -> list[tuple[str, Path]]:

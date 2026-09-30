@@ -269,3 +269,15 @@ issue_log:
 document_pairs:
   - source: README.ru.md
     follower: README.md
+
+# BDL-076 B2 (`beadloom-qki6`). This repository's portal identity. `beadloom docs
+# site` writes it into site/.vitepress/site.generated.mjs, which the shipped
+# config.mjs reads, so the portal at https://zoologov.github.io/beadloom/ is
+# built by the same path as an adopter's and nothing that ships names it. The
+# four values are the ones the tracked site/.vitepress/config.mjs held before
+# B1 moved the scaffold into the package.
+site:
+  title: Beadloom
+  description: "Living knowledge base: metrics dashboard, interactive architecture, and validated docs."
+  base: /beadloom/
+  repo_url: https://github.com/zoologov/beadloom
