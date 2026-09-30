@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.support.layer_rule import (
-    judged_by_another_layer_rule,
+    declared_layer_rules,
+    edges_judged_by,
     read_only_index,
     rule_flags,
-    rule_of,
     view_flags,
+    view_layer_tags,
     view_verdicts,
 )
 
@@ -45,13 +46,28 @@ class TestOnThisRepository:
         the agreement above would also hold if the view had stopped flagging
         anything at all. What makes it a measurement is the population: the view
         renders a verdict on the edges the rule judges, and that is most of
-        them. The site's edges are judged by `site-fsd-layers`, not by this
-        rule, and are left out of "them" (BDL-076 A3).
+        them.
+
+        "Them" is every `depends_on` edge the view draws, and an edge counts as
+        decided when any layer rule the project declares judges it (owner,
+        2026-09-30). The view draws one stratification, so the judgement of
+        the rule it draws is read from the view itself — the instrument this
+        test is about — and the judgement of every other declared layer rule,
+        `site-fsd-layers` over the site's edges since BDL-076 A2, is recomputed
+        from that rule. No edge leaves the denominator.
         """
         verdicts = view_verdicts(live)
-        decided = [edge for edge, verdict in verdicts.items() if verdict is not None]
+        decided = {edge for edge, verdict in verdicts.items() if verdict is not None}
+        drawn = set(view_layer_tags(live))
+        others = [
+            rule
+            for rule in declared_layer_rules(live)
+            if {layer.tag for layer in rule.layers} != drawn
+        ]
         with read_only_index(live) as conn:
-            own = len(verdicts) - judged_by_another_layer_rule(conn, live, rule_of(live))
-        assert own > 300
-        assert len(decided) > own * 9 // 10
+            judged = decided | edges_judged_by(conn, others, verdicts.keys())
+        counted = f"the view's own rule and {[rule.name for rule in others]}"
+        measured = f"{len(judged)} of {len(verdicts)} depends_on edge(s) judged by {counted}"
+        assert len(verdicts) > 300, measured
+        assert len(judged) > len(verdicts) * 9 // 10, f"not more than 90%: {measured}"
         assert view_flags(live) == set()

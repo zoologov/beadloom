@@ -25,10 +25,7 @@ from beadloom.graph.rules.evaluators import (
     evaluate_layer_rules,
     evaluate_require_rules,
 )
-from beadloom.graph.rules.layer_reach import (
-    LAYER_POPULATION_RULE_TYPE,
-    layer_rule_reach,
-)
+from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.graph.rules.loader import load_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
@@ -41,7 +38,8 @@ from beadloom.graph.rules.types import (
 from tests.support.layer_rule import (
     DDD_LAYERS,
     ddd_layer_rule,
-    judged_by_another_layer_rule,
+    declared_layer_rules,
+    layer_coverage,
 )
 from tests.support.the_lint_path_before_release_a import (
     ClosureTags,
@@ -83,16 +81,15 @@ class TestTheReachIsReadableWithoutRunningTheRule:
     ) -> None:
         """The measurement this epic exists for, taken from the code rather than quoted.
 
-        16 of 362 at `aa4bfad4` by own tags; the figure below is what the rule
-        decides on since `beadloom-ku26`. The site's edges are judged by
-        `site-fsd-layers` and are not this rule's to reach (BDL-076 A3).
+        16 of 362 at `aa4bfad4` by own tags; the figure below is what the rules
+        decide on since `beadloom-ku26`. An edge counts as judged when any layer
+        rule the project declares judges it, over every live `depends_on` edge:
+        the site's edges are judged by `site-fsd-layers` (BDL-076 A2) and none
+        leaves the denominator (owner, 2026-09-30).
         """
-        rule = ddd_layer_rule()
-        reach = layer_rule_reach(live_graph, rule)
-        elsewhere = judged_by_another_layer_rule(live_graph, self_check_snapshot, rule)
-        own = reach.population.total - elsewhere
-        assert own > 300
-        assert reach.population.evaluated > own * 9 // 10
+        coverage = layer_coverage(live_graph, declared_layer_rules(self_check_snapshot))
+        assert coverage.total > 300, str(coverage)
+        assert coverage.clears(), f"not more than 90%: {coverage}"
 
 
 class TestWhatTheDecisionsChangedTo:

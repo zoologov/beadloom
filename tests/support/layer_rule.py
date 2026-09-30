@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from beadloom.application.site.architecture_view import build_architecture_view_data
 from beadloom.graph.rules.layer_edges import flagged_layer_edges
 from beadloom.graph.rules.layer_reach import (
-    layer_rule_reach,
     live_edges_of_kind,
     part_of_parents,
     reach_of,
@@ -42,21 +41,91 @@ def rule_of(project: Path) -> LayerRule:
     )
 
 
-def judged_by_another_layer_rule(conn: sqlite3.Connection, project: Path, rule: LayerRule) -> int:
-    """How many edges the project's OTHER layered rules judge.
+#: The edge kind the layer-coverage self-checks measure.
+DEPENDS_ON = "depends_on"
 
-    This repository declares two layer rules over two source trees: the DDD
-    order over `src/` and the Feature-Sliced order over the site's theme
-    (`site-fsd-layers`, BDL-076 A2). An edge between two site slices is judged
-    by the second and is outside the first by declaration, so a claim about
-    how much of its own population the first rule reaches subtracts them
-    rather than counting them as edges it failed to reach.
+
+def declared_layer_rules(project: Path) -> list[LayerRule]:
+    """Every rule of the layer kind the project declares, in declaration order.
+
+    Selected by kind rather than by name, so a third layer rule declared in
+    `rules.yml` is counted by every check that reads this without an edit.
     """
-    return sum(
-        layer_rule_reach(conn, other).population.evaluated
-        for other in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
-        if isinstance(other, LayerRule) and other.name != rule.name
+    return [
+        rule
+        for rule in load_rules(project / ".beadloom" / "_graph" / "rules.yml")
+        if isinstance(rule, LayerRule)
+    ]
+
+
+def edges_judged_by(
+    conn: sqlite3.Connection,
+    rules: Sequence[LayerRule],
+    edges: Collection[tuple[str, str]],
+) -> set[tuple[str, str]]:
+    """The members of *edges* that at least one of *rules* judges.
+
+    An edge is judged by a rule when the rule's edge kind is the edge's —
+    every edge handed here is a `depends_on` edge — and the shipped
+    :func:`~beadloom.graph.rules.layer_reach.reach_of` counts it as evaluated.
+    Asked one edge at a time, so the predicate is the rule's own and not a
+    transcription of it.
+    """
+    parents = part_of_parents(conn)
+    tags = node_tags(conn).as_mapping()
+    counted = [rule for rule in rules if rule.edge_kind == DEPENDS_ON]
+    return {
+        edge
+        for edge in edges
+        if any(reach_of(rule, [edge], parents, tags).population.evaluated for rule in counted)
+    }
+
+
+@dataclass(frozen=True)
+class LayerCoverage:
+    """How many of the live `depends_on` edges any declared layer rule judges.
+
+    The denominator is every live `depends_on` edge: no edge leaves it because
+    some rule other than the one under discussion judges it, and an edge no
+    rule judges stays in it as unjudged.
+    """
+
+    judged: int
+    total: int
+    rules: tuple[str, ...]
+
+    def clears(self, share_floor_tenths: int = 9) -> bool:
+        """Whether more than *share_floor_tenths* tenths of the edges are judged."""
+        return self.judged > self.total * share_floor_tenths // 10
+
+    def __str__(self) -> str:
+        return (
+            f"{self.judged} of {self.total} live {DEPENDS_ON} edge(s) judged by any of "
+            f"the layer rules {list(self.rules)}"
+        )
+
+
+def layer_coverage(conn: sqlite3.Connection, rules: Sequence[LayerRule]) -> LayerCoverage:
+    """The share of live `depends_on` edges judged by any of *rules*.
+
+    ``rules`` on the result names the rules that were counted: those of *rules*
+    declared over `depends_on`, the only ones that can judge one of these edges.
+    """
+    edges = live_edges_of_kind(conn, DEPENDS_ON)
+    return LayerCoverage(
+        judged=len(edges_judged_by(conn, rules, edges)),
+        total=len(edges),
+        rules=tuple(rule.name for rule in rules if rule.edge_kind == DEPENDS_ON),
     )
+
+
+def view_layer_tags(project: Path) -> tuple[str, ...]:
+    """The layer tags of the one stratification the rendered view draws."""
+    with row_connection(project) as conn:
+        data = build_architecture_view_data(conn, pages={})
+    layers = data["layers"]
+    assert isinstance(layers, list)
+    return tuple(str(layer["tag"]) for layer in layers if isinstance(layer, dict))
 
 
 @dataclass(frozen=True)

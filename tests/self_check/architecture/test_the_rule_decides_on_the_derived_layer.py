@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.graph.rules.evaluators import evaluate_layer_rules
-from beadloom.graph.rules.layer_reach import layer_rule_reach
-from tests.support.layer_rule import judged_by_another_layer_rule, rule_of
+from tests.support.layer_rule import declared_layer_rules, layer_coverage, rule_of
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -41,15 +40,14 @@ class TestOnThisRepository:
     ) -> None:
         """16 of 365 by own tags before this bead; the ancestry figure is the claim now.
 
-        The population is the rule's own: the site's edges are judged by
-        `site-fsd-layers` and are subtracted (BDL-076 A3).
+        Counted over every live `depends_on` edge, an edge being judged when any
+        layer rule the project declares judges it: since BDL-076 A2 the site's
+        edges are judged by `site-fsd-layers` rather than by this rule, and
+        they stay in the denominator (owner, 2026-09-30).
         """
-        rule = rule_of(self_check_snapshot)
-        reach = layer_rule_reach(live, rule)
-        elsewhere = judged_by_another_layer_rule(live, self_check_snapshot, rule)
-        own = reach.population.total - elsewhere
-        assert own > 300
-        assert reach.population.evaluated > own * 9 // 10
+        coverage = layer_coverage(live, declared_layer_rules(self_check_snapshot))
+        assert coverage.total > 300, str(coverage)
+        assert coverage.clears(), f"not more than 90%: {coverage}"
 
     def test_it_decides_nothing_new_here_because_b1_and_b2_ran_first(
         self, live: sqlite3.Connection, self_check_snapshot: Path
@@ -60,4 +58,3 @@ class TestOnThisRepository:
         """
         rule = rule_of(self_check_snapshot)
         assert [v for v in evaluate_layer_rules(live, [rule]) if v.rule_type == "layer"] == []
-
