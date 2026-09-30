@@ -7,6 +7,10 @@ nodes:
     summary: "The impact mode: every node that depends on the selected one, without a depth limit, in distance rings, with a summary of domains, services, layer boundaries crossed and risky nodes, and the terminal commands for the code-level answer"
     source: site/.vitepress/theme/features/impact-view/
     tags: [fsd-features]
+    # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
+    # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
+    tests:
+      - site/e2e/impact.spec.js
     docs_absent: >-
       Written by the documentation bead that follows A3 (BDL-076 W1,
       `beadloom-qlii`), beside the other slice pages under

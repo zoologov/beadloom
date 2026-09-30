@@ -7,6 +7,10 @@ nodes:
     summary: "The node card: identity, layer, source linked to the repository, docs with their freshness, bound tests, public symbols, edges by kind, rule findings, activity, debt, the node's page and the ctx and why commands to copy"
     source: site/.vitepress/theme/widgets/node-card/
     tags: [fsd-widgets]
+    # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
+    # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
+    tests:
+      - site/e2e/card.spec.js
     docs_absent: >-
       Written by the documentation bead that follows A3 (BDL-076 W1,
       `beadloom-qlii`), beside the other slice pages under

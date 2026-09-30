@@ -7,6 +7,10 @@ nodes:
     summary: "The site's shared segments: browser checks, JSON loading, tree walks and a breadth-first walk, theme tokens resolved to literal colours, the Cytoscape and ELK loader, ECharts, and a command to copy"
     source: site/.vitepress/theme/shared/
     tags: [fsd-shared]
+    # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
+    # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
+    tests:
+      - site/e2e/shell-command.spec.js
     docs:
       - docs/services/vitepress-site/shared.md
 edges:

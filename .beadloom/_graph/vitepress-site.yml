@@ -15,9 +15,9 @@ nodes:
       - docs/services/vitepress-site.md
     # The Playwright tests of BDL-076 A5 live under `site/e2e/`, a test root in
     # `.beadloom/config.yml`. A file directly under that root sits in no kind
-    # folder, so it binds by this declaration rather than by the mirror. While
-    # the folder does not exist, the root is recorded as absent and this prefix
-    # binds nothing, which the reindex states as a warning.
+    # folder, so it binds by a declaration rather than by the mirror. Each spec
+    # is declared by the slice it drives, and the most specific declaration wins
+    # (BDL-076 R1 finding m5); this prefix binds a spec no slice declares.
     tests:
       - site/e2e/
 edges:
