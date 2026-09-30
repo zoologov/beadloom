@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-hmqn` (B3, adopter fixtures on six stacks; one uses B4's setting), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — waiting for the owner's decision on `beadloom-ujzb.14`/`.15`/`.16` (Go, Maven/Gradle, Swift); then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**B3 closed (2026-10-01):** `beadloom-hmqn` `983fbef2` — six fixtures, every portal builds (~17 s each); the advisory CI job `site-adopters` runs them (7 min 27 s locally). What an adopter's graph shows after `init`: Python 3/3 modules and 3/3 edges; TypeScript 6/6 and 7/7; Go 5/5 modules, 3/7 edges plus 3 false edges onto the entry point (`beadloom-ujzb.14`: the quick scan maps every internal import to `cmd/<module>`, and reindex resolves no Go import); Java and Kotlin 0 modules, 0 edges — init makes nodes of `src/main`, `src/test` (`beadloom-ujzb.15`); Swift 0 nodes and languages `[python]` (`beadloom-ujzb.16`). With hand-declared nodes the resolver finds the expected edges for Java, Kotlin and Swift. Each defect held by strict xfails. Browser suite passes on the Go and TypeScript portals (cases that need a landscape or a deeper graph left out, listed and self-checked). The self-hosted GitLab fixture (Java) passes all three link assertions.
 
 **B4 closed (2026-10-01):** `beadloom-ujzb.8` `b4c2ef11` — `site.forges` maps a host to a forge kind or to `source`/`raw` templates; one module (`forge_routes.py`) builds every repository link — card, project text, images (raw route) — at the generated commit, never `main`; a declared `repo_url` wins over the remote, and project text links only to a declared repository; refusals by name in `docs site`, `config-check` and the Gate. Our portal: 130 card links identical, four About links `blob/main` → `blob/<commit>`. Routes written from the forges' published forms, not opened live; Azure raw least certain. Playwright 99; `beadloom ci` rc 1 on 139 stale pairs.
 
@@ -106,12 +108,12 @@
 | `beadloom-srrn` | P1 PR 1 | ✓ done | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | ✓ done | scaffold in the wheel |
 | `beadloom-qki6` | B2 dev | ✓ done | our site through the same path |
-| `beadloom-hmqn` | B3 test | in progress | adopter fixtures, six stacks |
+| `beadloom-hmqn` | B3 test | ✓ done | adopter fixtures, six stacks |
 | `beadloom-ujzb.8` | B4 dev | ✓ done | self-hosted forge links (owner) |
 | `beadloom-ujzb.11` | fix | ✓ done | a relative link in a summary breaks the build |
 | `beadloom-ujzb.12` | fix | ✓ done | Vue interpolation and raw HTML in project text |
 | `beadloom-ujzb.13` | dev | ✓ done | adopter defaults: Node 22, init gitignore, base warning (owner) |
-| `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
+| `beadloom-19l6` | T2 test | ready | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
 | `beadloom-la3t` | P2 PR 2 | blocked | owner's look; PR 2 |
