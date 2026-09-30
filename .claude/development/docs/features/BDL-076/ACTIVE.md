@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-ujzb.11` (a relative link in a summary breaks the build), then `beadloom-qki6` (B2), then `beadloom-ujzb.8` (B4) and `beadloom-hmqn` (B3), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-qki6` (B2), then `beadloom-ujzb.12` (Vue interpolation and raw HTML in project text), then `beadloom-ujzb.8` (B4) and `beadloom-hmqn` (B3), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**`beadloom-ujzb.11` closed (2026-09-30):** `2402fd1b` — one link rule for all project text on the portal (`markdown_links.py`, taken from the About page): a link to a published file goes to its page, to another repository file goes to `<repo_url>/blob/main/<path>` when `repo_url` is declared (else plain text), outside the repository becomes text; README, node summaries and published docs use it. 49 tests; the slow adopter build with `See [license](LICENSE).` red before, green after. Not handled → `beadloom-ujzb.12` (P1): Vue interpolation `{{ }}` and raw HTML in project text. The `blob/main` route is GitHub's → B4.
 
 **B1 closed (2026-09-30):** `beadloom-dfwt` `ce750ebf` — the scaffold (116 files) moved by `git mv` to `src/beadloom/site_scaffold/`, package data in the wheel (verified by building one); the 20 slice nodes point at it, `site-fsd-layers` still judges 44 edges; `docs site` writes it with a marker (version + hash): unedited files follow the shipped body, hand-edited or unmarked files are never overwritten and are reported, `.beadloom/site/` copied last; the `site:` block (title, description, base, repo_url) validated by `docs site`, `config-check` and the Gate, nothing from the git remote; the ai-techwriter panel only when runs exist. An adopter's JS project built from the installed wheel with its own title and base. 45 tests; Playwright 99 passed; `beadloom ci` rc 1 on 144 stale pairs (→ W2). A slow end-to-end test skipped unless `BEADLOOM_RUN_SLOW=1` — B3 must run such tests in a CI job. Filed `beadloom-ujzb.11` (P1).
 
@@ -95,10 +97,11 @@
 | `beadloom-qlii` | W1 tech-writer | ✓ done | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | ✓ done | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | ✓ done | scaffold in the wheel |
-| `beadloom-qki6` | B2 dev | ready | our site through the same path |
+| `beadloom-qki6` | B2 dev | in progress | our site through the same path |
 | `beadloom-hmqn` | B3 test | blocked | adopter fixtures, six stacks |
 | `beadloom-ujzb.8` | B4 dev | ready |
-| `beadloom-ujzb.11` | fix | in progress | a relative link in a summary breaks the build | self-hosted forge links (owner) |
+| `beadloom-ujzb.11` | fix | ✓ done | a relative link in a summary breaks the build |
+| `beadloom-ujzb.12` | fix | ready | Vue interpolation and raw HTML in project text | self-hosted forge links (owner) |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
