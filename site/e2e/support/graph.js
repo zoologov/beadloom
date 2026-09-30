@@ -85,12 +85,41 @@ export function nearestOfKind(id, kind, byId, parents) {
   return null;
 }
 
-/** Why a node is a risk for a change: no bound tests, stale docs, open findings. */
+/**
+ * What a doc's sync status means for a change, by the PRD's risks (US-6) and
+ * the sync engine's words for its states: `stale` was compared and found out of
+ * date; `unpaired`, `unverified` and `missing` are states in which nothing
+ * could be compared, which the engine must not report as the same word; `ok`
+ * is no risk. A status this table does not name is treated as not checked.
+ */
+const DOC_RISK = Object.freeze({
+  ok: null,
+  stale: "stale docs",
+  unpaired: "docs not checked",
+  unverified: "docs not checked",
+  missing: "docs not checked",
+});
+
+/**
+ * The risks a change to `node` runs, as the labels the impact list shows.
+ *
+ * Written from the definition, not from the viewer: a node the test binding
+ * covers with no test is untested (a node it does not cover says nothing); a
+ * node's docs are judged one by one when the file lists them, and by the
+ * aggregate `doc_status` of a version 1 file otherwise; any finding, of any
+ * severity, is open. The labels are returned sorted.
+ */
 export function risksOf(node) {
-  const risks = [];
-  if (node.tests && node.tests.count === 0) risks.push("no bound tests");
-  const staleDoc = (node.docs || []).some((doc) => doc.status !== "ok");
-  if (staleDoc || node.doc_status === "stale") risks.push("stale docs");
-  if ((node.findings || []).length) risks.push("open findings");
-  return risks;
+  const risks = new Set();
+  if (node.tests != null && node.tests.count === 0) risks.add("no bound tests");
+  if (Array.isArray(node.docs)) {
+    for (const doc of node.docs) {
+      const risk = doc.status in DOC_RISK ? DOC_RISK[doc.status] : "docs not checked";
+      if (risk) risks.add(risk);
+    }
+  } else if (node.doc_status === "stale") {
+    risks.add("stale docs");
+  }
+  if (Array.isArray(node.findings) && node.findings.length > 0) risks.add("open findings");
+  return [...risks].sort();
 }

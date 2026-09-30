@@ -47,7 +47,15 @@ function expectedSummary(data, subject) {
     domains: nearest("domain"),
     services: nearest("service"),
     risky: affected.filter((id) => risksOf(byId.get(id)).length),
+    risks: Object.fromEntries(
+      affected.map((id) => [id, risksOf(byId.get(id))]).filter(([, risks]) => risks.length)
+    ),
   };
+}
+
+/** The impact summary's risks, `{ id: labels }`, each list sorted. */
+function listedRisks(summary) {
+  return Object.fromEntries(summary.risky.map((entry) => [entry.id, [...entry.risks].sort()]));
 }
 
 test("impact mode rings every dependent by its distance and summarises them", async ({
@@ -90,6 +98,7 @@ test("each affected node with no tests, stale docs or a finding is marked, and t
   await openArchitecture(page, `?focus=${subject}&view=impact`);
 
   await expect.poll(() => viewer(page, "riskIds")).toEqual(expected.risky);
+  expect(listedRisks(await viewer(page, "impactSummary"))).toEqual(expected.risks);
   const listed = await page
     .getByTestId("impact-risks")
     .locator("[data-risk-node]")
@@ -131,3 +140,35 @@ test("the rings are real colours, and leaving impact mode removes them", async (
   await expect.poll(() => viewer(page, "rings")).toEqual({});
   expect(await viewer(page, "riskIds")).toEqual([]);
 });
+
+// A doc nothing could check is not a stale doc (BDL-076 R1 finding m4): the sync
+// engine keeps `unpaired`, `unverified` and `missing` apart from `stale`, and so
+// does the impact list. This repository's docs are all `ok` or `stale` today, so
+// the served file gives one affected node each state, and nothing else at risk.
+const DOC_STATES = [
+  { status: "stale", label: "stale docs" },
+  { status: "unpaired", label: "docs not checked" },
+  { status: "unverified", label: "docs not checked" },
+  { status: "missing", label: "docs not checked" },
+];
+
+for (const { status, label } of DOC_STATES) {
+  test(`an affected node whose doc is ${status} is listed as "${label}"`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    const subject = subjectOf(data);
+    const target = expectedSummary(data, subject).affected[0];
+    const node = data.nodes.find((n) => n.id === target);
+    node.docs = [{ path: "docs/served-for-the-case.md", status }];
+    node.doc_status = status === "stale" ? "stale" : "fresh";
+    node.tests = { files: [], file_count: 1, count: 1, placement: {} };
+    node.findings = [];
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+    await openArchitecture(page, `?focus=${subject}&view=impact`);
+
+    await expect.poll(async () => listedRisks(await viewer(page, "impactSummary"))[target]).toEqual([
+      label,
+    ]);
+    await expect(page.locator(`[data-risk-node='${target}']`)).toContainText(label);
+  });
+}

@@ -3,7 +3,7 @@
 //
 // The browser tests assert state rather than pixels, and read it here: the
 // visible node ids, the selection, node positions, the viewport, the colours
-// Cytoscape resolved, the edge styles it drew — each edge's arrows, the colours
+// Cytoscape resolved, each node's status and its border, the edge styles it drew — each edge's arrows, the colours
 // along its line and its opacity — and what a selection marked —
 // the neighbourhood, the dimmed nodes, the impact rings and risks, and the
 // impact summary the panel shows. The handle exists only when
@@ -75,6 +75,21 @@ function readers(source) {
           .map((node) => [node.id(), node.data(DISTANCE_DATA)])
       ),
     riskIds: () => idsOf(cy().nodes(".is-risk")),
+    // Each node drawn with a status, the status and the border it is drawn with.
+    statusLooks: () =>
+      Object.fromEntries(
+        cy()
+          .nodes()
+          .filter((node) => Boolean(node.data("status")))
+          .map((node) => [
+            node.id(),
+            {
+              status: node.data("status"),
+              borderColour: node.style("border-color"),
+              borderStyle: node.style("border-style"),
+            },
+          ])
+      ),
     impactSummary: () => {
       const summary = source.impactSummary();
       return summary ? JSON.parse(JSON.stringify(summary)) : null;

@@ -7,8 +7,9 @@
 // follows VitePress's dark mode.
 //
 // Colour means the layer: a node's border, and a box's tint, are its layer's
-// tone. Status is a separate accent: a node with stale docs or a lint finding
-// gets a warning or danger ring. Each edge kind has its own line style. On the
+// tone. Status is a separate accent, drawn by `NODE_STATUSES`: an error finding
+// gets a danger ring, stale docs a warning ring, and warn findings only a
+// double warning ring. Each edge kind has its own line style. On the
 // landscape, which has no layers, a node's border is its health, a contract
 // edge is drawn by its look, and a broken one carries its verdict as a badge.
 //
@@ -19,6 +20,7 @@
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
+import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
 import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
 
@@ -30,6 +32,9 @@ export const GEOMETRY = Object.freeze({
   selectedEdgeWidth: 3.6,
   walkEdgeWidth: 2.8,
   riskOutlineWidth: 4,
+  statusBorderWidth: 5,
+  // A double border needs the width to show both of its lines.
+  doubleBorderWidth: 7,
 });
 
 /** How much of a ring's tone a node's fill takes; the rest is the node's usual fill. */
@@ -95,8 +100,15 @@ function nodeRules(tokens) {
       selector: `node[health = "${health}"]`,
       style: { "border-color": tokens[tone] },
     })),
-    { selector: 'node[status = "stale"]', style: { "border-color": tokens.warning, "border-width": 5 } },
-    { selector: 'node[status = "violation"]', style: { "border-color": tokens.danger, "border-width": 5 } },
+    ...Object.entries(NODE_STATUSES).map(([status, look]) => ({
+      selector: `node[status = "${status}"]`,
+      style: {
+        "border-color": tokens[look.tone],
+        ...(look.border === "double"
+          ? { "border-style": "double", "border-width": GEOMETRY.doubleBorderWidth }
+          : { "border-width": GEOMETRY.statusBorderWidth }),
+      },
+    })),
     {
       selector: "node.is-selected",
       style: {

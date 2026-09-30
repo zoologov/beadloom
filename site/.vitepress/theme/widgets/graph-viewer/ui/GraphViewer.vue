@@ -23,7 +23,7 @@
 // hidden when the reader asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { parentMapOf } from "../../../entities/graph-node/index.js";
+import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-node/index.js";
 import {
   DEPENDENCY_KINDS,
   EdgeLegend,
@@ -94,6 +94,7 @@ const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value, graph.value.layers));
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
+const statuses = computed(() => statusesOf(nodes.value));
 const legendKeys = computed(() =>
   legendKeysOf(
     edges.value.filter((edge) => nodeById.value.has(edge.src) && nodeById.value.has(edge.dst))
@@ -371,6 +372,7 @@ onBeforeUnmount(() => disposeHandle());
 
     <div class="bl-viewer-legend" aria-label="Legend">
       <LayerLegend :layers="layers" />
+      <NodeStatusLegend :statuses="statuses" />
       <EdgeLegend :keys="legendKeys" />
     </div>
   </div>
