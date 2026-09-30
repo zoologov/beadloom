@@ -358,8 +358,12 @@ def test_no_click_targets_a_missing_page(tmp_path: Path) -> None:
         assert (out / rel).exists(), f"dead click target: {url} (no {rel})"
 
 
-def test_site_node_without_page_has_no_click(tmp_path: Path) -> None:
-    """A node with no generated page (kind=site) must NOT emit a dead click."""
+def test_site_node_clicks_through_to_its_page_under_other(tmp_path: Path) -> None:
+    """A node of a kind with no directory (kind=site) clicks to its page under ``other/``.
+
+    Every node has a page, and the diagram viewer's base-path rewrite covers
+    ``/other/`` since BDL-076 A4, so the click is emitted, and it is not dead.
+    """
     conn = _open()
     out = tmp_path / "site"
     try:
@@ -369,9 +373,8 @@ def test_site_node_without_page_has_no_click(tmp_path: Path) -> None:
     finally:
         conn.close()
     md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
-    # ``vitepress-site`` (kind=site) has no /services or /domains page → no click.
-    assert "vitepress-site" in md  # the node still renders + carries its edge
-    assert 'click n_vitepress_site' not in md
+    assert 'click n_vitepress_site "/other/vitepress-site"' in md
+    assert (out / "other" / "vitepress-site.md").exists()
 
 
 def test_federated_foreign_node_has_no_dead_click(tmp_path: Path) -> None:

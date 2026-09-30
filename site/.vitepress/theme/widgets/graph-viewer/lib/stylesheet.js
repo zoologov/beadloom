@@ -8,7 +8,9 @@
 //
 // Colour means the layer: a node's border, and a box's tint, are its layer's
 // tone. Status is a separate accent: a node with stale docs or a lint finding
-// gets a warning or danger ring. Each edge kind has its own line style.
+// gets a warning or danger ring. Each edge kind has its own line style. On the
+// landscape, which has no layers, a node's border is its health, a contract
+// edge is drawn by its look, and a broken one carries its verdict as a badge.
 //
 // A selection adds three looks. Outside the neighbourhood or the impact set a
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
@@ -40,6 +42,12 @@ export const CURVE_STYLE = "bezier";
 
 /** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */
 const SOURCE_END_SHARE = 0.35;
+
+/** A landscape node's border tone by its health. */
+const HEALTH_TONES = Object.freeze({ healthy: "green", broken: "danger", neutral: "gray" });
+
+/** The contract looks drawn as heavy as a violation: the ones that hurt. */
+const PROBLEM_STYLE_KEYS = Object.freeze(["contract-broken", "contract-drift"]);
 
 function nodeRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
@@ -82,6 +90,10 @@ function nodeRules(tokens) {
     ...tones.map((tone) => ({
       selector: `:parent[tone = "${tone}"]`,
       style: { "background-color": tokens[tone] },
+    })),
+    ...Object.entries(HEALTH_TONES).map(([health, tone]) => ({
+      selector: `node[health = "${health}"]`,
+      style: { "border-color": tokens[tone] },
     })),
     { selector: 'node[status = "stale"]', style: { "border-color": tokens.warning, "border-width": 5 } },
     { selector: 'node[status = "violation"]', style: { "border-color": tokens.danger, "border-width": 5 } },
@@ -131,6 +143,14 @@ function edgeRules(tokens) {
     },
     ...byKey,
     { selector: 'edge[styleKey = "violation"]', style: { width: GEOMETRY.violationWidth, "z-index": 8 } },
+    ...PROBLEM_STYLE_KEYS.map((key) => ({
+      selector: `edge[styleKey = "${key}"]`,
+      style: { width: GEOMETRY.violationWidth, "z-index": 8 },
+    })),
+    {
+      selector: "edge[badge]",
+      style: { label: "data(badge)", color: tokens.danger, "font-weight": 700, "font-size": "10px" },
+    },
     { selector: "edge.is-selected-edge", style: { width: GEOMETRY.selectedEdgeWidth, "z-index": 10 } },
     { selector: "edge.is-selected-edge, edge.is-hovered", style: { label: "data(label)" } },
   ];

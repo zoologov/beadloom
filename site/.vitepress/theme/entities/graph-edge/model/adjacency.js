@@ -8,10 +8,10 @@
 // which is not a dependency of the producer, so a change's reach does not
 // travel along it.
 
-import { EDGE_STYLES, isDrawnKind, isViolation } from "./edgeKinds.js";
+import { DRAWN_KINDS, EDGE_STYLES, isDrawnKind, isViolation } from "./edgeKinds.js";
 
 /** The kinds a neighbourhood walks: every kind drawn as a line. */
-export const NEIGHBOURHOOD_KINDS = Object.freeze(Object.keys(EDGE_STYLES).filter(isDrawnKind));
+export const NEIGHBOURHOOD_KINDS = DRAWN_KINDS;
 
 /** The kinds whose source depends on its target: what the impact walk follows. */
 export const DEPENDENCY_KINDS = Object.freeze(["depends_on", "uses", "consumes"]);

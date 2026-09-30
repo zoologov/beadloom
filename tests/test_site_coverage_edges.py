@@ -151,8 +151,8 @@ def test_node_with_no_symbols_or_children_still_renders(
     assert page.exists()
     text = page.read_text(encoding="utf-8")
     assert "An isolated feature" in text
-    # A diagram block is still emitted (container fallback).
-    assert "```mermaid" in text
+    # The viewer is still mounted on it, focused on the lone node (BDL-076 A4).
+    assert '<ArchitectureMap focus="lonely"' in text
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // The Cytoscape instance behind the viewer's canvas, and what the viewer does to it.
 //
 // It creates the graph, lays it out, reports taps, labels a hovered edge, shows
-// only a set of node ids, marks a selection — the selected node, the nodes and
+// only a set of node ids (and of contracts), marks a selection — the selected node, the nodes and
 // edges its walk reached, their distance rings and risks, and what lies outside
 // — and swaps the stylesheet when the theme changes. It decides nothing about
 // which nodes are visible or selected: the viewer's state does.
@@ -75,9 +75,18 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     cy.value?.style(style);
   }
 
-  function showOnly(ids) {
+  /**
+   * Show only the nodes in `ids`. When `contracts` is a set of contract keys, an
+   * edge that carries a contract outside it is hidden as well, because two
+   * services that stay on the map can share a contract the filters leave out.
+   */
+  function showOnly(ids, contracts = null) {
     cy.value?.batch(() => {
       cy.value.nodes().forEach((node) => node.toggleClass("is-hidden", !ids.has(node.id())));
+      cy.value.edges().forEach((edge) => {
+        const contract = edge.data("contract");
+        edge.toggleClass("is-hidden", Boolean(contracts && contract && !contracts.has(contract)));
+      });
     });
   }
 

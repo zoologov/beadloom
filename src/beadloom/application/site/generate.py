@@ -65,7 +65,6 @@ from beadloom.application.site.dashboard import (
 )
 from beadloom.application.site.landscape_map import (
     build_landscape_data,
-    existing_page_urls,
     render_landscape_md,
 )
 from beadloom.application.site.landscape_view import (
@@ -574,7 +573,7 @@ def generate_site(
     # `landscape.md` mounts the client-side <LandscapeMap>. The original Mermaid
     # diagram stays as a static fallback at `landscape-diagram.md` (no dead link;
     # the federated map still flows through it when `--federated` is given).
-    landscape_pages = existing_page_urls(conn)
+    landscape_pages = node_page_urls(conn)
     view_data = build_landscape_view_data(conn, pages=landscape_pages)
     _write(
         out_dir / "public" / "landscape.data.json",

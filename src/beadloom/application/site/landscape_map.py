@@ -27,9 +27,10 @@ hand-drawn:
   edges get a red ``linkStyle``.
 - **Clickable — hardened (BDL-041 F4.4).** A node emits ``click <id> "<url>"``
   ONLY when ``url`` is a page that actually exists in the generated tree (the
-  ``pages`` map passed by the generator). A node with no page (a foreign repo,
-  or a non-page kind like ``site``) emits NO click — never a dead link (the live
-  404/MIME bug: clicks went to ``/services/<ref>`` for pages that did not exist).
+  ``pages`` map passed by the generator). Every node of this graph has a page,
+  ``other/`` included since BDL-076 A4; a node with no page (a foreign repo on a
+  federated map) emits NO click — never a dead link (the live 404/MIME bug:
+  clicks went to ``/services/<ref>`` for pages that did not exist).
 
 Thin slice = Mermaid only (VitePress renders it natively + supports ``click``);
 no JS graph library. Output is deterministic (sorted nodes/edges, stable Mermaid
@@ -225,27 +226,6 @@ def _assemble(
     return {"scope": scope, "nodes": nodes, "edges": edges}
 
 
-def existing_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
-    """Map every node that has a generated page to its absolute page URL.
-
-    A node page is emitted only for kinds with an output directory (see
-    :data:`beadloom.application.site.node_pages._KIND_DIR` — ``service`` / ``domain``
-    / ``feature``). The URL mirrors that page's location (``/<dir>/<ref>``), so
-    the landscape map's ``click`` links resolve to real pages — never a 404
-    (BDL-041 F4.4). A node whose kind has no page directory is absent from the
-    map and therefore renders without a click.
-    """
-    from beadloom.application.site.node_pages import _KIND_DIR
-
-    rows = conn.execute("SELECT ref_id, kind FROM nodes ORDER BY ref_id").fetchall()
-    urls: dict[str, str] = {}
-    for row in rows:
-        directory = _KIND_DIR.get(str(row["kind"]))
-        if directory is not None:
-            urls[str(row["ref_id"])] = f"/{directory}/{row['ref_id']}"
-    return urls
-
-
 def build_landscape_data(
     conn: sqlite3.Connection | None = None,
     *,
@@ -301,8 +281,8 @@ def _node_lines(
     poisons its endpoints red); otherwise grey when only neutral, else green.
 
     A ``click`` is emitted ONLY when the node has a real page in *pages* (the
-    generator's set of existing page URLs). A node with no page (a foreign repo,
-    or a non-page kind such as ``site``) emits no click — never a dead link
+    generator's set of existing page URLs). A node with no page (a foreign repo
+    on a federated map) emits no click — never a dead link
     (BDL-041 F4.4: the live 404/MIME bug came from a click to a page that did not
     exist).
     """

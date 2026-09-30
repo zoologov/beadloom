@@ -4,7 +4,8 @@
 // A node carries its layer's tone and its status as data, and the stylesheet
 // maps each value to a resolved colour, so a theme switch restyles the graph
 // without rebuilding it. Containment becomes Cytoscape's `parent`; every other
-// drawn kind becomes an edge with its style key.
+// drawn kind becomes an edge with its style key. A landscape node carries its
+// health, and a landscape edge its contract and, when broken, its badge.
 
 import { EDGE_STYLES, edgeKeyOf, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
 import { statusOf } from "../../../entities/graph-node/index.js";
@@ -18,6 +19,7 @@ function nodeElement(node, { parents, layers }) {
     tone: layerToneOf(node, layers),
     status: statusOf(node) || "",
   };
+  if (node.health) data.health = node.health;
   // The layer rank is the node's lane in the layout; a node with no rank has none.
   if (typeof node.layer_rank === "number") data.partition = node.layer_rank;
   if (parents[node.id]) data.parent = parents[node.id];
@@ -37,6 +39,8 @@ function edgeElement(edge, index) {
       key: edgeKeyOf(edge),
       styleKey,
       label: EDGE_STYLES[styleKey].label,
+      ...(edge.contract ? { contract: edge.contract } : {}),
+      ...(edge.badge ? { badge: edge.badge } : {}),
     },
   };
 }

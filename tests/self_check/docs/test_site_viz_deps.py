@@ -175,12 +175,18 @@ def test_filters_hide_rather_than_remove_and_keep_containers() -> None:
 
 
 def test_landscape_protocol_card_only_for_real_contracts() -> None:
-    """A plain dependency edge gets a Dependency card with NO Protocol field;
-    only a real amqp/graphql contract shows the protocol card (never 'unknown')."""
-    src = _read("pages/landscape/ui/LandscapeMap.vue")
-    assert "isContractEdge" in src
+    """A plain dependency gets a Dependency entry with NO Protocol field;
+    only a real amqp/graphql contract shows the protocol card (never 'unknown').
+
+    Since BDL-076 A4 the landscape card lists a service's contracts, and the
+    declared-protocol test lives in the landscape-data entity.
+    """
+    src = _read("pages/landscape/ui/LandscapeCard.vue")
+    assert 'v-if="isDeclaredContract(contract)"' in src
     assert "amqp" in src and "graphql" in src
     # The simpler Dependency branch exists.
     assert "Dependency" in src
     # The old unconditional 'unknown' protocol fallback is gone.
-    assert 'selected.contract.protocol || "unknown"' not in src
+    assert 'contract.protocol || "unknown"' not in src
+    contracts = _read("entities/landscape-data/model/contracts.js")
+    assert 'DECLARED_PROTOCOLS = Object.freeze(["amqp", "graphql"])' in contracts

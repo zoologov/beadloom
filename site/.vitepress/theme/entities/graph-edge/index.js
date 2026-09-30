@@ -3,8 +3,10 @@
 
 export {
   CONTAINMENT_KIND,
+  DRAWN_KINDS,
   EDGE_STYLES,
   VIOLATION_KEY,
+  contractStyleKey,
   isDrawnKind,
   isViolation,
   legendKeysOf,

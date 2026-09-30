@@ -2,11 +2,14 @@
 // beadloom:component=site-graph-viewer
 // GraphViewer — the viewer's own space: a toolbar, the canvas and a collapsible panel.
 //
-// It renders `architecture.data.json` with Cytoscape.js and the ELK layout, in
-// compound mode: domains and services are boxes around their features and
-// components. It composes the features below it — filters, navigation, the
-// neighbourhood, the impact mode, full screen and URL state — and the entities
-// it draws. Everything it shows comes from the data file.
+// It renders a data file with Cytoscape.js and the ELK layout, in one of two
+// modes (`model/modes.js`): the architecture, from `architecture.data.json`, in
+// compound mode — domains and services are boxes around their features and
+// components — or the landscape of contracts between services, from
+// `landscape.data.json`. It composes the features below it — filters,
+// navigation, the neighbourhood, the impact mode, full screen and URL state —
+// and the entities it draws. Everything it shows comes from the data file; the
+// mode supplies the filters in its slot of the toolbar.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
@@ -20,7 +23,6 @@
 // hidden when the reader asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useArchitectureData } from "../../../entities/architecture-data/index.js";
 import { parentMapOf } from "../../../entities/graph-node/index.js";
 import {
   DEPENDENCY_KINDS,
@@ -30,12 +32,6 @@ import {
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
 import { LayerLegend, layerOfNode, layersOf } from "../../../entities/layer/index.js";
-import {
-  FILTER_DEFAULTS,
-  FilterControls,
-  filterOptions,
-  visibleNodeIds,
-} from "../../../features/filter-graph/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,
@@ -63,45 +59,51 @@ import { buildStylesheet } from "../lib/stylesheet.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
+import { DEFAULT_MODE, modeOf } from "../model/modes.js";
 
 /** The selection's value for the neighbourhood, the default; the other is `IMPACT_VIEW`. */
 const NEIGHBOURHOOD_VIEW = "neighbourhood";
 
 const props = defineProps({
-  mode: { type: String, default: "architecture" },
+  mode: { type: String, default: DEFAULT_MODE },
   focus: { type: String, default: "" },
   depth: { type: [Number, String], default: NEIGHBOURHOOD_DEFAULTS.depth },
   direction: { type: String, default: NEIGHBOURHOOD_DEFAULTS.dir },
   height: { type: String, default: "640px" },
 });
 
+// The data mode is the page's: it is read once, and the URL does not carry it.
+const mode = modeOf(props.mode);
+
 // The view's state. The URL query overrides the props, and every change is
 // written back, so a view can be linked.
 const state = useUrlState({
-  ...FILTER_DEFAULTS,
+  ...mode.filterDefaults,
   focus: props.focus,
   depth: String(props.depth),
   dir: props.direction,
   hide: NEIGHBOURHOOD_DEFAULTS.hide,
   view: NEIGHBOURHOOD_VIEW,
-  mode: props.mode,
 });
 
-const { data, error } = useArchitectureData();
-const nodes = computed(() => (Array.isArray(data.value?.nodes) ? data.value.nodes : []));
-const edges = computed(() => (Array.isArray(data.value?.edges) ? data.value.edges : []));
+const { data, error } = mode.useData();
+const graph = computed(() => mode.graphOf(data.value));
+const nodes = computed(() => graph.value.nodes);
+const edges = computed(() => graph.value.edges);
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value));
-const repository = computed(() => data.value?.repository || null);
-const options = computed(() => filterOptions(nodes.value, layers.value));
+const repository = computed(() => graph.value.repository);
+const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const legendKeys = computed(() =>
   legendKeysOf(
     edges.value.filter((edge) => nodeById.value.has(edge.src) && nodeById.value.has(edge.dst))
   )
 );
-const visibleIds = computed(() =>
-  visibleNodeIds(nodes.value, state, { parents: parents.value, layers: layers.value })
+// `{ nodes, contracts }`: the node ids the filters show and, on the landscape,
+// the contracts they show (null where the mode filters no contract).
+const visible = computed(() =>
+  mode.visible(graph.value, state, { parents: parents.value, layers: layers.value })
 );
 const selectedNode = computed(() => nodeById.value.get(state.focus) || null);
 const selectedLayer = computed(() =>
@@ -111,7 +113,7 @@ const selectedLayer = computed(() =>
 const ids = computed(() => new Set(nodeById.value.keys()));
 const drawnAdjacency = computed(() => adjacencyOf(edges.value, NEIGHBOURHOOD_KINDS, ids.value));
 const dependencyAdjacency = computed(() => adjacencyOf(edges.value, DEPENDENCY_KINDS, ids.value));
-const impactMode = computed(() => state.view === IMPACT_VIEW);
+const impactMode = computed(() => mode.impact && state.view === IMPACT_VIEW);
 
 // The walk from the selected node, or null when nothing is selected.
 const walk = computed(() => {
@@ -169,6 +171,7 @@ function focusCanvas() {
   container.value?.focus({ preventScroll: true });
 }
 function toggleImpact() {
+  if (!mode.impact) return;
   state.view = impactMode.value ? NEIGHBOURHOOD_VIEW : IMPACT_VIEW;
 }
 
@@ -231,7 +234,7 @@ async function render() {
   const mounted = await canvas.mount(elements, buildStylesheet(tokens.value));
   if (!mounted) return;
   navigation.applyArrangePolicy();
-  canvas.showOnly(visibleIds.value);
+  canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
   frameSelection();
 }
@@ -242,9 +245,9 @@ watch(tokens, (current, previous) => {
   if (!previous || !canvas.ready.value) render();
   else canvas.setStyle(buildStylesheet(current));
 });
-watch(visibleIds, (visible) => {
+watch(visible, (shown) => {
   if (!canvas.ready.value) return;
-  canvas.showOnly(visible);
+  canvas.showOnly(shown.nodes, shown.contracts);
   navigation.fit();
 });
 watch(selection, (current) => {
@@ -268,7 +271,7 @@ onMounted(() => {
     container: () => container.value,
     ready: () => canvas.ready.value,
     selection: () => state.focus,
-    state: () => state,
+    state: () => ({ ...state, mode: props.mode }),
     arranging: () => navigation.arranging.value,
     impactSummary: () => summary.value,
   });
@@ -291,14 +294,19 @@ onBeforeUnmount(() => disposeHandle());
     </p>
 
     <div role="toolbar" aria-label="Graph viewer tools" class="bl-viewer-toolbar">
-      <FilterControls :filters="state" :options="options" @change="(key, value) => (state[key] = value)" />
+      <component
+        :is="mode.filterControls"
+        :filters="state"
+        :options="options"
+        @change="(key, value) => (state[key] = value)"
+      />
       <NeighbourhoodControls
         :depth="state.depth"
         :dir="state.dir"
         :hide="Boolean(state.hide)"
         @change="(key, value) => (state[key] = value)"
       />
-      <ImpactButton :active="impactMode" @toggle="toggleImpact" />
+      <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
       <span class="bl-viewer-spacer" />
       <NavigationControls
         :arranging="navigation.arranging.value"
@@ -326,7 +334,7 @@ onBeforeUnmount(() => disposeHandle());
         class="bl-viewer-canvas"
         data-testid="graph-canvas"
         tabindex="0"
-        aria-label="Architecture graph: drag to pan, scroll to zoom; keys + − 0 f Esc"
+        :aria-label="`${mode.label}: drag to pan, scroll to zoom; keys + − 0 f Esc`"
       />
       <aside
         v-show="panelOpen"
@@ -350,13 +358,14 @@ onBeforeUnmount(() => disposeHandle());
           :edges="edges"
           :layers="layers"
           :repository="repository"
+          :contracts="graph.contracts"
           :select="select"
           :close="clearSelection"
         />
         <p v-else class="bl-viewer-hint">
           Select a node to see its card and its neighbourhood; "Depth" and "Direction" choose how
-          far it reaches, and "Impact" shows everything that depends on it. Drag to pan and scroll
-          to zoom; "Arrange" lets you move nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
+          far it reaches<template v-if="mode.impact">, and "Impact" shows everything that depends
+          on it</template>. Drag to pan and scroll to zoom; "Arrange" lets you move nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
           <kbd>Esc</kbd> clear.
         </p>
       </aside>

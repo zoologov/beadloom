@@ -9,14 +9,22 @@
 // small control overlay. With JS disabled the page still shows the static
 // Mermaid SVG untouched (graceful degradation) — VitePress SSR emits the SVG
 // and this enhancement only runs in the browser.
+//
+// `vitepress-plugin-mermaid` renders a diagram again whenever an attribute of
+// `<html>` changes (the theme switch among them), replacing the SVG inside the
+// same container. The mark of an enhanced diagram is therefore on the SVG, not
+// on its container, and a mutation observer enhances each new SVG; before
+// BDL-076 A4 the mark sat on the container, so a re-rendered diagram lost its
+// pan, its controls and its base-aware click targets.
 
 import { onMounted, onBeforeUnmount, nextTick, watch } from "vue";
 import { useRoute } from "vitepress";
 import { isBrowser } from "../../../shared/lib/index.js";
 
 const route = useRoute();
-const ATTACHED = "data-bl-pz"; // marks a container we've already enhanced
+const ATTACHED = "data-bl-pz"; // marks an SVG we've already enhanced
 const instances = [];
+let observer = null;
 
 // SVG xlink namespace — Mermaid renders flowchart `click <id> "<url>"`
 // directives as `<a xlink:href="<url>">` wrappers around the node group.
@@ -25,7 +33,9 @@ const XLINK_NS = "http://www.w3.org/1999/xlink";
 // Root-absolute internal path prefixes the generator emits (base-agnostic).
 // A click target starting with one of these is an in-site page that must be
 // served under the configured base (e.g. `/beadloom/`).
-const INTERNAL_PREFIXES = ["/services/", "/domains/", "/features/", "/docs/"];
+// Every node page lives under one of the first four; a kind with no directory
+// of its own writes its page under `/other/`.
+const INTERNAL_PREFIXES = ["/services/", "/domains/", "/features/", "/other/", "/docs/"];
 
 // Make a raw Mermaid click target base-aware. Pure + idempotent: a root-absolute
 // internal path gets `base` prepended exactly once; anything else (external URL,
@@ -75,7 +85,7 @@ function rewriteClickTargets(svg, base) {
 
 function destroyAll() {
   while (instances.length) {
-    const pz = instances.pop();
+    const { pz } = instances.pop();
     try {
       pz.destroy();
     } catch {
@@ -114,7 +124,17 @@ async function enhance(container, svgPanZoom) {
   if (!svg) {
     return;
   }
-  container.setAttribute(ATTACHED, "true");
+  // A container whose SVG was rendered again drops the pan-zoom of the old one.
+  for (let i = instances.length - 1; i >= 0; i -= 1) {
+    if (instances[i].container !== container) continue;
+    try {
+      instances[i].pz.destroy();
+    } catch {
+      // The old SVG is already detached.
+    }
+    instances.splice(i, 1);
+  }
+  svg.setAttribute(ATTACHED, "true");
   container.classList.add("bl-pz-frame");
 
   // Base-aware click targets: VitePress rewrites markdown/nav links during the
@@ -140,7 +160,7 @@ async function enhance(container, svgPanZoom) {
     zoomScaleSensitivity: 0.3,
     dblClickZoomEnabled: false,
   });
-  instances.push(pz);
+  instances.push({ container, pz });
 
   const controls = document.createElement("div");
   controls.className = "bl-pz-controls";
@@ -179,9 +199,10 @@ async function enhanceAll() {
   if (!isBrowser()) {
     return;
   }
-  const containers = Array.from(
-    document.querySelectorAll(`.mermaid:not([${ATTACHED}])`),
-  );
+  const containers = Array.from(document.querySelectorAll(".mermaid")).filter((container) => {
+    const svg = container.querySelector("svg");
+    return svg && !svg.hasAttribute(ATTACHED);
+  });
   if (containers.length === 0) {
     return;
   }
@@ -194,7 +215,7 @@ async function enhanceAll() {
     return;
   }
   for (const container of containers) {
-    if (!container.hasAttribute(ATTACHED)) {
+    if (!container.querySelector("svg")?.hasAttribute(ATTACHED)) {
       await enhance(container, svgPanZoom);
     }
   }
@@ -236,7 +257,7 @@ onMounted(() => {
   );
 
   onFsChange = () => {
-    for (const pz of instances) {
+    for (const { pz } of instances) {
       try {
         pz.resize();
         pz.fit();
@@ -247,6 +268,10 @@ onMounted(() => {
     }
   };
   document.addEventListener("fullscreenchange", onFsChange);
+
+  // A diagram rendered again (a new SVG in its container) is enhanced again.
+  observer = new MutationObserver(() => enhanceAll());
+  observer.observe(document.body, { childList: true, subtree: true });
 });
 
 onBeforeUnmount(() => {
@@ -256,6 +281,8 @@ onBeforeUnmount(() => {
   if (onFsChange) {
     document.removeEventListener("fullscreenchange", onFsChange);
   }
+  observer?.disconnect();
+  observer = null;
   destroyAll();
 });
 </script>

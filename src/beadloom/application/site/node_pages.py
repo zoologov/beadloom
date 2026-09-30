@@ -3,20 +3,22 @@
 """Per-node page rendering for the `docs site` generator (BDL-040 BEAD-01).
 
 Split out of ``application/site/generate.py`` to keep each module under the domain-size
-limit. Renders one Markdown page per graph node (domain / service / feature)
-with summary, source, public symbols, edges-as-links, linked hand-written docs,
-and an embedded scoped C4/Mermaid diagram. All output is deterministic
-(sorted, no wall-clock).
+limit. Renders one Markdown page per graph node, of every kind, with summary,
+source, public symbols, edges-as-links and linked hand-written docs, and mounts
+the architecture viewer focused on the page's node (BDL-076 A4), in the place
+the scoped Mermaid diagram had, after the text sections. The Mermaid C4 view
+stays on ``architecture-diagram.md``. All output is deterministic (sorted, no
+wall-clock).
 """
 
 # beadloom:domain=application
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 from beadloom.infrastructure.repository import get_owned_symbols
 
 if TYPE_CHECKING:
@@ -85,11 +87,10 @@ def node_page_path(kind: str, ref_id: str) -> str:
 def node_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
     """Every node's page URL (``/<dir>/<ref>``), for every kind, ``other/`` included.
 
-    The architecture data file links each node to its page with this. The
-    landscape map keeps :func:`beadloom.application.site.landscape_map.existing_page_urls`,
-    which covers the three kinds with a directory of their own, because its
-    Mermaid links go through a base-path rewrite that does not cover ``/other/``
-    yet (BDL-076 RFC, "a url for every kind").
+    The architecture data file and both landscape views link each node to its
+    page with this. The Mermaid click targets on ``landscape-diagram.md`` reach
+    their page through the diagram viewer's base-path rewrite, which covers
+    ``/other/`` since BDL-076 A4.
     """
     kinds = _load_kinds(conn)
     return {ref_id: f"/{node_page_path(kind, ref_id)}" for ref_id, kind in kinds.items()}
@@ -201,23 +202,6 @@ def _load_docs(conn: sqlite3.Connection, ref_id: str) -> list[str]:
     return [str(row["path"]) for row in rows]
 
 
-def _scoped_diagram(conn: sqlite3.Connection, ref_id: str) -> str:
-    """A scoped C4/Mermaid diagram for one node (its component view).
-
-    Falls back to the container view when the node has no children.
-    """
-    nodes, rels = map_to_c4(conn)
-    try:
-        scoped_nodes, scoped_rels = filter_c4_nodes(
-            nodes, rels, level="component", scope=ref_id
-        )
-    except ValueError:
-        scoped_nodes, scoped_rels = filter_c4_nodes(nodes, rels, level="container")
-    if not scoped_nodes:
-        scoped_nodes, scoped_rels = filter_c4_nodes(nodes, rels, level="container")
-    return render_c4_mermaid(scoped_nodes, scoped_rels)
-
-
 # Incoming relationship sections, in stable display order.
 _INCOMING_LABELS: tuple[str, ...] = ("Used by", "Parts")
 
@@ -286,8 +270,27 @@ def _docs_section(docs: list[str]) -> list[str]:
     return lines
 
 
-def _diagram_section(diagram: str) -> list[str]:
-    return ["## Diagram", "", "```mermaid", diagram.rstrip("\n"), "```", ""]
+# The node page's viewer: one step of neighbourhood, and 60% of the window's height.
+_GRAPH_DEPTH = 1
+_GRAPH_HEIGHT = "60vh"
+
+
+def _graph_section(ref_id: str) -> list[str]:
+    """The architecture viewer, focused on *ref_id*, under ``<ClientOnly>``.
+
+    ``ArchitectureMap`` is the architecture page's composition of the graph
+    viewer and the node card; a page mounts it rather than the bare viewer,
+    because a widget does not import another and the viewer alone has no card.
+    """
+    focus = html.escape(ref_id, quote=True)
+    return [
+        "## Graph",
+        "",
+        "<ClientOnly>",
+        f'  <ArchitectureMap focus="{focus}" :depth="{_GRAPH_DEPTH}" height="{_GRAPH_HEIGHT}" />',
+        "</ClientOnly>",
+        "",
+    ]
 
 
 def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, str]) -> NodePage:
@@ -296,7 +299,6 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     incoming = _load_incoming_for(conn, node.ref_id, kinds)
     symbols = public_symbol_names(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
-    diagram = _scoped_diagram(conn, node.ref_id)
 
     lines: list[str] = [
         "---",
@@ -316,7 +318,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     lines.extend(_symbols_section(symbols))
     lines.extend(_edges_section(grouped, incoming))
     lines.extend(_docs_section(docs))
-    lines.extend(_diagram_section(diagram))
+    lines.extend(_graph_section(node.ref_id))
 
     rel_path = f"{node_page_path(node.kind, node.ref_id)}.md"
     return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n")
