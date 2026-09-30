@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-dfwt` (B1, the scaffold in the wheel), then `beadloom-ujzb.8` (B4, self-hosted forge links; serialised: both write the config schema), then B2, B3, T2, R2, W2, P2.
+**Bead:** Slice 2 — `beadloom-ujzb.11` (a relative link in a summary breaks the build), then `beadloom-qki6` (B2), then `beadloom-ujzb.8` (B4) and `beadloom-hmqn` (B3), then T2, R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**B1 closed (2026-09-30):** `beadloom-dfwt` `ce750ebf` — the scaffold (116 files) moved by `git mv` to `src/beadloom/site_scaffold/`, package data in the wheel (verified by building one); the 20 slice nodes point at it, `site-fsd-layers` still judges 44 edges; `docs site` writes it with a marker (version + hash): unedited files follow the shipped body, hand-edited or unmarked files are never overwritten and are reported, `.beadloom/site/` copied last; the `site:` block (title, description, base, repo_url) validated by `docs site`, `config-check` and the Gate, nothing from the git remote; the ai-techwriter panel only when runs exist. An adopter's JS project built from the installed wheel with its own title and base. 45 tests; Playwright 99 passed; `beadloom ci` rc 1 on 144 stale pairs (→ W2). A slow end-to-end test skipped unless `BEADLOOM_RUN_SLOW=1` — B3 must run such tests in a CI job. Filed `beadloom-ujzb.11` (P1).
 
 **Slice 1 shipped (2026-09-30):** the owner looked in a browser — "Мне все нравится! Можно сливать"; visuals and extra features after the team's feedback. PR #90 green on every check (the advisory `site-e2e` passed on its first GitHub run), squash-merged as `c133e0a5`, merged back tree-identical (`92f0690d`). Filed after the look: `beadloom-rcnz` (P2 spike: ELK routes around blocks, line jumps, JointJS against Cytoscape).
 
@@ -92,10 +94,11 @@
 | `beadloom-ujzb.10` | fix | ✓ done | the re-review's residue |
 | `beadloom-qlii` | W1 tech-writer | ✓ done | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | ✓ done | owner's look; PR 1 |
-| `beadloom-dfwt` | B1 dev | in progress | scaffold in the wheel |
-| `beadloom-qki6` | B2 dev | blocked | our site through the same path |
+| `beadloom-dfwt` | B1 dev | ✓ done | scaffold in the wheel |
+| `beadloom-qki6` | B2 dev | ready | our site through the same path |
 | `beadloom-hmqn` | B3 test | blocked | adopter fixtures, six stacks |
-| `beadloom-ujzb.8` | B4 dev | ready | self-hosted forge links (owner) |
+| `beadloom-ujzb.8` | B4 dev | ready |
+| `beadloom-ujzb.11` | fix | in progress | a relative link in a summary breaks the build | self-hosted forge links (owner) |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
