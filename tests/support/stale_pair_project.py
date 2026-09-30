@@ -146,8 +146,15 @@ def add_an_annotated_module(root: Path) -> None:
 
 
 def add_an_unannotated_module(root: Path) -> None:
-    """``untracked_files``: a file under the source no pair and no annotation owns."""
-    write(root, f"{SOURCE}gamma.py", "def gamma():\n    pass\n")
+    """``untracked_files``: a file under the source that no pair holds.
+
+    The module carries no annotation for this node: its annotation names a node
+    the graph does not have, which takes the file from this node's pairs and
+    gives it to no document. A module carrying no annotation at all is paired
+    with the node whose source owns it since ``beadloom-oo4m``, so it is no
+    longer the way to reach this reason.
+    """
+    write(root, f"{SOURCE}gamma.py", "# beadloom:domain=no-such-node\ndef gamma():\n    pass\n")
     reindex(root)
 
 
