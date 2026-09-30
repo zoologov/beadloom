@@ -8,7 +8,7 @@
 // component modules the dashboard needs (tree-shaken) and register them once.
 
 import { defineAsyncComponent, ref, onMounted, onBeforeUnmount } from "vue";
-import { isBrowser } from "../lib/browser.js";
+import { isBrowser } from "../lib/index.js";
 
 // Async <VChart> — resolves to the real `vue-echarts` component in the browser
 // (after registering the needed ECharts modules); never imported during SSR.

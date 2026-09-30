@@ -6,7 +6,7 @@
 // is rebuilt with the dark values rather than keeping the light ones.
 
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { isBrowser } from "../lib/browser.js";
+import { isBrowser } from "../lib/index.js";
 import { resolveTokens } from "./resolve.js";
 
 /** `{ tokens }`: null until mounted, then the tokens resolved under `scopeRef`. */

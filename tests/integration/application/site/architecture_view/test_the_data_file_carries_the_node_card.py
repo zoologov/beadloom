@@ -654,6 +654,19 @@ def test_the_page_names_the_declared_layers(shop: sqlite3.Connection) -> None:
     assert "infra" not in page
 
 
+def test_the_page_describes_what_the_viewer_draws_and_does(shop: sqlite3.Connection) -> None:
+    # BDL-076 R1 finding n4: the intro still described the first viewer — one
+    # edge kind as solid arrows, and a click that highlights a blast radius.
+    page = render_architecture_view_md(build_architecture_view_data(shop))
+
+    for kind in ("depends_on", "uses", "consumes", "produces"):
+        assert f"`{kind}`" in page, kind
+    assert "neighbourhood" in page
+    assert "**Impact**" in page
+    assert "solid arrows" not in page
+    assert "blast radius" not in page
+
+
 def test_the_page_says_so_when_no_layers_are_declared(graph: sqlite3.Connection) -> None:
     conn = graph
     add_node(conn, "shop", "service")

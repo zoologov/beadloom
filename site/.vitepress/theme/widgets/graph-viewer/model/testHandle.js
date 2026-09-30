@@ -144,17 +144,20 @@ function readers(source) {
  * Expose the handle over `source` when the browser is automated; return its disposer.
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
- * `arranging()` and `impactSummary()`.
+ * `arranging()` and `impactSummary()`. The handle is the last viewer's to
+ * install it, and the disposer removes it only while it is still this one's, so
+ * a viewer that leaves the page does not take a live neighbour's handle along.
  */
 export function exposeTestHandle(source) {
   if (typeof window === "undefined" || navigator.webdriver !== true) return () => {};
+  const handle = Object.freeze(readers(source));
   Object.defineProperty(window, HANDLE, {
-    value: Object.freeze(readers(source)),
+    value: handle,
     configurable: true,
     enumerable: false,
     writable: false,
   });
   return () => {
-    delete window[HANDLE];
+    if (window[HANDLE] === handle) delete window[HANDLE];
   };
 }

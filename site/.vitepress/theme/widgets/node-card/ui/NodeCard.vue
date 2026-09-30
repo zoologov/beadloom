@@ -19,6 +19,7 @@ import { computed } from "vue";
 import { withBase } from "vitepress";
 import { edgeGroupsOf } from "../../../entities/graph-edge/index.js";
 import { layerOfNode } from "../../../entities/layer/index.js";
+import { shellQuote } from "../../../shared/lib/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
 
 const props = defineProps({
@@ -192,8 +193,8 @@ const placements = computed(() =>
 
     <section data-card-field="commands">
       <h4>In the terminal</h4>
-      <CopyCommand :command="`beadloom ctx ${node.id}`" />
-      <CopyCommand :command="`beadloom why ${node.id}`" />
+      <CopyCommand :command="`beadloom ctx ${shellQuote(node.id)}`" />
+      <CopyCommand :command="`beadloom why ${shellQuote(node.id)}`" />
     </section>
   </article>
 </template>

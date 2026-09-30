@@ -59,6 +59,7 @@ import { buildStylesheet } from "../lib/stylesheet.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
+import { usePanelId } from "../model/usePanelId.js";
 import { DEFAULT_MODE, modeOf } from "../model/modes.js";
 
 /** The selection's value for the neighbourhood, the default; the other is `IMPACT_VIEW`. */
@@ -150,6 +151,7 @@ const selection = computed(() => {
 const root = ref(null);
 const container = ref(null);
 const panel = ref(null);
+const panelId = usePanelId();
 // The panel opens when a node is selected; the toolbar's "Panel" button toggles it.
 const panelOpen = ref(Boolean(state.focus));
 const { tokens } = useThemeTokens(root);
@@ -320,7 +322,7 @@ onBeforeUnmount(() => disposeHandle());
         type="button"
         class="bl-viewer-button"
         :aria-expanded="panelOpen"
-        aria-controls="bl-viewer-panel"
+        :aria-controls="panelId"
         @click="(panelOpen = !panelOpen), refit()"
       >
         Panel
@@ -339,7 +341,7 @@ onBeforeUnmount(() => disposeHandle());
       <aside
         v-show="panelOpen"
         ref="panel"
-        id="bl-viewer-panel"
+        :id="panelId"
         class="bl-viewer-panel"
         data-testid="viewer-panel"
         aria-label="Details"

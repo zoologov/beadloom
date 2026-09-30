@@ -7,6 +7,7 @@
 // crossed and the risky nodes, and last the two terminal commands that give
 // the code-level answer. A click on a node in it asks the viewer to select it.
 
+import { shellQuote } from "../../../shared/lib/index.js";
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
 import { RING_TONES, ringOf } from "../model/rings.js";
@@ -66,8 +67,8 @@ function swatch(distance) {
     </ul>
 
     <h4>The code-level answer</h4>
-    <CopyCommand :command="`beadloom why ${summary.focus}`" />
-    <CopyCommand v-if="source" :command="`beadloom impact ${source}`" />
+    <CopyCommand :command="`beadloom why ${shellQuote(summary.focus)}`" />
+    <CopyCommand v-if="source" :command="`beadloom impact ${shellQuote(source)}`" />
   </section>
 </template>
 
