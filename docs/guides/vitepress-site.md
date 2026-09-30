@@ -81,7 +81,7 @@ with — it is the gate, rendered. The widgets never invent a figure the
 
 Every Mermaid diagram Beadloom emits (the top-level and per-node C4 diagrams, the
 landscape map) is run through a structural validity guard
-(`application/site_mermaid_guard.validate_mermaid`) **before the page is written**.
+(`application/site/mermaid_guard.validate_mermaid`) **before the page is written**.
 The guard is a targeted set of structural validators (not a full Mermaid parser)
 covering the two F4 render bug classes:
 
@@ -162,7 +162,7 @@ Badges come from `doc_sync`, not from a model.
 
 The portal (reshaped in BDL-046) leads with **About = the README as the landing
 page** and a single ordered EN sidebar; there is **no top nav**. All of this is
-emitted by `application/site_nav.py` into `.vitepress/config.generated.mjs`
+emitted by `application/site/nav.py` into `.vitepress/config.generated.mjs`
 (deterministic, sorted, byte-stable, link-safe — no dead entries).
 
 ### Left sidebar — exact order
@@ -194,7 +194,7 @@ Documentation    → group, collapsed: false  (EXPANDED)
 
 ### About = README landing (EN `/`, RU `/ru/`)
 
-`application/site_about.render_about()` turns the `README.md` into the `/` home
+`application/site/about.render_about()` turns the `README.md` into the `/` home
 page (and `README.ru.md` into `/ru/`), **rebasing** repo-relative links so they
 resolve on the published site:
 

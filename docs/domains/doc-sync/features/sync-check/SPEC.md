@@ -29,13 +29,25 @@ broad interface surface. Two layers cooperate without interfering:
 
 ### Symbol-pair freshness
 
-A node's source files are found first through symbol annotations
-(`# beadloom:<kind>=<ref>`) and, when those yield none, through the files the
-node's declared `source` **owns** (most-specific-source wins, so a container
-never claims a nested node's files). Pairing on annotations alone left any node
-whose annotation is not a comment tree-sitter reads — or which declares only
+A node's source files are the files whose symbols carry its annotation
+(`# beadloom:<kind>=<ref>`) together with the files the node's declared `source`
+**owns** that no annotation claims (most-specific-source wins, so a container
+never claims a nested node's files). A node that claims nothing by annotation
+keeps every file it owns. Pairing on annotations alone left any node whose
+annotation is not a comment tree-sitter reads — or which declares only
 `source:` — with no pairs at all, kind-independent, and a freshness gate with no
 pairs reported "clean" for files it never opened (BDL-UX #146).
+
+**One annotation does not replace a node's other files (`beadloom-oo4m`, BDL-076
+K2).** Until K2 the annotated files were taken INSTEAD of the owned ones, so one
+`// beadloom:component=` line in one `.vue` file took the site theme's node from
+17 pairs to 1, and nothing said so. Now an annotated node also keeps a pair for
+every owned file that no annotation claims for any node. Boilerplate
+(`__init__.py`, `conftest.py`, `__main__.py`) joins only through the
+no-annotation fallback, as before. Measured by K2 on this repository: the site's
+pairs went from 45 to 64, one per indexed theme file, and the Python pairs from
+523 to 526, none removed. The three added (`cli.py`, `graph/rule_engine.py`,
+`tui/widgets/domain_list.py`) had lost their pair the same way.
 
 The owned-file fallback reads **`file_index`**, not `code_symbols`
 (BDL-061.50). Keyed on symbols, the #146 fallback carried the very blindness it
@@ -57,7 +69,13 @@ was nothing there.
 `build_sync_state` records the baseline doc and symbol hashes for each pair;
 `check_sync` re-reads files from disk to detect changes since the last sync,
 independently of reindex, and also runs source-coverage and doc-coverage checks
-to catch untracked files and missing module mentions. `mark_synced` (and
+to catch untracked files and missing module mentions. The source-coverage
+backstop (`check_source_coverage`) reads the `*.py` files directly in the node's
+source directory, which catches one added since the last reindex, and since K2
+also every code file `file_index` holds that the node owns, at any depth and in
+every language the reindex reads, so a `.vue` or `.js` file that loses its pair
+is named. The doc-coverage check (`missing_modules`) still reads only the `*.py`
+stems directly in the source directory. `mark_synced` (and
 `mark_synced_by_ref`) re-baselines a pair once its doc is brought up to date.
 `check_sync_since` compares against a git ref for diff-based checks.
 
@@ -105,7 +123,7 @@ nothing about their files had changed — so the only remaining action was the
 bulk re-attestation #163 was filed to prevent, and the tool *required* it rather
 than merely permitting it. Measured on this repository at HEAD `e255a21`, in two
 clean rooms differing only in this change: appending one function to
-`application/architecture_view.py` produced **69 stale pairs, 67 of which named
+`application/architecture_view.py` (now `application/site/architecture_view.py`) produced **69 stale pairs, 67 of which named
 a file nobody had touched**; the same perturbation now produces **2 stale pairs
 and 67 `unverified/sibling_symbols_changed`**, each carrying
 `details: architecture_view.py`. Both runs exit 2. The gate still bites; it bites

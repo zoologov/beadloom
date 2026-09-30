@@ -462,6 +462,32 @@ never dropped: the population sentence ends `"; N sit outside the source root"`,
 adds up to every pair the graph offered. A reader who cannot see the exclusions cannot tell a graph
 with no outliers from one whose outliers vanished.
 
+**A second source tree large enough to hold a convention is read as a tree (BDL-076 K3,
+`beadloom-5o48`).** A frontend of two or more nodes beside a backend is a second *supported* way
+down, so the descent forks at the very top and the root comes out empty. Read as it stands, the
+areas are then the tree names, no document names a tree, and the rule checked none of the pairs:
+126 of 126 on this repository once its site became 17 slice nodes. The fork at the top is
+ambiguous. A repository of top-level packages has its areas begin there, a backend beside a
+frontend has its trees begin there, and the sources alone cannot tell which.
+
+So the rule derives both readings: one root for the whole graph, and, when two or more top-level
+segments each carry `min_support` sources, one root per such tree. It keeps the reading under
+which more pairs fall under a dominant mapping, then the one under which more pairs compare. A
+tie keeps the single reading, and a graph whose single root is not empty never reaches the
+second, so a project with one source tree is read exactly as before. In the per-tree reading:
+
+- an area is qualified by its tree, so two trees' `shared` stay two areas;
+- each tree votes its own area depth, and a tree whose documents name none of its areas is read
+  at the depth the whole docs tree votes for, because one docs tree serves every source tree;
+- pairs under a top-level segment with fewer than `min_support` sources count as outside the
+  root;
+- the population sentence ends with one clause per tree, `` `<root>`: N of M pairs compare, K
+  under a dominant mapping, J agree ``, because a total over two trees can hide one of them
+  checking nothing.
+
+Measured by K3 on this repository: 117 of 126 pairs fall under a dominant mapping, 102 under
+`src/beadloom` and 15 under `site/.vitepress/theme`, and none contradicts it.
+
 A mapping `source area -> docs area` is **dominant** when it covers at least `threshold` of that
 area's pairs *and* rests on at least `min_support` of them. `min_support` is not decoration:
 without it every area holding a single documented node is unanimous at one observation, and a
@@ -479,6 +505,8 @@ configuration that reads as a rule and behaves as a silence.
 **Severity ships `warn`.** A convention check that fails an adopter's first `beadloom ci` on their
 own house style is a check they switch off. This repository sets `error`, because its layout has
 been settled since BDL-051 and a contradiction there is a defect rather than a matter of taste.
+From 2026-09-30 until K3 this repository held the rule at `warn`, because it checked none of 126
+pairs once the site became a second source tree; K3 restored `error`.
 
 ### `summary_facts` — a number in a node summary checked against the project (BDL-062 `.1`)
 
@@ -959,7 +987,8 @@ def same_layer_crossings(edges, layers, parents, tags) -> list[tuple[str, str]]
 
 One answer to "what layer is this node in", for every caller that asks. Three bodies asked it
 before and disagreed: `evaluate_layer_rules` read a node's OWN tags and skipped every edge whose
-ends carried none, `application/architecture_view.py` climbed `part_of` with the four tags and
+ends carried none, `application/architecture_view.py` (now `application/site/architecture_view.py`) climbed
+`part_of` with the four tags and
 their ranks written into it, and `liveness.py` did neither. Measured on this repository at
 `aa4bfad4`: 362 live `depends_on` edges, 16 with a layer at both ends by own tags, 354 by `part_of`
 ancestry.

@@ -44,7 +44,7 @@ rules in `.beadloom/_graph/rules.yml` enforce this (`lint --strict`).
 | `packet` | `packet.py` | Deterministic context-packet assembly (`build_packet`, `select_polish_for_ref`, `read_doc`) |
 | `provider` | `provider.py` | `ProviderConfig` (Qwen3.7-Plus / OpenAI-compatible endpoint), `qwen_provider`, `default_recipe_path`; API key resolved from env at run time, never inlined |
 | `runner` | `runner.py` | Deterministic orchestrator (`run_harness`): discover → bounded-parallel per-doc repair → global fixpoint → `beadloom ci` gate → publish → emit record; three-verdict classifier (`classify_verdict`: `ok` / `flagged` / `infra`) |
-| `runs_store` | `runs_store.py` | Append-only run-record store (`.beadloom/ai_techwriter_runs.json`); `runs_store_path`, `load_runs`, `append_run` |
+| `runs_store` | `runs_store.py` | Append-only run-record store (`.beadloom/ai_techwriter_runs.json`), built like the site's metrics-history store (`application/site/metrics_history.py`); `runs_store_path`, `load_runs`, `append_run` |
 | `scope` | `scope.py` | Drift-scope discovery (`discover_scope`, `parse_scope`): parses `beadloom sync-check --json` into grouped `DriftItem`s, then applies symbol-level narrowing |
 | `seams` | `seams.py` | Mockable protocols + real implementations: `AgentRunner` / `GooseAgentRunner`, `ReviewPublisher` / `CommentPublisher` with GitHub + GitLab adapters (`GitHubPublisher`, `GitLabPublisher`, `GitHubPRBranchPublisher`, `GitLabPRBranchPublisher`), `FakeAgentRunner`, `FakePublisher` |
 | `symbol_scope` | `symbol_scope.py` | Symbol-level scope narrowing (BDL-052 S4): `python_symbol_ranges`, `changed_symbols`, `narrow_by_changed_symbols`; conservative-by-construction — never under-refreshes |
