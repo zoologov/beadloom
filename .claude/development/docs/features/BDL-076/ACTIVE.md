@@ -81,6 +81,7 @@
 | `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |
 | `beadloom-qki6` | B2 dev | blocked | our site through the same path |
 | `beadloom-hmqn` | B3 test | blocked | adopter fixtures, six stacks |
+| `beadloom-ujzb.8` | B4 dev | blocked | self-hosted forge links (owner) |
 | `beadloom-19l6` | T2 test | blocked | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
