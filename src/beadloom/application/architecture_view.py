@@ -14,15 +14,23 @@ repository seam) — never a re-implemented surface. Each node carries its
 ``kind``, ``summary``, ``layer`` (the ``layer-*`` tag), symbol count, doc-status
 (fresh / stale / none), page url + published doc link(s), its compound ``parent``
 (the ``part_of`` container), and the ``beadloom why`` dependency lists
-(``depends_on`` / ``depended_on_by``). Edges carry ``depends_on`` (solid) +
-``part_of`` (containment).
+(``depends_on`` / ``depended_on_by``). Edges carry ``depends_on`` (solid),
+``part_of`` (containment), ``uses`` (declared runtime coupling) and the contract
+kinds ``consumes`` / ``produces``.
+
+Schema version 2 (BDL-076 A1) keeps every version-1 key and adds the node card
+(:mod:`beadloom.application.architecture_card`) and, at the top level, the
+run's provenance (``generated_at``, ``beadloom_version``, ``project``) and the
+declared ``layers`` with their ``layer_order``, from which the viewer builds its
+palette instead of a vocabulary of its own. ``touches_code`` stays out: it
+points at files, not at nodes.
 
 Honest degradation (DATA-STRICTNESS): a node with no doc gets an EMPTY
 ``doc_links`` (the view shows none, never a fabricated link); a node with no
 ``layer-*`` tag gets an empty ``layer``; the lint-clean flag is OMITTED entirely
-when lint was not computed (``lint_violation_refs is None``) rather than faking a
+when lint was not computed (no findings supplied) rather than faking a
 "clean" verdict. Determinism: nodes/edges are sorted and the payload serializes
-with ``sort_keys`` so regeneration is byte-stable.
+with ``sort_keys``, so regeneration is byte-stable for a fixed ``generated_at``.
 """
 
 from __future__ import annotations
@@ -32,6 +40,13 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom import __version__
+from beadloom.application.architecture_card import (
+    CardSources,
+    NodeVerdicts,
+    card_fields,
+    card_sources,
+)
 from beadloom.application.site_pages import _KIND_DIR
 from beadloom.graph.rule_engine import (
     LayerDef,
@@ -51,8 +66,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Artifact schema version (additive bumps; the view tolerates missing blocks).
-ARCHITECTURE_SCHEMA_VERSION = 1
+# Artifact schema version. Version 2 (BDL-076 A1) is additive: every key of
+# version 1 is kept with its meaning, and the viewer refuses a version it does
+# not know with a visible message.
+ARCHITECTURE_SCHEMA_VERSION = 2
 
 # The conventional prefix a layer tag carries, removed to get the short token
 # the view strata-colors by (``layer-domain`` -> ``domain``). It is NOT a layer:
@@ -60,7 +77,8 @@ ARCHITECTURE_SCHEMA_VERSION = 1
 # prefix is stripped because the four tokens are the front-end's contract
 # (``site/.vitepress/theme/architectureTheme.js`` keys its colors and its lane
 # labels by them), and a tag that does not carry the prefix is used verbatim,
-# which colors grey rather than wrongly.
+# which colors grey rather than wrongly. Since schema version 2 the file also
+# names the declared layers with their tokens, so a viewer can color by those.
 _LAYER_TAG_PREFIX = "layer-"
 
 # Served extension for a published doc page. The site is built WITHOUT VitePress
@@ -76,6 +94,10 @@ _MD_EXT = ".md"
 # so a rule declared over another kind is judged by `beadloom lint` and drawn by
 # nothing here.
 _FLAGGED_EDGE_KIND = "depends_on"
+
+# The kinds that name a contract, carried on the edge so two contracts between
+# one pair of nodes stay two edges.
+_CONTRACT_EDGE_KINDS = frozenset({"consumes", "produces"})
 
 _DOC_FRESH = "fresh"
 _DOC_STALE = "stale"
@@ -120,12 +142,28 @@ class _LayerView:
         """The declared layers, top to bottom; empty when none are declared."""
         return () if self.rule is None else self.rule.layers
 
+    @property
+    def order(self) -> str:
+        """The direction the declared rule enforces; ``""`` when none is declared."""
+        return "" if self.rule is None else self.rule.enforce
+
+    def declared(self) -> list[dict[str, object]]:
+        """The declared layers as the data file carries them, top to bottom.
+
+        ``token`` is what a node in that layer carries as its ``layer``, so the
+        viewer can match the two without knowing any project's vocabulary.
+        """
+        return [
+            {"name": layer.name, "rank": rank, "tag": layer.tag, "token": _token(layer)}
+            for rank, layer in enumerate(self.layers)
+        ]
+
     def token(self, ref_id: str) -> str:
         """The short layer name for the node's OWN tag; ``""`` when it has none."""
         index = own_layer_of(ref_id, self.layers, self.tags)
         if index is None:
             return ""
-        return self.layers[index].tag.removeprefix(_LAYER_TAG_PREFIX)
+        return _token(self.layers[index])
 
     def rank(self, ref_id: str) -> int | None:
         """The node's lane: its own layer's index, else its nearest container's.
@@ -148,6 +186,10 @@ class _LayerView:
         if self.rule is None or self.rule.edge_kind != _FLAGGED_EDGE_KIND:
             return frozenset()
         return flagged_layer_edges(conn, self.rule)
+
+
+def _token(layer: LayerDef) -> str:
+    return layer.tag.removeprefix(_LAYER_TAG_PREFIX)
 
 
 def _declared_layer_rule(conn: sqlite3.Connection) -> LayerRule | None:
@@ -370,8 +412,9 @@ def _arch_edges(
 
     Returns ``(edges, depends_on_by_id, depended_on_by_by_id)``:
 
-    - ``edges``: one entry per ``part_of`` / ``depends_on`` / ``uses`` edge,
-      sorted. A ``depends_on`` edge also carries a ``violation`` flag — ``True``
+    - ``edges``: one entry per ``part_of`` / ``depends_on`` / ``uses`` /
+      ``consumes`` / ``produces`` edge, sorted; a contract edge carries its
+      ``contract`` key. A ``depends_on`` edge also carries a ``violation`` flag — ``True``
       when the project's layer rule finds against that edge, ``False`` when it
       does not. **The verdict is the rule's** (BDL-070 B4): the view asks
       :func:`~beadloom.graph.rules.layer_edges.flagged_layer_edges` rather than
@@ -393,10 +436,11 @@ def _arch_edges(
       `ai-techwriter` node read as an island while being the hub of a whole
       workflow — hides coupling that derivation can never see, only declaration.
     """
+    # ``touches_code`` is not read: it points at a file, and the viewer draws nodes.
     rows = conn.execute(
-        "SELECT src_ref_id, dst_ref_id, kind FROM edges "
-        "WHERE kind IN ('part_of', 'depends_on', 'uses') "
-        "ORDER BY kind, src_ref_id, dst_ref_id"
+        "SELECT src_ref_id, dst_ref_id, kind, contract_key FROM edges "
+        "WHERE kind IN ('part_of', 'depends_on', 'uses', 'consumes', 'produces') "
+        "ORDER BY kind, src_ref_id, dst_ref_id, contract_key"
     ).fetchall()
     flagged = layers.flagged(conn)
     edges: list[dict[str, object]] = []
@@ -407,6 +451,8 @@ def _arch_edges(
     for row in rows:
         src, dst, kind = str(row["src_ref_id"]), str(row["dst_ref_id"]), str(row["kind"])
         edge: dict[str, object] = {"src": src, "dst": dst, "kind": kind}
+        if kind in _CONTRACT_EDGE_KINDS:
+            edge["contract"] = str(row["contract_key"] or "")
         if kind == _FLAGGED_EDGE_KIND:
             depends_on.setdefault(src, set()).add(dst)
             depended_on_by.setdefault(dst, set()).add(src)
@@ -416,7 +462,9 @@ def _arch_edges(
             uses.setdefault(src, set()).add(dst)
             used_by.setdefault(dst, set()).add(src)
         edges.append(edge)
-    edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
+    edges.sort(
+        key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"]), str(e.get("contract", "")))
+    )
     return (
         edges,
         {k: sorted(v) for k, v in depends_on.items()},
@@ -439,48 +487,69 @@ def _parent_map(conn: sqlite3.Connection) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _Relations:
+    """The ``why`` lists of every node, derived once from the edges."""
+
+    depends_on: dict[str, list[str]]
+    depended_on_by: dict[str, list[str]]
+    uses: dict[str, list[str]]
+    used_by: dict[str, list[str]]
+
+
+@dataclass(frozen=True)
+class _BuildInputs:
+    """Everything one build reads for every node, taken once."""
+
+    pages: Mapping[str, str]
+    parent: Mapping[str, str]
+    layers: _LayerView
+    relations: _Relations
+    card: CardSources
+    published_doc_slugs: set[str] | None
+
+
 def _node_dict(
-    conn: sqlite3.Connection,
-    ref_id: str,
-    kind: str,
-    summary: str,
-    source: str | None,
-    *,
-    pages: dict[str, str],
-    parent: dict[str, str],
-    layers: _LayerView,
-    depends_on: dict[str, list[str]],
-    depended_on_by: dict[str, list[str]],
-    uses: dict[str, list[str]],
-    used_by: dict[str, list[str]],
-    lint_violation_refs: set[str] | None,
-    published_doc_slugs: set[str] | None,
+    conn: sqlite3.Connection, row: sqlite3.Row, inputs: _BuildInputs
 ) -> dict[str, object]:
     """Project one graph node to its JSON-safe architecture-view payload."""
+    ref_id, kind = str(row["ref_id"]), str(row["kind"])
+    relations = inputs.relations
     node: dict[str, object] = {
         "id": ref_id,
         "label": ref_id,
         "kind": kind,
-        "summary": summary,
-        "layer": layers.token(ref_id),
-        "layer_rank": layers.rank(ref_id),
+        "summary": str(row["summary"] or ""),
+        "layer": inputs.layers.token(ref_id),
+        "layer_rank": inputs.layers.rank(ref_id),
         "group": _KIND_DIR.get(kind, "other"),
         "symbols": _symbol_count(conn, ref_id),
         "doc_status": _doc_status(conn, ref_id),
-        "doc_links": _doc_links(conn, ref_id, published_doc_slugs=published_doc_slugs),
-        "url": pages.get(ref_id, ""),
-        "parent": parent.get(ref_id, ""),
-        "depends_on": depends_on.get(ref_id, []),
-        "depended_on_by": depended_on_by.get(ref_id, []),
+        "doc_links": _doc_links(conn, ref_id, published_doc_slugs=inputs.published_doc_slugs),
+        "url": inputs.pages.get(ref_id, ""),
+        "parent": inputs.parent.get(ref_id, ""),
+        "depends_on": relations.depends_on.get(ref_id, []),
+        "depended_on_by": relations.depended_on_by.get(ref_id, []),
         # Declared runtime coupling, kept separate from the import lists: a
         # subprocess call or a file-format contract is real but is NOT an
         # import, and derivation cannot see it at all.
-        "uses": uses.get(ref_id, []),
-        "used_by": used_by.get(ref_id, []),
+        "uses": relations.uses.get(ref_id, []),
+        "used_by": relations.used_by.get(ref_id, []),
     }
+    node.update(
+        card_fields(
+            conn,
+            ref_id,
+            source=row["source"],
+            lifecycle=str(row["lifecycle"]),
+            raw_extra=row["extra"],
+            sources=inputs.card,
+        )
+    )
     # Honest degradation: only carry the lint-clean flag when lint was computed.
-    if lint_violation_refs is not None:
-        node["lint_clean"] = ref_id not in lint_violation_refs
+    # It is the version-1 reading of the findings the card now lists in full.
+    if "findings" in node:
+        node["lint_clean"] = not node["findings"]
     return node
 
 
@@ -488,8 +557,10 @@ def build_architecture_view_data(
     conn: sqlite3.Connection,
     *,
     pages: dict[str, str] | None = None,
-    lint_violation_refs: set[str] | None = None,
     published_doc_slugs: set[str] | None = None,
+    verdicts: NodeVerdicts | None = None,
+    generated_at: str = "",
+    project: str = "",
 ) -> dict[str, object]:
     """Build the deterministic interactive-architecture data model.
 
@@ -497,50 +568,49 @@ def build_architecture_view_data(
         conn: An open read-only connection to the indexed graph DB.
         pages: Map of ``ref_id -> existing page URL`` (a node gets a non-empty
             ``url`` only when present, so a click never resolves to a dead page).
-        lint_violation_refs: The set of ``ref_id``s with a lint violation, or
-            ``None`` when lint was not computed. When ``None`` the per-node
-            ``lint_clean`` flag is OMITTED (honest — never a fabricated "clean").
+            ``docs site`` passes :func:`~beadloom.application.site_pages.node_page_urls`,
+            which covers every kind.
         published_doc_slugs: The set of ``docs/``-relative slugs (``.md``
             stripped) that actually got a published page. A node's doc link is
             emitted only when its slug is in this set (honest — never a 404).
             ``None`` skips the gate (every doc row yields its served link).
+        verdicts: The lint findings and the debt report the site run computed.
+            A field left ``None`` is OMITTED from every node — ``findings`` with
+            ``lint_clean``, and ``debt`` — rather than reported clean.
+        generated_at: The instant the site run states for this file. The
+            caller supplies it, so a fixed value regenerates byte-identically.
+        project: The project's name, as the caller resolves it.
 
     Returns:
-        A JSON-safe dict ``{schema_version, scope, nodes, edges}`` with every
-        section sorted for byte-stable serialization. Each node carries its
-        ``layer_rank`` (the partition index for the layered-lanes layout) and
-        each ``depends_on`` edge a ``violation`` flag (it points up/cross-cuts).
+        A JSON-safe dict with ``schema_version`` 2, ``scope``, ``nodes``,
+        ``edges``, ``generated_at``, ``beadloom_version``, ``project``,
+        ``layers`` and ``layer_order``, every section sorted for byte-stable
+        serialization. Each node carries its ``layer_rank`` (the partition
+        index for the layered-lanes layout) and each ``depends_on`` edge a
+        ``violation`` flag when both ends have a rank.
     """
-    page_map = pages or {}
-    parent = _parent_map(conn)
     layers = _layer_view(conn)
     edges, depends_on, depended_on_by, uses, used_by = _arch_edges(conn, layers)
+    inputs = _BuildInputs(
+        pages=pages or {},
+        parent=_parent_map(conn),
+        layers=layers,
+        relations=_Relations(depends_on, depended_on_by, uses, used_by),
+        card=card_sources(conn, tags=layers.tags, verdicts=verdicts),
+        published_doc_slugs=published_doc_slugs,
+    )
     rows = conn.execute(
-        "SELECT ref_id, kind, summary, source FROM nodes ORDER BY ref_id"
+        "SELECT ref_id, kind, summary, source, lifecycle, extra FROM nodes ORDER BY ref_id"
     ).fetchall()
-    nodes = [
-        _node_dict(
-            conn,
-            str(r["ref_id"]),
-            str(r["kind"]),
-            str(r["summary"] or ""),
-            r["source"],
-            pages=page_map,
-            parent=parent,
-            layers=layers,
-            depends_on=depends_on,
-            depended_on_by=depended_on_by,
-            uses=uses,
-            used_by=used_by,
-            lint_violation_refs=lint_violation_refs,
-            published_doc_slugs=published_doc_slugs,
-        )
-        for r in rows
-    ]
     return {
         "schema_version": ARCHITECTURE_SCHEMA_VERSION,
         "scope": "architecture",
-        "nodes": nodes,
+        "generated_at": generated_at,
+        "beadloom_version": __version__,
+        "project": project,
+        "layers": layers.declared(),
+        "layer_order": layers.order,
+        "nodes": [_node_dict(conn, row, inputs) for row in rows],
         "edges": edges,
     }
 
@@ -552,6 +622,22 @@ def serialize_architecture_view(data: dict[str, object]) -> str:
 
 def _as_list(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _stratification(data: dict[str, object]) -> str:
+    """The sentence naming the declared layers, top to bottom, from *data*.
+
+    The names come from the project's declaration. A page that wrote a fixed
+    list would describe this repository's layers on every adopter's site.
+    """
+    names = [
+        str(layer["name"])
+        for layer in _as_list(data.get("layers"))
+        if isinstance(layer, dict) and layer.get("name")
+    ]
+    if not names:
+        return "The project declares no layers, so the map draws no lanes."
+    return f"The lanes are the declared layers, top to bottom: {' → '.join(names)}."
 
 
 def render_architecture_view_md(data: dict[str, object]) -> str:
@@ -575,8 +661,8 @@ def render_architecture_view_md(data: dict[str, object]) -> str:
         "",
         "Generated by `beadloom docs site` from the indexed graph — never "
         "hand-drawn. Domains are compound boxes containing their features and "
-        "components; edges are `depends_on` (solid arrows) over the layered "
-        "stratification (service → application → domain → infra). "
+        "components; edges are `depends_on` (solid arrows). "
+        f"{_stratification(data)} "
         "Click a node for its card (kind, summary, layer, symbol count, "
         "doc-status, dependency lists like `beadloom why`, and a base-path-correct "
         "link to its page); click to highlight its blast radius. Filter by kind / "

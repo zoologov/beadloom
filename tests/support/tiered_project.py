@@ -370,7 +370,22 @@ _ZONED_MODULES = {
 }
 
 
-def write_zoned_import_project(root: Path) -> Path:
+#: Test files that bind to ``storage-pool`` by mirroring its source under
+#: ``tests/unit/``: two files, three tests. For a scenario that reads what the
+#: test binding (BDL-074) attributes to a node rather than what a fixture says.
+ZONED_POOL_TESTS = {
+    "tests/unit/storage/test_pool.py": (
+        "from storage.pool import PRICE_LIST\n\n\n"
+        "def test_the_pool_sells_nothing() -> None:\n    assert PRICE_LIST == ()\n\n\n"
+        "def test_the_pool_imports() -> None:\n    assert PRICE_LIST is not None\n"
+    ),
+    "tests/unit/storage/pool/test_pool_size.py": (
+        "def test_the_pool_has_a_size() -> None:\n    assert True\n"
+    ),
+}
+
+
+def write_zoned_import_project(root: Path, *, tests: Mapping[str, str] | None = None) -> Path:
     """A project whose every `depends_on` edge is DERIVED from a Python import.
 
     BDL-070 B5 (`beadloom-bi78`), for the PRD's scenario *an import from
@@ -387,6 +402,9 @@ def write_zoned_import_project(root: Path) -> Path:
     tag, so the reported edge leaves a node whose layer is inherited from the
     container two facts away: the file's owning node, and that node's tagged
     parent.
+
+    *tests* writes test files as well, path relative to *root* — for example
+    :data:`ZONED_POOL_TESTS` — so the reindex records a test binding.
     """
     nodes: list[Node] = [
         ("platform", "service", []),
@@ -408,5 +426,5 @@ def write_zoned_import_project(root: Path) -> Path:
         tiers=ZONES,
         layer_names=ZONE_NAMES,
         sources={"storage-pool": "src/storage/pool.py"},
-        modules=_ZONED_MODULES,
+        modules={**_ZONED_MODULES, **(tests or {})},
     )

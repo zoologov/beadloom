@@ -30,8 +30,10 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   Documentation).
 
 Beadloom produces, VitePress renders. Output is deterministic (sorted, stable
-frontmatter, NO wall-clock in the diffed output) and is NEVER written into the
-source ``docs/`` tree — only under ``--out``.
+frontmatter) and is NEVER written into the source ``docs/`` tree — only under
+``--out``. The one wall-clock read is the run's instant (``now_ts``, injected in
+tests): it stamps the metrics-history point and ``architecture.data.json``'s
+``generated_at``, so a fixed instant regenerates byte-identically.
 """
 
 # beadloom:domain=application
@@ -43,10 +45,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.architecture_card import NodeFinding, NodeVerdicts
 from beadloom.application.architecture_view import (
     build_architecture_view_data,
     render_architecture_view_md,
     serialize_architecture_view,
+)
+from beadloom.application.debt_report import (
+    NodeDebt,
+    collect_debt_data,
+    compute_top_offenders,
+    load_debt_weights,
 )
 from beadloom.application.landscape_view import (
     build_landscape_view_data,
@@ -71,9 +80,15 @@ from beadloom.application.site_metrics_history import (
     backfill_structural_history,
 )
 from beadloom.application.site_nav import human_label, render_nav_config
-from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
+from beadloom.application.site_pages import (
+    NodeRow,
+    load_nodes,
+    node_page_urls,
+    render_all_pages,
+)
 from beadloom.application.site_published import build_published_docs, publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
+from beadloom.graph.federation import resolve_repo_name
 
 if TYPE_CHECKING:
     import sqlite3
@@ -163,13 +178,16 @@ def _top_level_diagram(conn: sqlite3.Connection) -> str:
     return render_c4_mermaid(nodes, rels)
 
 
-def _lint_violation_refs(project_root: Path) -> set[str] | None:
-    """The set of node ``ref_id``s carrying a lint violation, or ``None``.
+def _lint_findings(project_root: Path) -> dict[str, list[NodeFinding]] | None:
+    """Each node's lint findings — rule, severity, message — or ``None``.
 
     Runs the SAME ``beadloom lint`` gate the dashboard/CI use, then projects the
-    violations to their source node (``from_ref_id``). Returns ``None`` (honest
-    degradation — the view OMITS the per-node lint-clean flag rather than fake a
-    "clean" verdict) when lint cannot run (e.g. no project graph in a test root).
+    violations to their source node (``from_ref_id``). Until BDL-076 A1 this
+    kept only the set of those nodes, so the view could say THAT a node was
+    found against and not by which rule or why. Returns ``None`` (honest
+    degradation — the view OMITS the findings and the lint-clean flag rather
+    than fake a "clean" verdict) when lint cannot run (e.g. no project graph in
+    a test root).
     """
     from beadloom.graph.linter import lint
 
@@ -177,7 +195,31 @@ def _lint_violation_refs(project_root: Path) -> set[str] | None:
         result = lint(project_root)
     except (OSError, ValueError):
         return None
-    return {v.from_ref_id for v in result.violations if v.from_ref_id is not None}
+    findings: dict[str, list[NodeFinding]] = {}
+    for violation in result.violations:
+        if violation.from_ref_id is None:
+            continue
+        findings.setdefault(violation.from_ref_id, []).append(
+            NodeFinding(
+                rule=violation.rule_name,
+                severity=violation.severity,
+                message=violation.message,
+            )
+        )
+    return findings
+
+
+def _node_debt(conn: sqlite3.Connection, project_root: Path) -> dict[str, NodeDebt]:
+    """Every node's debt, as the debt report scores it — read, never re-scored.
+
+    The report ranks the top offenders; asking for as many as it has issues
+    for returns every node it scores above zero, and a node it does not return
+    has no debt.
+    """
+    weights = load_debt_weights(project_root)
+    data = collect_debt_data(conn, project_root, weights)
+    offenders = compute_top_offenders(data, weights, limit=len(data.node_issues))
+    return {offender.ref_id: offender for offender in offenders}
 
 
 def _render_index(conn: sqlite3.Connection, nodes: list[NodeRow]) -> str:
@@ -404,7 +446,7 @@ def _record_metrics_point(
     The point's ts is the only wall-clock read and lands solely in the
     append-only history store — never in the diffed dashboard fields.
     """
-    ts = now_ts or datetime.now(timezone.utc).isoformat()
+    ts = now_ts or _now()
     data = _scalar_metrics(conn, project_root, federated)
     lint_obj = data["lint"]
     debt_obj = data["debt"]
@@ -425,6 +467,11 @@ def _record_metrics_point(
         symbols=symbols,
     )
     append_metrics_point(project_root, point)
+
+
+def _now() -> str:
+    """The current UTC instant, ISO-8601 — the run's one wall-clock read."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def generate_site(
@@ -453,6 +500,7 @@ def generate_site(
     """
     nodes = load_nodes(conn)
     written: list[Path] = []
+    now_ts = now_ts or _now()
 
     # About home (EN) from README.md, with the architecture overview moved to
     # its own /architecture page. Falls back to the overview when no README.
@@ -469,13 +517,16 @@ def generate_site(
     # fetch), and `architecture.md` mounts the client-side <ArchitectureMap>. The
     # original Mermaid overview is demoted to a static fallback at
     # `architecture-diagram.md` (no dead link; readable Mermaid was the problem).
-    arch_pages = existing_page_urls(conn)
-    lint_refs = _lint_violation_refs(project_root)
     arch_data = build_architecture_view_data(
         conn,
-        pages=arch_pages,
-        lint_violation_refs=lint_refs,
+        pages=node_page_urls(conn),
         published_doc_slugs=slugs,
+        verdicts=NodeVerdicts(
+            findings=_lint_findings(project_root),
+            debt=_node_debt(conn, project_root),
+        ),
+        generated_at=now_ts,
+        project=resolve_repo_name(project_root),
     )
     _write(
         out_dir / "public" / "architecture.data.json",

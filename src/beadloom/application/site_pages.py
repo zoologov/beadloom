@@ -73,6 +73,28 @@ def _kind_dir(kind: str) -> str:
     return _KIND_DIR.get(kind, "other")
 
 
+def node_page_path(kind: str, ref_id: str) -> str:
+    """Where a node's page is written, relative to the site root, without ``.md``.
+
+    Every node gets a page — :func:`render_all_pages` renders all of them — and
+    a kind with no directory of its own writes under ``other/``.
+    """
+    return f"{_kind_dir(kind)}/{ref_id}"
+
+
+def node_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
+    """Every node's page URL (``/<dir>/<ref>``), for every kind, ``other/`` included.
+
+    The architecture data file links each node to its page with this. The
+    landscape map keeps :func:`beadloom.application.site_landscape.existing_page_urls`,
+    which covers the three kinds with a directory of their own, because its
+    Mermaid links go through a base-path rewrite that does not cover ``/other/``
+    yet (BDL-076 RFC, "a url for every kind").
+    """
+    kinds = _load_kinds(conn)
+    return {ref_id: f"/{node_page_path(kind, ref_id)}" for ref_id, kind in kinds.items()}
+
+
 def _node_link(target_kind: str, target_ref: str) -> str:
     """A relative Markdown link from one node page to another's page.
 
@@ -155,7 +177,7 @@ def _load_incoming_for(
     return incoming
 
 
-def _load_symbols(conn: sqlite3.Connection, ref_id: str) -> list[str]:
+def public_symbol_names(conn: sqlite3.Connection, ref_id: str) -> list[str]:
     """Public symbol names in the files the node OWNS, sorted + de-duped.
 
     Ownership (most specific source wins) is resolved in
@@ -272,7 +294,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     """Render one node's Markdown page (deterministic)."""
     grouped = _load_edges_for(conn, node.ref_id, kinds)
     incoming = _load_incoming_for(conn, node.ref_id, kinds)
-    symbols = _load_symbols(conn, node.ref_id)
+    symbols = public_symbol_names(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
     diagram = _scoped_diagram(conn, node.ref_id)
 
@@ -296,7 +318,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     lines.extend(_docs_section(docs))
     lines.extend(_diagram_section(diagram))
 
-    rel_path = f"{_kind_dir(node.kind)}/{node.ref_id}.md"
+    rel_path = f"{node_page_path(node.kind, node.ref_id)}.md"
     return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n")
 
 
