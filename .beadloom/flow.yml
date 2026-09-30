@@ -73,9 +73,5 @@ mutation:
   - src/beadloom/services/bd_seam/invocations.py
 
 waves:
-  overrides:
-  - beads: [beadloom-ujzb.2, beadloom-oo4m, beadloom-5o48]
-    decision: parallel
-    reason: "BDL-076 wave 2. beadloom-ujzb.2 moves the portal modules from application/ into application/site/ (git mv, imports, their tests, .beadloom/_graph/site-generation.yml); beadloom-oo4m edits the sync-check engine under doc_sync/ and its tests; beadloom-5o48 edits the doc-area-coherence rule under graph/rules/ and its tests, and restores error in .beadloom/_graph/rules.yml. Ownership rule handed to all three: rules.yml is 5o48's; site-generation.yml and application/site/** are ujzb.2's; doc_sync/** is oo4m's. A test file that imports a moved module is updated by ujzb.2; the others add only new test files."
-    until: "2026-11-15"
+  overrides: []
 

@@ -7,9 +7,11 @@
 
 ## Current Bead
 
-**Bead:** Wave 2 — `beadloom-ujzb.2` (K1, the portal package) ∥ `beadloom-oo4m` (K2, JS/Vue sync pairs) ∥ `beadloom-5o48` (K3, `doc-area-coherence` with several source trees); then `beadloom-ujzb.3` (K4, data size), then `beadloom-ujzb.4` (W0, docs); then A3 ∥ A4.
+**Bead:** `beadloom-ujzb.3` (K4, data size); then `beadloom-ujzb.4` (W0, docs); then A3 ∥ A4.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
-**Done when:** the domain-size checks pass without raising the limit; `doc-area-coherence` is back to error and judges pairs; a JS/Vue node keeps every file's sync pair; the data file lists tests at their node only; `beadloom ci` rc 0.
+**Done when:** the data file lists tests at their node only; W0 brings every stale pair fresh; `beadloom ci` rc 0.
+
+**Wave 2 closed (2026-09-30):** K1 `beadloom-ujzb.2` `2a3daa08` — the portal's modules in `application/site/` (53 files moved, no shims; `application` 183 → 14 owned symbols, `site-generation` 24 → 193 as a feature; 495 moved tests same ids; `docs site` output identical but for timestamps). K2 `beadloom-oo4m` `0e690d16` — a partly annotated node keeps a pair for every file, the backstop reads every indexed language (site pairs 45 → 64; Python 523 → 526). K3 `beadloom-5o48` `f61c8ab0` — `doc-area-coherence` reads one root per top-level tree when that matches more pairs; back at error, 117 of 126 pairs checked, 0 findings. Gate owner K1 on the combined tree (f61c8ab0): 11 937 passed, 1 failed (`test_all_new_node_pairs_are_fresh`: 18 `site-generation` SPEC pairs → W0), ruff and mypy clean, `lint --strict` 0; `beadloom ci` rc 1 on sync-check only (→ W0).
 
 **Wave 1 closed (2026-09-30):** A1 `beadloom-o2ua` `9daa9d19` — data file v2 (every card field, all edge kinds, the project's layers, a `url` for all 110 nodes; v1 keys kept; symbols' names under `public_symbols`); 145 → 345 KB, mostly test lists repeated at every ancestor (→ K4). A2 `beadloom-iehv` `678942f1`, `20560d14`, `f62243fd` — the core in FSD (`app`/`pages`/`widgets`/`features`/`entities`/`shared`), no dragging by default, real colours in both themes, per-kind edges, layer lanes that ELK now receives, filters that keep ancestors, URL state, full screen holding toolbar, canvas, card and legend; 16 Playwright cases, each red on the old viewer; 17 slice nodes and the `site-fsd-layers` rule (29 edges judged, 0 findings). Combined tree: 11 910 passed, 2 failed (`application` at 183 of 180 symbols → K1); `beadloom ci` rc 1 on 93 stale pairs (→ W0). A2 lowered `doc-area-coherence` to warn, because a second source tree made it judge 0 of 126 pairs; the owner ruled: fix it in the epic (K3) and restore error before PR 1.
 
@@ -24,11 +26,6 @@
 - **Relative JS/TS imports are never resolved** (`graph/import_resolver.py:153-155`). None of the theme's 26 relative imports becomes an edge, and on the fixture `why` finds no dependents for an imported composable. This affects every JS/TS adopter → `beadloom-hjr1` (P1 bug).
 - **A non-Python scan path creates false edges.** With the theme path added, 1,318 unresolvable Python imports (`typing`, `pathlib`, …) resolve to `vitepress-site` through the resolver's walk-up (`import_resolver.py:737-765`): 103 false `depends_on` edges, and `lint --strict` stays green → `beadloom-g9fb` (P1 bug).
 - **What the tools see today:** `ctx` shows none of the theme's functions (no annotations); `impact` says "reads Python source"; `sync-check` sees a `.vue` edit only as a whole-file hash change.
-
-**The decision waiting for the owner:** A0 step 2 needs the three beadloom changes above (`.vue` reader, relative JS/TS imports, the resolver walk-up fix). Choose among:
-- take them into BDL-076 before the viewer work;
-- make them their own work item first;
-- or proceed with the viewer and leave the site outside the graph until they land.
 
 ## Progress
 
@@ -52,10 +49,10 @@
 | `beadloom-kcwz` | A0 dev | ✓ done | our site under beadloom; `.vue` measured first |
 | `beadloom-o2ua` | A1 dev | ✓ done | the data file v2 |
 | `beadloom-iehv` | A2 dev | ✓ done | the viewer core |
-| `beadloom-ujzb.2` | K1 dev | ready | the portal package |
-| `beadloom-oo4m` | K2 dev | ready | JS/Vue sync pairs kept |
-| `beadloom-5o48` | K3 dev | ready | `doc-area-coherence`, several trees |
-| `beadloom-ujzb.3` | K4 dev | blocked | tests listed at their node only |
+| `beadloom-ujzb.2` | K1 dev | ✓ done | the portal package |
+| `beadloom-oo4m` | K2 dev | ✓ done | JS/Vue sync pairs kept |
+| `beadloom-5o48` | K3 dev | ✓ done | `doc-area-coherence`, several trees |
+| `beadloom-ujzb.3` | K4 dev | in progress | tests listed at their node only |
 | `beadloom-ujzb.4` | W0 docs | blocked | stale pairs of A1, A2, K1–K4 |
 | `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | blocked | node pages; landscape mode |
