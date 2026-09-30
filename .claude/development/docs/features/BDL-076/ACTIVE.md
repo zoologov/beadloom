@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** Wave 3 — `beadloom-7091` (A3, neighbourhood, impact, the card) ∥ `beadloom-k0s6` (A4, node pages, landscape mode); then A5.
+**Bead:** Wave 3 — `beadloom-7091` (A3, neighbourhood, impact, the card), then `beadloom-k0s6` (A4, node pages, landscape mode); then A5. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **Done when:** the PRD's slice-1 criteria for the selection modes, the card and node pages hold in the browser tests; `beadloom ci` rc 0.
 
@@ -58,7 +58,7 @@
 | `beadloom-5o48` | K3 dev | ✓ done | `doc-area-coherence`, several trees |
 | `beadloom-ujzb.3` | K4 dev | ✓ done | tests listed at their node only |
 | `beadloom-ujzb.4` | W0 docs | ✓ done | stale pairs of A1, A2, K1–K4 |
-| `beadloom-7091` | A3 dev | ready | neighbourhood, impact, the card |
+| `beadloom-7091` | A3 dev | in progress | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | ready | node pages; landscape mode |
 | `beadloom-rjp1` | A5 test | blocked | browser tests; `site-e2e` |
 | `beadloom-bp8n` | T1 test | blocked | slice 1 criteria |
