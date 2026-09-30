@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-arak` (R1, review of slice 1, the authors' accounts withheld); then W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-arak` (R1, review of slice 1, the authors' accounts withheld); then the fixes and `beadloom-ujzb.6` (landscape impact, owner), W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
@@ -72,6 +72,7 @@
 | `beadloom-rjp1` | A5 test | ✓ done | browser tests; `site-e2e` |
 | `beadloom-bp8n` | T1 test | ✓ done | slice 1 criteria |
 | `beadloom-arak` | R1 review | in progress | review slice 1 |
+| `beadloom-ujzb.6` | dev | blocked | landscape impact mode (owner) |
 | `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
 | `beadloom-dfwt` | B1 dev | blocked | scaffold in the wheel |

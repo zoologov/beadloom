@@ -73,6 +73,7 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 | K3 | `beadloom-5o48` | fix: `doc-area-coherence` works with more than one source tree; back to error (owner, 2026-09-30) | P0 | A2 |
 | K4 | `beadloom-ujzb.3` | fix: test files listed at their node only; ancestors carry counts (data size) | P0 | K1 |
 | W0 | `beadloom-ujzb.4` | docs: the pairs A1, A2 and K1–K4 made stale | P0 | K2, K3, K4 |
+| A6 | `beadloom-ujzb.6` | dev: impact mode on the service landscape, over its contracts (owner, 2026-09-30) | P0 | R1 |
 | A3 | `beadloom-7091` | dev: neighbourhood (depth, direction), impact mode, the node card | P0 | A1, A2 |
 | A4 | `beadloom-k0s6` | dev: node pages focused on their node; landscape as the core's second mode | P0 | A1, A2 |
 | A5 | `beadloom-rjp1` | test: Playwright cases for every slice-1 goal, and the `site-e2e` CI job | P0 | A3, A4 |
