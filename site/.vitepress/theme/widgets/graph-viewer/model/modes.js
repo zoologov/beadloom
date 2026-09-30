@@ -43,7 +43,6 @@ export const MODES = Object.freeze({
       nodes: list(data?.nodes),
       edges: list(data?.edges),
       contracts: [],
-      repository: data?.repository || null,
     }),
     filterDefaults: FILTER_DEFAULTS,
     filterControls: FilterControls,
@@ -57,7 +56,7 @@ export const MODES = Object.freeze({
   landscape: Object.freeze({
     label: "Landscape of contracts",
     useData: useLandscapeData,
-    graphOf: (data) => ({ ...landscapeGraphOf(data), repository: null }),
+    graphOf: (data) => landscapeGraphOf(data),
     filterDefaults: CONTRACT_FILTER_DEFAULTS,
     filterControls: ContractFilterControls,
     filterOptions: (graph) => contractFilterOptions(graph.contracts),

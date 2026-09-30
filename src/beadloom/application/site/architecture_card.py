@@ -21,7 +21,13 @@ Honest degradation, as in the rest of the data file:
 - ``tests`` lists a test file once, at the node it is bound to. A container
   counts its parts' files without repeating their paths: listed at every
   ancestor, the paths were the largest field of the file (BDL-076 K4).
-- ``activity`` is ``None`` when the reindex recorded none.
+- ``activity`` is ``None`` when the reindex recorded none, and carries only
+  :data:`CARD_ACTIVITY_KEYS`: the reindex records the names of a node's most
+  frequent committers as well, and the data file is published (BDL-076 R1
+  finding M2).
+- ``source_url`` is the finished link to the node's source, decided per forge
+  by :class:`~beadloom.application.site.repository_link.RepositoryLink`, and
+  ``""`` when there is none to give (BDL-076 R1 finding M1).
 - ``findings`` and ``debt`` are omitted entirely when the site run did not
   compute them, never reported as clean.
 """
@@ -29,10 +35,11 @@ Honest degradation, as in the rest of the data file:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.application.site.node_pages import public_symbol_names
+from beadloom.application.site.repository_link import RepositoryLink
 from beadloom.graph.rules.suite_tables import read_test_files
 
 if TYPE_CHECKING:
@@ -45,6 +52,10 @@ if TYPE_CHECKING:
 #: listed: the node page lists every name, and the data file is fetched on every
 #: page view.
 PUBLIC_SYMBOL_CAP = 50
+
+#: The activity keys the node card shows, and the only ones the data file carries.
+#: A key the reindex adds reaches the published file by being listed here.
+CARD_ACTIVITY_KEYS = ("commits_30d", "level")
 
 #: A doc the index holds with no sync pair: nothing has been checked against it.
 DOC_UNPAIRED = "unpaired"
@@ -87,6 +98,8 @@ class CardSources:
     #: Test file path -> the node it is bound to, for owners the graph holds.
     test_owners: Mapping[str, str]
     verdicts: NodeVerdicts
+    #: The repository a node's source links into.
+    repository: RepositoryLink = field(default_factory=RepositoryLink)
 
 
 def card_sources(
@@ -94,6 +107,7 @@ def card_sources(
     *,
     tags: Mapping[str, Collection[str]],
     verdicts: NodeVerdicts | None,
+    repository: RepositoryLink | None = None,
 ) -> CardSources:
     """Read the per-build inputs of the card: the test placements and owners, once."""
     tests = read_test_files(conn) or []
@@ -107,6 +121,7 @@ def card_sources(
             if test.ref_id is not None and test.ref_id in nodes
         },
         verdicts=verdicts or NodeVerdicts(),
+        repository=repository or RepositoryLink(),
     )
 
 
@@ -123,12 +138,13 @@ def card_fields(
     extra = _extra(raw_extra)
     card: dict[str, object] = {
         "source": source or "",
+        "source_url": sources.repository.source_url(source or ""),
         "lifecycle": lifecycle,
         "tags": sorted(sources.tags.get(ref_id, ())),
         "docs": doc_pairs(conn, ref_id),
         "tests": bound_tests(extra, sources, ref_id),
         "public_symbols": capped_public_symbols(conn, ref_id),
-        "activity": _mapping(extra.get("activity")),
+        "activity": card_activity(extra.get("activity")),
     }
     verdicts = sources.verdicts
     if verdicts.findings is not None:
@@ -231,5 +247,8 @@ def _extra(raw: object) -> dict[str, object]:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def _mapping(value: object) -> dict[str, object] | None:
-    return value if isinstance(value, dict) else None
+def card_activity(recorded: object) -> dict[str, object] | None:
+    """The recorded activity narrowed to :data:`CARD_ACTIVITY_KEYS`; ``None`` when none."""
+    if not isinstance(recorded, dict):
+        return None
+    return {key: recorded[key] for key in CARD_ACTIVITY_KEYS if key in recorded}

@@ -93,7 +93,6 @@ const edges = computed(() => graph.value.edges);
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value));
-const repository = computed(() => graph.value.repository);
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const legendKeys = computed(() =>
   legendKeysOf(
@@ -357,7 +356,6 @@ onBeforeUnmount(() => disposeHandle());
           :layer-name="selectedLayer"
           :edges="edges"
           :layers="layers"
-          :repository="repository"
           :contracts="graph.contracts"
           :select="select"
           :close="clearSelection"

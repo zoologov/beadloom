@@ -75,9 +75,11 @@ V1_NODE_KEYS = {
 }
 
 #: The node keys schema version 2 adds, with `findings` and `debt` present
-#: because both were computed.
+#: because both were computed. `source_url` joined in R1's fix (`beadloom-ujzb.7`):
+#: the finished link to the node's source, decided per forge by the generator.
 V2_NODE_KEYS = {
     "source",
+    "source_url",
     "lifecycle",
     "tags",
     "docs",
@@ -92,6 +94,12 @@ V2_NODE_KEYS = {
 #: counts over the node and its ``part_of`` descendants. A file is listed once,
 #: at the node that holds it; an ancestor counts it without repeating the path.
 TESTS_KEYS = {"files", "file_count", "count", "placement"}
+
+#: The activity keys a node may carry: the ones the node card shows. The reindex
+#: records more — among them the names of a node's most frequent committers —
+#: and the data file is published, so a key reaches it only by being listed here
+#: (BDL-076 R1 finding M2).
+ACTIVITY_KEYS = {"commits_30d", "level"}
 
 #: What a declared layer carries at the top level.
 LAYER_KEYS = {"name", "rank", "tag", "token"}
@@ -551,6 +559,50 @@ def test_the_activity_is_the_one_the_reindex_recorded(shop: sqlite3.Connection) 
 
     assert nodes["orders"]["activity"] == activity
     assert nodes["shop"]["activity"] is None
+
+
+def test_the_activity_carries_only_what_the_card_shows(shop: sqlite3.Connection) -> None:
+    conn = shop
+    recorded = {
+        "level": "warm",
+        "commits_30d": 3,
+        "commits_90d": 9,
+        "last_commit": "2026-09-29",
+        "top_contributors": ["Ada Quillfeather", "Grace Tallow"],
+        "a_key_nobody_reviewed": "value",
+    }
+    _set_extra(conn, "orders", {"tags": ["tier-core"], "activity": recorded})
+    conn.commit()
+    data = build_architecture_view_data(conn)
+
+    assert _nodes(data)["orders"]["activity"] == {"level": "warm", "commits_30d": 3}
+    for node in _nodes(data).values():
+        activity = node["activity"]
+        assert activity is None or set(activity) <= ACTIVITY_KEYS, node["id"]
+    assert "Ada Quillfeather" not in json.dumps(data)
+
+
+def test_a_source_links_to_the_page_its_forge_serves(shop: sqlite3.Connection) -> None:
+    data = build_architecture_view_data(
+        shop, repository=RepositoryLink(url="https://bitbucket.org/team/shop", ref="abc123")
+    )
+    nodes = _nodes(data)
+
+    assert nodes["pricing"]["source_url"] == (
+        "https://bitbucket.org/team/shop/src/abc123/src/orders/pricing.py"
+    )
+    # A node with no source has nothing to link.
+    assert nodes["shop"]["source_url"] == ""
+
+
+def test_a_forge_the_generator_does_not_recognise_gets_no_source_link(
+    shop: sqlite3.Connection,
+) -> None:
+    data = build_architecture_view_data(
+        shop, repository=RepositoryLink(url="https://git.example/team/shop", ref="abc123")
+    )
+
+    assert all(node["source_url"] == "" for node in _nodes(data).values())
 
 
 def test_findings_name_the_rule_the_severity_and_the_message(shop: sqlite3.Connection) -> None:

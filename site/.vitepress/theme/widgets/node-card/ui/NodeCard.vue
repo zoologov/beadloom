@@ -3,7 +3,9 @@
 // A node's card: everything the data file says about one node.
 //
 // Identity (kind, summary, lifecycle, tags), the layer it is in and whether
-// the tag is its own or inherited, its source linked to the repository, its
+// the tag is its own or inherited, its source linked to the address the data
+// file gives (the generator decides it per forge, and gives none for a host it
+// does not recognise, so the card knows no forge), its
 // docs each with its freshness, its bound tests, its public symbols, its edges
 // by kind and direction, its rule findings, its activity and its debt, then the
 // node's page and the `ctx` and `why` commands to copy.
@@ -23,7 +25,6 @@ const props = defineProps({
   node: { type: Object, required: true },
   edges: { type: Array, default: () => [] },
   layers: { type: Array, default: () => [] },
-  repository: { type: Object, default: null },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -36,11 +37,7 @@ const layerOrigin = computed(() => {
   return props.node.layer ? "its own tag" : "inherited through part_of";
 });
 
-const sourceUrl = computed(() => {
-  const url = props.repository?.url;
-  if (!url || !props.node.source) return "";
-  return `${url}/tree/${props.repository.ref || "HEAD"}/${props.node.source}`;
-});
+const sourceUrl = computed(() => props.node.source_url || "");
 
 // A doc's page, when the site published one: its served link ends with the doc's path.
 const docLinkOf = computed(() => {

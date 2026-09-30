@@ -602,7 +602,7 @@ def build_architecture_view_data(
         parent=_parent_map(conn),
         layers=layers,
         relations=_Relations(depends_on, depended_on_by, uses, used_by),
-        card=card_sources(conn, tags=layers.tags, verdicts=verdicts),
+        card=card_sources(conn, tags=layers.tags, verdicts=verdicts, repository=repository),
         published_doc_slugs=published_doc_slugs,
     )
     rows = conn.execute(

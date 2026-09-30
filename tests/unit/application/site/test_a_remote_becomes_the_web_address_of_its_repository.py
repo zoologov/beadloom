@@ -1,10 +1,10 @@
 """The node card links a node's source to its repository (BDL-076 A3).
 
-The link is built in the browser from the data file's ``repository`` block, and
-the block is derived from the project's own ``origin`` remote, never from a
-constant: an adopter's portal must link to the adopter's repository. A remote
-in any of git's spellings becomes one web address, and a credential written into
-the remote never reaches a page that is published.
+The repository's web address is derived from the project's own ``origin``
+remote, never from a constant: an adopter's portal must link to the adopter's
+repository. A remote in any of git's spellings becomes one web address, and a
+credential written into the remote never reaches a page that is published. The
+link to one source path, per forge, is ``test_a_source_links_to_its_forge_or_not_at_all``.
 """
 
 from __future__ import annotations
@@ -24,6 +24,24 @@ from beadloom.application.site.repository_link import web_url_of_remote
         ("git@gitlab.example.com:group/sub/repo.git", "https://gitlab.example.com/group/sub/repo"),
         ("ssh://git@host.example:2222/owner/repo.git", "https://host.example/owner/repo"),
         ("http://intranet.example/owner/repo.git", "http://intranet.example/owner/repo"),
+        # Azure DevOps serves its SSH remotes from another host and another path
+        # than its web pages (BDL-076 R1 finding M1).
+        (
+            "git@ssh.dev.azure.com:v3/org/project/repo",
+            "https://dev.azure.com/org/project/_git/repo",
+        ),
+        (
+            "ssh://git@ssh.dev.azure.com/v3/org/project/repo",
+            "https://dev.azure.com/org/project/_git/repo",
+        ),
+        (
+            "https://org@dev.azure.com/org/project/_git/repo",
+            "https://dev.azure.com/org/project/_git/repo",
+        ),
+        (
+            "org@vs-ssh.visualstudio.com:v3/org/project/repo",
+            "https://org.visualstudio.com/project/_git/repo",
+        ),
     ],
 )
 def test_each_spelling_of_a_remote_becomes_one_web_address(remote: str, web_url: str) -> None:

@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from beadloom.application.reindex import reindex
 from beadloom.application.site.generate import generate_site
 from tests.support.tiered_project import ZONED_POOL_TESTS, write_zoned_import_project
 
@@ -32,6 +35,13 @@ _VIEW_DATA = "public/architecture.data.json"
 
 #: A fixed instant for the one wall-clock read `generate_site` makes.
 _NOW = "2026-09-30T00:00:00+00:00"
+
+#: The one person who commits to the scenario's repository. The name is unusual
+#: enough that finding it anywhere in the data file can only mean it leaked.
+_AUTHOR = "Ada Quillfeather"
+
+#: The activity keys the node card shows (BDL-076 R1 finding M2).
+_CARD_ACTIVITY_KEYS = {"commits_30d", "level"}
 
 
 def _split(listing: str) -> list[str]:
@@ -49,6 +59,30 @@ def world(tmp_path: Path) -> dict[str, Any]:
 )
 def _zoned_project(world: dict[str, Any]) -> None:
     world["project"] = write_zoned_import_project(world["root"], tests=ZONED_POOL_TESTS)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(  # noqa: S603 - fixed git arguments written by this step
+        ["git", *args],  # noqa: S607 - the scenario drives the git on PATH, as the generator does
+        cwd=cwd,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+@given(parsers.parse('the project is a git repository whose origin is "{remote}"'))
+def _git_repository(world: dict[str, Any], remote: str) -> None:
+    project = world["project"]
+    _git(project, "init", "-q")
+    _git(project, "remote", "add", "origin", remote)
+    _git(project, "add", "-A")
+    identity = ("-c", f"user.name={_AUTHOR}", "-c", "user.email=ada@example.invalid")
+    _git(project, *identity, "commit", "-q", "-m", "the shop")
+    world["ref"] = _git(project, "rev-parse", "HEAD")
+    # Reindexed after the commit, so the recorded activity names the author.
+    reindex(project)
 
 
 @when("the site is generated for the project")
@@ -144,3 +178,31 @@ def _layer_names(world: dict[str, Any], names: str) -> None:
 @then(parsers.parse('the declared layers carry the tags "{tags}"'))
 def _layer_tags(world: dict[str, Any], tags: str) -> None:
     assert [layer["tag"] for layer in world["data"]["layers"]] == _split(tags)
+
+
+@then(parsers.parse('the node "{ref}" links its source to "{link}"'))
+def _source_link(world: dict[str, Any], ref: str, link: str) -> None:
+    node = world["nodes"][ref]
+    expected = link.replace("{ref}", world["ref"])
+    assert node["source_url"] == expected
+    assert quote(node["source"], safe="/") in node["source_url"]
+
+
+@then(parsers.parse('the node "{ref}" has no source link'))
+def _no_source_link(world: dict[str, Any], ref: str) -> None:
+    node = world["nodes"][ref]
+    assert node["source"], "the scenario needs a node with a source"
+    assert node["source_url"] == ""
+
+
+@then("the data file does not contain the name of the project's commit author")
+def _no_author(world: dict[str, Any]) -> None:
+    text = (world["site"] / _VIEW_DATA).read_text(encoding="utf-8")
+    assert _AUTHOR not in text
+
+
+@then(parsers.parse('the node "{ref}" carries only the activity the card shows'))
+def _card_activity(world: dict[str, Any], ref: str) -> None:
+    activity = world["nodes"][ref]["activity"]
+    assert activity is not None, "the reindex recorded no activity for the node"
+    assert set(activity) == _CARD_ACTIVITY_KEYS

@@ -25,12 +25,11 @@ defineProps({
 
 <template>
   <GraphViewer mode="architecture" :focus="focus" :depth="depth" :height="height">
-    <template #panel="{ node, edges, layers, repository, select, close }">
+    <template #panel="{ node, edges, layers, select, close }">
       <NodeCard
         :node="node"
         :edges="edges"
         :layers="layers"
-        :repository="repository"
         @select="select"
         @close="close"
       />

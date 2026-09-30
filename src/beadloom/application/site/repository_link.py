@@ -11,6 +11,15 @@ describes rather than whatever the branch holds later.
 A remote git can reach but a browser cannot (a path on disk, ``file://``) gives
 no address, and the card then shows the source without a link. A credential
 written into an HTTPS remote is dropped: the data file is published.
+
+The link to one path is decided here, per forge, and written finished into the
+data file (BDL-076 R1 finding M1): each forge serves a path at a revision under
+its own route, and only the generator knows which forge the remote is. The
+forge is recognised from the host, and only a public forge's own host is
+recognised. Any other host — a self-hosted forge included — gets no link,
+because a guessed route is a 404 that looks like a link, and the card's
+plain-text source is true. A self-hosted forge is declared in the project's
+configuration instead (the owner's ruling, `beadloom-ujzb.8`, slice 2).
 """
 
 from __future__ import annotations
@@ -19,7 +28,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from beadloom.graph.federation import current_commit_sha
 
@@ -31,6 +40,42 @@ logger = logging.getLogger(__name__)
 _WEB_SCHEMES = frozenset({"http", "https"})
 _SSH_SCHEME = "ssh"
 _GIT_SUFFIX = ".git"
+
+#: Azure DevOps serves SSH from these hosts, under ``v3/<org>/<project>/<repo>``,
+#: and its web pages from another host and another path.
+_AZURE_SSH_HOST = "ssh.dev.azure.com"
+_VSTS_SSH_HOST = "vs-ssh.visualstudio.com"
+_AZURE_SSH_PREFIX = "v3"
+_AZURE_SSH_PARTS = 4  # v3, organisation, project, repository
+
+_GITHUB = "github"
+_GITLAB = "gitlab"
+_BITBUCKET = "bitbucket"
+_GITEA = "gitea"
+_AZURE = "azure"
+
+#: Each forge's route to a path at a revision, over the repository's web address.
+#: The path and the revision arrive URL-encoded.
+_ROUTES = {
+    _GITHUB: "{base}/tree/{ref}/{path}",
+    _GITLAB: "{base}/-/tree/{ref}/{path}",
+    _BITBUCKET: "{base}/src/{ref}/{path}",
+    _GITEA: "{base}/src/commit/{ref}/{path}",
+    _AZURE: "{base}?path=/{path}&version=GC{ref}",
+}
+
+#: The public forges, by the host they serve from.
+_PUBLIC_HOSTS = {
+    "github.com": _GITHUB,
+    "gitlab.com": _GITLAB,
+    "bitbucket.org": _BITBUCKET,
+    "codeberg.org": _GITEA,
+    "gitea.com": _GITEA,
+    "dev.azure.com": _AZURE,
+}
+
+#: Azure DevOps' older hosts, ``<organisation>.visualstudio.com``.
+_VSTS_SUFFIX = ".visualstudio.com"
 
 
 @dataclass(frozen=True)
@@ -47,6 +92,28 @@ class RepositoryLink:
     def as_dict(self) -> dict[str, str]:
         """The data file's ``repository`` block."""
         return {"url": self.url, "ref": self.ref}
+
+    def source_url(self, source: str) -> str:
+        """The page the forge serves for *source* at the recorded commit, or ``""``.
+
+        ``""`` when there is no repository, no commit or no path, and when the
+        host is not a forge this module recognises.
+        """
+        path = source.strip("/")
+        route = _ROUTES.get(forge_of(self.url) or "")
+        if route is None or not self.ref or not path:
+            return ""
+        return route.format(
+            base=self.url, ref=quote(self.ref, safe=""), path=quote(path, safe="/")
+        )
+
+
+def forge_of(web_url: str) -> str | None:
+    """Which forge serves *web_url*, by its host; ``None`` when none is recognised."""
+    host = (urlsplit(web_url).hostname or "").lower()
+    if host.endswith(_VSTS_SUFFIX):
+        return _AZURE
+    return _PUBLIC_HOSTS.get(host)
 
 
 def _strip_suffix(path: str) -> str:
@@ -66,12 +133,29 @@ def _scp_like(remote: str) -> tuple[str, str] | None:
     return host, path
 
 
+def _ssh_web_url(host: str, path: str) -> str:
+    """The web address of an SSH remote on *host* at *path*.
+
+    HTTPS on the same host, except for Azure DevOps, whose SSH host and path
+    (``ssh.dev.azure.com:v3/<org>/<project>/<repo>``) are not its web ones.
+    """
+    parts = path.split("/")
+    azure = len(parts) == _AZURE_SSH_PARTS and parts[0] == _AZURE_SSH_PREFIX
+    if azure and host == _AZURE_SSH_HOST:
+        _, org, project, repo = parts
+        return f"https://dev.azure.com/{org}/{project}/_git/{repo}"
+    if azure and host == _VSTS_SSH_HOST:
+        _, org, project, repo = parts
+        return f"https://{org}{_VSTS_SUFFIX}/{project}/_git/{repo}"
+    return f"https://{host}/{path}"
+
+
 def web_url_of_remote(remote: str) -> str:
     """The web address of a git remote, or ``""`` when a browser cannot open it.
 
     HTTP(S) keeps its scheme; SSH, in either spelling, becomes HTTPS on the same
-    host without the port. User names and credentials are dropped, and so is a
-    trailing ``.git``.
+    host without the port, or Azure DevOps' web address for its SSH remotes.
+    User names and credentials are dropped, and so is a trailing ``.git``.
     """
     remote = remote.strip()
     if not remote:
@@ -79,7 +163,7 @@ def web_url_of_remote(remote: str) -> str:
     scp = _scp_like(remote)
     if scp is not None:
         host, path = scp
-        return f"https://{host}/{_strip_suffix(path)}"
+        return _ssh_web_url(host, _strip_suffix(path))
     parts = urlsplit(remote)
     host = parts.hostname or ""
     path = _strip_suffix(parts.path)
@@ -89,7 +173,7 @@ def web_url_of_remote(remote: str) -> str:
         port = f":{parts.port}" if parts.port else ""
         return f"{parts.scheme}://{host}{port}/{path}"
     if parts.scheme == _SSH_SCHEME:
-        return f"https://{host}/{path}"
+        return _ssh_web_url(host, path)
     return ""
 
 

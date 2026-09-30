@@ -45,9 +45,10 @@ test("the card shows every field the data file holds for the node", async ({ pag
   await expect(field(page, "lifecycle")).toContainText(node.lifecycle);
   await expect(field(page, "layer")).not.toBeEmpty();
   await expect(field(page, "source")).toContainText(node.source);
-  if (data.repository?.url) {
-    const href = await field(page, "source").locator("a").getAttribute("href");
-    expect(href).toBe(`${data.repository.url}/tree/${data.repository.ref || "HEAD"}/${node.source}`);
+  if (node.source_url) {
+    await expect(field(page, "source").locator("a")).toHaveAttribute("href", node.source_url);
+  } else {
+    await expect(field(page, "source").locator("a")).toHaveCount(0);
   }
   for (const doc of node.docs) {
     await expect(field(page, "docs")).toContainText(doc.path);
@@ -221,3 +222,57 @@ for (const { field: name, listOf, read } of LISTED_FIELDS) {
     expect(shown).toEqual(listOf(node));
   });
 }
+
+// The link from a node's source is decided by the generator, which knows the
+// remote, and each forge serves a path under its own route (BDL-076 R1 finding
+// M1). The card renders the link it is given, whatever its form, and shows the
+// source as plain text when it is given none. The repository block names a
+// GitHub repository in every case, so a card that still built GitHub's route
+// from it would link somewhere else.
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const SOURCE_LINKS = [
+  { forge: "GitHub", link: (path) => `https://github.com/team/shop/tree/${COMMIT}/${path}` },
+  { forge: "GitLab", link: (path) => `https://gitlab.com/team/shop/-/tree/${COMMIT}/${path}` },
+  { forge: "Bitbucket", link: (path) => `https://bitbucket.org/team/shop/src/${COMMIT}/${path}` },
+  { forge: "Gitea", link: (path) => `https://codeberg.org/team/shop/src/commit/${COMMIT}/${path}` },
+  {
+    forge: "Azure DevOps",
+    link: (path) => `https://dev.azure.com/team/sales/_git/shop?path=/${path}&version=GC${COMMIT}`,
+  },
+];
+
+async function serveSourceLink(page, request, sourceUrl) {
+  const data = await architectureData(request);
+  const node = [...data.nodes].filter((n) => n.source).sort((a, b) => a.id.localeCompare(b.id))[0];
+  node.source_url = sourceUrl(node.source);
+  data.repository = { url: "https://github.com/someone-else/elsewhere", ref: "ffffffff" };
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  return node;
+}
+
+for (const { forge, link } of SOURCE_LINKS) {
+  test(`the card links the source to the ${forge} address the data file gives`, async ({
+    page,
+    request,
+  }) => {
+    const node = await serveSourceLink(page, request, link);
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    await expect(field(page, "source").locator("a")).toHaveAttribute("href", node.source_url);
+    await expect(field(page, "source")).toContainText(node.source);
+  });
+}
+
+test("the card shows the source without a link when the data file gives none", async ({
+  page,
+  request,
+}) => {
+  // A host the generator does not recognise: `beadloom docs site` writes no link.
+  const node = await serveSourceLink(page, request, () => "");
+
+  await openArchitecture(page, `?focus=${node.id}`);
+
+  await expect(field(page, "source").locator("code")).toHaveText(node.source);
+  await expect(field(page, "source").locator("a")).toHaveCount(0);
+});
