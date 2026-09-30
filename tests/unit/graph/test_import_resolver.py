@@ -102,3 +102,59 @@ class TestExtractKeepsRelativeSpecifiers:
             "export function f() { return 1; }\n"
         )
         assert [imp.import_path for imp in extract_imports(js)] == ["./card", "../shared"]
+
+
+@pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
+class TestExtractDynamicImports:
+    """BDL-076 J2: `import('...')` is a call expression, not an import statement."""
+
+    def test_a_literal_specifier_is_read_at_its_line(self, tmp_path: Path) -> None:
+        js = tmp_path / "lazy.js"
+        js.write_text("const a = 1;\nconst m = await import('./chart.js');\n")
+        imports = extract_imports(js)
+        assert [(imp.import_path, imp.line_number) for imp in imports] == [("./chart.js", 2)]
+
+    def test_a_template_literal_without_substitution_is_a_literal(self, tmp_path: Path) -> None:
+        js = tmp_path / "lazy.js"
+        js.write_text("import(`./chart.js`);\n")
+        assert [imp.import_path for imp in extract_imports(js)] == ["./chart.js"]
+
+    @pytest.mark.parametrize(
+        "source",
+        ["import(name);\n", "import(`./t${a}`);\n", "foo.import('y');\n", "import('./' + a);\n"],
+    )
+    def test_a_computed_specifier_names_nothing(self, tmp_path: Path, source: str) -> None:
+        js = tmp_path / "lazy.js"
+        js.write_text(source)
+        assert extract_imports(js) == []
+
+
+@pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
+class TestExtractVueImports:
+    """BDL-076 J2: a component's imports come from its script blocks, at file lines."""
+
+    def test_both_blocks_are_read_at_their_lines(self, tmp_path: Path) -> None:
+        vue = tmp_path / "Counter.vue"
+        vue.write_text(
+            '<script lang="ts">\n'
+            "import type { Props } from './types';\n"
+            "</script>\n"
+            "<template><b/></template>\n"
+            "<script setup>\n"
+            "import { ref } from 'vue';\n"
+            "const Chart = () => import('../charts/bar');\n"
+            "</script>\n"
+            "<style>.b { color: red; }</style>\n"
+        )
+        imports = extract_imports(vue)
+        assert [(imp.import_path, imp.line_number) for imp in imports] == [
+            ("./types", 2),
+            ("vue", 6),
+            ("../charts/bar", 7),
+        ]
+        assert {imp.file_path for imp in imports} == {str(vue)}
+
+    def test_a_template_only_component_has_no_imports(self, tmp_path: Path) -> None:
+        vue = tmp_path / "Badge.vue"
+        vue.write_text("<template><b>import x from './y'</b></template>\n")
+        assert extract_imports(vue) == []

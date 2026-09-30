@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Any
 
 from tree_sitter import Language, Parser
 
-from beadloom.context_oracle.vue_sfc import script_blocks
+# Re-exported on purpose: the import resolver reads a component's imports from the
+# same blocks this indexer reads its symbols from, and reaches the tree-sitter
+# facilities through this module only (the one declared `import-resolver ->
+# code-indexer` crossing in rules.yml), rather than adding a second one.
+from beadloom.context_oracle.vue_sfc import script_blocks as script_blocks
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable

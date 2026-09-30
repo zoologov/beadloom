@@ -17,6 +17,7 @@ from beadloom.context_oracle.code_indexer import clear_cache
 from beadloom.graph.import_resolver import (
     index_imports,
     reindex_file_imports,
+    resolve_import_to_node,
     resolve_relative_import,
 )
 from beadloom.infrastructure.db import create_schema, open_db
@@ -178,3 +179,81 @@ class TestIndexRecordsRelativeImports:
         )
         assert _imports(conn) == {("src/app/main.ts", "../shared/money", "shared")}
         assert _depends_on(conn) == {("app", "shared")}
+
+
+class TestTheWalkUpStopsAtTheScanRoot:
+    """BDL-076 J2: an import no file answers is not claimed by a node at or above a scan path.
+
+    A0 measured the defect on this repository: with ``site/.vitepress/theme`` as a
+    scan path, ``typing`` became ``site/.vitepress/theme/typing`` and walked up to
+    ``site/``, the source of ``vitepress-site``.
+    """
+
+    def _node(self, conn: sqlite3.Connection, ref_id: str, source: str) -> None:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+            (ref_id, source),
+        )
+
+    def test_a_node_above_the_scan_path_is_not_reached(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "site", "web/")
+        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["web/theme"]) is None
+
+    def test_a_node_whose_source_is_the_scan_root_is_not_reached(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "everything", "lib/")
+        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["lib"]) is None
+
+    def test_a_trailing_slash_on_the_scan_path_is_the_same_scan_root(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "everything", "lib/")
+        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["lib/"]) is None
+
+    def test_a_package_below_the_scan_root_still_resolves(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "billing", "lib/billing/")
+        assert resolve_import_to_node(
+            "billing.invoices.render", tmp_path, conn, scan_paths=["lib"]
+        ) == ("billing")
+
+
+@pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
+class TestAnImportIsReadOnlyThroughScanPathsOfItsLanguage:
+    """BDL-076 J2: a Python import is never prefixed with a JavaScript-only scan path."""
+
+    def test_a_python_import_does_not_reach_a_folder_under_a_js_scan_path(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES "
+            "('widgets', 'feature', '', 'web/theme/widgets/')"
+        )
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- src\n- web/theme\n", encoding="utf-8"
+        )
+        _write(tmp_path, "src/app/main.py", "import widgets.card\n")
+        _write(tmp_path, "web/theme/widgets/card.js", "export const card = 1;\n")
+        _write(tmp_path, "web/theme/main.js", "import { card } from 'widgets/card';\n")
+        index_imports(tmp_path, conn)
+        assert ("src/app/main.py", "widgets.card", None) in _imports(conn)
+
+    def test_the_languages_each_scan_path_holds(self, tmp_path: Path) -> None:
+        from beadloom.graph.import_resolver import scan_path_languages
+
+        _write(tmp_path, "src/a.py", "x = 1\n")
+        _write(tmp_path, "src/b.ts")
+        _write(tmp_path, "web/theme/c.vue", "<template/>\n")
+        _write(tmp_path, "web/theme/d.jsx")
+        files = [
+            tmp_path / p for p in ("src/a.py", "src/b.ts", "web/theme/c.vue", "web/theme/d.jsx")
+        ]
+        assert scan_path_languages(tmp_path, ["src", "web/theme/"], files) == {
+            "src": frozenset({".py", ".ts"}),
+            "web/theme/": frozenset({".ts"}),
+        }

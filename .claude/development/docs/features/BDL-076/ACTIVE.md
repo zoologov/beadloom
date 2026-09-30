@@ -41,9 +41,9 @@
 |---|---|---|---|
 | `beadloom-ujzb` | epic | ready | BDL-076 parent |
 | `beadloom-hjr1` | J1 dev | ✓ done | relative JS/TS imports resolve; 379 edges unchanged here |
-| `beadloom-g9fb` | J2 dev | ready | no false edges from a foreign scan path |
-| `beadloom-tmxa` | J3 dev | in progress | `.vue` symbols at their lines; `export const`/`default` read; `.vue` imports and `import()` NOT done (resolver file, see bead) |
-| `beadloom-kcwz` | A0 dev | blocked | our site under beadloom; `.vue` measured first |
+| `beadloom-g9fb` | J2 dev | ✓ done | no false edges from a foreign scan path; `.vue` imports and `import()` read |
+| `beadloom-tmxa` | J3 dev | ✓ done | `.vue` symbols at their lines; `export const`/`default` read; `.vue` imports and `import()` NOT done (resolver file, see bead) |
+| `beadloom-kcwz` | A0 dev | ready | our site under beadloom; `.vue` measured first |
 | `beadloom-o2ua` | A1 dev | blocked | the data file v2 |
 | `beadloom-iehv` | A2 dev | blocked | the viewer core |
 | `beadloom-7091` | A3 dev | blocked | neighbourhood, impact, the card |

@@ -9,24 +9,22 @@ gets and a double would agree with whatever the resolver does now.
 mistaken for: `parcels` is TypeScript and `recipes` is JavaScript, and this
 repository scans Python only.
 
+The shared When/Then steps are in this folder's `conftest.py`.
 The module is named `test_*` so default pytest collection picks the scenarios up.
 """
 
 from __future__ import annotations
 
-import json
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from click.testing import CliRunner
-from pytest_bdd import given, parsers, scenarios, then, when
-
-from beadloom.application.reindex import reindex
-from beadloom.services.cli import main
+from pytest_bdd import given, scenarios
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    WriteProject = Callable[[Path, str, str, dict[str, str]], None]
 
 pytest.importorskip("tree_sitter_typescript")
 
@@ -97,90 +95,26 @@ _RECIPES: dict[str, str] = {
 }
 
 
-def _write_project(root: Path, service: str, files: dict[str, str]) -> None:
+def _write_project(
+    write_project: WriteProject, root: Path, service: str, files: dict[str, str]
+) -> None:
     domains = tuple(sorted({path.split("/")[1] for path in files}))
-    graph = root / ".beadloom" / "_graph"
-    graph.mkdir(parents=True)
-    (graph / "graph.yml").write_text(_graph(service, domains), encoding="utf-8")
-    (root / ".beadloom" / "config.yml").write_text(_CONFIG, encoding="utf-8")
-    for rel_path, text in files.items():
-        path = root / rel_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-
-
-def _connect(root: Path) -> sqlite3.Connection:
-    return sqlite3.connect(root / ".beadloom" / "beadloom.db")
-
-
-@pytest.fixture
-def state() -> dict[str, Any]:
-    """What the steps hand each other: the project root."""
-    return {}
+    write_project(root, _graph(service, domains), _CONFIG, files)
 
 
 @given("a TypeScript package with nested folders and relative imports")
-def _typescript_package(tmp_path: Path, state: dict[str, Any]) -> None:
+def _typescript_package(
+    tmp_path: Path, state: dict[str, Any], write_project: WriteProject
+) -> None:
     root = tmp_path / "parcels"
-    _write_project(root, "parcels", _PARCELS)
+    _write_project(write_project, root, "parcels", _PARCELS)
     state["root"] = root
 
 
 @given("a JavaScript package whose folders are entered through index files")
-def _javascript_package(tmp_path: Path, state: dict[str, Any]) -> None:
+def _javascript_package(
+    tmp_path: Path, state: dict[str, Any], write_project: WriteProject
+) -> None:
     root = tmp_path / "recipes"
-    _write_project(root, "recipes", _RECIPES)
+    _write_project(write_project, root, "recipes", _RECIPES)
     state["root"] = root
-
-
-@when("the project is indexed")
-def _indexed(state: dict[str, Any]) -> None:
-    reindex(state["root"])
-
-
-def _dependents(root: Path, ref_id: str) -> set[str]:
-    result = CliRunner().invoke(main, ["why", ref_id, "--json", "--project", str(root)])
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.stdout)
-    return {str(item["ref_id"]) for item in payload["downstream"]}
-
-
-@then(parsers.parse('why on "{ref_id}" lists "{first}" and "{second}" as dependents'))
-def _why_lists_two(state: dict[str, Any], ref_id: str, first: str, second: str) -> None:
-    assert {first, second} <= _dependents(state["root"], ref_id)
-
-
-@then(parsers.parse('why on "{ref_id}" lists "{dependent}" as a dependent'))
-def _why_lists_one(state: dict[str, Any], ref_id: str, dependent: str) -> None:
-    assert dependent in _dependents(state["root"], ref_id)
-
-
-@then(parsers.parse("the depends_on edges are exactly {edges}"))
-def _edges_exactly(state: dict[str, Any], edges: str) -> None:
-    expected = {tuple(part.strip().split(" -> ")) for part in edges.replace('"', "").split(",")}
-    with _connect(state["root"]) as conn:
-        actual = set(
-            conn.execute(
-                "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
-            ).fetchall()
-        )
-    assert actual == expected
-
-
-def _resolved(root: Path, file_path: str, import_path: str) -> list[str | None]:
-    with _connect(root) as conn:
-        rows = conn.execute(
-            "SELECT resolved_ref_id FROM code_imports WHERE file_path = ? AND import_path = ?",
-            (file_path, import_path),
-        ).fetchall()
-    return [row[0] for row in rows]
-
-
-@then(parsers.parse('the import "{import_path}" of "{file_path}" resolves to "{ref_id}"'))
-def _resolves_to(state: dict[str, Any], import_path: str, file_path: str, ref_id: str) -> None:
-    assert _resolved(state["root"], file_path, import_path) == [ref_id]
-
-
-@then(parsers.parse('the import "{import_path}" of "{file_path}" is recorded with no node'))
-def _recorded_unresolved(state: dict[str, Any], import_path: str, file_path: str) -> None:
-    assert _resolved(state["root"], file_path, import_path) == [None]
