@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-rjp1` (A5, a browser case per slice-1 goal, the `site-e2e` job); then T1, R1, W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
+**Bead:** `beadloom-bp8n` (T1, every slice-1 acceptance criterion measured); then R1, W1, P1. Serialised, not parallel as PLAN drew it: `beadloom waves` finds both in the shared node `site-app`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
-**Done when:** every slice-1 goal has its Playwright case, passing locally; the `site-e2e` job is in `ci.yml`, not required.
+**Done when:** each slice-1 criterion of the PRD has a measurement and a verdict.
+
+**A5 closed (2026-09-30):** `beadloom-rjp1` `7fe2912e` — 55 Playwright cases (39 → 55), each goal mapped to its cases on the bead; 16 new or strengthened cases seen red on one deliberately broken build; the advisory `site-e2e` job in `ci.yml` (after `site-build`, Node 22, report on failure), named in `ADVISORY_JOBS` in the CI self-checks, not a required context. Not covered: direction readable at a glance (the test handle exposes no arrow shape), the 50-name symbol cap. pytest 11 998 passed, 1 failed (stale pairs → W1).
 
 **A4 closed (2026-09-30):** `beadloom-k0s6` `01fadab4` — node pages (every kind, `/other/` included) mount `ArchitectureMap` focused on their node, depth 1, card open, free navigation; the landscape runs on the core with protocol, verdict and problems filters, health borders, resolved colours; a pre-existing bug fixed — no Mermaid click target on the built site was rewritten. Deliberate differences, in CONTEXT: no impact in landscape mode, no edge card, the data mode is the page's prop. Playwright 39 passed (10 new, red first); pytest 11 991 passed, 1 failed (stale pairs); `beadloom ci` rc 1 on 59 stale pairs → W1. `beadloom-ujzb.5` `bf19eeb0`: layer coverage counts any layer rule — 411 of 420 (97.9%); counting one rule only drops it to 372 and the three checks go red.
 
@@ -65,8 +67,8 @@
 | `beadloom-7091` | A3 dev | ✓ done | neighbourhood, impact, the card |
 | `beadloom-k0s6` | A4 dev | ✓ done | node pages; landscape mode |
 | `beadloom-ujzb.5` | test | ✓ done | layer-coverage self-checks, strict (owner) |
-| `beadloom-rjp1` | A5 test | in progress | browser tests; `site-e2e` |
-| `beadloom-bp8n` | T1 test | blocked | slice 1 criteria |
+| `beadloom-rjp1` | A5 test | ✓ done | browser tests; `site-e2e` |
+| `beadloom-bp8n` | T1 test | in progress | slice 1 criteria |
 | `beadloom-arak` | R1 review | blocked | review slice 1 |
 | `beadloom-qlii` | W1 tech-writer | blocked | site SPEC, guide, data contract |
 | `beadloom-srrn` | P1 PR 1 | blocked | owner's look; PR 1 |
