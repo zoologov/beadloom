@@ -5,7 +5,7 @@ nodes:
   - ref_id: site-app
     kind: component
     summary: "The theme entry of the VitePress site: extends the default theme and registers the pages and widgets the generated Markdown mounts"
-    source: site/.vitepress/theme/app/
+    source: src/beadloom/site_scaffold/.vitepress/theme/app/
     tags: [fsd-app]
     docs:
       - docs/services/vitepress-site/app.md

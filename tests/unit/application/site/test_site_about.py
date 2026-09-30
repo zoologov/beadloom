@@ -470,3 +470,42 @@ def test_plain_link_and_plain_image_still_work() -> None:
         f"[text]({_REPO}/blob/main/LICENSE) and "
         f"![alt]({_REPO}/blob/main/img.png)"
     )
+
+
+# BDL-076 B1 (`beadloom-dfwt`): a project that declares no repository link.
+# The About page used to rebase such a link onto this repository's GitHub URL,
+# a constant in the generator, so every adopter's About page linked here. A
+# project that declares no `site.repo_url` gets the link's text instead: there
+# is nowhere true to send it.
+
+
+def test_without_a_repository_an_unknown_link_keeps_its_text() -> None:
+    out = render_about(
+        "See the [license](LICENSE) file.",
+        published_doc_slugs=set(),
+        repo_url="",
+    )
+    assert out == "See the license file."
+
+
+def test_without_a_repository_a_relative_image_keeps_its_alt_text() -> None:
+    out = render_about("![diagram](docs/arch.png)", published_doc_slugs=set(), repo_url="")
+    assert out == "diagram"
+
+
+def test_without_a_repository_a_badge_link_keeps_its_badge() -> None:
+    out = render_about(
+        "[![ci](https://img.shields.io/badge/ci-green)](LICENSE)",
+        published_doc_slugs=set(),
+        repo_url="",
+    )
+    assert out == "![ci](https://img.shields.io/badge/ci-green)"
+
+
+def test_without_a_repository_a_published_doc_still_links_to_its_page() -> None:
+    out = render_about(
+        "[guide](docs/getting-started.md)",
+        published_doc_slugs={"getting-started"},
+        repo_url="",
+    )
+    assert out == "[guide](/docs/getting-started)"

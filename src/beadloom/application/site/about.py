@@ -20,7 +20,9 @@ Rebasing rules (applied to both ``[text](target)`` links and
   (back-compat).
 - any other internal/relative target (``LICENSE``, source paths, an
   unpublished ``docs/<x>``) -> absolute GitHub URL
-  ``{repo_url}/blob/main/<path>`` (a leading ``./`` is stripped).
+  ``{repo_url}/blob/main/<path>`` (a leading ``./`` is stripped). With no
+  ``repo_url`` — a project that declares no repository link (BDL-076 B1) — there
+  is nowhere true to send it: a link keeps its text and an image its alt text.
 - already-absolute URLs (http/https, including shields.io badges) and pure
   anchors (``#section``) -> unchanged.
 
@@ -124,6 +126,8 @@ def _rebase_one(
     if site_link is not None:
         return f"{bang}[{text}]({site_link})"
 
+    if not repo_url:
+        return text
     return f"{bang}[{text}]({repo_url}/blob/main/{path})"
 
 

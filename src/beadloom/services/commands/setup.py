@@ -584,7 +584,9 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     _echo_duty_limits(project_root)
     _echo_role_map_limits(project_root)
 
-    if not blocking:
+    site_refused = _echo_site_config_refusals(project_root)
+
+    if not blocking and not site_refused:
         # A warning is a real finding and is printed above; it does not block,
         # because a green project going red on upgrade is how a check gets
         # switched off wholesale.
@@ -598,14 +600,35 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         _echo_weakened_verdicts(warnings)
         return
 
-    click.echo(f"Agent-config drift detected ({len(blocking)}):", err=True)
-    for drift in blocking:
-        click.echo(f"  - {drift.file}: {drift.reason}", err=True)
-        if drift.remediation:
-            click.echo(f"    -> {drift.remediation}", err=True)
-    _echo_closing_advice(blocking)
+    if blocking:
+        click.echo(f"Agent-config drift detected ({len(blocking)}):", err=True)
+        for drift in blocking:
+            click.echo(f"  - {drift.file}: {drift.reason}", err=True)
+            if drift.remediation:
+                click.echo(f"    -> {drift.remediation}", err=True)
+        _echo_closing_advice(blocking)
     _echo_weakened_verdicts(warnings)
     raise SystemExit(1)
+
+
+def _echo_site_config_refusals(project_root: Path) -> bool:
+    """Print every value of the ``site:`` block the portal cannot use; ``True`` if any.
+
+    BDL-076 B1. Printed with the agent-config drift, because it is the same
+    subject — a declaration checked against the project — and it blocks for the
+    reason ``docs site`` refuses it: a mistyped base path deploys the portal
+    under the wrong one without a word.
+    """
+    from beadloom.application.site.site_config import read_site_config
+
+    _, refusals = read_site_config(project_root)
+    if not refusals:
+        return False
+    click.echo(f"The `site:` block of .beadloom/config.yml ({len(refusals)}):", err=True)
+    for refusal in refusals:
+        click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
+        click.echo(f"    -> {refusal.remediation}", err=True)
+    return True
 
 
 def _echo_duty_limits(project_root: Path) -> None:

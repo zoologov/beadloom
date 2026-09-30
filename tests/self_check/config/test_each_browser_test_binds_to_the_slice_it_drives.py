@@ -24,8 +24,9 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 from beadloom.onboarding.graph_files import each_graph_file
 from tests.support.repository_root import REPO_ROOT
 
-#: The browser tests' folder, relative to the repository root.
-_E2E = "site/e2e"
+#: The browser tests' folder, relative to the repository root: in the package
+#: since BDL-076 B1 (``beadloom-dfwt``); ``site/e2e`` is the copy ``docs site`` writes.
+_E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {

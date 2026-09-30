@@ -214,7 +214,8 @@ rules:
         until: "the rule engine takes a project's facts as an input rather than reading them"
 
   # THE SITE'S FRONTEND IS JUDGED THE WAY AN FSD ADOPTER'S IS (BDL-076 A2,
-  # `beadloom-iehv`). The VitePress theme under `site/.vitepress/theme` follows
+  # `beadloom-iehv`). The VitePress theme (package data under
+  # `src/beadloom/site_scaffold/.vitepress/theme` since BDL-076 B1) follows
   # Feature-Sliced Design (owner, 2026-09-30): six layers, and a layer imports only
   # the layers below it. Each slice is a `component` node `part_of vitepress-site`
   # and carries its layer as its OWN tag. There is deliberately no node per layer:
@@ -473,6 +474,12 @@ rules:
   # pairs, and it sat at `warn`. Measured after the fix on the same graph: 117 of
   # 126 pairs fall under a dominant mapping, 102 under `src/beadloom` and 15 under
   # `site/.vitepress/theme`, and 0 contradict it.
+  #
+  # BDL-076 B1 (`beadloom-dfwt`) moved the theme into the package, so `src/` is
+  # again the one source tree and the site's slices are judged inside it.
+  # Measured after the move: 122 of 129 pairs fall under a dominant mapping, the
+  # twenty slices among them (`site_scaffold` -> `vitepress_site`), and 0
+  # contradict it.
   - name: doc-area-coherence
     description: "A node is documented where this graph documents nodes from its source area"
     severity: error

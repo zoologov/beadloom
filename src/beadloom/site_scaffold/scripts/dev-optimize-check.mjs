@@ -19,10 +19,10 @@ async function main() {
   // Reaching here means Vite created the dev server + began dep optimization
   // for the configured root without throwing on the viz worker chain.
   await server.close();
-  console.log("DEV-OPTIMIZE-CHECK OK: vitepress dev server booted + closed");
+  process.stdout.write("DEV-OPTIMIZE-CHECK OK: vitepress dev server booted + closed\n");
 }
 
 main().catch((err) => {
-  console.error("DEV-OPTIMIZE-CHECK FAIL:", err);
+  process.stderr.write(`DEV-OPTIMIZE-CHECK FAIL: ${err?.stack || err}\n`);
   process.exit(1);
 });

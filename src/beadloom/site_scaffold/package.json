@@ -4,6 +4,9 @@
   "private": true,
   "description": "VitePress scaffold that renders the tree produced by `beadloom docs site`.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "docs:dev": "vitepress dev .",
     "docs:build": "vitepress build .",

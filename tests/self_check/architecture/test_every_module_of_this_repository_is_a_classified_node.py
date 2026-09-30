@@ -95,6 +95,8 @@ class TestSiteGenerationCluster:
         ``application/`` into ``application/site/``, whose single owner is the
         ``site-generation`` node: eleven modules plus the ``dashboard/`` package.
         BDL-076 A3 (``beadloom-7091``) added ``repository_link.py``, the twelfth.
+        BDL-076 B1 (``beadloom-dfwt``) added ``scaffold.py`` and ``site_config.py``,
+        the portal's shipped files and its identity: fourteen.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -102,7 +104,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 12, names
+        assert len(names) == 14, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

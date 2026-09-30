@@ -26,8 +26,15 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   in (source never mutated) with a per-doc ``doc_sync`` validation badge (same
   source as ``sync-check``).
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
-  committed VitePress scaffold (sections: Dashboard / Architecture / Landscape /
+  VitePress scaffold (sections: Dashboard / Architecture / Landscape /
   Documentation).
+- ``.vitepress/site.generated.mjs`` — the portal's identity (title, description,
+  base path, repository link) from the project's ``site:`` block (see
+  :mod:`beadloom.application.site.site_config`).
+- the scaffold — the theme, the viewer, ``package.json``, the lockfile, the
+  VitePress config and the browser tests — written from the installed package,
+  then the project's own ``.beadloom/site/``, copied last (see
+  :mod:`beadloom.application.site.scaffold`).
 
 Beadloom produces, VitePress renders. Output is deterministic (sorted, stable
 frontmatter) and is NEVER written into the source ``docs/`` tree — only under
@@ -45,6 +52,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom import __version__
 from beadloom.application.debt_report import (
     NodeDebt,
     collect_debt_data,
@@ -87,6 +95,8 @@ from beadloom.application.site.node_pages import (
 )
 from beadloom.application.site.published_docs import build_published_docs, publish_docs
 from beadloom.application.site.repository_link import repository_of
+from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
+from beadloom.application.site.site_config import render_site_module, site_config_of
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
@@ -94,10 +104,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-#: Canonical repo URL used to rebase unknown internal README links to absolute
-#: GitHub URLs (so the About page never carries a broken site-relative link).
-_REPO_URL = "https://github.com/zoologov/beadloom"
 
 
 class MermaidValidationError(RuntimeError):
@@ -117,10 +123,15 @@ class MermaidValidationError(RuntimeError):
 
 @dataclass(frozen=True)
 class SiteResult:
-    """The outcome of a site generation: every file written, sorted."""
+    """The outcome of a site generation: every file written, sorted.
+
+    ``scaffold`` is what the scaffold writer did with each shipped file,
+    including the ones it kept because they are not beadloom's.
+    """
 
     out_dir: Path
     written: tuple[Path, ...]
+    scaffold: ScaffoldReport
 
 
 @dataclass(frozen=True)
@@ -285,15 +296,20 @@ def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[st
 _CROSS_LINK_ROUTES: dict[str, str] = {"readme.ru.md": "/ru/", "readme.md": "/"}
 
 
-def _render_about_page(readme_path: Path, slugs: set[str]) -> str | None:
-    """The About-page body for *readme_path*, or None when the file is absent."""
+def _render_about_page(readme_path: Path, slugs: set[str], repo_url: str) -> str | None:
+    """The About-page body for *readme_path*, or None when the file is absent.
+
+    *repo_url* is the repository link the project declares, ``""`` when none:
+    until BDL-076 B1 it was this repository's URL, a constant, on every
+    project's About page.
+    """
     if not readme_path.is_file():
         return None
     readme_text = readme_path.read_text(encoding="utf-8")
     return render_about(
         readme_text,
         published_doc_slugs=slugs,
-        repo_url=_REPO_URL,
+        repo_url=repo_url,
         cross_link_routes=_CROSS_LINK_ROUTES,
     )
 
@@ -496,7 +512,12 @@ def generate_site(
 
     Returns:
         A :class:`SiteResult` listing every written file (sorted).
+
+    Raises:
+        SiteConfigError: the project's ``site:`` block holds a value the portal
+            cannot use. Raised before any file is written.
     """
+    identity = site_config_of(project_root)
     nodes = load_nodes(conn)
     written: list[Path] = []
     now_ts = now_ts or _now()
@@ -505,7 +526,7 @@ def generate_site(
     # its own /architecture page. Falls back to the overview when no README.
     slugs = _published_doc_slugs(conn, project_root)
     overview = _render_index(conn, nodes)
-    about_en = _render_about_page(project_root / "README.md", slugs)
+    about_en = _render_about_page(project_root / "README.md", slugs, identity.repo_url)
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
 
     # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
@@ -536,7 +557,7 @@ def generate_site(
     _write(out_dir / "architecture-diagram.md", overview, written)
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
-    about_ru = _render_about_page(project_root / "README.ru.md", slugs)
+    about_ru = _render_about_page(project_root / "README.ru.md", slugs, identity.repo_url)
     if about_ru is not None:
         _write(out_dir / "ru" / "index.md", about_ru, written)
 
@@ -610,5 +631,14 @@ def generate_site(
         render_nav_config(conn, project_root),
         written,
     )
+    _write(out_dir / ".vitepress" / "site.generated.mjs", render_site_module(identity), written)
 
-    return SiteResult(out_dir=out_dir, written=tuple(sorted(written)))
+    # The scaffold last but one, the project's overrides last of all: a file
+    # under .beadloom/site/ replaces whatever this run wrote at its path.
+    scaffold = write_scaffold(out_dir, project_root=project_root, version=__version__)
+    for rel in (*scaffold.written, *scaffold.updated, *scaffold.overridden):
+        written.append(out_dir / rel)
+
+    return SiteResult(
+        out_dir=out_dir, written=tuple(sorted(set(written))), scaffold=scaffold
+    )

@@ -5,7 +5,7 @@ nodes:
   - ref_id: site-dashboard-data
     kind: component
     summary: "The dashboard data file as the dashboard panels read it"
-    source: site/.vitepress/theme/entities/dashboard-data/
+    source: src/beadloom/site_scaffold/.vitepress/theme/entities/dashboard-data/
     tags: [fsd-entities]
     docs:
       - docs/services/vitepress-site/dashboard-data.md

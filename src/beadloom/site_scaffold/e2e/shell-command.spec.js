@@ -11,7 +11,7 @@ import { architectureData, openArchitecture } from "./support/viewer.js";
 
 const CASES = [
   { word: "rule-engine", quoted: "rule-engine" },
-  { word: "src/beadloom/graph/rules/", quoted: "src/beadloom/graph/rules/" },
+  { word: "src/shop/core/", quoted: "src/shop/core/" },
   { word: "src/my module/a.py", quoted: "'src/my module/a.py'" },
   { word: "src/it's.py", quoted: "'src/it'\\''s.py'" },
   { word: "src/c#/x.py", quoted: "'src/c#/x.py'" },

@@ -3,9 +3,9 @@
 // The tests drive the BUILT portal, not the dev server: `support/serve.mjs`
 // runs `vitepress build` and then `vitepress preview`, so what is tested is the
 // bundle that is deployed. The content must be generated first, with
-// `beadloom docs site --out site`; the server script refuses to start without it.
+// `beadloom docs site`; the server script refuses to start without it.
 //
-// Run from `site/`: `npm run test:e2e`.
+// Run from the portal's root: `npm run test:e2e`.
 
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
@@ -14,8 +14,17 @@ import path from "node:path";
 const SITE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A port of its own, so a preview the developer already runs on 4173 is not reused.
 const PORT = Number(process.env.BEADLOOM_E2E_PORT || 4178);
-// The site's configured base path (`base` in `.vitepress/config.mjs`).
-const BASE = process.env.BEADLOOM_E2E_BASE || "/beadloom/";
+// The portal's base path, as `docs site` generated it from the project's `site:`
+// block; `/` before the first generation.
+async function configuredBase() {
+  try {
+    const { site } = await import("../.vitepress/site.generated.mjs");
+    return site?.base || "/";
+  } catch {
+    return "/";
+  }
+}
+const BASE = process.env.BEADLOOM_E2E_BASE || (await configuredBase());
 
 export default defineConfig({
   testDir: ".",

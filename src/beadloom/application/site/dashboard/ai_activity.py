@@ -132,6 +132,11 @@ def _ai_techwriter(project_root: Path) -> dict[str, object]:
         )
 
     return {
+        # Whether the project records runs at all (BDL-076 B1): the dashboard
+        # mounts the panel only then. A store that exists and holds no run is a
+        # harness that has not run yet, which the panel says; no store is a
+        # project without the harness, to which the panel has nothing to say.
+        "recorded": (project_root / ".beadloom" / _AI_RUNS_FILENAME).is_file(),
         "runs": runs,
         "totals": {
             "runs": len(runs),

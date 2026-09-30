@@ -1025,12 +1025,24 @@ def _step_config_check(project_root: Path) -> GateStep:
 
     findings = [_config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts]
     findings.extend(scope)
+    # The portal's `site:` block (BDL-076 B1) rides here for the reason the
+    # mutation scope does: a declaration checked against the project, with no
+    # step of its own. It blocks, because a value `docs site` cannot use stops
+    # `docs site`, and no project declared the block before it existed.
+    site = _site_config_findings(project_root)
+    findings.extend(site)
     blocking = [d for d in drifts if d.severity == "error"]
     warned = len(drifts) - len(blocking) + len(scope)
-    passed = not blocking
+    passed = not blocking and not site
     # Three states, three summaries. `agent-config in sync` printed over a
     # reported-but-non-blocking finding is the shape BDL-061 S2b spent itself on.
-    if blocking:
+    if site:
+        summary = f"{len(site)} unusable `site:` value(s)"
+        if blocking:
+            summary += f" + {len(blocking)} drifted artifact(s)"
+        if warned:
+            summary += f" + {warned} warning(s)"
+    elif blocking:
         summary = f"{len(blocking)} drifted artifact(s)"
         if warned:
             summary += f" + {warned} warning(s)"
@@ -1353,6 +1365,24 @@ def _config_finding(
         "remediation": remediation
         or "run `beadloom setup-rules --refresh` (or `config-check --fix`)",
     }
+
+
+def _site_config_findings(project_root: Path) -> list[Finding]:
+    """Every value of the ``site:`` block ``docs site`` could not use, as blocking findings."""
+    from beadloom.application.site.site_config import read_site_config
+
+    _, refusals = read_site_config(project_root)
+    return [
+        {
+            "kind": "config-check",
+            "rule": "site-config",
+            "severity": "error",
+            "locations": [{"file": ".beadloom/config.yml"}],
+            "why": f"{refusal.where}: {refusal.why}",
+            "remediation": refusal.remediation,
+        }
+        for refusal in refusals
+    ]
 
 
 def _mutation_scope_finding(finding: object) -> Finding:

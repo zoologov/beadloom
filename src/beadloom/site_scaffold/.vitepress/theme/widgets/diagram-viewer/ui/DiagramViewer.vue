@@ -32,7 +32,7 @@ const XLINK_NS = "http://www.w3.org/1999/xlink";
 
 // Root-absolute internal path prefixes the generator emits (base-agnostic).
 // A click target starting with one of these is an in-site page that must be
-// served under the configured base (e.g. `/beadloom/`).
+// served under the configured base (e.g. `/orders/`).
 // Every node page lives under one of the first four; a kind with no directory
 // of its own writes its page under `/other/`.
 const INTERNAL_PREFIXES = ["/services/", "/domains/", "/features/", "/other/", "/docs/"];
@@ -40,7 +40,7 @@ const INTERNAL_PREFIXES = ["/services/", "/domains/", "/features/", "/other/", "
 // Make a raw Mermaid click target base-aware. Pure + idempotent: a root-absolute
 // internal path gets `base` prepended exactly once; anything else (external URL,
 // in-page anchor, relative path, or a value already under `base`) is returned
-// unchanged. `base` is VitePress's configured base (e.g. "/beadloom/", always
+// unchanged. `base` is VitePress's configured base (e.g. "/orders/", always
 // trailing-slashed; "/" when unset).
 function baseAwareHref(raw, base) {
   if (!raw || !base || base === "/") {

@@ -3,8 +3,9 @@ languages:
 # BDL-076 A0 (`beadloom-kcwz`). The VitePress theme is scanned so that the graph
 # viewer is not a blind spot of the tool that draws it: its `.vue` and `.js`
 # files are read for symbols and imports and belong to the `vitepress-site` node.
-# Only the theme is scanned, not `site/`: everything else under `site/` is
-# generated output or `node_modules`.
+# BDL-076 B1 (`beadloom-dfwt`) moved the theme into the package, under
+# `src/beadloom/site_scaffold/`, so `src` covers it and `site/` is output only:
+# the portal `docs site` writes, with `node_modules` beside it.
 #
 # `languages` stays `.py`: it states what mutmut, a Python mutator, can mutate,
 # and the mutation scope reads it for that. Reading `.vue` and `.js` needs the
@@ -15,7 +16,6 @@ languages:
 # the extra removed the theme's 80 symbols from this index).
 scan_paths:
 - src
-- site/.vitepress/theme
 sync:
   hook_mode: warn
 # BDL-074 G2 (`beadloom-2mj3.11`, review `beadloom-b9ll` M3 and m4). Where this
@@ -30,14 +30,14 @@ sync:
 # `patterns` names pytest and Playwright: declaring the groups replaces the Go and
 # JS/TS defaults rather than keeping them unused.
 #
-# BDL-076 A0 (`beadloom-kcwz`): `site/e2e` is the root of the site's Playwright
-# tests, which A5 writes. Their pattern group is Playwright's own default match
-# for JavaScript (the site has no TypeScript). A file directly under the root sits
-# in no kind folder, so it binds through the `tests:` list of `vitepress-site`.
-# Until the folder exists, the index records the root as absent and reads nothing
-# from it.
+# BDL-076 A0 (`beadloom-kcwz`): the site's Playwright tests have a root of their
+# own. Their pattern group is Playwright's own default match for JavaScript (the
+# site has no TypeScript). A file directly under the root sits in no kind folder,
+# so it binds through the `tests:` list of the slice it drives, or of
+# `vitepress-site`. BDL-076 B1 (`beadloom-dfwt`) moved the root with the
+# scaffold into the package; `site/e2e` is now the copy `docs site` writes.
 tests:
-  roots: [tests, site/e2e]
+  roots: [tests, src/beadloom/site_scaffold/e2e]
   beside_code: false
   kinds:
     unit: unit

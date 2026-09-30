@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from beadloom.application.doc_spaces import SpacesReport, TrackerRead
+    from beadloom.application.site.scaffold import ScaffoldReport
 
 from beadloom.services.commands._root import main
 
@@ -105,14 +106,18 @@ def docs_site(
     federated: Path | None,
     project: Path | None,
 ) -> None:
-    """Generate a VitePress content tree from the architecture graph.
+    """Generate the project's portal: a VitePress site built from the architecture graph.
 
     Reads the indexed graph read-only and emits an architecture overview,
-    one page per node (with summary, symbols, edges-as-links, and an embedded
-    C4/Mermaid diagram), and the VitePress nav/sidebar config — under --out
-    (default site/). Never writes into the source docs/ tree.
+    one page per node, the dashboard, the landscape and the VitePress nav —
+    under --out (default site/) — with the identity declared under `site:` in
+    .beadloom/config.yml. Writes the portal scaffold (theme, viewer,
+    package.json, lockfile, VitePress config, browser tests) from the installed
+    package, never over a file it did not write, then copies .beadloom/site/
+    last. Never writes into the source docs/ tree.
     """
     from beadloom.application.site import generate_site
+    from beadloom.application.site.site_config import SiteConfigError
     from beadloom.infrastructure.db import connection
 
     project_root = project or Path.cwd()
@@ -122,9 +127,36 @@ def docs_site(
         sys.exit(1)
 
     out = out_dir if out_dir is not None else project_root / "site"
-    with connection(db_path) as conn:
-        result = generate_site(conn, out, project_root=project_root, federated=federated)
+    try:
+        with connection(db_path) as conn:
+            result = generate_site(conn, out, project_root=project_root, federated=federated)
+    except SiteConfigError as exc:
+        click.echo("Error: the `site:` block of .beadloom/config.yml cannot be used:", err=True)
+        for refusal in exc.refusals:
+            click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
+            click.echo(f"    -> {refusal.remediation}", err=True)
+        sys.exit(1)
     click.echo(f"Generated {len(result.written)} files under {out}")
+    _echo_scaffold_report(result.scaffold, out)
+
+
+def _echo_scaffold_report(report: ScaffoldReport, out: Path) -> None:
+    """Say what happened to each scaffold file, and name every one that was kept."""
+    click.echo(
+        f"Scaffold (beadloom {report.version}): {len(report.written)} written, "
+        f"{len(report.updated)} updated, {len(report.unchanged)} unchanged, "
+        f"{len(report.retired)} retired, {len(report.overridden)} copied from .beadloom/site/"
+    )
+    if not report.kept:
+        return
+    click.echo(
+        f"Kept {len(report.kept)} file(s) under {out} that beadloom did not write "
+        "or that were edited by hand; the shipped version was not written over them:",
+        err=True,
+    )
+    for kept in report.kept:
+        click.echo(f"  - {kept.path}: {kept.reason}", err=True)
+        click.echo(f"    -> {kept.remediation}", err=True)
 
 
 @docs.command("audit")
