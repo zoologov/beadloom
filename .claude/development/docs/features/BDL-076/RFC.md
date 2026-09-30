@@ -285,5 +285,7 @@ Deferred to `beadloom-ikj6`; the build's cost has to be measured first.
 
 ## Open Questions
 
-- [ ] The exact edge curve style (bezier or taxi, per lane): decided by measuring it in the browser
-      on this repository's graph during slice 1.
+- [x] The exact edge curve style (bezier or taxi, per lane): decided by measuring it in the browser
+      on this repository's graph during slice 1. **Decided in A2: `bezier`.** Under `bezier` an edge
+      shares 15.7% of its middle with another edge, against 40.7% under `taxi` and 25.1% with `taxi`
+      inside a lane (the measurement is in CONTEXT.md and in the graph viewer's document).
