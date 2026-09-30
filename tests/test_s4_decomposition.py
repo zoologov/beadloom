@@ -8,6 +8,9 @@ preserving its public import path via an ``__init__`` re-export hub:
 - ``application/debt_report.py``  -> ``application/debt_report/``  (6 modules)
 - ``application/site_dashboard.py`` -> ``application/site_dashboard/`` (7 modules)
 
+BDL-076 K1 (``beadloom-ujzb.2``) moved the dashboard package into the portal
+package, so its hub is now ``beadloom.application.site.dashboard``.
+
 The CLI / status decomposition is guarded by ``test_s4_cli_decomposition.py``;
 debt scoring golden values by ``test_debt_report.py``; dashboard JSON determinism
 and per-gate parity by ``test_site_dashboard.py``. This module pins the remaining
@@ -33,7 +36,7 @@ DECOMPOSED_PACKAGES = [
     "beadloom.application.reindex",
     "beadloom.onboarding.scanner",
     "beadloom.application.debt_report",
-    "beadloom.application.site_dashboard",
+    "beadloom.application.site.dashboard",
 ]
 
 
@@ -141,10 +144,10 @@ class TestDebtReportHubExports:
 
 
 class TestSiteDashboardHubExports:
-    """Spot-check the site_dashboard hub's three public functions."""
+    """Spot-check the dashboard hub's three public functions."""
 
     def test_public_functions_importable(self) -> None:
-        from beadloom.application.site_dashboard import (
+        from beadloom.application.site.dashboard import (
             build_dashboard_data,
             render_dashboard_md,
             serialize_dashboard_data,

@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_about — README -> About transform.
+"""Tests for beadloom.application.site.about — README -> About transform.
 
 BDL-046 BEAD-01: ``render_about`` rebases a README's Markdown link/image
 targets so they resolve on the published VitePress site, leaving prose and
@@ -13,7 +13,7 @@ Rebasing table:
 
 from __future__ import annotations
 
-from beadloom.application.site_about import render_about
+from beadloom.application.site.about import render_about
 
 _REPO = "https://github.com/zoologov/beadloom"
 

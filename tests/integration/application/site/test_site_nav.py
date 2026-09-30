@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_nav — VitePress nav/sidebar trees.
+"""Tests for beadloom.application.site.nav — VitePress nav/sidebar trees.
 
 BDL-041 F4.4 BEAD-11: the Architecture sidebar group is a collapsed, ``part_of``-
 nested 3-level tree with human-readable labels; the Documentation group mirrors
@@ -17,7 +17,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
-from beadloom.application.site_nav import (
+from beadloom.application.site.nav import (
     human_label,
     render_architecture_group,
     render_documentation_group,
@@ -489,7 +489,7 @@ def test_render_nav_config_emits_only_nav_and_sidebar(
 
 def test_render_sidebar_ru_is_removed() -> None:
     """``render_sidebar_ru`` no longer exists in the public surface."""
-    import beadloom.application.site_nav as nav_mod
+    import beadloom.application.site.nav as nav_mod
 
     assert not hasattr(nav_mod, "render_sidebar_ru")
 

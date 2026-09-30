@@ -22,7 +22,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from beadloom.application.architecture_view import build_architecture_view_data
+from beadloom.application.site.architecture_view import build_architecture_view_data
 from beadloom.graph.rules.layer_reach import part_of_parents
 from beadloom.graph.rules.layers import layer_of
 from beadloom.graph.rules.node_tags import node_tags
@@ -205,7 +205,9 @@ class TestTheDeclarationDecides:
             _ddd_graph(conn)
             conn.commit()
             # Act
-            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+            with caplog.at_level(
+                logging.INFO, logger="beadloom.application.site.architecture_view"
+            ):
                 build_architecture_view_data(conn, pages={})
         finally:
             conn.close()
@@ -224,7 +226,9 @@ class TestTheDeclarationDecides:
             _declare_layers(conn, DDD_LAYERS)
             conn.commit()
             # Act
-            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+            with caplog.at_level(
+                logging.INFO, logger="beadloom.application.site.architecture_view"
+            ):
                 build_architecture_view_data(conn, pages={})
         finally:
             conn.close()
@@ -241,7 +245,9 @@ class TestTheDeclarationDecides:
             add_node(conn, "solo", "domain")
             conn.commit()
             # Act
-            with caplog.at_level(logging.INFO, logger="beadloom.application.architecture_view"):
+            with caplog.at_level(
+                logging.INFO, logger="beadloom.application.site.architecture_view"
+            ):
                 build_architecture_view_data(conn, pages={})
         finally:
             conn.close()

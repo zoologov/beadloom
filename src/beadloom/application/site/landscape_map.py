@@ -229,13 +229,13 @@ def existing_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
     """Map every node that has a generated page to its absolute page URL.
 
     A node page is emitted only for kinds with an output directory (see
-    :data:`beadloom.application.site_pages._KIND_DIR` — ``service`` / ``domain``
+    :data:`beadloom.application.site.node_pages._KIND_DIR` — ``service`` / ``domain``
     / ``feature``). The URL mirrors that page's location (``/<dir>/<ref>``), so
     the landscape map's ``click`` links resolve to real pages — never a 404
     (BDL-041 F4.4). A node whose kind has no page directory is absent from the
     map and therefore renders without a click.
     """
-    from beadloom.application.site_pages import _KIND_DIR
+    from beadloom.application.site.node_pages import _KIND_DIR
 
     rows = conn.execute("SELECT ref_id, kind FROM nodes ORDER BY ref_id").fetchall()
     urls: dict[str, str] = {}

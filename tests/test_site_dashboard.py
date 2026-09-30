@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_dashboard — Showcase A (BDL-040 BEAD-02).
+"""Tests for beadloom.application.site.dashboard — Showcase A (BDL-040 BEAD-02).
 
 The dashboard MUST be honest by construction: every number it shows equals the
 value produced by the SAME code path as the corresponding CLI gate
@@ -23,8 +23,8 @@ from beadloom.application.debt_report import (
     load_debt_weights,
 )
 from beadloom.application.doctor import Severity, run_checks
-from beadloom.application.site import generate_site
-from beadloom.application.site_dashboard import build_dashboard_data, render_dashboard_md
+from beadloom.application.site.dashboard import build_dashboard_data, render_dashboard_md
+from beadloom.application.site.generate import generate_site
 from beadloom.graph.linter import lint
 
 if TYPE_CHECKING:
@@ -465,7 +465,7 @@ def test_trends_empty_when_no_history(tmp_path: Path) -> None:
 
 
 def test_trends_are_exactly_recorded_points_sorted(tmp_path: Path) -> None:
-    from beadloom.application.site_metrics_history import (
+    from beadloom.application.site.metrics_history import (
         MetricsPoint,
         append_metrics_point,
     )
@@ -805,7 +805,7 @@ def test_dashboard_md_no_alert_messages_in_page_but_data_carries_them(
 def test_contract_alerts_handles_malformed_payload() -> None:
     """A non-dict payload, a missing/non-list ``contracts``, and non-dict items
     all degrade to no alerts (honest: only real verdicts count)."""
-    from beadloom.application.site_dashboard import _contract_alerts
+    from beadloom.application.site.dashboard import _contract_alerts
 
     assert _contract_alerts(None) == []
     assert _contract_alerts({"contracts": "nope"}) == []
@@ -819,7 +819,7 @@ def test_contract_alerts_handles_malformed_payload() -> None:
 
 
 def test_contract_alerts_drift_only_has_no_breaking() -> None:
-    from beadloom.application.site_dashboard import _contract_alerts
+    from beadloom.application.site.dashboard import _contract_alerts
 
     alerts = _contract_alerts({"contracts": [{"verdict": "drift"}, {"verdict": "drift"}]})
     # Only a DRIFT alert (no BREAKING) — the breaking branch is skipped.
@@ -828,7 +828,7 @@ def test_contract_alerts_drift_only_has_no_breaking() -> None:
 
 
 def test_build_alerts_each_problem_class_emits_one_alert() -> None:
-    from beadloom.application.site_dashboard import _build_alerts
+    from beadloom.application.site.dashboard import _build_alerts
 
     alerts = _build_alerts(
         lint_data={"errors": 0},
@@ -847,7 +847,7 @@ def test_build_alerts_each_problem_class_emits_one_alert() -> None:
 
 
 def test_build_alerts_low_debt_is_not_alerted() -> None:
-    from beadloom.application.site_dashboard import _build_alerts
+    from beadloom.application.site.dashboard import _build_alerts
 
     alerts = _build_alerts(
         lint_data={"errors": 0},
@@ -865,7 +865,7 @@ def test_build_alerts_low_debt_is_not_alerted() -> None:
     [("critical", "error"), ("high", "error"), ("medium", "warn"), ("low", "ok"), ("", "ok")],
 )
 def test_debt_card_threshold_status(severity: str, expected: str) -> None:
-    from beadloom.application.site_dashboard import _debt_card
+    from beadloom.application.site.dashboard import _debt_card
 
     card = _debt_card({"severity": severity, "debt_score": 10})
     assert card["status"] == expected
@@ -877,7 +877,7 @@ def test_debt_card_threshold_status(severity: str, expected: str) -> None:
     [(2, 95.0, "warn"), (0, 50.0, "warn"), (0, 80.0, "ok"), (0, 100.0, "ok")],
 )
 def test_docs_card_threshold_status(stale: int, coverage: float, expected: str) -> None:
-    from beadloom.application.site_dashboard import _docs_card
+    from beadloom.application.site.dashboard import _docs_card
 
     card = _docs_card({"stale": stale, "coverage_pct": coverage, "tracked_pairs": 5})
     assert card["status"] == expected
@@ -888,7 +888,7 @@ def test_docs_card_threshold_status(stale: int, coverage: float, expected: str) 
     [(1, 0, "error"), (0, 2, "warn"), (0, 0, "ok")],
 )
 def test_doctor_card_threshold_status(errors: int, warnings: int, expected: str) -> None:
-    from beadloom.application.site_dashboard import _doctor_card
+    from beadloom.application.site.dashboard import _doctor_card
 
     card = _doctor_card({"errors": errors, "warnings": warnings, "passed": errors == 0})
     assert card["status"] == expected
@@ -901,7 +901,7 @@ def test_doctor_card_threshold_status(errors: int, warnings: int, expected: str)
 def test_federated_card_threshold_status(
     breaking: int, drift: int, expected: str
 ) -> None:
-    from beadloom.application.site_dashboard import _federated_card
+    from beadloom.application.site.dashboard import _federated_card
 
     card = _federated_card(
         {"contract_verdicts": {"breaking": breaking, "drift": drift}, "contract_count": 4}
@@ -910,7 +910,7 @@ def test_federated_card_threshold_status(
 
 
 def test_node_link_falls_back_to_dashboard_for_empty_ref() -> None:
-    from beadloom.application.site_dashboard import _node_link
+    from beadloom.application.site.dashboard import _node_link
 
     assert _node_link(None) == "/dashboard"
     assert _node_link("") == "/dashboard"
@@ -918,7 +918,7 @@ def test_node_link_falls_back_to_dashboard_for_empty_ref() -> None:
 
 
 def test_contract_recommendations_handles_malformed_payload() -> None:
-    from beadloom.application.site_dashboard import _contract_recommendations
+    from beadloom.application.site.dashboard import _contract_recommendations
 
     assert _contract_recommendations(None) == []
     assert _contract_recommendations({"contracts": "nope"}) == []
@@ -1071,7 +1071,7 @@ def test_ai_techwriter_totals_are_summed_facts(tmp_path: Path) -> None:
 
 def test_ai_techwriter_cost_is_labeled_estimate_not_a_hard_figure(tmp_path: Path) -> None:
     """$ cost is a CLEARLY-LABELED estimate at a configured rate — never a fact."""
-    from beadloom.application.site_dashboard import _USD_PER_1M_TOKENS
+    from beadloom.application.site.dashboard import _USD_PER_1M_TOKENS
 
     project = _make_project(tmp_path, with_violation=False)
     _write_runs(

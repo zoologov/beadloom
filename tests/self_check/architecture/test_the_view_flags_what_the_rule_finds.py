@@ -1,7 +1,8 @@
 """Self-checks of this repository's graph, rules and code structure (BDL-074 A3).
 
 Moved out of ``tests/integration/application/test_the_view_flags_what_the_rule_finds.py``;
-the product tests of the same code stay there.
+the product tests of the same code stay in that file, which BDL-076 K1 moved to
+``tests/integration/application/site/``.
 Everything here asserts on this repository's own tree, so it carries the
 ``self_check`` marker by its folder (see ``tests/conftest.py``).
 """

@@ -32,51 +32,51 @@ This package decomposes the dashboard feature by responsibility (BDL-059 S4):
 - :mod:`.assemble`       — orchestrate the data dict + render ``dashboard.md``.
 
 Every public symbol is re-exported here, so ``from
-beadloom.application.site_dashboard import X`` is unchanged for all callers —
+beadloom.application.site.dashboard import X`` is unchanged for all callers —
 the split is purely internal.
 """
 
 from __future__ import annotations
 
 # Private helpers are re-exported (``X as X``) so the historical
-# ``from beadloom.application.site_dashboard import _foo`` paths (used by tests)
+# ``from beadloom.application.site.dashboard import _foo`` paths (used by tests)
 # keep working after the cohesion split — the public surface is unchanged.
-from beadloom.application.site_dashboard.ai_activity import (
+from beadloom.application.site.dashboard.ai_activity import (
     _USD_PER_1M_TOKENS as _USD_PER_1M_TOKENS,
 )
-from beadloom.application.site_dashboard.alerts import (
+from beadloom.application.site.dashboard.alerts import (
     _build_alerts as _build_alerts,
 )
-from beadloom.application.site_dashboard.alerts import (
+from beadloom.application.site.dashboard.alerts import (
     _contract_alerts as _contract_alerts,
 )
-from beadloom.application.site_dashboard.assemble import (
+from beadloom.application.site.dashboard.assemble import (
     build_dashboard_data,
     render_dashboard_md,
     serialize_dashboard_data,
 )
-from beadloom.application.site_dashboard.gate_metrics import (
+from beadloom.application.site.dashboard.gate_metrics import (
     _federated_metrics as _federated_metrics,
 )
-from beadloom.application.site_dashboard.gate_metrics import (
+from beadloom.application.site.dashboard.gate_metrics import (
     _read_federated_payload as _read_federated_payload,
 )
-from beadloom.application.site_dashboard.recommendations import (
+from beadloom.application.site.dashboard.recommendations import (
     _contract_recommendations as _contract_recommendations,
 )
-from beadloom.application.site_dashboard.recommendations import (
+from beadloom.application.site.dashboard.recommendations import (
     _node_link as _node_link,
 )
-from beadloom.application.site_dashboard.status_cards import (
+from beadloom.application.site.dashboard.status_cards import (
     _debt_card as _debt_card,
 )
-from beadloom.application.site_dashboard.status_cards import (
+from beadloom.application.site.dashboard.status_cards import (
     _docs_card as _docs_card,
 )
-from beadloom.application.site_dashboard.status_cards import (
+from beadloom.application.site.dashboard.status_cards import (
     _doctor_card as _doctor_card,
 )
-from beadloom.application.site_dashboard.status_cards import (
+from beadloom.application.site.dashboard.status_cards import (
     _federated_card as _federated_card,
 )
 

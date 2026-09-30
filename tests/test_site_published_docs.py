@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.site import generate_site
-from beadloom.application.site_published import (
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.published_docs import (
     BADGE_END,
     BADGE_START,
     _badge_body,

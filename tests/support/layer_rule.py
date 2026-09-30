@@ -7,7 +7,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.architecture_view import build_architecture_view_data
+from beadloom.application.site.architecture_view import build_architecture_view_data
 from beadloom.graph.rules.layer_edges import flagged_layer_edges
 from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,

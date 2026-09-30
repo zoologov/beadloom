@@ -11,7 +11,7 @@ debt report.
 
 **One responsibility:** project the card fields of one node. Where the node
 sits — its layer, its lane, its parent, its edges — is
-:mod:`beadloom.application.architecture_view`'s question, and that module merges
+:mod:`beadloom.application.site.architecture_view`'s question, and that module merges
 these fields into each node.
 
 Honest degradation, as in the rest of the data file:
@@ -29,7 +29,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.site_pages import public_symbol_names
+from beadloom.application.site.node_pages import public_symbol_names
 from beadloom.graph.rules.suite_tables import read_test_files
 
 if TYPE_CHECKING:

@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_mermaid_guard (BDL-041 BEAD-01).
+"""Tests for beadloom.application.site.mermaid_guard (BDL-041 BEAD-01).
 
 The generation-time Mermaid validity guard rejects the two F4 render bug
 classes in pytest (no browser/node):
@@ -20,12 +20,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.site import (
+from beadloom.application.site.generate import (
     MermaidValidationError,
     _guard_diagrams,
     generate_site,
 )
-from beadloom.application.site_mermaid_guard import MermaidIssue, validate_mermaid
+from beadloom.application.site.mermaid_guard import MermaidIssue, validate_mermaid
 from beadloom.infrastructure.db import create_schema
 
 if TYPE_CHECKING:

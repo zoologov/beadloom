@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from beadloom.application.site_dashboard import _build_alerts
+from beadloom.application.site.dashboard import _build_alerts
 from beadloom.onboarding.scanner.prime import (
     MAX_LISTED_FINDINGS,
     _format_prime_json,

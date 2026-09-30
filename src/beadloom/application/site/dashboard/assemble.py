@@ -16,9 +16,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from beadloom.application.debt_report import format_debt_json
-from beadloom.application.site_dashboard.ai_activity import _ai_techwriter
-from beadloom.application.site_dashboard.alerts import _build_alerts
-from beadloom.application.site_dashboard.gate_metrics import (
+from beadloom.application.site.dashboard.ai_activity import _ai_techwriter
+from beadloom.application.site.dashboard.alerts import _build_alerts
+from beadloom.application.site.dashboard.gate_metrics import (
     _debt_report,
     _docs_metrics,
     _doctor_metrics,
@@ -27,8 +27,8 @@ from beadloom.application.site_dashboard.gate_metrics import (
     _read_federated_payload,
     _trends,
 )
-from beadloom.application.site_dashboard.recommendations import _build_recommendations
-from beadloom.application.site_dashboard.status_cards import _build_status_cards
+from beadloom.application.site.dashboard.recommendations import _build_recommendations
+from beadloom.application.site.dashboard.status_cards import _build_status_cards
 from beadloom.graph.linter import lint
 
 if TYPE_CHECKING:

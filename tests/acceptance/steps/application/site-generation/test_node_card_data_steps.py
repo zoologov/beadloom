@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from beadloom.application.site import generate_site
+from beadloom.application.site.generate import generate_site
 from tests.support.tiered_project import ZONED_POOL_TESTS, write_zoned_import_project
 
 if TYPE_CHECKING:

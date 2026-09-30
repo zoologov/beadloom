@@ -9,7 +9,7 @@ computed — no new metric is invented.
 
 from __future__ import annotations
 
-from beadloom.application.site_dashboard._common import (
+from beadloom.application.site.dashboard._common import (
     _DEBT_ALERT_SEVERITY,
     _as_float,
     _as_int,

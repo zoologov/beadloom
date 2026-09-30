@@ -1,20 +1,20 @@
 """Edge/error-path coverage for the `docs site` generator surface (BDL-040 BEAD-06).
 
-Closes the remaining branch gaps in the F4 modules (``site.py`` / ``site_pages.py``
-/ ``site_dashboard.py`` / ``site_landscape.py`` / ``site_published.py``) by
+Closes the remaining branch gaps in the F4 modules (``site/generate.py`` / ``node_pages.py``
+/ ``dashboard/`` / ``landscape_map.py`` / ``published_docs.py``) by
 exercising the defensive and degenerate paths the happy-path suites skip:
 
 - a node whose kind is none of domain/service/feature (nav-config + page dir
   fallback to ``other``);
 - a self-edge dropped on a node page;
 - a node with no symbols / no diagram children;
-- ``site_published``: a node with a directory source (real coverage counting),
+- ``published_docs``: a node with a directory source (real coverage counting),
   an empty ``ref_id`` (0.0 coverage), a non-Markdown asset copied verbatim, and
   ``build_published_docs`` with no source ``docs/`` dir;
-- ``site_landscape``: a malformed federated.json (read error -> empty map), a
+- ``landscape_map``: a malformed federated.json (read error -> empty map), a
   self-edge / empty-endpoint federated edge dropped, a ``@``-only id passed
   through, and an edge referencing a node not in the node set;
-- ``site_dashboard``: an unreadable federated artifact, a non-dict payload, an
+- ``dashboard``: an unreadable federated artifact, a non-dict payload, an
   edge with an empty verdict skipped, and the debt-trend attach branch.
 
 Behaviour-focused: assertions are on the public output (emitted files / returned
@@ -29,18 +29,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.site import generate_site
-from beadloom.application.site_dashboard import (
+from beadloom.application.site.dashboard import (
     _federated_metrics,
     _read_federated_payload,
     build_dashboard_data,
 )
-from beadloom.application.site_landscape import (
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.landscape_map import (
     _strip_namespace,
     build_landscape_data,
     render_landscape_md,
 )
-from beadloom.application.site_published import (
+from beadloom.application.site.published_docs import (
     build_published_docs,
     publish_docs,
 )
@@ -78,7 +78,7 @@ def _add_node(
 
 
 # ---------------------------------------------------------------------------
-# site.py: a node whose kind is not domain/service/feature
+# generate.py: a node whose kind is not domain/service/feature
 # ---------------------------------------------------------------------------
 
 
@@ -110,7 +110,7 @@ def test_unknown_kind_page_goes_to_other_dir(
 
 
 # ---------------------------------------------------------------------------
-# site_pages.py: self-edge dropped, node with no symbols / no diagram children
+# node_pages.py: self-edge dropped, node with no symbols / no diagram children
 # ---------------------------------------------------------------------------
 
 
@@ -156,7 +156,7 @@ def test_node_with_no_symbols_or_children_still_renders(
 
 
 # ---------------------------------------------------------------------------
-# site_pages.py: incoming relationships — "Used by" + "Parts" (BDL-044)
+# node_pages.py: incoming relationships — "Used by" + "Parts" (BDL-044)
 # ---------------------------------------------------------------------------
 
 
@@ -304,7 +304,7 @@ def test_incoming_ref_without_page_renders_as_plain_text(
 
 
 # ---------------------------------------------------------------------------
-# site_published.py: directory-source coverage, empty ref_id, non-md asset,
+# published_docs.py: directory-source coverage, empty ref_id, non-md asset,
 # missing docs/ dir
 # ---------------------------------------------------------------------------
 
@@ -410,7 +410,7 @@ def test_publish_no_docs_dir_returns_empty(
 
 
 # ---------------------------------------------------------------------------
-# site_landscape.py: read error, dropped edges, namespace strip, foreign edge
+# landscape_map.py: read error, dropped edges, namespace strip, foreign edge
 # ---------------------------------------------------------------------------
 
 
@@ -467,7 +467,7 @@ def test_landscape_render_ignores_edge_to_unknown_node() -> None:
 
 
 # ---------------------------------------------------------------------------
-# site_dashboard.py: federated read-error / non-dict / empty-verdict / trend
+# dashboard/: federated read-error / non-dict / empty-verdict / trend
 # ---------------------------------------------------------------------------
 
 

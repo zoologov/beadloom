@@ -2,7 +2,7 @@
 # beadloom:feature=site-generation
 """Per-node page rendering for the `docs site` generator (BDL-040 BEAD-01).
 
-Split out of ``application/site.py`` to keep each module under the domain-size
+Split out of ``application/site/generate.py`` to keep each module under the domain-size
 limit. Renders one Markdown page per graph node (domain / service / feature)
 with summary, source, public symbols, edges-as-links, linked hand-written docs,
 and an embedded scoped C4/Mermaid diagram. All output is deterministic
@@ -86,7 +86,7 @@ def node_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
     """Every node's page URL (``/<dir>/<ref>``), for every kind, ``other/`` included.
 
     The architecture data file links each node to its page with this. The
-    landscape map keeps :func:`beadloom.application.site_landscape.existing_page_urls`,
+    landscape map keeps :func:`beadloom.application.site.landscape_map.existing_page_urls`,
     which covers the three kinds with a directory of their own, because its
     Mermaid links go through a base-path rewrite that does not cover ``/other/``
     yet (BDL-076 RFC, "a url for every kind").

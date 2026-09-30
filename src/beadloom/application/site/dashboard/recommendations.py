@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.application.site_dashboard._common import _UNHEALTHY_VERDICTS
+from beadloom.application.site.dashboard._common import _UNHEALTHY_VERDICTS
 from beadloom.infrastructure.repository import stale_node_refs
 
 if TYPE_CHECKING:

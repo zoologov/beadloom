@@ -4,7 +4,7 @@
 
 Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``):
 - ``index.md`` — the About home page, rendered from the project ``README.md``
-  via :func:`beadloom.application.site_about.render_about` (link-rebased so
+  via :func:`beadloom.application.site.about.render_about` (link-rebased so
   README links resolve on the site). Falls back to the architecture overview
   body when no ``README.md`` is present.
 - ``ru/index.md`` — the RU About page, rendered from ``README.ru.md`` the same
@@ -13,16 +13,16 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   the top-level C4/Mermaid diagram, a health summary line); this is the body
   that used to live at ``index.md`` before the About home replaced it.
 - per-node pages (``domains/<ref>.md`` / ``services/<ref>.md`` /
-  ``features/<ref>.md``) — see :mod:`beadloom.application.site_pages`.
+  ``features/<ref>.md``) — see :mod:`beadloom.application.site.node_pages`.
 - ``dashboard.md`` + ``dashboard.data.json`` — Showcase A, the AaC/DocAsCode
-  metrics dashboard (see :mod:`beadloom.application.site_dashboard`); every
+  metrics dashboard (see :mod:`beadloom.application.site.dashboard`); every
   number comes from the same code path as its gate (honest by construction).
 - ``landscape.md`` — Showcase B, the 🌟 cross-repo landscape map (see
-  :mod:`beadloom.application.site_landscape`); a Mermaid diagram generated from
+  :mod:`beadloom.application.site.landscape_map`); a Mermaid diagram generated from
   the ``federate`` hub output (or a degenerate single-repo map), with edges
   labelled by ``ContractVerdict``, a health overlay, and clickable nodes.
 - ``docs/…`` — Showcase C, the published validated documentation (see
-  :mod:`beadloom.application.site_published`): the REAL ``docs/**`` tree copied
+  :mod:`beadloom.application.site.published_docs`): the REAL ``docs/**`` tree copied
   in (source never mutated) with a per-doc ``doc_sync`` validation badge (same
   source as ``sync-check``).
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
@@ -45,48 +45,48 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from beadloom.application.architecture_card import NodeFinding, NodeVerdicts
-from beadloom.application.architecture_view import (
-    build_architecture_view_data,
-    render_architecture_view_md,
-    serialize_architecture_view,
-)
 from beadloom.application.debt_report import (
     NodeDebt,
     collect_debt_data,
     compute_top_offenders,
     load_debt_weights,
 )
-from beadloom.application.landscape_view import (
-    build_landscape_view_data,
-    render_landscape_view_md,
-    serialize_landscape_view,
+from beadloom.application.site.about import render_about
+from beadloom.application.site.architecture_card import NodeFinding, NodeVerdicts
+from beadloom.application.site.architecture_view import (
+    build_architecture_view_data,
+    render_architecture_view_md,
+    serialize_architecture_view,
 )
-from beadloom.application.site_about import render_about
-from beadloom.application.site_dashboard import (
+from beadloom.application.site.dashboard import (
     build_dashboard_data,
     render_dashboard_md,
     serialize_dashboard_data,
 )
-from beadloom.application.site_landscape import (
+from beadloom.application.site.landscape_map import (
     build_landscape_data,
     existing_page_urls,
     render_landscape_md,
 )
-from beadloom.application.site_mermaid_guard import MermaidIssue, validate_mermaid
-from beadloom.application.site_metrics_history import (
+from beadloom.application.site.landscape_view import (
+    build_landscape_view_data,
+    render_landscape_view_md,
+    serialize_landscape_view,
+)
+from beadloom.application.site.mermaid_guard import MermaidIssue, validate_mermaid
+from beadloom.application.site.metrics_history import (
     MetricsPoint,
     append_metrics_point,
     backfill_structural_history,
 )
-from beadloom.application.site_nav import human_label, render_nav_config
-from beadloom.application.site_pages import (
+from beadloom.application.site.nav import human_label, render_nav_config
+from beadloom.application.site.node_pages import (
     NodeRow,
     load_nodes,
     node_page_urls,
     render_all_pages,
 )
-from beadloom.application.site_published import build_published_docs, publish_docs
+from beadloom.application.site.published_docs import build_published_docs, publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 from beadloom.graph.federation import resolve_repo_name
 

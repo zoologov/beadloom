@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_metrics_history (BDL-041 F4.4 BEAD-03).
+"""Tests for beadloom.application.site.metrics_history (BDL-041 F4.4 BEAD-03).
 
 The metrics-history store is an additive append-log of honest metric points
 ``{ts, lint_violations, debt_score, coverage_pct, sync_pct, nodes, edges,
@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from beadloom.application.site_metrics_history import (
+from beadloom.application.site.metrics_history import (
     MetricsPoint,
     append_metrics_point,
     backfill_structural_history,

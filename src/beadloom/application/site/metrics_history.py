@@ -5,7 +5,7 @@
 A tiny additive append-log of real metric points persisted to
 ``.beadloom/metrics_history.json``. ``docs site`` records one point per run
 (:func:`append_metrics_point`); :func:`read_history` returns the sorted series
-that :mod:`beadloom.application.site_dashboard` emits into
+that :mod:`beadloom.application.site.dashboard` emits into
 ``dashboard.data.json.trends``.
 
 Design invariants (honest + deterministic):

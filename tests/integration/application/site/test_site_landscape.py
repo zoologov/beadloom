@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site_landscape — Showcase B (BDL-040 BEAD-03).
+"""Tests for beadloom.application.site.landscape_map — Showcase B (BDL-040 BEAD-03).
 
 The 🌟 cross-repo landscape map is a Mermaid diagram GENERATED from data (never
 hand-drawn): nodes = services/repos, edges = contracts/cross-repo links labelled
@@ -15,8 +15,8 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING
 
-from beadloom.application.site import generate_site
-from beadloom.application.site_landscape import (
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.landscape_map import (
     build_landscape_data,
     render_landscape_md,
 )

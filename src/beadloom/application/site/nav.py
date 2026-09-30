@@ -9,7 +9,7 @@ Both are pure + deterministic (sorted, byte-stable) and emit only links that
 resolve to a generated page (no dead nav entries).
 
 Output is a fragment of the generated ``.vitepress/config.generated.mjs`` module
-(see :mod:`beadloom.application.site`). Kept here so ``site.py`` stays small.
+(see :mod:`beadloom.application.site.generate`). Kept here so ``generate.py`` stays small.
 """
 
 # beadloom:domain=application
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
-# Node kind -> generated page sub-directory (mirrors site_pages._KIND_DIR; the
+# Node kind -> generated page sub-directory (mirrors node_pages._KIND_DIR; the
 # nav links are extension-less — VitePress rewrites to clean URLs).
 _KIND_DIR: dict[str, str] = {
     "domain": "domains",

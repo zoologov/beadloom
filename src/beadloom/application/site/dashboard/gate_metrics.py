@@ -22,8 +22,8 @@ from beadloom.application.debt_report import (
     load_debt_weights,
 )
 from beadloom.application.doctor import Severity, run_checks
-from beadloom.application.site_dashboard._common import _UNHEALTHY_VERDICTS
-from beadloom.application.site_metrics_history import MetricsPoint, read_history
+from beadloom.application.site.dashboard._common import _UNHEALTHY_VERDICTS
+from beadloom.application.site.metrics_history import MetricsPoint, read_history
 from beadloom.infrastructure.repository import count_stale_pairs
 
 if TYPE_CHECKING:

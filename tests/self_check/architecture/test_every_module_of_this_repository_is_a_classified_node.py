@@ -85,25 +85,28 @@ class TestErrorLevelRegressionGuard:
 
 
 class TestSiteGenerationCluster:
-    """The 9 application/site*.py modules are covered by the single site-generation node."""
+    """The portal's modules form one package, covered by the single site-generation node."""
 
     def test_all_nine_site_modules_exist_on_disk(self, self_check_snapshot: Path) -> None:
-        """Sanity: the expected site* cluster lives under application/.
+        """Sanity: the portal package lives under application/, and nothing is left beside it.
 
-        BDL-059 S4 decomposed the former ``site_dashboard.py`` into the
-        cohesive ``site_dashboard/`` package, so the cluster is now 8 ``site*.py``
-        modules plus the ``site_dashboard/`` package directory — 9 members total,
-        all covered by the single ``site-generation`` node.
+        BDL-059 S4 decomposed the former ``site_dashboard.py`` into a package, and
+        BDL-076 K1 (``beadloom-ujzb.2``) moved every portal module out of
+        ``application/`` into ``application/site/``, whose single owner is the
+        ``site-generation`` node: eleven modules plus the ``dashboard/`` package.
+        The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
-        site_files = sorted(app_dir.glob("site*.py"))
-        names = {p.name for p in site_files}
-        assert "site.py" in names
-        assert len(site_files) == 8, names
-        assert (app_dir / "site_dashboard").is_dir()
+        site_dir = app_dir / "site"
+        assert (site_dir / "__init__.py").is_file()
+        names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
+        assert "generate.py" in names
+        assert len(names) == 11, names
+        assert (site_dir / "dashboard").is_dir()
+        assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 
     def test_no_site_module_is_flagged_by_coverage(self, self_check_snapshot: Path) -> None:
-        """None of the 9 site*.py modules appear as a module-coverage finding (live repo)."""
+        """No module of the portal package appears as a module-coverage finding (live repo)."""
         runner = CliRunner()
         result = runner.invoke(
             main,
@@ -115,9 +118,12 @@ class TestSiteGenerationCluster:
             for v in payload["violations"]
             if v["rule_name"] == "module-coverage"
         }
-        site_files = (self_check_snapshot / "src" / "beadloom" / "application").glob("site*.py")
+        site_files = sorted(
+            (self_check_snapshot / "src" / "beadloom" / "application" / "site").rglob("*.py")
+        )
+        assert site_files
         for path in site_files:
-            rel = f"src/beadloom/application/{path.name}"
+            rel = path.relative_to(self_check_snapshot).as_posix()
             assert rel not in coverage_files, rel
 
     def test_site_generation_node_round_trips_reindex(self, self_check_snapshot: Path) -> None:

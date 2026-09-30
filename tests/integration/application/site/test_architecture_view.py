@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.architecture_view — the interactive arch graph.
+"""Tests for beadloom.application.site.architecture_view — the interactive arch graph.
 
 The architecture top-level diagram (formerly a Mermaid mess) is now rendered with
 the SAME Cytoscape+ELK viz the landscape uses, fed a deterministic,
@@ -16,12 +16,12 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING
 
-from beadloom.application.architecture_view import (
+from beadloom.application.site.architecture_view import (
     build_architecture_view_data,
     render_architecture_view_md,
     serialize_architecture_view,
 )
-from beadloom.application.site import generate_site
+from beadloom.application.site.generate import generate_site
 from beadloom.infrastructure.db import create_schema
 
 if TYPE_CHECKING:
@@ -107,7 +107,7 @@ def _seed_arch(conn: sqlite3.Connection) -> None:
         conn, "infrastructure", "domain", "src/beadloom/infrastructure/",
         layer_tag="layer-infra",
     )
-    _add_node(conn, "site-generation", "feature", "src/beadloom/application/site.py")
+    _add_node(conn, "site-generation", "feature", "src/beadloom/application/site/generate.py")
 
     # Containment (part_of) + dependency (depends_on).
     _add_edge(conn, "application", "beadloom", "part_of")
@@ -118,8 +118,8 @@ def _seed_arch(conn: sqlite3.Connection) -> None:
     _add_edge(conn, "graph", "infrastructure", "depends_on")
 
     # Symbols (drive the symbol count); two public + one private under application.
-    _add_symbol(conn, "src/beadloom/application/site.py", "generate_site", 1)
-    _add_symbol(conn, "src/beadloom/application/site.py", "_helper", 50)
+    _add_symbol(conn, "src/beadloom/application/site/generate.py", "generate_site", 1)
+    _add_symbol(conn, "src/beadloom/application/site/generate.py", "_helper", 50)
     _add_symbol(conn, "src/beadloom/graph/loader.py", "load_graph", 1)
 
     # Docs: application fresh, graph stale, infrastructure none.
@@ -208,7 +208,7 @@ def test_nodes_carry_kind_layer_summary_symbols() -> None:
     assert app["layer"] == "application"
     assert app["summary"] == "application summary."
     # Symbol count follows OWNERSHIP, not the raw path prefix: the two symbols
-    # in `application/site.py` belong to the `site-generation` node whose source
+    # in `application/site/generate.py` belong to the `site-generation` node whose source
     # IS that file, so the domain that merely contains it owns none of them
     # (BDL-UX #144). A compound view drawing the child inside the parent must
     # not also count the child against the parent.

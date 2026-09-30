@@ -9,7 +9,7 @@ and which did not.
 
 Split out of ``tests/test_the_view_and_the_rule_engine_read_one_layer_declaration.py``
 by node (BDL-074 E1); the architecture view's half is
-``tests/integration/application/architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py``.
+``tests/integration/application/site/architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py``.
 """
 
 from __future__ import annotations

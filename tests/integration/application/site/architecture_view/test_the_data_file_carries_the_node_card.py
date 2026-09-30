@@ -17,15 +17,19 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom import __version__
-from beadloom.application.architecture_card import PUBLIC_SYMBOL_CAP, NodeFinding, NodeVerdicts
-from beadloom.application.architecture_view import (
+from beadloom.application.debt_report import NodeDebt
+from beadloom.application.site.architecture_card import (
+    PUBLIC_SYMBOL_CAP,
+    NodeFinding,
+    NodeVerdicts,
+)
+from beadloom.application.site.architecture_view import (
     ARCHITECTURE_SCHEMA_VERSION,
     build_architecture_view_data,
     render_architecture_view_md,
 )
-from beadloom.application.debt_report import NodeDebt
-from beadloom.application.site import generate_site
-from beadloom.application.site_pages import node_page_urls, render_all_pages
+from beadloom.application.site.generate import generate_site
+from beadloom.application.site.node_pages import node_page_urls, render_all_pages
 from tests.support.in_memory_graph import add_edge, add_node, open_graph
 
 if TYPE_CHECKING:

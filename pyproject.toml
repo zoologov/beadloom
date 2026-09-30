@@ -178,7 +178,7 @@ ignore = [
 # BDL-046 BEAD-11: the bilingual About cross-link test uses the intentional
 # Cyrillic label "Русский" — RUF001 ambiguous-unicode is a false positive for a
 # deliberate non-Latin UI string.
-"tests/unit/application/test_site_about.py" = ["RUF001", "S101"]
+"tests/unit/application/site/test_site_about.py" = ["RUF001", "S101"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -559,9 +559,9 @@ pytest_add_cli_args_test_selection = [
     "tests/self_check/architecture/test_the_rule_decides_on_the_derived_layer.py",
     "tests/integration/graph/rules/test_the_same_layer_split_is_recomputed.py",
     "tests/self_check/architecture/test_the_same_layer_split_is_recomputed.py",
-    "tests/integration/application/architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py",
+    "tests/integration/application/site/architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py",
     "tests/integration/graph/rules/test_liveness_reads_the_layer_the_rule_decides_on.py",
-    "tests/integration/application/test_the_view_flags_what_the_rule_finds.py",
+    "tests/integration/application/site/test_the_view_flags_what_the_rule_finds.py",
     "tests/self_check/architecture/test_the_view_flags_what_the_rule_finds.py",
     "tests/integration/tui/test_tui.py",
     "tests/test_two_readers_of_one_markdown_table.py",

@@ -272,7 +272,7 @@ def _node_dicts(
     landscape/service), its worst-health class, a human ``label``, and a
     ``url`` that is non-empty ONLY when a real page exists (no dead link).
     """
-    from beadloom.application.site_pages import _KIND_DIR
+    from beadloom.application.site.node_pages import _KIND_DIR
 
     rows = conn.execute(
         "SELECT ref_id, kind, summary FROM nodes ORDER BY ref_id"

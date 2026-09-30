@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.application.architecture_view import build_architecture_view_data
+from beadloom.application.site.architecture_view import build_architecture_view_data
 from beadloom.doc_sync import Fact, FactSet
 from beadloom.graph.linter import LintError, lint
 from beadloom.graph.rules import (

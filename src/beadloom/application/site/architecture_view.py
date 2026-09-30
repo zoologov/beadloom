@@ -19,7 +19,7 @@ repository seam) — never a re-implemented surface. Each node carries its
 kinds ``consumes`` / ``produces``.
 
 Schema version 2 (BDL-076 A1) keeps every version-1 key and adds the node card
-(:mod:`beadloom.application.architecture_card`) and, at the top level, the
+(:mod:`beadloom.application.site.architecture_card`) and, at the top level, the
 run's provenance (``generated_at``, ``beadloom_version``, ``project``) and the
 declared ``layers`` with their ``layer_order``, from which the viewer builds its
 palette instead of a vocabulary of its own. ``touches_code`` stays out: it
@@ -41,13 +41,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom import __version__
-from beadloom.application.architecture_card import (
+from beadloom.application.site.architecture_card import (
     CardSources,
     NodeVerdicts,
     card_fields,
     card_sources,
 )
-from beadloom.application.site_pages import _KIND_DIR
+from beadloom.application.site.node_pages import _KIND_DIR
 from beadloom.graph.rule_engine import (
     LayerDef,
     LayerExemption,
@@ -350,7 +350,7 @@ def _doc_status(conn: sqlite3.Connection, ref_id: str) -> str:
 def _doc_slug(path: str) -> str:
     """The ``docs/``-relative slug for a doc path (``.md`` stripped), normalised.
 
-    Mirrors :func:`beadloom.application.site._published_doc_slugs` so a node's
+    Mirrors :func:`beadloom.application.site.generate._published_doc_slugs` so a node's
     doc link can be gated against the SAME published-slug set (link-safe by
     construction — a doc with no published page is omitted, never a dead link).
     """
@@ -568,7 +568,7 @@ def build_architecture_view_data(
         conn: An open read-only connection to the indexed graph DB.
         pages: Map of ``ref_id -> existing page URL`` (a node gets a non-empty
             ``url`` only when present, so a click never resolves to a dead page).
-            ``docs site`` passes :func:`~beadloom.application.site_pages.node_page_urls`,
+            ``docs site`` passes :func:`~beadloom.application.site.node_pages.node_page_urls`,
             which covers every kind.
         published_doc_slugs: The set of ``docs/``-relative slugs (``.md``
             stripped) that actually got a published page. A node's doc link is

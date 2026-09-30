@@ -1,4 +1,4 @@
-"""Tests for beadloom.application.site — the `docs site` generator (BDL-040 BEAD-01).
+"""Tests for beadloom.application.site.generate — the `docs site` generator (BDL-040 BEAD-01).
 
 Asserts the generator emits the expected files deterministically (re-generate ->
 byte-identical), node pages contain summary/symbols/edges-as-links + an embedded
@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.application.site import generate_site
+from beadloom.application.site.generate import generate_site
 from beadloom.infrastructure.db import create_schema
 from tests.support.site_links import (
     dead_links,
