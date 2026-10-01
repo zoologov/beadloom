@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-19l6` (T2, slice 2's criteria measured end to end); then R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-ujzb.17` (the shipped browser suite passes on an adopter's portal), then `beadloom-ujzb.18` (no node ids of ours in the shipped scaffold); then R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**T2 closed (2026-10-01):** `beadloom-19l6` `9f08e9b8` — measured from the built wheel in a fresh environment on all six fixtures: every stack's modules and edges exactly as the code has them, 0 false edges, builds rc 0 in ~18 s, own title and base, `/site/` gitignored, no leak of this repository's identity or the remote. 24 criteria: 19 met, 2 not met — US-5 AC2 (the shipped `npm run test:e2e` gives 31 failed on a default Python portal; Go and TypeScript pass only through a list in our `tests/support` → `beadloom-ujzb.17`, P1) and `beadloom ci` rc 0 (stale pairs → W2) — 3 not measurable here (the CI jobs on GitHub, the nine checks, the owner's look). Filed `beadloom-ujzb.18` (P2, our `beadloom:component` annotations ship in the scaffold) and `beadloom-55x2` (P2, `scan_paths: ['.']` reads `node_modules`).
 
 **B7 closed (2026-10-01):** `beadloom-ujzb.16` `e7ac76bf` — `Package.swift` read as text, never run (`swift_packages.py`): targets with literal `name:`/`path:`/`dependencies:`, SwiftPM's default folders; `init` makes a node per library/executable/macro/plugin target with Swift source, test targets mirrored to the target they test, `languages` `.swift`, mirrors merged with the JVM ones; edges from `import` between targets in both the quick scan and `reindex`. Swift fixture: 0 → 3 nodes, exactly 3 edges, the test bound. Every other stack and this repository byte-identical. The slow run: 69 passed, 0 xfailed — every stack's strict xfail is gone.
 
@@ -122,7 +124,9 @@
 | `beadloom-ujzb.14` | fix | ✓ done | Go: init's false edges, no Go import resolved |
 | `beadloom-ujzb.15` | fix | ✓ done | Java/Kotlin: source-set nodes, no edges |
 | `beadloom-ujzb.16` | fix | ✓ done | Swift: init finds nothing |
-| `beadloom-19l6` | T2 test | in progress | slice 2 criteria |
+| `beadloom-ujzb.17` | fix | in progress | the shipped browser suite on an adopter's portal |
+| `beadloom-ujzb.18` | chore | blocked | no node ids of ours in the shipped scaffold |
+| `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
 | `beadloom-fht7` | R2 review | blocked | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
 | `beadloom-la3t` | P2 PR 2 | blocked | owner's look; PR 2 |
