@@ -1,6 +1,6 @@
-// Impact mode: everything that depends on a node, by distance, with the risk marked (BDL-076 A3, US-6).
+// Impact mode: everything that depends on a node, by distance, with the risk marked.
 //
-// Before A3 the viewer had no impact mode: a selection showed the node's own
+// In an earlier version the viewer had no impact mode: a selection showed the node's own
 // edges and nothing that reached it from further away.
 
 import { test, expect } from "@playwright/test";
@@ -14,11 +14,13 @@ import {
 import { DEPENDENCY_KINDS, impact, nearestOfKind, risksOf } from "./support/graph.js";
 import { requireShape } from "./support/shape.js";
 
-/** `rule-engine` when this graph has it; otherwise the node with the most dependents. */
+/** The node with the most dependents; between equals, the first by id. */
 function subjectOf(data) {
-  if (data.nodes.some((n) => n.id === "rule-engine")) return "rule-engine";
   const reach = (id) => impact(data, id).distances.size;
-  return data.nodes.map((n) => n.id).sort((a, b) => reach(b) - reach(a))[0];
+  return data.nodes
+    .map((n) => n.id)
+    .sort()
+    .sort((a, b) => reach(b) - reach(a))[0];
 }
 
 /** `subjectOf` when `holds` of it; otherwise the first node, by id, of which it does. */
@@ -179,10 +181,10 @@ test("the rings are real colours, and leaving impact mode removes them", async (
   expect(await viewer(page, "riskIds")).toEqual([]);
 });
 
-// A doc nothing could check is not a stale doc (BDL-076 R1 finding m4): the sync
-// engine keeps `unpaired`, `unverified` and `missing` apart from `stale`, and so
-// does the impact list. This repository's docs are all `ok` or `stale` today, so
-// the served file gives one affected node each state, and nothing else at risk.
+// A doc nothing could check is not a stale doc: the sync engine keeps `unpaired`,
+// `unverified` and `missing` apart from `stale`, and so does the impact list. A
+// project's docs need not hold every state, so the served file gives one affected
+// node each state, and nothing else at risk.
 const DOC_STATES = [
   { status: "stale", label: "stale docs" },
   { status: "unpaired", label: "docs not checked" },

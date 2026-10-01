@@ -1,6 +1,6 @@
-// Filters keep what nests inside a hidden parent (BDL-076 A2).
+// Filters keep what nests inside a hidden parent.
 //
-// Before A2 a filter hid compound parents with `display: none`, and Cytoscape
+// In an earlier version a filter hid compound parents with `display: none`, and Cytoscape
 // hides the children of a hidden parent: `Kind = feature` showed nothing, and
 // the domain filter kept direct children only.
 
@@ -100,7 +100,7 @@ test("a layer filter keeps every node in that layer, inherited or its own, with 
   const members = data.nodes.filter((n) => n.layer_rank === declared.layer_rank).map((n) => n.id);
 
   await openArchitecture(page);
-  // The filter offers the declared names, not the tag tokens (BDL-076 R1 finding m2).
+  // The filter offers the declared names, not the tag tokens.
   const name = data.layers.find((layer) => layer.rank === declared.layer_rank).name;
   await page.getByLabel("Layer", { exact: true }).selectOption(name);
 

@@ -8,8 +8,8 @@
 // `INCLUDE_CHILDREN` lays out compound parents (a domain's box around its
 // features and components) together with their children.
 //
-// The partition reaches ELK through `nodeLayoutOptions`. Before BDL-076 the
-// element carried `partition` in its data and nothing handed it to ELK, so
+// The partition reaches ELK through `nodeLayoutOptions`. In an earlier version
+// the element carried `partition` in its data and nothing handed it to ELK, so
 // partitioning was switched on with no node in a partition.
 
 /** ELK's per-node options: the node's lane, when it has one. */

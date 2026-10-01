@@ -2,8 +2,8 @@
 // Full screen for one element, with a CSS fallback over the same element.
 //
 // The element is the viewer's whole space, so the toolbar, the canvas and the
-// panel go full screen together. Before BDL-076 only the canvas and the card
-// did, and the controls stayed behind in the page. When the Fullscreen API is
+// panel go full screen together. In an earlier version only the canvas and the
+// card did, and the controls stayed behind in the page. When the Fullscreen API is
 // missing or refuses, the same element is pinned over the viewport instead;
 // `fallback` says which of the two is on.
 

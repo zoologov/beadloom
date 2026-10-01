@@ -1,6 +1,6 @@
-// A selected node's neighbourhood: depth, direction, and dim or hide (BDL-076 A3, US-1).
+// A selected node's neighbourhood: depth, direction, and dim or hide.
 //
-// Before A3 a selection marked the node and its own edges and nothing else:
+// In an earlier version a selection marked the node and its own edges and nothing else:
 // depth and direction were carried in the URL and read by nothing, and the rest
 // of the graph stayed as it was.
 
@@ -12,15 +12,16 @@ import { requireShape } from "./support/shape.js";
 const sorted = (ids) => [...ids].sort();
 
 /**
- * The node the PRD names, `rule-engine`, when this graph has it; otherwise the
- * node whose outgoing neighbourhood grows most from depth 1 to depth 2, so the
- * case sees a second level whatever graph it runs on.
+ * The node whose outgoing neighbourhood grows most from depth 1 to depth 2 (between
+ * equals, the first by id), so the case sees a second level whatever graph it runs on.
  */
 function subjectOf(data) {
-  if (data.nodes.some((n) => n.id === "rule-engine")) return "rule-engine";
   const growth = (id) =>
     neighbourhood(data, id, 2, "out").ids.length - neighbourhood(data, id, 1, "out").ids.length;
-  return data.nodes.map((n) => n.id).sort((a, b) => growth(b) - growth(a))[0];
+  return data.nodes
+    .map((n) => n.id)
+    .sort()
+    .sort((a, b) => growth(b) - growth(a))[0];
 }
 
 /** `subjectOf` when `holds` of it; otherwise the first node, by id, of which it does. */

@@ -1,4 +1,4 @@
-// Playwright configuration for the portal's browser tests (BDL-076 A2).
+// Playwright configuration for the portal's browser tests.
 //
 // The tests drive the BUILT portal, not the dev server: `support/serve.mjs`
 // runs `vitepress build` and then `vitepress preview`, so what is tested is the
@@ -14,19 +14,19 @@
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { importGenerated } from "../.vitepress/generated.mjs";
 
 const SITE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A port of its own, so a preview the developer already runs on 4173 is not reused.
 const PORT = Number(process.env.BEADLOOM_E2E_PORT || 4178);
 // The portal's base path, as `docs site` generated it from the project's `site:`
-// block; `/` before the first generation.
+// block; `/` before the first generation. A module that exists and fails to load
+// stops the run rather than aiming every test at `/`.
 async function configuredBase() {
-  try {
-    const { site } = await import("../.vitepress/site.generated.mjs");
-    return site?.base || "/";
-  } catch {
-    return "/";
-  }
+  const { site } = await importGenerated(
+    new URL("../.vitepress/site.generated.mjs", import.meta.url)
+  );
+  return site?.base || "/";
 }
 const BASE = process.env.BEADLOOM_E2E_BASE || (await configuredBase());
 

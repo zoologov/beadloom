@@ -1,4 +1,4 @@
-// A data file of a schema version the viewer does not read is refused in the page (BDL-076 A1).
+// A data file of a schema version the viewer does not read is refused in the page.
 //
 // The data file is a contract: the viewer reads versions 1 and 2, and a version
 // it does not know is refused with a message the reader sees, rather than drawn

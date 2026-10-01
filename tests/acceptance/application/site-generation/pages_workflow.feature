@@ -48,3 +48,32 @@ Feature: docs site --pages-workflow writes a Pages workflow for the project's po
     Then the generation is refused, naming --out
     And no Pages workflow was written
     And no portal was written outside the project
+
+  # beadloom-ujzb.20 (R2 finding F10): the build job runs install scripts, so it
+  # only reads; a push to another branch starts no run, and a tag named like the
+  # default branch deploys nothing; every action is pinned by a commit.
+  @bead:beadloom-ujzb.20
+  Scenario: the workflow runs on the branch the project's git records as its default
+    Given a project that declares the site base "/orders/"
+    And the project's git records "trunk" as its remote's default branch
+    When the site is generated with the Pages workflow
+    Then a push starts the Pages workflow only on "trunk"
+    And the Pages workflow builds only from a branch that is the default, never a tag
+    And only the deploy job of the Pages workflow may write Pages or mint a token
+    And every action the Pages workflow uses is pinned by a full commit
+    And the generation names "trunk" as the branch the Pages workflow runs on
+
+  @bead:beadloom-ujzb.20
+  Scenario: with no default branch recorded, no branch is named and the generation says so
+    Given a project that declares the site base "/orders/"
+    When the site is generated with the Pages workflow
+    Then the Pages workflow names no branch
+    And the Pages workflow builds only from a branch that is the default, never a tag
+    And the generation says the Pages workflow names no branch, and how to give it one
+
+  @bead:beadloom-ujzb.20
+  Scenario: a base holding an Actions expression is refused before anything is written
+    Given a project that declares the site base "/${{ github.token }}/"
+    When the site is generated with the Pages workflow, expecting a refusal
+    Then the generation is refused, naming site.base
+    And no Pages workflow was written

@@ -1,4 +1,4 @@
-// Dev/runtime guard for the interactive viz (BDL-060 S4 ext).
+// Dev/runtime guard for the interactive viz.
 //
 // The web-worker bug class slipped through because `vitepress build` (the
 // production bundle) stayed GREEN while the VitePress *dev* server crashed: the

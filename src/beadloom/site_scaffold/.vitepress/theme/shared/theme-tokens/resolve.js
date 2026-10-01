@@ -3,8 +3,8 @@
 //
 // Cytoscape parses colour names, hex, rgb and hsl only. A `var(--vp-…)` string is
 // rejected with a console warning and drawn in its fallback grey,
-// rgb(153,153,153), which is how every edge of the viewer went grey before
-// BDL-076. So nothing that reaches Cytoscape may carry `var(...)`: the browser
+// rgb(153,153,153), which is how every edge of the viewer once went grey.
+// So nothing that reaches Cytoscape may carry `var(...)`: the browser
 // resolves each token here, through `getComputedStyle` on a probe element, and a
 // translucent colour is flattened over the resolved background so the result is
 // one opaque `rgb(r,g,b)`.

@@ -86,7 +86,7 @@ export function nearestOfKind(id, kind, byId, parents) {
 }
 
 /**
- * What a doc's sync status means for a change, by the PRD's risks (US-6) and
+ * What a doc's sync status means for a change, by the impact mode's risks and
  * the sync engine's words for its states: `stale` was compared and found out of
  * date; `unpaired`, `unverified` and `missing` are states in which nothing
  * could be compared, which the engine must not report as the same word; `ok`

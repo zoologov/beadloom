@@ -1,6 +1,6 @@
-// Edges: one style per kind, violations stand out, the legend lists what is drawn (BDL-076 A2).
+// Edges: one style per kind, violations stand out, the legend lists what is drawn.
 //
-// Before A2 the viewer drew two kinds of six and its legend listed a `part_of`
+// In an earlier version the viewer drew two kinds of six and its legend listed a `part_of`
 // line style that was never drawn.
 
 import { test, expect } from "@playwright/test";

@@ -7,7 +7,8 @@
 #        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
 #      tests-locale ──(the environment dimension; not in ai-techwriter's needs)
 #        site-build ──► site-e2e (browser tests; advisory, not a required check)
-#     site-adopters ──(adopter fixtures, every stack; slow tests; advisory)
+#     site-adopters.yml (adopter fixtures, every stack; slow tests; advisory) runs
+#       apart: on a pull request that changes what it tests, weekly, and by hand
 #
 # gate / tests / tests-locale / site-build run in parallel on GitHub-hosted
 # runners; there is no platform dimension — it was built, priced and declined
@@ -412,69 +413,6 @@ jobs:
           path: |
             site/playwright-report/
             site/test-results/
-          retention-days: 14
-
-  # ---------------------------------------------------------------------- #
-  # site-adopters — the portal on projects that are not this one (BDL-076 B3).
-  # One small fixture per claimed stack (Python, Go, JS/TS, Java, Kotlin,
-  # Swift) under tests/fixtures/site/ is committed, initialised with
-  # `beadloom init`, built with `beadloom docs site`, `npm ci` and
-  # `vitepress build`, and read the way its adopter would read it; the shipped
-  # Playwright suite then runs on each portal as its adopter runs it, with
-  # `npm run test:e2e`, and a case whose shape a fixture's graph lacks skips
-  # by itself, naming the shape (beadloom-ujzb.17). These are
-  # the suite's `slow` tests, which the `tests` job skips: without this job
-  # nothing runs them. No stack toolchain is installed: `beadloom init` parses
-  # the source, it does not build it.
-  #
-  # NOT a required check, for the same reason as site-e2e: advisory until it has
-  # run clean on ten pull requests (tests/support/ci_workflows.py ADVISORY_JOBS).
-  # ---------------------------------------------------------------------- #
-  site-adopters:
-    runs-on: ubuntu-latest
-    # Six Playwright runs: about 15 minutes measured on a 10-core machine with
-    # 5 workers each; a 4-core runner gets 2 workers, so the bound is doubled.
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync --extra dev --extra languages
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: src/beadloom/site_scaffold/package-lock.json
-
-      # The browser at the version the scaffold's locked @playwright/test expects,
-      # read from the scaffold itself, so the two cannot drift apart.
-      - name: Install the Playwright Chromium browser
-        run: >-
-          npx --yes "playwright@$(node -p
-          "require('./src/beadloom/site_scaffold/package.json').devDependencies['@playwright/test']")"
-          install --with-deps chromium
-
-      - name: Build every adopter fixture and run the browser tests on each
-        run: uv run pytest -m slow -v --basetemp="$RUNNER_TEMP/adopters"
-        env:
-          BEADLOOM_RUN_SLOW: "1"
-
-      - name: Upload the fixtures' Playwright results
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: site-adopters-playwright
-          path: |
-            ${{ runner.temp }}/adopters/**/site/test-results/
-            ${{ runner.temp }}/adopters/**/site/playwright-report/
           retention-days: 14
 
   # ---------------------------------------------------------------------- #

@@ -1,10 +1,10 @@
-// URL state: filters, focus, depth, direction and the impact view round-trip (BDL-076 A2).
+// URL state: filters, focus, depth, direction and the impact view round-trip.
 //
-// Before A2 the filters lived in component refs, so a view could not be linked.
-// The data mode is not a URL key: it is the page's (CONTEXT, A4), and a query
-// cannot turn the architecture page into the landscape. Every key the query
+// In an earlier version the filters lived in component refs, so a view could not
+// be linked. The data mode is not a URL key: it is the page's, and a query cannot
+// turn the architecture page into the landscape. Every key the query
 // names below differs from its default, so an assertion on it fails when the
-// viewer does not read it (BDL-076 R1 finding m3).
+// viewer does not read it.
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";

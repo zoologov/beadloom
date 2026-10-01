@@ -46,7 +46,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from beadloom.application.site.forge_routes import (
     KNOWN_FORGES,
@@ -54,6 +54,7 @@ from beadloom.application.site.forge_routes import (
     Forge,
     forge_for,
     read_forge,
+    runs_past_repository,
 )
 from beadloom.doc_sync.declarations import (
     Refusal,
@@ -129,29 +130,92 @@ def _text(value: object, where: str) -> Refusal | None:
     )
 
 
+#: What GitHub Actions evaluates wherever it stands in a workflow, quoted or not.
+_ACTIONS_EXPRESSION = "${{"
+
+
 def _base(value: object, where: str) -> Refusal | None:
-    """A base path VitePress accepts: it starts and ends with ``/``."""
-    if isinstance(value, str) and value.startswith("/") and value.endswith("/"):
+    """A base path VitePress accepts, starting and ending with ``/``, that a workflow can carry.
+
+    The Pages workflow (:mod:`beadloom.application.site.pages_workflow`) writes
+    the base into a workflow file, where ``${{`` opens an expression however the
+    value is quoted, so such a base is refused here, where it was written.
+    """
+    remediation = "write `base:` as the path the portal is served under, e.g. `/orders/`"
+    if not (isinstance(value, str) and value.startswith("/") and value.endswith("/")):
+        shown = f"`{value}`" if isinstance(value, str) else describe_value(value)
+        return Refusal(
+            where=where,
+            why=f"`{where}` is {shown}, and a base path starts and ends with `/`",
+            remediation=remediation,
+        )
+    if _ACTIONS_EXPRESSION in value:
+        return Refusal(
+            where=where,
+            why=(
+                f"`{where}` holds `{_ACTIONS_EXPRESSION}`, which GitHub Actions evaluates as "
+                "an expression in any workflow that carries the base"
+            ),
+            remediation=remediation,
+        )
+    return None
+
+
+_REPO_URL_REMEDIATION = (
+    "write `repo_url:` as the repository's own address, e.g. "
+    "`https://gitlab.com/acme/orders`, with no credential, query or fragment"
+)
+_GIT_SUFFIX = ".git"
+
+
+def _repo_url(value: object, where: str) -> tuple[object, tuple[Refusal, ...]]:
+    """A web address a reader can open, in one spelling, holding nothing unpublishable.
+
+    The spelling is :func:`canonical_repo_url`'s, so a link the generator builds
+    from it is the forge's route whichever way the address was copied.
+    """
+    why = _repo_url_problem(value)
+    if why is None and isinstance(value, str):
+        return canonical_repo_url(value), ()
+    # The value itself is never repeated: it may hold a credential.
+    return None, (
+        Refusal(where=where, why=f"`{where}` {why}", remediation=_REPO_URL_REMEDIATION),
+    )
+
+
+def canonical_repo_url(url: str) -> str:
+    """*url* without what does not change the repository it names.
+
+    The scheme and the host are lower-cased (RFC 3986 makes them
+    case-insensitive) and the port is kept; trailing ``/`` and one ``.git`` are
+    removed: an address bar adds the first, a forge's clone address carries the
+    second, and the forge's routes are appended after neither. The path keeps
+    its case, because a forge may serve two repositories that differ by it.
+    """
+    parts = urlsplit(url)
+    path = parts.path.rstrip("/")
+    if path.endswith(_GIT_SUFFIX):
+        path = path[: -len(_GIT_SUFFIX)].rstrip("/")
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, "", ""))
+
+
+def _past_repository(repo_url: str, forges: Mapping[str, Forge], where: str) -> Refusal | None:
+    """A refusal when *repo_url* is a page inside the repository rather than the repository.
+
+    Only on a host whose forge is known, by the routes that forge appends: on
+    any other host nothing says which segment of the path is a route.
+    """
+    forge = forge_for(repo_url, forges)
+    if forge is None or not runs_past_repository(repo_url, forge):
         return None
-    shown = f"`{value}`" if isinstance(value, str) else describe_value(value)
     return Refusal(
         where=where,
-        why=f"`{where}` is {shown}, and a base path starts and ends with `/`",
-        remediation="write `base:` as the path the portal is served under, e.g. `/orders/`",
+        why=(
+            f"`{where}` runs past the repository into a page of it, a route its forge "
+            "serves, and every link the portal builds would be appended to that page"
+        ),
+        remediation=_REPO_URL_REMEDIATION,
     )
-
-
-def _repo_url(value: object, where: str) -> Refusal | None:
-    """A web address a reader can open, holding nothing that must not be published."""
-    remediation = (
-        "write `repo_url:` as the repository's web address, e.g. "
-        "`https://gitlab.com/acme/orders`, with no credential, query or fragment"
-    )
-    why = _repo_url_problem(value)
-    if why is None:
-        return None
-    # The value itself is never repeated: it may hold a credential.
-    return Refusal(where=where, why=f"`{where}` {why}", remediation=remediation)
 
 
 def _repo_url_problem(value: object) -> str | None:
@@ -238,7 +302,7 @@ _FIELDS: dict[str, Callable[[object, str], tuple[object, tuple[Refusal, ...]]]] 
     "title": _checked(_text),
     "description": _checked(_text),
     "base": _checked(_base),
-    "repo_url": _checked(_repo_url),
+    "repo_url": _repo_url,
     "forges": _forges,
 }
 
@@ -290,12 +354,19 @@ def read_site_config(project_root: Path) -> tuple[SiteConfig, tuple[Refusal, ...
         if read is not None:
             usable[str(key)] = read
     forges = usable.get("forges")
+    declared_forges = forges if isinstance(forges, dict) else {}
+    repo_url = usable.get("repo_url")
+    if isinstance(repo_url, str):
+        past = _past_repository(repo_url, declared_forges, f"{SITE_KEY}.repo_url")
+        if past is not None:
+            found.append(past)
+            del usable["repo_url"]
     config = SiteConfig(
         title=_text_of(usable, "title", defaults.title),
         description=_text_of(usable, "description", defaults.description),
         base=_text_of(usable, "base", defaults.base),
         repo_url=_text_of(usable, "repo_url", defaults.repo_url),
-        forges=forges if isinstance(forges, dict) else {},
+        forges=declared_forges,
     )
     return config, tuple(found)
 

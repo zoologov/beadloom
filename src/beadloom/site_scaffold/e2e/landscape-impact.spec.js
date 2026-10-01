@@ -1,6 +1,6 @@
-// Impact on the landscape: every service a change reaches over the contracts (BDL-076, beadloom-ujzb.6).
+// Impact on the landscape: every service a change reaches over the contracts.
 //
-// Before this bead the landscape offered no impact mode (A4): the toolbar had no
+// In an earlier version the landscape offered no impact mode: the toolbar had no
 // "Impact" button, and a selection showed one step of the neighbourhood.
 //
 // A contract edge runs from a producer to a consumer. The consumer reads the

@@ -42,7 +42,10 @@ const RING_FILL_SHARE = 0.55;
 /** How visible a node or edge outside the selection stays when it is dimmed. */
 const DIMMED_OPACITY = 0.14;
 
-/** The edge curve style, chosen by measurement on this repository's graph (BDL-076 A2). */
+/**
+ * The edge curve style, chosen by measurement: `bezier` lets fewer edges share a
+ * stretch than `taxi`, which runs every edge out of a node down one trunk.
+ */
 export const CURVE_STYLE = "bezier";
 
 /** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */

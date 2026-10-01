@@ -1,6 +1,6 @@
-// Navigation: dragging the canvas pans and never moves a node (BDL-076 A2).
+// Navigation: dragging the canvas pans and never moves a node.
 //
-// Before A2 every node was grabbable, compound parents included, so a drag that
+// In an earlier version every node was grabbable, compound parents included, so a drag that
 // started inside a domain box moved the box and everything in it.
 
 import { test, expect } from "@playwright/test";

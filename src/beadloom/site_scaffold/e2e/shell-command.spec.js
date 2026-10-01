@@ -1,4 +1,4 @@
-// A command to copy names its target in a form the shell reads back whole (BDL-076 R1 finding n2).
+// A command to copy names its target in a form the shell reads back whole.
 //
 // The card and the impact summary offer `beadloom ctx <ref>`, `beadloom why <ref>`
 // and `beadloom impact <source>` to copy. A source path with a space, a quote or
@@ -10,7 +10,7 @@ import { openThemeModules } from "./support/themeModules.js";
 import { architectureData, openArchitecture } from "./support/viewer.js";
 
 const CASES = [
-  { word: "rule-engine", quoted: "rule-engine" },
+  { word: "orders-api", quoted: "orders-api" },
   { word: "src/shop/core/", quoted: "src/shop/core/" },
   { word: "src/my module/a.py", quoted: "'src/my module/a.py'" },
   { word: "src/it's.py", quoted: "'src/it'\\''s.py'" },
@@ -37,7 +37,8 @@ test("the impact summary quotes a source path with a space in the command it cop
   request,
 }) => {
   const data = await architectureData(request);
-  const node = data.nodes.find((n) => n.id === "rule-engine") || data.nodes.find((n) => n.source);
+  // Any node: the case gives it the source it is about.
+  const node = data.nodes.find((n) => n.source) ?? data.nodes[0];
   node.source = "src/my module/it's.py";
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
 

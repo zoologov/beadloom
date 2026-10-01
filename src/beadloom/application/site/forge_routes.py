@@ -76,6 +76,51 @@ class Forge:
             values[_ITEMS_FIELD] = items
         return template.format(**values)
 
+    @property
+    def route_segments(self) -> frozenset[str]:
+        """The first path segment each route appends to the repository's address.
+
+        ``tree``/``blob``/``raw`` for GitHub, ``-`` for GitLab; none for a route
+        that is a query (Azure DevOps) or does not start at ``{url}/``.
+        """
+        segments: set[str] = set()
+        for template in (self.tree, self.blob, self.raw):
+            if not template.startswith(_URL_PREFIX):
+                continue
+            first = template[len(_URL_PREFIX) :].split("/", 1)[0]
+            if first and "{" not in first and "?" not in first:
+                segments.add(first)
+        return frozenset(segments)
+
+
+#: A route that continues the repository's address as a path.
+_URL_PREFIX = "{url}/"
+
+#: The fewest path segments a repository's address has on any known forge:
+#: an owner or group, and the repository.
+_REPOSITORY_SEGMENTS = 2
+
+
+def runs_past_repository(web_url: str, forge: Forge) -> bool:
+    """Whether *web_url* goes on, past a repository, into a route *forge* serves.
+
+    ``https://github.com/o/r/tree/main`` does: ``tree`` is a route GitHub
+    appends, it comes after the owner and the repository, and something
+    follows it. A segment that is the last one, or that comes before the
+    second, is a name (a repository called ``tree``, an owner called ``src``).
+    """
+    try:
+        segments = [part for part in urlsplit(web_url).path.split("/") if part]
+    except ValueError:
+        return False
+    routes = forge.route_segments
+    last = len(segments) - 1
+    return any(
+        segment in routes
+        for index, segment in enumerate(segments)
+        if _REPOSITORY_SEGMENTS <= index < last
+    )
+
 
 _GITHUB = "github"
 _GITLAB = "gitlab"

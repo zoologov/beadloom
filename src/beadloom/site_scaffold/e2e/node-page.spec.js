@@ -1,6 +1,6 @@
-// A node page opens the viewer on its node, and the reader walks away from there (BDL-076 A4, US-4).
+// A node page opens the viewer on its node, and the reader walks away from there.
 //
-// Before A4 a node page carried a scoped Mermaid C4 diagram of its own, with
+// In an earlier version a node page carried a scoped Mermaid C4 diagram of its own, with
 // its own pan and zoom and none of the viewer's navigation, filters or card.
 
 import { test, expect } from "@playwright/test";
@@ -90,7 +90,7 @@ test("from the node page every toolbar control works and the selection moves fre
 
 // On a node page the selection's default is the page's own node, so a cleared
 // selection has to be written to the URL, or a reload brings the node back
-// (BDL-076 R1 finding m1).
+//.
 test("a selection cleared on a node page stays cleared after a reload", async ({
   page,
   request,

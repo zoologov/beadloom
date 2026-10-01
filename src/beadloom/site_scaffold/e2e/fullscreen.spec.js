@@ -1,6 +1,6 @@
-// Full screen covers the viewer's whole space: toolbar, canvas and panel (BDL-076 A2).
+// Full screen covers the viewer's whole space: toolbar, canvas and panel.
 //
-// Before A2 only the canvas and the card went full screen; the controls and the
+// In an earlier version only the canvas and the card went full screen; the controls and the
 // legend stayed behind in the page.
 
 import { test, expect } from "@playwright/test";

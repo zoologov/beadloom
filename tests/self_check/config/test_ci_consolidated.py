@@ -9,7 +9,6 @@ The three independent PR workflows (``beadloom-gate.yml``, ``tests.yml``,
       tests       (ubuntu, 3.10-3.13)    pytest matrix, NO paths filter
       site-build  (ubuntu)               beadloom docs site + vitepress build
       site-e2e    (ubuntu)               needs: site-build; Playwright, advisory
-      site-adopters (ubuntu)             adopter fixtures, the slow tests; advisory
       ai-techwriter (self-hosted)        needs: [gate, tests, site-build]
 
 ``deploy-site.yml`` stays the ONLY ``push: main`` job (logic unchanged; only the
@@ -101,9 +100,12 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 def test_ci_has_the_declared_jobs() -> None:
     """The consolidated four (BDL-050), the locale DIMENSION (BDL-061.38) and site-e2e.
 
-    ``site-e2e`` (BDL-076 A5) and ``site-adopters`` (B3) are the jobs here that are
-    not required checks; each is listed in ``tests.support.ci_workflows.ADVISORY_JOBS``
-    with its exit.
+    ``site-e2e`` (BDL-076 A5) is the job here that is not a required check; it is
+    listed in ``tests.support.ci_workflows.ADVISORY_JOBS`` with its exit.
+    ``site-adopters`` (B3) left this file for ``site-adopters.yml`` in
+    ``beadloom-ujzb.20``, so that it runs only on a pull request that changes what
+    it tests; ``tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py``
+    holds it there.
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
@@ -121,7 +123,6 @@ def test_ci_has_the_declared_jobs() -> None:
         "tests-locale",
         "site-build",
         "site-e2e",
-        "site-adopters",
         "ai-techwriter",
     }
 
@@ -314,7 +315,12 @@ def test_every_workflow_builds_the_portal_on_the_node_the_scaffold_declares() ->
 
     declared = node_major_of(json.loads(shipped_files()["package.json"])["engines"]["node"])
     versions = _setup_node_versions()
-    assert {"ci.yml:site-build", "ci.yml:site-e2e", "deploy-site.yml:build"} <= set(versions)
+    assert {
+        "ci.yml:site-build",
+        "ci.yml:site-e2e",
+        "deploy-site.yml:build",
+        "site-adopters.yml:site-adopters",
+    } <= set(versions)
     assert {where: v for where, v in versions.items() if v != declared} == {}
 
 

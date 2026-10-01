@@ -197,10 +197,19 @@ def _write_pages_workflow(project_root: Path, out: Path) -> None:
     except PagesWorkflowError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+    branch = f"branch {report.branch}" if report.branch else "no branch"
     click.echo(
         f"Pages workflow: {report.path} {report.outcome} (base {report.base}, "
-        f"Node {report.node_major}, portal {report.site_dir}/)"
+        f"Node {report.node_major}, portal {report.site_dir}/, {branch})"
     )
+    if not report.branch and report.outcome != "kept":
+        click.echo(
+            f"{report.path} names no branch: git records no default branch for `origin` "
+            "(origin/HEAD), so every push starts a run that deploys only from the "
+            "default branch. To name it, run `git remote set-head origin --auto` and "
+            "`beadloom docs site --pages-workflow` again.",
+            err=True,
+        )
     if report.outcome == "kept":
         click.echo(f"Kept {report.path}: it {report.reason}", err=True)
         click.echo(f"  -> {report.remediation}", err=True)

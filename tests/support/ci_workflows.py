@@ -23,7 +23,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 #: This repository's own pipelines.
-GH_CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+GH_CI = WORKFLOWS_DIR / "ci.yml"
+#: The adopter fixtures' slow suite, outside the pipeline every pull request runs
+#: (``beadloom-ujzb.20``, owner ruling of 2026-10-01): a pull request that changes
+#: what it tests, weekly on the default branch, and by hand.
+GH_SITE_ADOPTERS = WORKFLOWS_DIR / "site-adopters.yml"
 GL_CI = REPO_ROOT / ".gitlab-ci.yml"
 
 #: The ai-techwriter templates the package ships to adopters.
@@ -41,11 +46,12 @@ VERIFY_JOBS = ("gate", "tests", "site-build")
 #: The job that carries the locale dimension.
 LOCALE_JOB = "tests-locale"
 
-#: Jobs ``ci.yml`` runs that are deliberately NOT required status checks, each
-#: with its reason and the exit that makes it required. The self-check that
-#: compares ``ci.yml`` with the required contexts leaves these out, and fails on
-#: an entry whose job no longer exists or that is also required, so the map only
-#: shrinks and never hides a lockout.
+#: Jobs this repository's pull-request workflows run that are deliberately NOT
+#: required status checks, each with its reason and the exit that makes it
+#: required. The self-check that compares ``ci.yml`` with the required contexts
+#: leaves these out, and fails on an entry whose job no longer exists in
+#: ``ci.yml`` or an :data:`ADVISORY_WORKFLOWS` file, or that is also required, so
+#: the map only shrinks and never hides a lockout.
 ADVISORY_JOBS: dict[str, str] = {
     "site-e2e": (
         "the portal's browser tests (BDL-076 A5) stay non-required until they have "
@@ -55,12 +61,17 @@ ADVISORY_JOBS: dict[str, str] = {
     "site-adopters": (
         "the adopter fixtures on every claimed stack and their browser tests (BDL-076 B3) "
         "build six portals and run the browser suite on each, about sixteen minutes "
-        "measured locally on a warm npm cache; advisory "
-        "until it has run clean on ten pull "
-        "requests; the exit is to add 'site-adopters' to DEFAULT_STATUS_CHECK_CONTEXTS "
-        "in the change that removes this entry"
+        "measured locally on a warm npm cache; since beadloom-ujzb.20 it runs only on a "
+        "pull request that changes what it tests (a paths filter), weekly and by hand, "
+        "and a workflow a paths filter leaves unstarted reports no check-run, so a "
+        "required context naming it would never report on most pull requests and would "
+        "lock main; it cannot be made required while it is filtered"
     ),
 }
+
+#: Workflows besides ``ci.yml`` that run on pull requests and whose every job is
+#: in :data:`ADVISORY_JOBS`: none of their check-runs may become a required context.
+ADVISORY_WORKFLOWS = (GH_SITE_ADOPTERS,)
 
 #: The fallback expression the checkout token + GH_TOKEN must use on the PR path.
 PAT_FALLBACK_CHECKOUT = "secrets.AI_TW_PAT || github.token"

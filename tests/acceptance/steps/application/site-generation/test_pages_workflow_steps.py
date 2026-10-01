@@ -8,6 +8,8 @@ installed package ships: the workflow is read from the path an adopter commits.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -62,7 +64,7 @@ def _generate(world: dict[str, Any], *flags: str) -> Result:
 def _declared(world: dict[str, Any], base: str) -> None:
     project = write_zoned_import_project(world["root"])
     config = project / ".beadloom" / "config.yml"
-    block = f"site:\n  base: {base}\n"
+    block = f"site:\n  base: '{base}'\n"
     config.write_text(config.read_text(encoding="utf-8") + block, encoding="utf-8")
 
 
@@ -166,3 +168,82 @@ def _edit_reported(world: dict[str, Any]) -> None:
 def _nothing(world: dict[str, Any]) -> None:
     assert not _workflow_path(world).exists()
     assert "Pages workflow" not in world["result"].output
+
+
+_GUARD = "github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch"
+_PINNED = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+
+
+def _git(world: dict[str, Any], *args: str) -> None:
+    subprocess.run(["git", *args], cwd=world["root"], check=True, capture_output=True)  # noqa: S603, S607
+
+
+@given(parsers.parse("the project's git records \"{branch}\" as its remote's default branch"))
+def _default_branch(world: dict[str, Any], branch: str) -> None:
+    _git(world, "init", "-q", "-b", "work")
+    _git(world, "add", "-A")
+    _git(world, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "-m", "c")
+    _git(world, "update-ref", f"refs/remotes/origin/{branch}", "HEAD")
+    _git(world, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{branch}")
+
+
+@when("the site is generated with the Pages workflow, expecting a refusal")
+def _generate_refused(world: dict[str, Any]) -> None:
+    world["result"] = CliRunner().invoke(
+        main, ["docs", "site", "--project", str(world["root"]), "--pages-workflow"]
+    )
+
+
+@then(parsers.parse('a push starts the Pages workflow only on "{branch}"'))
+def _push_branch(world: dict[str, Any], branch: str) -> None:
+    # PyYAML reads the bare key `on` as the boolean true; GitHub reads it as `on`.
+    assert _workflow(world)[True]["push"] == {"branches": [branch]}
+
+
+@then("the Pages workflow names no branch")
+def _no_branch(world: dict[str, Any]) -> None:
+    assert _workflow(world)[True]["push"] is None
+
+
+@then("the Pages workflow builds only from a branch that is the default, never a tag")
+def _guard(world: dict[str, Any]) -> None:
+    assert _workflow(world)["jobs"]["build"]["if"] == _GUARD
+
+
+@then("only the deploy job of the Pages workflow may write Pages or mint a token")
+def _permissions(world: dict[str, Any]) -> None:
+    workflow = _workflow(world)
+    assert workflow["permissions"] == {}
+    assert workflow["jobs"]["build"]["permissions"] == {"contents": "read", "pages": "read"}
+    assert workflow["jobs"]["deploy"]["permissions"] == {"pages": "write", "id-token": "write"}
+
+
+@then("every action the Pages workflow uses is pinned by a full commit")
+def _pinned(world: dict[str, Any]) -> None:
+    uses = [
+        str(step["uses"])
+        for job in _workflow(world)["jobs"].values()
+        for step in job["steps"]
+        if "uses" in step
+    ]
+    assert uses
+    assert [use for use in uses if not _PINNED.match(use)] == []
+
+
+@then(parsers.parse('the generation names "{branch}" as the branch the Pages workflow runs on'))
+def _branch_named(world: dict[str, Any], branch: str) -> None:
+    assert f"branch {branch}" in world["result"].stdout
+
+
+@then("the generation says the Pages workflow names no branch, and how to give it one")
+def _no_branch_said(world: dict[str, Any]) -> None:
+    stderr = world["result"].stderr
+    assert "names no branch" in stderr
+    assert "git remote set-head origin --auto" in stderr
+
+
+@then("the generation is refused, naming site.base")
+def _refused_base(world: dict[str, Any]) -> None:
+    result = world["result"]
+    assert result.exit_code == 1
+    assert "site.base" in result.stderr

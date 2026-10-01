@@ -1,20 +1,19 @@
 // beadloom:component=site-graph-viewer
 // The viewer's two data modes: the architecture graph and the landscape of contracts.
 //
-// One viewer core draws both (BDL-076 A4). A mode names what differs between
+// One viewer core draws both. A mode names what differs between
 // them and nothing else: the data file it reads and how that file becomes
 // nodes and edges, the filters in its slot of the toolbar and the set they
 // show, and whether the impact mode is offered. Navigation, the neighbourhood,
 // full screen, the panel, the legend and URL state are the core's, the same in
 // both.
 //
-// Both offer the impact mode (the landscape since `beadloom-ujzb.6`), and a
-// mode names its walk: which end of each edge kind depends on the other, and
-// the summary of what the walk reached. The architecture walks the dependency
-// edges backwards and summarises domains, services and layer boundaries; the
-// landscape walks each contract from its producer to its consumers and
-// summarises the contracts and protocols crossed and the broken ones. The
-// landscape's neighbourhood, one step both ways by default, is what its old
+// Both offer the impact mode, and a mode names its walk: which end of each edge
+// kind depends on the other, and the summary of what the walk reached. The
+// architecture walks the dependency edges backwards and summarises domains,
+// services and layer boundaries; the landscape walks each contract from its
+// producer to its consumers and summarises the contracts and protocols crossed
+// and the broken ones. The landscape's neighbourhood, one step both ways by default, is what its old
 // "Focus" control showed.
 //
 // The mode is the page's, not the URL's: the architecture page and the

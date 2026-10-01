@@ -1,4 +1,4 @@
-// The layers are the ones the project declares, named as it names them (BDL-076 R1 finding m2).
+// The layers are the ones the project declares, named as it names them.
 //
 // The data file carries the declared layers, `[{ name, rank, tag, token }]`, and
 // each node its layer's token and rank. Before the fix the viewer rebuilt the

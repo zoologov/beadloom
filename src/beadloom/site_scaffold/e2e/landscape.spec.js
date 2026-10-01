@@ -1,6 +1,6 @@
-// The landscape runs on the viewer core: its own filters, full screen and a card (BDL-076 A4).
+// The landscape runs on the viewer core: its own filters, full screen and a card.
 //
-// Before A4 the landscape was a component of its own: no test handle, filters
+// In an earlier version the landscape was a component of its own: no test handle, filters
 // in component refs, a card beside the canvas that did not go full screen, and
 // every theme colour a `var(--vp-…)` string that Cytoscape drew as its
 // fallback grey.
@@ -45,7 +45,7 @@ test("the landscape page draws every service of its data file in the viewer, in 
     await expect(toolbar.getByLabel(label, { exact: true })).toBeVisible();
   }
   await expect(toolbar.getByLabel("Kind", { exact: true })).toHaveCount(0);
-  // The owner's ruling after A4 (beadloom-ujzb.6): the landscape has an impact mode too.
+  // The landscape has an impact mode too, over its contract edges.
   await expect(toolbar.getByRole("button", { name: "Impact", exact: true })).toBeVisible();
 });
 

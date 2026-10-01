@@ -1,4 +1,4 @@
-// A node's status is drawn by the severity of what was found (BDL-076 R1 finding m6).
+// A node's status is drawn by the severity of what was found.
 //
 // Version 2 of the data file carries each finding's severity. Before the fix the
 // viewer read only `lint_clean`, which is false for a node with any finding, and
@@ -44,8 +44,8 @@ test("a node with warn findings only is drawn as a warning, not as a violation",
     Object.entries(await viewer(page, "statusLooks")).map(([id, look]) => [id, look.status])
   );
   expect(drawn).toEqual(expected);
-  // `beadloom lint --strict` finds no error on this repository today, so nothing
-  // is drawn as a violation; the day it does, the node is, and this still holds.
+  // When `beadloom lint --strict` finds no error, nothing is drawn as a
+  // violation; when it finds one, the node is, and this holds either way.
   expect(Object.values(drawn).includes("violation")).toBe(errors.length > 0);
 });
 

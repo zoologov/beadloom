@@ -12,18 +12,13 @@
 // Render with `npm ci && npm run docs:build`.
 
 import { withMermaid } from "vitepress-plugin-mermaid";
+import { importGenerated } from "./generated.mjs";
 
-/** A module `docs site` generates, or an empty one before the first generation. */
-async function generated(name) {
-  try {
-    return await import(name);
-  } catch {
-    return {};
-  }
-}
-
-const { nav = [], sidebar = [] } = await generated("./config.generated.mjs");
-const { site = {} } = await generated("./site.generated.mjs");
+// Empty before the first generation; a module that exists and fails to load stops the build.
+const { nav = [], sidebar = [] } = await importGenerated(
+  new URL("./config.generated.mjs", import.meta.url)
+);
+const { site = {} } = await importGenerated(new URL("./site.generated.mjs", import.meta.url));
 
 export default withMermaid({
   title: site.title,

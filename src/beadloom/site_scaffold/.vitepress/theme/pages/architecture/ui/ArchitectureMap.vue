@@ -11,7 +11,7 @@
 //
 // A node page passes `focus`, its own node, with a depth and a height: the
 // viewer opens with that node selected and its neighbourhood marked, and the
-// reader moves on from there (BDL-076 A4).
+// reader moves on from there.
 
 import { GraphViewer } from "../../../widgets/graph-viewer/index.js";
 import { NodeCard } from "../../../widgets/node-card/index.js";

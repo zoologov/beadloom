@@ -1,6 +1,6 @@
-// The node card: every field the index holds, clickable edges, commands to copy (BDL-076 A3, US-3).
+// The node card: every field the index holds, clickable edges, commands to copy.
 //
-// Before A3 the card showed kind, layer, a symbol count, one aggregate doc
+// In an earlier version the card showed kind, layer, a symbol count, one aggregate doc
 // status and the two dependency lists: no source, no tests, no findings, no
 // activity or debt, and nothing to copy.
 
@@ -131,7 +131,7 @@ for (const { origin, own } of LAYER_ORIGINS) {
       .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
       .sort((a, b) => a.id.localeCompare(b.id))[0];
     requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
-    // The declared name of the node's layer, not the tag token (BDL-076 R1 finding m2).
+    // The declared name of the node's layer, not the tag token.
     const layer = data.layers.find((l) => l.rank === node.layer_rank).name;
 
     await openArchitecture(page, `?focus=${node.id}`);
@@ -249,9 +249,9 @@ for (const { field: name, listOf, read, lacking } of LISTED_FIELDS) {
 }
 
 // The link from a node's source is decided by the generator, which knows the
-// remote, and each forge serves a path under its own route (BDL-076 R1 finding
-// M1). The card renders the link it is given, whatever its form, and shows the
-// source as plain text when it is given none. The repository block names a
+// remote, and each forge serves a path under its own route. The card renders the
+// link it is given, whatever its form, and shows the source as plain text when it
+// is given none. The repository block names a
 // GitHub repository in every case, so a card that still built GitHub's route
 // from it would link somewhere else.
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";

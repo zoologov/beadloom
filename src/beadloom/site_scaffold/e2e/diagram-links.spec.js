@@ -1,7 +1,7 @@
-// A Mermaid click target under /other/ is served under the site's base path (BDL-076 A4).
+// A Mermaid click target under /other/ is served under the site's base path.
 //
 // Mermaid's `click` directives are raw strings VitePress does not rewrite, so
-// the diagram viewer prepends the base to every internal target. Before A4 it
+// the diagram viewer prepends the base to every internal target. In an earlier version it
 // knew /services/, /domains/, /features/ and /docs/ only, so a landscape link to
 // a page under /other/ would have left the base and ended on a missing page.
 //

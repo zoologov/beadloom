@@ -1,8 +1,8 @@
 // beadloom:component=site-navigate-graph
 // How a reader moves around the graph: pan, zoom, fit, centre, and Arrange.
 //
-// Dragging the canvas pans and never moves the node under the pointer. Before
-// BDL-076 every node was grabbable, compound parents included, and a domain box
+// Dragging the canvas pans and never moves the node under the pointer. In an
+// earlier version every node was grabbable, compound parents included, and a domain box
 // covers its children's area, so a drag started almost anywhere inside it
 // grabbed the box. Now nodes are not grabbable (`autoungrabify`) and every node
 // is `pannable`, which passes a drag on it through to the viewport. "Arrange"

@@ -1,6 +1,6 @@
-// Colours: every colour Cytoscape draws is a real value, in both themes (BDL-076 A2).
+// Colours: every colour Cytoscape draws is a real value, in both themes.
 //
-// Before A2 the stylesheet handed Cytoscape `var(--vp-…)` strings. Cytoscape
+// In an earlier version the stylesheet handed Cytoscape `var(--vp-…)` strings. Cytoscape
 // accepts only literal colours, so it logged each one as invalid and drew it in
 // its fallback grey, rgb(153,153,153).
 
@@ -39,8 +39,8 @@ test("switching to the dark theme rebuilds the colours from the dark tokens", as
 
 
 // Every drawn edge kind, the violation style included, in a page that opens in
-// each theme: this repository's graph carries no violation today, so its own
-// data would leave the violation colour and the dark theme's first build unread.
+// each theme: a project's graph may carry no violation, and then its own data
+// would leave the violation colour and the dark theme's first build unread.
 for (const colorScheme of ["light", "dark"]) {
   test.describe(`opened in the ${colorScheme} theme`, () => {
     test.use({ colorScheme });

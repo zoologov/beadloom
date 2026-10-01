@@ -15,8 +15,21 @@ Three facts are the project's, and each comes from where the project declares it
   path GitHub Pages reports for the repository and fails before building when
   they differ, because a portal built for another base loads none of its assets;
 - the **portal directory**, from ``--out``, which must lie inside the project;
-- the **branch** it deploys from, which is not written at all: the build job runs
-  only on the repository's default branch, read from the event at run time.
+- the **branch** it deploys from: the default branch the project's own git
+  records for its remote (``origin/HEAD``), read when the file is written and
+  named in the push trigger, so a push to another branch starts no run. When git
+  records none, no branch is named - a branch the project did not choose is
+  never guessed - and every push starts a run the build job skips. Either way
+  the build job runs only when the ref is a BRANCH and is the repository's
+  default at run time, so a tag named like it, a stale trigger after a rename or
+  a manual run on another branch deploys nothing.
+
+Hardened after R2 (BDL-076 ``beadloom-ujzb.20``, finding F10): the workflow
+grants nothing by default; ``build``, which runs third-party install scripts,
+only reads; ``deploy`` alone writes Pages and mints the OIDC token. Every action
+is pinned by the full commit of a release, named in a comment. A value holding
+an Actions expression (``${{``) is refused, because quoting keeps the YAML's
+structure and Actions still evaluates the expression.
 
 The workflow carries the scaffold's generated marker, so the rule is the
 scaffold's rule (:func:`~beadloom.application.site.scaffold.place_marked`): a
@@ -27,8 +40,10 @@ and any other file at that path is left as it is and reported.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shlex
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -40,6 +55,8 @@ if TYPE_CHECKING:
 
 #: Where the workflow is written, relative to the project root.
 PAGES_WORKFLOW_PATH = Path(".github") / "workflows" / "beadloom-portal.yml"
+
+logger = logging.getLogger(__name__)
 
 #: The lowest major a range admits: `>=20`, `^20.1`, `~22`, `20.x`, `>= 22 <24`.
 _LOWEST_MAJOR = re.compile(r"^\s*(?:>=|\^|~)?\s*v?(?P<major>\d+)(?:\.|\s|$)")
@@ -60,13 +77,11 @@ _TEMPLATE = """\
 name: Deploy the beadloom portal to GitHub Pages
 
 on:
-  push:
+  push:@BRANCHES@
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Nothing by default: each job declares what it needs.
+permissions: {}
 
 # The Pages actions below still ship Node 20 entry points; this runs them on
 # Node 24, the runtime GitHub moves every action to.
@@ -75,16 +90,21 @@ env:
 
 jobs:
   build:
-    if: github.ref_name == github.event.repository.default_branch
+    # A branch, and the default one: a tag of the same name is no branch.
+    if: github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
+    # Reads the repository and the Pages site; runs install scripts, so writes nothing.
+    permissions:
+      contents: read
+      pages: read
     env:
       PORTAL_BASE: @BASE@
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@@CHECKOUT@
 
       - name: Configure Pages
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@@CONFIGURE_PAGES@
 
       - name: Check the portal's base against the Pages address
         env:
@@ -100,7 +120,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@@SETUP_PYTHON@
         with:
           python-version: "3.12"
 
@@ -113,7 +133,7 @@ jobs:
       - name: Generate the portal
         run: @GENERATE@
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@@SETUP_NODE@
         with:
           node-version: @NODE@
 
@@ -125,13 +145,17 @@ jobs:
         run: npm run docs:build
         working-directory: @SITE_DIR@
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@@UPLOAD_PAGES_ARTIFACT@
         with:
           path: @DIST@
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # The only job that publishes: Pages write, and the OIDC token deploy-pages presents.
+    permissions:
+      pages: write
+      id-token: write
     concurrency:
       group: pages
       cancel-in-progress: false
@@ -141,8 +165,28 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@@DEPLOY_PAGES@
 """
+
+#: Each action the workflow uses, pinned by the full commit of a release; the
+#: release is written beside it. Majors are the ones this repository's own
+#: workflows run. Each commit was read with ``git ls-remote`` from the action's
+#: repository on 2026-10-01, and the tags are lightweight, so each names the
+#: commit itself.
+_PINS = {
+    "@CHECKOUT@": ("fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09", "v5.1.0"),
+    "@CONFIGURE_PAGES@": ("983d7736d9b0ae728b81ab479565c72886d7745b", "v5.0.0"),
+    "@SETUP_PYTHON@": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6.3.0"),
+    "@SETUP_NODE@": ("a0853c24544627f65ddf259abe73b1d18a591444", "v5.0.0"),
+    "@UPLOAD_PAGES_ARTIFACT@": ("56afc609e74202658d3ffba0e8f6dda462b719fa", "v3.0.1"),
+    "@DEPLOY_PAGES@": ("d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e", "v4.0.5"),
+}
+
+#: What Actions evaluates wherever it stands in a workflow, quoted or not.
+_EXPRESSION = "${{"
+
+#: The prefix ``git symbolic-ref --short`` gives a branch of the ``origin`` remote.
+_ORIGIN_PREFIX = "origin/"
 
 
 class PagesWorkflowError(ValueError):
@@ -153,7 +197,9 @@ class PagesWorkflowError(ValueError):
 class PagesWorkflowReport:
     """What one run did with the workflow, and what the workflow it wanted holds.
 
-    ``reason`` and ``remediation`` are set only when the file there was kept.
+    ``branch`` is the branch the push trigger names, ``""`` when git recorded
+    no default branch. ``reason`` and ``remediation`` are set only when the file
+    there was kept.
     """
 
     path: str
@@ -161,6 +207,7 @@ class PagesWorkflowReport:
     base: str
     node_major: str
     site_dir: str
+    branch: str = ""
     reason: str = ""
     remediation: str = ""
 
@@ -193,18 +240,66 @@ def site_dir_of(project_root: Path, out_dir: Path) -> str:
             f"--pages-workflow needs the portal inside the project, and --out is {out_dir}; "
             f"name a directory inside the project, such as {root / 'site'}"
         )
-    return out.relative_to(root).as_posix()
+    site_dir = out.relative_to(root).as_posix()
+    _refuse_expression(site_dir, "--out")
+    return site_dir
 
 
-def render_pages_workflow(*, base: str, site_dir: str, node_major: str, version: str) -> str:
+def default_branch_of(project_root: Path) -> str:
+    """The default branch git records for the project's ``origin`` remote, or ``""``.
+
+    Read from ``origin/HEAD``, which a clone sets and ``git remote set-head
+    origin --auto`` refreshes. ``""`` outside git, without the ref, or when it
+    names no branch of ``origin``: the workflow then names no branch rather than
+    one the project did not choose.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],  # noqa: S607 - the git on PATH, as every git read here
+            cwd=project_root,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError as exc:
+        logger.debug("git is not available to read the default branch: %s", exc)
+        return ""
+    name = result.stdout.strip() if result.returncode == 0 else ""
+    return name.removeprefix(_ORIGIN_PREFIX) if name.startswith(_ORIGIN_PREFIX) else ""
+
+
+def _refuse_expression(value: str, named: str) -> None:
+    """Raise :class:`PagesWorkflowError` when *value* holds an Actions expression."""
+    if _EXPRESSION in value:
+        raise PagesWorkflowError(
+            f"{named} holds `{_EXPRESSION}`, which GitHub Actions would evaluate as an "
+            "expression in the workflow; write it without that sequence"
+        )
+
+
+def render_pages_workflow(
+    *, base: str, site_dir: str, node_major: str, version: str, branch: str = ""
+) -> str:
     """The workflow's body, without its marker line.
 
     Every value reaches the YAML as a JSON string, which YAML reads as a
     double-quoted scalar, so a path holding `#` or `: ` cannot change the file's
-    structure; the ones a shell also reads are quoted for the shell first.
+    structure; the ones a shell also reads are quoted for the shell first. A
+    value holding ``${{`` is refused, because Actions evaluates it however it is
+    quoted. *branch* is the one the push trigger names; ``""`` names none.
     """
+    for value, named in (
+        (base, "site.base"),
+        (site_dir, "--out"),
+        (branch, "the default branch"),
+        (node_major, "engines.node"),
+        (version, "the beadloom version"),
+    ):
+        _refuse_expression(value, named)
     install = f'python -m pip install "beadloom[languages]=={version}"'
     values = {
+        "@BRANCHES@": f"\n    branches: [{json.dumps(branch)}]" if branch else "",
         "@BASE@": json.dumps(base),
         "@INSTALL@": json.dumps(install),
         "@GENERATE@": json.dumps(f"beadloom docs site --out {shlex.quote(site_dir)}"),
@@ -212,6 +307,7 @@ def render_pages_workflow(*, base: str, site_dir: str, node_major: str, version:
         "@SITE_DIR@": json.dumps(site_dir),
         "@DIST@": json.dumps(f"{site_dir}/.vitepress/dist"),
     }
+    values.update({key: f"{sha} # {release}" for key, (sha, release) in _PINS.items()})
     body = _TEMPLATE
     for placeholder, value in values.items():
         body = body.replace(placeholder, value)
@@ -234,6 +330,7 @@ def write_pages_workflow(
     base: str,
     version: str,
     source: Traversable | Path | None = None,
+    branch: str | None = None,
 ) -> PagesWorkflowReport:
     """Write the Pages workflow for the portal at *out_dir*, unless a file there is not ours.
 
@@ -243,11 +340,14 @@ def write_pages_workflow(
         base: The base path the portal is built for, from the ``site:`` block.
         version: The installed beadloom version, which the workflow installs.
         source: Replaces the installed package's scaffold, for a test.
+        branch: The branch the push trigger names; read with
+            :func:`default_branch_of` when not given.
     """
     site_dir = site_dir_of(project_root, out_dir)
     node_major = _node_major_of_scaffold(source)
+    named = default_branch_of(project_root) if branch is None else branch
     body = render_pages_workflow(
-        base=base, site_dir=site_dir, node_major=node_major, version=version
+        base=base, site_dir=site_dir, node_major=node_major, version=version, branch=named
     )
     expected = f"# {marker_line(body, version, _NOTE)}\n{body}"
     rel = PAGES_WORKFLOW_PATH.as_posix()
@@ -264,6 +364,7 @@ def write_pages_workflow(
         base=base,
         node_major=node_major,
         site_dir=site_dir,
+        branch=named,
         reason=placed.reason,
         remediation=remediation,
     )

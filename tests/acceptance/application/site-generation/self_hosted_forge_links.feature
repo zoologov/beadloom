@@ -58,3 +58,32 @@ Feature: a self-hosted forge links sources, files and images by the kind the pro
     When the project is initialised and its site is generated
     Then the site is refused naming "site.forges[git.acme.example]" and "gitlab-ce"
     And config-check refuses the project naming "site.forges[git.acme.example]"
+
+  # beadloom-ujzb.20 (R2 finding F9). The declared address was used as written,
+  # so one copied from the address bar built `orders//-/tree/...` and the clone
+  # address built `orders.git/-/tree/...`. Both name the same repository and are
+  # read as the address without them; the host is read in lower case.
+  @bead:beadloom-ujzb.20
+  Scenario Outline: an address copied with a trailing slash or .git links like the address itself
+    Given a JavaScript service whose README links its licence and draws its flow diagram
+    And the project is committed to git with the origin "ssh://git@git.acme.example:2222/platform/team/orders.git"
+    And the project declares its repository "<written>" on the forge "gitlab"
+    When the project is initialised and its site is generated
+    Then every node's source links to "https://git.acme.example/platform/team/orders/-/tree/{commit}/<source>"
+    And the About page links "license" to "https://git.acme.example/platform/team/orders/-/blob/{commit}/LICENSE"
+
+    Examples:
+      | written                                                  |
+      | https://git.acme.example/platform/team/orders/           |
+      | https://git.acme.example/platform/team/orders.git        |
+      | https://Git.Acme.Example/platform/team/orders.git/       |
+
+  # A page inside the repository is no spelling of it: every link would be
+  # appended to that page, and no reading recovers the repository on every forge.
+  @bead:beadloom-ujzb.20
+  Scenario: an address that runs past the repository into a page of it is refused by name
+    Given a JavaScript service whose README links its licence and draws its flow diagram
+    And the project declares its repository "https://git.acme.example/platform/team/orders/-/tree/main" on the forge "gitlab"
+    When the project is initialised and its site is generated
+    Then the site is refused naming "site.repo_url" and "past the repository"
+    And config-check refuses the project naming "site.repo_url"

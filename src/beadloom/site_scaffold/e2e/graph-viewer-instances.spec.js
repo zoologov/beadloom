@@ -1,4 +1,4 @@
-// Two viewers on one page do not share an id or a test handle (BDL-076 R1 finding n3).
+// Two viewers on one page do not share an id or a test handle.
 //
 // The panel's id was the constant "bl-viewer-panel", so two viewers on one page
 // would give two elements one id and the second toolbar's "Panel" button would

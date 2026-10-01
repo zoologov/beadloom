@@ -12,7 +12,7 @@
 //
 // A contract edge of the landscape is drawn by its look — healthy, drifting,
 // broken or neutral — rather than by its kind, because on that map the health
-// of a contract is what the reader looks for (BDL-076 A4).
+// of a contract is what the reader looks for.
 
 /** The containment kind: drawn as nesting, never as a line. */
 export const CONTAINMENT_KIND = "part_of";

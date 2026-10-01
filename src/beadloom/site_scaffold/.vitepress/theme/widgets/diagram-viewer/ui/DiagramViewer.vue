@@ -13,8 +13,8 @@
 // `vitepress-plugin-mermaid` renders a diagram again whenever an attribute of
 // `<html>` changes (the theme switch among them), replacing the SVG inside the
 // same container. The mark of an enhanced diagram is therefore on the SVG, not
-// on its container, and a mutation observer enhances each new SVG; before
-// BDL-076 A4 the mark sat on the container, so a re-rendered diagram lost its
+// on its container, and a mutation observer enhances each new SVG; in an
+// earlier version the mark sat on the container, so a re-rendered diagram lost its
 // pan, its controls and its base-aware click targets.
 
 import { onMounted, onBeforeUnmount, nextTick, watch } from "vue";

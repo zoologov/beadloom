@@ -1,7 +1,7 @@
 // beadloom:component=site-app
 // The theme: the VitePress default theme, extended by the site's pages and widgets.
 //
-// Feature-Sliced Design (BDL-076). This is the `app` layer: it wires the slices
+// Feature-Sliced Design. This is the `app` layer: it wires the slices
 // below it into VitePress and holds no behaviour of its own. It mounts the
 // Mermaid diagram viewer on every page and registers, by name, the components
 // the generated Markdown mounts: the architecture and landscape pages and the
