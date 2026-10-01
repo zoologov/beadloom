@@ -148,7 +148,7 @@ test("the landscape's impact says it is the graph's view and offers the commands
   await expect(page.getByTestId("impact-summary")).toContainText(`beadloom why 'svc report'\\''s'`);
 });
 
-test("on this repository's own landscape a change to a producer reaches its consumer", async ({
+test("on the landscape the portal serves, a change to a producer reaches its consumer", async ({
   page,
   request,
 }) => {

@@ -9,7 +9,7 @@
 // show none of the declared names.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture } from "./support/viewer.js";
+import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -98,4 +98,43 @@ test("a file that declares no layer names falls back to the nodes' tokens", asyn
     .locator("[data-legend-layer]")
     .evaluateAll((items) => items.map((item) => item.dataset.legendLayer));
   expect(legend).toEqual([...tokenOfRank].sort(([a], [b]) => a - b).map(([, token]) => token));
+});
+
+// The colours come from the project's declared layers, by position, not from a
+// palette keyed to one project's layer names: before slice 2 the viewer coloured
+// four names of its own and drew every other project's layers in the grey of a
+// node in no layer. Read on the portal as built, without renaming anything.
+test("each declared layer is drawn in a colour of its own, apart from a node in no layer", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  expect(data.layers.length).toBeGreaterThan(1);
+
+  await openArchitecture(page);
+  const borders = new Map(
+    (await viewer(page, "colours"))
+      .filter((entry) => entry.property === "border-color")
+      .map((entry) => [entry.element, entry.value.replace(/\s+/g, "")])
+  );
+  // A status is drawn over the layer's colour, so a node with one says nothing here.
+  const withStatus = new Set(Object.keys(await viewer(page, "statusLooks")));
+  const drawn = data.nodes.filter((node) => borders.has(node.id) && !withStatus.has(node.id));
+  const declaredRanks = new Set(data.layers.map((layer) => layer.rank));
+  const coloursOfRank = new Map();
+  for (const node of drawn.filter((n) => declaredRanks.has(n.layer_rank))) {
+    if (!coloursOfRank.has(node.layer_rank)) coloursOfRank.set(node.layer_rank, new Set());
+    coloursOfRank.get(node.layer_rank).add(borders.get(node.id));
+  }
+  const unlayered = new Set(
+    drawn.filter((n) => typeof n.layer_rank !== "number").map((n) => borders.get(n.id))
+  );
+  // The tones repeat after five layers, so distinctness is asked of the top five.
+  const topRanks = [...coloursOfRank.keys()].sort((a, b) => a - b).slice(0, 5);
+  const colourOf = (rank) => [...coloursOfRank.get(rank)].join(" | ");
+
+  expect(topRanks.length).toBeGreaterThan(1);
+  expect([...coloursOfRank.values()].every((colours) => colours.size === 1)).toBe(true);
+  expect(new Set(topRanks.map(colourOf)).size).toBe(topRanks.length);
+  expect(topRanks.filter((rank) => unlayered.has(colourOf(rank)))).toEqual([]);
 });

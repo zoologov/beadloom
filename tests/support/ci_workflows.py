@@ -54,8 +54,8 @@ ADVISORY_JOBS: dict[str, str] = {
     ),
     "site-adopters": (
         "the adopter fixtures on every claimed stack and their browser tests (BDL-076 B3) "
-        "build six portals and hold strict xfails for three open init defects "
-        "(beadloom-ujzb.14, .15, .16); advisory until it has run clean on ten pull "
+        "build six portals, about eight minutes on a warm npm cache; advisory "
+        "until it has run clean on ten pull "
         "requests; the exit is to add 'site-adopters' to DEFAULT_STATUS_CHECK_CONTEXTS "
         "in the change that removes this entry"
     ),
