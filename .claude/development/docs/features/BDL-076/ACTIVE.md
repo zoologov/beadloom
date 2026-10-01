@@ -13,6 +13,8 @@
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
 
+**`beadloom-ujzb.19` closed (2026-10-01):** `63d5b96c` — F2: the JVM and Swift readers claim only the folders they read, and scan paths are the unclaimed folders, so a Python or TypeScript sibling keeps its node (both reviewer reproductions rerun). F6: `graph/jvm_packages.py` maps packages from `package` declarations, in init and in `reindex` (`resolve_jvm_import`, old dotted reading as fallback). F5: no `/site/` line when `site/` already holds files, with a message naming the fix. F7: an Xcode project is reported ("Not read: N .swift files outside any Package.swift target"), not guessed. Six fixtures and this repository byte-identical. Filed `beadloom-0e3m` (P2, `init --project .` writes a root node with an empty ref). README's Swift claim should say SwiftPM only → W2.
+
 **R2 closed (2026-10-01):** `beadloom-fht7` — ISSUES, 2 critical, 4 major. F1: a code span in link text is never rebased, `docs:build` fails on a dead link. F2 (regression): `init` drops the whole top-level folder holding a JVM module or Swift package, so a Python or TypeScript sibling loses its node. F3: the hand-written code-region reader disagrees with markdown-it (indented fences, code in list items and quotes, front matter), and `{{ }}` reaches Vue. F4: a `<` inside a raw HTML block, or `@click`, still reaches Vue. F5: `init` ignores `/site/` even when it holds tracked source. F6: Kotlin's recommended layout (root package omitted) gives no edge. Minor: Xcode layout silent; `rule-engine` in shipped specs; `repo_url` not normalised; the Pages workflow's permissions, triggers and pins; swallowed import errors. Sound: no credential survives, workflow values quoted, scaffold rules, Go via `go.mod`/`go.work`, Maven multi-module, skips through one helper, required checks unchanged. The reviewer noted my steer and the pre-review note on the bead partly defeated the withholding.
 
 **`beadloom-ujzb.18` closed (2026-10-01):** `aa1c0991` — `docs site` strips annotation-only comment lines (`beadloom:<key>=<ref>`) from what it writes; the hash describes the written body, so second-run, hand-edit and upgrade rules hold; our source stays annotated and our graph identical (709 edges, 281 scaffold symbols). 87 lines no longer ship. Left in shipped comments: `rule-engine` preferred as a subject in three specs (with a shape fallback), bead ids and `BDL-076` references, "this repository" prose — for R2 to judge. Filed `beadloom-m6eb` (P3): a mid-comment `beadloom:` is parsed as an annotation.
@@ -132,7 +134,7 @@
 | `beadloom-ujzb.16` | fix | ✓ done | Swift: init finds nothing |
 | `beadloom-ujzb.17` | fix | ✓ done | the shipped browser suite on an adopter's portal |
 | `beadloom-ujzb.18` | chore | ✓ done | no node ids of ours in the shipped scaffold |
-| `beadloom-ujzb.19` | fix | in progress | R2: init findings F2, F5, F6, F7 |
+| `beadloom-ujzb.19` | fix | ✓ done | R2: init findings F2, F5, F6, F7 |
 | `beadloom-ujzb.20` | fix | in progress | R2: site findings F8–F11 |
 | `beadloom-ujzb.21` | fix | ready | R2: project text F1, F3, F4 |
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
