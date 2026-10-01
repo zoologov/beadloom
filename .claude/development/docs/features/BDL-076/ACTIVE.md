@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-ujzb.18` (no node ids of ours in the shipped scaffold); then R2, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-fht7` (R2, review of slice 2, the authors' accounts withheld); then W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**`beadloom-ujzb.18` closed (2026-10-01):** `aa1c0991` — `docs site` strips annotation-only comment lines (`beadloom:<key>=<ref>`) from what it writes; the hash describes the written body, so second-run, hand-edit and upgrade rules hold; our source stays annotated and our graph identical (709 edges, 281 scaffold symbols). 87 lines no longer ship. Left in shipped comments: `rule-engine` preferred as a subject in three specs (with a shape fallback), bead ids and `BDL-076` references, "this repository" prose — for R2 to judge. Filed `beadloom-m6eb` (P3): a mid-comment `beadloom:` is parsed as an annotation.
 
 **`beadloom-ujzb.17` closed (2026-10-01):** `f3ba0914` — the shipped browser suite chooses its subjects from the served data, and a case whose precondition the graph lacks skips naming the missing shape (`requireShape`); with `BEADLOOM_E2E_NO_SKIP=1` (set in `site-e2e`) a skip fails. Our portal 101 of 101, none skipped; the six fixtures rc 0 (python 75 passed / 26 skipped, go 88/13, typescript 94/7, java 78/23, kotlin 74/27, swift 74/27). Repository-side exclusion list deleted; four broken detections proven to skip without the variable and fail with it. `site-adopters` runs the suite on all six (≈16 min locally; timeout 60 min). Filed `beadloom-76mk` (P2): flat Python tests (`tests/test_*.py`) bind to no node after `init`.
 
@@ -127,8 +129,8 @@
 | `beadloom-ujzb.15` | fix | ✓ done | Java/Kotlin: source-set nodes, no edges |
 | `beadloom-ujzb.16` | fix | ✓ done | Swift: init finds nothing |
 | `beadloom-ujzb.17` | fix | ✓ done | the shipped browser suite on an adopter's portal |
-| `beadloom-ujzb.18` | chore | in progress | no node ids of ours in the shipped scaffold |
+| `beadloom-ujzb.18` | chore | ✓ done | no node ids of ours in the shipped scaffold |
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
-| `beadloom-fht7` | R2 review | blocked | review slice 2 |
+| `beadloom-fht7` | R2 review | in progress | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
 | `beadloom-la3t` | P2 PR 2 | blocked | owner's look; PR 2 |
