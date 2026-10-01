@@ -266,6 +266,9 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
         preset_name = bs_result.get("preset", "monolith")
         console.print(f"  Preset: {escape(str(preset_name))}")
         console.print(f"  Generated {len(nodes)} nodes, {len(edges)} edges")
+        unread = bs_result.get("unread_swift")
+        if unread is not None and unread.sentence():
+            console.print(f"  {escape(unread.sentence())}", soft_wrap=True)
 
         # Interactive review. The graph is on disk already: the answers below
         # decide what happens NEXT, not whether anything was written.

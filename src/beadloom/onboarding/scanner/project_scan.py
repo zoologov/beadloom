@@ -20,6 +20,7 @@ from beadloom.onboarding.scanner.constants import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
     from beadloom.onboarding.scanner.types import ClusterEntry, ScanResult
@@ -132,9 +133,56 @@ def _cluster_by_dirs(
     return clusters
 
 
+def is_claimed(path: str, claimed: Collection[str]) -> bool:
+    """Whether the project-relative *path* is one of the *claimed* folders or lies below one."""
+    return any(path == folder or path.startswith(f"{folder}/") for folder in claimed)
+
+
+def _holds_code(folder: Path) -> bool:
+    """Whether *folder* holds a code file the project scan counts."""
+    return any(
+        f.is_file() and f.suffix in _CODE_EXTENSIONS and not _is_in_skip_dir(f, folder)
+        for f in folder.rglob("*")
+    )
+
+
+def unclaimed_folders(
+    project_root: Path, folders: list[str], claimed: Collection[str]
+) -> list[str]:
+    """*folders* without the *claimed* ones, as scan paths that never overlap.
+
+    A folder with no claimed folder below it is kept whole. One that holds a
+    claimed folder is replaced by its subfolders that hold code, each read the
+    same way, so a Python service beside a Maven module in ``services/`` is
+    scanned and the module — whose production roots are scan paths of their
+    own, and whose test tree must stay out — is not scanned a second time. A
+    code file lying directly in such a folder, beside the module, is in no scan
+    path: a scan path is a folder, and that folder would hold the module too.
+    """
+    kept: list[str] = []
+    for folder in folders:
+        if is_claimed(folder, claimed):
+            continue
+        if not any(other.startswith(f"{folder}/") for other in claimed):
+            kept.append(folder)
+            continue
+        subfolders = [
+            f"{folder}/{child.name}"
+            for child in sorted((project_root / folder).iterdir())
+            if child.is_dir()
+            and not child.name.startswith(".")
+            and child.name not in _RECURSIVE_SKIP
+            and _holds_code(child)
+        ]
+        kept.extend(unclaimed_folders(project_root, subfolders, claimed))
+    return kept
+
+
 def _cluster_with_children(
     project_root: Path,
     source_dirs: list[str] | None = None,
+    *,
+    claimed: Collection[str] = (),
 ) -> dict[str, ClusterEntry]:
     """Two-level directory scan for preset-aware bootstrap.
 
@@ -145,12 +193,19 @@ def _cluster_with_children(
     source_dirs:
         Discovered source directories.  When *None*, falls back to
         ``_SOURCE_DIRS`` for backwards compatibility.
+    claimed:
+        Project-relative folders another reading accounts for (a JVM module, a
+        Swift package or target). None of them, and no file below one, is part
+        of a cluster here; their siblings are.
 
     Returns dict of dir_name -> {files, children, source_dir} where
     children is a dict of child_name -> {files}.
     """
     result: dict[str, ClusterEntry] = {}
     dirs_to_scan = source_dirs if source_dirs is not None else list(_SOURCE_DIRS)
+
+    def _rel(path: Path) -> str:
+        return path.relative_to(project_root).as_posix()
 
     for src_dir_name in dirs_to_scan:
         src_dir = project_root / src_dir_name
@@ -161,6 +216,8 @@ def _cluster_with_children(
             if not sub.is_dir() or sub.name.startswith("_"):
                 continue
             if sub.name in _RECURSIVE_SKIP or sub.name in _CLUSTER_SKIP:
+                continue
+            if claimed and is_claimed(_rel(sub), claimed):
                 continue
 
             files: list[str] = []
@@ -178,6 +235,7 @@ def _cluster_with_children(
                             f.is_file()
                             and f.suffix in _CODE_EXTENSIONS
                             and not _is_in_skip_dir(f, item)
+                            and not (claimed and is_claimed(_rel(f), claimed))
                         ):
                             child_files.append(str(f.relative_to(project_root)))
                     if child_files:

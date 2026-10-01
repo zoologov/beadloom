@@ -101,12 +101,14 @@ class SwiftLayout:
         return (SWIFT_EXTENSION,) if self.production else ()
 
     @property
-    def territory(self) -> frozenset[str]:
-        """The top folders the layout accounts for, taken out of the directory clustering."""
+    def claimed(self) -> frozenset[str]:
+        """The folders the layout accounts for: a package below the root, else a target's.
+
+        Only these leave the directory reading, so a TypeScript app beside a Swift
+        package in ``apps/`` keeps its node (R2 finding 2).
+        """
         return frozenset(
-            PurePosixPath(root.package or root.directory).parts[0]
-            for root in self.roots
-            if root.package or root.directory
+            root.package or root.directory for root in self.roots if root.package or root.directory
         )
 
     @property
@@ -178,6 +180,89 @@ def read_swift_layout(project_root: Path) -> SwiftLayout:
         for root in _roots(project_root, package)
     ]
     return SwiftLayout(tuple(roots), packages)
+
+
+# --- What is not read ---------------------------------------------------------
+
+#: Folders of other people's Swift or of build output, at any depth.
+_NOT_THE_PROJECTS = frozenset({"Pods", "Carthage", "DerivedData"})
+#: The bundle an Xcode project is, and its workspace.
+_XCODE_SUFFIXES = (".xcodeproj", ".xcworkspace")
+#: A manifest, or a version-specific one (``Package@swift-5.9.swift``): no target's code.
+_MANIFEST_NAMES = ("Package.swift", "Package@swift")
+
+
+@dataclass(frozen=True)
+class UnreadSwift:
+    """The Swift files no read ``Package.swift`` target holds, and the Xcode projects found.
+
+    R2 finding 7 (``beadloom-fht7``): an Xcode project with no ``Package.swift`` got
+    an empty graph and ``languages: [python]`` with no word about its Swift. ``init``
+    does not read it — an Xcode target's files are listed in ``project.pbxproj``, not
+    by folder, and the files of one target see each other without an import, so a
+    folder node guessed from the tree would carry no edge by construction — and
+    this is what it says it saw instead.
+    """
+
+    files: tuple[str, ...] = ()
+    xcode_projects: tuple[str, ...] = ()
+
+    def sentence(self) -> str:
+        """What ``init`` says about these files; ``""`` when there are none."""
+        if not self.files:
+            return ""
+        count = len(self.files)
+        noun = ".swift file" if count == 1 else ".swift files"
+        xcode = f" (Xcode: {', '.join(self.xcode_projects)})" if self.xcode_projects else ""
+        return (
+            f"Not read: {count} {noun} outside any Package.swift target{xcode} - init "
+            "reads Swift through Package.swift only, so they are in no node and no scan path"
+        )
+
+
+def _is_manifest(name: str) -> bool:
+    return name == _MANIFEST_NAMES[0] or name.startswith(_MANIFEST_NAMES[1])
+
+
+def _walked(folder: Path, *, top_level: bool) -> bool:
+    name = folder.name
+    if name.startswith(".") or name in _RECURSIVE_SKIP or name in _NOT_THE_PROJECTS:
+        return False
+    return not (name in _CLUSTER_SKIP or (top_level and name in _SKIP_DIRS))
+
+
+def unread_swift(project_root: Path, layout: SwiftLayout) -> UnreadSwift:
+    """Every Swift file of *project_root* outside *layout*'s targets, and each Xcode project.
+
+    The tree is walked as the project scan reads it: hidden folders, build output
+    and other people's code (``Pods``, ``Carthage``, ``DerivedData``) are skipped at
+    any depth, the scan's skipped top folders (``tests``, ``docs`` ...) at the top.
+    """
+    targets = [root.directory for root in layout.roots]
+    files: list[str] = []
+    xcode: list[str] = []
+    pending = [project_root]
+    while pending:
+        folder = pending.pop()
+        for child in sorted(folder.iterdir()):
+            relative = child.relative_to(project_root).as_posix()
+            if child.is_dir():
+                if child.name.endswith(_XCODE_SUFFIXES):
+                    xcode.append(relative)
+                elif not child.is_symlink() and _walked(child, top_level=folder == project_root):
+                    pending.append(child)
+            elif (
+                child.suffix == SWIFT_EXTENSION
+                and not _is_manifest(child.name)
+                and not _in_a_target(relative, targets)
+            ):
+                files.append(relative)
+    return UnreadSwift(tuple(sorted(files)), tuple(sorted(xcode)))
+
+
+def _in_a_target(path: str, targets: list[str]) -> bool:
+    """Whether *path* lies in one of the *targets*' folders (``""``: the package's own)."""
+    return any(not target or path.startswith(f"{target}/") for target in targets)
 
 
 # --- Clusters ----------------------------------------------------------------

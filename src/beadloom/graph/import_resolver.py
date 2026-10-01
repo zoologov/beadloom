@@ -15,6 +15,7 @@ from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
 from beadloom.graph.go_modules import GoModules
+from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.infrastructure.repository import get_owning_ref_id
@@ -1081,6 +1082,28 @@ def resolve_swift_import(
     return get_owning_ref_id(conn, f"{directory}/")
 
 
+def resolve_jvm_import(
+    import_path: str,
+    file_path: Path,
+    conn: sqlite3.Connection,
+    scan_paths: list[str],
+    packages: JvmPackages,
+) -> str | None:
+    """Map a Java or Kotlin *import_path* to the node that owns the package it names.
+
+    The package is the one the project's files DECLARE (:mod:`.jvm_packages`, R2
+    finding 6), and its owner is decided by the one ownership rule, applied to
+    the package's folder. Kotlin's recommended layout omits the common root
+    package from the folders, so the dotted path names no folder there; it is
+    still the reading for an import whose package no file declares, which keeps
+    every import that resolved before resolving the same way.
+    """
+    directory = packages.directory(import_path)
+    if directory is None:
+        return resolve_import_to_node(import_path, file_path, conn, scan_paths=scan_paths)
+    return get_owning_ref_id(conn, f"{directory}/")
+
+
 #: Extensions whose files write their imports in one language, mapped to one
 #: representative extension of it. An extension not listed is its own language.
 _IMPORT_LANGUAGE: dict[str, str] = {
@@ -1275,11 +1298,13 @@ def _index_one_file(
     scan_paths: list[str],
     go_modules: GoModules,
     swift_packages: SwiftPackages,
+    jvm_packages: JvmPackages,
 ) -> int:
     """Index one source file's imports into ``code_imports``; return the count.
 
     *go_modules* is read only when the file is Go, *swift_packages* only when it
-    is Swift, and each only once per run.
+    is Swift, and each only once per run. *jvm_packages* holds the packages the
+    project's Java and Kotlin files declare, read once per run.
     """
     imports = extract_imports(file_path)
     if not imports:
@@ -1305,6 +1330,10 @@ def _index_one_file(
         ):
             resolved = resolve_swift_import(
                 imp.import_path, relative.as_posix(), project_root, conn, swift_packages
+            )
+        elif file_path.suffix in JVM_EXTENSIONS and jvm_packages:
+            resolved = resolve_jvm_import(
+                imp.import_path, file_path, conn, scan_paths, jvm_packages
             )
         elif is_ts and is_relative_specifier(imp.import_path):
             resolved = resolve_relative_import(
@@ -1342,6 +1371,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     languages = scan_path_languages(project_root, scan_paths, files)
     go_modules = GoModules(project_root)
     swift_packages = SwiftPackages(project_root)
+    jvm_packages = read_jvm_packages(project_root, files)
     total = sum(
         _index_one_file(
             file_path,
@@ -1350,6 +1380,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
             _scan_paths_for(file_path.suffix, scan_paths, languages),
             go_modules,
             swift_packages,
+            jvm_packages,
         )
         for file_path in files
     )
@@ -1386,10 +1417,17 @@ def reindex_file_imports(
         conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
 
     scan_paths = resolve_scan_paths(project_root)
-    languages = scan_path_languages(project_root, scan_paths, _collect_source_files(project_root))
+    files = _collect_source_files(project_root)
+    languages = scan_path_languages(project_root, scan_paths, files)
     extensions = _supported_extensions()
     go_modules = GoModules(project_root)
     swift_packages = SwiftPackages(project_root)
+    # Every JVM file's declaration is read only when a touched file is Java or Kotlin.
+    jvm_packages = (
+        read_jvm_packages(project_root, files)
+        if any(posixpath.splitext(path)[1] in JVM_EXTENSIONS for path in touched)
+        else JvmPackages(())
+    )
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
@@ -1402,6 +1440,7 @@ def reindex_file_imports(
             _scan_paths_for(file_path.suffix, scan_paths, languages),
             go_modules,
             swift_packages,
+            jvm_packages,
         )
 
     conn.commit()

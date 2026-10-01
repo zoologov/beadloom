@@ -179,6 +179,121 @@ class TestInitWritesOneLine:
         assert not _git_ignores(repo, "site/index.md")
 
 
+class TestASiteFolderHoldingTheProjectsFiles:
+    """R2 finding 5: a ``site/`` that already holds files is the project's, not the portal's.
+
+    Appending ``/site/`` there hid every new file under it from ``git status``.
+    """
+
+    def _commit(self, repo: Path) -> None:
+        for args in (["add", "-A"], ["commit", "-q", "-m", "site"]):
+            subprocess.run(  # noqa: S603
+                ["git", "-c", "user.name=t", "-c", "user.email=t@e.invalid", *args],  # noqa: S607
+                cwd=repo,
+                check=True,
+            )
+
+    def test_tracked_files_leave_the_ignore_file_unwritten(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / "site").mkdir()
+        (repo / "site" / "index.html").write_text("<h1>Acme</h1>\n", encoding="utf-8")
+        (repo / "site" / "app.js").write_text("go()\n", encoding="utf-8")
+        self._commit(repo)
+
+        result = ensure_portal_ignored(repo)
+
+        assert not (repo / IGNORE_RELPATH).exists()
+        assert result.outcome == "occupied"
+        assert "2 files tracked by git" in result.reason
+        assert "--out" in result.reason
+        assert not _git_ignores(repo, "site/about.html")
+
+    def test_an_existing_ignore_file_is_left_byte_for_byte(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / IGNORE_RELPATH).write_bytes(b"/dist/\n")
+        (repo / "site").mkdir()
+        (repo / "site" / "index.html").write_text("x\n", encoding="utf-8")
+        self._commit(repo)
+
+        result = ensure_portal_ignored(repo)
+
+        assert (repo / IGNORE_RELPATH).read_bytes() == b"/dist/\n"
+        assert result.outcome == "occupied"
+        assert "1 file tracked by git" in result.reason
+
+    def test_files_not_yet_committed_leave_it_unwritten_too(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / "site" / "pages").mkdir(parents=True)
+        (repo / "site" / "pages" / "index.html").write_text("x\n", encoding="utf-8")
+
+        result = ensure_portal_ignored(repo)
+
+        assert not (repo / IGNORE_RELPATH).exists()
+        assert result.outcome == "occupied"
+        assert "1 file, none tracked by git" in result.reason
+
+    def test_where_git_cannot_list_the_files_the_ones_on_disk_decide(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()  # a working tree git itself cannot read
+        (tmp_path / "site").mkdir()
+        (tmp_path / "site" / "index.html").write_text("x\n", encoding="utf-8")
+
+        result = ensure_portal_ignored(tmp_path)
+
+        assert not (tmp_path / IGNORE_RELPATH).exists()
+        assert result.outcome == "occupied"
+        assert "1 file, none tracked by git" in result.reason
+
+    def test_an_empty_site_folder_is_the_portals_to_take(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / "site").mkdir()
+
+        result = ensure_portal_ignored(repo)
+
+        assert result.outcome == "created"
+        assert (repo / IGNORE_RELPATH).read_bytes() == b"/site/\n"
+
+    def test_a_line_the_project_wrote_still_decides_first(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / IGNORE_RELPATH).write_bytes(b"site/\n")
+        (repo / "site").mkdir()
+        (repo / "site" / "index.html").write_text("x\n", encoding="utf-8")
+
+        result = ensure_portal_ignored(repo)
+
+        assert (result.outcome, result.covered_by) == ("covered", "site/")
+
+    def test_tracked_files_deleted_from_the_working_tree_still_count(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        (repo / "site").mkdir()
+        (repo / "site" / "index.html").write_text("x\n", encoding="utf-8")
+        self._commit(repo)
+        (repo / "site" / "index.html").unlink()
+
+        result = ensure_portal_ignored(repo)
+
+        assert result.outcome == "occupied"
+        assert "1 file tracked by git" in result.reason
+
+    def test_init_says_why_and_what_to_do(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        repo = _git_repo(tmp_path)
+        (repo / "src").mkdir()
+        (repo / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+        (repo / "site").mkdir()
+        (repo / "site" / "index.html").write_text("x\n", encoding="utf-8")
+        self._commit(repo)
+
+        result = CliRunner().invoke(main, ["init", "--yes", "--project", str(repo)])
+
+        assert result.exit_code == 0, result.output
+        said = "Not ignored: /site/ - site/ already holds 1 file tracked by git"
+        assert said in result.output
+        assert "beadloom docs site --out" in result.output
+
+
 class TestTheWorkingSetBlockKeepsTheFilesLineEndings:
     def test_a_windows_ignore_file_stays_windows(self, tmp_path: Path) -> None:
         repo = _git_repo(tmp_path)

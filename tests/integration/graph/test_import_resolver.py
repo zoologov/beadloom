@@ -426,6 +426,66 @@ class TestJavaAndKotlinShareOnePackageNamespace:
         assert _depends_on(c) == {("legacy", "fresh"), ("fresh", "legacy")}
 
 
+#: Kotlin's recommended layout: the root package `org.example` omitted from the folders
+#: (R2 finding 6). The package path names no folder; only the declarations do.
+_KOTLIN_CONVENTION: dict[str, str] = {
+    "src/main/kotlin/app/Main.kt": (
+        "package org.example.app\n\n"
+        "import org.example.network.Socket\n"
+        "import org.example.storage.*\n"
+        "import io.ktor.server.routing.get\n\n"
+        "fun main() { Socket() }\n"
+    ),
+    "src/main/kotlin/network/Socket.kt": "package org.example.network\n\nclass Socket\n",
+    "src/main/kotlin/storage/Store.kt": "package org.example.storage\n\nclass Store\n",
+}
+
+
+@pytest.mark.skipif(not _jvm_available(), reason="tree-sitter-java or -kotlin not installed")
+class TestAKotlinImportIsReadByItsDeclaredPackage:
+    """R2 finding 6: reindex reads a JVM import's package from the files' declarations.
+
+    The dotted path was read as a folder under the scan paths, and on Kotlin's
+    recommended layout no such folder exists, so no import resolved.
+    """
+
+    def _project(self, root: Path) -> sqlite3.Connection:
+        c = open_db(root / "index.db")
+        create_schema(c)
+        for ref_id in ("app", "network", "storage"):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+                (ref_id, f"src/main/kotlin/{ref_id}/"),
+            )
+        c.commit()
+        (root / ".beadloom").mkdir()
+        (root / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- src/main/kotlin\n", encoding="utf-8"
+        )
+        for rel_path, text in _KOTLIN_CONVENTION.items():
+            _write(root, rel_path, text)
+        return c
+
+    def test_a_full_index_resolves_each_import_to_its_package(self, tmp_path: Path) -> None:
+        c = self._project(tmp_path)
+
+        index_imports(tmp_path, c)
+
+        edges, imports = _depends_on(c), _imports(c)
+        c.close()
+        assert edges == {("app", "network"), ("app", "storage")}
+        assert ("src/main/kotlin/app/Main.kt", "io.ktor.server.routing.get", None) in imports
+
+    def test_an_incremental_reindex_resolves_it_too(self, tmp_path: Path) -> None:
+        c = self._project(tmp_path)
+
+        reindex_file_imports(tmp_path, c, touched=["src/main/kotlin/app/Main.kt"], removed=[])
+
+        edges = _depends_on(c)
+        c.close()
+        assert edges == {("app", "network"), ("app", "storage")}
+
+
 def _swift_available() -> bool:
     try:
         import tree_sitter_swift  # noqa: F401

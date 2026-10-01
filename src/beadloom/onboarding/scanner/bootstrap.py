@@ -24,13 +24,19 @@ from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
     _detect_project_name,
     _read_manifest_deps,
+    is_claimed,
     scan_project,
+    unclaimed_folders,
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 from beadloom.onboarding.scanner.rules_gen import generate_rules
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
-from beadloom.onboarding.scanner.swift_layout import cluster_targets, read_swift_layout
+from beadloom.onboarding.scanner.swift_layout import (
+    cluster_targets,
+    read_swift_layout,
+    unread_swift,
+)
 from beadloom.onboarding.scanner.types import child_directory, cluster_directory
 
 if TYPE_CHECKING:
@@ -66,15 +72,18 @@ def bootstrap_project(
     # A Maven or Gradle tree is clustered by package below its source roots
     # (BDL-076 B6), a Swift package by target (B7); the folders they account for
     # leave the directory clustering, which made nodes of `src/main` and
-    # `src/test` and knew no `Sources/`. Without such a tree both lists below are
-    # the scan's, as they were.
+    # `src/test` and knew no `Sources/`. Only those folders leave it: a Python or
+    # TypeScript service beside a module or a package keeps its node and its scan
+    # path (R2 finding 2). Without such a tree both lists below are the scan's,
+    # as they were.
     jvm = read_jvm_layout(project_root)
     swift = read_swift_layout(project_root)
-    territory = jvm.territory | swift.territory
-    source_dirs = [d for d in scan["source_dirs"] if d not in territory]
+    claimed = jvm.claimed | swift.claimed
+    source_dirs = [d for d in scan["source_dirs"] if not is_claimed(d, claimed)]
     clusters = _cluster_with_children(
         project_root,
-        source_dirs=source_dirs if territory else (source_dirs or None),
+        source_dirs=source_dirs if claimed else (source_dirs or None),
+        claimed=claimed,
     )
     clusters.update(cluster_packages(jvm, taken=clusters))
     clusters.update(cluster_targets(swift, taken=clusters))
@@ -317,7 +326,13 @@ def bootstrap_project(
 
     # Create config.
     config: dict[str, Any] = {
-        "scan_paths": sorted([*source_dirs, *jvm.production_roots, *swift.production_roots])
+        "scan_paths": sorted(
+            [
+                *unclaimed_folders(project_root, source_dirs, claimed),
+                *jvm.production_roots,
+                *swift.production_roots,
+            ]
+        )
         or ["src"],
         # The project scan counts no `.swift` file, so a Swift package's language
         # comes from its targets.
@@ -373,4 +388,6 @@ def bootstrap_project(
         "ignore_added": ignore.added,
         "ignore_skipped_reason": ignore.skipped_reason,
         "portal_ignore": portal_ignore,
+        # Swift this run saw and did not read, said rather than left silent (R2 F7).
+        "unread_swift": unread_swift(project_root, swift),
     }

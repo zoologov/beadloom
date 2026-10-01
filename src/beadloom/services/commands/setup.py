@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     )
     from beadloom.onboarding.ignore_block import PortalIgnoreResult
     from beadloom.onboarding.role_map import RoleMapReport
+    from beadloom.onboarding.scanner.swift_layout import UnreadSwift
 
 # beadloom:service=mcp-server
 _MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
@@ -1418,7 +1419,8 @@ def _echo_portal_ignore(result: PortalIgnoreResult | None, *, prefix: str) -> No
     """Say what init did with the portal's line in .gitignore, when it did anything.
 
     A line the project already had is its own and goes unmentioned; a project
-    outside git is told that nothing was written, and why.
+    outside git, or whose ``site/`` already holds its own files, is told that
+    nothing was written, and why.
     """
     if result is None:
         return
@@ -1428,8 +1430,19 @@ def _echo_portal_ignore(result: PortalIgnoreResult | None, *, prefix: str) -> No
             f"{prefix}Ignored: {result.line} (the portal `beadloom docs site` writes) "
             f"{where[result.outcome]}"
         )
-    elif result.outcome == "skipped":
+    elif result.outcome in ("skipped", "occupied"):
         click.echo(f"{prefix}Not ignored: {result.line} - {result.reason}")
+
+
+def _echo_unread_swift(unread: UnreadSwift | None, *, prefix: str) -> None:
+    """Name the Swift files init saw and did not read, and the Xcode projects beside them.
+
+    Silent when there are none, so every project without such files prints what it
+    printed before (R2 finding 7).
+    """
+    sentence = unread.sentence() if unread is not None else ""
+    if sentence:
+        click.echo(f"{prefix}{sentence}")
 
 
 # beadloom:domain=onboarding
@@ -1522,6 +1535,7 @@ def init(
                 f"  Graph: {bs['nodes_generated']} nodes, "
                 f"{bs['edges_generated']} edges (preset: {bs['preset']})"
             )
+            _echo_unread_swift(bs.get("unread_swift"), prefix="  ")
             _echo_portal_ignore(bs.get("portal_ignore"), prefix="  ")
         if result.get("reindex"):
             ri = result["reindex"]
@@ -1601,6 +1615,7 @@ def init(
                 f"\u2713 Ignored: {len(result['ignore_added'])} generated path(s) "
                 "appended to .gitignore (yours to edit; never rewritten)"
             )
+        _echo_unread_swift(result.get("unread_swift"), prefix="\u2713 ")
         _echo_portal_ignore(result.get("portal_ignore"), prefix="\u2713 ")
         click.echo(
             f"\u2713 Index: {ri.symbols_indexed} symbols, "

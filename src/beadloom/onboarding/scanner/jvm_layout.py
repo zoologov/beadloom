@@ -42,8 +42,15 @@ rules below are what replaced that reading.
   others; ``java`` before ``kotlin``) keeps the package's name, and the next is
   qualified by its set and language (``shared-main-kotlin``).
 
+- **A package is what its files declare** (R2 finding 6): an import is mapped to
+  the folder of the package it names through each file's ``package`` statement,
+  and a file with none is read by its folder below its root. Kotlin's recommended
+  layout omits the common root package from the folders, and there only the
+  declaration names the package.
+
 Pure apart from :func:`read_jvm_layout`, which walks the tree once and records
-every code file, so the clustering and the import mapping read no file.
+every code file and the package it declares, so the clustering and the import
+mapping read no file.
 """
 
 # beadloom:domain=onboarding
@@ -57,6 +64,7 @@ from functools import cached_property
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
+from beadloom.graph.jvm_packages import JvmPackages, file_package
 from beadloom.onboarding.scanner.constants import _CLUSTER_SKIP, _RECURSIVE_SKIP, _SKIP_DIRS
 
 if TYPE_CHECKING:
@@ -118,9 +126,14 @@ class SourceRoot:
 
 @dataclass(frozen=True)
 class JvmLayout:
-    """Every JVM source root of a project, test and production; empty when it has none."""
+    """Every JVM source root of a project, test and production; empty when it has none.
+
+    ``declarations`` pairs each production file with the package it declares, for
+    the files that declare one (see :attr:`packages`).
+    """
 
     roots: tuple[SourceRoot, ...] = ()
+    declarations: tuple[tuple[str, str], ...] = ()
 
     @property
     def production_roots(self) -> tuple[str, ...]:
@@ -137,11 +150,14 @@ class JvmLayout:
         return tuple(sorted({root.module for root in self.roots}))
 
     @property
-    def territory(self) -> frozenset[str]:
-        """The top-level folders the layout accounts for: ``src`` for the root module."""
-        return frozenset(
-            PurePosixPath(module).parts[0] if module else _SOURCE_FOLDER for module in self.modules
-        )
+    def claimed(self) -> frozenset[str]:
+        """The folders the layout accounts for: each module's own, ``src`` for the root module.
+
+        Only these leave the directory reading. Until R2 finding 2 it was each
+        module's TOP-LEVEL folder, so a Python service beside a Maven one in
+        ``services/`` lost its node and its scan path with it.
+        """
+        return frozenset(module or _SOURCE_FOLDER for module in self.modules)
 
     @property
     def mirrors(self) -> dict[str, str]:
@@ -170,11 +186,22 @@ class JvmLayout:
         return tuple(root for root in self.roots if not root.is_test)
 
     @cached_property
-    def package_directories(self) -> frozenset[str]:
-        """Every folder under a production root that holds code itself."""
-        return frozenset(
-            PurePosixPath(file).parent.as_posix()
-            for root in self.production
+    def packages(self) -> JvmPackages:
+        """Every production package mapped to its folder, by each file's declaration.
+
+        A file declaring no package is read by its folder below its root, as
+        before R2 finding 6; on the layout Kotlin recommends, with the root
+        package omitted from the folders, only the declaration names the package.
+        Roots are read module by module in precedence order, so where two hold
+        one package the root read first keeps it.
+        """
+        declared = dict(self.declarations)
+        return JvmPackages(
+            (
+                declared.get(file) or _package_of(root, file).replace("/", "."),
+                PurePosixPath(file).parent.as_posix(),
+            )
+            for root in sorted(self.production, key=lambda r: (r.module, r.precedence))
             for file in root.files
         )
 
@@ -205,7 +232,14 @@ def read_jvm_layout(project_root: Path) -> JvmLayout:
             for child in sorted(folder.iterdir(), reverse=True)
             if _is_walked(child, top_level=folder == project_root)
         )
-    return JvmLayout(tuple(sorted(roots, key=lambda root: root.path)))
+    declarations = tuple(
+        (file, package)
+        for root in roots
+        if not root.is_test
+        for file in root.files
+        if (package := file_package(project_root / file))
+    )
+    return JvmLayout(tuple(sorted(roots, key=lambda root: root.path)), declarations)
 
 
 def _is_walked(folder: Path, *, top_level: bool) -> bool:
@@ -422,20 +456,10 @@ def cluster_packages(layout: JvmLayout, taken: Collection[str] = ()) -> dict[str
 def jvm_package_directory(import_path: str, layout: JvmLayout) -> str | None:
     """The project folder of the package a Java or Kotlin import names, if the project has it.
 
-    The import is read as a package path under every production root, and the
-    longest prefix of it that is a folder holding code is the package: a class,
-    a member of a static import and a wildcard all sit below it. A third-party
-    import names no such folder, even where a segment of it names one of the
-    project's packages (``org.springframework.web`` beside a package ``web``).
-    Where two roots hold the package, the deeper match wins, then the root read first.
+    The longest prefix of the import that is one of the project's packages
+    (:attr:`JvmLayout.packages`) is the package: a class, a member of a static
+    import and a wildcard all sit below it. A third-party import names none, even
+    where a segment of it names one of the project's packages
+    (``org.springframework.web`` beside a package ``web``).
     """
-    segments = [part for part in import_path.split(".") if part and part != "*"]
-    best: tuple[int, str] | None = None
-    for root in sorted(layout.production, key=lambda r: (r.module, r.precedence)):
-        for depth in range(len(segments), 0, -1):
-            candidate = _join(root.path, *segments[:depth])
-            if candidate in layout.package_directories:
-                if best is None or depth > best[0]:
-                    best = (depth, candidate)
-                break
-    return None if best is None else best[1]
+    return layout.packages.directory(import_path)

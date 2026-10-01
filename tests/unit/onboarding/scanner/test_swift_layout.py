@@ -13,7 +13,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.onboarding.scanner.swift_layout import cluster_targets, read_swift_layout
+from beadloom.onboarding.scanner.swift_layout import (
+    cluster_targets,
+    read_swift_layout,
+    unread_swift,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -90,7 +94,7 @@ class TestASinglePackageAtTheRoot:
 
         assert layout.production_roots == ("Engine",)
         assert _directories(layout) == {"Engine": "Engine"}
-        assert layout.territory == frozenset({"Engine"})
+        assert layout.claimed == frozenset({"Engine"})
 
     def test_plugins_and_macros_are_targets_and_binaries_are_not(self, tmp_path: Path) -> None:
         layout = _tree(
@@ -139,7 +143,7 @@ class TestASinglePackageAtTheRoot:
         assert layout.production_roots == ("Sources/Core",)
         assert list(cluster_targets(layout)) == ["Core"]
 
-    def test_the_territory_is_every_top_folder_a_target_holds(self, tmp_path: Path) -> None:
+    def test_the_claimed_folders_are_the_targets_own(self, tmp_path: Path) -> None:
         layout = _tree(
             tmp_path,
             {
@@ -151,7 +155,7 @@ class TestASinglePackageAtTheRoot:
             },
         )
 
-        assert layout.territory == frozenset({"Sources", "Tests"})
+        assert layout.claimed == frozenset({"Sources/Core", "Tests/CoreTests"})
 
     def test_a_cluster_name_already_taken_is_qualified(self, tmp_path: Path) -> None:
         layout = _tree(
@@ -243,7 +247,7 @@ class TestPackagesBelowTheRoot:
             "Packages/Kit/Sources/Net",
             "Sources/App",
         )
-        assert layout.territory == frozenset({"Sources", "Packages"})
+        assert layout.claimed == frozenset({"Sources/App", "Packages/Kit"})
 
     def test_packages_under_tests_docs_or_fixtures_are_not_the_projects(
         self, tmp_path: Path
@@ -262,7 +266,7 @@ class TestPackagesBelowTheRoot:
         )
 
         assert cluster_targets(layout) == {}
-        assert layout.territory == frozenset()
+        assert layout.claimed == frozenset()
 
 
 class TestNoSwiftPackage:
@@ -272,5 +276,91 @@ class TestNoSwiftPackage:
         assert layout.production_roots == ()
         assert layout.languages == ()
         assert layout.mirrors == {}
-        assert layout.territory == frozenset()
+        assert layout.claimed == frozenset()
         assert cluster_targets(layout) == {}
+
+
+class TestTheSwiftInitDoesNotRead:
+    """R2 finding 7: Swift outside every read ``Package.swift`` target is named, not lost."""
+
+    def test_an_xcode_project_without_a_manifest(self, tmp_path: Path) -> None:
+        layout = _tree(
+            tmp_path,
+            {
+                "Beacon.xcodeproj/project.pbxproj": "// !$*UTF8*$!\n",
+                "Beacon/Views/HomeView.swift": "",
+                "Beacon/Models/Reading.swift": "",
+                "src/app.py": "",
+            },
+        )
+
+        unread = unread_swift(tmp_path, layout)
+
+        assert unread.files == ("Beacon/Models/Reading.swift", "Beacon/Views/HomeView.swift")
+        assert unread.xcode_projects == ("Beacon.xcodeproj",)
+
+    def test_a_targets_files_and_the_manifests_are_read(self, tmp_path: Path) -> None:
+        layout = _tree(
+            tmp_path,
+            {
+                "Package.swift": _manifest(
+                    '.target(name: "Core")', '.testTarget(name: "CoreTests")'
+                ),
+                "Package@swift-5.9.swift": "",
+                "Sources/Core/Route.swift": "",
+                "Tests/CoreTests/RouteTests.swift": "",
+            },
+        )
+
+        assert unread_swift(tmp_path, layout).files == ()
+
+    def test_an_app_beside_a_local_package_is_the_part_named(self, tmp_path: Path) -> None:
+        layout = _tree(
+            tmp_path,
+            {
+                "App.xcworkspace/contents.xcworkspacedata": "",
+                "App/AppMain.swift": "",
+                "Packages/Kit/Package.swift": _manifest('.target(name: "Kit")'),
+                "Packages/Kit/Sources/Kit/Kit.swift": "",
+            },
+        )
+
+        unread = unread_swift(tmp_path, layout)
+
+        assert unread.files == ("App/AppMain.swift",)
+        assert unread.xcode_projects == ("App.xcworkspace",)
+
+    def test_other_peoples_code_build_output_and_skipped_folders_are_not_named(
+        self, tmp_path: Path
+    ) -> None:
+        layout = _tree(
+            tmp_path,
+            {
+                "Pods/Alamofire/Session.swift": "",
+                "Carthage/Checkouts/X/X.swift": "",
+                ".build/checkouts/Y/Y.swift": "",
+                "build/Z.swift": "",
+                "docs/Example.swift": "",
+                "tests/fixtures/F.swift": "",
+                "App/fixtures/G.swift": "",
+            },
+        )
+
+        assert unread_swift(tmp_path, layout).files == ()
+
+    def test_a_project_without_swift_has_nothing_to_name(self, tmp_path: Path) -> None:
+        layout = _tree(tmp_path, {"src/app.py": "", "web/index.ts": ""})
+
+        unread = unread_swift(tmp_path, layout)
+
+        assert (unread.files, unread.xcode_projects) == ((), ())
+
+    def test_the_sentence_init_says(self) -> None:
+        from beadloom.onboarding.scanner.swift_layout import UnreadSwift
+
+        assert UnreadSwift().sentence() == ""
+        one = UnreadSwift(("A/B.swift",)).sentence()
+        assert one.startswith("Not read: 1 .swift file outside any Package.swift target - init")
+        both = UnreadSwift(("A/B.swift", "A/C.swift"), ("A.xcodeproj",)).sentence()
+        assert both.startswith("Not read: 2 .swift files outside any Package.swift target")
+        assert "(Xcode: A.xcodeproj)" in both

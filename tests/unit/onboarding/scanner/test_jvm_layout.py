@@ -76,7 +76,7 @@ class TestAMavenProject:
     def test_it_claims_the_top_level_src_directory(self, tmp_path: Path) -> None:
         layout = _tree(tmp_path, _MAVEN)
 
-        assert layout.territory == frozenset({"src"})
+        assert layout.claimed == frozenset({"src"})
 
     def test_each_package_below_the_shared_prefix_is_a_cluster(self, tmp_path: Path) -> None:
         clusters = cluster_packages(_tree(tmp_path, _MAVEN))
@@ -205,7 +205,7 @@ class TestABuildOfSeveralModules:
 
         assert layout.production_roots == ("app/src/main/kotlin", "core/src/main/java")
         assert layout.mirrors == {"app/src/test/kotlin": "app/src/main/kotlin"}
-        assert layout.territory == frozenset({"app", "core"})
+        assert layout.claimed == frozenset({"app", "core"})
         assert _directories(clusters) == {"app": "app", "core": "core"}
         assert _children(clusters) == {
             "app": {"routing": "app/src/main/kotlin/org/acme/app/routing"},
@@ -230,7 +230,10 @@ class TestABuildOfSeveralModules:
         )
         clusters = cluster_packages(layout)
 
-        assert layout.territory == frozenset({"ledger", "services"})
+        # Each module's own folder, not the top-level folder holding it: a service
+        # in another language beside `services/billing` stays the directory
+        # reading's (R2 finding 2).
+        assert layout.claimed == frozenset({"ledger", "services/billing"})
         assert _directories(clusters) == {
             "ledger": "ledger",
             "services-billing": "services/billing",
@@ -293,7 +296,7 @@ class TestTestSourceSets:
         )
 
         assert layout.production_roots == ("src/main/java",)
-        assert layout.territory == frozenset({"e2e", "src"})
+        assert layout.claimed == frozenset({"e2e", "src"})
         assert layout.mirrors == {}
         assert set(cluster_packages(layout)) == {"model"}
 
@@ -355,7 +358,7 @@ class TestWhatIsNotAJvmLayout:
         layout = _tree(tmp_path, ["pyproject.toml", "src/parcel/api/routes.py"])
 
         assert layout.production_roots == ()
-        assert layout.territory == frozenset()
+        assert layout.claimed == frozenset()
         assert cluster_packages(layout) == {}
 
     def test_a_fixture_under_tests_or_a_build_output_is_not_a_module(self, tmp_path: Path) -> None:
@@ -427,3 +430,48 @@ class TestAnImportNamesAPackageDirectory:
 
         assert jvm_package_directory("org.springframework.web.Foo", layout) is None
         assert jvm_package_directory("org.acme.Missing", layout) is None
+
+
+class TestKotlinsRecommendedLayout:
+    """R2 finding 6: the root package omitted from the folders, as Kotlin recommends.
+
+    ``package org.example.network`` lives in ``src/main/kotlin/network/``, so only
+    the declaration names the package an import reaches.
+    """
+
+    def _layout(self, tmp_path: Path) -> JvmLayout:
+        files = {
+            "build.gradle.kts": "",
+            "src/main/kotlin/app/Main.kt": (
+                "package org.example.app\n\nimport org.example.network.Socket\n"
+            ),
+            "src/main/kotlin/network/Socket.kt": "package org.example.network\n\nclass Socket\n",
+            "src/main/kotlin/network/tcp/Conn.kt": "package org.example.network.tcp\n",
+            "src/test/kotlin/network/SocketTest.kt": "package org.example.network\n",
+        }
+        for rel_path, text in files.items():
+            path = tmp_path / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        return read_jvm_layout(tmp_path)
+
+    def test_an_import_reaches_the_folder_of_its_declared_package(self, tmp_path: Path) -> None:
+        layout = self._layout(tmp_path)
+
+        assert jvm_package_directory("org.example.network.Socket", layout) == (
+            "src/main/kotlin/network"
+        )
+        assert jvm_package_directory("org.example.network.tcp.*", layout) == (
+            "src/main/kotlin/network/tcp"
+        )
+
+    def test_the_folder_path_alone_names_no_package_any_more(self, tmp_path: Path) -> None:
+        layout = self._layout(tmp_path)
+
+        assert jvm_package_directory("network.Socket", layout) is None
+
+    def test_the_packages_are_still_clustered_by_their_folders(self, tmp_path: Path) -> None:
+        assert _directories(cluster_packages(self._layout(tmp_path))) == {
+            "app": "src/main/kotlin/app",
+            "network": "src/main/kotlin/network",
+        }

@@ -51,8 +51,11 @@ it is not part of the block because it is not under ``.beadloom/``, and a
 project that ignores the directory its own way needs nothing added. Unlike the
 block it is checked on every run, which is what makes it idempotent. A line that
 un-ignores the directory (``!/site/``) is the project's statement that it wants
-the portal committed, so a file with one also gets nothing added. See
-:func:`ensure_portal_ignored`.
+the portal committed, so a file with one also gets nothing added. Nor does a
+project whose ``site/`` already holds files (R2 finding 5): a folder of that
+common name holding a website or an app is the project's own source, and the
+line would hide every new file there from ``git status``. Init says so and names
+``docs site --out``. See :func:`ensure_portal_ignored`.
 
 **Both writers append bytes and never rewrite the file.** What the file held is
 kept byte for byte, its encoding included, and an appended line ends the way the
@@ -62,6 +65,7 @@ file's first line ends, so a file with Windows line endings stays one.
 from __future__ import annotations
 
 import fnmatch
+import subprocess
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -391,13 +395,52 @@ class PortalIgnoreResult:
     """What :func:`ensure_portal_ignored` did with the project's ignore file.
 
     ``covered_by`` is the project's own line that decided, when one did;
-    ``reason`` says why nothing was written when the file was not looked at.
+    ``reason`` says why nothing was written when the file was not looked at, or
+    when the directory already holds the project's files (``occupied``).
     """
 
-    outcome: Literal["created", "appended", "covered", "negated", "skipped"]
+    outcome: Literal["created", "appended", "covered", "negated", "skipped", "occupied"]
     line: str
     covered_by: str = ""
     reason: str = ""
+
+
+def _plural(count: int) -> str:
+    return f"{count} file" if count == 1 else f"{count} files"
+
+
+def _tracked_count(project_root: Path, directory: str) -> int:
+    """How many files under *directory* git tracks; 0 when git cannot say."""
+    try:
+        listed = subprocess.run(  # noqa: S603
+            ["git", "ls-files", "-z", "--", directory],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return 0
+    if listed.returncode != 0:
+        return 0
+    return len([name for name in listed.stdout.split(b"\0") if name])
+
+
+def _occupied_reason(project_root: Path, directory: str) -> str:
+    """Why *directory* is the project's own, or ``""`` when it holds no file of the project's."""
+    folder = project_root / directory
+    on_disk = sum(1 for path in folder.rglob("*") if path.is_file()) if folder.is_dir() else 0
+    tracked = _tracked_count(project_root, directory)
+    if tracked:
+        held = f"{_plural(tracked)} tracked by git"
+    elif on_disk:
+        held = f"{_plural(on_disk)}, none tracked by git yet"
+    else:
+        return ""
+    return (
+        f"{directory}/ already holds {held}, so it is the project's own and new files "
+        f"there must stay visible to git; run `beadloom docs site --out <dir>` to write "
+        f"the portal elsewhere, or move that source out of {directory}/"
+    )
 
 
 def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
@@ -406,7 +449,9 @@ def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
     Creates the file when there is none and appends ``/<PORTAL_DIR>/`` when no line
     names the directory. A line that already names it decides, whether it
     ignores the directory or un-ignores it, and nothing is written. Outside a
-    git working tree nothing is written either, as for the working-set block.
+    git working tree nothing is written either, as for the working-set block,
+    and nothing when the directory already holds files — tracked by git or not —
+    because then it is the project's source, not the portal's output.
     """
     line = f"/{PORTAL_DIR}/"
     if _git_root(project_root) is None:
@@ -424,5 +469,8 @@ def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
             "negated" if deciding.startswith("!") else "covered"
         )
         return PortalIgnoreResult(outcome=outcome, line=line, covered_by=deciding)
+    occupied = _occupied_reason(project_root, PORTAL_DIR)
+    if occupied:
+        return PortalIgnoreResult(outcome="occupied", line=line, reason=occupied)
     _append_lines(path, data, [line])
     return PortalIgnoreResult(outcome="appended" if existed else "created", line=line)
