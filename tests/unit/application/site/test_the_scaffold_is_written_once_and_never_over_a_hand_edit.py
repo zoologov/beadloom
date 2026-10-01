@@ -270,3 +270,107 @@ def test_build_output_and_dependencies_are_never_shipped(project: Path, shipped:
     report = _write(project, shipped)
     excluded = ("node_modules/", ".vitepress/cache/", ".vitepress/dist/")
     assert not any(rel.startswith(excluded) for rel in report.written)
+
+
+# --- this repository's graph annotations (beadloom-ujzb.18) -----------------------
+#
+# The scaffold's source carries `beadloom:component=<ref>` lines so that THIS
+# repository's graph binds the theme's files to its slice nodes. An adopter's
+# portal is not this repository, and those lines would name nodes the adopter
+# does not have, so `docs site` writes every shipped file without them. The
+# marker hashes the body as written, so every rule above holds over that body.
+
+_ANNOTATED = {
+    ".vitepress/theme/app/index.js": (
+        "// beadloom:component=site-app\n// The theme entry.\nexport const app = 1;\n"
+    ),
+    ".vitepress/theme/widgets/Panel.vue": (
+        "<script setup>\n// beadloom:component=site-panel\nconst a = 1;\n</script>\n"
+        "<template>\n  <!-- beadloom:feature=site-panel -->\n  <div />\n</template>\n"
+    ),
+    ".vitepress/theme/shared/ui/panel.css": (
+        "/* beadloom:component=site-shared */\n.panel { color: red; }\n"
+    ),
+    "e2e/viewer.spec.js": "  // beadloom:domain=site-tests service=site\ntest('x', () => {});\n",
+}
+
+#: The bodies an adopter's portal receives: the same files, without those lines.
+_AS_WRITTEN = {
+    ".vitepress/theme/app/index.js": "// The theme entry.\nexport const app = 1;\n",
+    ".vitepress/theme/widgets/Panel.vue": (
+        "<script setup>\nconst a = 1;\n</script>\n<template>\n  <div />\n</template>\n"
+    ),
+    ".vitepress/theme/shared/ui/panel.css": ".panel { color: red; }\n",
+    "e2e/viewer.spec.js": "test('x', () => {});\n",
+}
+
+
+@pytest.fixture()
+def annotated(tmp_path: Path) -> Path:
+    return _ship(tmp_path / "annotated", {**_SHIPPED, **_ANNOTATED})
+
+
+def test_no_annotation_of_the_source_reaches_the_portal(project: Path, annotated: Path) -> None:
+    _write(project, annotated)
+    for rel, body in _AS_WRITTEN.items():
+        written = (project / "site" / rel).read_text(encoding="utf-8")
+        marker = read_marker(written)
+        assert marker is not None
+        assert (marker.body, marker.intact) == (body, True), rel
+        assert "beadloom:component" not in written
+        assert "beadloom:feature" not in written
+        assert "beadloom:domain" not in written
+
+
+def test_a_comment_that_only_mentions_beadloom_is_written(project: Path, shipped: Path) -> None:
+    """Only a line that IS an annotation goes: prose and code keep every line."""
+    body = (
+        "// Written by `beadloom docs site`; see beadloom: the tool.\n"
+        "const note = 'beadloom:component=not-a-comment';\n"
+    )
+    (shipped / ".vitepress/theme/app/index.js").write_text(body, encoding="utf-8")
+    _write(project, shipped)
+    marker = read_marker((project / "site/.vitepress/theme/app/index.js").read_text("utf-8"))
+    assert marker is not None
+    assert marker.body == body
+
+
+def test_a_second_run_over_an_annotated_source_changes_nothing(
+    project: Path, annotated: Path
+) -> None:
+    _write(project, annotated)
+    report = _write(project, annotated)
+    assert sorted(report.unchanged) == sorted(_SHIPPED)
+    assert (report.written, report.updated, report.kept, report.retired) == ((), (), (), ())
+
+
+def test_a_hand_edit_over_an_annotated_source_is_kept(project: Path, annotated: Path) -> None:
+    _write(project, annotated)
+    spec = project / "site/e2e/viewer.spec.js"
+    edited = spec.read_text(encoding="utf-8") + "// mine\n"
+    spec.write_text(edited, encoding="utf-8")
+    report = _write(project, annotated, version=_V2)
+    assert spec.read_text(encoding="utf-8") == edited
+    assert [kept.path for kept in report.kept] == ["e2e/viewer.spec.js"]
+
+
+@pytest.mark.parametrize("version", [_V1, _V2])
+def test_a_portal_written_with_the_annotations_is_rewritten_without_them(
+    project: Path, annotated: Path, version: str
+) -> None:
+    """A portal an earlier ``docs site`` wrote carries the lines under an intact marker.
+
+    That file is beadloom's, so the next run replaces it — on an upgrade, and on
+    the same version string, which is an editable install whose source changed.
+    """
+    site = project / "site"
+    for rel, body in _ANNOTATED.items():
+        (site / rel).parent.mkdir(parents=True, exist_ok=True)
+        (site / rel).write_text(mark(rel, body, _V1), encoding="utf-8")
+    report = _write(project, annotated, version=version)
+    assert sorted(report.updated) == sorted(_ANNOTATED)
+    assert report.kept == ()
+    for rel, body in _AS_WRITTEN.items():
+        marker = read_marker((site / rel).read_text(encoding="utf-8"))
+        assert marker is not None
+        assert (marker.version, marker.body) == (version, body)

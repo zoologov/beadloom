@@ -26,6 +26,16 @@ Feature: docs site writes a portal that carries the project's identity and keeps
     And the portal's identity is "Acme Orders" at "/orders/" linking "https://gitlab.com/acme/orders"
     And no file of the portal names this repository
 
+  # beadloom-ujzb.18: the scaffold's source binds each theme file to a node of
+  # this repository's graph with a `beadloom:component=` line. Those nodes are not
+  # the project's, so the portal is written without the lines.
+  @bead:beadloom-ujzb.18
+  Scenario: the portal names none of the nodes this repository's graph binds to the scaffold
+    Given a project that declares no site
+    When the site is generated for the project
+    Then no scaffold file of the portal carries a beadloom annotation
+    And no file of the portal names a node this repository's graph binds to the scaffold
+
   Scenario: a project that declares nothing is named after its directory and links nowhere
     Given a project that declares no site
     When the site is generated for the project

@@ -29,6 +29,15 @@ ships is removed, so a browser test retired upstream does not keep running
 against a viewer that changed under it. Content ``docs site`` generates each run
 carries no marker and is never touched here.
 
+**This repository's annotations** (``beadloom-ujzb.18``). The scaffold's source
+carries ``beadloom:component=<ref>`` lines so that the graph of the repository
+it is developed in binds each theme file to one of that repository's nodes. An
+adopter's portal is not that repository, and those lines would name nodes the
+adopter does not have, so every line that is only such an annotation is left
+out of the body a portal receives. The marker hashes the body as written, so
+the rules above are the same rules over that body: a portal an earlier version
+wrote with the lines is beadloom's, and it is rewritten without them.
+
 **The override directory**, ``.beadloom/site/``, is copied last and verbatim. It
 is where a project changes its portal — a page, a stylesheet, a component —
 without editing a generated file, and a shipped path it provides is not written
@@ -78,6 +87,13 @@ _MARKER_RE = re.compile(
 )
 #: The marker sits on the first line, or on the second of a JSON file.
 _MARKER_LINES = 2
+
+#: A line that is nothing but a graph annotation (the tool's name, a colon, then
+#: ``<key>=<ref>``) in a comment of any syntax a shipped file is written in. The
+#: generated marker puts a space, not ``=``, after its key, so it never matches;
+#: neither does a line that only mentions beadloom. Worded without the literal
+#: form on purpose: a comment holding it is read as an annotation of this module.
+_ANNOTATION_LINE_RE = re.compile(r"^[ \t]*(?://|/\*|<!--)[ \t]*beadloom:\w+=.*(?:\n|$)", re.M)
 
 
 class ScaffoldError(ValueError):
@@ -186,6 +202,11 @@ def read_marker(text: str) -> Marker | None:
     return None
 
 
+def without_annotations(body: str) -> str:
+    """*body* without the lines that bind it to a node of the repository it ships from."""
+    return _ANNOTATION_LINE_RE.sub("", body)
+
+
 def _walk(root: Traversable, prefix: str = "") -> dict[str, str]:
     shipped: dict[str, str] = {}
     for entry in root.iterdir():
@@ -197,12 +218,16 @@ def _walk(root: Traversable, prefix: str = "") -> dict[str, str]:
         if entry.is_dir():
             shipped.update(_walk(entry, f"{rel}/"))
         elif entry.is_file():
-            shipped[rel] = entry.read_text(encoding="utf-8")
+            shipped[rel] = without_annotations(entry.read_text(encoding="utf-8"))
     return shipped
 
 
 def shipped_files(source: Traversable | Path | None = None) -> dict[str, str]:
-    """Every file the scaffold ships, by its path in a portal, with its body.
+    """Every file the scaffold ships, by its path in a portal, with the body a portal gets.
+
+    That body is the source's without its graph annotations
+    (:func:`without_annotations`): they name the nodes of the repository the
+    scaffold is developed in, and the portal is somebody else's.
 
     *source* replaces the installed package's scaffold, for a test.
     """

@@ -17,7 +17,9 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.site.generate import SiteResult, generate_site
+from beadloom.application.site.scaffold import read_marker
 from beadloom.application.site.site_config import SiteConfigError
+from tests.support.scaffold_node_ids import node_ids_named, scaffold_node_ids
 from tests.support.tiered_project import write_zoned_import_project
 
 if TYPE_CHECKING:
@@ -180,6 +182,39 @@ def _no_leak(world: dict[str, Any]) -> None:
         text = path.read_text(encoding="utf-8", errors="replace")
         leaks.extend((path.name, token) for token in _OUR_IDENTITY if token in text)
     assert leaks == []
+
+
+def _portal_files(world: dict[str, Any]) -> dict[str, str]:
+    return {
+        path.relative_to(world["site"]).as_posix(): path.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        for path in sorted(world["site"].rglob("*"))
+        if path.is_file()
+    }
+
+
+@then("no scaffold file of the portal carries a beadloom annotation")
+def _no_annotation(world: dict[str, Any]) -> None:
+    marked = {
+        rel: marker
+        for rel, text in _portal_files(world).items()
+        if (marker := read_marker(text)) is not None
+    }
+    assert marked, "the portal holds no file the scaffold wrote"
+    assert sorted(rel for rel, marker in marked.items() if "beadloom:" in marker.body) == []
+
+
+@then("no file of the portal names a node this repository's graph binds to the scaffold")
+def _no_node_of_ours(world: dict[str, Any]) -> None:
+    ids = scaffold_node_ids()
+    assert ids, "this repository's graph binds no node to the scaffold"
+    named = {
+        rel: refs
+        for rel, text in _portal_files(world).items()
+        if (refs := node_ids_named(text, ids))
+    }
+    assert named == {}
 
 
 @then("the hand edit in the VitePress config is still on disk")
