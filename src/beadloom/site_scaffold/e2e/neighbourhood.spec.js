@@ -6,7 +6,8 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, parentMap, viewer, withAncestors } from "./support/viewer.js";
-import { neighbourhood } from "./support/graph.js";
+import { NEIGHBOURHOOD_KINDS, edgeKey, neighbourhood } from "./support/graph.js";
+import { requireShape } from "./support/shape.js";
 
 const sorted = (ids) => [...ids].sort();
 
@@ -22,6 +23,28 @@ function subjectOf(data) {
   return data.nodes.map((n) => n.id).sort((a, b) => growth(b) - growth(a))[0];
 }
 
+/** `subjectOf` when `holds` of it; otherwise the first node, by id, of which it does. */
+function subjectWhere(data, holds) {
+  const preferred = subjectOf(data);
+  if (holds(preferred)) return preferred;
+  return data.nodes.map((n) => n.id).sort().find(holds);
+}
+
+/** How many more nodes a walk of `depth` in `dir` reaches from `id` than a walk of one step. */
+function growth(data, id, depth, dir) {
+  return neighbourhood(data, id, depth, dir).ids.length - neighbourhood(data, id, 1, dir).ids.length;
+}
+
+/** The keys of every edge the viewer draws between two nodes of the file. */
+function drawnEdges(data) {
+  const ids = new Set(data.nodes.map((n) => n.id));
+  return new Set(
+    data.edges
+      .filter((e) => NEIGHBOURHOOD_KINDS.includes(e.kind) && e.src !== e.dst && ids.has(e.src) && ids.has(e.dst))
+      .map(edgeKey)
+  );
+}
+
 /** Every node that is neither in the walk nor a container of a node in it. */
 function outside(data, walked) {
   const kept = withAncestors(walked, parentMap(data));
@@ -33,9 +56,9 @@ test("depth 2 outgoing shows the node, what it reaches in two steps and those ed
   request,
 }) => {
   const data = await architectureData(request);
-  const subject = subjectOf(data);
+  const subject = subjectWhere(data, (id) => growth(data, id, 2, "out") > 0);
+  requireShape(subject, "no node reaches a node two steps out that it does not reach in one");
   const expected = neighbourhood(data, subject, 2, "out");
-  expect(expected.ids.length).toBeGreaterThan(neighbourhood(data, subject, 1, "out").ids.length);
 
   await openArchitecture(page, `?focus=${subject}`);
   await page.getByLabel("Depth", { exact: true }).selectOption("2");
@@ -62,9 +85,9 @@ test("switching the direction to incoming shows the nodes that reach it", async 
 
 test("'all' walks without a depth limit in both directions", async ({ page, request }) => {
   const data = await architectureData(request);
-  const subject = subjectOf(data);
+  const subject = subjectWhere(data, (id) => growth(data, id, Infinity, "both") > 0);
+  requireShape(subject, "no node is linked to another more than one step away, in either direction");
   const expected = neighbourhood(data, subject, Infinity, "both");
-  expect(expected.ids.length).toBeGreaterThan(neighbourhood(data, subject, 1, "both").ids.length);
 
   await openArchitecture(page, `?focus=${subject}`);
   await page.getByLabel("Depth", { exact: true }).selectOption("all");
@@ -92,7 +115,12 @@ test("'Hide the rest' hides what the neighbourhood leaves out, and keeps its con
 
 test("clearing the selection shows the whole graph again", async ({ page, request }) => {
   const data = await architectureData(request);
-  const subject = subjectOf(data);
+  // The default direction is both ways: a node outside that walk is dimmed.
+  const subject = subjectWhere(data, (id) => outside(data, neighbourhood(data, id, 2, "both").ids).length > 0);
+  requireShape(
+    subject,
+    "no node lies more than two steps from another: each node's two-step neighbourhood, with its containers, is the whole graph"
+  );
 
   await openArchitecture(page, `?focus=${subject}&depth=2`);
   await expect.poll(async () => (await viewer(page, "dimmedIds")).length).toBeGreaterThan(0);
@@ -117,8 +145,14 @@ for (const { choice, query, outside: looksOutside } of OUTSIDE_LOOKS) {
     request,
   }) => {
     const data = await architectureData(request);
-    const subject = subjectOf(data);
-    const walked = new Set(neighbourhood(data, subject, 2, "out").edges);
+    const walkedFrom = (id) => neighbourhood(data, id, 2, "out").edges;
+    // A walk that takes an edge and leaves one out, so both looks are read.
+    const subject = subjectWhere(
+      data,
+      (id) => walkedFrom(id).length > 0 && walkedFrom(id).length < drawnEdges(data).size
+    );
+    requireShape(subject, "no node's two-step outgoing walk takes one drawn edge and leaves another out");
+    const walked = new Set(walkedFrom(subject));
 
     await openArchitecture(page, `?focus=${subject}&depth=2&dir=out${query}`);
     await expect.poll(async () => (await viewer(page, "neighbourhood")).edges.length).toBe(walked.size);

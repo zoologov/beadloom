@@ -148,10 +148,10 @@ export function expectedContractImpact(data, start) {
  * contract back into the chain, a producer outside the chain, a broken, a
  * drifting and an unverified contract, and a consumer with no producer.
  * `root` is the producer of the file's first contract, where the walk starts.
+ * A landscape with no contract, as a single project serves, is first given
+ * one, between two services of its own, so the same walk is grown on it.
  */
 export function grownLandscape(data) {
-  const first = data.edges[0];
-  const hub = first.dst;
   const contract = (key, protocol, producers, consumers, verdict, basis) => ({
     contract_key: key,
     protocol,
@@ -166,7 +166,13 @@ export function grownLandscape(data) {
     fields: { exposed: {}, referenced: {} },
     body: { exposed: {}, referenced: {} },
   });
+  const first = data.edges[0] ?? { src: "svc-origin", dst: "svc-hub" };
+  const hub = first.dst;
+  const seeded = data.edges.length
+    ? []
+    : [contract("amqp:origin/sent:Sent", "amqp", [first.src], [hub], "confirmed", "surface")];
   const added = [
+    ...seeded,
     contract("amqp:orders/placed:Placed", "amqp", [hub], ["svc-billing", "svc-mail"], "confirmed", "surface"),
     contract("graphql:Billing", "graphql", ["svc-billing"], ["svc-report"], "breaking", "surface"),
     contract("amqp:report/ready:Ready", "amqp", ["svc-report"], [hub], "confirmed", "presence"),

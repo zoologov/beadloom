@@ -19,6 +19,7 @@ import {
   openLandscape,
   servicesWithEdges,
 } from "./support/landscape.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='landscape-card']";
 
@@ -76,6 +77,7 @@ test("a selected service shows its neighbourhood and a card with every contract 
 }) => {
   const data = await landscapeData(request);
   const service = busiest(data);
+  requireShape(service && contractsOf(data, service).length > 0, LACKING.landscape);
 
   await openLandscape(page, `?focus=${service}`);
 
@@ -90,7 +92,11 @@ test("a selected service shows its neighbourhood and a card with every contract 
   }
 });
 
-test("the landscape resolves every colour it draws, and no style is rejected", async ({ page }) => {
+test("the landscape resolves every colour it draws, and no style is rejected", async ({
+  page,
+  request,
+}) => {
+  requireShape((await landscapeData(request)).nodes.length > 0, LACKING.landscapeService);
   const rejected = collectRejectedStyles(page);
   await openLandscape(page);
 
@@ -102,6 +108,7 @@ test("the landscape resolves every colour it draws, and no style is rejected", a
 
 test("full screen holds the landscape's toolbar, canvas and card", async ({ page, request }) => {
   const data = await landscapeData(request);
+  requireShape(data.nodes.length > 0, LACKING.landscapeService);
   await openLandscape(page, `?focus=${busiest(data)}`);
   await page.getByRole("button", { name: /full screen/i }).click();
 

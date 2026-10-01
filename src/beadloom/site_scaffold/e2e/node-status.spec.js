@@ -9,6 +9,7 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { requireShape } from "./support/shape.js";
 
 /**
  * Each flagged node's status, from the data file alone: an error finding is a
@@ -35,7 +36,7 @@ test("a node with warn findings only is drawn as a warning, not as a violation",
   const data = await architectureData(request);
   const expected = expectedStatuses(data);
   const errors = data.nodes.flatMap((n) => n.findings || []).filter((f) => f.severity === "error");
-  expect(Object.values(expected)).toContain("warned");
+  requireShape(Object.values(expected).includes("warned"), "no node has warn-level findings only");
 
   await openArchitecture(page);
 
@@ -53,8 +54,17 @@ test("an error finding draws a violation, in a look apart from a warning's", asy
   request,
 }) => {
   const data = await architectureData(request);
-  const warned = Object.entries(expectedStatuses(data)).find(([, status]) => status === "warned")[0];
-  const clean = data.nodes.find((n) => !(n.findings || []).length && n.doc_status !== "stale");
+  const cleanNodes = data.nodes.filter((n) => !(n.findings || []).length && n.doc_status !== "stale");
+  let warned = Object.entries(expectedStatuses(data)).find(([, status]) => status === "warned")?.[0];
+  requireShape(cleanNodes.length >= (warned ? 1 : 2), "fewer than two nodes have no finding and no stale doc");
+  // A graph with no warned node is served one, on the last clean node, so the two looks are compared.
+  if (!warned) {
+    const served = cleanNodes.pop();
+    served.findings = [{ rule: "served-warn-rule", severity: "warn", message: "served for the case" }];
+    served.lint_clean = false;
+    warned = served.id;
+  }
+  const clean = cleanNodes[0];
   clean.findings = [{ rule: "served-rule", severity: "error", message: "served for the case" }];
   clean.lint_clean = false;
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));

@@ -6,6 +6,10 @@
 // `beadloom docs site`; the server script refuses to start without it.
 //
 // Run from the portal's root: `npm run test:e2e`.
+//
+// A case written about a shape your graph does not hold, such as declared layers
+// or a contract in the landscape, is skipped and the report names that shape
+// (`support/shape.js`). With BEADLOOM_E2E_NO_SKIP=1 such a case fails instead.
 
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";

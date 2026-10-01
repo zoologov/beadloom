@@ -4,7 +4,8 @@
 // started inside a domain box moved the box and everything in it.
 
 import { test, expect } from "@playwright/test";
-import { openArchitecture, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, parentMap, viewer } from "./support/viewer.js";
+import { requireShape } from "./support/shape.js";
 
 /** A point on the canvas, inside a compound parent's box, that lies on no other node. */
 function pointInsideParentOnly(boxes, canvas) {
@@ -47,7 +48,13 @@ async function drag(page, from, dx, dy) {
   await page.mouse.up();
 }
 
-test("a drag inside a domain box pans the view and moves no node", async ({ page }) => {
+test("a drag inside a domain box pans the view and moves no node", async ({ page, request }) => {
+  const parents = parentMap(await architectureData(request));
+  const containers = new Set(Object.values(parents).filter(Boolean));
+  requireShape(
+    [...containers].some((id) => parents[id]),
+    "no container sits inside another container, so there is no box within a box to drag in"
+  );
   await openArchitecture(page);
   const canvas = page.getByTestId("graph-canvas");
   await canvas.scrollIntoViewIfNeeded();

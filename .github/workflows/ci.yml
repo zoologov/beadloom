@@ -395,9 +395,14 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: site
 
+      # This repository's graph holds every shape the suite is written about, so
+      # a case that would skip for a missing shape fails here instead
+      # (beadloom-ujzb.17); an adopter's portal, which may lack one, skips it.
       - name: Run the browser tests
         run: npm run test:e2e
         working-directory: site
+        env:
+          BEADLOOM_E2E_NO_SKIP: "1"
 
       - name: Upload the Playwright report
         if: failure()
@@ -415,7 +420,9 @@ jobs:
   # Swift) under tests/fixtures/site/ is committed, initialised with
   # `beadloom init`, built with `beadloom docs site`, `npm ci` and
   # `vitepress build`, and read the way its adopter would read it; the shipped
-  # Playwright suite then runs on the Go and the TypeScript portal. These are
+  # Playwright suite then runs on each portal as its adopter runs it, with
+  # `npm run test:e2e`, and a case whose shape a fixture's graph lacks skips
+  # by itself, naming the shape (beadloom-ujzb.17). These are
   # the suite's `slow` tests, which the `tests` job skips: without this job
   # nothing runs them. No stack toolchain is installed: `beadloom init` parses
   # the source, it does not build it.
@@ -425,7 +432,9 @@ jobs:
   # ---------------------------------------------------------------------- #
   site-adopters:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Six Playwright runs: about 15 minutes measured on a 10-core machine with
+    # 5 workers each; a 4-core runner gets 2 workers, so the bound is doubled.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -453,7 +462,7 @@ jobs:
           "require('./src/beadloom/site_scaffold/package.json').devDependencies['@playwright/test']")"
           install --with-deps chromium
 
-      - name: Build every adopter fixture and run the browser tests on two
+      - name: Build every adopter fixture and run the browser tests on each
         run: uv run pytest -m slow -v --basetemp="$RUNNER_TEMP/adopters"
         env:
           BEADLOOM_RUN_SLOW: "1"

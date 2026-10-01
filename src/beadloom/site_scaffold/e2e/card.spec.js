@@ -6,6 +6,7 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -29,14 +30,22 @@ function richest(data) {
   return [...data.nodes].sort((a, b) => richness(b) - richness(a) || a.id.localeCompare(b.id))[0];
 }
 
+/**
+ * The richest node with a finding, so the card's findings are read as well; the
+ * richest node when no node has a finding, whose card then holds none to read.
+ */
+function richestWithFindings(data) {
+  const found = data.nodes.filter((n) => (n.findings || []).length > 0);
+  return richest(found.length ? { nodes: found } : data);
+}
+
 function field(page, name) {
   return page.locator(`${CARD} [data-card-field='${name}']`);
 }
 
 test("the card shows every field the data file holds for the node", async ({ page, request }) => {
   const data = await architectureData(request);
-  const node = richest(data);
-  expect((node.findings || []).length).toBeGreaterThan(0);
+  const node = richestWithFindings(data);
 
   await openArchitecture(page, `?focus=${node.id}`);
 
@@ -121,6 +130,7 @@ for (const { origin, own } of LAYER_ORIGINS) {
     const node = data.nodes
       .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
       .sort((a, b) => a.id.localeCompare(b.id))[0];
+    requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
     // The declared name of the node's layer, not the tag token (BDL-076 R1 finding m2).
     const layer = data.layers.find((l) => l.rank === node.layer_rank).name;
 
@@ -137,7 +147,11 @@ test("every edge kind the node has is listed by direction, and a click moves the
   const data = await architectureData(request);
   const drawn = new Set(["depends_on", "uses", "consumes", "produces"]);
   const edgesOf = (id) => data.edges.filter((e) => drawn.has(e.kind) && (e.src === id || e.dst === id));
-  const node = [...data.nodes].sort((a, b) => edgesOf(b.id).length - edgesOf(a.id).length)[0];
+  // The node with the most drawn edges among those with one going out, so the click has a target.
+  const node = data.nodes
+    .filter((n) => edgesOf(n.id).some((e) => e.src === n.id))
+    .sort((a, b) => edgesOf(b.id).length - edgesOf(a.id).length)[0];
+  requireShape(node, "no drawn edge: no depends_on, uses, consumes or produces edge between two nodes");
   const outgoing = edgesOf(node.id).find((e) => e.src === node.id);
 
   await openArchitecture(page, `?focus=${node.id}`);
@@ -207,15 +221,25 @@ function holdingMost(data, listOf) {
 // Two list fields the card's full-field case reads only by their "none": each
 // tag, and each test file bound to the node itself, are shown by name.
 const LISTED_FIELDS = [
-  { field: "tags", listOf: (node) => node.tags || [], read: (el) => el.locator("code") },
-  { field: "tests", listOf: (node) => node.tests?.files || [], read: (el) => el.locator("li code") },
+  {
+    field: "tags",
+    listOf: (node) => node.tags || [],
+    read: (el) => el.locator("code"),
+    lacking: "no node carries a tag",
+  },
+  {
+    field: "tests",
+    listOf: (node) => node.tests?.files || [],
+    read: (el) => el.locator("li code"),
+    lacking: "no test file is bound to a node itself",
+  },
 ];
 
-for (const { field: name, listOf, read } of LISTED_FIELDS) {
+for (const { field: name, listOf, read, lacking } of LISTED_FIELDS) {
   test(`the card lists every entry of the node's ${name} by name`, async ({ page, request }) => {
     const data = await architectureData(request);
     const node = holdingMost(data, listOf);
-    expect(listOf(node).length).toBeGreaterThan(0);
+    requireShape(listOf(node).length > 0, lacking);
 
     await openArchitecture(page, `?focus=${node.id}`);
 

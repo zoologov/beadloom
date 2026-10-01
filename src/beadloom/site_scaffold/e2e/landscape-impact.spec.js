@@ -18,6 +18,7 @@ import {
   openLandscape,
   serveLandscape,
 } from "./support/landscape.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 const IMPACT = { name: "Impact", exact: true };
 
@@ -153,6 +154,7 @@ test("on the landscape the portal serves, a change to a producer reaches its con
   request,
 }) => {
   const data = await landscapeData(request);
+  requireShape(data.edges.length > 0, LACKING.landscape);
   const producer = data.edges[0].src;
   const expected = expectedContractImpact(data, producer);
   expect(expected.affected.length).toBeGreaterThan(0);

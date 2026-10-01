@@ -13,6 +13,7 @@
 
 import { test, expect } from "@playwright/test";
 import { landscapeData } from "./support/landscape.js";
+import { requireShape } from "./support/shape.js";
 
 const XLINK = "http://www.w3.org/1999/xlink";
 
@@ -23,7 +24,7 @@ test("a landscape diagram link to a page under other/ carries the base path", as
 }) => {
   const data = await landscapeData(request);
   const target = data.nodes.map((n) => n.url).find((url) => url && url.startsWith("/other/"));
-  expect(target, "this landscape has a node whose page is under other/").toBeTruthy();
+  requireShape(target, "no node of the landscape has a page under other/");
   const base = new URL(baseURL).pathname;
 
   await page.goto("landscape-diagram.html");
@@ -40,8 +41,11 @@ test("a landscape diagram link to a page under other/ carries the base path", as
 
 test("a diagram rendered again by a theme switch keeps its base-aware links and its controls", async ({
   page,
+  request,
   baseURL,
 }) => {
+  const data = await landscapeData(request);
+  requireShape(data.nodes.some((n) => n.url), "no node of the landscape has a page for the diagram to link");
   const base = new URL(baseURL).pathname;
   await page.goto("landscape-diagram.html");
   await expect.poll(() => page.locator(".mermaid svg[data-bl-pz] a").count()).toBeGreaterThan(0);

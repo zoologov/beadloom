@@ -15,8 +15,11 @@ import {
   viewer,
   withAncestors,
 } from "./support/viewer.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 const sorted = (ids) => [...ids].sort();
+
+const NO_NESTING = "no node sits inside another: the graph has no part_of edge";
 
 test("a kind filter keeps every node of that kind visible, with its containers", async ({
   page,
@@ -24,26 +27,36 @@ test("a kind filter keeps every node of that kind visible, with its containers",
 }) => {
   const data = await architectureData(request);
   const parents = parentMap(data);
-  const features = data.nodes.filter((n) => n.kind === "feature").map((n) => n.id);
-  expect(features.some((id) => parents[id])).toBe(true);
+  // A feature inside a container when the graph has one; otherwise the kind the
+  // most nodes inside a container are of, so the containers kept are seen.
+  const nested = (kind) => data.nodes.filter((n) => n.kind === kind && parents[n.id]).length;
+  const kind = nested("feature")
+    ? "feature"
+    : [...new Set(data.nodes.map((n) => n.kind))].sort((a, b) => nested(b) - nested(a) || a.localeCompare(b))[0];
+  requireShape(nested(kind) > 0, NO_NESTING);
+  const ofKind = data.nodes.filter((n) => n.kind === kind).map((n) => n.id);
 
   await openArchitecture(page);
-  await page.getByLabel("Kind", { exact: true }).selectOption("feature");
+  await page.getByLabel("Kind", { exact: true }).selectOption(kind);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
-    sorted(withAncestors(features, parents))
+    sorted(withAncestors(ofKind, parents))
   );
 });
 
 test("a domain filter keeps the domain's whole subtree", async ({ page, request }) => {
   const data = await architectureData(request);
   const parents = parentMap(data);
-  const domains = data.nodes.filter((n) => n.kind === "domain").map((n) => n.id);
-  // The domain holding the deepest node, so the test sees more than direct children.
-  const deepest = data.nodes.map((n) => n.id).sort((a, b) => depthOf(b, parents) - depthOf(a, parents))[0];
-  const domain = domains.find((d) => subtreeOf(d, parents).has(deepest)) ?? domains[0];
+  // How far below a domain its subtree reaches.
+  const reach = (domain) =>
+    Math.max(...[...subtreeOf(domain, parents)].map((id) => depthOf(id, parents) - depthOf(domain, parents)));
+  // The domain whose subtree reaches deepest, so the test sees more than direct children.
+  const domain = data.nodes
+    .filter((n) => n.kind === "domain")
+    .map((n) => n.id)
+    .sort((a, b) => reach(b) - reach(a) || a.localeCompare(b))[0];
+  requireShape(domain && reach(domain) >= 2, "no domain holds a node two levels below it");
   const subtree = subtreeOf(domain, parents);
-  expect([...subtree].some((id) => depthOf(id, parents) - depthOf(domain, parents) >= 2)).toBe(true);
 
   await openArchitecture(page);
   await page.getByLabel("Domain", { exact: true }).selectOption(domain);
@@ -56,7 +69,10 @@ test("a domain filter keeps the domain's whole subtree", async ({ page, request 
 test("the search box keeps the matching nodes and their containers", async ({ page, request }) => {
   const data = await architectureData(request);
   const parents = parentMap(data);
-  const target = data.nodes.find((n) => parents[n.id] && parents[parents[n.id]]);
+  // A node two levels below the top, or failing that one level, so its containers are kept.
+  const target =
+    data.nodes.find((n) => parents[n.id] && parents[parents[n.id]]) ?? data.nodes.find((n) => parents[n.id]);
+  requireShape(target, NO_NESTING);
   const query = target.id;
   const matches = data.nodes
     .filter((n) => n.id.toLowerCase().includes(query.toLowerCase()))
@@ -80,8 +96,8 @@ test("a layer filter keeps every node in that layer, inherited or its own, with 
   const declared = data.nodes
     .filter((n) => n.layer && typeof n.layer_rank === "number")
     .sort((a, b) => untagged(b.layer_rank) - untagged(a.layer_rank) || a.id.localeCompare(b.id))[0];
+  requireShape(declared && untagged(declared.layer_rank) > 0, LACKING.inheritedLayer);
   const members = data.nodes.filter((n) => n.layer_rank === declared.layer_rank).map((n) => n.id);
-  expect(untagged(declared.layer_rank)).toBeGreaterThan(0);
 
   await openArchitecture(page);
   // The filter offers the declared names, not the tag tokens (BDL-076 R1 finding m2).
@@ -100,7 +116,10 @@ test("the flagged filter keeps every node with a violation or stale docs, with i
   const data = await architectureData(request);
   const parents = parentMap(data);
   const flagged = flaggedIds(data);
-  expect(flagged.some((id) => parents[id] && !flagged.includes(parents[id]))).toBe(true);
+  requireShape(
+    flagged.some((id) => parents[id] && !flagged.includes(parents[id])),
+    "no flagged node (a rule violation or stale docs) sits inside a container that is not flagged"
+  );
 
   await openArchitecture(page);
   await page.getByLabel("Only flagged", { exact: true }).check();

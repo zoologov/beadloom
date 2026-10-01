@@ -12,12 +12,25 @@ import {
   viewer,
 } from "./support/viewer.js";
 import { DEPENDENCY_KINDS, impact, nearestOfKind, risksOf } from "./support/graph.js";
+import { requireShape } from "./support/shape.js";
 
 /** `rule-engine` when this graph has it; otherwise the node with the most dependents. */
 function subjectOf(data) {
   if (data.nodes.some((n) => n.id === "rule-engine")) return "rule-engine";
   const reach = (id) => impact(data, id).distances.size;
   return data.nodes.map((n) => n.id).sort((a, b) => reach(b) - reach(a))[0];
+}
+
+/** `subjectOf` when `holds` of it; otherwise the first node, by id, of which it does. */
+function subjectWhere(data, holds) {
+  const preferred = subjectOf(data);
+  if (holds(preferred)) return preferred;
+  return data.nodes.map((n) => n.id).sort().find(holds);
+}
+
+/** How many dependency steps away the farthest node a change to `id` reaches is. */
+function farthest(data, id) {
+  return Math.max(...impact(data, id).distances.values());
 }
 
 /** What the summary must say, computed from the data file alone. */
@@ -63,9 +76,9 @@ test("impact mode rings every dependent by its distance and summarises them", as
   request,
 }) => {
   const data = await architectureData(request);
-  const subject = subjectOf(data);
+  const subject = subjectWhere(data, (id) => farthest(data, id) > 1);
+  requireShape(subject, "no change reaches a node two dependency steps away");
   const expected = expectedSummary(data, subject);
-  expect(Math.max(...Object.values(expected.distances))).toBeGreaterThan(1);
 
   await openArchitecture(page, `?focus=${subject}`);
   await page.getByRole("button", { name: "Impact", exact: true }).click();
@@ -78,12 +91,34 @@ test("impact mode rings every dependent by its distance and summarises them", as
   expect(
     Object.fromEntries(summary.boundaries.map((b) => [`${b.fromRank}->${b.toRank}`, b.count]).sort())
   ).toEqual(expected.boundaries);
-  expect(Object.keys(expected.boundaries).length).toBeGreaterThan(0);
   expect(new URL(page.url()).searchParams.get("view")).toBe("impact");
 
   const panel = page.getByTestId("impact-summary");
   await expect(panel.getByTestId("impact-count")).toHaveText(String(expected.affected.length));
   for (const domain of expected.domains) await expect(panel).toContainText(domain);
+});
+
+test("the impact summary counts the dependencies that cross each layer boundary, by rank", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const crosses = (id) => Object.keys(expectedSummary(data, id).boundaries).length > 0;
+  const subject = subjectWhere(data, crosses);
+  requireShape(subject, "no change's dependents cross a boundary between two declared layers");
+  const expected = expectedSummary(data, subject);
+
+  await openArchitecture(page, `?focus=${subject}&view=impact`);
+
+  await expect
+    .poll(async () =>
+      Object.fromEntries(
+        ((await viewer(page, "impactSummary"))?.boundaries || [])
+          .map((b) => [`${b.fromRank}->${b.toRank}`, b.count])
+          .sort()
+      )
+    )
+    .toEqual(expected.boundaries);
 });
 
 test("each affected node with no tests, stale docs or a finding is marked, and the card lists it", async ({
@@ -93,7 +128,10 @@ test("each affected node with no tests, stale docs or a finding is marked, and t
   const data = await architectureData(request);
   const subject = subjectOf(data);
   const expected = expectedSummary(data, subject);
-  expect(expected.risky.length).toBeGreaterThan(0);
+  requireShape(
+    expected.risky.length > 0,
+    "no node a change reaches carries a risk: none lacks bound tests, has unchecked or stale docs, or has a finding"
+  );
 
   await openArchitecture(page, `?focus=${subject}&view=impact`);
 
@@ -157,6 +195,7 @@ for (const { status, label } of DOC_STATES) {
     const data = await architectureData(request);
     const subject = subjectOf(data);
     const target = expectedSummary(data, subject).affected[0];
+    requireShape(target, "no node depends on another");
     const node = data.nodes.find((n) => n.id === target);
     node.docs = [{ path: "docs/served-for-the-case.md", status }];
     node.doc_status = status === "stale" ? "stale" : "fresh";

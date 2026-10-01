@@ -16,6 +16,7 @@ import {
   withAncestors,
 } from "./support/viewer.js";
 import { neighbourhood } from "./support/graph.js";
+import { requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -37,9 +38,11 @@ function subjectOf(data, prefix) {
     .filter((n) => neighbourhood(data, n.id, 1, "out").ids.length > 1)
     .filter((n) => neighbourhood(data, n.id, 1, "in").ids.length > 1);
   const preferred = qualifying.filter((n) => n.url.startsWith(prefix));
-  return (preferred.length ? preferred : qualifying).sort(
+  const subject = (preferred.length ? preferred : qualifying).sort(
     (a, b) => reach(b.id) - reach(a.id) || a.id.localeCompare(b.id)
   )[0];
+  requireShape(subject, "no node with a page both depends on another node and has a dependent");
+  return subject;
 }
 
 test("a node page opens with its node selected, its neighbourhood marked and its card open", async ({
@@ -115,7 +118,10 @@ test("a page under other/ opens focused on its node the same way", async ({ page
   const node = data.nodes
     .filter((n) => n.url && n.url.startsWith("/other/"))
     .sort((a, b) => a.id.localeCompare(b.id))[0];
-  expect(node, "this graph has a node whose page is under other/").toBeTruthy();
+  requireShape(
+    node,
+    "no node has a page under other/; only a node of a kind other than service, domain and feature has one"
+  );
 
   await page.goto(pageOf(node));
   await waitForViewer(page);

@@ -10,13 +10,14 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
 
 /** The data file with each declared layer renamed, and its tag and every node's token rewritten. */
 async function serveRenamedLayers(page, request) {
   const data = await architectureData(request);
-  expect(data.layers.length).toBeGreaterThan(1);
+  requireShape((data.layers || []).length > 1, LACKING.layers);
   const tokens = new Map();
   data.layers = data.layers.map((layer, index) => {
     const token = `zone-${index}`;
@@ -71,6 +72,7 @@ for (const own of [true, false]) {
     const node = data.nodes
       .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
       .sort((a, b) => a.id.localeCompare(b.id))[0];
+    requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
 
     await openArchitecture(page, `?focus=${node.id}`);
 
@@ -91,6 +93,7 @@ test("a file that declares no layer names falls back to the nodes' tokens", asyn
   for (const node of data.nodes) {
     if (node.layer && !tokenOfRank.has(node.layer_rank)) tokenOfRank.set(node.layer_rank, node.layer);
   }
+  requireShape(tokenOfRank.size > 0, LACKING.ownLayer);
 
   await openArchitecture(page);
 
@@ -109,7 +112,7 @@ test("each declared layer is drawn in a colour of its own, apart from a node in 
   request,
 }) => {
   const data = await architectureData(request);
-  expect(data.layers.length).toBeGreaterThan(1);
+  requireShape((data.layers || []).length > 1, LACKING.layers);
 
   await openArchitecture(page);
   const borders = new Map(

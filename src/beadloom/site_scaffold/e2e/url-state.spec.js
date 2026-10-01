@@ -8,23 +8,27 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
+import { requireShape } from "./support/shape.js";
 
 test("a linked view opens in the state its query names", async ({ page, request }) => {
   const data = await architectureData(request);
-  // A feature directly inside a domain; the first domain need not hold one.
+  // A feature directly inside a domain, or failing that a node of any kind; the
+  // first domain need not hold one.
   const kinds = new Map(data.nodes.map((n) => [n.id, n.kind]));
-  const feature = data.nodes.find((n) => n.kind === "feature" && kinds.get(n.parent) === "domain");
-  const [domain, focus] = [feature.parent, feature.id];
-  const query = `?kind=feature&domain=${domain}&violations=1&focus=${focus}&depth=2&dir=in&view=impact`;
+  const inDomain = data.nodes.filter((n) => n.parent !== n.id && kinds.get(n.parent) === "domain");
+  const member = inDomain.find((n) => n.kind === "feature") ?? inDomain[0];
+  requireShape(member, "no node sits directly inside a domain");
+  const [kind, domain, focus] = [member.kind, member.parent, member.id];
+  const query = `?kind=${kind}&domain=${domain}&violations=1&focus=${focus}&depth=2&dir=in&view=impact`;
 
   await openArchitecture(page, query);
 
-  await expect(page.getByLabel("Kind", { exact: true })).toHaveValue("feature");
+  await expect(page.getByLabel("Kind", { exact: true })).toHaveValue(kind);
   await expect(page.getByLabel("Domain", { exact: true })).toHaveValue(domain);
   await expect(page.getByLabel("Only flagged", { exact: true })).toBeChecked();
   expect(await viewer(page, "selection")).toBe(focus);
   expect(await viewer(page, "state")).toMatchObject({
-    kind: "feature",
+    kind,
     domain,
     violations: true,
     focus,
@@ -49,8 +53,14 @@ test("a change in the toolbar is written to the URL and survives a reload", asyn
   request,
 }) => {
   const data = await architectureData(request);
-  const layer = data.layers[data.layers.length - 1].name;
-  const focus = data.nodes.find((n) => n.kind === "domain").id;
+  const layers = data.layers || [];
+  requireShape(
+    layers.length > 0,
+    "no declared layer; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml"
+  );
+  const layer = layers[layers.length - 1].name;
+  // A domain when the graph has one; the focus is any node's.
+  const focus = (data.nodes.find((n) => n.kind === "domain") ?? data.nodes[0]).id;
 
   await openArchitecture(page, `?depth=3&dir=out&focus=${focus}`);
   await page.getByLabel("Layer", { exact: true }).selectOption(layer);
