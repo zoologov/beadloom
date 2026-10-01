@@ -505,3 +505,72 @@ class TestAGoImportNamesThePackageItsModulePathNames:
         refs = {name: name for name in clusters}
 
         assert _quick_import_scan(tmp_path, clusters, refs) == []
+
+
+def _jvm_available() -> bool:
+    try:
+        import tree_sitter_java  # noqa: F401
+        import tree_sitter_kotlin  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _java(package: str, *imports: str) -> str:
+    lines = "".join(f"import {name};\n" for name in imports)
+    return f"package {package};\n\n{lines}\nclass X {{}}\n"
+
+
+@pytest.mark.skipif(not _jvm_available(), reason="tree-sitter-java or -kotlin not installed")
+class TestAJvmImportNamesAPackageUnderTheSourceRoots:
+    """BDL-076 B6: a Java or Kotlin import is read as a package path under the source roots.
+
+    The segment reading took the first segment of an import naming a cluster, so
+    ``org.springframework.web.client.RestClient`` named a package ``web`` of the
+    project's own. Read under ``src/main/java`` it names no folder of the project.
+    """
+
+    def _scan(self, tmp_path: Path, files: dict[str, str]) -> set[tuple[str, str]]:
+        from beadloom.onboarding.scanner import _quick_import_scan
+        from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
+
+        for rel_path, text in files.items():
+            path = tmp_path / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        layout = read_jvm_layout(tmp_path)
+        clusters = cluster_packages(layout)
+        refs = {name: name for name in clusters}
+        edges = _quick_import_scan(tmp_path, clusters, refs, jvm=layout)
+        return {(e["src"], e["dst"]) for e in edges}
+
+    def test_a_third_party_import_sharing_a_package_name_is_no_edge(self, tmp_path: Path) -> None:
+        shop = "src/main/java/org/acme/shop"
+        edges = self._scan(
+            tmp_path,
+            {
+                f"{shop}/web/Controller.java": _java(
+                    "org.acme.shop.web", "org.acme.shop.model.Item"
+                ),
+                f"{shop}/model/Item.java": _java(
+                    "org.acme.shop.model", "org.springframework.web.client.RestClient"
+                ),
+            },
+        )
+
+        assert edges == {("web", "model")}
+
+    def test_an_import_of_another_modules_package_joins_the_two_modules(
+        self, tmp_path: Path
+    ) -> None:
+        edges = self._scan(
+            tmp_path,
+            {
+                "core/src/main/java/org/acme/core/geo/Point.java": _java("org.acme.core.geo"),
+                "app/src/main/kotlin/org/acme/app/Main.kt": (
+                    "package org.acme.app\n\nimport org.acme.core.geo.Point\n\nfun main() {}\n"
+                ),
+            },
+        )
+
+        assert edges == {("app", "core")}

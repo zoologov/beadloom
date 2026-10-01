@@ -18,6 +18,7 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
+from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
@@ -29,6 +30,7 @@ from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 from beadloom.onboarding.scanner.rules_gen import generate_rules
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
+from beadloom.onboarding.scanner.types import child_directory, cluster_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,10 +62,17 @@ def bootstrap_project(
     else:
         preset = detect_preset(project_root)
 
+    # A Maven or Gradle tree is clustered by package below its source roots
+    # (BDL-076 B6); the folders it accounts for leave the directory clustering,
+    # which made nodes of `src/main` and `src/test`. Without such a tree both
+    # lists below are the scan's, as they were.
+    jvm = read_jvm_layout(project_root)
+    source_dirs = [d for d in scan["source_dirs"] if d not in jvm.territory]
     clusters = _cluster_with_children(
         project_root,
-        source_dirs=scan["source_dirs"] or None,
+        source_dirs=source_dirs if jvm.territory else (source_dirs or None),
     )
+    clusters.update(cluster_packages(jvm, taken=clusters))
 
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []
@@ -101,14 +110,14 @@ def bootstrap_project(
         kind, confidence = preset.classify_dir(name)
         all_files: list[str] = info["files"]
         children: dict[str, list[str]] = info["children"]
-        source_dir: str = info["source_dir"]
+        directory = cluster_directory(name, info)
 
         # Top-level node — contextual summary with symbols, README, entry points.
         preferred = _sanitize_ref_id(name)
         ref_id = ref_ids.take(preferred, qualifier=kind)
         ref_by_name[preferred] = ref_id
         cluster_refs[name] = ref_id
-        dir_path = project_root / source_dir / name
+        dir_path = project_root / directory
         summary = _build_contextual_summary(
             dir_path,
             name,
@@ -123,7 +132,7 @@ def bootstrap_project(
                 "kind": kind,
                 "summary": summary,
                 "confidence": confidence,
-                "source": f"{source_dir}/{name}/",
+                "source": f"{directory}/",
             }
         )
 
@@ -134,7 +143,8 @@ def bootstrap_project(
                 child_preferred = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
                 child_ref_id = ref_ids.take(child_preferred, qualifier=child_kind)
                 ref_by_name[child_preferred] = child_ref_id
-                child_dir_path = project_root / source_dir / name / child_name
+                child_dir = child_directory(name, info, child_name)
+                child_dir_path = project_root / child_dir
                 child_summary = _build_contextual_summary(
                     child_dir_path,
                     child_name,
@@ -149,7 +159,7 @@ def bootstrap_project(
                         "kind": child_kind,
                         "summary": child_summary,
                         "confidence": child_conf,
-                        "source": f"{source_dir}/{name}/{child_name}/",
+                        "source": f"{child_dir}/",
                     }
                 )
                 edges.append(
@@ -161,8 +171,8 @@ def bootstrap_project(
                 )
 
     # Fallback: no clusters found, create minimal nodes from scan.
-    if not nodes and scan["source_dirs"]:
-        for sd in scan["source_dirs"]:
+    if not nodes and source_dirs:
+        for sd in source_dirs:
             sd_ref_id = ref_ids.take(sd, qualifier=preset.default_kind)
             ref_by_name[sd] = sd_ref_id
             nodes.append(
@@ -178,8 +188,7 @@ def bootstrap_project(
     # Monorepo: infer depends_on edges from manifest files.
     if preset.infer_deps_from_manifests:
         for name, info in clusters.items():
-            source_dir = info["source_dir"]
-            pkg_dir = project_root / source_dir / name
+            pkg_dir = project_root / cluster_directory(name, info)
             dep_names = _read_manifest_deps(pkg_dir)
             src_ref_id = cluster_refs[name]
             for dep in dep_names:
@@ -194,7 +203,7 @@ def bootstrap_project(
                     )
 
     # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, cluster_refs)
+    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm)
     edges.extend(import_edges)
 
     # Create root node + part_of edges from top-level nodes.
@@ -303,13 +312,18 @@ def bootstrap_project(
 
     # Create config.
     config: dict[str, Any] = {
-        "scan_paths": scan["source_dirs"] or ["src"],
+        "scan_paths": sorted([*source_dirs, *jvm.production_roots]) or ["src"],
         "languages": scan["languages"] or ["python"],
         "sync": {"hook_mode": "warn"},
         "preset": preset.name,
     }
     if not has_docs:
         config["docs_dir"] = None
+    # Each JVM test tree is named with the code tree it tests, so a test binds
+    # to its package; written whole, because a declared mapping replaces the
+    # test layout's default one.
+    if jvm.mirrors:
+        config["tests"] = {"mirrors": jvm.mirrors}
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,

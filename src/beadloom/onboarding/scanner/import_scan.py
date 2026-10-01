@@ -9,10 +9,13 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.go_modules import GoModules
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
+from beadloom.onboarding.scanner.jvm_layout import JVM_EXTENSIONS, jvm_package_directory
+from beadloom.onboarding.scanner.types import cluster_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.onboarding.scanner.jvm_layout import JvmLayout
     from beadloom.onboarding.scanner.types import ClusterEntry
 
 # Maximum number of import-based edges to avoid overwhelming the graph.
@@ -25,10 +28,15 @@ def _cluster_by_directory(
     clusters: dict[str, ClusterEntry], cluster_refs: dict[str, str]
 ) -> dict[str, str]:
     """Each cluster's project-relative directory, mapped to the ref_id it was written under."""
-    return {
-        f"{info['source_dir']}/{name}".strip("/"): cluster_refs[name]
-        for name, info in clusters.items()
-    }
+    return {cluster_directory(name, info): cluster_refs[name] for name, info in clusters.items()}
+
+
+def _holding_cluster(directory: str | None, by_directory: dict[str, str]) -> str | None:
+    """The cluster whose folder is *directory* or the nearest one above it."""
+    if directory is None:
+        return None
+    holders = [d for d in by_directory if directory == d or directory.startswith(f"{d}/")]
+    return by_directory[max(holders, key=len)] if holders else None
 
 
 def _go_import_cluster(
@@ -41,11 +49,7 @@ def _go_import_cluster(
     layout — no longer takes every import whose module path ends in its name.
     The standard library and modules the project does not hold name no cluster.
     """
-    directory = modules.package_directory(import_path, importer)
-    if directory is None:
-        return None
-    holders = [d for d in by_directory if directory == d or directory.startswith(f"{d}/")]
-    return by_directory[max(holders, key=len)] if holders else None
+    return _holding_cluster(modules.package_directory(import_path, importer), by_directory)
 
 
 def _segment_cluster(import_path: str, src_ref_id: str, by_name: dict[str, str]) -> str | None:
@@ -61,6 +65,8 @@ def _quick_import_scan(
     project_root: Path,
     clusters: dict[str, ClusterEntry],
     cluster_refs: dict[str, str],
+    *,
+    jvm: JvmLayout | None = None,
 ) -> list[dict[str, str]]:
     """Quick import scan to infer depends_on edges between clusters.
 
@@ -75,6 +81,11 @@ def _quick_import_scan(
     package is written as `<project>-<kind>`. A recomputed name would then name
     no node, and the edge this function builds from it would be dropped by the
     loader exactly as quietly as the duplicate node it replaced (BDL-UX #214).
+
+    *jvm* is the project's Maven/Gradle layout: where it has source roots, a
+    Java or Kotlin import is read as a package path under them (BDL-076 B6), so
+    a third-party import whose segments name one of the project's packages
+    (``org.springframework.web`` beside a package ``web``) draws no edge.
 
     Returns list of edge dicts: {src, dst, kind: "depends_on"}.
     """
@@ -93,6 +104,7 @@ def _quick_import_scan(
 
     by_directory = _cluster_by_directory(clusters, cluster_refs)
     go_modules = GoModules(project_root)
+    jvm_layout = jvm if jvm is not None and jvm.production else None
 
     seen_edges: set[tuple[str, str]] = set()
     edges: list[dict[str, str]] = []
@@ -114,11 +126,16 @@ def _quick_import_scan(
                 continue
 
             for imp in imports:
-                # A Go import is read through its module path; any other import
-                # by the first of its segments that names a cluster.
+                # A Go import is read through its module path, a JVM import as a
+                # package under the source roots; any other import by the first
+                # of its segments that names a cluster.
                 if abs_path.suffix == _GO_EXTENSION:
                     dst_ref_id = _go_import_cluster(
                         imp.import_path, rel_path, go_modules, by_directory
+                    )
+                elif jvm_layout is not None and abs_path.suffix in JVM_EXTENSIONS:
+                    dst_ref_id = _holding_cluster(
+                        jvm_package_directory(imp.import_path, jvm_layout), by_directory
                     )
                 else:
                     dst_ref_id = _segment_cluster(

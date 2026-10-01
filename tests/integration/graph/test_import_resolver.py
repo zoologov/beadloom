@@ -367,3 +367,60 @@ class TestGoImportsResolveThroughTheirModule:
         assert ("internal/ledger/ledger.go", "example.org/quay/internal/gone", None) in _imports(
             go_conn
         )
+
+
+def _jvm_available() -> bool:
+    try:
+        import tree_sitter_java  # noqa: F401
+        import tree_sitter_kotlin  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+#: One Gradle module keeping Java and Kotlin in separate roots (BDL-076 B6).
+_MIXED_MODULE: dict[str, str] = {
+    "src/main/java/org/acme/mill/legacy/Grinder.java": (
+        "package org.acme.mill.legacy;\n\nimport org.acme.mill.fresh.Sifter;\n\n"
+        "public class Grinder { Sifter sifter; }\n"
+    ),
+    "src/main/kotlin/org/acme/mill/fresh/Sifter.kt": (
+        "package org.acme.mill.fresh\n\nclass Sifter\n"
+    ),
+    "src/main/kotlin/org/acme/mill/fresh/Sieve.kt": (
+        "package org.acme.mill.fresh\n\nimport org.acme.mill.legacy.Grinder\n\nclass Sieve\n"
+    ),
+}
+
+
+@pytest.mark.skipif(not _jvm_available(), reason="tree-sitter-java or -kotlin not installed")
+class TestJavaAndKotlinShareOnePackageNamespace:
+    """BDL-076 B6: a Kotlin import of a Java package resolves across the module's two roots.
+
+    An import was read only through the scan paths holding its own language, and
+    ``.java`` and ``.kt`` were two languages, so a Kotlin file in
+    ``src/main/kotlin`` never reached a Java package in ``src/main/java``.
+    """
+
+    def test_each_language_reaches_the_other_roots_packages(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "index.db")
+        create_schema(c)
+        for ref_id, source in (
+            ("legacy", "src/main/java/org/acme/mill/legacy/"),
+            ("fresh", "src/main/kotlin/org/acme/mill/fresh/"),
+        ):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+                (ref_id, source),
+            )
+        c.commit()
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- src/main/java\n- src/main/kotlin\n", encoding="utf-8"
+        )
+        for rel_path, text in _MIXED_MODULE.items():
+            _write(tmp_path, rel_path, text)
+
+        index_imports(tmp_path, c)
+
+        assert _depends_on(c) == {("legacy", "fresh"), ("fresh", "legacy")}

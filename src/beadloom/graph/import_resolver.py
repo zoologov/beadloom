@@ -1054,6 +1054,11 @@ _IMPORT_LANGUAGE: dict[str, str] = {
     ".cjs": ".ts",
     ".vue": ".ts",
     ".kts": ".kt",
+    # Java and Kotlin share the JVM's one package namespace: a Kotlin file imports
+    # a Java class by its package and the other way round, and Gradle keeps the
+    # two in separate roots (`src/main/java`, `src/main/kotlin`) of one module
+    # (BDL-076 B6).
+    ".java": ".kt",
     ".mm": ".m",
     ".h": ".c",
     ".cpp": ".c",

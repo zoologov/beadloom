@@ -2873,6 +2873,8 @@ class TestScannerTypedDictShapes:
         "languages",
     }
     _CLUSTER_KEYS: ClassVar[set[str]] = {"files", "children", "source_dir"}
+    #: Set only where a cluster does not sit at ``<source_dir>/<name>`` (BDL-076 B6).
+    _CLUSTER_PLACEMENT_KEYS: ClassVar[set[str]] = {"directory", "child_directories"}
 
     def test_scanresult_keys_match_typeddict_annotations(self) -> None:
         """ScanResult producer keys == declared __annotations__ keys."""
@@ -2883,7 +2885,23 @@ class TestScannerTypedDictShapes:
     def test_clusterentry_keys_match_typeddict_annotations(self) -> None:
         from beadloom.onboarding.scanner.types import ClusterEntry
 
-        assert set(ClusterEntry.__annotations__) == self._CLUSTER_KEYS
+        assert set(ClusterEntry.__required_keys__) == self._CLUSTER_KEYS
+        assert set(ClusterEntry.__optional_keys__) == self._CLUSTER_PLACEMENT_KEYS
+
+    def test_a_jvm_package_cluster_carries_its_placement(self, tmp_path: Path) -> None:
+        """A package cluster sits below its source root, so it states where (BDL-076 B6)."""
+        from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
+
+        code = tmp_path / "src" / "main" / "java" / "org" / "acme" / "web"
+        code.mkdir(parents=True)
+        (code / "Api.java").write_text("class Api {}\n")
+        (tmp_path / "src" / "main" / "java" / "org" / "acme" / "model").mkdir()
+        (tmp_path / "src" / "main" / "java" / "org" / "acme" / "model" / "M.java").write_text("")
+
+        entry = cluster_packages(read_jvm_layout(tmp_path))["web"]
+
+        assert set(entry.keys()) == self._CLUSTER_KEYS | self._CLUSTER_PLACEMENT_KEYS
+        assert entry["directory"] == "src/main/java/org/acme/web"
 
     def test_representative_scan_populates_all_scanresult_fields(
         self, tmp_path: Path
