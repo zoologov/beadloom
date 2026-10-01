@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING
 from beadloom.graph.go_modules import GoModules
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.jvm_layout import JVM_EXTENSIONS, jvm_package_directory
+from beadloom.onboarding.scanner.swift_layout import SWIFT_EXTENSION
 from beadloom.onboarding.scanner.types import cluster_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.onboarding.scanner.jvm_layout import JvmLayout
+    from beadloom.onboarding.scanner.swift_layout import SwiftLayout
     from beadloom.onboarding.scanner.types import ClusterEntry
 
 # Maximum number of import-based edges to avoid overwhelming the graph.
@@ -67,6 +69,7 @@ def _quick_import_scan(
     cluster_refs: dict[str, str],
     *,
     jvm: JvmLayout | None = None,
+    swift: SwiftLayout | None = None,
 ) -> list[dict[str, str]]:
     """Quick import scan to infer depends_on edges between clusters.
 
@@ -87,6 +90,12 @@ def _quick_import_scan(
     a third-party import whose segments name one of the project's packages
     (``org.springframework.web`` beside a package ``web``) draws no edge.
 
+    *swift* is the project's Swift Package Manager layout: where it has
+    manifests, a Swift import is read as the target the manifest declares under
+    that name (BDL-076 B7), so an import of a target in a package below the root
+    reaches that package's cluster, and an Apple framework or a remote product
+    names nothing.
+
     Returns list of edge dicts: {src, dst, kind: "depends_on"}.
     """
     try:
@@ -105,6 +114,7 @@ def _quick_import_scan(
     by_directory = _cluster_by_directory(clusters, cluster_refs)
     go_modules = GoModules(project_root)
     jvm_layout = jvm if jvm is not None and jvm.production else None
+    swift_packages = swift.packages if swift is not None and swift.production else None
 
     seen_edges: set[tuple[str, str]] = set()
     edges: list[dict[str, str]] = []
@@ -127,8 +137,9 @@ def _quick_import_scan(
 
             for imp in imports:
                 # A Go import is read through its module path, a JVM import as a
-                # package under the source roots; any other import by the first
-                # of its segments that names a cluster.
+                # package under the source roots, a Swift import as the target its
+                # manifest declares; any other import by the first of its segments
+                # that names a cluster.
                 if abs_path.suffix == _GO_EXTENSION:
                     dst_ref_id = _go_import_cluster(
                         imp.import_path, rel_path, go_modules, by_directory
@@ -136,6 +147,10 @@ def _quick_import_scan(
                 elif jvm_layout is not None and abs_path.suffix in JVM_EXTENSIONS:
                     dst_ref_id = _holding_cluster(
                         jvm_package_directory(imp.import_path, jvm_layout), by_directory
+                    )
+                elif swift_packages is not None and abs_path.suffix == SWIFT_EXTENSION:
+                    dst_ref_id = _holding_cluster(
+                        swift_packages.module_directory(imp.import_path, rel_path), by_directory
                     )
                 else:
                     dst_ref_id = _segment_cluster(

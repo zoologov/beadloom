@@ -424,3 +424,118 @@ class TestJavaAndKotlinShareOnePackageNamespace:
         index_imports(tmp_path, c)
 
         assert _depends_on(c) == {("legacy", "fresh"), ("fresh", "legacy")}
+
+
+def _swift_available() -> bool:
+    try:
+        import tree_sitter_swift  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+#: A Swift package at the root with a target outside `Sources/`, and a local package
+#: below it (BDL-076 B7). Each target is its own scan path, as `init` writes them.
+_SWIFT_PACKAGES: dict[str, str] = {
+    "Package.swift": (
+        "import PackageDescription\n"
+        'let package = Package(name: "Harbor", targets: [\n'
+        '    .target(name: "Engine", path: "Engine"),\n'
+        '    .executableTarget(name: "Harbor", dependencies: ["Engine", "Moor"]),\n'
+        '    .binaryTarget(name: "Crypto", path: "Crypto.xcframework"),\n'
+        "])\n"
+    ),
+    "Engine/Engine.swift": "import Foundation\n\npublic struct Engine {}\n",
+    "Sources/Harbor/main.swift": "import Engine\nimport Moor\nimport Logging\nimport Crypto\n",
+    "Packages/Docks/Package.swift": (
+        "import PackageDescription\n"
+        'let package = Package(name: "Docks", targets: [.target(name: "Moor")])\n'
+    ),
+    "Packages/Docks/Sources/Moor/Moor.swift": "import Engine\n\npublic struct Moor {}\n",
+}
+
+
+@pytest.mark.skipif(not _swift_available(), reason="tree-sitter-swift not installed")
+class TestSwiftImportsResolveThroughTheirManifest:
+    """BDL-076 B7: a Swift import reaches the node owning the target its manifest declares.
+
+    A Swift ``import`` names a module, not a folder: read as a dotted folder path
+    under each scan path it names nothing once every target is its own scan path,
+    and nothing at all for a target whose ``path:`` is not ``Sources/<name>``.
+    """
+
+    @pytest.fixture
+    def swift_conn(self, tmp_path: Path) -> sqlite3.Connection:
+        c = open_db(tmp_path / "index.db")
+        create_schema(c)
+        for ref_id, source in (
+            ("Engine", "Engine/"),
+            ("Harbor", "Sources/Harbor/"),
+            ("Moor", "Packages/Docks/Sources/Moor/"),
+        ):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+                (ref_id, source),
+            )
+        c.commit()
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- Engine\n- Packages/Docks/Sources/Moor\n- Sources/Harbor\n",
+            encoding="utf-8",
+        )
+        for rel_path, text in _SWIFT_PACKAGES.items():
+            _write(tmp_path, rel_path, text)
+        return c
+
+    def test_each_import_is_recorded_with_the_node_owning_its_target(
+        self, tmp_path: Path, swift_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, swift_conn)
+        assert _imports(swift_conn) == {
+            ("Sources/Harbor/main.swift", "Engine", "Engine"),
+            ("Sources/Harbor/main.swift", "Moor", "Moor"),
+            ("Sources/Harbor/main.swift", "Logging", None),
+            ("Sources/Harbor/main.swift", "Crypto", None),
+            ("Packages/Docks/Sources/Moor/Moor.swift", "Engine", "Engine"),
+        }
+
+    def test_the_edges_are_exactly_the_target_imports(
+        self, tmp_path: Path, swift_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, swift_conn)
+        assert _depends_on(swift_conn) == {
+            ("Harbor", "Engine"),
+            ("Harbor", "Moor"),
+            ("Moor", "Engine"),
+        }
+
+    def test_an_incremental_reindex_resolves_the_same_way(
+        self, tmp_path: Path, swift_conn: sqlite3.Connection
+    ) -> None:
+        index_imports(tmp_path, swift_conn)
+        _write(tmp_path, "Sources/Harbor/main.swift", "import Moor\n")
+        reindex_file_imports(
+            tmp_path, swift_conn, touched=["Sources/Harbor/main.swift"], removed=[]
+        )
+        assert _depends_on(swift_conn) == {("Harbor", "Moor"), ("Moor", "Engine")}
+
+    def test_without_a_manifest_an_import_is_read_as_before(self, tmp_path: Path) -> None:
+        """No ``Package.swift``: a module folder under the scan path, as B3 measured it."""
+        c = open_db(tmp_path / "index.db")
+        create_schema(c)
+        for ref_id, source in (("Core", "Sources/Core/"), ("App", "Sources/App/")):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+                (ref_id, source),
+            )
+        c.commit()
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- Sources\n", encoding="utf-8"
+        )
+        _write(tmp_path, "Sources/Core/Core.swift", "public struct Core {}\n")
+        _write(tmp_path, "Sources/App/main.swift", "import Core\n")
+
+        index_imports(tmp_path, c)
+
+        assert _depends_on(c) == {("App", "Core")}

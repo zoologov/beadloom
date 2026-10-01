@@ -16,6 +16,7 @@ from tree_sitter import Parser
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.rules.layers import part_of_ancestors
+from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
@@ -1044,6 +1045,42 @@ def resolve_go_import(
     return get_owning_ref_id(conn, posixpath.join(directory, primary))
 
 
+#: The extension of a Swift source file.
+_SWIFT_EXTENSION = ".swift"
+
+
+def _swift_module(import_path: str) -> str:
+    """The module a Swift import names: ``import Core.Route`` names ``Core``."""
+    return import_path.split(".", 1)[0]
+
+
+def resolve_swift_import(
+    import_path: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+    packages: SwiftPackages,
+) -> str | None:
+    """Map a Swift *import_path* to the node that owns the target it names (BDL-076 B7).
+
+    *importer* is the importing file's project-relative POSIX path. The target's
+    folder comes from the project's manifests (:mod:`.swift_packages`: the target
+    of that name in the importer's own package, else the one other package that
+    declares it); its owner is decided by the one ownership rule, applied to the
+    folder itself, so a node sourced at the target folder or above it is found.
+    ``None`` for an Apple framework, a product of a package the project does not
+    hold, a target with no Swift source and a folder that does not exist.
+
+    The caller reads an import here only when some manifest declares its module;
+    a project with no ``Package.swift`` keeps the dotted-path reading of
+    :func:`resolve_import_to_node`, which finds a module folder under a scan path.
+    """
+    directory = packages.module_directory(import_path, importer)
+    if directory is None or not (project_root / directory).is_dir():
+        return None
+    return get_owning_ref_id(conn, f"{directory}/")
+
+
 #: Extensions whose files write their imports in one language, mapped to one
 #: representative extension of it. An extension not listed is its own language.
 _IMPORT_LANGUAGE: dict[str, str] = {
@@ -1237,10 +1274,12 @@ def _index_one_file(
     conn: sqlite3.Connection,
     scan_paths: list[str],
     go_modules: GoModules,
+    swift_packages: SwiftPackages,
 ) -> int:
     """Index one source file's imports into ``code_imports``; return the count.
 
-    *go_modules* is read only when the file is Go, and only once per run.
+    *go_modules* is read only when the file is Go, *swift_packages* only when it
+    is Swift, and each only once per run.
     """
     imports = extract_imports(file_path)
     if not imports:
@@ -1260,6 +1299,12 @@ def _index_one_file(
         if file_path.suffix == _GO_EXTENSION:
             resolved = resolve_go_import(
                 imp.import_path, relative.as_posix(), project_root, conn, go_modules
+            )
+        elif file_path.suffix == _SWIFT_EXTENSION and swift_packages.declares(
+            _swift_module(imp.import_path)
+        ):
+            resolved = resolve_swift_import(
+                imp.import_path, relative.as_posix(), project_root, conn, swift_packages
             )
         elif is_ts and is_relative_specifier(imp.import_path):
             resolved = resolve_relative_import(
@@ -1296,6 +1341,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     files = _collect_source_files(project_root)
     languages = scan_path_languages(project_root, scan_paths, files)
     go_modules = GoModules(project_root)
+    swift_packages = SwiftPackages(project_root)
     total = sum(
         _index_one_file(
             file_path,
@@ -1303,6 +1349,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
             go_modules,
+            swift_packages,
         )
         for file_path in files
     )
@@ -1342,6 +1389,7 @@ def reindex_file_imports(
     languages = scan_path_languages(project_root, scan_paths, _collect_source_files(project_root))
     extensions = _supported_extensions()
     go_modules = GoModules(project_root)
+    swift_packages = SwiftPackages(project_root)
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
@@ -1353,6 +1401,7 @@ def reindex_file_imports(
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
             go_modules,
+            swift_packages,
         )
 
     conn.commit()

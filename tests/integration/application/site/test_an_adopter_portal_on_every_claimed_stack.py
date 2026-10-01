@@ -35,9 +35,10 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.slow
 
-#: The defects B3 found, each filed under the epic; the reason names the bead. The
-#: Maven/Gradle one (``beadloom-ujzb.15``) was fixed by B6, and its marks are gone.
-_SWIFTPM_LAYOUT = "beadloom-ujzb.16: init on a Swift Package Manager layout finds no node at all"
+#: The defects B3 found were each filed under the epic and held here by a strict
+#: xfail naming its bead: Go (``beadloom-ujzb.14``, B5), Maven/Gradle
+#: (``beadloom-ujzb.15``, B6) and SwiftPM (``beadloom-ujzb.16``, B7). All three are
+#: fixed and their marks are gone; a new defect adds its mark through ``_stacks``.
 
 
 def _stacks(xfails: dict[str, str] | None = None) -> list[Any]:
@@ -86,7 +87,7 @@ def test_the_portal_builds_from_docs_site(
     assert (portal.dist / "index.html").is_file()
 
 
-@pytest.mark.parametrize("stack", _stacks({"swift": _SWIFTPM_LAYOUT}))
+@pytest.mark.parametrize("stack", _stacks())
 def test_every_module_of_the_project_is_a_node(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -97,7 +98,7 @@ def test_every_module_of_the_project_is_a_node(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks({"swift": _SWIFTPM_LAYOUT}))
+@pytest.mark.parametrize("stack", _stacks())
 def test_every_import_between_modules_is_a_depends_on_edge(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:

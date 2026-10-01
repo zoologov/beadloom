@@ -30,6 +30,7 @@ from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 from beadloom.onboarding.scanner.rules_gen import generate_rules
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
+from beadloom.onboarding.scanner.swift_layout import cluster_targets, read_swift_layout
 from beadloom.onboarding.scanner.types import child_directory, cluster_directory
 
 if TYPE_CHECKING:
@@ -63,16 +64,20 @@ def bootstrap_project(
         preset = detect_preset(project_root)
 
     # A Maven or Gradle tree is clustered by package below its source roots
-    # (BDL-076 B6); the folders it accounts for leave the directory clustering,
-    # which made nodes of `src/main` and `src/test`. Without such a tree both
-    # lists below are the scan's, as they were.
+    # (BDL-076 B6), a Swift package by target (B7); the folders they account for
+    # leave the directory clustering, which made nodes of `src/main` and
+    # `src/test` and knew no `Sources/`. Without such a tree both lists below are
+    # the scan's, as they were.
     jvm = read_jvm_layout(project_root)
-    source_dirs = [d for d in scan["source_dirs"] if d not in jvm.territory]
+    swift = read_swift_layout(project_root)
+    territory = jvm.territory | swift.territory
+    source_dirs = [d for d in scan["source_dirs"] if d not in territory]
     clusters = _cluster_with_children(
         project_root,
-        source_dirs=source_dirs if jvm.territory else (source_dirs or None),
+        source_dirs=source_dirs if territory else (source_dirs or None),
     )
     clusters.update(cluster_packages(jvm, taken=clusters))
+    clusters.update(cluster_targets(swift, taken=clusters))
 
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []
@@ -203,7 +208,7 @@ def bootstrap_project(
                     )
 
     # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm)
+    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
     edges.extend(import_edges)
 
     # Create root node + part_of edges from top-level nodes.
@@ -312,18 +317,22 @@ def bootstrap_project(
 
     # Create config.
     config: dict[str, Any] = {
-        "scan_paths": sorted([*source_dirs, *jvm.production_roots]) or ["src"],
-        "languages": scan["languages"] or ["python"],
+        "scan_paths": sorted([*source_dirs, *jvm.production_roots, *swift.production_roots])
+        or ["src"],
+        # The project scan counts no `.swift` file, so a Swift package's language
+        # comes from its targets.
+        "languages": sorted({*scan["languages"], *swift.languages}) or ["python"],
         "sync": {"hook_mode": "warn"},
         "preset": preset.name,
     }
     if not has_docs:
         config["docs_dir"] = None
-    # Each JVM test tree is named with the code tree it tests, so a test binds
-    # to its package; written whole, because a declared mapping replaces the
-    # test layout's default one.
-    if jvm.mirrors:
-        config["tests"] = {"mirrors": jvm.mirrors}
+    # Each JVM test tree and each Swift test target is named with the code tree
+    # it tests, so a test binds to its package or target; written whole, both
+    # together, because a declared mapping replaces the test layout's default one.
+    mirrors = {**jvm.mirrors, **swift.mirrors}
+    if mirrors:
+        config["tests"] = {"mirrors": dict(sorted(mirrors.items()))}
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,
