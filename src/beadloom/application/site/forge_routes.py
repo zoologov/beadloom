@@ -102,24 +102,114 @@ _REPOSITORY_SEGMENTS = 2
 
 
 def runs_past_repository(web_url: str, forge: Forge) -> bool:
-    """Whether *web_url* goes on, past a repository, into a route *forge* serves.
+    """Whether *web_url* goes on, past a repository, into a page *forge* serves.
 
     ``https://github.com/o/r/tree/main`` does: ``tree`` is a route GitHub
     appends, it comes after the owner and the repository, and something
     follows it. A segment that is the last one, or that comes before the
     second, is a name (a repository called ``tree``, an owner called ``src``).
+
+    A known forge also says where its repository's address ends (BDL-076,
+    ``beadloom-ujzb.23``, re-review finding n2): GitHub, Bitbucket Cloud and a
+    public Gitea host serve a repository at ``/<owner>/<repository>`` and
+    nothing deeper, so ``/o/r/pulls`` is a page; GitLab reserves the names of
+    its own routes (``tree``, ``blob``, ``-``), which no project may take, so one
+    of them past the second segment is a page; Azure DevOps ends a repository
+    at ``_git/<repository>``.
     """
-    try:
-        segments = [part for part in urlsplit(web_url).path.split("/") if part]
-    except ValueError:
+    segments = _segments(web_url)
+    if segments is None:
         return False
     routes = forge.route_segments
     last = len(segments) - 1
-    return any(
+    if any(
         segment in routes
         for index, segment in enumerate(segments)
         if _REPOSITORY_SEGMENTS <= index < last
+    ):
+        return True
+    return _past_by_shape(segments, forge.kind, _host(web_url))
+
+
+def stops_before_repository(web_url: str, forge: Forge) -> str | None:
+    """How *forge* writes a repository's address, when *web_url* stops before one; else ``None``.
+
+    A host alone, an owner or a group alone, an Azure DevOps project with no
+    ``_git/<repository>``: none of them is a repository on a known forge. A forge
+    a project describes by a template says nothing about its addresses' shape.
+    """
+    shape = _SHAPES.get(forge.kind)
+    segments = _segments(web_url)
+    if shape is None or segments is None:
+        return None
+    if forge.kind == _AZURE:
+        short = _AZURE_REPOSITORY not in segments[:-1]
+    else:
+        short = len(segments) < _REPOSITORY_SEGMENTS
+    return shape.path if short else None
+
+
+@dataclass(frozen=True)
+class _Shape:
+    """Where a known forge's repository address ends.
+
+    ``path`` is how the forge writes one, for a refusal; ``at_root`` that it is
+    always the first two segments of the path, and ``public_at_root`` that it is
+    on the forge's public host (a self-hosted one may serve under a path);
+    ``pages`` the segments past the repository only the forge's own pages use.
+    """
+
+    path: str
+    at_root: bool
+    public_at_root: bool = False
+    pages: frozenset[str] = frozenset()
+
+
+#: The project names GitLab reserves because its own routes use them.
+_GITLAB_RESERVED = frozenset(
+    ("-", "badges", "blame", "blob", "builds", "commits", "create", "create_dir", "edit",
+     "files", "find_file", "new", "preview", "raw", "refs", "tree", "update", "wikis")
+)  # fmt: skip
+#: Gitea's pages of a repository, for a host that may serve it under a path.
+_GITEA_PAGES = frozenset(
+    ("src", "raw", "media", "blame", "commits", "commit", "branches", "tags", "releases",
+     "issues", "pulls", "wiki", "activity", "actions", "projects", "packages", "milestones",
+     "labels", "settings", "compare")
+)  # fmt: skip
+#: The segment before an Azure DevOps repository's name.
+_AZURE_REPOSITORY = "_git"
+
+
+def _past_by_shape(segments: list[str], kind: str, host: str) -> bool:
+    """Whether *segments* run past where a repository's address ends on the forge *kind*."""
+    shape = _SHAPES.get(kind)
+    if shape is None:
+        return False
+    if kind == _AZURE:
+        return _AZURE_REPOSITORY in segments[:-2]
+    at_root = shape.at_root or (shape.public_at_root and _PUBLIC_HOSTS.get(host) == kind)
+    if at_root:
+        return len(segments) > _REPOSITORY_SEGMENTS
+    last = len(segments) - 1
+    return any(
+        segment in shape.pages and (kind == _GITLAB or index < last)
+        for index, segment in enumerate(segments)
+        if index >= _REPOSITORY_SEGMENTS
     )
+
+
+def _segments(web_url: str) -> list[str] | None:
+    try:
+        return [part for part in urlsplit(web_url).path.split("/") if part]
+    except ValueError:
+        return None
+
+
+def _host(web_url: str) -> str:
+    try:
+        return (urlsplit(web_url).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
 _GITHUB = "github"
@@ -184,6 +274,17 @@ _PUBLIC_HOSTS = {
     "codeberg.org": _GITEA,
     "gitea.com": _GITEA,
     "dev.azure.com": _AZURE,
+}
+
+#: Where each known forge's repository address ends (:func:`runs_past_repository`).
+_SHAPES: Mapping[str, _Shape] = {
+    _GITHUB: _Shape("/<owner>/<repository>", at_root=True),
+    _BITBUCKET: _Shape("/<workspace>/<repository>", at_root=True),
+    _GITEA: _Shape(
+        "/<owner>/<repository>", at_root=False, public_at_root=True, pages=_GITEA_PAGES
+    ),
+    _GITLAB: _Shape("/<group>/<project>", at_root=False, pages=_GITLAB_RESERVED),
+    _AZURE: _Shape("/<organisation>/<project>/_git/<repository>", at_root=False),
 }
 
 #: Azure DevOps' older hosts, ``<organisation>.visualstudio.com``, and the one

@@ -98,10 +98,16 @@ class RawHtml:
 class Text:
     """Text markdown-it renders as an element's content, which Vue reads for ``{{ }}``.
 
-    ``segment`` is Markdown: a backslash escapes the character after it.
+    ``segment`` is Markdown: a backslash escapes the character after it. Where it
+    sits in its inline token is what markdown-it-attrs reads (:mod:`.markdown_attrs`):
+    ``opens`` and ``closes`` say it starts and ends the inline token, and ``alone``
+    that the inline is a paragraph right after a table or a list.
     """
 
     segment: Segment
+    opens: bool = False
+    closes: bool = False
+    alone: bool = False
 
 
 @dataclass(frozen=True)
@@ -121,7 +127,10 @@ class CodeBlock:
     ``insert_at`` is where a line can be inserted before it and still sit in its
     containers, ``continuation`` begins any new line inside them, and ``resume``
     is what the rest of the block's first line needs once a line break is
-    inserted at ``insert_at`` (empty when ``insert_at`` starts a line).
+    inserted at ``insert_at`` (empty when ``insert_at`` starts a line), and
+    ``lead`` what goes between ``insert_at`` and an inserted line's own text. For
+    a fence, ``info`` is the source span of its info string, which VitePress
+    writes into the page as it is.
     """
 
     kind: str
@@ -131,9 +140,37 @@ class CodeBlock:
     insert_at: int = 0
     continuation: str = ""
     resume: str = ""
+    lead: str = ""
+    info: Span | None = None
 
 
-Part = Element | RawHtml | Text | CodeSpan | CodeBlock
+@dataclass(frozen=True)
+class Autolink:
+    """An autolink, ``<address>``, from ``start`` to ``end``.
+
+    ``label`` is the text markdown-it renders for it, the address with its
+    percent-escapes decoded, and ``destination`` the address it links to.
+    """
+
+    start: int
+    end: int
+    label: str
+    destination: str
+
+
+@dataclass(frozen=True)
+class RawLabel:
+    """Text markdown-it-attrs reads as written, escapes included, ending at ``end``.
+
+    An image's label (the image token's content) and a container's info string,
+    which the plugin's fence pattern reads on any block token that has one.
+    """
+
+    end: int
+    label: str
+
+
+Part = Element | RawHtml | Text | CodeSpan | CodeBlock | Autolink | RawLabel
 
 
 # -- links and definitions --------------------------------------------------------
@@ -245,6 +282,7 @@ class _Reader:
         self.links: list[Link] = []
         self.definitions: list[Definition] = []
         self.code: list[CodeRegion] = []
+        self.alone = False
         if head:
             self.code.append(CodeRegion(0, head, "frontmatter"))
 
@@ -257,7 +295,8 @@ class _Reader:
         )
 
     def read(self, tokens: Sequence[Token]) -> None:
-        for token in tokens:
+        for index, token in enumerate(tokens):
+            self.alone = index >= _ALONE_AFTER and _follows_a_list_or_table(tokens, index)
             self._block(token)
 
     def _block(self, token: Token) -> None:
@@ -265,7 +304,7 @@ class _Reader:
             if token.type == "html_inline":
                 self.parts.append(RawHtml(self._segment(token)))
                 return
-            self._inline(self._segment(token), token.children or [])
+            self._inline(self._segment(token), token.children or [], alone=self.alone)
         elif token.type == "html_block":
             self.parts.append(RawHtml(self._segment(token)))
         elif token.type in {"fence", "code_block"}:
@@ -274,6 +313,7 @@ class _Reader:
             self._definition(token)
         elif token.nesting and not token.hidden:
             self.parts.append(Element(opening=token.nesting > 0))
+            self._container_info(token)
             self._container_title(token)
 
     def _segment(self, token: Token) -> Segment:
@@ -286,7 +326,9 @@ class _Reader:
     def _code_block(self, token: Token) -> None:
         start, end = self._lines(token)
         if token.type == "fence":
-            self.parts.append(CodeBlock("fence", start, end, token.content))
+            info_start, info_end = token.meta["info"]
+            info = (self.head + info_start, self.head + info_end)
+            self.parts.append(CodeBlock("fence", start, end, token.content, info=info))
             self.code.append(CodeRegion(start, end, "fence"))
             return
         self.parts.append(
@@ -298,6 +340,7 @@ class _Reader:
                 insert_at=self.head + token.meta["insert_at"],
                 continuation=token.meta["continuation"],
                 resume=token.meta["resume"],
+                lead=token.meta["lead"],
             )
         )
         self.code.append(CodeRegion(start, end, "indented"))
@@ -314,6 +357,11 @@ class _Reader:
             )
         )
 
+    def _container_info(self, token: Token) -> None:
+        info_end = token.meta.get("info_end")
+        if info_end is not None:
+            self.parts.append(RawLabel(self.head + info_end, token.info))
+
     def _container_title(self, token: Token) -> None:
         title = token.meta.get("title")
         name = token.type.removeprefix("container_").removesuffix("_open")
@@ -325,9 +373,11 @@ class _Reader:
         self._inline(segment, children)
         self.parts.append(Element(opening=False))
 
-    def _inline(self, segment: Segment, children: Sequence[Token]) -> None:
+    def _inline(
+        self, segment: Segment, children: Sequence[Token], *, alone: bool = False
+    ) -> None:
         """The parts of one inline token, in order: text runs between located children."""
-        walk = _InlineWalk(segment, self)
+        walk = _InlineWalk(segment, self, alone=alone)
         for child in children:
             walk.child(child)
         walk.text_until(len(segment.text))
@@ -336,15 +386,23 @@ class _Reader:
 class _InlineWalk:
     """One inline token's children, turned into parts and links."""
 
-    def __init__(self, segment: Segment, reader: _Reader) -> None:
+    def __init__(self, segment: Segment, reader: _Reader, *, alone: bool) -> None:
         self.segment = segment
         self.reader = reader
+        self.alone = alone
         self.cursor = 0
         self.open_links: list[tuple[int, int] | None] = []
 
     def text_until(self, position: int) -> None:
         if position > self.cursor:
-            self.reader.parts.append(Text(self.segment.slice(self.cursor, position)))
+            self.reader.parts.append(
+                Text(
+                    self.segment.slice(self.cursor, position),
+                    opens=self.cursor == 0,
+                    closes=position == len(self.segment.text),
+                    alone=self.alone,
+                )
+            )
         self.cursor = max(self.cursor, position)
 
     def child(self, child: Token) -> None:
@@ -362,6 +420,8 @@ class _InlineWalk:
         elif child.type == "image" and span:
             self.text_until(span[0])
             self.reader.links.append(self._link(child, image=True))
+            label = self.segment.text[span[0] + len("![") : child.meta["label_end"]]
+            self.reader.parts.append(RawLabel(self.segment.source(span[1] - 1) + 1, label))
             self.cursor = span[1]
         elif child.type == "link_open":
             self._link_open(child, span)
@@ -374,6 +434,7 @@ class _InlineWalk:
         if span is None or child.meta.get("autolink"):
             if span is not None:
                 self.text_until(span[0])
+                self._autolink(child, span)
                 self.cursor = span[1]
             self.open_links.append(None)
         else:
@@ -382,6 +443,19 @@ class _InlineWalk:
             self.cursor = span[0] + 1
             self.open_links.append((child.meta["label_end"], span[1]))
         self.reader.parts.append(Element(opening=True))
+
+    def _autolink(self, child: Token, span: Span) -> None:
+        """An autolink's text, which markdown-it renders from the address it decodes."""
+        if child.markup != _AUTOLINK:
+            return
+        self.reader.parts.append(
+            Autolink(
+                start=self.segment.source(span[0]),
+                end=self.segment.source(span[1] - 1) + 1,
+                label=child.meta["label"],
+                destination=child.meta["destination"],
+            )
+        )
 
     def _link_close(self) -> None:
         located = self.open_links.pop() if self.open_links else None
@@ -405,6 +479,22 @@ class _InlineWalk:
             else (source(destination[0]), source(destination[1])),
             reference=token.meta["reference"],
         )
+
+
+#: The tokens before an inline that make it a paragraph of its own after a table or list.
+_ALONE_AFTER = 2
+_LIST_OR_TABLE_CLOSE = frozenset({"table_close", "bullet_list_close", "ordered_list_close"})
+#: The markup markdown-it gives a link opened by ``<address>``.
+_AUTOLINK = "autolink"
+
+
+def _follows_a_list_or_table(tokens: Sequence[Token], index: int) -> bool:
+    """Whether ``tokens[index]`` is a paragraph's inline right after a table or a list."""
+    return (
+        tokens[index].type == "inline"
+        and tokens[index - 1].type == "paragraph_open"
+        and tokens[index - 2].type in _LIST_OR_TABLE_CLOSE
+    )
 
 
 def _line_starts(text: str) -> list[int]:

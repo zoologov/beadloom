@@ -21,7 +21,13 @@ import pytest
 from beadloom.application.site.markdown_positions import located_markdown, normalise
 from beadloom.application.site.markdown_source import Segment, read_markdown
 from beadloom.application.site.raw_html import read_markup
-from beadloom.application.site.vitepress_markdown import front_matter_length, vitepress_markdown
+from beadloom.application.site.vitepress_markdown import (
+    front_matter_is_read,
+    front_matter_length,
+    vitepress_markdown,
+)
+from tests.support.repository_root import REPO_ROOT
+from tests.support.toml_reader import toml_loads
 
 
 def _blocks(text: str) -> list[tuple[str, list[int] | None]]:
@@ -218,3 +224,71 @@ def test_a_container_title_is_text_vue_reads() -> None:
     parts = read_markdown(text).parts
     texts = [part.segment.text for part in parts if hasattr(part, "segment")]
     assert "{{ x }}" in texts
+
+
+# -- whether gray-matter reads it (``beadloom-ujzb.23``, m1) ----------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "read"),
+    [
+        # Measured on gray-matter as VitePress 1.6.4 bundles it (js-yaml 3, safeLoad).
+        ("---\ntitle: ok\n---\nbody", True),
+        ("---\n---\nbody", True),
+        ("---\n# only a comment\n---\nbody", True),
+        ("---\nhello\n---\nbody", True),
+        ("---\n- a\n- b\n---\nbody", True),
+        ("---\na: &x 1\nb: *x\n---\n", True),
+        ("---\n? [a, b]\n: c\n---\n", True),  # js-yaml makes a key of a list
+        ("---\ntitle: {{ x }}\n---\n", True),  # and of a mapping
+        ("---\n<<: {a: 1}\na: 2\n---\n", True),  # a merged key may be written again
+        ("---yaml\na: 1\n---\n", True),
+        ("---\na: 1\n", True),
+        ("---\ntitle: Setup: the first step\n---\nbody", False),
+        ("---\na: 1\na: 2\n---\nbody", False),
+        ("---\n'a': 1\n\"a\": 2\n---\n", False),
+        ("---\n1: a\n1.0: b\n---\n", False),
+        ("---\nnull: a\n~: b\n---\n", False),
+        ("---\n\"1\": a\n1: b\n---\n", False),  # one key to JavaScript, two to Python
+        ("---\n1e3: a\n1000: b\n---\n", False),  # 1e3 is a number to js-yaml only
+        ("---\na: {b: 1, b: 2}\n---\n", False),
+        ("---\na: @b\n---\n", False),
+        ("---\na: [1, 2\n---\n", False),
+        ("---\na: !foo x\n---\n", False),
+        ("---\na: *missing\n---\n", False),
+        ("---\nkey: value\n  bad: indent\n---\n", False),
+        ("---toml\na = 1\n---\n", False),
+        ("---\nprose: with colon: again\n", False),
+        # No front matter at all is nothing gray-matter can fail on.
+        ("# Title\n", True),
+        ("\n---\ntitle: Setup: the first step\n---\n", True),
+    ],
+)
+def test_front_matter_is_read_where_gray_matter_reads_it(text: str, read: bool) -> None:
+    assert front_matter_is_read(text) is read
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\na:\tb\n---\n",  # js-yaml 3 accepts a tab here; PyYAML does not
+        "---js\n{a: 1}\n---\n",  # gray-matter evaluates JavaScript; nothing here does
+        "---\n1: a\n2: b\n---\n",  # keys like numbers, which the two parsers resolve apart
+    ],
+)
+def test_front_matter_this_side_cannot_confirm_is_not_read(text: str) -> None:
+    """Where the two parsers part, the answer is no: the block is then shown, never fails."""
+    assert front_matter_is_read(text) is False
+
+
+def test_the_parser_version_whose_internals_are_read_is_bounded() -> None:
+    """n3: the positions read ``Ruler.__find__``/``__rules__`` and ``StateBlock`` internals.
+
+    Those are not markdown-it-py's public API, so a major version may change them;
+    the declared range stops before the next major (``beadloom-ujzb.23``).
+    """
+    pyproject = toml_loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+    assert isinstance(project, dict)
+    declared = [dep for dep in project["dependencies"] if dep.startswith("markdown-it-py")]
+    assert declared == ["markdown-it-py>=4.0,<5"]

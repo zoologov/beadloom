@@ -23,17 +23,26 @@ each one that changes WHICH block or inline construct a line is:
 - ``markdown-it-container`` opens a container at ``::: tip`` and the other names
   VitePress registers, and its content is read as blocks. Ported below.
 
-What is not followed, and why it does not change a decision made here:
+What is not followed here, and where it is followed instead:
 
 - front matter is cut off before markdown-it runs, by gray-matter;
-  :func:`front_matter_length` follows gray-matter's rule instead;
+  :func:`front_matter_length` follows gray-matter's rule instead, and
+  :func:`front_matter_is_read` whether gray-matter parses the block without an
+  error, since an error fails the build;
 - ``linkify`` turns a bare ``https://…`` into a link. Python needs
   ``linkify-it-py`` for it, which is not a dependency; a bare address is absolute,
   so no link rule rebases it, and its text is element text that Vue reads either
-  way;
-- ``markdown-it-attrs`` (``{.class}``), ``markdown-it-emoji``,
-  ``markdown-it-anchor``, the GitHub alerts, the table of contents and the title
-  change attributes and text, not where a block or a span begins;
+  way. The one place that differs, a percent-escaped brace the link's text
+  decodes, is handled where the text is made inert (:mod:`.project_text`);
+- ``markdown-it-attrs`` does not change where a block or a span begins, but it
+  does change the text: it reads a ``{...}`` at the end of a block, after an
+  inline element, or on a line of its own as the element's attributes, removes
+  it from the text, and Vue compiles an attribute named ``:x``, ``@x``, ``v-x`` or
+  ``#x`` (``beadloom-ujzb.23``, M2). Where it reads a brace is mirrored in
+  :mod:`.markdown_attrs`;
+- ``markdown-it-emoji``, ``markdown-it-anchor``, the GitHub alerts, the table of
+  contents and the title change attributes and text Vue does not compile, not
+  where a block or a span begins;
 - the ``<<< path`` snippet and ``<!--@include: path-->`` read files at build time,
   which the portal does not publish; they stay outside what is read here.
 """
@@ -42,12 +51,16 @@ What is not followed, and why it does not change a decision made here:
 
 from __future__ import annotations
 
+import math
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import yaml
 from markdown_it import MarkdownIt
 
 if TYPE_CHECKING:
+    from collections.abc import Hashable
+
     from markdown_it.parser_block import RuleFuncBlockType
     from markdown_it.rules_block import StateBlock
     from markdown_it.rules_inline import StateInline
@@ -310,3 +323,135 @@ def front_matter_length(text: str, *, closed_only: bool = False) -> int:
         return 0 if closed_only else len(text)
     end = close + len(_FRONT_MATTER_CLOSE)
     return end + 1 if text[end : end + 1] == "\n" else end
+
+
+#: The languages gray-matter parses as YAML: none named, or ``yaml``.
+_YAML_LANGUAGES = frozenset({"", "yaml"})
+#: gray-matter drops comment lines before it decides a block is empty.
+_COMMENT_LINE_RE = re.compile(r"^\s*#[^\n]+", re.MULTILINE)
+#: The tag of a YAML merge key (``<<``), whose keys may be written again.
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+#: What JavaScript makes of an object used as a key.
+_JS_OBJECT = "[object Object]"
+#: The magnitude from which JavaScript writes a whole number with an exponent.
+_JS_EXPONENT_FROM = 1e21
+#: A plain scalar that starts like a number, a date or ``.inf``/``.nan``.
+_NUMERIC_LOOKING_RE = re.compile(r"[-+]?(?:\.?[0-9]|\.(?:inf|nan))", re.IGNORECASE)
+#: What PyYAML raises on a block it cannot construct: a date it cannot build is a
+#: ``ValueError``, a collection as a key a ``TypeError``.
+_UNREADABLE = (yaml.YAMLError, ValueError, TypeError, OverflowError, RecursionError)
+
+
+def front_matter_is_read(text: str) -> bool:
+    """Whether gray-matter, as VitePress 1.6.4 runs it, reads *text*'s front matter without error.
+
+    VitePress parses a page's leading front matter with gray-matter, whose YAML
+    engine is js-yaml 3's ``safeLoad``, and an error stops the build (BDL-076,
+    ``beadloom-ujzb.23``, re-review finding m1). A text with no front matter, or
+    a block holding only comments, is read. gray-matter takes the rest of the
+    opening line as the block's language: only YAML is confirmed here, since no
+    other engine is mirrored, and an unknown name fails the build.
+
+    PyYAML stands in for js-yaml, with js-yaml's reading of keys: a key is the
+    string JavaScript makes of it, so ``1`` and ``"1"``, ``null`` and ``~`` are one
+    key and a key written twice is refused; a mapping or a list may be a key. Where
+    the two parsers still part, the answer is no: PyYAML refuses a tab js-yaml
+    accepts after a colon, and two keys that start like numbers are refused, since
+    the two resolve such scalars differently. A block answered no is shown as
+    Markdown instead, which builds, so a wrong no costs a block shown as text and
+    never a failed build.
+    """
+    length = front_matter_length(text)
+    if not length:
+        return True
+    body = text[len(_FRONT_MATTER_OPEN) : length]
+    newline = body.find("\n")
+    language = body if newline < 0 else body[:newline]
+    if language.strip() not in _YAML_LANGUAGES:
+        return False
+    close = body.find(_FRONT_MATTER_CLOSE, len(language))
+    matter = body[len(language) : close if close >= 0 else len(body)]
+    if not _COMMENT_LINE_RE.sub("", matter).strip():
+        return True
+    try:
+        yaml.load(matter, Loader=_JsYamlKeysLoader)  # noqa: S506 - a SafeLoader subclass
+    except _UNREADABLE:
+        return False
+    return True
+
+
+class _JsYamlKeysLoader(yaml.SafeLoader):
+    """PyYAML's safe loader, reading a mapping's keys as js-yaml 3 does."""
+
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[Hashable, Any]:  # the stub's own signature
+        """Keys as JavaScript strings; an explicit key written twice is refused.
+
+        A merged key (``<<``) may be written again, as js-yaml allows.
+        """
+        seen: set[str] = set()
+        numeric = [key for key, _ in node.value if _numeric_looking(key)]
+        if len(numeric) > 1:
+            raise yaml.constructor.ConstructorError(
+                None, None, "keys js-yaml may read as one number", numeric[1].start_mark
+            )
+        for key_node, _ in node.value:
+            if key_node.tag == _MERGE_TAG:
+                continue
+            key = _js_key(self.construct_object(key_node, deep=True), key_node)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, "duplicated mapping key", key_node.start_mark
+                )
+            seen.add(key)
+        self.flatten_mapping(node)
+        return {
+            _js_key(self.construct_object(key, deep=True), key): self.construct_object(
+                value, deep=deep
+            )
+            for key, value in node.value
+        }
+
+
+def _numeric_looking(node: yaml.Node) -> bool:
+    """A plain key js-yaml may read as a number or a date, which PyYAML reads by YAML 1.1.
+
+    The two resolve such scalars differently (``1e3`` is a number to js-yaml and a
+    string to PyYAML, ``017`` octal to js-yaml only), so two of them in one mapping
+    may be one key to js-yaml while PyYAML sees two.
+    """
+    return (
+        isinstance(node, yaml.ScalarNode)
+        and node.style is None
+        and _NUMERIC_LOOKING_RE.match(node.value) is not None
+    )
+
+
+def _js_key(value: object, node: yaml.Node) -> str:
+    """*value* as the property name js-yaml 3 stores it under (``String(key)``)."""
+    if isinstance(value, list):
+        if any(isinstance(item, list) for item in value):
+            raise yaml.constructor.ConstructorError(
+                None, None, "nested arrays are not supported inside keys", node.start_mark
+            )
+        return ",".join("" if item is None else _js_key(item, node) for item in value)
+    if isinstance(value, dict):
+        return _JS_OBJECT
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return _js_number(value)
+    return str(value)
+
+
+def _js_number(value: float) -> str:
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    if value.is_integer() and abs(value) < _JS_EXPONENT_FROM:
+        return str(int(value))
+    return repr(value)

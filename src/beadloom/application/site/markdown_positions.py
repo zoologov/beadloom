@@ -54,6 +54,10 @@ _NEWLINES_RE = re.compile(r"\r\n?")
 #: A character of a container's line prefix that only opens a list item.
 _LIST_MARKER_RE = re.compile(r"[^>\s]")
 _TAB_STOP = 4
+_MAILTO = "mailto:"
+#: A block quote's marker with no space after it on its line, where the quote's own
+#: optional space is still to come.
+_QUOTE_MARKER = ">"
 
 
 def normalise(text: str) -> str:
@@ -79,6 +83,7 @@ def located_markdown() -> MarkdownIt:
         "table": _locate_table,
         "html_block": _locate_html_block,
         "code": _locate_code_block,
+        "fence": _locate_fence,
     }
     locators.update({f"container_{name}": _locate_container for name in CONTAINERS})
     for name, locate in locators.items():
@@ -112,11 +117,26 @@ def _mark_inline(state: StateInline, start: int, pushed: Sequence[Token]) -> Non
         if token.type == "link_open" and token.markup in {"autolink", "linkify"}:
             token.meta["span"] = (start, state.pos)
             token.meta["autolink"] = True
+            token.meta.update(_autolink_parts(state, start, pushed[pushed.index(token) :]))
             return
         if token.type in {"link_open", "image"}:
             token.meta["span"] = (start, state.pos)
             token.meta.update(_link_parts(state, start, image=token.type == "image"))
             return
+
+
+def _autolink_parts(state: StateInline, start: int, pushed: Sequence[Token]) -> dict[str, str]:
+    """An autolink's rendered text and its address, from its ``link_open`` onwards in *pushed*.
+
+    The text is the address with its percent-escapes decoded (``normalizeLinkText``),
+    so it can hold a brace its source does not show. An e-mail address links to
+    ``mailto:`` and the address.
+    """
+    address = state.src[start + 1 : state.pos - 1]
+    href = str(pushed[0].attrs.get("href", ""))
+    email = href.lower().startswith(_MAILTO) and not address.lower().startswith(_MAILTO)
+    label = next((token.content for token in pushed if token.type == "text"), address)
+    return {"label": label, "destination": f"{_MAILTO}{address}" if email else address}
 
 
 def _link_parts(state: StateInline, start: int, *, image: bool) -> dict[str, object]:
@@ -361,7 +381,7 @@ def _label_end(text: str) -> int:
 
 
 def _locate_container(state: StateBlock, start_line: int, pushed: Sequence[Token]) -> None:
-    """A container's title: the text after its name, which VitePress renders inline."""
+    """A container's title, the text after its name VitePress renders inline, and its end."""
     opening = pushed[0] if pushed else None
     if opening is None or not opening.type.endswith("_open"):
         return
@@ -373,35 +393,56 @@ def _locate_container(state: StateBlock, start_line: int, pushed: Sequence[Token
     title = after_name.strip()
     at = params_start + lead + len(name) + (len(after_name) - len(after_name.lstrip()))
     opening.meta["title"] = (title, (*range(at, at + len(title)), at + len(title)))
+    opening.meta["info_end"] = state.eMarks[start_line]
+
+
+def _locate_fence(state: StateBlock, start_line: int, pushed: Sequence[Token]) -> None:
+    """A fence's info string: the rest of its opening line, after the marker run."""
+    for token in pushed:
+        if token.type == "fence":
+            start = state.bMarks[start_line] + state.tShift[start_line] + len(token.markup)
+            token.meta["info"] = (start, state.eMarks[start_line])
 
 
 def _locate_code_block(state: StateBlock, start_line: int, pushed: Sequence[Token]) -> None:
     """What a line inserted before or after an indented block needs to stay in its containers.
 
     ``continuation`` begins any new line inside the block's containers: its block
-    quote markers and the indentation of its list items. When the block's first
-    line also opens a list item, a line cannot go before it; ``insert_at`` is then
-    just after the item's marker, and ``resume`` is what the rest of that line
-    needs in front of it once it moves to a line of its own.
+    quote markers, each with the space a quote may take after it, and the
+    indentation of its list items. A marker written with no space has its
+    content one column nearer, so a new line gets the space, or it would lose
+    that column to it. When the block's first line also opens a list item, a
+    line cannot go before it; ``insert_at`` is then right after the item's
+    marker, and ``resume`` is what the rest of that line needs in front of it
+    once it moves to a line of its own. Such an item's content starts one column
+    past its marker (markdown-it reads more as code), so a line inserted there
+    puts one space after the marker: a tab after it would set the content column
+    by where the tab ends, and the item would end before the inserted lines do
+    (``beadloom-ujzb.23``, m2).
     """
     line_start = state.src.rfind("\n", 0, state.bMarks[start_line]) + 1
     quoted = state.src[line_start : state.bMarks[start_line]]
-    continuation = _LIST_MARKER_RE.sub(" ", quoted) + " " * state.blkIndent
+    prefix = _LIST_MARKER_RE.sub(" ", quoted)
+    if prefix.endswith(_QUOTE_MARKER):
+        prefix += " "
+    continuation = prefix + " " * state.blkIndent
     lead = state.src[
         state.bMarks[start_line] : state.bMarks[start_line] + state.tShift[start_line]
     ]
     marker = lead.rstrip()
+    space = ""
     if marker:
-        insert_at = state.bMarks[start_line] + len(marker) + 1
+        insert_at = state.bMarks[start_line] + len(marker)
+        space = " "
+        resume = prefix + _LIST_MARKER_RE.sub(" ", marker)
     elif _LIST_MARKER_RE.search(quoted):
         insert_at = state.bMarks[start_line]
+        resume = prefix
     else:
         insert_at = line_start
-    resume = (
-        ""
-        if insert_at == line_start
-        else _LIST_MARKER_RE.sub(" ", state.src[line_start:insert_at])
-    )
+        resume = ""
     for token in pushed:
         if token.type == "code_block":
-            token.meta.update(continuation=continuation, insert_at=insert_at, resume=resume)
+            token.meta.update(
+                continuation=continuation, insert_at=insert_at, resume=resume, lead=space
+            )

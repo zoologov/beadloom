@@ -166,3 +166,41 @@ def _holds_no(world: dict[str, Any], text: str) -> None:
     body = _page(world, "docs/guide.md")
     assert text not in body, body
 
+
+
+# -- the re-review of R2's fixes (``beadloom-ujzb.23``) ---------------------------------
+
+
+@given(parsers.parse('the project\'s document "{rel}" opens with the front matter "{block}"'))
+def _document_with_front_matter(world: dict[str, Any], rel: str, block: str) -> None:
+    doc: Path = world["root"] / rel
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(f"---\n{_unescape(block)}\n---\n\n# Setup\n", encoding="utf-8")
+    world["front_matter"] = _unescape(block)
+
+
+@then(parsers.parse('the published guide links to "{url}" with text Vue does not read'))
+def _links_with_inert_text(world: dict[str, Any], url: str) -> None:
+    """The address is the link's text with its brace pair broken; the destination keeps it."""
+    body = _page(world, "docs/guide.md")
+    shown = url.replace("{{", "{" + _BREAK + "{")
+    assert f"[{shown}](<{url}>)" in body, body
+
+
+@then(parsers.parse('the published guide shows "{text}" with no attribute read from it'))
+def _attrs_read_none(world: dict[str, Any], text: str) -> None:
+    """A backslash before the brace makes it an escape, which the plugin never reads."""
+    body = _page(world, "docs/guide.md")
+    assert "\\" + text in body, body
+
+
+@then(parsers.parse('the published "{rel}" opens with its badge'))
+def _opens_with_badge(world: dict[str, Any], rel: str) -> None:
+    assert _page(world, rel).startswith("<!-- beadloom:badge-start -->"), _page(world, rel)
+
+
+@then(parsers.parse('the published "{rel}" holds its front matter below the badge, as Markdown'))
+def _front_matter_below_badge(world: dict[str, Any], rel: str) -> None:
+    body = _page(world, rel)
+    below = body.split("<!-- beadloom:badge-end -->", 1)[1]
+    assert below.startswith(f"\n\n---\n{world['front_matter']}\n---\n"), body

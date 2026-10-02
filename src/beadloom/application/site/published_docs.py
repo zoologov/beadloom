@@ -58,7 +58,10 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.site.markdown_links import PortalLinks
 from beadloom.application.site.project_text import render_project_text
-from beadloom.application.site.vitepress_markdown import front_matter_length
+from beadloom.application.site.vitepress_markdown import (
+    front_matter_is_read,
+    front_matter_length,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -103,7 +106,9 @@ def inject_badge(prose: str, badge_body: str) -> str:
     previous badge region is present it is replaced in place; the authored prose
     after the region is preserved byte-for-byte. The top is below the document's
     front matter, which VitePress reads only at the very start of a page
-    (BDL-076, ``beadloom-ujzb.21``, R2 F3-i).
+    (BDL-076, ``beadloom-ujzb.21``, R2 F3-i), when gray-matter can read it: a
+    block it cannot parse fails the build at the top of a page, so the badge then
+    goes first and the block below it is Markdown (``beadloom-ujzb.23``, m1).
     """
     block = f"{BADGE_START}\n{badge_body}\n{BADGE_END}\n\n"
     if BADGE_START in prose and BADGE_END in prose:
@@ -113,8 +118,13 @@ def inject_badge(prose: str, badge_body: str) -> str:
         # re-injection is byte-stable (no accumulating blank lines).
         after = after[2:] if after.startswith("\n\n") else after.lstrip("\n")
         return f"{before}{block}{after}"
-    head = front_matter_length(prose, closed_only=True)
+    head = _page_front_matter_length(prose)
     return f"{prose[:head]}{block}{prose[head:]}"
+
+
+def _page_front_matter_length(text: str) -> int:
+    """The front matter that stays first on the page: closed, and read by gray-matter."""
+    return front_matter_length(text, closed_only=True) if front_matter_is_read(text) else 0
 
 
 def _node_coverage_pct(
@@ -356,8 +366,9 @@ def publish_docs(
                 source_dir=source_dir,
                 mirrored_dir=_DOCS_DIR.as_posix(),
                 page_dir=source_dir,
-                # A closed front matter stays first on the page; the badge goes below it.
-                opens_page=front_matter_length(text, closed_only=True) > 0,
+                # A closed front matter gray-matter reads stays first on the page; the
+                # badge goes below it. Any other goes below the badge, as Markdown.
+                opens_page=_page_front_matter_length(text) > 0,
             )
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose

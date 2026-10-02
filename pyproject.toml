@@ -46,8 +46,11 @@ dependencies = [
     # 14.1, the version VitePress 1.6.4 bundles. rich already pulls markdown-it-py
     # (>=2.2.0, resolved to 4.2.0 here); the 2.x and 3.x lines port markdown-it
     # 12 and 13, and this reading was verified against 4.2.0 only, so the floor
-    # is the line that ports the parser VitePress itself runs.
-    "markdown-it-py>=4.0",
+    # is the line that ports the parser VitePress itself runs. The ceiling is the
+    # next major (beadloom-ujzb.23): the positions are read from internals of the
+    # parser that are not its public API (Ruler.__find__ and Ruler.__rules__, the
+    # StateBlock line arrays), which a major version is free to change.
+    "markdown-it-py>=4.0,<5",
 ]
 
 [project.optional-dependencies]

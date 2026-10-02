@@ -385,3 +385,98 @@ def test_project_text_markdown_it_reads_differently_builds_and_reads_as_written(
     assert "<title>Adversarial {{ .Values.a }}" in page
     assert "title: Adversarial" not in shown
     assert "@click" not in page
+
+
+#: The re-review of R2's fixes (BDL-076, ``beadloom-ujzb.23``): an autolink's text
+#: (M1), braces markdown-it-attrs reads as attributes (M2), front matter js-yaml
+#: refuses (m1), a tab after a list marker (m2) and a fence language with ``<`` (n1).
+#: Each failed ``vitepress build`` or showed junk on the code before this bead.
+_RE_REVIEW_README = """---
+title: Acme: orders
+---
+
+# Acme Orders
+
+Chart host: <https://{{.Values.host}}/api>.
+"""
+_RE_REVIEW_DOC = """# Attributes
+
+In Clojure a map is {:a 1 :b 2}
+
+Pass options as { :verbose => true }
+
+Template {v-for="i in list"}
+
+A set {a, b}
+
+*a*{:x} b
+
+| a | b |
+|---|---|
+| c {:x} | d |
+
+- the config {:port 8080}
+
+## Setup {#setup}
+
+## Again {#setup}
+
+![map {:a 1}](https://a.test/map.png)
+
+-\t\t{{ .Values.j }}
+
+``` <span>x
+code
+```
+
+Chart host: <https://{{.Values.host}}/api>
+"""
+_RE_REVIEW_SETUP = "---\ntitle: Setup: the first step\n---\n\n# Setup\n"
+_RE_REVIEW_AS_WRITTEN = (
+    "In Clojure a map is {:a 1 :b 2}",
+    "Pass options as { :verbose => true }",
+    'Template {v-for="i in list"}',
+    "A set {a, b}",
+    "a{:x} b",
+    "c {:x}",
+    "the config {:port 8080}",
+    "Setup {#setup}",
+    "Again {#setup}",
+    "{{ .Values.j }}",
+    "<span>x",
+    "Chart host: https://{{.Values.host}}/api",
+)
+
+
+def test_project_text_the_re_review_found_builds_and_reads_as_written(
+    tmp_path: Path, npm: str
+) -> None:
+    """The build passes, every brace reads as written, and no brace became an attribute."""
+    root = tmp_path / "acme-orders"
+    _write_project(root)
+    (root / "README.md").write_text(_RE_REVIEW_README, encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "attributes.md").write_text(_RE_REVIEW_DOC, encoding="utf-8")
+    (root / "docs" / "setup.md").write_text(_RE_REVIEW_SETUP, encoding="utf-8")
+    _beadloom("init", "--yes", "--project", str(root))
+    _beadloom("reindex", "--project", str(root))
+    _beadloom("docs", "site", "--project", str(root))
+
+    site = root / "site"
+    for command in ([npm, "ci", "--no-audit", "--no-fund"], [npm, "run", "docs:build"]):
+        built = subprocess.run(command, cwd=site, capture_output=True, encoding="utf-8")  # noqa: S603
+        assert built.returncode == 0, built.stdout + built.stderr
+
+    dist = site / ".vitepress" / "dist"
+    page = (dist / "docs" / "attributes.html").read_text(encoding="utf-8")
+    shown = _shown_text(page)
+    missing = [text for text in _RE_REVIEW_AS_WRITTEN if text not in shown]
+    assert missing == [], shown
+    # No brace became an attribute, and the tab case left no wrapper on show.
+    for leaked in (':a=""', ':verbose=""', 'v-for="', 'id="setup"', 'a,=""', "&lt;div v-pre"):
+        assert leaked not in page, leaked
+    assert 'alt="map {:a 1}"' in page
+    about = _shown_text((dist / "index.html").read_text(encoding="utf-8"))
+    assert "Chart host: https://{{.Values.host}}/api." in about, about
+    setup = _shown_text((dist / "docs" / "setup.html").read_text(encoding="utf-8"))
+    assert "title: Setup: the first step" in setup, setup

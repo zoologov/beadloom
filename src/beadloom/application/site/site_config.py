@@ -55,6 +55,7 @@ from beadloom.application.site.forge_routes import (
     forge_for,
     read_forge,
     runs_past_repository,
+    stops_before_repository,
 )
 from beadloom.doc_sync.declarations import (
     Refusal,
@@ -200,22 +201,30 @@ def canonical_repo_url(url: str) -> str:
 
 
 def _past_repository(repo_url: str, forges: Mapping[str, Forge], where: str) -> Refusal | None:
-    """A refusal when *repo_url* is a page inside the repository rather than the repository.
+    """A refusal when *repo_url* is not a repository's own address on its forge.
 
-    Only on a host whose forge is known, by the routes that forge appends: on
-    any other host nothing says which segment of the path is a route.
+    Only on a host whose forge is known: a page inside the repository, by the
+    routes and the address shape that forge has, or an address that stops
+    before a repository (``beadloom-ujzb.23``, n2). On any other host nothing
+    says which segment of the path is a route.
     """
     forge = forge_for(repo_url, forges)
-    if forge is None or not runs_past_repository(repo_url, forge):
+    if forge is None:
         return None
-    return Refusal(
-        where=where,
-        why=(
+    shape = stops_before_repository(repo_url, forge)
+    if shape is not None:
+        why = (
+            f"`{where}` stops before a repository: its forge writes a repository's "
+            f"address as `{shape}`, and every link the portal builds would miss it"
+        )
+    elif runs_past_repository(repo_url, forge):
+        why = (
             f"`{where}` runs past the repository into a page of it, a route its forge "
             "serves, and every link the portal builds would be appended to that page"
-        ),
-        remediation=_REPO_URL_REMEDIATION,
-    )
+        )
+    else:
+        return None
+    return Refusal(where=where, why=why, remediation=_REPO_URL_REMEDIATION)
 
 
 def _repo_url_problem(value: object) -> str | None:

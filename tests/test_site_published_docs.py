@@ -394,3 +394,28 @@ def test_regenerate_published_docs_byte_identical(
         if p.is_file()
     }
     assert first == second
+
+
+def test_inject_badge_goes_first_when_gray_matter_cannot_read_the_front_matter() -> None:
+    """Re-review m1 (``beadloom-ujzb.23``): below the badge is where it compiled before.
+
+    With the badge under a front matter js-yaml refuses, VitePress parsed the block
+    and the build failed; above it, the block is Markdown and the page builds.
+    """
+    prose = "---\ntitle: Setup: the first step\n---\n# Setup\n"
+    injected = inject_badge(prose, "BADGE")
+    assert injected == f"{BADGE_START}\nBADGE\n{BADGE_END}\n\n{prose}"
+
+
+def test_a_doc_whose_front_matter_is_not_yaml_is_published_below_its_badge_as_markdown(
+    conn: sqlite3.Connection, project: Path
+) -> None:
+    doc = project / "docs" / "orphan.md"
+    doc.write_text("---\ntitle: Setup: the first step {{ x }}\n---\n# Setup\n", encoding="utf-8")
+    out = project / "site"
+    generate_site(conn, out, project_root=project)
+    text = (out / "docs" / "orphan.md").read_text(encoding="utf-8")
+    assert text.startswith(BADGE_START)
+    # Read as Markdown, so the brace pair in what is now a heading is broken for Vue.
+    shown = "---\ntitle: Setup: the first step {<!---->{ x }}\n---\n# Setup\n"
+    assert text.endswith(f"{BADGE_END}\n\n{shown}")

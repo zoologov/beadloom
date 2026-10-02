@@ -60,3 +60,23 @@ Feature: a project's own text is shown as written, never compiled as a Vue templ
     Then the published guide shows "<String," as text
     And the published guide keeps "<summary>" as HTML
     And the published guide holds no "@click"
+
+  # BDL-076 (`beadloom-ujzb.23`). The re-review of R2's fixes: an autolink's text is
+  # element text Vue reads; VitePress's markdown-it-attrs reads a trailing `{...}` as
+  # attributes, and Vue compiles one that starts with `:`; and gray-matter parses a
+  # page's leading front matter, so a block js-yaml refuses fails the build.
+  @bead:beadloom-ujzb.23
+  Scenario: an autolink with a Helm value and a Clojure map are shown as written
+    Given a project whose README opens with "Takes orders."
+    And the project's document "docs/guide.md" reads "Chart host: <https://{{.Values.host}}/api>\n\nIn Clojure a map is {:a 1 :b 2}"
+    When the project is initialised and its site is generated
+    Then the published guide links to "https://{{.Values.host}}/api" with text Vue does not read
+    And the published guide shows "{:a 1 :b 2}" with no attribute read from it
+
+  @bead:beadloom-ujzb.23
+  Scenario: a document whose front matter is not YAML is published below its badge
+    Given a project whose README opens with "Takes orders."
+    And the project's document "docs/setup.md" opens with the front matter "title: Setup: the first step"
+    When the project is initialised and its site is generated
+    Then the published "docs/setup.md" opens with its badge
+    And the published "docs/setup.md" holds its front matter below the badge, as Markdown

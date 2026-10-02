@@ -213,3 +213,139 @@ def test_the_result_is_a_fixed_point() -> None:
     for text in cases:
         once = _inert(text)
         assert _inert(once) == once, text
+
+
+# -- the re-review of R2's fixes (``beadloom-ujzb.23``) -----------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (  # M1: a Helm chart's host, as its README writes it
+            "Chart host: <https://{{.Values.host}}/api>\n",
+            "Chart host: [https://{<!---->{.Values.host}}/api](<https://{{.Values.host}}/api>)\n",
+        ),
+        (  # an e-mail autolink: markdown-it links it with mailto:
+            "Mail <a{{b}}@x.test> now\n",
+            "Mail [a{<!---->{b}}@x.test](<mailto:a{{b}}@x.test>) now\n",
+        ),
+        (  # what a label reads as Markdown is escaped, so it shows as written
+            "See <https://a.test/{{x}}/*_y_*>\n",
+            "See [https://a.test/{<!---->{x}}/\\*\\_y\\_\\*](<https://a.test/{{x}}/*_y_*>)\n",
+        ),
+    ],
+)
+def test_an_autolink_shows_its_address_as_written_and_vue_reads_no_interpolation(
+    text: str, expected: str
+) -> None:
+    """M1: an autolink's text is the address, element text Vue reads like any other.
+
+    An autolink cannot hold the empty comment that breaks a brace pair, so it is
+    written as the link it renders: its address as the text, the same address as
+    the destination. The destination is an attribute, which Vue does not read.
+    """
+    assert _inert(text) == expected
+
+
+def test_an_autolink_with_no_brace_pair_is_left_as_written() -> None:
+    text = "See <https://a.test/x> and <a@b.test>.\n"
+    assert _inert(text) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("``` <span>x\ncode\n```\n", "``` &lt;span>x\ncode\n```\n"),  # n1
+        ('```a"b\ncode\n```\n', "```a&quot;b\ncode\n```\n"),
+        (  # a code group's tab title, which VitePress writes as the label's text
+            "::: code-group\n```js [{{x}} <b>]\na\n```\n:::\n",
+            "::: code-group\n```js [{&#123;x}} &lt;b>]\na\n```\n:::\n",
+        ),
+        ("> - ```<T>\n>   code\n>   ```\n", "> - ```&lt;T>\n>   code\n>   ```\n"),
+    ],
+)
+def test_a_fence_info_string_vitepress_writes_raw_is_shown_as_written(
+    text: str, expected: str
+) -> None:
+    """n1: VitePress writes the fence's language into the page as it is, and Vue compiles it.
+
+    As entities the characters reach the page as written: markdown-it decodes the
+    info string before it names the highlighter's language, so that is unchanged.
+    """
+    assert _inert(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["```js {1,3}\nconst a = 1\n```\n", "```yaml\na: {{ b }}\n```\n", "~~~\nx\n~~~\n"]
+)
+def test_a_fence_info_string_vue_does_not_misread_is_left_as_written(text: str) -> None:
+    assert _inert(text) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (  # m2: the reviewer's three variants
+            "-\t\t{{ .Values.j }}\n",
+            "- <div v-pre>\n\n \t\t{{ .Values.j }}\n\n  </div>\n\n",
+        ),
+        (
+            "1.\t\t{{ .Values.j }}\n",
+            "1. <div v-pre>\n\n  \t\t{{ .Values.j }}\n\n   </div>\n\n",
+        ),
+        (
+            "-\t\t{{ .Values.j }}\n\t\tline2\n",
+            "- <div v-pre>\n\n \t\t{{ .Values.j }}\n\t\tline2\n\n  </div>\n\n",
+        ),
+        (
+            "> -\t\t{{ .Values.j }}\n",
+            "> - <div v-pre>\n>\n>  \t\t{{ .Values.j }}\n>\n>   </div>\n>\n",
+        ),
+        (  # a quote whose marker a tab follows: the quote's space comes from the tab
+            ">\t-\t\t{{ .Values.j }}\n",
+            ">\t- <div v-pre>\n>\n> \t \t\t{{ .Values.j }}\n>\n>     </div>\n>\n",
+        ),
+        (  # a quote marker with no space: a new line needs the space the quote takes
+            ">-     {{ .Values.j }}\n",
+            ">- <div v-pre>\n>\n>       {{ .Values.j }}\n>\n>   </div>\n>\n",
+        ),
+    ],
+)
+def test_a_tab_after_a_list_marker_keeps_the_wrapper_inside_the_item(
+    text: str, expected: str
+) -> None:
+    """m2: the wrapper opened after the marker's tab, which moved the item's content column.
+
+    The item then ended before the wrapper closed, and the page showed a literal
+    ``<div v-pre>`` in the item and a stray ``</div>`` after the list. The wrapper now
+    opens one space after the marker, the column the item had, and the tab moves
+    to the code's own line, where it still reaches the column it reached.
+    """
+    assert _inert(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\ntitle: Setup: the first step\n---\n# Setup\n",  # m1: not YAML
+        "---\na: 1\na: 2\n---\n# Twice\n",  # js-yaml refuses a duplicated key
+        "---toml\na = 1\n---\n# Toml\n",  # gray-matter has no toml engine
+        "---\nprose: with colon: again\n",  # unclosed: gray-matter parses all of it
+    ],
+)
+def test_front_matter_gray_matter_cannot_read_is_moved_off_the_top_and_read_as_markdown(
+    text: str,
+) -> None:
+    """m1: VitePress parses a page's leading front matter, and a parse error fails the build.
+
+    A text that opens its page and starts with front matter gray-matter cannot
+    read starts with a blank line instead, where gray-matter finds no front
+    matter, and the block is Markdown: a rule, a paragraph, a heading.
+    """
+    assert _inert(text) == f"\n{text}"
+    assert _inert(text, opens_page=False) == text
+
+
+def test_front_matter_gray_matter_cannot_read_is_made_inert_as_markdown() -> None:
+    text = "---\ntitle: x {{ y }}: z\n---\n# Doc\n"
+    assert _inert(text) == "\n---\ntitle: x {<!---->{ y }}: z\n---\n# Doc\n"

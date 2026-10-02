@@ -24,6 +24,21 @@ the way VitePress reads it (:func:`.markdown_source.read_markdown`,
   alone, since VitePress renders it with ``v-pre``; so is front matter.
   An entity such as ``&#123;`` is left alone too: VitePress writes it back as an
   entity, which Vue does not read as a brace.
+- a link's text that markdown-it writes from an address, an autolink's
+  ``<https://…>`` or a bare address VitePress links, decodes its
+  percent-escapes, so it can show a brace pair its source does not. Such a link
+  is written as the Markdown link it renders, ``[address](<address>)``, whose
+  text is then read like any other (``beadloom-ujzb.23``, M1).
+- a brace VitePress's markdown-it-attrs would read as the start of attributes
+  (:mod:`.markdown_attrs`) is escaped with a backslash, which renders as the
+  brace and which the plugin never reads (``beadloom-ujzb.23``, M2). An image's
+  label and a container's info string, which the plugin reads as written, end
+  with an empty comment instead, so they no longer end with braces.
+- a fence's info string, which VitePress writes into the page as it is, holds
+  ``<``, ``"`` and a brace pair as entities (``beadloom-ujzb.23``, n1).
+- front matter gray-matter cannot read would fail the build where it opens a
+  page, so the text then starts with a blank line, after which gray-matter finds
+  no front matter, and the block is read as Markdown (``beadloom-ujzb.23``, m1).
 - in raw HTML, which markdown-it passes through, markup is read as Vue's
   tokenizer reads it (:mod:`.raw_html`). A tag is kept when it is a lowercase
   element of the HTML a forge renders in a README and its partner closes it
@@ -49,28 +64,33 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.application.site.markdown_attrs import attribute_braces, ends_with_attributes
 from beadloom.application.site.markdown_links import (
     PortalLinks,
     raw_html_destination,
     rebase_links,
 )
-from beadloom.application.site.markdown_positions import normalise
+from beadloom.application.site.markdown_positions import located_markdown, normalise
 from beadloom.application.site.markdown_source import (
+    Autolink,
     CodeBlock,
     CodeSpan,
     Edit,
     Element,
     MarkdownSource,
     RawHtml,
+    RawLabel,
     Segment,
     Text,
     apply_edits,
     read_markdown,
 )
 from beadloom.application.site.raw_html import Markup, read_markup
+from beadloom.application.site.vitepress_markdown import front_matter_is_read
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -114,6 +134,23 @@ _V_PRE = "v-pre"
 _BREAK = "<!---->"
 #: Characters with a meaning to VitePress's inline Markdown, escaped inside ``<code v-pre>``.
 _INLINE_SPECIAL = frozenset("\\`*_[]~|:")
+#: Characters a link's text would read as Markdown, escaped where an address becomes one.
+_LABEL_SPECIAL = frozenset("\\`*_[]<>&!~|")
+_ESCAPE = "\\"
+#: A brace pair, as an interpolation Vue reads.
+_PAIR = "{{"
+#: The characters VitePress writes raw from a fence's info string, as entities.
+_INFO_ENTITIES = (("<", "&lt;"), ('"', "&quot;"), (_PAIR, "{&#123;"))
+#: A bare address VitePress's linkify turns into a link (``fuzzyLink`` is off, so a
+#: scheme is needed), up to the characters that end it.
+_BARE_ADDRESS_RE = re.compile(r"(?i)\b(?:https?|ftp)://[^\s<>]+")
+#: Characters linkify leaves out of the end of an address.
+_ADDRESS_TAIL = ".,;:!?'\")]}*_~"
+#: A percent-escaped brace, which a linked address's text decodes.
+_ESCAPED_BRACE = "%7b"
+#: Where a text opens its page with front matter gray-matter cannot read: a blank
+#: line first, after which gray-matter finds none.
+_NO_FRONT_MATTER = "\n"
 #: The most passes the text may need; each one only escapes, wraps or breaks.
 _MAX_PASSES = 8
 #: Passes in which an indented block may still be wrapped (see :meth:`_Pass._code_block`).
@@ -136,13 +173,18 @@ def render_project_text(
     its page, so a leading front matter block is VitePress's front matter; below
     other content it is Markdown.
     """
+    text = normalise(markdown)
+    front_matter = opens_page
+    lead = ""
+    if opens_page and not front_matter_is_read(text):
+        front_matter, lead = False, _NO_FRONT_MATTER
     text = rebase_links(
-        normalise(markdown),
+        text,
         portal,
         source_dir=source_dir,
         mirrored_dir=mirrored_dir,
         page_dir=page_dir,
-        front_matter=opens_page,
+        front_matter=front_matter,
     )
 
     def raw_link(url: str, asset: bool) -> str | None:
@@ -155,7 +197,7 @@ def render_project_text(
             asset=asset,
         )
 
-    return _inert(text, raw_link, front_matter=opens_page)
+    return lead + _inert(text, raw_link, front_matter=front_matter)
 
 
 def _inert(text: str, raw_link: RawLink, *, front_matter: bool) -> str:
@@ -207,9 +249,13 @@ class _Pass:
             elif isinstance(part, RawHtml):
                 self._raw(part.segment)
             elif isinstance(part, Text):
-                self._text(part.segment)
+                self._text(part)
             elif isinstance(part, CodeSpan):
                 self._code_span(part)
+            elif isinstance(part, Autolink):
+                self._autolink(part)
+            elif isinstance(part, RawLabel):
+                self._raw_label(part)
             else:
                 self._code_block(part)
         self._unwind()
@@ -240,17 +286,61 @@ class _Pass:
 
     # -- text ---------------------------------------------------------------------
 
-    def _text(self, segment: Segment) -> None:
-        """Break every brace pair markdown-it would render adjacent: ``{{``, ``{\\{``."""
-        if self._protected:
-            return
-        text = segment.text
-        for index in range(len(text) - 1):
-            if text[index] != "{":
+    def _text(self, part: Text) -> None:
+        """Break each brace pair Vue would read, and escape each brace markdown-it-attrs would.
+
+        A pair is any two braces markdown-it renders adjacent: ``{{``, ``{\\{``. An
+        address whose linked text decodes a brace is rewritten whole, and the next
+        reading treats its text.
+        """
+        segment, text = part.segment, part.segment.text
+        rewritten = [] if self._protected else self._decoded_addresses(segment)
+        escapes = set(
+            attribute_braces(text, opens=part.opens, closes=part.closes, alone=part.alone)
+        )
+        for index in range(len(text)):
+            if any(start <= index < end for start, end in rewritten):
                 continue
-            following = text[index + 1 : index + 3]
-            if following.startswith("{") or following == "\\{":
-                self._insert(segment.source(index + 1), _BREAK)
+            inserted = ""
+            if not self._protected and _closes_pair(text, index):
+                inserted += _BREAK
+            if index in escapes:
+                inserted += _ESCAPE
+            if inserted:
+                self._insert(segment.source(index), inserted)
+
+    def _decoded_addresses(self, segment: Segment) -> list[tuple[int, int]]:
+        """Bare addresses whose linked text decodes a brace pair, each written as a link."""
+        rewritten: list[tuple[int, int]] = []
+        for match in _BARE_ADDRESS_RE.finditer(segment.text):
+            address = match.group(0).rstrip(_ADDRESS_TAIL)
+            if _ESCAPED_BRACE not in address.lower():
+                continue
+            label = located_markdown().normalizeLinkText(address)
+            if _PAIR not in label:
+                continue
+            start, end = match.start(), match.start() + len(address)
+            self._replace(segment, start, end, _markdown_link(label, address))
+            rewritten.append((start, end))
+        return rewritten
+
+    def _autolink(self, part: Autolink) -> None:
+        """An autolink whose text shows a brace pair: written as the link it renders."""
+        if _PAIR in part.label and not self._protected:
+            self.edits.append(
+                Edit(part.start, part.end, _markdown_link(part.label, part.destination))
+            )
+
+    def _raw_label(self, part: RawLabel) -> None:
+        """An empty comment after a label markdown-it-attrs would read as attributes.
+
+        The plugin reads an image's label or a container's info string as written,
+        so an escape inside it does not hide a brace; ending with a comment does.
+        """
+        if not ends_with_attributes(part.label):
+            return
+        if self.text[part.end : part.end + len(_BREAK)] != _BREAK:
+            self._insert(part.end, _BREAK)
 
     def _raw_text(self, segment: Segment, start: int, end: int) -> None:
         """Break every ``{{`` in raw HTML's text, which Vue reads as written."""
@@ -276,7 +366,10 @@ class _Pass:
         would be wrapped again on every pass; after a few, each brace pair in the
         block is split by a zero-width space instead, which no reading can undo.
         """
-        if part.kind != "indented" or "{{" not in part.content or self._protected:
+        if part.kind == "fence":
+            self._fence_info(part)
+            return
+        if "{{" not in part.content or self._protected:
             return
         if not self.wrap:
             block = self.text[part.start : part.end]
@@ -286,13 +379,25 @@ class _Pass:
             return
         blank = (part.resume or part.continuation).rstrip()
         if part.resume:
-            opening = f"<div {_V_PRE}>\n{blank}\n{part.resume}"
+            opening = f"{part.lead}<div {_V_PRE}>\n{blank}\n{part.resume}"
         else:
             opening = f"{part.continuation}<div {_V_PRE}>\n{blank}\n"
         self._insert(part.insert_at, opening)
         closing_blank = part.continuation.rstrip()
         closing = f"{closing_blank}\n{part.continuation}</div>\n{closing_blank}\n"
         self._insert(part.end, closing)
+
+    def _fence_info(self, part: CodeBlock) -> None:
+        """A fence's info string with what VitePress would write raw held as entities."""
+        if part.info is None:
+            return
+        start, end = part.info
+        info = self.text[start:end]
+        shown = info
+        for raw, entity in _INFO_ENTITIES:
+            shown = shown.replace(raw, entity)
+        if shown != info:
+            self.edits.append(Edit(start, end, shown))
 
     # -- raw HTML ---------------------------------------------------------------------
 
@@ -425,6 +530,19 @@ def _rebase_url_attr(name: str, value: str, asset: bool, raw_link: RawLink) -> s
         candidates.append(f"{rebased} {descriptor}".rstrip())
     rewritten = ", ".join(candidates)
     return value if rewritten == ", ".join(c.strip() for c in value.split(",")) else rewritten
+
+
+def _closes_pair(text: str, index: int) -> bool:
+    """Whether the brace at *index*, or an escaped one there, renders beside the ``{`` before."""
+    if index == 0 or text[index - 1] != "{":
+        return False
+    return text[index] == "{" or text[index : index + 2] == "\\{"
+
+
+def _markdown_link(label: str, destination: str) -> str:
+    """``[label](<destination>)``: *label* shown as written, *destination* linked as it is."""
+    shown = "".join(f"{_ESCAPE}{char}" if char in _LABEL_SPECIAL else char for char in label)
+    return f"[{shown}](<{destination.replace(_ESCAPE, _ESCAPE * 2)}>)"
 
 
 def _inline_code(content: str) -> str:
