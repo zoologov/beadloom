@@ -3,7 +3,7 @@
 A slice of the `shared` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/shared/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/shared/`
 
 ---
 
@@ -41,5 +41,6 @@ every other layer does.
 
 ## Tests
 
-`site/e2e/shell-command.spec.js` drives `shellQuote`: a plain word is left alone, any other is
-single-quoted, and a source path with a space is quoted in the command the impact summary copies.
+`src/beadloom/site_scaffold/e2e/shell-command.spec.js` drives `shellQuote`: a plain word is
+left alone, any other is single-quoted, and a source path with a space is quoted in the command
+the impact summary copies.

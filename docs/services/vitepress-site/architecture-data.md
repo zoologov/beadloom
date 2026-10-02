@@ -3,7 +3,7 @@
 A slice of the `entities` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/entities/architecture-data/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/entities/architecture-data/`
 
 ---
 
@@ -43,5 +43,5 @@ contract is in the
 
 ## Tests
 
-`site/e2e/data-version.spec.js`: a data file of an unknown schema version is refused with a
-visible message.
+`src/beadloom/site_scaffold/e2e/data-version.spec.js`: a data file of an unknown schema version
+is refused with a visible message.

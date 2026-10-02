@@ -4,15 +4,20 @@
 
 `beadloom docs site` turns the indexed architecture graph into a **VitePress
 knowledge base** — a published, versioned, URL-shareable source of truth for
-humans *and* agents. It is the F4 "Living Knowledge Base + Visual Landscape"
-deliverable of Strategy 3.
+humans *and* agents. Any project indexed by Beadloom gets it: the theme ships in the
+package, and the project's own identity comes from its configuration.
 
 > **Beadloom produces, VitePress renders.** Beadloom emits a deterministic
 > Markdown/config content tree plus three data files (`architecture.data.json`,
-> `landscape.data.json`, `dashboard.data.json`); the committed theme (Vue, Cytoscape
-> with ELK, ECharts) and VitePress (a static site generator) render it client-side. There is no live server, no SaaS, and no LLM in this path —
+> `landscape.data.json`, `dashboard.data.json`), and writes beside them the theme
+> it ships (Vue, Cytoscape with ELK, ECharts); VitePress (a static site generator)
+> builds the result. There is no live server, no SaaS, and no LLM in this path —
 > freshness comes from rebuilding on push, the same way `beadloom ci` keeps the
 > graph honest.
+
+The steps from installation to a published portal are in
+[Getting Started](../getting-started.md#publish-the-portal). This guide describes what the
+portal shows, how it is built, and every setting it reads.
 
 > **Build green ≠ renders ok.** A generation-time Mermaid validity guard rejects
 > the diagram bug classes that crash the browser render *during generation /
@@ -22,24 +27,26 @@ deliverable of Strategy 3.
 ## What it generates
 
 ```bash
-beadloom docs site [--out DIR] [--federated FILE] [--project DIR]
+beadloom docs site [--out DIR] [--federated FILE] [--pages-workflow] [--project DIR]
 ```
 
 Reading the graph **read-only**, the command writes the following under `--out`
-(default `site/`). It NEVER writes into the source `docs/` tree.
+(default `site/`). It NEVER writes into the source `docs/` tree. Besides the content below, it
+writes the portal's scaffold (see [The portal for your project](#the-portal-for-your-project)).
 
 | Output | Showcase | What it is |
 |--------|----------|------------|
-| `index.md` | — | **About** — the home page (`/`), generated from `README.md` with links rebased so they resolve on the site (see [Information architecture](#information-architecture)). Falls back to the architecture overview if no README. |
-| `ru/index.md` | — | **About (RU)** — the `/ru/` page, generated from `README.ru.md` by the same transform. The bilingual entry is an in-page cross-link, NOT VitePress locales (see below). |
+| `index.md` | — | **About** — the home page (`/`), generated from `README.md` as [project text](#project-text-on-the-portal). Falls back to the architecture overview if no README. |
+| `ru/index.md` | — | **About (RU)** — the `/ru/` page, generated from `README.ru.md` by the same transform, only when that file exists. The bilingual entry is an in-page cross-link, NOT VitePress locales (see below). |
 | `architecture.md` + `public/architecture.data.json` | Architecture | The architecture viewer (`/architecture`): the interactive graph described in [the architecture viewer](#the-architecture-viewer), with a static count summary for a reader without JavaScript. |
 | `architecture-diagram.md` | Architecture | The Mermaid fallback: node counts, the top-level C4 diagram, a health summary line. |
 | `domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md`, `other/<ref>.md` | Architecture | One page per node of every kind: summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as links, linked docs, and the viewer opened on the node. |
 | `dashboard.md` + `dashboard.data.json` | **A — metrics dashboard** | An interactive ECharts dashboard: a critical-first alert banner + status cards, gauges, category charts, honest trends, and a recommendations panel. |
 | `landscape.md` + `public/landscape.data.json` | **B — 🌟 landscape map** | The contract graph in the viewer's landscape mode. |
 | `landscape-diagram.md` | **B — 🌟 landscape map** | The same contract graph as a Mermaid diagram with pan, zoom and full screen. |
-| `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, copied verbatim, with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
-| `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the committed scaffold. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
+| `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, each document as [project text](#project-text-on-the-portal), with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
+| `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the shipped `config.mjs`. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
+| `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon. |
 
 ### Showcase A — interactive ECharts metrics dashboard
 
@@ -146,7 +153,8 @@ none and renders without a click, so the map never links to a dead URL.
 ### Showcase C — published validated documentation
 
 `publish_docs` copies the **real** `docs/**` tree into `site/docs/…`, preserving
-structure, and injects a per-doc validation badge into the **copy only**:
+structure, passes each Markdown copy through the [project-text path](#project-text-on-the-portal),
+and injects a per-doc validation badge into the **copy only**:
 
 - The badge status comes from the `doc_sync` engine via `check_sync` — the SAME
   code path `beadloom sync-check` runs — so a doc the gate calls stale shows
@@ -154,8 +162,8 @@ structure, and injects a per-doc validation badge into the **copy only**:
   also shows the stored `last synced` time (deterministic, not wall-clock) and
   the owning node's source-coverage %.
 - The badge is wrapped between stable `<!-- beadloom:badge-start -->` /
-  `<!-- beadloom:badge-end -->` markers, so regeneration overwrites ONLY the
-  badge region and leaves the authored prose byte-for-byte intact.
+  `<!-- beadloom:badge-end -->` markers, below the document's front matter when it
+  has one, so regeneration overwrites ONLY the badge region.
 
 **The published `docs/` is the source of truth.** The source tree is never
 mutated; there is no AI prose-rewriting (that is the deferred F4.1 follow-up).
@@ -283,10 +291,12 @@ The panel shows a card for the selected node, one kind per mode.
   `beadloom why <ref>` to copy. "None" means the data file holds nothing for the field; "not
   recorded" means the file does not carry the field at all.
 - **The source link** points at the source as it was in the commit the site was generated from.
-  The generator writes it for a public forge it recognises by the host of the project's `origin`:
-  GitHub, GitLab, Bitbucket, Gitea, Codeberg and Azure DevOps. For any other host, a self-hosted
-  forge included, the card shows the source as plain text, because a guessed address would be a
-  dead link. Nothing else from the git remote is published.
+  The repository is the one `site.repo_url` declares, else the project's `origin`. The generator
+  writes the link for a forge it recognises by the host: GitHub, GitLab, Bitbucket, Gitea,
+  Codeberg and Azure DevOps by their public hosts, and any host the project declares under
+  [`site.forges`](#forges-a-self-hosted-forge). For any other host the card shows the source as
+  plain text, because a guessed address would be a dead link. Nothing else from the git remote
+  is published.
 - **The service card** on the landscape: the service's kind, health, number of contracts and page,
   then every contract it produces or consumes, with its verdict, protocol, routing, the fields or
   the message body each side declares ("undeclared" when a side declared none) and, for a
@@ -346,21 +356,11 @@ Documentation    → group, collapsed: false  (EXPANDED)
 ### About = README landing (EN `/`, RU `/ru/`)
 
 `application/site/about.render_about()` turns the `README.md` into the `/` home
-page (and `README.ru.md` into `/ru/`), **rebasing** repo-relative links so they
-resolve on the published site:
-
-| README link target | Rebased to |
-|--------------------|------------|
-| `docs/<x>.md` whose slug `<x>` is published | extension-less site link `/docs/<x>` |
-| `README.ru.md` / `README.md` cross-link | rewritten to the counterpart route (`/ru/` ↔ `/`) — the bilingual toggle (see below) |
-| `LICENSE`, source paths, an unpublished `docs/<x>` | absolute GitHub URL `https://github.com/<owner>/beadloom/blob/main/<path>` |
-| external URLs + shields.io badges + pure anchors | unchanged |
-
-The transform is pure and deterministic, leaves prose / inline code / fenced
-blocks untouched, and handles the badge-link idiom `[![alt](img)](target)`
-(rebases the outer link, recurses the inner image). The About page is plain
-Markdown (no `layout: home` hero) so it reads identically to the README on
-GitHub. If no README exists, `/` falls back to the architecture overview.
+page (and `README.ru.md` into `/ru/`) through the
+[project-text path](#project-text-on-the-portal): its links are rebased so they resolve on
+the published site, and it is shown as written. The About page is plain Markdown (no
+`layout: home` hero) so it reads like the README on a forge. If no README exists, `/` falls
+back to the architecture overview.
 
 ### Bilingual About via in-page cross-link (NOT VitePress locales)
 
@@ -422,29 +422,217 @@ has no extractable top-level symbol — so the file counts as tracked and its SP
 is freshness-checked. (This is the annotation, NOT the YAML `source:` field, that
 drives per-SPEC freshness.)
 
+## The portal for your project
+
+`beadloom docs site` writes two kinds of file into the portal directory: the content it
+generates from the graph on every run, and the **scaffold** the package ships — the theme and
+the viewer, `package.json` with its lockfile, `.vitepress/config.mjs`, and the browser tests
+under `e2e/`. One beadloom version means one theme: there is no separate npm package to keep in
+step. The run says what it did with the scaffold:
+
+```text
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+```
+
+### The marker, upgrades and hand edits
+
+Every scaffold file carries one marker line: the beadloom version that wrote it and a SHA-256
+of the rest of the file — a comment in `.js`, `.mjs`, `.vue` and `.css`, a `"//"` key on the
+second line of a `.json` file. The marker is how beadloom tells its own files from yours, so
+each run does this:
+
+| The file in the portal | What the run does |
+|------------------------|-------------------|
+| absent | writes it (`written`) |
+| marker intact, same body and version | leaves it (`unchanged`) |
+| marker intact, the installed beadloom ships another body or version | rewrites it (`updated`) — this is how an upgrade reaches the portal |
+| no marker, or edited after beadloom wrote it | never overwrites it, and names it on stderr with the remedy (`kept`); the exit code stays 0 |
+| marker intact, and the installed beadloom no longer ships it | removes it (`retired`), so a retired browser test does not keep running |
+
+```text
+Kept 1 file(s) under site that beadloom did not write or that were edited by hand; the shipped version was not written over them:
+  - .vitepress/theme/app/index.js: was edited by hand after beadloom wrote it, so it was not replaced
+    -> put your version in .beadloom/site/.vitepress/theme/app/index.js, which is copied last on every run, and delete site/.vitepress/theme/app/index.js; or delete it to take the shipped one
+```
+
+The scaffold is written without the graph annotations its source carries in this repository,
+so nothing in a portal names a node of ours.
+
+### Your own portal files
+
+A file under `.beadloom/site/` is copied into the portal last, on every run, at the same path
+relative to the portal root. A path it provides replaces the shipped file, which the scaffold
+then does not write at all, and it is never upgraded by beadloom. Use it for a page, a
+stylesheet or a component of your own; commit it with the project. A replaced shipped file is
+yours to keep in step with later beadloom versions.
+
+### What the portal reads from the project
+
+- the graph and the index (run `beadloom reindex` first);
+- `README.md`, `README.ru.md` and `docs/**`, as [project text](#project-text-on-the-portal);
+- the [`site:` block](#configuration-reference-site) of `.beadloom/config.yml`;
+- the `origin` remote, only for the card's source links when no `site.repo_url` is declared,
+  and for the [base warning](#the-base-path-and-github-pages). Nothing else from the remote is
+  published.
+
+## Project text on the portal
+
+The project's own Markdown reaches three places: the README pair on the About pages, each
+node's summary on its node page, and every document under `docs/`. VitePress compiles every page
+as a Vue template, so text written for a forge can fail the build or render something else:
+measured on the VitePress release the scaffold pins, a Helm value written in double braces failed
+`vitepress build`, an arithmetic expression in double braces rendered as its result,
+`List<String>` and an unclosed `<details>` failed the build, and a `<style>` restyled the whole
+page. Every piece of project text therefore takes one path onto the
+portal (`project_text.render_project_text`). It is read with markdown-it-py configured as
+VitePress configures markdown-it, so code, links and raw HTML are found exactly where VitePress
+finds them.
+
+### Links
+
+A relative link is resolved against the file it was written in, then:
+
+| The target | On the portal |
+|------------|---------------|
+| a file the portal publishes: a document under `docs/`, `README.md`, `README.ru.md` | that file's page (`/docs/<slug>`, `/`, `/ru/`), the anchor kept |
+| another file under `docs/` that the portal copies, such as an image | the copy, from where the page sits |
+| a file under `docs/` the portal does not publish | the link's text |
+| any other file in the repository (`LICENSE`, `src/…`) | the declared repository's page for it at the commit the site was generated from, by the forge's route (`<repo>/blob/<commit>/LICENSE` on GitHub, `<repo>/-/blob/<commit>/LICENSE` on GitLab); an image goes to the forge's raw route |
+| the same, with no `site.repo_url` declared, no commit, or a host no forge is known for | the link's text (an image's alt text) |
+| a path outside the repository (`../other/x`) | the link's text |
+| an absolute address, `//host/x`, an anchor, an empty target | unchanged |
+
+Reference definitions (`[label]: target`), images and the badge idiom `[![alt](img)](target)` are
+rebased too. A raw HTML `href`, `src`, `srcset` or `poster` follows the same rule, written in full
+under the base path, because VitePress does not rewrite raw HTML.
+
+### Shown as written
+
+The text is changed only where Vue would read it, and only so that the page shows what the
+author wrote:
+
+- Double braces in text show as written: an empty HTML comment is put between the two opening
+  braces. A code span holding them becomes `<code v-pre>`; an indented code block holding them is wrapped in
+  `<div v-pre>`. Fenced code blocks and front matter are left alone, since VitePress already
+  shows them as written.
+- Raw HTML is kept only when it is the lowercase HTML a forge renders in a README (`<details>`,
+  `<img>`, `<table>`, `<kbd>`, …) and its closing tag is inside the same block. Any other tag, an
+  unclosed one, `<script>`, `<style>`, `<template>`, `<iframe>` and `<textarea>` show as text.
+- An attribute only Vue gives meaning to (`@click`, `#slot`, `.prop`) is dropped, and a directive
+  such as `v-if` or `:title` is shown rather than run.
+
+**A Vue component written in a document shows as text.** `<Badge type="tip">` or a component of
+your own in `docs/**` or in the README appears on the page as the markup you wrote, because the
+portal cannot tell a component you meant from text that only looks like one. Put a page that
+uses live components under [`.beadloom/site/`](#your-own-portal-files): it is copied as
+written and compiled by VitePress like any page, so the components VitePress's default theme
+registers work there. A component of your own also has to be registered in the theme entry,
+`.vitepress/theme/index.js`, which you would then provide under `.beadloom/site/` too.
+
+## Configuration reference: `site:`
+
+The portal's identity is the `site:` block of `.beadloom/config.yml`. Every key is optional.
+
+```yaml
+site:
+  title: Acme Orders
+  description: Orders, payments and stock
+  base: /orders/
+  repo_url: https://github.com/acme/orders
+```
+
+| Key | Default | What it sets | Refused when |
+|-----|---------|--------------|--------------|
+| `title` | the project directory's name | the site title in the nav bar and the browser tab | it is not a non-empty string |
+| `description` | `The architecture of <title>: its graph, its documentation and its health` | the page description | it is not a non-empty string |
+| `base` | `/` | the path the portal is served under; VitePress prefixes every link and asset with it | it does not start and end with `/`, or it holds a GitHub Actions expression opener (a workflow would evaluate it) |
+| `repo_url` | none: no repository link | the repository link in the nav bar, the repository the card's source links and the project text's file links go to | it is not an `http` or `https` address with a host; it carries a user, a password, a query or a fragment, which the portal would publish; on a host whose forge is known, it runs past the repository into one of the forge's pages (`…/tree/main`) |
+| `forges` | none: only public forge hosts are recognised | the forge serving each host, below | see below |
+
+`repo_url` is stored in one spelling: the scheme and the host lower-cased, a trailing `/` and one
+`.git` removed, the port and the case of the path kept. A key the block does not read is refused
+by name, with the keys it does read. The project's name is never taken from the git remote.
+
+**Where a refusal shows.** `beadloom docs site` stops before writing anything and exits 1;
+`beadloom config-check` exits 1; the Gate's `config-check` step reports the rule `site-config`
+and blocks. Each names the key (`site.base`, `site.forges[git.acme.example]`) and the remedy, and
+never repeats a `repo_url` it refused, because it may hold a credential:
+
+```text
+Error: the `site:` block of .beadloom/config.yml cannot be used:
+  - site.base: `site.base` is `orders`, and a base path starts and ends with `/`
+    -> write `base:` as the path the portal is served under, e.g. `/orders/`
+```
+
+### `forges`: a self-hosted forge
+
+A source link needs the forge's own route, and a guessed route is a 404 that looks like a link,
+so a host is recognised only when it is a public forge's (`github.com`, `gitlab.com`,
+`bitbucket.org`, `codeberg.org`, `gitea.com`, `dev.azure.com`, `*.visualstudio.com`) or when the
+project declares it. `forges` maps a host name — no scheme, port or path — to one of:
+
+- **a kind:** `github`, `gitlab`, `gitea`, `bitbucket` (Bitbucket Cloud's routes) or `azure`. The
+  kind's routes are used for every repository on that host, over HTTPS or SSH, with or without a
+  port.
+- **templates:** `source:` (required), the page for a path, and `raw:` (optional), the file
+  itself, for images. A template uses the placeholders `{url}` (the repository's web address),
+  `{ref}` (the commit) and `{path}`, must contain `{path}`, and must yield an `http(s)` address
+  with no credential. Without `raw:`, an image in project text becomes its alt text.
+
+A self-hosted GitLab, with the repository under a subgroup:
+
+```yaml
+site:
+  title: Ledger
+  base: /ledger/
+  repo_url: https://git.acme.example/finance/platform/ledger
+  forges:
+    git.acme.example: gitlab
+```
+
+A node's source then links to
+`https://git.acme.example/finance/platform/ledger/-/tree/<commit>/<source>`, a README link to
+`LICENSE` goes to `…/-/blob/<commit>/LICENSE`, and a README image comes from
+`…/-/raw/<commit>/<image>`. A forge no kind describes, such as Bitbucket Data Center, is written
+as templates:
+
+```yaml
+site:
+  repo_url: https://bitbucket.acme.example/projects/FIN/repos/ledger
+  forges:
+    bitbucket.acme.example:
+      source: "{url}/browse/{path}?at={ref}"
+      raw: "{url}/raw/{path}?at={ref}"
+```
+
+The routes were written from the forms each forge publishes, not opened against a live forge;
+the Azure DevOps `raw` route is the least certain. A refused entry is named by its host:
+
+```text
+  - site.forges[git.acme.example]: `site.forges[git.acme.example]` names `gitlabb`, which is not a forge kind; the kinds are `azure`, `bitbucket`, `gitea`, `github`, `gitlab`, or a mapping with a `source:` template
+```
+
 ## Building and previewing
 
-The committed VitePress **scaffold** (`site/package.json`,
-`site/.vitepress/config.mjs`, and the custom theme under
-`site/.vitepress/theme/`, laid out in Feature-Sliced Design and described in
-[the VitePress site page](../services/vitepress-site.md), with Cytoscape, ELK,
-ECharts and `svg-pan-zoom` pinned to exact versions) renders the generated content
-tree. The generated tree itself, the build output (`site/.vitepress/dist/`), the
-VitePress cache and `site/node_modules/` are gitignored: only the scaffold is
-committed, and CI regenerates the content with `beadloom docs site`. The Python
-generator and the Mermaid guard stay fully pytest-testable without Node; the
-viewer's Playwright tests run from `site/` with `npm run test:e2e`.
+The portal needs `Node.js 22` or later (`engines.node: >=22` in the shipped `package.json`; an older
+Node makes `npm ci` print an `EBADENGINE` warning). Every npm dependency is pinned exactly in the
+shipped lockfile, except `web-worker`. The Python generator and the Mermaid guard stay fully
+pytest-testable without Node.
 
 ```bash
-# 1. Generate the content tree from the indexed graph (run `beadloom reindex` first).
+# 1. Generate the content and the scaffold from the indexed graph (run `beadloom reindex` first).
 beadloom docs site --out site
 
-# 2. Build the static site.
-cd site && npm install && npm run docs:build
+# 2. Install the portal's dependencies from the shipped lockfile, then build.
+cd site && npm ci && npm run docs:build
 
 # 3. Preview the built site locally.
 npm run docs:preview          # or `npm run docs:dev` for a live-reload dev server
 ```
+
+Everything under the portal directory is output: `beadloom init` ignores `/site/` in
+`.gitignore` (see [Getting Started](../getting-started.md#what-init-writes)), and nothing there
+needs committing. Your own portal files go under `.beadloom/site/`.
 
 For the federated landscape diagram (Showcase B), feed a federation artifact:
 
@@ -453,15 +641,88 @@ beadloom federate service-a.json service-b.json   # writes .beadloom/federated.j
 beadloom docs site --out site --federated .beadloom/federated.json
 ```
 
+### The base path and GitHub Pages
+
+GitHub serves a project repository's Pages site under `/<repo>/`, and a portal built for the
+base `/` loads none of its assets there. When `site.base` is `/` and the `origin` remote is a
+`github.com` project repository, `docs site` warns on stderr and exits 0:
+
+```text
+Warning: the portal is built for the base /, and GitHub Pages serves this project repository under /tidewater/, where the portal loads none of its assets. Set `site.base: /tidewater/` in .beadloom/config.yml, unless the site is served from a custom domain.
+```
+
+A `<owner>.github.io` repository, another host, no remote and a declared base other than `/` get
+no warning. A project repository served from a custom domain is at `/` and is warned about all
+the same, which the warning says.
+
 ### Deploy to GitHub Pages
 
-Beadloom ships a ready deploy workflow: **`.github/workflows/deploy-site.yml`**. On every push to `main` (or manual `workflow_dispatch`) it regenerates the site from the graph (`beadloom reindex && beadloom docs site --out site`), runs `npm ci && npm run docs:build`, and publishes `site/.vitepress/dist` via `actions/upload-pages-artifact` + `actions/deploy-pages` (with `pages: write` + `id-token: write` and a `pages` concurrency group). Because CI regenerates the site, the published page never drifts from the code.
+`beadloom docs site --pages-workflow` writes `.github/workflows/beadloom-portal.yml` beside the
+portal, and reports it:
 
-This repo is served as a **GitHub project page** at `https://zoologov.github.io/beadloom/`, so `site/.vitepress/config.mjs` sets `base: "/beadloom/"`. VitePress prepends that base to markdown/nav links at build time; Mermaid diagram `click` targets are raw strings the plugin does not rewrite, so `DiagramViewer.vue` prepends `import.meta.env.BASE_URL` to internal click hrefs at runtime (the generated Markdown stays base-agnostic).
+```text
+Pages workflow: .github/workflows/beadloom-portal.yml written (base /tidewater/, Node 22, portal site/, branch main)
+```
 
-**One-time setup (repo owner):** Settings → Pages → **Source = GitHub Actions**. Then the first push to `main` deploys the site.
+The workflow does in CI what `docs site` did locally: it installs the same beadloom version with
+`beadloom[languages]` on Python 3.12, runs `beadloom reindex` and `beadloom docs site --out <dir>`,
+sets up the Node major the scaffold declares, runs `npm ci` and `npm run docs:build`, and deploys
+`<dir>/.vitepress/dist` with `actions/upload-pages-artifact` and `actions/deploy-pages`.
 
-> For a user/organization page or a custom domain served at the root, drop `base` (defaults to `/`) — no other change needed; the base-aware click rewrite is a no-op when base is `/`.
+- **Branch.** It runs on a push to the default branch git records for `origin` (`origin/HEAD`),
+  and its build runs only when the ref is a branch and is the repository's default branch at run
+  time, so a tag or a manual run on another branch deploys nothing. When git records no default
+  branch the report ends `no branch`, every push starts a run that deploys only from the default
+  branch, and stderr names the fix: `git remote set-head origin --auto`, then run the command
+  again.
+- **Base check.** A step fails the build when `site.base` differs from the path GitHub Pages
+  reports for the repository, naming the base to set.
+- **Permissions.** Nothing at the top (`permissions: {}`); `build`, which runs install scripts,
+  only reads (`contents: read`, `pages: read`); `deploy` alone has `pages: write` and
+  `id-token: write`. Every action is pinned by commit SHA, with its release in a comment.
+- **Upgrades and edits.** The file carries the scaffold's marker: run the command again after
+  upgrading beadloom or changing `site:` and an unedited workflow is rewritten; an edited one, or
+  one beadloom did not write, is kept and reported with the remedy.
+- `--out` must lie inside the project, or the command exits 1 before writing anything.
+
+**One-time setup:** Settings → Pages → **Source = GitHub Actions**, then commit the workflow and
+push to the default branch. Whether the build job's `pages: read` is enough for
+`actions/configure-pages` has not been verified on GitHub yet. <!-- TODO: verify -->
+
+This repository deploys its own portal with `.github/workflows/deploy-site.yml`, which runs the
+same `docs site --out site`, `npm ci` and `npm run docs:build` on every push to `main` and is
+served at `https://zoologov.github.io/beadloom/` under the base `/beadloom/` its `site:` block
+declares. Mermaid click targets are raw strings VitePress does not rewrite, so
+`DiagramViewer.vue` prepends the base at runtime; the generated Markdown stays base-agnostic.
+
+## Browser tests in the portal
+
+The scaffold ships the viewer's Playwright suite under `e2e/`, so any portal can run it:
+
+```bash
+cd site
+npx playwright install chromium
+npm run test:e2e
+```
+
+`e2e/support/serve.mjs` builds the portal and serves the build, so the suite tests the bundle
+that deploys, under the base the `site:` block declares (`BEADLOOM_E2E_BASE` overrides it). It
+refuses to start before `beadloom docs site` has written the content.
+
+A correct portal can lack what a case is written about: a project with no layer rule has no
+layers to colour, and a single project's landscape has no contract to walk. Such a case is
+skipped, and the report names the missing shape:
+
+```text
+this portal's graph lacks what the case needs: fewer than two declared layers; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml
+```
+
+With `BEADLOOM_E2E_NO_SKIP=1` a missing shape fails the case instead. Set it for a portal that is
+meant to hold every shape, so a change that would quietly turn a check into a skip is reported
+as a failure; this repository's `site-e2e` job does. Measured on six small projects, one per
+stack (`tests/fixtures/site/`, macOS, `Node.js 22`), all 101 cases ran or skipped by shape and
+none failed: between 7 and 27 cases skipped,
+the most on the projects with no declared layers.
 
 ## Determinism
 
@@ -517,9 +778,13 @@ reproducible and the generated tree diffable in review.
   replaced the Mermaid-only landscape and the per-node Mermaid diagrams; the
   landscape diagram and the top-level C4 diagram stay as fallbacks on
   `landscape-diagram.md` and `architecture-diagram.md`.
-- **Deferred:** the portal scaffold shipped for adopters with their own identity and
-  a declared self-hosted forge (BDL-076 slice 2); REST/OpenAPI + gRPC contracts in
-  the federated map.
+- **The portal for adopters (BDL-076, slice 2):** the scaffold ships in the package and
+  `docs site` writes it under the marker rules; the `site:` block with a self-hosted forge
+  declared per host; `docs site --pages-workflow`; `init` ignoring `/site/`; project text read
+  as VitePress reads it and shown as written; the browser suite runnable on any portal. Measured
+  on one small project per claimed stack (`tests/fixtures/site/`), built by the
+  `site-adopters` workflow.
+- **Deferred:** REST/OpenAPI + gRPC contracts in the federated map.
 
 See the [`beadloom docs site` CLI reference](../services/cli.md#beadloom-docs-site),
 the [application domain README](../domains/application/README.md) for the

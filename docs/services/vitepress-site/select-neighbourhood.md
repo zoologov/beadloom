@@ -3,7 +3,7 @@
 A slice of the `features` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/features/select-neighbourhood/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/features/select-neighbourhood/`
 
 ---
 
@@ -40,7 +40,7 @@ fewest steps from the selection.
 
 ## Tests
 
-`site/e2e/neighbourhood.spec.js`: depth 2 outgoing shows the node, what it reaches in two steps
-and those edges, with the rest dimmed; incoming shows what reaches it; `all` walks without a limit;
-"Hide the rest" hides what is left out and keeps its containers; clearing the selection shows the
-whole graph again.
+`src/beadloom/site_scaffold/e2e/neighbourhood.spec.js`: depth 2 outgoing shows the node, what
+it reaches in two steps and those edges, with the rest dimmed; incoming shows what reaches it;
+`all` walks without a limit; "Hide the rest" hides what is left out and keeps its containers;
+clearing the selection shows the whole graph again.

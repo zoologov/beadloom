@@ -16,7 +16,11 @@ reads the graph read-only and emits the About home page, the interactive
 architecture view (a canonical layered-lanes Cytoscape+ELK graph), per-node
 pages that open that view on their node, the metrics dashboard (data and page),
 the cross-repo landscape map, the published `docs/` section, the nav/sidebar
-tree, and a generation-time Mermaid validity guard.
+tree, and a generation-time Mermaid validity guard. Since BDL-076 slice 2 it also writes the
+portal's hand-written half: the scaffold the package ships (theme, viewer, `package.json`,
+lockfile, VitePress config, browser tests) and the identity the project declares in the
+`site:` block of `.beadloom/config.yml`, so a project that is not this repository builds its
+portal from `docs site` alone.
 
 ### The package
 
@@ -89,6 +93,135 @@ One feature node covers the cooperating modules below (all annotated
   (`mermaid_guard.validate_mermaid`) before writing — a structurally broken diagram raises
   `MermaidValidationError` and fails generation (closing the "build green ≠ renders ok" gap)
   instead of shipping a page that crashes the browser render.
+
+  **Slice 2 (BDL-076 B1, B4, `beadloom-ujzb.11`–`.13`).** The run first reads the identity
+  (`site_config.site_config_of`; a refused value raises `SiteConfigError` before any file is
+  written) and one `RepositoryLink` for every link: `repository_of(project_root,
+  declared_url=identity.repo_url, forges=identity.forges)`, where a declared `site.repo_url`
+  wins over the `origin` remote. The node card's `source_url` may come from the remote; the
+  project's own text links only to a repository the project DECLARED, so with no `repo_url`
+  a link to a repository file becomes its text. Every piece of project text — the README pair
+  on the About pages, each node's summary, every published document — goes through
+  `project_text.render_project_text` with one `PortalLinks` (`about.portal_links_for`,
+  carrying the base and the published files). `ru/index.md` is written, and `README.ru.md`
+  routed to `/ru/`, only when `README.ru.md` exists. After the content it writes
+  `.vitepress/site.generated.mjs` (`site_config.render_site_module`) and then the scaffold
+  (`scaffold.write_scaffold`, which copies `.beadloom/site/` last); `SiteResult.scaffold` is the
+  `ScaffoldReport` of that write.
+- **site_config.py** — the portal's identity, the `site:` block (BDL-076 B1, B4 and
+  `beadloom-ujzb.20`). `read_site_config(project_root)` returns `(SiteConfig, refusals)` with a
+  refused value replaced by its default, and `site_config_of(project_root)` raises
+  `SiteConfigError` on any refusal. `SiteConfig(title, description, base, repo_url, forges)`;
+  defaults: the project directory's name,
+  `The architecture of <title>: its graph, its documentation and its health`, `/`, no
+  repository. The keys are one table, `_FIELDS` (`title`, `description`, `base`, `repo_url`,
+  `forges`); an unknown key is refused by name with the keys the block reads. `base` must start
+  and end with `/` and hold no GitHub Actions expression opener. `repo_url` must be an `http(s)` address with a host and no credential, query or fragment; it is stored in one
+  spelling by `canonical_repo_url` (scheme and host lower-cased, port and path case kept,
+  trailing `/` and one `.git` removed), and refused when on a host with a known forge it runs
+  past the repository into one of that forge's routes (`forge_routes.runs_past_repository`).
+  The value itself is never repeated in a refusal, because it may hold a credential.
+  `repo_icon_of(repo_url, forges)` names the icon VitePress draws, and
+  `render_site_module(config)` writes `.vitepress/site.generated.mjs` as JSON. The refusals
+  reach three readers: `docs site`, `beadloom config-check` and the Gate's `config-check` step
+  (rule `site-config`).
+- **forge_routes.py** — the routes a forge serves a path under (BDL-076 `beadloom-ujzb.8`).
+  `Forge(kind, tree, blob, raw)` holds three URL templates over `{url}`, `{ref}`, `{path}`;
+  `link(route, url, ref, path)` fills one, URL-encoding the revision and the path.
+  `KNOWN_FORGES` covers `github`, `gitlab`, `gitea`, `bitbucket` (Bitbucket Cloud) and `azure`;
+  `forge_for(web_url, declared)` looks up a host the project declares first, then the public
+  hosts (`github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`, `gitea.com`,
+  `dev.azure.com`, `*.visualstudio.com`). `read_forge(setting)` reads one `site.forges` value: a
+  kind, or a mapping with a required `source:` template (used for the page of a path and of a
+  file) and an optional `raw:` template (the file itself); `template_problem(template)` refuses
+  an unknown placeholder, a conversion or format spec, a template without `{path}`, one that does
+  not yield an `http(s)` address, and one carrying a credential. The routes were written from
+  the forms the forges publish, not opened against a live forge; the Azure DevOps `raw` route
+  is the least certain.
+- **scaffold.py** — the shipped scaffold and the project's overrides (BDL-076 B1,
+  `beadloom-ujzb.18`). The scaffold is package data under `beadloom/site_scaffold/`, laid out as
+  it sits in a portal. `write_scaffold(out_dir, *, project_root, version)` writes each shipped
+  file with a marker line (`beadloom:generated version=<v> sha256=<hash of the rest>`, a comment
+  in `.js`/`.mjs`/`.vue`/`.css`, a `"//"` key on the second line of a `.json`): an absent file is
+  written; a file with an intact marker is rewritten when the shipped body or the version
+  differs; a file with no marker, or whose body no longer matches its marker, is never
+  overwritten and is reported as a `KeptFile` with its remedy. A file with an intact marker that
+  the installed version no longer ships is removed (`retired`). `.beadloom/site/` (`OVERRIDE_DIR`)
+  is copied last and verbatim, and a shipped path it provides is not written at all.
+  `shipped_files()` returns each body without the lines that are only a graph annotation
+  (`without_annotations`), so a portal never names this repository's nodes; the marker hashes
+  the body as written. `marker_line(body, version, note)` and `place_marked(target, expected)` are
+  shared with the Pages workflow. `ScaffoldReport` counts `written`, `updated`, `unchanged`,
+  `retired`, `kept` and `overridden`.
+- **pages_workflow.py** — `docs site --pages-workflow` (BDL-076 B2, `beadloom-ujzb.13`, `.20`).
+  `write_pages_workflow(project_root, *, out_dir, base, version, branch=None)` writes
+  `.github/workflows/beadloom-portal.yml` (`PAGES_WORKFLOW_PATH`) under the scaffold's marker
+  rule, and returns a `PagesWorkflowReport(path, outcome, base, node_major, site_dir, branch,
+  reason, remediation)`. The workflow installs `beadloom[languages]==<version>` on Python 3.12,
+  runs `beadloom reindex` and `beadloom docs site --out <dir>`, sets up the Node major
+  `node_major_of` reads from the scaffold's `engines.node` (22 today), runs `npm ci` and
+  `npm run docs:build`, uploads `<dir>/.vitepress/dist` and deploys it. It grants nothing at the
+  top (`permissions: {}`); `build` reads (`contents: read`, `pages: read`); `deploy` alone has
+  `pages: write` and `id-token: write`. The push trigger names the branch `default_branch_of`
+  reads from `origin/HEAD` (none when git records none), and the build runs only when the ref is
+  a branch and the repository's default branch. A step fails the build when `site.base` differs
+  from the path `configure-pages` reports. Every action is pinned by commit SHA with its release
+  in a comment. `site_dir_of` refuses an `--out` outside the project; any value holding a GitHub Actions
+  expression opener is refused (`PagesWorkflowError`).
+- **pages_base.py** — the local base warning (BDL-076 `beadloom-ujzb.13`).
+  `project_pages_base(remote)` is `/<repo>/` for a `github.com` project repository and `None`
+  for anything else (another host, a `<owner>.github.io` repository, no remote);
+  `base_warning(base, remote)` returns the warning `docs site` prints on stderr when `base` is
+  `/` and the remote is such a repository. The remote is read only to warn.
+- **markdown_links.py** — the one link rule for project text on the portal (BDL-076
+  `beadloom-ujzb.11`, `.12`, `.8`, `.21`). `PortalLinks(doc_slugs, page_routes, repository,
+  withheld, base, mirrored_files)` says what the portal publishes;
+  `rebase_links(markdown, portal, *, source_dir, mirrored_dir, page_dir, front_matter)` resolves
+  each link against the file the text came from: a published file goes to its page; a link
+  inside the mirrored `docs/` stays as written, or becomes its text when the portal does not
+  publish the target; an image the portal publishes is referenced from the page's directory;
+  any other repository file goes to the declared repository's `blob` route (an image to its
+  `raw` route) at the generated commit, or becomes its text with no repository, commit or known
+  forge; a target outside the repository becomes its text; an absolute address, `//host`, an
+  anchor and an empty target are left alone. Reference definitions are rebased too, and a
+  withdrawn one turns every reference naming it into text. Links are read from markdown-it's
+  tokens (`markdown_source.read_markdown`), so a link whose text is code is a link and anything
+  in code or raw HTML is not. `raw_html_destination(url, portal, ...)` applies the same rule to
+  a raw `href`/`src`, writing a page's address in full under the base.
+- **project_text.py** — project text as a page shows it, never as a Vue template (BDL-076
+  `beadloom-ujzb.12`, `.21`). `render_project_text(markdown, portal, *, source_dir, mirrored_dir,
+  page_dir, opens_page=True)` rebases the links and then changes the text only where Vue would
+  read it: a pair of opening braces in rendered text gets an empty HTML comment between the
+  two braces; a code span holding such a pair becomes
+  `<code v-pre>`; an indented block holding one is wrapped in `<div v-pre>` inside its own list
+  item or quote; fenced blocks and front matter are left alone. Raw HTML is read as Vue's
+  tokenizer reads it (`raw_html.read_markup`): a tag is kept only when it is lowercase README
+  HTML (`_KEPT`) balanced inside the element markdown-it writes, and anything else becomes text;
+  Vue-only attributes (`@x`, `#x`, `.x`, `[x]`) are dropped and a directive the DOM can hold gets
+  `v-pre`; `<script>`, `<style>`, `<template>`, `<iframe>`, `<textarea>` and Vue components
+  (`<Badge>`) become text. An `<a>` with nowhere to go keeps its content and an `<img>` becomes
+  its alt text. The pass repeats until it changes nothing. `opens_page=False` (node summaries)
+  reads a leading `---` block as Markdown rather than front matter.
+- **vitepress_markdown.py** — markdown-it-py configured as VitePress 1.6.4 configures
+  markdown-it (BDL-076 `beadloom-ujzb.21`): the `js-default` preset with HTML on, the
+  `@mdit-vue/plugin-component` HTML rules and `markdown-it-container` under VitePress's names
+  (`tip`, `info`, `warning`, `danger`, `details`, `v-pre`, `raw`, `code-group`), ported line for
+  line. `vitepress_markdown()` returns the parser; `front_matter_length(text, *,
+  closed_only=False)` follows gray-matter's rule. `linkify`, attributes, emoji, anchors, alerts,
+  the table of contents, `<<<` snippets and `@include` are not followed, each argued in the
+  module docstring. Checked against VitePress's own parser over 142 Markdown files of this
+  repository and R2's cases: no difference in block tokens beyond anchors and table-cell line
+  maps.
+- **markdown_positions.py** — wraps that parser's rules so every token carries its source
+  offsets (`located_markdown()`); `normalise(text)` normalises line endings and NUL the way
+  markdown-it does before parsing.
+- **markdown_source.py** — `read_markdown(text, *, front_matter=True)` returns a
+  `MarkdownSource` with `parts` (`Element`, `RawHtml`, `Text`, `CodeSpan`, `CodeBlock`, in page
+  order), `links` (`Link`), `definitions` (`Definition`) and `code` (`CodeRegion`);
+  `Edit` and `apply_edits(source, edits)` change the source at exact offsets.
+- **raw_html.py** — `read_markup(html)` returns the `Markup` (tags, comments and their
+  `Attribute`s) of a raw HTML fragment as Vue's tokenizer reads it, marking `unreadable` what Vue
+  would report as an error.
 - **architecture_view.py** — the interactive **architecture** data model
   (`architecture.data.json`): each node carries its `layer`, its `layer_rank`
   (the partition index for the canonical layered-lanes layout — the index of the
@@ -197,25 +330,28 @@ One feature node covers the cooperating modules below (all annotated
   file is published, so a key reaches it only by being listed there (BDL-076 R1
   finding M2). The fields and their shapes are listed under the data file below.
 - **repository_link.py** — where a node's source can be read on the web (BDL-076 A3, reworked
-  by R1 finding M1 and the re-review's m1–m3). `repository_of(project_root)` reads the
-  project's own `origin` remote and the commit the site is generated from, and returns a
-  `RepositoryLink(url, ref)`, empty unless `project_root` is the top of its own git
+  by R1 finding M1, the re-review's m1–m3 and `beadloom-ujzb.8`).
+  `repository_of(project_root, *, declared_url="", forges=None)` returns a
+  `RepositoryLink(url, ref, forges)`: the declared `site.repo_url` wins, and the project's own
+  `origin` remote (`origin_remote(project_root)`) is read only when nothing is declared; the
+  revision is the current commit, empty unless `project_root` is the top of its own git
   repository. `web_url_of_remote(remote)` turns HTTP(S), `ssh://` and scp-like remotes into a
   web address: credentials, user names, the SSH port and a trailing `.git` are dropped, and
   Azure DevOps' `v3/<org>/<project>/<repo>` SSH form becomes its `_git` web address. A remote a
   browser cannot open (a path on disk, `file://`), an Azure SSH remote in its legacy form, an
   IPv6 host and a port that is not a number give `""`, never an error, because the link is an
-  extra of the site. `RepositoryLink.source_url(source)` builds the finished link to one path
-  at the recorded commit by the forge's own route; `forge_of(web_url)` recognises the forge by
-  its host: GitHub, GitLab, Bitbucket, Gitea and Codeberg, and Azure DevOps with its
-  `*.visualstudio.com` hosts. Any other host, a self-hosted forge included, gets no link,
-  because a guessed route is a 404 that looks like a link; a self-hosted forge is to be
-  declared in configuration in slice 2 (`beadloom-ujzb.8`). The remote reaches the data file
-  only as each node's `source_url`: no screen reads the address, and a remote can hold a
-  credential where no parser expects it.
+  extra of the site. `RepositoryLink.source_url(source)` (the `tree` route), `file_url(path)`
+  (`blob`) and `raw_url(path)` (`raw`) build the finished link at the recorded commit by the
+  forge `forge_routes.forge_for` finds for the host: a host the project declares in
+  `site.forges`, else a public forge's own host. Any other host gets no link, because a guessed
+  route is a 404 that looks like a link. The remote reaches the data file only as each node's
+  `source_url`: no screen reads the address, and a remote can hold a credential where no parser
+  expects it.
 - **node_pages.py** — per-node page rendering for `generate.py` (split out to stay under the
-  domain-size limit). `render_all_pages(conn)` returns sorted `NodePage`s, one per node of every
-  kind; each page has summary, source, public symbols, a **Relationships** section, linked
+  domain-size limit). `render_all_pages(conn, portal=None)` returns sorted `NodePage`s, one per
+  node of every kind; each page has summary (through `project_text.render_project_text` with
+  `opens_page=False`, so a relative link in it is rebased onto `portal`, or keeps only its text
+  with none — BDL-076 `beadloom-ujzb.11`), source, public symbols, a **Relationships** section, linked
   hand-written docs (rooted at `/docs/` so they resolve to the published copy under
   `site/docs/…`), and a **Graph** section that mounts
   `<ArchitectureMap focus="<ref>" :depth="1" height="60vh" />` inside `<ClientOnly>`, the
@@ -257,20 +393,17 @@ One feature node covers the cooperating modules below (all annotated
   structure (each subdir a group, each `.md` a leaf link rooted at `/docs/`), led by an
   Overview link. Dashboard + Landscape map are plain `{ text, link }` entries (not one-child
   groups). Deterministic (sorted, byte-stable); no dead nav links.
-- **about.py** — the README→About page transform (BDL-046). `render_about(readme_text, *,
-  published_doc_slugs, repo_url, cross_link_routes=None)` turns a project README's Markdown
-  into the VitePress About/home page body by **rebasing links** (prose untouched, pure,
-  deterministic, no I/O): a `docs/<x>.md` link whose slug is in `published_doc_slugs` → the
-  extension-less site link `/docs/<x>`; a `README.md`/`README.ru.md` cross-link → if its
-  lowercased basename is in `cross_link_routes` (a basename→route map, e.g. `{"readme.ru.md":
-  "/ru/", "readme.md": "/"}`), the link target is **rewritten to that route** (visible text
-  kept) — this is the in-page bilingual About toggle that replaced the dropped locale switcher
-  (BDL-046 BEAD-11); when no map is given the cross-link is dropped (text kept, back-compat);
-  any other internal/relative target → an absolute GitHub URL `{repo_url}/blob/main/<path>`;
-  already-absolute URLs, shields.io badges, and pure anchors are left untouched; the same rules
-  apply to image targets; links inside code spans / fenced blocks are never rewritten. This
-  lets the rewritten README be the bilingual front-door page (EN `/`, RU `/ru/`) without a
-  hand-maintained duplicate.
+- **about.py** — the README→About page (BDL-046; since BDL-076 `beadloom-ujzb.11`, `.12` and
+  `.8` a thin front of the project-text path). `portal_links_for(*, published_doc_slugs,
+  repository, cross_link_routes=None, base="/", published_files=None)` builds the `PortalLinks`
+  every page of the run shares: a README of the pair that `cross_link_routes` routes (e.g.
+  `{"readme.ru.md": "/ru/", "readme.md": "/"}`) goes to that route — the in-page bilingual
+  toggle that replaced the dropped locale switcher (BDL-046 BEAD-11) — and one it does not route
+  is withheld, so a link to it keeps its text. `render_about(readme_text, *,
+  published_doc_slugs, repository, cross_link_routes=None)` returns
+  `render_project_text(readme_text, portal)`: links follow the rule of `markdown_links`, and the
+  text is shown as written (`project_text`). A link to a repository file goes to the DECLARED
+  repository's forge route at the generated commit, no longer to `<repo>/blob/main/<path>`.
 - **dashboard/** — package (decomposed by cohesion in BDL-059 S4 into `_common`,
   `gate_metrics`, `ai_activity`, `recommendations`, `alerts`, `status_cards`, `assemble`; the
   package `__init__` re-exports the public surface). Showcase A, the AaC/DocAsCode metrics
@@ -292,7 +425,10 @@ One feature node covers the cooperating modules below (all annotated
   contract as `trends`), `totals`, and a `cost_estimate` (`{usd, rate_usd_per_1m,
   is_estimate=True, label "est. @ $X/1M tokens"}`) — token counts are FACTS from each record
   while the dollar figure is a clearly-labeled ESTIMATE at the configured `_USD_PER_1M_TOKENS`
-  rate, never a hard cost (rendered by the `AiTechwriterActivity` widget) — and
+  rate, never a hard cost (rendered by the `AiTechwriterActivity` widget). Since BDL-076 B1 the
+  section also carries `recorded` (whether `.beadloom/ai_techwriter_runs.json` exists), and
+  `render_dashboard_md` mounts `<AiTechwriterActivity />` only when it is `true`, so a project
+  that never ran the harness gets no empty panel — and
   **`recommendations`** — a prioritized, actionable list built from the EXISTING gate data (one
   item per lint violation, BREAKING/DRIFT contract risks from the `--federated` artifact, stale
   docs from `sync_state`, and worst-debt nodes from `debt_report` top offenders); each item is
@@ -375,8 +511,13 @@ One feature node covers the cooperating modules below (all annotated
   structural trend isn't empty on day one (idempotent; never overwrites a richer recorded
   point). Additive append-state, NOT a versioned artifact — no schema bump.
 - **published_docs.py** — Showcase C, the published validated documentation.
-  `publish_docs(conn, out_dir, *, project_root)` copies the REAL `docs/**` tree into
-  `out_dir/docs/…` preserving structure (the source of truth, rendered as-is) and injects a
+  `publish_docs(conn, out_dir, *, project_root, portal=None)` copies the REAL `docs/**` tree
+  into `out_dir/docs/…` preserving structure. Since BDL-076 `beadloom-ujzb.11` and `.12` each
+  Markdown copy goes through `project_text.render_project_text`: a link that leaves `docs/` is
+  rebased onto `portal` (with none it keeps only its text), a link inside `docs/` to a file the
+  portal does not publish becomes its text, and what Vue would read is made inert, so the
+  authored prose is no longer copied byte for byte. `published_files(project_root)` lists the
+  project paths of every file it copies. It injects a
   per-doc validation badge into the COPY only — the source `docs/` is NEVER mutated (no AI
   prose-rewriting; that is the deferred F4.1). A generated `docs/index.md` landing page (sorted
   links to every published doc) is also emitted so the `/docs/` nav target resolves.
@@ -387,8 +528,9 @@ One feature node covers the cooperating modules below (all annotated
   `⚠️ stale — <reason>` for tracked docs; a doc tracked by NO doc-code pair is badged **neutrally**
   as `📘 reference — overview/guide, not tied to a code symbol` (an overview/guide is not a
   defect, so it is NOT called "untracked"). `inject_badge(prose, badge_body)` wraps the badge
-  between the stable `<!-- beadloom:badge-start -->` / `-end -->` markers so regeneration
-  overwrites ONLY the badge region and leaves the authored prose byte-for-byte intact;
+  between the stable `<!-- beadloom:badge-start -->` / `-end -->` markers, below a closed
+  front matter (BDL-076 `beadloom-ujzb.21`: VitePress reads front matter only at the very top of
+  a page), so regeneration overwrites ONLY the badge region;
   `render_published_doc(doc, prose)` renders the badged Markdown. Fresh/stale badges show `last
   synced` (the stored `sync_state.synced_at`, not wall-clock → deterministic) and the owning
   node's read-only source-coverage %; the **reference** (untracked) badge deliberately omits
@@ -420,7 +562,7 @@ version 2:
 Nothing derived from the git remote is at the top level. A1 wrote a `project` name and A3 a
 `repository {url, ref}`; no screen read either, and a remote could carry a credential or a
 `?token=` into both, so the re-review removed them (`beadloom-ujzb.10`). The remote reaches the
-file only as each node's `source_url`.
+file only as each node's `source_url`, and only when the project declares no `site.repo_url`.
 
 **Per node.** Version 1: `id`, `label`, `kind`, `summary`, `layer`, `layer_rank`, `group`,
 `symbols`, `doc_status`, `doc_links`, `url`, `parent`, `depends_on`, `depended_on_by`, `uses`,
@@ -430,7 +572,7 @@ node links to its page, `other/` included. Version 2 adds the card:
 | Key | Shape | Absent or empty when |
 |---|---|---|
 | `source` | the declared source | `""` when the node declares none |
-| `source_url` | the finished link to `source` at the commit the site was generated from, by the forge's own route | `""` with no source, no git repository of the project's own, a remote a browser cannot open, or a host that is not a recognised public forge |
+| `source_url` | the finished link to `source` at the commit the site was generated from, by the forge's own route | `""` with no source, no git repository of the project's own, no declared `site.repo_url` and a remote a browser cannot open, or a host that is neither a public forge's nor declared in `site.forges` |
 | `lifecycle` | the node's lifecycle | — |
 | `tags` | sorted list | `[]` |
 | `docs` | `[{path, status}]` — the worst status of the doc's sync pairs (`missing`, `stale`, `unverified`, `ok`), `unpaired` for a doc with no pair | `[]` |
@@ -492,7 +634,13 @@ neither broken nor decided by its surface "unverified". This repository's one co
 ### Output contract
 
 The generated `site/` tree is consumed by the VitePress site (the
-`vitepress-site` node) — a real producer → consumer contract. The source `docs/`
+`vitepress-site` node) — a real producer → consumer contract. Since BDL-076 B1 the consumer's
+files are written into the same directory by the same run: the scaffold from the installed
+package, `.vitepress/site.generated.mjs` beside the nav's `.vitepress/config.generated.mjs`, and
+`.beadloom/site/` last. The shipped `.vitepress/config.mjs` and the browser tests read both
+generated modules through `.vitepress/generated.mjs` (`importGenerated`): a module that is not
+there yet loads as `{}` with a console warning, and any other load error is thrown, because a
+portal built without its identity deploys under the wrong base and says nothing. The source `docs/`
 is never written; output goes only under `--out` (default `site/`). The run's
 instant comes from `now_ts`, injected in tests for determinism and defaulting to
 the current UTC instant in production. It is the only wall-clock read, and it
@@ -512,19 +660,27 @@ carries it.
   `tests/integration/application/site/architecture_view/test_the_data_file_carries_the_node_card.py`.
 - A value the run did not compute is omitted, never reported clean.
 - Nothing from the git remote is published except each node's `source_url`, and a source link
-  is written only for a recognised public forge, never guessed.
+  is written only for a forge recognised by its public host or declared in `site.forges`, never
+  guessed. The project's own text links to repository files only when `site.repo_url` is
+  declared.
+- A file in the output directory that beadloom did not write, or that was edited after it was
+  written, is never overwritten by the scaffold or the Pages workflow.
+- Nothing that ships in the scaffold names a node, bead or path of this repository: graph
+  annotations are stripped at write time, and a self-check reads every node id and the tracker.
+- A `site:` value the portal cannot use stops `docs site` before any file is written.
 - `activity` in the data file carries only the keys in `CARD_ACTIVITY_KEYS`.
 
 ## API
 
 Module `src/beadloom/application/site/generate.py`:
-- `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path)
+- `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path),
+  `scaffold` (`ScaffoldReport`)
 - `MermaidValidationError` — raised when a generated page fails the Mermaid guard (carries
   `page` + `issues`)
 - `generate_site(conn, out_dir, *, project_root, federated=None, now_ts=None)` -> `SiteResult`
   — deterministic VitePress tree generator; never writes into the source `docs/`; guards every
-  emitted diagram. Emits the About home `index.md` from `README.md` (fallback: architecture
-  overview), the architecture overview at `architecture.md`, a RU About `ru/index.md` from
+  emitted diagram; raises `SiteConfigError` before writing when the `site:` block is refused.
+  Emits the About home `index.md` from `README.md` (fallback: architecture overview), the architecture overview at `architecture.md`, a RU About `ru/index.md` from
   `README.ru.md` (skipped when absent; both link to each other via the in-page `/` ↔ `/ru/`
   cross-link), and a `docs/index.md` Documentation overview = intro + per-section named-members
   descriptions, no link wall (BDL-046 BEAD-11). `now_ts` is the injected ISO-8601 instant of
@@ -595,9 +751,10 @@ Module `src/beadloom/application/site/landscape_view.py`:
 
 Module `src/beadloom/application/site/node_pages.py`:
 - `NodeRow` / `NodePage` — frozen dataclasses for a graph node and its rendered page
-- `load_nodes(conn)` -> `list[NodeRow]`; `render_all_pages(conn)` -> sorted `list[NodePage]`,
-  one per node; `render_node_page(conn, node, kinds)` -> `NodePage`, whose last section mounts
-  `ArchitectureMap` focused on the node
+- `load_nodes(conn)` -> `list[NodeRow]`; `render_all_pages(conn, portal=None)` -> sorted
+  `list[NodePage]`, one per node; `render_node_page(conn, node, kinds, portal=None)` ->
+  `NodePage`, whose summary is project text and whose last section mounts `ArchitectureMap`
+  focused on the node
 - `node_page_path(kind, ref_id)` -> `str` — the page's path without `.md`, `other/` for a kind
   with no directory
 - `node_page_urls(conn)` -> `dict[str, str]` — every node's page URL, every kind included; the
@@ -625,12 +782,66 @@ Module `src/beadloom/application/site/nav.py`:
   `navRu`/`sidebarRu`/`render_sidebar_ru`
 
 Module `src/beadloom/application/site/about.py`:
-- `render_about(readme_text, *, published_doc_slugs, repo_url, cross_link_routes=None)` ->
-  `str` — pure, deterministic README→About transform: rebases doc links to `/docs/<slug>`;
-  rewrites `README.md`/`README.ru.md` cross-links to the route in `cross_link_routes` (the
-  in-page bilingual toggle `/` ↔ `/ru/`) or drops them when no map is given; rewrites other
-  internal targets to absolute GitHub URLs; leaves absolute URLs/badges/anchors and
-  code-span/fenced links untouched (EN `/`, RU `/ru/` front-door page)
+- `portal_links_for(*, published_doc_slugs, repository, cross_link_routes=None, base="/",
+  published_files=None)` -> `PortalLinks` — what the portal publishes, the README pair routed or
+  withheld
+- `render_about(readme_text, *, published_doc_slugs, repository, cross_link_routes=None)` ->
+  `str` — the README as the About page body, through `render_project_text`
+
+Module `src/beadloom/application/site/site_config.py`:
+- `SITE_KEY` — `"site"`; `SiteConfig(title, description, base, repo_url, forges)`;
+  `SiteConfigError(refusals)`
+- `read_site_config(project_root)` -> `tuple[SiteConfig, tuple[Refusal, ...]]`;
+  `site_config_of(project_root)` -> `SiteConfig` (raises on any refusal)
+- `canonical_repo_url(url)` -> `str`; `repo_icon_of(repo_url, forges=None)` -> `str`;
+  `render_site_module(config)` -> `str`
+
+Module `src/beadloom/application/site/forge_routes.py`:
+- `Forge(kind, tree, blob, raw)` with `link(route, url, ref, path)` and `route_segments`;
+  `KNOWN_FORGES`; `PLACEHOLDERS` — `("url", "ref", "path")`
+- `forge_for(web_url, declared=None)` -> `Forge | None`; `read_forge(setting)` ->
+  `tuple[Forge | None, tuple[str, ...]]`; `template_problem(template)` -> `str | None`;
+  `runs_past_repository(web_url, forge)` -> `bool`
+
+Module `src/beadloom/application/site/scaffold.py`:
+- `SCAFFOLD_PACKAGE_DIR`, `OVERRIDE_DIR`, `MARKABLE_SUFFIXES`; `ScaffoldError`
+- `Marker`, `Placement`, `KeptFile`, `ScaffoldReport` — frozen dataclasses
+- `write_scaffold(out_dir, *, project_root, version, source=None)` -> `ScaffoldReport`
+- `shipped_files(source=None)` -> `dict[str, str]`; `without_annotations(body)` -> `str`
+- `mark(rel, body, version)` -> `str`; `read_marker(text)` -> `Marker | None`;
+  `marker_line(body, version, note)` -> `str`; `place_marked(target, expected)` -> `Placement`
+
+Module `src/beadloom/application/site/pages_workflow.py`:
+- `PAGES_WORKFLOW_PATH`; `PagesWorkflowError`; `PagesWorkflowReport`
+- `write_pages_workflow(project_root, *, out_dir, base, version, source=None, branch=None)` ->
+  `PagesWorkflowReport`; `render_pages_workflow(*, base, site_dir, node_major, version,
+  branch="")` -> `str`
+- `node_major_of(engines_node)` -> `str`; `site_dir_of(project_root, out_dir)` -> `str`;
+  `default_branch_of(project_root)` -> `str`
+
+Module `src/beadloom/application/site/pages_base.py`:
+- `project_pages_base(remote)` -> `str | None`; `base_warning(base, remote)` -> `str | None`
+
+Module `src/beadloom/application/site/markdown_links.py`:
+- `PortalLinks(doc_slugs, page_routes, repository, withheld, base, mirrored_files)` with
+  `route_of(path)`, `page_url(route)`, `publishes(path)`, `repository_url_of(path, *, image=False)`
+- `rebase_links(markdown, portal, *, source_dir="", mirrored_dir="", page_dir=None,
+  front_matter=True)` -> `str`
+- `raw_html_destination(url, portal, *, source_dir="", mirrored_dir="", page_dir=None,
+  asset=False)` -> `str | None`
+
+Module `src/beadloom/application/site/project_text.py`:
+- `render_project_text(markdown, portal, *, source_dir="", mirrored_dir="", page_dir=None,
+  opens_page=True)` -> `str`
+
+Modules `vitepress_markdown.py`, `markdown_positions.py`, `markdown_source.py`, `raw_html.py`:
+- `vitepress_markdown()` -> `MarkdownIt`; `front_matter_length(text, *, closed_only=False)` ->
+  `int`; `CONTAINERS`, `TITLED_CONTAINERS`
+- `located_markdown()` -> `MarkdownIt`; `normalise(text)` -> `str`
+- `read_markdown(text, *, front_matter=True)` -> `MarkdownSource`; `Edit`,
+  `apply_edits(source, edits)` -> `str`; `Segment`, `Element`, `RawHtml`, `Text`, `CodeSpan`,
+  `CodeBlock`, `Link`, `Definition`, `CodeRegion`
+- `read_markup(html)` -> `list[Markup]`; `Markup`, `Attribute`
 
 Module `src/beadloom/application/site/published_docs.py`:
 - `BADGE_START` / `BADGE_END` — stable markers delimiting the injected badge region
@@ -641,9 +852,10 @@ Module `src/beadloom/application/site/published_docs.py`:
   `untracked` and rendered as a neutral `📘 reference` badge (no coverage % line)
 - `inject_badge(prose, badge_body)` -> `str` — marker-delimited badge prefix; re-injection
   overwrites only the badge region
-- `render_published_doc(doc, prose)` -> `str` — badged Markdown (badge + authored prose as-is)
-- `publish_docs(conn, out_dir, *, project_root)` -> `list[Path]` — copy `docs/**` into
-  `out_dir/docs/…` with badges (plus a generated `docs/index.md` landing page so the `/docs/`
+- `render_published_doc(doc, prose)` -> `str` — badged Markdown (badge + the prose given)
+- `published_files(project_root)` -> `frozenset[str]` — the `docs/…` paths `publish_docs` copies
+- `publish_docs(conn, out_dir, *, project_root, portal=None)` -> `list[Path]` — copy `docs/**`
+  into `out_dir/docs/…`, each Markdown copy through `render_project_text`, with badges (plus a generated `docs/index.md` landing page so the `/docs/`
   nav target resolves); never mutates the source
 
 Module `src/beadloom/application/site/architecture_view.py`:
@@ -674,14 +886,16 @@ Module `src/beadloom/application/site/architecture_card.py`:
   `CARD_ACTIVITY_KEYS`; `None` when none was recorded
 
 Module `src/beadloom/application/site/repository_link.py`:
-- `RepositoryLink` — frozen dataclass `url`, `ref` (both `""` when nothing states them);
-  `source_url(source)` -> `str` — the forge's page for `source` at `ref`, `""` when there is no
-  repository, commit or path, or the host is not a recognised forge
-- `forge_of(web_url)` -> `str | None` — the forge serving `web_url`, by its host
+- `RepositoryLink` — frozen dataclass `url`, `ref` (both `""` when nothing states them),
+  `forges`; `source_url(source)`, `file_url(path)`, `raw_url(path)` -> `str` — the forge's
+  `tree`, `blob` and `raw` routes at `ref`, `""` when there is no repository, commit or path, or
+  no forge is known for the host. `forge_of` was removed; `forge_routes.forge_for` replaces it
 - `web_url_of_remote(remote)` -> `str` — the web address of a git remote, `""` when a browser
   cannot open it or the remote cannot be parsed; never raises
-- `repository_of(project_root)` -> `RepositoryLink` — the project's `origin` and current
-  commit, empty unless `project_root` is the top of its own git repository
+- `origin_remote(project_root)` -> `str` — the `origin` remote as git records it, `""` when none
+- `repository_of(project_root, *, declared_url="", forges=None)` -> `RepositoryLink` — the
+  declared repository, else `origin`, and the current commit, which is empty unless
+  `project_root` is the top of its own git repository
 
 ## Testing
 
@@ -699,14 +913,45 @@ and `tests/unit/application/site/` — `test_site_about.py`, `test_site_mermaid_
 `test_a_source_links_to_its_forge_or_not_at_all.py` (the remote and the forge routes), and
 `test_a_contract_names_what_decided_its_verdict.py` (`verdict_basis`).
 
+Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`), under
+`tests/unit/application/site/`: the `site:` block and the forges
+(`test_the_portal_takes_its_identity_from_the_site_block.py`,
+`test_the_site_block_declares_a_forge_per_host.py`,
+`test_a_declared_repository_address_is_read_in_one_spelling.py`,
+`test_a_self_hosted_forge_links_by_the_kind_the_project_declares.py`,
+`test_the_declared_repository_wins_over_the_remote.py`,
+`test_a_repository_file_in_project_text_follows_its_forge.py`), the scaffold
+(`test_the_scaffold_is_written_once_and_never_over_a_hand_edit.py`), the Pages workflow and the
+base (`test_the_pages_workflow_deploys_the_portal_and_keeps_a_hand_edit.py`,
+`test_the_pages_workflow_grants_each_job_only_what_it_needs.py`,
+`test_a_default_base_is_warned_about_on_a_github_project_repository.py`), and project text
+(`test_a_link_in_project_text_is_rebased_or_kept_as_text.py`,
+`test_a_raw_html_link_follows_the_link_rule.py`, `test_markdown_is_parsed_as_vitepress_parses_it.py`,
+`test_project_text_is_read_as_vitepress_reads_it.py`,
+`test_project_text_is_shown_as_written_not_compiled_by_vue.py`,
+`test_where_code_is_in_project_markdown.py`); under `tests/integration/application/site/`:
+`test_the_scaffold_ships_with_the_package.py`,
+`test_the_written_scaffold_names_none_of_this_repositorys_nodes.py`,
+`test_config_check_reads_the_site_block.py`,
+`test_a_generated_module_that_fails_to_load_is_not_read_as_missing.py`,
+`test_project_text_on_a_page_is_not_a_vue_template.py`,
+`test_project_text_on_a_page_leaves_no_dead_link.py`, and the slow adopter builds, skipped unless
+`BEADLOOM_RUN_SLOW=1` and run by the `site-adopters` workflow:
+`test_an_adopter_builds_its_portal_from_docs_site.py`,
+`test_an_adopter_portal_on_every_claimed_stack.py` (six fixtures under `tests/fixtures/site/`)
+and `test_the_browser_tests_pass_on_an_adopter_portal.py`.
+
 Scenarios: `tests/acceptance/application/site-generation/node_card_data.feature` (the card, the
 source link per forge, no commit author and no credential in any generated file, an unreadable
-remote) and `layer_view_verdict.feature`, with their steps under
-`tests/acceptance/steps/application/site-generation/`.
+remote), `layer_view_verdict.feature`, and since slice 2 `portal_scaffold.feature`,
+`pages_workflow.feature`, `pages_base_warning.feature`, `self_hosted_forge_links.feature`,
+`project_links_on_the_portal.feature` and `project_text_is_not_a_vue_template.feature`, with
+their steps under `tests/acceptance/steps/application/site-generation/`.
 
 Unplaced, so bound to no node: `tests/test_site_generator.py`, `tests/test_site_dashboard.py`,
 `tests/test_site_published_docs.py`, `tests/test_site_coverage_edges.py`,
 `tests/test_site_viz_data_guards.py`, `tests/test_landscape_view.py`.
 
-The viewer's browser tests are under `site/e2e/` and bind to the theme's slices; see [the site's
+The viewer's browser tests are under `src/beadloom/site_scaffold/e2e/` (written into the portal's
+`e2e/`) and bind to the theme's slices; see [the site's
 page](../../../../services/vitepress-site.md#browser-tests).

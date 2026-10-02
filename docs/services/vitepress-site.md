@@ -1,17 +1,24 @@
-# VitePress site — the committed theme
+# VitePress site — the portal scaffold
 
-The `vitepress-site` node is the VitePress site committed under `site/`, with its theme under
-`site/.vitepress/theme/`. It renders the data that `beadloom docs site` writes: the node pages,
-`architecture.data.json`, `landscape.data.json` and `dashboard.data.json`. The node consumes the
-`site-data` contract, and the root service `beadloom` produces it. How the generator works is described in
-[the VitePress site guide](../guides/vitepress-site.md); this page describes the theme.
+The `vitepress-site` node is the portal scaffold the package ships, under
+`src/beadloom/site_scaffold/`, with its theme under `src/beadloom/site_scaffold/.vitepress/theme/`.
+`beadloom docs site` writes it into the portal directory beside the content it generates, and it
+renders that content: the node pages, `architecture.data.json`, `landscape.data.json` and
+`dashboard.data.json`. The node consumes the `site-data` contract, and the root service
+`beadloom` produces it. How the generator works and how a project publishes its portal are
+described in [the VitePress site guide](../guides/vitepress-site.md); this page describes the
+scaffold.
+
+Since BDL-076 B1 the scaffold is package data, so every project gets the same theme from the
+installed beadloom, and `site/` in this repository is output only: `/site/` is ignored, and
+`docs site --out site` writes this repository's portal the way it writes an adopter's.
 
 ## What is scanned
 
-`site/.vitepress/theme` is a scan path in `.beadloom/config.yml` (BDL-076 A0). The rest of
-`site/` is not scanned: it is generated output, the VitePress cache and `node_modules`.
-`site/.vitepress/config.mjs`, `site/package.json` and `site/scripts/` are committed and belong to
-this node through its `source: site/`, but they are outside the scan path.
+The scaffold lies under `src`, this repository's scan path, so its `.js`, `.mjs` and `.vue` files
+are read with the rest of the source. `.vitepress/config.mjs`, `.vitepress/generated.mjs`,
+`package.json`, `package-lock.json` and `scripts/` belong to this node through its
+`source: src/beadloom/site_scaffold/`.
 
 What the index reads from the theme requires the `languages` extra, which provides the
 TypeScript grammar:
@@ -59,7 +66,11 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, ECharts and the copy button. |
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
-re-exports the `app` layer; `site/.vitepress/config.mjs`; `site/package.json`; and `site/scripts/`.
+re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity and the nav
+`docs site` generates (`site.generated.mjs`, `config.generated.mjs`); `.vitepress/generated.mjs`,
+whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
+yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
+pinned exactly but `web-worker`) with its lockfile; and `scripts/`.
 
 **The layer rule.** `site-fsd-layers` in `.beadloom/_graph/rules.yml` declares the six layers by
 the tags `fsd-app` to `fsd-shared`, at `error`. Each slice carries its layer as its own tag and no
@@ -72,7 +83,9 @@ relative imports between theme files, which resolve to the files they name.
 
 - **`beadloom ctx <slice>`** lists the slice's symbols: every file of every slice carries a
   `// beadloom:component=<slice>` annotation. A slice annotates all of its files or none, because
-  a node with some files annotated keeps sync pairs for those files only (`beadloom-oo4m`).
+  a node with some files annotated keeps sync pairs for those files only (`beadloom-oo4m`). The
+  annotations bind the source to this repository's graph and do not ship: `docs site` writes each
+  file without its annotation-only lines (`beadloom-ujzb.18`).
 - **`beadloom sync-check`** holds each slice's document to that slice's files. A change to a
   script block's symbols is reported as `symbols_changed`, and any other edit as `hash_changed`.
 - **`beadloom why <slice>`** follows the `depends_on` edges the imports between slices produce.
@@ -81,16 +94,34 @@ relative imports between theme files, which resolve to the files they name.
 
 ## Browser tests
 
-The Playwright tests live under `site/e2e/`. `.beadloom/config.yml` declares `site/e2e` as a test
-root and names the `playwright` pattern group. This node declares the whole directory, and each
-spec is also declared in the `tests:` list of the one slice it drives, which is where it binds:
-a test file binds to one node, and a node does not inherit its ancestors' tests. The eighteen
-specs bind to sixteen slices. No spec drives `site-app`, `site-dashboard`, `site-dashboard-data`
-or `site-landscape-data`, so those four report no bound tests.
+The Playwright tests live under `src/beadloom/site_scaffold/e2e/` and ship with the scaffold, so a
+portal written by `docs site` carries them in its `e2e/`. `.beadloom/config.yml` declares
+`src/beadloom/site_scaffold/e2e` as a test root and names the `playwright` pattern group. This
+node declares the whole directory, and each spec is also declared in the `tests:` list of the one
+slice it drives, which is where it binds: a test file binds to one node, and a node does not
+inherit its ancestors' tests. The eighteen specs bind to sixteen slices. No spec drives
+`site-app`, `site-dashboard`, `site-dashboard-data` or `site-landscape-data`, so those four report
+no bound tests.
 
-The tests drive the built portal: `site/e2e/support/serve.mjs` runs `vitepress build` and then
-`vitepress preview`, after `beadloom docs site --out site` has written the content. Run them from
-`site/` with `npm run test:e2e`, under the Node.js version the workflows pin: Playwright does not
-run on the older releases the site build still accepts. The advisory `site-e2e` CI job runs them
-after `site-build`; it is not a required check. The tests read the viewer's state through its
+The tests drive the built portal: `e2e/support/serve.mjs` runs `vitepress build` and then
+`vitepress preview`, and refuses to start before `beadloom docs site` has written the content.
+Run them from the portal directory with `npm run test:e2e`, on `Node.js 22` or later, after
+`npx playwright install chromium`. The base path is read from the generated
+`site.generated.mjs`, or from `BEADLOOM_E2E_BASE`. The tests read the viewer's state through its
 test handle, `window.__beadloomViewer`, which exists only under automation.
+
+**Any project's graph** (`beadloom-ujzb.17`, `.20`). A case chooses its subject from the data the
+portal serves, never by a node id of this repository. A case written about a shape the served
+graph does not hold, such as two declared layers, a domain two levels deep or a contract between
+two services, calls `requireShape` (`e2e/support/shape.js`) and is skipped with the reason
+`this portal's graph lacks what the case needs: <shape>`. With `BEADLOOM_E2E_NO_SKIP=1` such a
+case fails instead, naming the shape. No case skips in any other way, which a self-check holds.
+Measured on the six adopter fixtures under `tests/fixtures/site/` when the shape skips were
+introduced (`beadloom-ujzb.17`, on macOS with `Node.js 22`), all 101 cases ran or skipped by
+shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 78 and 23, kotlin
+74 and 27, swift 74 and 27.
+
+**In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
+`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 101 of 101. It is not a
+required check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
+on pull requests that change what it tests, weekly on `main` and on demand.

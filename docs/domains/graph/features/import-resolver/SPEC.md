@@ -2,7 +2,9 @@
 
 Import analysis and `depends_on` edge generation via tree-sitter-based source code parsing.
 
-**Source:** `src/beadloom/graph/import_resolver.py`
+**Source:** `src/beadloom/graph/import_resolver.py`, with the manifest readers
+`src/beadloom/graph/go_modules.py`, `src/beadloom/graph/jvm_packages.py` and
+`src/beadloom/graph/swift_packages.py`
 
 ---
 
@@ -19,12 +21,15 @@ Extract import statements from source files using tree-sitter grammars, resolve 
 | Python                | `.py`                      | `import X`, `from X import Y`              | Relative imports (`from . import`, `from ..`)   |
 | TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`| `import ... from 'path'`, `export ... from 'path'`, `import('literal')` | None at extraction; npm packages resolve to no node |
 | Vue component         | `.vue`                     | The TS/JS forms, inside each `<script>` / `<script setup>` block | As TypeScript/JavaScript                        |
-| Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Standard library (no `/` in path)               |
+| Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Standard library (no `/` in path); resolved through `go.mod` (see below) |
 | Rust                  | `.rs`                      | `use path::to::module`                     | Built-in crates (`std`, `core`, `alloc`), `self`, `super` |
 
 The table details four languages. The resolver also extracts Kotlin, Java, Swift, Objective-C
 and C/C++ imports (`_extract_kotlin_imports`, `_extract_java_imports`, `_extract_swift_imports`,
-`_extract_objc_imports`, `_extract_c_cpp_imports`); they are not described here.
+`_extract_objc_imports`, `_extract_c_cpp_imports`); their extraction is not described here.
+`.java` and `.kt` files share one import language (`_IMPORT_LANGUAGE['.java'] = '.kt'`), so a
+Java file and a Kotlin file are given the same scan paths. How Go, Java/Kotlin and Swift imports
+are resolved is described in [Imports resolved through a manifest](#imports-resolved-through-a-manifest).
 
 ### Constants
 
@@ -237,6 +242,25 @@ Limits: a scan path holding both languages is read for both, because the groupin
 extension. The onboarding scan and the test index still call `resolve_import_to_node` with every
 scan path: they get the walk-up floor, not the per-language filter.
 
+### Imports resolved through a manifest
+
+Three languages name a module, not a folder, so a dotted-path reading finds nothing or the wrong
+node. Each is resolved through what the project declares (BDL-076 B5, B7 and R2 finding 6):
+
+| Language | Function | Read from | Unresolved |
+|----------|----------|-----------|------------|
+| Go | `resolve_go_import(import_path, importer, project_root, conn, modules)` | `GoModules` (`go_modules.py`): the nearest `go.mod` at or above the importer; the longest module path among the project's modules, the importer's local `replace` directives and those of the `go.work` that uses it; the rest of the path is a directory under that module | The standard library and every module the project does not hold |
+| Java, Kotlin | `resolve_jvm_import(import_path, file_path, conn, scan_paths, packages)` | `JvmPackages` (`jvm_packages.py`): the longest dotted prefix of the import that some file declares as its `package`, mapped to that file's folder | A package no file declares (the JDK, a library); the dotted folder reading stays the fallback for such a package |
+| Swift | `resolve_swift_import(import_path, importer, project_root, conn, packages)` | `SwiftPackages` (`swift_packages.py`): the target of that name in the nearest `Package.swift`, else the one other package declaring it | An Apple framework, a product of a package the project does not hold, a test, plugin, binary or system-library target |
+
+The owner of the folder found is decided by the one ownership rule (`get_owning_ref_id`). A Go
+import never goes through `resolve_import_to_node`, whose dotted reading turned `net/http` into a
+node sourced at `net/`. A Swift import goes through `resolve_swift_import` only when some manifest
+declares its module; a project with no `Package.swift` keeps the folder-path reading of
+`resolve_import_to_node`. The Kotlin layout that omits the common root package from the folders
+(`package org.example.network` in `src/main/kotlin/network/`) resolves because the package is
+read from the declaration, not from the folder.
+
 ### Internal Resolution Helpers
 
 | Function                      | Description                                                                                                 |
@@ -297,7 +321,9 @@ def reindex_file_imports(
 ```
 
 Deletes `code_imports` rows for the touched and removed paths, re-extracts the
-touched ones, then calls `refresh_import_edges`. This is what an incremental
+touched ones, then calls `refresh_import_edges`. The JVM package declarations are read again only
+when a touched file is `.java` or `.kt`. A change to `go.mod`, `go.work` or `Package.swift` alone
+re-resolves no import of the files it governs (`beadloom-jcng`); `beadloom reindex --full` does. This is what an incremental
 reindex calls; without it every import rule read an index frozen at the last
 FULL rebuild, so `reindex && lint` passed a real boundary break (BDL-UX #142).
 
@@ -314,8 +340,11 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int
    b. Read file content, compute SHA-256 hash, compute relative path.
    c. Determine `is_ts` flag from file extension (`.ts`, `.tsx`, `.js`, `.jsx`, `.vue`).
    d. For each `ImportInfo`: a relative specifier from a TS/JS/Vue importer goes to
-      `resolve_relative_import`; every other import goes to `resolve_import_to_node` with the
-      scan paths of the file's import language.
+      `resolve_relative_import`; a Go import to `resolve_go_import`; a Java or Kotlin import to
+      `resolve_jvm_import`; a Swift import whose module a manifest declares to
+      `resolve_swift_import`; every other import goes to `resolve_import_to_node` with the
+      scan paths of the file's import language. The Go modules, the declared JVM packages and
+      the Swift packages are read once per run.
    e. Upsert into `code_imports` with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE SET resolved_ref_id, file_hash`.
 4. Commit.
 5. Call `refresh_import_edges(conn)` to regenerate `depends_on` edges.
@@ -361,6 +390,18 @@ def resolve_import_to_node(
     *,
     is_ts: bool = False,
 ) -> str | None: ...
+def resolve_go_import(
+    import_path: str, importer: str, project_root: Path, conn: sqlite3.Connection,
+    modules: GoModules,
+) -> str | None: ...
+def resolve_jvm_import(
+    import_path: str, file_path: Path, conn: sqlite3.Connection, scan_paths: list[str],
+    packages: JvmPackages,
+) -> str | None: ...
+def resolve_swift_import(
+    import_path: str, importer: str, project_root: Path, conn: sqlite3.Connection,
+    packages: SwiftPackages,
+) -> str | None: ...
 def create_import_edges(conn: sqlite3.Connection) -> int: ...
 def delete_derived_import_edges(conn: sqlite3.Connection) -> int: ...
 def refresh_import_edges(conn: sqlite3.Connection) -> int: ...
@@ -373,6 +414,9 @@ def reindex_file_imports(
     removed: Sequence[str],
 ) -> int: ...
 ```
+
+The manifest readers' public API is listed in the
+[graph domain README](../../README.md), under each module.
 
 ### Public Classes
 
@@ -446,6 +490,10 @@ class ImportInfo:
 - `relative_js_ts_imports.feature` (5 scenarios): a TS package and a JS package with `index.js`/`index.mjs` facades get exactly their real edges, and `beadloom why` lists the dependents.
 - `a_foreign_scan_path_adds_no_false_edges.feature` (3 scenarios): a Python service beside a JS theme scan path owned by a node above it gets no false edge.
 - `vue_and_dynamic_imports.feature` (2 scenarios): `why` on a composable lists the component, the import is on its `.vue` line, a lazy `import('../charts/bar')` is an edge.
+- `go_module_imports.feature`: Go imports resolve through `go.mod`, and a deny rule fires on a Go import.
+
+The manifest readers have unit tests of their own: `tests/unit/graph/test_go_modules.py`,
+`tests/unit/graph/test_jvm_packages.py`, `tests/unit/graph/test_swift_packages.py`.
 
 ### Edge Generation Tests
 

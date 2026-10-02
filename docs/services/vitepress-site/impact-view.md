@@ -3,7 +3,7 @@
 A slice of the `features` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/features/impact-view/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/features/impact-view/`
 
 ---
 
@@ -50,9 +50,12 @@ the reconciler recorded. A click on a node in the risk list selects it.
 
 ## Tests
 
-`site/e2e/impact.spec.js` on the architecture: the rings and the summary, each risky node marked
-and listed, the statement and the two commands, the rings drawn in real colours and removed on
-leaving the mode, and each doc status listed as its risk. `site/e2e/landscape-impact.spec.js` on
-the landscape: every service reached however far, consumers and never producers, the contracts,
-protocols and broken ones on the path, the services at risk, and this repository's producer
-reaching its consumer.
+`src/beadloom/site_scaffold/e2e/impact.spec.js` on the architecture: the rings and the summary,
+each risky node marked and listed, the statement and the two commands, the rings drawn in real
+colours and removed on leaving the mode, and each doc status listed as its risk.
+`src/beadloom/site_scaffold/e2e/landscape-impact.spec.js` on the landscape: every service
+reached however far, consumers and never producers, the contracts, protocols and broken ones on
+the path, the services at risk, and, on the landscape the portal serves, a producer reaching
+its consumer. The landscape cases grow the served landscape from a seeded contract, so five of
+the six run on a project whose own landscape is empty; the sixth needs a contract the portal
+serves and skips, naming that shape, where there is none.
