@@ -156,6 +156,7 @@ class TestASinglePackageAtTheRoot:
         )
 
         assert layout.claimed == frozenset({"Sources/Core", "Tests/CoreTests"})
+        assert layout.read_folders == layout.claimed
 
     def test_a_cluster_name_already_taken_is_qualified(self, tmp_path: Path) -> None:
         layout = _tree(
@@ -248,6 +249,11 @@ class TestPackagesBelowTheRoot:
             "Sources/App",
         )
         assert layout.claimed == frozenset({"Sources/App", "Packages/Kit"})
+        # What the layout itself reads is each target's folder: the rest of the
+        # package's folder is scanned as any other folder (the re-review's m3).
+        assert layout.read_folders == frozenset(
+            {"Sources/App", "Packages/Kit/Sources/Core", "Packages/Kit/Sources/Net"}
+        )
 
     def test_packages_under_tests_docs_or_fixtures_are_not_the_projects(
         self, tmp_path: Path

@@ -112,6 +112,16 @@ class SwiftLayout:
         )
 
     @property
+    def read_folders(self) -> frozenset[str]:
+        """The folders whose code this layout reads or keeps out itself: each target's own.
+
+        A target's folder is a scan path or, for a test target, kept out on purpose;
+        the rest of a package's folder is scanned as any other folder (the
+        re-review's finding m3).
+        """
+        return frozenset(root.directory for root in self.roots if root.directory)
+
+    @property
     def mirrors(self) -> dict[str, str]:
         """Each test target's folder mapped to the folder of the target it tests."""
         mapped: dict[str, str] = {}

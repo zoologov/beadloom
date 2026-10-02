@@ -486,6 +486,74 @@ class TestAKotlinImportIsReadByItsDeclaredPackage:
         assert edges == {("app", "network"), ("app", "storage")}
 
 
+#: One package declared in two folders of Kotlin's recommended layout, a third folder
+#: holding both under one node (the re-review's finding m5).
+_ONE_PACKAGE_TWO_FOLDERS: dict[str, str] = {
+    "src/main/kotlin/a/A.kt": "package org.ex.shared\n\nclass A\n",
+    "src/main/kotlin/b/B.kt": "package org.ex.shared\n\nclass B\n",
+    "src/main/kotlin/util/x/Ux.kt": "package org.ex.util\n\nfun ux() = 1\n",
+    "src/main/kotlin/util/y/Uy.kt": "package org.ex.util\n\nfun uy() = 2\n",
+    "src/main/kotlin/c/C.kt": (
+        "package org.ex.c\n\n"
+        "import org.ex.shared.B\n"
+        "import org.ex.shared.*\n"
+        "import org.ex.util.uy\n\n"
+        "class C(val b: B)\n"
+    ),
+}
+
+
+@pytest.mark.skipif(not _jvm_available(), reason="tree-sitter-java or -kotlin not installed")
+class TestAPackageDeclaredInTwoFoldersIsNotGivenToTheFirst:
+    """The re-review's finding m5 (``beadloom-ujzb.24``): no false edge to the folder read first.
+
+    ``org.ex.shared.B`` resolved to ``a``, the first folder declaring the package,
+    while ``B`` is in ``b``.
+    """
+
+    def _project(self, root: Path) -> sqlite3.Connection:
+        c = open_db(root / "index.db")
+        create_schema(c)
+        for ref_id in ("a", "b", "c", "util"):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, 'domain', '', ?)",
+                (ref_id, f"src/main/kotlin/{ref_id}/"),
+            )
+        c.commit()
+        (root / ".beadloom").mkdir()
+        (root / ".beadloom" / "config.yml").write_text(
+            "scan_paths:\n- src/main/kotlin\n", encoding="utf-8"
+        )
+        for rel_path, text in _ONE_PACKAGE_TWO_FOLDERS.items():
+            _write(root, rel_path, text)
+        return c
+
+    def test_each_import_reaches_the_folder_of_its_class_or_no_node(
+        self, tmp_path: Path
+    ) -> None:
+        c = self._project(tmp_path)
+
+        index_imports(tmp_path, c)
+
+        edges, imports = _depends_on(c), _imports(c)
+        c.close()
+        # The class import reaches b; the wildcard reaches a and b, two nodes, so
+        # none; the function reaches util/x and util/y, which one node owns.
+        assert ("src/main/kotlin/c/C.kt", "org.ex.shared.B", "b") in imports
+        assert ("src/main/kotlin/c/C.kt", "org.ex.shared", None) in imports
+        assert ("src/main/kotlin/c/C.kt", "org.ex.util.uy", "util") in imports
+        assert edges == {("c", "b"), ("c", "util")}
+
+    def test_an_incremental_reindex_resolves_the_same_way(self, tmp_path: Path) -> None:
+        c = self._project(tmp_path)
+
+        reindex_file_imports(tmp_path, c, touched=["src/main/kotlin/c/C.kt"], removed=[])
+
+        edges = _depends_on(c)
+        c.close()
+        assert edges == {("c", "b"), ("c", "util")}
+
+
 def _swift_available() -> bool:
     try:
         import tree_sitter_swift  # noqa: F401

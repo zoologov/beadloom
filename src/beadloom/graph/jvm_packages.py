@@ -17,10 +17,19 @@ be imported from a named one.
 
 **An import's package** is the longest dotted prefix of the import that some file
 declares as its package, so a class, a member of a static import and a wildcard all
-reach the package they sit in; where several folders declare one package (a package
-split across a Java and a Kotlin root, or across modules), the first folder in the
-order given keeps it. A package no file declares — the JDK, a library — names no
-folder, even where its last segments match a folder of the project.
+reach the package they sit in. A package no file declares — the JDK, a library —
+names no folder, even where its last segments match a folder of the project.
+
+**A package declared in several folders** (split across a Java and a Kotlin root,
+across modules, or across folders of Kotlin's recommended layout) is not given to the
+folder read first: that drew a false edge to it for every import of a class the other
+folder holds (the re-review's finding m5, ``beadloom-ujzb.24``). The segment after the
+package is read as the class the import names, and the folders holding a file named
+after it (``B.kt``, ``B.java``) are the import's folders; Java requires that name of a
+public class, and Kotlin's conventions ask it of a file holding one class. An import
+naming no such file — a wildcard, a top-level Kotlin function, a class in a file
+named otherwise — reaches every folder of the package, and a caller that needs one
+folder gets none: no edge is drawn rather than a guessed one.
 """
 
 # beadloom:domain=graph
@@ -60,24 +69,56 @@ def declared_package(text: str) -> str | None:
 
 
 class JvmPackages:
-    """Each declared package mapped to the folder that holds it; false when there is none."""
+    """Each declared package mapped to the folders holding it; false when there is none.
 
-    def __init__(self, folders: Iterable[tuple[str, str]]) -> None:
-        self._folders: dict[str, str] = {}
-        for package, directory in folders:
-            self._folders.setdefault(package, directory)
+    Built from ``(package, file)`` pairs: the file's folder holds the package, and
+    its name (without the extension) is a class the folder answers for.
+    """
+
+    def __init__(self, files: Iterable[tuple[str, str]]) -> None:
+        self._folders: dict[str, dict[str, set[str]]] = {}
+        for package, file in files:
+            path = PurePosixPath(file)
+            held = self._folders.setdefault(package, {})
+            held.setdefault(path.parent.as_posix(), set()).add(path.stem)
 
     def __bool__(self) -> bool:
         return bool(self._folders)
 
-    def directory(self, import_path: str) -> str | None:
-        """The folder of the package *import_path* names, if the project declares it."""
+    def _declared(self, import_path: str) -> tuple[str, list[str]] | None:
+        """The declared package *import_path* names, and the segments after it."""
         segments = [part for part in import_path.split(".") if part and part != "*"]
         for depth in range(len(segments), 0, -1):
-            folder = self._folders.get(".".join(segments[:depth]))
-            if folder is not None:
-                return folder
+            package = ".".join(segments[:depth])
+            if package in self._folders:
+                return package, segments[depth:]
         return None
+
+    def package(self, import_path: str) -> str | None:
+        """The project's package *import_path* names, ``None`` when the project declares none."""
+        declared = self._declared(import_path)
+        return declared[0] if declared is not None else None
+
+    def folders(self, import_path: str) -> tuple[str, ...]:
+        """Every folder the import can reach, sorted (see the module docstring)."""
+        declared = self._declared(import_path)
+        if declared is None:
+            return ()
+        package, rest = declared
+        held = self._folders[package]
+        if len(held) > 1 and rest:
+            named = sorted(folder for folder, stems in held.items() if rest[0] in stems)
+            if named:
+                return tuple(named)
+        return tuple(sorted(held))
+
+    def directory(self, import_path: str) -> str | None:
+        """The one folder of the package *import_path* names, if the project declares it.
+
+        ``None`` too when the import reaches several folders and names none of them.
+        """
+        reached = self.folders(import_path)
+        return reached[0] if len(reached) == 1 else None
 
 
 def file_package(path: Path) -> str | None:
@@ -89,9 +130,9 @@ def file_package(path: Path) -> str | None:
 
 
 def read_jvm_packages(project_root: Path, files: Iterable[Path]) -> JvmPackages:
-    """The packages *files* declare, each under its file's project-relative folder."""
+    """The packages *files* declare, each with its file's project-relative path."""
     return JvmPackages(
-        (package, PurePosixPath(path.relative_to(project_root).as_posix()).parent.as_posix())
+        (package, path.relative_to(project_root).as_posix())
         for path in files
         if path.suffix in JVM_EXTENSIONS and (package := file_package(path))
     )

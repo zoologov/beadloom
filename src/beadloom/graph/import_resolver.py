@@ -1097,11 +1097,16 @@ def resolve_jvm_import(
     package from the folders, so the dotted path names no folder there; it is
     still the reading for an import whose package no file declares, which keeps
     every import that resolved before resolving the same way.
+
+    Where several folders declare the package, the import reaches those holding
+    the class it names, else all of them, and it resolves only when one node owns
+    every folder it reaches: never to a folder picked by the order it was read in
+    (the re-review's finding m5).
     """
-    directory = packages.directory(import_path)
-    if directory is None:
+    if packages.package(import_path) is None:
         return resolve_import_to_node(import_path, file_path, conn, scan_paths=scan_paths)
-    return get_owning_ref_id(conn, f"{directory}/")
+    owners = {get_owning_ref_id(conn, f"{folder}/") for folder in packages.folders(import_path)}
+    return owners.pop() if len(owners) == 1 else None
 
 
 #: Extensions whose files write their imports in one language, mapped to one

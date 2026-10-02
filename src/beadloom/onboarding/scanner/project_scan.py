@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.onboarding.scanner.constants import (
@@ -20,16 +21,45 @@ from beadloom.onboarding.scanner.constants import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Callable, Collection
     from pathlib import Path
 
     from beadloom.onboarding.scanner.types import ClusterEntry, ScanResult
 
 
-def scan_project(project_root: Path) -> ScanResult:
+def generated_portals(project_root: Path, is_portal: Callable[[Path], bool]) -> tuple[str, ...]:
+    """The top-level folders of *project_root* holding the portal ``docs site`` wrote, sorted.
+
+    *is_portal* decides, and is the scaffold's own marker test in production (the
+    re-review's finding m4): this domain cannot read the scaffold, which lives in
+    the application layer. A portal written below a top-level folder is not looked
+    for.
+    """
+    return tuple(
+        item.name
+        for item in sorted(project_root.iterdir())
+        if item.is_dir() and not item.name.startswith(".") and is_portal(item)
+    )
+
+
+def unscanned_portals_sentence(portals: Collection[str]) -> str:
+    """What ``init`` says about the *portals* it did not scan; ``""`` when there are none."""
+    if not portals:
+        return ""
+    named = ", ".join(f"{portal}/" for portal in portals)
+    return (
+        f"Not scanned: {named} - holds the portal `beadloom docs site` wrote (its files "
+        "carry the generated marker), which is output, not the project's code"
+    )
+
+
+def scan_project(project_root: Path, *, skip: Collection[str] = ()) -> ScanResult:
     """Scan project structure and return summary.
 
     Returns dict with manifests, source_dirs, file_count, languages.
+
+    A top-level folder named in *skip* is not read at all: a portal ``beadloom docs
+    site`` wrote is output, not the project's code (:func:`generated_portals`).
 
     Discovery strategy (both passes always run, results merged):
     1. **Pass 1:** directories matching ``_SOURCE_DIRS`` (known names).
@@ -46,7 +76,7 @@ def scan_project(project_root: Path) -> ScanResult:
     other_dirs: list[str] = []
 
     for item in sorted(project_root.iterdir()):
-        if item.name.startswith("."):
+        if item.name.startswith(".") or item.name in skip:
             continue
         if item.is_file() and item.name in _MANIFESTS:
             manifests.append(item.name)
@@ -146,9 +176,21 @@ def _holds_code(folder: Path) -> bool:
     )
 
 
-def unclaimed_folders(
+@dataclass(frozen=True)
+class UnclaimedCode:
+    """The scan paths left around the claimed folders, and the code no scan path can hold.
+
+    ``loose_files`` are code files lying directly in a folder that was split around a
+    claimed one: a scan path is a folder, and that folder would hold the claim too.
+    """
+
+    folders: tuple[str, ...] = ()
+    loose_files: tuple[str, ...] = ()
+
+
+def unclaimed_code(
     project_root: Path, folders: list[str], claimed: Collection[str]
-) -> list[str]:
+) -> UnclaimedCode:
     """*folders* without the *claimed* ones, as scan paths that never overlap.
 
     A folder with no claimed folder below it is kept whole. One that holds a
@@ -156,26 +198,91 @@ def unclaimed_folders(
     same way, so a Python service beside a Maven module in ``services/`` is
     scanned and the module — whose production roots are scan paths of their
     own, and whose test tree must stay out — is not scanned a second time. A
-    code file lying directly in such a folder, beside the module, is in no scan
-    path: a scan path is a folder, and that folder would hold the module too.
+    code file lying directly in such a folder, beside the module, can be in no
+    scan path, and is returned as a loose file so that ``init`` names it
+    (the re-review's finding m3) instead of dropping it in silence.
     """
     kept: list[str] = []
+    loose: list[str] = []
     for folder in folders:
         if is_claimed(folder, claimed):
             continue
         if not any(other.startswith(f"{folder}/") for other in claimed):
             kept.append(folder)
             continue
+        children = sorted((project_root / folder).iterdir())
+        loose.extend(
+            f"{folder}/{child.name}"
+            for child in children
+            if child.is_file() and child.suffix in _CODE_EXTENSIONS
+        )
         subfolders = [
             f"{folder}/{child.name}"
-            for child in sorted((project_root / folder).iterdir())
+            for child in children
             if child.is_dir()
             and not child.name.startswith(".")
             and child.name not in _RECURSIVE_SKIP
             and _holds_code(child)
         ]
-        kept.extend(unclaimed_folders(project_root, subfolders, claimed))
-    return kept
+        below = unclaimed_code(project_root, subfolders, claimed)
+        kept.extend(below.folders)
+        loose.extend(below.loose_files)
+    return UnclaimedCode(tuple(kept), tuple(loose))
+
+
+def unclaimed_folders(
+    project_root: Path, folders: list[str], claimed: Collection[str]
+) -> list[str]:
+    """The scan paths of :func:`unclaimed_code`."""
+    return list(unclaimed_code(project_root, folders, claimed).folders)
+
+
+#: How many unread files ``init`` names before it only counts the rest.
+_NAMED_FILES = 5
+
+
+@dataclass(frozen=True)
+class CodeBesideModules:
+    """The code beside a module's or a package's source roots, and what ``init`` says of it.
+
+    ``scanned`` are folders inside a module's own folder and outside the folders its
+    layout reads (``backend/scripts`` beside ``backend/src``): each is a scan path,
+    and its files belong to the module's node, the deepest node whose folder holds
+    them. ``unread`` are the loose files of :class:`UnclaimedCode`.
+    """
+
+    scanned: tuple[str, ...] = ()
+    unread: tuple[str, ...] = ()
+
+    def sentences(self) -> list[str]:
+        """What ``init`` says about this code: nothing when there is none."""
+        said: list[str] = []
+        if self.scanned:
+            said.append(
+                f"Also scanned: {', '.join(self.scanned)} - code in a module's folder outside "
+                "its source roots; its files belong to that module's node"
+            )
+        if self.unread:
+            said.append(self._unread_sentence())
+        return said
+
+    def _unread_sentence(self) -> str:
+        count = len(self.unread)
+        if count == 1:
+            return (
+                f"Not read: {self.unread[0]} - a code file lying directly in a folder that "
+                "holds a module; a scan path is a folder, and that one would scan the "
+                "module's test tree too, so move the file into a folder of its own to have "
+                "it read"
+            )
+        named = ", ".join(self.unread[:_NAMED_FILES])
+        rest = count - _NAMED_FILES
+        more = f" and {rest} more" if rest > 0 else ""
+        return (
+            f"Not read: {count} code files lying directly in folders that hold a module "
+            f"({named}{more}) - a scan path is a folder, and those would scan the module's "
+            "test tree too, so move the files into a folder of their own to have them read"
+        )
 
 
 def _cluster_with_children(

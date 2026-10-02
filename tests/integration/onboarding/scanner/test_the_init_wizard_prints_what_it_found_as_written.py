@@ -82,3 +82,55 @@ def test_the_wizard_names_the_swift_files_it_did_not_read(
     printed = capsys.readouterr().out
     assert "Not read: 1 .swift file outside any Package.swift target" in printed
     assert "(Xcode: Beacon.xcodeproj)" in printed
+
+
+def test_the_wizard_names_the_code_beside_a_module(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The re-review's finding m3 (``beadloom-ujzb.24``): the wizard says what init says.
+
+    A folder scanned beside a Gradle module's sources, and a file no scan path can hold.
+    """
+    monkeypatch.setenv("COLUMNS", "400")
+    files = {
+        "backend/src/main/kotlin/com/acme/Api.kt": "package com.acme\n\nclass Api\n",
+        "backend/scripts/deploy.py": "def deploy() -> None:\n    pass\n",
+        "backend/run.py": "def run() -> None:\n    pass\n",
+    }
+    for rel_path, text in files.items():
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["bootstrap", "cancel"]):
+        interactive_init(tmp_path, reindex=_no_reindex)
+
+    printed = capsys.readouterr().out
+    assert "Also scanned: backend/scripts - " in printed
+    assert "Not read: backend/run.py - " in printed
+
+
+def test_the_wizard_leaves_the_generated_portal_out_and_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The re-review's finding m4 (``beadloom-ujzb.24``): the wizard reads what init reads.
+
+    Its scan summary and its bootstrap both leave out the folder the probe calls the
+    portal, and it says so.
+    """
+    monkeypatch.setenv("COLUMNS", "400")
+    for rel_path in ("src/orders/place.py", "site/.vitepress/theme/index.js"):
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x = 1\n", encoding="utf-8")
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["bootstrap", "cancel"]):
+        result = interactive_init(
+            tmp_path, reindex=_no_reindex, is_portal=lambda folder: folder.name == "site"
+        )
+
+    printed = capsys.readouterr().out
+    assert "Source dirs: src\n" in printed
+    assert "Not scanned: site/ - " in printed
+    sources = {node["source"] for node in result["bootstrap"]["nodes"]}
+    assert not [source for source in sources if source.startswith("site")]

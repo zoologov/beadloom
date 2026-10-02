@@ -367,10 +367,12 @@ def _layer_rule(fixture: AdopterFixture) -> dict[str, Any]:
     }
 
 
-def build_portal(fixture: AdopterFixture, workdir: Path, npm: str) -> BuiltPortal:
-    """Do to a copy of *fixture* under *workdir* what an adopter does, step by step.
+def adopt(fixture: AdopterFixture, workdir: Path) -> BuiltPortal:
+    """The beadloom half of :func:`build_portal`: copy, commit, init, declare, reindex, docs site.
 
-    A step that fails stops the build; the record says which one and why.
+    Apart from the npm half so that the product code these steps run can be traced
+    on its own (``tests/support/slow_test_trace.py``), and the ``site-adopters``
+    workflow's paths filter held to it.
     """
     root = workdir / fixture.project
     shutil.copytree(fixture.source, root)
@@ -385,6 +387,15 @@ def build_portal(fixture: AdopterFixture, workdir: Path, npm: str) -> BuiltPorta
     _declare(root, fixture)
     built.steps["reindex"] = _beadloom("reindex", *project)
     built.steps["docs site"] = _beadloom("docs", "site", *project)
+    return built
+
+
+def build_portal(fixture: AdopterFixture, workdir: Path, npm: str) -> BuiltPortal:
+    """Do to a copy of *fixture* under *workdir* what an adopter does, step by step.
+
+    A step that fails stops the build; the record says which one and why.
+    """
+    built = adopt(fixture, workdir)
     if built.failed_step() is not None:
         return built
     built.steps["npm ci"] = _run([npm, "ci", "--no-audit", "--no-fund"], built.site)

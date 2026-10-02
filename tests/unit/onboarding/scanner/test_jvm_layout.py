@@ -77,6 +77,7 @@ class TestAMavenProject:
         layout = _tree(tmp_path, _MAVEN)
 
         assert layout.claimed == frozenset({"src"})
+        assert layout.read_folders == frozenset({"src"})
 
     def test_each_package_below_the_shared_prefix_is_a_cluster(self, tmp_path: Path) -> None:
         clusters = cluster_packages(_tree(tmp_path, _MAVEN))
@@ -234,6 +235,9 @@ class TestABuildOfSeveralModules:
         # in another language beside `services/billing` stays the directory
         # reading's (R2 finding 2).
         assert layout.claimed == frozenset({"ledger", "services/billing"})
+        # What the layout itself reads is each module's `src`: the rest of a
+        # module's folder is scanned as any other folder (the re-review's m3).
+        assert layout.read_folders == frozenset({"ledger/src", "services/billing/src"})
         assert _directories(clusters) == {
             "ledger": "ledger",
             "services-billing": "services/billing",

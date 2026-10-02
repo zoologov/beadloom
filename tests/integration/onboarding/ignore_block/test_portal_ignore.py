@@ -294,6 +294,128 @@ class TestASiteFolderHoldingTheProjectsFiles:
         assert "beadloom docs site --out" in result.output
 
 
+class TestASiteFolderHoldingTheGeneratedPortal:
+    """The re-review's finding m4 (``beadloom-ujzb.24``): our own portal is not the project's.
+
+    ``init --force`` after ``docs site`` found ``site/`` holding the generated portal,
+    called it the project's own and left it unignored. Whether the folder holds the
+    portal is asked of the probe the caller hands in (the scaffold's marker test).
+    """
+
+    @staticmethod
+    def _untracked_site(repo: Path) -> None:
+        (repo / "site").mkdir()
+        (repo / "site" / "package.json").write_text("{}\n", encoding="utf-8")
+        (repo / "site" / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    def test_untracked_files_of_the_generated_portal_get_the_line(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        self._untracked_site(repo)
+        asked: list[Path] = []
+
+        def is_portal(folder: Path) -> bool:
+            asked.append(folder)
+            return True
+
+        result = ensure_portal_ignored(repo, is_portal=is_portal)
+
+        assert result.outcome == "created"
+        assert (repo / IGNORE_RELPATH).read_bytes() == b"/site/\n"
+        assert asked == [repo / "site"]
+        assert _git_ignores(repo, "site/extra.md")
+
+    def test_untracked_files_the_probe_does_not_know_stay_the_projects(
+        self, tmp_path: Path
+    ) -> None:
+        repo = _git_repo(tmp_path)
+        self._untracked_site(repo)
+
+        result = ensure_portal_ignored(repo, is_portal=lambda _folder: False)
+
+        assert result.outcome == "occupied"
+        assert not (repo / IGNORE_RELPATH).exists()
+
+    def test_tracked_files_stay_the_projects_whatever_the_probe_says(
+        self, tmp_path: Path
+    ) -> None:
+        repo = _git_repo(tmp_path)
+        self._untracked_site(repo)
+        TestASiteFolderHoldingTheProjectsFiles()._commit(repo)
+
+        result = ensure_portal_ignored(repo, is_portal=lambda _folder: True)
+
+        assert result.outcome == "occupied"
+        assert "2 files tracked by git" in result.reason
+        assert not (repo / IGNORE_RELPATH).exists()
+
+    def test_without_a_probe_the_files_on_disk_decide_as_before(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path)
+        self._untracked_site(repo)
+
+        assert ensure_portal_ignored(repo).outcome == "occupied"
+
+
+class TestInitTellsTheGeneratedPortalByTheScaffoldsMarker:
+    """The re-review's finding m4 through ``init``: the probe it hands in is the marker test.
+
+    The scaffold is written by its own writer, so the files carry the marker exactly as
+    ``docs site`` writes it; the same files without the marker are the project's.
+    """
+
+    @staticmethod
+    def _project(repo: Path) -> None:
+        (repo / "src" / "orders").mkdir(parents=True)
+        (repo / "src" / "orders" / "__init__.py").write_text("def place() -> None: ...\n")
+
+    @staticmethod
+    def _init(repo: Path, *args: str) -> str:
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        result = CliRunner().invoke(main, ["init", *args, "--project", str(repo)])
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    @staticmethod
+    def _scan_paths(repo: Path) -> list[str]:
+        import yaml
+
+        config = (repo / ".beadloom" / "config.yml").read_text(encoding="utf-8")
+        paths = yaml.safe_load(config)["scan_paths"]
+        assert isinstance(paths, list)
+        return [str(path) for path in paths]
+
+    def test_a_written_scaffold_is_ignored_and_not_scanned(self, tmp_path: Path) -> None:
+        from beadloom.application.site.scaffold import write_scaffold
+
+        repo = _git_repo(tmp_path)
+        self._project(repo)
+        write_scaffold(repo / "site", project_root=repo, version="0.0.0-test")
+
+        output = self._init(repo, "--bootstrap")
+
+        assert (repo / IGNORE_RELPATH).read_text(encoding="utf-8").splitlines()[0] == "/site/"
+        assert "Not scanned: site/ - " in output
+        assert self._scan_paths(repo) == ["src"]
+
+    def test_the_same_files_without_the_marker_are_the_projects(self, tmp_path: Path) -> None:
+        from beadloom.application.site.scaffold import shipped_files
+
+        repo = _git_repo(tmp_path)
+        self._project(repo)
+        for rel, body in shipped_files().items():
+            target = repo / "site" / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(body, encoding="utf-8")
+
+        output = self._init(repo, "--yes")
+
+        assert "Not ignored: /site/" in output
+        assert "Not scanned:" not in output
+        assert "site" in self._scan_paths(repo)
+
+
 class TestTheWorkingSetBlockKeepsTheFilesLineEndings:
     def test_a_windows_ignore_file_stays_windows(self, tmp_path: Path) -> None:
         repo = _git_repo(tmp_path)

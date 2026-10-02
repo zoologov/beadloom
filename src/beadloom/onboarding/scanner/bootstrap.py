@@ -9,7 +9,11 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
-from beadloom.onboarding.ignore_block import ensure_ignore_block, ensure_portal_ignored
+from beadloom.onboarding.ignore_block import (
+    PortalProbe,
+    ensure_ignore_block,
+    ensure_portal_ignored,
+)
 from beadloom.onboarding.scanner.agents_md import (
     generate_agents_md,
     setup_mcp_auto,
@@ -21,12 +25,14 @@ from beadloom.onboarding.scanner.import_scan import _quick_import_scan
 from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 from beadloom.onboarding.scanner.project_scan import (
+    CodeBesideModules,
     _cluster_with_children,
     _detect_project_name,
     _read_manifest_deps,
+    generated_portals,
     is_claimed,
     scan_project,
-    unclaimed_folders,
+    unclaimed_code,
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
@@ -47,11 +53,18 @@ def bootstrap_project(
     project_root: Path,
     *,
     preset_name: str | None = None,
+    is_portal: PortalProbe | None = None,
 ) -> dict[str, Any]:
     """Bootstrap a project: scan, cluster, generate YAML graph and config.
 
     When *preset_name* is given (or auto-detected), the bootstrap uses
     architecture-aware rules for node kind classification and edge inference.
+
+    *is_portal* tells a folder holding the portal ``beadloom docs site`` wrote
+    (the scaffold's marker test, handed in from above this domain): such a
+    top-level folder is not scanned, and its untracked files do not keep the
+    portal's ignore line out (the re-review's finding m4). Without it every
+    folder is read as the project's, as before.
 
     Returns summary dict with generated file counts.
     """
@@ -61,7 +74,8 @@ def bootstrap_project(
     graph_dir = beadloom_dir / "_graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    scan = scan_project(project_root)
+    portals = generated_portals(project_root, is_portal) if is_portal is not None else ()
+    scan = scan_project(project_root, skip=portals)
 
     # Resolve preset.
     if preset_name and preset_name in PRESETS:
@@ -87,6 +101,17 @@ def bootstrap_project(
     )
     clusters.update(cluster_packages(jvm, taken=clusters))
     clusters.update(cluster_targets(swift, taken=clusters))
+    # The scan paths leave out only what the layouts READ (a module's `src`, a
+    # target's folder): the rest of a module's folder is scanned like any other,
+    # and a code file no scan path can hold is named (the re-review's finding m3).
+    read = jvm.read_folders | swift.read_folders
+    unclaimed = unclaimed_code(
+        project_root, [d for d in scan["source_dirs"] if not is_claimed(d, read)], read
+    )
+    beside_modules = CodeBesideModules(
+        scanned=tuple(folder for folder in unclaimed.folders if is_claimed(folder, claimed)),
+        unread=unclaimed.loose_files,
+    )
 
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []
@@ -328,7 +353,7 @@ def bootstrap_project(
     config: dict[str, Any] = {
         "scan_paths": sorted(
             [
-                *unclaimed_folders(project_root, source_dirs, claimed),
+                *unclaimed.folders,
                 *jvm.production_roots,
                 *swift.production_roots,
             ]
@@ -369,7 +394,7 @@ def bootstrap_project(
     # Bootstrap owns it because bootstrap is what creates the working set.
     # The portal's output directory goes first, as one line of its own, so it
     # does not read as an entry of the block that follows (BDL-076 `.13`).
-    portal_ignore = ensure_portal_ignored(project_root)
+    portal_ignore = ensure_portal_ignored(project_root, is_portal=is_portal)
     ignore = ensure_ignore_block(project_root)
 
     return {
@@ -390,4 +415,8 @@ def bootstrap_project(
         "portal_ignore": portal_ignore,
         # Swift this run saw and did not read, said rather than left silent (R2 F7).
         "unread_swift": unread_swift(project_root, swift),
+        # Code beside a module: scanned, or named when no scan path can hold it (m3).
+        "beside_modules": beside_modules,
+        # Top-level folders holding the portal `docs site` wrote, not scanned (m4).
+        "generated_portals": portals,
     }

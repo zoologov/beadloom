@@ -160,6 +160,17 @@ class JvmLayout:
         return frozenset(module or _SOURCE_FOLDER for module in self.modules)
 
     @property
+    def read_folders(self) -> frozenset[str]:
+        """The folders whose code this layout reads or keeps out itself: each module's ``src``.
+
+        A production root is a scan path of its own and a test root is kept out on
+        purpose; everything else in a module's folder is code like any other, and
+        is scanned as any other folder (the re-review's finding m3: Python scripts
+        in ``backend/scripts`` beside ``backend/src`` were in no scan path).
+        """
+        return frozenset(_join(module, _SOURCE_FOLDER) for module in self.modules)
+
+    @property
     def mirrors(self) -> dict[str, str]:
         """Each test root mapped to the production root its tests bind to."""
         mapped: dict[str, str] = {}
@@ -192,16 +203,13 @@ class JvmLayout:
         A file declaring no package is read by its folder below its root, as
         before R2 finding 6; on the layout Kotlin recommends, with the root
         package omitted from the folders, only the declaration names the package.
-        Roots are read module by module in precedence order, so where two hold
-        one package the root read first keeps it.
+        Where two folders hold one package, an import reaches the one holding the
+        class it names (:class:`~beadloom.graph.jvm_packages.JvmPackages`).
         """
         declared = dict(self.declarations)
         return JvmPackages(
-            (
-                declared.get(file) or _package_of(root, file).replace("/", "."),
-                PurePosixPath(file).parent.as_posix(),
-            )
-            for root in sorted(self.production, key=lambda r: (r.module, r.precedence))
+            (declared.get(file) or _package_of(root, file).replace("/", "."), file)
+            for root in self.production
             for file in root.files
         )
 

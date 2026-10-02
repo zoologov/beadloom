@@ -24,14 +24,17 @@
 #                      job can never be a required status check while it is
 #                      filtered (tests/support/ci_workflows.py ADVISORY_JOBS).
 #   schedule           weekly on the default branch, which catches a change the
-#                      filter does not name (doc_sync, infrastructure, the CLI
-#                      outside `docs site`) within a week.
+#                      filter does not name (the rest of the CLI, the parts of
+#                      the package the steps below never enter) within a week.
 #   workflow_dispatch  by hand, on any branch.
 #
 # The filter names every file the slow tests read - each slow test, the
-# conftest files above it and the support modules they import - and
-# tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py derives that
-# set from the files and fails while the filter misses one of them.
+# conftest files above it and the support modules they import - and every file
+# of the package their beadloom steps (init, reindex, docs site) run: traced on
+# every fixture in a fresh interpreter by tests/support/slow_test_trace.py
+# (beadloom-ujzb.24; the hand list before it missed application/reindex and the
+# init command). tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py
+# derives both sets and fails while the filter misses a file of either.
 
 name: Site adopters
 
@@ -40,13 +43,28 @@ on:
     types: [opened, synchronize, reopened]
     branches: [main, master]
     paths:
-      # The code a portal is built from.
+      # The code a portal is built from, and every package file the slow tests'
+      # beadloom steps enter (the self-check traces it). A folder is named whole
+      # where the steps enter most of it; the command line by file.
+      - "src/beadloom/application/*.py"
+      - "src/beadloom/application/active_table/**"
+      - "src/beadloom/application/debt_report/**"
+      - "src/beadloom/application/impact/**"
+      - "src/beadloom/application/reindex/**"
       - "src/beadloom/application/site/**"
+      - "src/beadloom/application/source_derivation/**"
+      - "src/beadloom/application/waves/**"
       - "src/beadloom/site_scaffold/**"
       - "src/beadloom/onboarding/**"
       - "src/beadloom/graph/**"
       - "src/beadloom/context_oracle/**"
+      - "src/beadloom/doc_sync/**"
+      - "src/beadloom/infrastructure/**"
+      - "src/beadloom/services/cli.py"
+      - "src/beadloom/services/commands/_root.py"
       - "src/beadloom/services/commands/docs.py"
+      - "src/beadloom/services/commands/index_ops.py"
+      - "src/beadloom/services/commands/setup.py"
       # The fixtures and the slow tests, with what they read.
       - "tests/fixtures/site/**"
       - "tests/conftest.py"

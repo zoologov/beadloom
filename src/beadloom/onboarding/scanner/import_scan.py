@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.go_modules import GoModules
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
-from beadloom.onboarding.scanner.jvm_layout import JVM_EXTENSIONS, jvm_package_directory
+from beadloom.onboarding.scanner.jvm_layout import JVM_EXTENSIONS
 from beadloom.onboarding.scanner.swift_layout import SWIFT_EXTENSION
 from beadloom.onboarding.scanner.types import cluster_directory
 
@@ -52,6 +52,22 @@ def _go_import_cluster(
     The standard library and modules the project does not hold name no cluster.
     """
     return _holding_cluster(modules.package_directory(import_path, importer), by_directory)
+
+
+def _jvm_import_cluster(
+    import_path: str, layout: JvmLayout, by_directory: dict[str, str]
+) -> str | None:
+    """The cluster holding every folder a Java or Kotlin import reaches, when one does.
+
+    A package declared in several folders is reached through the one holding the
+    imported class, else through all of them (:mod:`beadloom.graph.jvm_packages`);
+    folders held by different clusters name none, so no edge is guessed (the
+    re-review's finding m5).
+    """
+    holders = {
+        _holding_cluster(folder, by_directory) for folder in layout.packages.folders(import_path)
+    }
+    return holders.pop() if len(holders) == 1 else None
 
 
 def _segment_cluster(import_path: str, src_ref_id: str, by_name: dict[str, str]) -> str | None:
@@ -145,9 +161,7 @@ def _quick_import_scan(
                         imp.import_path, rel_path, go_modules, by_directory
                     )
                 elif jvm_layout is not None and abs_path.suffix in JVM_EXTENSIONS:
-                    dst_ref_id = _holding_cluster(
-                        jvm_package_directory(imp.import_path, jvm_layout), by_directory
-                    )
+                    dst_ref_id = _jvm_import_cluster(imp.import_path, jvm_layout, by_directory)
                 elif swift_packages is not None and abs_path.suffix == SWIFT_EXTENSION:
                     dst_ref_id = _holding_cluster(
                         swift_packages.module_directory(imp.import_path, rel_path), by_directory

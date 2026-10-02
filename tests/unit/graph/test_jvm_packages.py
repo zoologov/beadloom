@@ -54,10 +54,9 @@ class TestAnImportNamesTheFolderOfItsPackage:
     def _packages(self) -> JvmPackages:
         return JvmPackages(
             (
-                ("org.example.app", "src/main/kotlin/app"),
-                ("org.example.network", "src/main/kotlin/network"),
-                ("org.example.network.tcp", "src/main/kotlin/network/tcp"),
-                ("org.example.network", "lib/src/main/kotlin/network"),
+                ("org.example.app", "src/main/kotlin/app/Main.kt"),
+                ("org.example.network", "src/main/kotlin/network/Socket.kt"),
+                ("org.example.network.tcp", "src/main/kotlin/network/tcp/Conn.kt"),
             )
         )
 
@@ -73,19 +72,68 @@ class TestAnImportNamesTheFolderOfItsPackage:
             "src/main/kotlin/network/tcp"
         )
 
-    def test_the_first_folder_declaring_a_package_keeps_it(self) -> None:
-        assert self._packages().directory("org.example.network.X") == "src/main/kotlin/network"
-
     def test_a_package_the_project_does_not_declare_names_nothing(self) -> None:
         packages = self._packages()
 
         assert packages.directory("org.example.Missing") is None
         assert packages.directory("network.Socket") is None
         assert packages.directory("kotlin.math.abs") is None
+        assert packages.package("kotlin.math.abs") is None
 
     def test_an_empty_set_is_false(self) -> None:
         assert not JvmPackages(())
         assert self._packages()
+
+
+class TestAPackageDeclaredInTwoFolders:
+    """The re-review's finding m5 (``beadloom-ujzb.22``), fixed by ``beadloom-ujzb.24``.
+
+    Until this fix the folder read first kept the package, so an import of a class in
+    the second folder resolved to the first: a false edge.
+    """
+
+    def _packages(self) -> JvmPackages:
+        return JvmPackages(
+            (
+                ("org.ex.shared", "src/main/kotlin/a/A.kt"),
+                ("org.ex.shared", "src/main/kotlin/a/Helpers.kt"),
+                ("org.ex.shared", "src/main/kotlin/b/B.kt"),
+                ("org.ex.shared", "lib/src/main/java/org/ex/shared/B.java"),
+            )
+        )
+
+    def test_an_imported_class_reaches_the_folder_holding_it(self) -> None:
+        packages = self._packages()
+
+        assert packages.directory("org.ex.shared.A") == "src/main/kotlin/a"
+        assert packages.directory("org.ex.shared.A.Companion") == "src/main/kotlin/a"
+
+    def test_the_package_is_still_the_projects(self) -> None:
+        assert self._packages().package("org.ex.shared.Anything") == "org.ex.shared"
+
+    def test_a_class_two_folders_hold_reaches_both_and_names_no_one(self) -> None:
+        packages = self._packages()
+
+        assert packages.folders("org.ex.shared.B") == (
+            "lib/src/main/java/org/ex/shared",
+            "src/main/kotlin/b",
+        )
+        assert packages.directory("org.ex.shared.B") is None
+
+    def test_a_wildcard_or_a_class_no_file_is_named_after_reaches_every_folder(self) -> None:
+        packages = self._packages()
+        every = ("lib/src/main/java/org/ex/shared", "src/main/kotlin/a", "src/main/kotlin/b")
+
+        assert packages.folders("org.ex.shared.*") == every
+        assert packages.folders("org.ex.shared.helperFunction") == every
+        assert packages.directory("org.ex.shared.*") is None
+        assert packages.directory("org.ex.shared.helperFunction") is None
+
+    def test_a_package_in_one_folder_is_that_folder_whatever_it_names(self) -> None:
+        packages = JvmPackages((("org.ex.one", "src/main/kotlin/one/Util.kt"),))
+
+        assert packages.folders("org.ex.one.helper") == ("src/main/kotlin/one",)
+        assert packages.directory("org.ex.one.*") == "src/main/kotlin/one"
 
 
 class TestReadFromTheFiles:

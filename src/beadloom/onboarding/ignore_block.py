@@ -57,6 +57,14 @@ common name holding a website or an app is the project's own source, and the
 line would hide every new file there from ``git status``. Init says so and names
 ``docs site --out``. See :func:`ensure_portal_ignored`.
 
+**Files of the portal itself are not the project's** (the re-review's finding m4,
+``beadloom-ujzb.24``). ``init --force`` after ``docs site`` found ``site/`` holding
+the generated portal and called it the project's own. Whether files on disk are the
+portal is asked of a :data:`PortalProbe` the caller hands in: the decision is the
+scaffold's own marker test, which lives in the application layer above this domain.
+Files git tracks stay the project's whatever the probe says, because an adopter who
+committed files there - the portal or anything else - keeps seeing new ones.
+
 **Both writers append bytes and never rewrite the file.** What the file held is
 kept byte for byte, its encoding included, and an appended line ends the way the
 file's first line ends, so a file with Windows line endings stays one.
@@ -69,7 +77,10 @@ import subprocess
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, TypeAlias
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 #: The project's ignore file, relative to the project root.
 IGNORE_RELPATH = Path(".gitignore")
@@ -77,6 +88,12 @@ IGNORE_RELPATH = Path(".gitignore")
 #: The directory ``beadloom docs site`` writes the portal into when ``--out`` names
 #: none, relative to the project root. ``docs site`` takes its default from here.
 PORTAL_DIR = "site"
+
+#: Whether a folder holds the portal ``beadloom docs site`` wrote. Supplied by the
+#: caller - the scaffold's marker test, in ``application.site``, answers it - and
+#: never resolved from inside this domain (see ``scanner/reindex_port.py`` for the
+#: same inversion of a dependency the layers forbid).
+PortalProbe: TypeAlias = "Callable[[Path], bool]"
 
 #: A leading part of an ignore pattern that matches at any depth, the top included.
 _ANY_DEPTH = "**/"
@@ -425,14 +442,20 @@ def _tracked_count(project_root: Path, directory: str) -> int:
     return len([name for name in listed.stdout.split(b"\0") if name])
 
 
-def _occupied_reason(project_root: Path, directory: str) -> str:
-    """Why *directory* is the project's own, or ``""`` when it holds no file of the project's."""
+def _occupied_reason(
+    project_root: Path, directory: str, is_portal: PortalProbe | None = None
+) -> str:
+    """Why *directory* is the project's own, or ``""`` when it holds no file of the project's.
+
+    Untracked files there are the portal's, not the project's, when *is_portal*
+    says the folder holds the portal ``docs site`` wrote.
+    """
     folder = project_root / directory
     on_disk = sum(1 for path in folder.rglob("*") if path.is_file()) if folder.is_dir() else 0
     tracked = _tracked_count(project_root, directory)
     if tracked:
         held = f"{_plural(tracked)} tracked by git"
-    elif on_disk:
+    elif on_disk and not (is_portal is not None and is_portal(folder)):
         held = f"{_plural(on_disk)}, none tracked by git yet"
     else:
         return ""
@@ -443,7 +466,9 @@ def _occupied_reason(project_root: Path, directory: str) -> str:
     )
 
 
-def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
+def ensure_portal_ignored(
+    project_root: Path, *, is_portal: PortalProbe | None = None
+) -> PortalIgnoreResult:
     """Name the portal's output directory in *project_root*'s ``.gitignore``, once.
 
     Creates the file when there is none and appends ``/<PORTAL_DIR>/`` when no line
@@ -451,7 +476,10 @@ def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
     ignores the directory or un-ignores it, and nothing is written. Outside a
     git working tree nothing is written either, as for the working-set block,
     and nothing when the directory already holds files — tracked by git or not —
-    because then it is the project's source, not the portal's output.
+    because then it is the project's source, not the portal's output. Untracked
+    files that *is_portal* recognises as the portal ``docs site`` wrote are its
+    output, and the line is written for them; without a probe, as before, any
+    file on disk keeps the directory the project's.
     """
     line = f"/{PORTAL_DIR}/"
     if _git_root(project_root) is None:
@@ -469,7 +497,7 @@ def ensure_portal_ignored(project_root: Path) -> PortalIgnoreResult:
             "negated" if deciding.startswith("!") else "covered"
         )
         return PortalIgnoreResult(outcome=outcome, line=line, covered_by=deciding)
-    occupied = _occupied_reason(project_root, PORTAL_DIR)
+    occupied = _occupied_reason(project_root, PORTAL_DIR, is_portal)
     if occupied:
         return PortalIgnoreResult(outcome="occupied", line=line, reason=occupied)
     _append_lines(path, data, [line])

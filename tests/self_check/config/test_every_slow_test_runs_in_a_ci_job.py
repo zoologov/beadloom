@@ -14,12 +14,23 @@ by hand. The filter is held here to what the job reads: every slow test file,
 every conftest above one, and every support module they import, transitively,
 read from the files themselves - so a new support module a slow test imports
 fails this check until the filter names it.
+
+``beadloom-ujzb.24``, the re-review's finding m6: the product code those tests RUN
+was a hand list, and it missed ``application/reindex``, the ``init`` command and what
+they reach. It is now traced: the beadloom half of the build every slow test makes is
+run on every adopter fixture in a fresh interpreter, and every ``src/beadloom`` file
+entered on the way must be named by the filter (``tests/support/slow_test_trace.py``
+says how, and what it cannot see).
 """
 
 from __future__ import annotations
 
 import ast
+import os
 import re
+import subprocess
+import sys
+import tempfile
 from functools import cache
 from typing import Any
 
@@ -33,6 +44,18 @@ from tests.support.ci_workflows import (
     load_yaml,
 )
 from tests.support.repository_root import REPO_ROOT, TESTS_ROOT
+
+#: Where the beadloom half of the build every slow test makes is written.
+_ADOPTER_PORTALS = "tests/support/adopter_portals.py"
+_ADOPT = "adopt"
+#: The helper every slow test and support module runs a beadloom command through.
+_BEADLOOM_CALL = "_beadloom"
+#: The command each step of ``adopt`` runs, and the module of the CLI that holds it.
+_COMMAND_MODULES = {
+    "init": "src/beadloom/services/commands/setup.py",
+    "reindex": "src/beadloom/services/commands/index_ops.py",
+    "docs": "src/beadloom/services/commands/docs.py",
+}
 
 _JOB = "site-adopters"
 _SWITCH = "BEADLOOM_RUN_SLOW"
@@ -241,3 +264,73 @@ def test_every_pattern_of_the_filter_names_something_that_exists() -> None:
     ] + ["pyproject.toml", "uv.lock"]
     dead = [pattern for pattern in _paths() if not any(_matches(pattern, p) for p in tracked)]
     assert dead == []
+
+
+# -- the product code the slow tests run (the re-review's m6, beadloom-ujzb.24) ---
+
+
+@cache
+def _product_code_the_slow_tests_run() -> frozenset[str]:
+    """Every ``src/beadloom`` file the slow tests' beadloom steps enter, traced afresh."""
+    with tempfile.TemporaryDirectory() as workdir:
+        traced = subprocess.run(  # noqa: S603 - this interpreter, a module of this suite
+            [sys.executable, "-m", "tests.support.slow_test_trace", workdir],
+            cwd=workdir,
+            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+            capture_output=True,
+            encoding="utf-8",
+            check=False,
+        )
+    assert traced.returncode == 0, traced.stderr[-4000:]
+    return frozenset(traced.stdout.split())
+
+
+def _beadloom_commands(path: str, function: str | None = None) -> set[str]:
+    """The first word of every ``_beadloom(...)`` call in *path*, or in its *function*."""
+    tree: ast.AST = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8"))
+    if function is not None:
+        (tree,) = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == function
+        ]
+    return {
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == _BEADLOOM_CALL
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+
+
+def test_the_trace_runs_every_command_the_slow_tests_run() -> None:
+    """A slow test running a command the trace does not would leave its code unnamed."""
+    run_by_the_slow_tests = set().union(
+        *(_beadloom_commands(path) for path in sorted(_what_the_slow_tests_read()))
+    )
+    traced = _beadloom_commands(_ADOPTER_PORTALS, _ADOPT)
+
+    assert run_by_the_slow_tests
+    assert run_by_the_slow_tests <= traced
+    assert traced == set(_COMMAND_MODULES)
+
+
+def test_the_trace_entered_each_command_it_ran() -> None:
+    """A trace that recorded nothing would make the next check pass on nothing."""
+    entered = _product_code_the_slow_tests_run()
+
+    assert set(_COMMAND_MODULES.values()) <= entered
+    assert "src/beadloom/application/reindex/full.py" in entered
+
+
+def test_the_filter_names_the_product_code_the_slow_tests_run() -> None:
+    patterns = _paths()
+    unfiltered = sorted(
+        path
+        for path in _product_code_the_slow_tests_run()
+        if not any(_matches(pattern, path) for pattern in patterns)
+    )
+    assert unfiltered == []

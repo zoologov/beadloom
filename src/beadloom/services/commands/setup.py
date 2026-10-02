@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     )
     from beadloom.onboarding.ignore_block import PortalIgnoreResult
     from beadloom.onboarding.role_map import RoleMapReport
+    from beadloom.onboarding.scanner.project_scan import CodeBesideModules
     from beadloom.onboarding.scanner.swift_layout import UnreadSwift
 
 # beadloom:service=mcp-server
@@ -1445,6 +1446,49 @@ def _echo_unread_swift(unread: UnreadSwift | None, *, prefix: str) -> None:
         click.echo(f"{prefix}{sentence}")
 
 
+def _holds_generated_portal(folder: Path) -> bool:
+    """Whether *folder* holds the portal ``beadloom docs site`` wrote (the re-review's m4).
+
+    Decided by the scaffold's own test - a file the scaffold ships, at its place in
+    *folder*, carrying the generated marker ``docs site`` writes and reads back
+    before it replaces a file - not by a folder or file name. A marker edited
+    since still names the file beadloom's. Handed to the onboarding domain, which
+    may not import the application layer this test lives in.
+    """
+    from beadloom.application.site.scaffold import read_marker, shipped_files
+
+    for rel in shipped_files():
+        path = folder / rel
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if read_marker(text) is not None:
+            return True
+    return False
+
+
+def _echo_unscanned_portals(portals: Sequence[str] | None, *, prefix: str) -> None:
+    """Name the folders init did not scan because they hold the generated portal."""
+    from beadloom.onboarding.scanner.project_scan import unscanned_portals_sentence
+
+    sentence = unscanned_portals_sentence(portals or ())
+    if sentence:
+        click.echo(f"{prefix}{sentence}")
+
+
+def _echo_beside_modules(beside: CodeBesideModules | None, *, prefix: str) -> None:
+    """Name the code beside a module that init scanned, and the files it could not.
+
+    Silent when there is none, so every project without a module beside other code
+    prints what it printed before (the re-review's finding m3).
+    """
+    for sentence in beside.sentences() if beside is not None else []:
+        click.echo(f"{prefix}{sentence}")
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -1520,7 +1564,11 @@ def init(
         # and reaches down to each (BDL-070 `beadloom-46am`).
         mode = init_mode or "bootstrap"
         result = non_interactive_init(
-            project_root, reindex=do_reindex, mode=mode, force=force
+            project_root,
+            reindex=do_reindex,
+            mode=mode,
+            force=force,
+            is_portal=_holds_generated_portal,
         )
 
         if result["mode"] == "skipped":
@@ -1536,6 +1584,8 @@ def init(
                 f"{bs['edges_generated']} edges (preset: {bs['preset']})"
             )
             _echo_unread_swift(bs.get("unread_swift"), prefix="  ")
+            _echo_beside_modules(bs.get("beside_modules"), prefix="  ")
+            _echo_unscanned_portals(bs.get("generated_portals"), prefix="  ")
             _echo_portal_ignore(bs.get("portal_ignore"), prefix="  ")
         if result.get("reindex"):
             ri = result["reindex"]
@@ -1556,7 +1606,9 @@ def init(
         return
 
     if bootstrap:
-        result = bootstrap_project(project_root, preset_name=preset)
+        result = bootstrap_project(
+            project_root, preset_name=preset, is_portal=_holds_generated_portal
+        )
 
         # Generate doc skeletons. From the tree, like every other caller: this
         # branch passed `result["nodes"], result["edges"]` until BDL-067 `.21`,
@@ -1616,6 +1668,8 @@ def init(
                 "appended to .gitignore (yours to edit; never rewritten)"
             )
         _echo_unread_swift(result.get("unread_swift"), prefix="\u2713 ")
+        _echo_beside_modules(result.get("beside_modules"), prefix="\u2713 ")
+        _echo_unscanned_portals(result.get("generated_portals"), prefix="\u2713 ")
         _echo_portal_ignore(result.get("portal_ignore"), prefix="\u2713 ")
         click.echo(
             f"\u2713 Index: {ri.symbols_indexed} symbols, "
@@ -1660,7 +1714,9 @@ def init(
     from beadloom.onboarding import interactive_init
 
     # Handed in for the reason given at the `--yes` branch above.
-    result = interactive_init(project_root, reindex=do_reindex)
+    result = interactive_init(
+        project_root, reindex=do_reindex, is_portal=_holds_generated_portal
+    )
     # The branch a human adopter meets first. It was left out when the verdict
     # landed (BDL-067 `.2`) because the test that covered the other two was
     # parametrised over the two BINDINGS of `bootstrap_project` — and the wizard
