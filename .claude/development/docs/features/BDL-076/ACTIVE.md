@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-ujzb.22` (re-review of R2's findings, read-only) ∥ `beadloom-ri5a` (W2, docs); then P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-ujzb.23` (re-review's site findings) ∥ `beadloom-ujzb.24` (init and CI; gate owner); then `beadloom-ujzb.25` (docs), P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**Re-review closed (2026-10-02):** `beadloom-ujzb.22` — F1–F11 fixed (F2, F3, F5, F6, F9 with residue); ISSUES 0 critical, 2 major: M1 (regression) an autolink's text reaches Vue (`<https://{{.Values.host}}/api>` fails the build); M2 VitePress's markdown-it-attrs turns a trailing `{:a 1 :b 2}` (Clojure, Ruby, Elixir) into live attributes. Minor: invalid front matter now under the badge fails the build (regression); a tab-indented list code block; unscanned code beside a claimed module; our own generated `site/` read as project source; one package in two folders gives a false edge; the `site-adopters` filter misses `reindex/**` and the init command. Regression checks: our portal identical, six fixtures' init identical, a 2,100-document fuzz without an exception.
 
 **W2 closed (2026-10-02):** `beadloom-ri5a` `ec5abc0f` — 241 stale pairs and 1 missing → 0 (671 fresh, surface re-recorded 615 → 671); `getting-started` from install to a published portal with what `init` reads per stack as measured and five known limits; the portal guide (scaffold rules, project text, the browser suite) and the `site:` reference with a self-hosted GitLab example; two small additions to each README (the theme ships in the package and needs Node.js 22; Swift through Package.swift only) — for the owner to review. `beadloom ci` rc 0, `readme-pair` 118 blocks 0 findings, pytest 0 failed. Left: nine surface-drift warnings; one TODO on `pages: read`. Filed `beadloom-y1ew` (P2, `sync-update --pair` crashes on a missing pair whose code file was deleted).
 
@@ -143,7 +145,10 @@
 | `beadloom-ujzb.19` | fix | ✓ done | R2: init findings F2, F5, F6, F7 |
 | `beadloom-ujzb.20` | fix | ✓ done | R2: site findings F8–F11 |
 | `beadloom-ujzb.21` | fix | ✓ done |
-| `beadloom-ujzb.22` | review | in progress | re-review of R2's findings | R2: project text F1, F3, F4 |
+| `beadloom-ujzb.22` | review | ✓ done | re-review of R2's findings |
+| `beadloom-ujzb.23` | fix | in progress | re-review: site findings |
+| `beadloom-ujzb.24` | fix | in progress | re-review: init and CI findings |
+| `beadloom-ujzb.25` | docs | blocked | pairs the fixes make stale | R2: project text F1, F3, F4 |
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
 | `beadloom-fht7` | R2 review | ✓ done | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | ✓ done | adopter docs |
