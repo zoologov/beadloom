@@ -118,8 +118,12 @@ One feature node covers the cooperating modules below (all annotated
   `forges`); an unknown key is refused by name with the keys the block reads. `base` must start
   and end with `/` and hold no GitHub Actions expression opener. `repo_url` must be an `http(s)` address with a host and no credential, query or fragment; it is stored in one
   spelling by `canonical_repo_url` (scheme and host lower-cased, port and path case kept,
-  trailing `/` and one `.git` removed), and refused when on a host with a known forge it runs
-  past the repository into one of that forge's routes (`forge_routes.runs_past_repository`).
+  trailing `/` and one `.git` removed). On a host with a known forge it is refused by name in
+  two cases (`beadloom-ujzb.23`, n2): when it stops before a repository
+  (`forge_routes.stops_before_repository`; the refusal names how the forge writes one, such as
+  `/<owner>/<repository>`), and when it runs past the repository into a page of it
+  (`forge_routes.runs_past_repository`). On any other host nothing says which segment of the
+  path is a route, and nothing is refused.
   The value itself is never repeated in a refusal, because it may hold a credential.
   `repo_icon_of(repo_url, forges)` names the icon VitePress draws, and
   `render_site_module(config)` writes `.vitepress/site.generated.mjs` as JSON. The refusals
@@ -135,7 +139,20 @@ One feature node covers the cooperating modules below (all annotated
   kind, or a mapping with a required `source:` template (used for the page of a path and of a
   file) and an optional `raw:` template (the file itself); `template_problem(template)` refuses
   an unknown placeholder, a conversion or format spec, a template without `{path}`, one that does
-  not yield an `http(s)` address, and one carrying a credential. The routes were written from
+  not yield an `http(s)` address, and one carrying a credential.
+  `runs_past_repository(web_url, forge)` is true when a route segment of the forge (`tree`,
+  `blob`, …) comes after the owner and the repository and something follows it, and, since
+  `beadloom-ujzb.23` (n2), when the path runs past where that forge's repository address ends:
+  GitHub and Bitbucket Cloud serve a repository at exactly `/<owner>/<repository>`, and so does a
+  Gitea on a public host; on a declared Gitea host a Gitea page segment (`src`, `pulls`, …) past
+  the second segment that is not the last one; on GitLab a reserved route word (`-`, `tree`,
+  `blob`, …) past the second segment; on Azure DevOps anything past `_git/<repository>`.
+  `stops_before_repository(web_url, forge)` returns the forge's repository shape when the path
+  is shorter than it (fewer than two segments, or an Azure DevOps address with no
+  `_git/<repository>`), else `None`; a forge declared by a template has no shape and is never
+  refused by it. A GitLab subgroup named like a reserved word past the second segment is
+  refused, and a declared Gitea or GitLab host is not held to two segments, since it may serve
+  under a path. The routes were written from
   the forms the forges publish, not opened against a live forge; the Azure DevOps `raw` route
   is the least certain.
 - **scaffold.py** — the shipped scaffold and the project's overrides (BDL-076 B1,
@@ -194,7 +211,22 @@ One feature node covers the cooperating modules below (all annotated
   read it: a pair of opening braces in rendered text gets an empty HTML comment between the
   two braces; a code span holding such a pair becomes
   `<code v-pre>`; an indented block holding one is wrapped in `<div v-pre>` inside its own list
-  item or quote; fenced blocks and front matter are left alone. Raw HTML is read as Vue's
+  item or quote (when the block opens a list item, the wrapper starts one space after the
+  marker, and a quote marker written with no space gets one in the inserted lines); a fenced
+  block's content and readable front matter are left alone. Since `beadloom-ujzb.23`: an
+  autolink, or a bare `http(s)`/`ftp` address VitePress's linkify links, whose linked text
+  decodes a brace pair from percent-escapes is written as the link it renders,
+  `[address](<address>)`, and its text is then read like any other (M1). A brace VitePress's
+  markdown-it-attrs would read as the start of attributes (`markdown_attrs.attribute_braces`)
+  gets a backslash before it, which renders as the brace and which the plugin never reads; an
+  image's label or a container's info string that ends with attributes
+  (`markdown_attrs.ends_with_attributes`) gets an empty HTML comment after it (M2). A project's
+  own `{#id}` is therefore shown as written, not applied: a repeated id stops the build, and a
+  forge does not apply it either. A fence's info string holds `<`, `"` and a brace pair as
+  entities, since VitePress writes it into the page as it is (n1). With `opens_page=True`, front
+  matter gray-matter cannot read (`vitepress_markdown.front_matter_is_read`) would fail the
+  build at the top of the page, so the text then starts with a blank line and the block is read
+  as Markdown (m1). Raw HTML is read as Vue's
   tokenizer reads it (`raw_html.read_markup`): a tag is kept only when it is lowercase README
   HTML (`_KEPT`) balanced inside the element markdown-it writes, and anything else becomes text;
   Vue-only attributes (`@x`, `#x`, `.x`, `[x]`) are dropped and a directive the DOM can hold gets
@@ -207,18 +239,49 @@ One feature node covers the cooperating modules below (all annotated
   `@mdit-vue/plugin-component` HTML rules and `markdown-it-container` under VitePress's names
   (`tip`, `info`, `warning`, `danger`, `details`, `v-pre`, `raw`, `code-group`), ported line for
   line. `vitepress_markdown()` returns the parser; `front_matter_length(text, *,
-  closed_only=False)` follows gray-matter's rule. `linkify`, attributes, emoji, anchors, alerts,
-  the table of contents, `<<<` snippets and `@include` are not followed, each argued in the
-  module docstring. Checked against VitePress's own parser over 142 Markdown files of this
-  repository and R2's cases: no difference in block tokens beyond anchors and table-cell line
-  maps.
+  closed_only=False)` follows gray-matter's rule for where front matter ends, and
+  `front_matter_is_read(text)` whether gray-matter, as VitePress runs it, parses the block
+  without an error (`beadloom-ujzb.23`, m1). PyYAML stands in for js-yaml 3 with js-yaml's
+  reading of keys: a key is the string JavaScript makes of it, so a key written twice in that
+  sense is refused, and a list or a mapping may be a key. Only YAML is read (no language, or
+  `yaml`, on the opening line). Where the two parsers part, the answer is no: a tab PyYAML
+  refuses, and two keys that start like numbers. A wrong no costs a block shown as Markdown,
+  never a failed build. `linkify`, emoji, anchors, alerts, the table of contents, `<<<`
+  snippets and `@include` are not followed, each argued in the module docstring; a bare
+  address whose linked text decodes a brace pair is handled in `project_text`, and where
+  markdown-it-attrs reads a brace is mirrored in `markdown_attrs`. Checked against VitePress's
+  own parser over 142 Markdown files of this repository and R2's cases: no difference in block
+  tokens beyond anchors and table-cell line maps. The dependency is pinned
+  `markdown-it-py>=4.0,<5`.
+- **markdown_attrs.py** — where VitePress 1.6.4's markdown-it-attrs 4.x would read a brace as
+  the start of attributes (BDL-076 `beadloom-ujzb.23`, M2). The portal sets no
+  `markdown.attrs`, so the plugin runs with its defaults: `{` and `}` delimit attributes and
+  every attribute name is allowed, so Vue compiles a `:x`, `@x`, `v-x` or `#x` it moves onto an
+  element. The mirrored patterns: the end of a block or a list item, a line of its own after a
+  soft break, right after a closing inline element, an image or a code span, a paragraph of its
+  own right after a table or a list, a thematic break written as `*** {...}`, an image's label
+  and a container's info string. `attribute_braces(text, *, opens, closes, alone)` returns the
+  indices of the braces in one run of an inline token's text the plugin could read as a left
+  delimiter (`opens`/`closes`: the run starts or ends its inline token; `alone`: the inline is a
+  paragraph right after a table or a list). A run here may be several markdown-it tokens, so the
+  reading is a superset of the plugin's: a brace named that the plugin would not read gains a
+  backslash that renders as nothing. `ends_with_attributes(text)` is the plugin's end test on a
+  label read as written, escapes included.
 - **markdown_positions.py** — wraps that parser's rules so every token carries its source
   offsets (`located_markdown()`); `normalise(text)` normalises line endings and NUL the way
-  markdown-it does before parsing.
+  markdown-it does before parsing. Since `beadloom-ujzb.23` it also records an autolink's
+  rendered text (the address with its percent-escapes decoded) and its destination (`mailto:`
+  added for an e-mail address), a fence's info-string span, and where a container's info line
+  ends.
 - **markdown_source.py** — `read_markdown(text, *, front_matter=True)` returns a
-  `MarkdownSource` with `parts` (`Element`, `RawHtml`, `Text`, `CodeSpan`, `CodeBlock`, in page
-  order), `links` (`Link`), `definitions` (`Definition`) and `code` (`CodeRegion`);
-  `Edit` and `apply_edits(source, edits)` change the source at exact offsets.
+  `MarkdownSource` with `parts` (`Element`, `RawHtml`, `Text`, `CodeSpan`, `CodeBlock`,
+  `Autolink`, `RawLabel`, in page order), `links` (`Link`), `definitions` (`Definition`) and
+  `code` (`CodeRegion`); `Edit` and `apply_edits(source, edits)` change the source at exact
+  offsets. A `Text` carries `opens`, `closes` and `alone`, which say where it sits in its inline
+  token for `markdown_attrs`. A `CodeBlock` carries `lead` (what goes between an inserted line's
+  position and its text) and, for a fence, `info` (the info string's source span). `Autolink(start,
+  end, label, destination)` is an autolink written `<address>`; `RawLabel(end, label)` is text
+  markdown-it-attrs reads as written, an image's label or a container's info string.
 - **raw_html.py** — `read_markup(html)` returns the `Markup` (tags, comments and their
   `Attribute`s) of a raw HTML fragment as Vue's tokenizer reads it, marking `unreadable` what Vue
   would report as an error.
@@ -529,8 +592,10 @@ One feature node covers the cooperating modules below (all annotated
   as `📘 reference — overview/guide, not tied to a code symbol` (an overview/guide is not a
   defect, so it is NOT called "untracked"). `inject_badge(prose, badge_body)` wraps the badge
   between the stable `<!-- beadloom:badge-start -->` / `-end -->` markers, below a closed
-  front matter (BDL-076 `beadloom-ujzb.21`: VitePress reads front matter only at the very top of
-  a page), so regeneration overwrites ONLY the badge region;
+  front matter that gray-matter reads (BDL-076 `beadloom-ujzb.21`: VitePress reads front matter
+  only at the very top of a page; `beadloom-ujzb.23`, m1: a block gray-matter cannot parse
+  would fail the build there, so the badge then goes first and the block below it is shown as
+  Markdown), so regeneration overwrites ONLY the badge region;
   `render_published_doc(doc, prose)` renders the badged Markdown. Fresh/stale badges show `last
   synced` (the stored `sync_state.synced_at`, not wall-clock → deterministic) and the owning
   node's read-only source-coverage %; the **reference** (untracked) badge deliberately omits
@@ -801,7 +866,8 @@ Module `src/beadloom/application/site/forge_routes.py`:
   `KNOWN_FORGES`; `PLACEHOLDERS` — `("url", "ref", "path")`
 - `forge_for(web_url, declared=None)` -> `Forge | None`; `read_forge(setting)` ->
   `tuple[Forge | None, tuple[str, ...]]`; `template_problem(template)` -> `str | None`;
-  `runs_past_repository(web_url, forge)` -> `bool`
+  `runs_past_repository(web_url, forge)` -> `bool`; `stops_before_repository(web_url, forge)` ->
+  `str | None` (the forge's repository shape when the address stops before one)
 
 Module `src/beadloom/application/site/scaffold.py`:
 - `SCAFFOLD_PACKAGE_DIR`, `OVERRIDE_DIR`, `MARKABLE_SUFFIXES`; `ScaffoldError`
@@ -834,13 +900,16 @@ Module `src/beadloom/application/site/project_text.py`:
 - `render_project_text(markdown, portal, *, source_dir="", mirrored_dir="", page_dir=None,
   opens_page=True)` -> `str`
 
-Modules `vitepress_markdown.py`, `markdown_positions.py`, `markdown_source.py`, `raw_html.py`:
+Modules `vitepress_markdown.py`, `markdown_positions.py`, `markdown_source.py`,
+`markdown_attrs.py`, `raw_html.py`:
 - `vitepress_markdown()` -> `MarkdownIt`; `front_matter_length(text, *, closed_only=False)` ->
-  `int`; `CONTAINERS`, `TITLED_CONTAINERS`
+  `int`; `front_matter_is_read(text)` -> `bool`; `CONTAINERS`, `TITLED_CONTAINERS`
 - `located_markdown()` -> `MarkdownIt`; `normalise(text)` -> `str`
 - `read_markdown(text, *, front_matter=True)` -> `MarkdownSource`; `Edit`,
   `apply_edits(source, edits)` -> `str`; `Segment`, `Element`, `RawHtml`, `Text`, `CodeSpan`,
-  `CodeBlock`, `Link`, `Definition`, `CodeRegion`
+  `CodeBlock`, `Autolink`, `RawLabel`, `Link`, `Definition`, `CodeRegion`
+- `attribute_braces(text, *, opens, closes, alone)` -> `list[int]`;
+  `ends_with_attributes(text)` -> `bool`
 - `read_markup(html)` -> `list[Markup]`; `Markup`, `Attribute`
 
 Module `src/beadloom/application/site/published_docs.py`:
@@ -850,8 +919,8 @@ Module `src/beadloom/application/site/published_docs.py`:
 - `build_published_docs(conn, *, project_root)` -> `list[PublishedDoc]` — per-doc validation
   inputs from `check_sync` (same source as `sync-check`); a doc with no doc-code pair is
   `untracked` and rendered as a neutral `📘 reference` badge (no coverage % line)
-- `inject_badge(prose, badge_body)` -> `str` — marker-delimited badge prefix; re-injection
-  overwrites only the badge region
+- `inject_badge(prose, badge_body)` -> `str` — marker-delimited badge prefix, below front matter
+  gray-matter reads and above any other; re-injection overwrites only the badge region
 - `render_published_doc(doc, prose)` -> `str` — badged Markdown (badge + the prose given)
 - `published_files(project_root)` -> `frozenset[str]` — the `docs/…` paths `publish_docs` copies
 - `publish_docs(conn, out_dir, *, project_root, portal=None)` -> `list[Path]` — copy `docs/**`
@@ -917,7 +986,8 @@ Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`)
 `tests/unit/application/site/`: the `site:` block and the forges
 (`test_the_portal_takes_its_identity_from_the_site_block.py`,
 `test_the_site_block_declares_a_forge_per_host.py`,
-`test_a_declared_repository_address_is_read_in_one_spelling.py`,
+`test_a_declared_repository_address_is_read_in_one_spelling.py`, which since
+`beadloom-ujzb.23` also holds the `repo_url` refusals by forge shape,
 `test_a_self_hosted_forge_links_by_the_kind_the_project_declares.py`,
 `test_the_declared_repository_wins_over_the_remote.py`,
 `test_a_repository_file_in_project_text_follows_its_forge.py`), the scaffold
@@ -929,6 +999,7 @@ base (`test_the_pages_workflow_deploys_the_portal_and_keeps_a_hand_edit.py`,
 `test_a_raw_html_link_follows_the_link_rule.py`, `test_markdown_is_parsed_as_vitepress_parses_it.py`,
 `test_project_text_is_read_as_vitepress_reads_it.py`,
 `test_project_text_is_shown_as_written_not_compiled_by_vue.py`,
+`test_braces_markdown_it_attrs_would_read_are_shown_as_written.py` (`beadloom-ujzb.23`),
 `test_where_code_is_in_project_markdown.py`); under `tests/integration/application/site/`:
 `test_the_scaffold_ships_with_the_package.py`,
 `test_the_written_scaffold_names_none_of_this_repositorys_nodes.py`,
@@ -939,7 +1010,13 @@ base (`test_the_pages_workflow_deploys_the_portal_and_keeps_a_hand_edit.py`,
 `BEADLOOM_RUN_SLOW=1` and run by the `site-adopters` workflow:
 `test_an_adopter_builds_its_portal_from_docs_site.py`,
 `test_an_adopter_portal_on_every_claimed_stack.py` (six fixtures under `tests/fixtures/site/`)
-and `test_the_browser_tests_pass_on_an_adopter_portal.py`.
+and `test_the_browser_tests_pass_on_an_adopter_portal.py`. That workflow starts on a pull request
+only through its `paths:` filter, and `tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py`
+holds the filter to what the slow tests read and run: every slow test file, conftest and
+support module they import, and, since `beadloom-ujzb.24` (m6), every `src/beadloom` file the
+beadloom steps of the build (`init`, `reindex`, `docs site`) enter, traced on every adopter
+fixture in a fresh interpreter by `tests/support/slow_test_trace.py`. The hand list before it
+missed 84 such files, `application/reindex` and the `init` command among them.
 
 Scenarios: `tests/acceptance/application/site-generation/node_card_data.feature` (the card, the
 source link per forge, no commit author and no credential in any generated file, an unreadable

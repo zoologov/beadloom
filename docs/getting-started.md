@@ -100,12 +100,26 @@ that take no verdict, and the one graph file shape that still ends `init` in a t
 The `/site/` line is not written when a line of `.gitignore` already decides for `site/`
 (`site/`, `/site/**`, or `!/site/` to commit the portal), when `site/` already holds files —
 tracked by git or only on disk, it is then your own source and must stay visible to
-`git status` — or when the project is not inside a git working tree. `init` prints which:
+`git status` — or when the project is not inside a git working tree. Untracked files of the
+portal `beadloom docs site` wrote there do not count: `init` recognises them by the generated
+marker the scaffold writes into its files, writes the line for them, and does not scan that
+folder as code. Files git tracks in `site/` keep it yours, whatever they are. `init` prints
+which:
 
 ```text
   Ignored: /site/ (the portal `beadloom docs site` writes) appended to .gitignore
   Not ignored: /site/ - site/ already holds 12 files tracked by git, so it is the project's own and new files there must stay visible to git; run `beadloom docs site --out <dir>` to write the portal elsewhere, or move that source out of site/
 ```
+
+and, when a top-level folder holds the portal `docs site` wrote (after `init --force` on a
+project that already built its portal):
+
+```text
+  Not scanned: site/ - holds the portal `beadloom docs site` wrote (its files carry the generated marker), which is output, not the project's code
+```
+
+A portal written below a top-level folder (`--out build/portal`) is not recognised and is
+scanned like the rest of the project.
 
 With your own `site/`, write the portal elsewhere, for example `beadloom docs site --out portal`,
 and ignore that directory yourself.
@@ -129,7 +143,14 @@ edge appeared that the code does not have.
 | Swift (Swift Package Manager) | every `Package.swift`, read as text and never run; each library, executable, macro or plugin target holding Swift becomes a node and its folder a scan path; each test target a `tests.mirrors` entry; an import through the target the manifest declares | three targets, three edges |
 
 A project mixing stacks keeps each one's reading: a Python or TypeScript service beside a Maven
-module or a Swift package keeps its node and its scan path.
+module or a Swift package keeps its node and its scan path. Code inside a module's folder but
+outside the folders its layout reads — Python scripts in `backend/scripts` beside a Gradle
+module's `backend/src` — is a scan path too, and its files belong to the module's node. `init`
+names it:
+
+```text
+  Also scanned: backend/scripts - code in a module's folder outside its source roots; its files belong to that module's node
+```
 
 **Known limits.**
 
@@ -142,7 +163,14 @@ module or a Swift package keeps its node and its scan path.
   `init` finds a JVM module by the standard `src/<set>/<java|kotlin>/` layout and parses no build
   file. Add the source folders to `scan_paths` and declare the nodes by hand.
 - **A code file lying directly in a folder beside a JVM module or a Swift package** (`services/x.py`
-  next to `services/billing/`) is in no scan path.
+  next to `services/billing/`) is in no scan path: a scan path is a folder, and that folder
+  would scan the module's test tree too. `init` names it — `Not read: services/x.py - a code
+  file lying directly in a folder that holds a module; ...`, or with several files a count and
+  the first five — and the file is read once you move it into a folder of its own.
+- **A Java or Kotlin package declared in folders that different nodes own** resolves an import
+  of a class to the folder holding the class's file (`B.kt`, `B.java`). A wildcard import of
+  such a package, a top-level Kotlin function, or a class in a file named otherwise draws no
+  edge rather than a guessed one.
 - **After changing only `go.mod`, `go.work` or `Package.swift`,** an incremental
   `beadloom reindex` does not re-resolve the imports of the files they govern (`beadloom-jcng`).
   Run `beadloom reindex --full`.

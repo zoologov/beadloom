@@ -250,7 +250,7 @@ node. Each is resolved through what the project declares (BDL-076 B5, B7 and R2 
 | Language | Function | Read from | Unresolved |
 |----------|----------|-----------|------------|
 | Go | `resolve_go_import(import_path, importer, project_root, conn, modules)` | `GoModules` (`go_modules.py`): the nearest `go.mod` at or above the importer; the longest module path among the project's modules, the importer's local `replace` directives and those of the `go.work` that uses it; the rest of the path is a directory under that module | The standard library and every module the project does not hold |
-| Java, Kotlin | `resolve_jvm_import(import_path, file_path, conn, scan_paths, packages)` | `JvmPackages` (`jvm_packages.py`): the longest dotted prefix of the import that some file declares as its `package`, mapped to that file's folder | A package no file declares (the JDK, a library); the dotted folder reading stays the fallback for such a package |
+| Java, Kotlin | `resolve_jvm_import(import_path, file_path, conn, scan_paths, packages)` | `JvmPackages` (`jvm_packages.py`): the longest dotted prefix of the import that some file declares as its `package`, mapped to the folders of the files declaring it; where several folders declare the package, the import reaches those holding a file named after the imported class (`B.kt`, `B.java`), else all of them | A package no file declares (the JDK, a library), whose dotted folder reading stays the fallback; an import whose folders different nodes own (a wildcard or a top-level Kotlin function of a package split across nodes) |
 | Swift | `resolve_swift_import(import_path, importer, project_root, conn, packages)` | `SwiftPackages` (`swift_packages.py`): the target of that name in the nearest `Package.swift`, else the one other package declaring it | An Apple framework, a product of a package the project does not hold, a test, plugin, binary or system-library target |
 
 The owner of the folder found is decided by the one ownership rule (`get_owning_ref_id`). A Go
@@ -260,6 +260,15 @@ declares its module; a project with no `Package.swift` keeps the folder-path rea
 `resolve_import_to_node`. The Kotlin layout that omits the common root package from the folders
 (`package org.example.network` in `src/main/kotlin/network/`) resolves because the package is
 read from the declaration, not from the folder.
+
+A JVM package declared in several folders — split across a Java and a Kotlin root, across
+modules, or across folders of Kotlin's recommended layout — is not given to the folder read
+first (BDL-076 `beadloom-ujzb.24`, re-review finding m5). That choice drew a false edge to the
+first folder for every import of a class the other folder holds. The segment after the package
+is read as the class the import names: Java requires a public class's file to carry its name,
+and Kotlin's conventions ask it of a file holding one class. `resolve_jvm_import` resolves only
+when one node owns every folder the import reaches, so an import naming no such file draws no
+edge rather than a guessed one. `init`'s quick import scan applies the same rule to clusters.
 
 ### Internal Resolution Helpers
 
@@ -491,9 +500,14 @@ class ImportInfo:
 - `a_foreign_scan_path_adds_no_false_edges.feature` (3 scenarios): a Python service beside a JS theme scan path owned by a node above it gets no false edge.
 - `vue_and_dynamic_imports.feature` (2 scenarios): `why` on a composable lists the component, the import is on its `.vue` line, a lazy `import('../charts/bar')` is an edge.
 - `go_module_imports.feature`: Go imports resolve through `go.mod`, and a deny rule fires on a Go import.
+- `one_jvm_package_in_two_folders.feature` (2 scenarios, `beadloom-ujzb.24`): an import of a class
+  of a package declared in two folders draws its edge to the node holding the class's file, from
+  `init` and from `reindex`, and a wildcard import of that package resolves to no folder.
 
 The manifest readers have unit tests of their own: `tests/unit/graph/test_go_modules.py`,
-`tests/unit/graph/test_jvm_packages.py`, `tests/unit/graph/test_swift_packages.py`.
+`tests/unit/graph/test_jvm_packages.py` (with `TestAPackageDeclaredInTwoFolders`),
+`tests/unit/graph/test_swift_packages.py`. `tests/integration/graph/test_import_resolver.py`
+covers a package in two folders on a full and an incremental reindex.
 
 ### Edge Generation Tests
 

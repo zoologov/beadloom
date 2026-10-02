@@ -163,7 +163,9 @@ and injects a per-doc validation badge into the **copy only**:
   the owning node's source-coverage %.
 - The badge is wrapped between stable `<!-- beadloom:badge-start -->` /
   `<!-- beadloom:badge-end -->` markers, below the document's front matter when it
-  has one, so regeneration overwrites ONLY the badge region.
+  has one that VitePress can read, so regeneration overwrites ONLY the badge region.
+  Front matter VitePress cannot parse would fail the build at the top of the page, so
+  the badge then goes first and the block below it shows as Markdown.
 
 **The published `docs/` is the source of truth.** The source tree is never
 mutated; there is no AI prose-rewriting (that is the deferred F4.1 follow-up).
@@ -513,8 +515,25 @@ author wrote:
 
 - Double braces in text show as written: an empty HTML comment is put between the two opening
   braces. A code span holding them becomes `<code v-pre>`; an indented code block holding them is wrapped in
-  `<div v-pre>`. Fenced code blocks and front matter are left alone, since VitePress already
-  shows them as written.
+  `<div v-pre>`. The content of a fenced code block and readable front matter are left alone,
+  since VitePress already shows them as written.
+- A link's text that VitePress writes from an address, an autolink `<https://…>` or a bare
+  address it links, has its percent-escapes decoded, so `%7B%7B` would show double braces the
+  source does not. Such a link is written as the Markdown link it renders,
+  `[address](<address>)`, and its text then shows as written.
+- A brace VitePress's attributes plugin (markdown-it-attrs) would read as the start of
+  attributes — `{.class}` at the end of a paragraph or a heading, on a line of its own, right
+  after a link, an emphasis or a code span — gets a backslash before it, so it shows as the
+  brace and is not moved onto the element, where Vue would compile an attribute named `:x`,
+  `@x` or `v-x`. A heading's own `{#id}` is shown too, not applied: a repeated id stops the
+  build, and a forge does not apply it either. An image's alt text or a container's title that
+  ends with such braces gets an empty HTML comment after it instead.
+- A fenced block's language line, which VitePress writes into the page as it is, holds `<`,
+  `"` and double braces as HTML entities.
+- Front matter VitePress cannot parse (VitePress reads it with gray-matter and js-yaml 3; a key
+  written twice is one example) would fail the build at the top of a page. The text then
+  opens with a blank line, and the block shows as Markdown. Only YAML front matter is read;
+  a block in another language shows as Markdown too.
 - Raw HTML is kept only when it is the lowercase HTML a forge renders in a README (`<details>`,
   `<img>`, `<table>`, `<kbd>`, …) and its closing tag is inside the same block. Any other tag, an
   unclosed one, `<script>`, `<style>`, `<template>`, `<iframe>` and `<textarea>` show as text.
@@ -546,12 +565,20 @@ site:
 | `title` | the project directory's name | the site title in the nav bar and the browser tab | it is not a non-empty string |
 | `description` | `The architecture of <title>: its graph, its documentation and its health` | the page description | it is not a non-empty string |
 | `base` | `/` | the path the portal is served under; VitePress prefixes every link and asset with it | it does not start and end with `/`, or it holds a GitHub Actions expression opener (a workflow would evaluate it) |
-| `repo_url` | none: no repository link | the repository link in the nav bar, the repository the card's source links and the project text's file links go to | it is not an `http` or `https` address with a host; it carries a user, a password, a query or a fragment, which the portal would publish; on a host whose forge is known, it runs past the repository into one of the forge's pages (`…/tree/main`) |
+| `repo_url` | none: no repository link | the repository link in the nav bar, the repository the card's source links and the project text's file links go to | it is not an `http` or `https` address with a host; it carries a user, a password, a query or a fragment, which the portal would publish; on a host whose forge is known, it stops before a repository (a host or an owner alone, an Azure DevOps project with no `_git/<repository>`) or runs past the repository into one of the forge's pages (`…/tree/main`, `…/pulls` on GitHub) |
 | `forges` | none: only public forge hosts are recognised | the forge serving each host, below | see below |
 
 `repo_url` is stored in one spelling: the scheme and the host lower-cased, a trailing `/` and one
 `.git` removed, the port and the case of the path kept. A key the block does not read is refused
 by name, with the keys it does read. The project's name is never taken from the git remote.
+
+On a host whose forge is known, `repo_url` is held to where that forge's repository address
+ends. GitHub, Bitbucket Cloud, `codeberg.org` and `gitea.com` serve a repository at exactly
+`/<owner>/<repository>`; on GitLab, a route word GitLab reserves (`-`, `tree`, `blob`, …) after
+the group and the project is a page; Azure DevOps ends a repository at `_git/<repository>`. A
+Gitea or GitLab host declared under `forges` may serve under a path, so it is not held to two
+segments, and a forge declared by a template is not held to any shape. The refusal for an
+address that stops too early names the shape the forge writes, such as `/<owner>/<repository>`.
 
 **Where a refusal shows.** `beadloom docs site` stops before writing anything and exits 1;
 `beadloom config-check` exits 1; the Gate's `config-check` step reports the rule `site-config`

@@ -36,9 +36,10 @@ wholesale.
   patterns a file does not declare, each an `IgnoreFinding` carrying the `IgnoreEntry` itself
   plus the declared lines the pattern `supersedes`. `ensure_ignore_block` writes what the
   first of these returns, so the writer and the check cannot disagree about what is missing.
-- `PORTAL_DIR` (`"site"`), `ensure_portal_ignored(project_root)`, `covers_directory(text,
-  directory)` and `PortalIgnoreResult(outcome, line, covered_by, reason)` — the portal's
-  output directory, below.
+- `PORTAL_DIR` (`"site"`), `ensure_portal_ignored(project_root, *, is_portal=None)`,
+  `covers_directory(text, directory)`, `PortalIgnoreResult(outcome, line, covered_by, reason)`
+  and `PortalProbe` (`Callable[[Path], bool]`, whether a folder holds the portal `docs site`
+  wrote) — the portal's output directory, below.
 
 ## The portal's output directory, one line apart from the block
 
@@ -51,10 +52,10 @@ run, which is what makes it idempotent. The line is written only when nothing el
 
 | `outcome` | When | Written |
 |-----------|------|---------|
-| `created` / `appended` | no line names `site/`, and `site/` is empty or absent | `/site/`, in a new file or at the end of the existing one |
+| `created` / `appended` | no line names `site/`, and `site/` is empty or absent, or holds only untracked files of the portal `docs site` wrote | `/site/`, in a new file or at the end of the existing one |
 | `covered` | the last line naming `site/` ignores it (`covered_by` holds it) | nothing |
 | `negated` | the last line naming `site/` un-ignores it (`!/site/`): the project wants the portal committed | nothing |
-| `occupied` | `site/` already holds files, tracked by git or only on disk: it is the project's own source, and the line would hide every new file there from `git status` | nothing; `reason` names `beadloom docs site --out <dir>` |
+| `occupied` | `site/` already holds files tracked by git, or untracked files that are not the portal `docs site` wrote: it is the project's own source, and the line would hide every new file there from `git status` | nothing; `reason` names `beadloom docs site --out <dir>` |
 | `skipped` | not inside a git working tree | nothing |
 
 The lines are read as git reads them: the last line naming the directory decides, a leading
@@ -66,6 +67,17 @@ Ignored: /site/ (the portal `beadloom docs site` writes) appended to .gitignore
 Not ignored: /site/ - not inside a git working tree - no .gitignore written
 Not ignored: /site/ - site/ already holds 3 files tracked by git, so it is the project's own and new files there must stay visible to git; run `beadloom docs site --out <dir>` to write the portal elsewhere, or move that source out of site/
 ```
+
+**Our own portal is not the project's source** (`beadloom-ujzb.24`, re-review finding m4).
+`init --force` after `docs site` found `site/` holding the generated portal and called it
+occupied; it also scanned it as code. Whether files on disk are the portal is asked of the
+`is_portal` probe the caller hands in: the CLI supplies the scaffold's own marker test (a file
+the scaffold ships, at its place in the folder, carrying the generated marker), which lives in
+`application.site`, a layer this domain may not import. With such a probe, untracked files it
+recognises do not make `site/` occupied, and the line is written. Files git tracks keep the
+directory the project's whatever the probe says, because an adopter who committed files there
+keeps seeing new ones. Without a probe, any file on disk keeps the directory the project's, as
+before.
 
 ## Where the entry belongs, and why not in the guard scaffolder
 
@@ -177,7 +189,8 @@ rather than surfacing as untracked churn.
   first line ends, so a file with Windows line endings stays one (fixed in BDL-076, where the
   block had been rewriting a CRLF file as LF).
 - **Never an ignore line over the project's own source.** `/site/` is not written when
-  `site/` already holds files.
+  `site/` already holds files git tracks, or untracked files the `is_portal` probe does not
+  recognise as the generated portal.
 
 ## Collaborators
 

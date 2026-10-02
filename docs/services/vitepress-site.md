@@ -124,4 +124,7 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
 `site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 101 of 101. It is not a
 required check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
-on pull requests that change what it tests, weekly on `main` and on demand.
+on pull requests that change what it tests, weekly on `main` and on demand. What it tests is its
+`paths:` filter, and a self-check holds that filter to every file the slow tests read and every
+`src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced on each fixture in
+a fresh interpreter (`beadloom-ujzb.24`).
