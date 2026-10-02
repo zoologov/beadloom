@@ -41,6 +41,13 @@ dependencies = [
     "tree-sitter>=0.25,<0.26",
     "tree-sitter-python>=0.25",
     "mcp>=2.0",
+    # The portal reads the Markdown of a project with the parser VitePress uses
+    # (BDL-076, beadloom-ujzb.21). markdown-it-py 4.x is the port of markdown-it
+    # 14.1, the version VitePress 1.6.4 bundles. rich already pulls markdown-it-py
+    # (>=2.2.0, resolved to 4.2.0 here); the 2.x and 3.x lines port markdown-it
+    # 12 and 13, and this reading was verified against 4.2.0 only, so the floor
+    # is the line that ports the parser VitePress itself runs.
+    "markdown-it-py>=4.0",
 ]
 
 [project.optional-dependencies]

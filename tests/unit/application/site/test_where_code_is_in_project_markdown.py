@@ -6,9 +6,12 @@ inert to Vue's template compiler. Neither may touch code: a link in a code
 example is an example, and ``{{ .Values.image.tag }}`` in a fenced block is
 already left alone by VitePress, which wraps fences in ``v-pre``.
 
-:func:`code_regions` answers one question — which characters are code — the way
-CommonMark reads it: YAML front matter, fenced blocks (backticks or tildes, in a
-list item or a block quote too), indented blocks, and code spans.
+``read_markdown(text).code`` answers one question — which characters are code —
+the way VitePress reads it: front matter as gray-matter takes it, and fenced
+blocks, indented blocks and code spans as markdown-it-py decides them, configured
+as VitePress configures markdown-it (``beadloom-ujzb.21``: the hand-written
+reader this replaces disagreed with markdown-it in six classes, and each failed
+``vitepress build``).
 """
 
 from __future__ import annotations
@@ -17,12 +20,13 @@ import itertools
 
 import pytest
 
-from beadloom.application.site.markdown_code import code_regions
+from beadloom.application.site.markdown_source import read_markdown
 
 
 def _code(markdown: str) -> list[tuple[str, str]]:
     return [
-        (region.kind, markdown[region.start : region.end]) for region in code_regions(markdown)
+        (region.kind, markdown[region.start : region.end])
+        for region in read_markdown(markdown).code
     ]
 
 
@@ -130,7 +134,7 @@ def test_a_code_span_may_cross_a_line_but_not_a_paragraph() -> None:
 
 def test_regions_are_sorted_and_do_not_overlap() -> None:
     text = "---\na: 1\n---\n`x` and\n\n```\n`y`\n```\n\n    `z`\n"
-    regions = code_regions(text)
+    regions = read_markdown(text).code
     assert [r.kind for r in regions] == ["frontmatter", "code_span", "fence", "indented"]
     assert all(a.end <= b.start for a, b in itertools.pairwise(regions))
 
@@ -147,5 +151,40 @@ def test_a_code_span_does_not_close_in_the_next_block(next_line: str) -> None:
     assert _code(text) == [("code_span", "`c`")]
 
 
+def test_two_pipe_lines_with_no_delimiter_row_are_one_paragraph() -> None:
+    """Without a delimiter row there is no table, so a code span may cross the line.
+
+    The hand-written reader stopped a span at every line that opened with a pipe;
+    markdown-it reads the two lines as one paragraph (``beadloom-ujzb.21``).
+    """
+    assert _code("| `a |\n| b` |") == [("code_span", "`a |\n| b`")]
+
+
 def test_a_code_span_does_not_close_in_the_next_table_row() -> None:
-    assert _code("| `a |\n| b` |") == []
+    assert _code("| a |\n|---|\n| `x |\n| y` |\n") == []
+
+
+def test_indented_code_inside_a_list_item_is_code() -> None:
+    """R2 case h: six columns in an item whose content starts at two."""
+    block = "      helm install {{ .Release.Name }}\n"
+    assert _code(f"- item:\n\n{block}") == [("indented", block)]
+
+
+def test_a_fence_indented_four_columns_is_an_indented_block() -> None:
+    """R2 case b."""
+    block = "    ```\n    x\n    ```\n"
+    assert _code(f"Intro.\n\n{block}") == [("indented", block)]
+
+
+def test_a_fence_ends_with_its_list_item() -> None:
+    """R2 case q."""
+    assert _code("- item\n  ```\n  code\n- next `x`\n") == [
+        ("fence", "- item\n  ```\n  code\n"[7:]),
+        ("code_span", "`x`"),
+    ]
+
+
+def test_front_matter_is_read_only_where_the_text_opens_its_page() -> None:
+    head = "---\ntitle: x\n---\n"
+    regions = read_markdown(f"{head}# Doc\n", front_matter=False).code
+    assert regions == ()

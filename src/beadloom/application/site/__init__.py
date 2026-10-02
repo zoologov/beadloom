@@ -16,7 +16,12 @@ module keeps one responsibility:
 - :mod:`.nav` — the VitePress nav and sidebar trees;
 - :mod:`.about` — the README rendered as the About page;
 - :mod:`.markdown_links` — the links in a project's own text, rebased onto the portal;
-- :mod:`.markdown_code` — where a project's Markdown holds code, left as written;
+- :mod:`.vitepress_markdown` — markdown-it-py set up the way VitePress sets up
+  markdown-it;
+- :mod:`.markdown_positions` — where in the source each piece of text it reads
+  came from;
+- :mod:`.markdown_source` — a project's Markdown as VitePress reads it, located;
+- :mod:`.raw_html` — raw HTML as Vue's template compiler reads it;
 - :mod:`.project_text` — a project's own text on a page, shown as written rather
   than compiled as a Vue template;
 - :mod:`.published_docs` — the ``docs/`` tree published with validation badges;

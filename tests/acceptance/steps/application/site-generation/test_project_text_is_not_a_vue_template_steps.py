@@ -52,10 +52,21 @@ def _unescape(text: str) -> str:
     return text.replace("\\n", "\n").replace('\\"', '"')
 
 
+#: An empty comment: it renders nothing, and between two braces Vue reads no interpolation.
+_BREAK = "<!---->"
+
+
 def _held_where_vue_does_not_read(body: str, text: str) -> tuple[int, int]:
-    """How often *body* holds *text*, and how often inside an element Vue skips (``v-pre``)."""
+    """How often *body* shows *text*, and how often Vue does not read it there.
+
+    Vue reads ``{{`` only where the two braces meet in the page, and nothing inside
+    an element carrying ``v-pre``. Text whose braces an empty comment separates is
+    shown as written and never read (``beadloom-ujzb.21``).
+    """
+    shown = body.replace(_BREAK, "").count(text)
+    broken = body.count(text[:1] + _BREAK + text[1:])
     inert = re.findall(rf"<(\w+) v-pre>{re.escape(text)}</\1>", body)
-    return body.count(text), len(inert)
+    return shown, broken + len(inert)
 
 
 @given(parsers.parse('a project whose README opens with "{paragraph}"'))
@@ -139,3 +150,19 @@ def _image_as_text(world: dict[str, Any], alt: str) -> None:
     body = _page(world, "docs/guide.md")
     assert "<img" not in body, body
     assert alt in body, body
+
+
+@then(parsers.parse('the published guide holds "{text}" in {count:d} blocks Vue skips'))
+def _held_in_skipped_blocks(world: dict[str, Any], text: str, count: int) -> None:
+    """Each block a ``<div v-pre>`` wraps, which Vue leaves as written, holds *text* once."""
+    body = _page(world, "docs/guide.md")
+    blocks = re.findall(r"<div v-pre>(.*?)</div>", body, re.DOTALL)
+    assert [block.count(text) for block in blocks] == [1] * count, body
+    assert body.count(text) == count, body
+
+
+@then(parsers.parse('the published guide holds no "{text}"'))
+def _holds_no(world: dict[str, Any], text: str) -> None:
+    body = _page(world, "docs/guide.md")
+    assert text not in body, body
+

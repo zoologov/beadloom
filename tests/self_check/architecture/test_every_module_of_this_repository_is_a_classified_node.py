@@ -108,6 +108,11 @@ class TestSiteGenerationCluster:
         match the path GitHub Pages serves the project under: nineteen.
         BDL-076 B4 (``beadloom-ujzb.8``) added ``forge_routes.py``, the routes a
         forge serves a path under and which forge serves a host: twenty.
+        ``beadloom-ujzb.21`` replaced the hand-written ``markdown_code.py`` with
+        markdown-it-py read as VitePress reads Markdown: ``vitepress_markdown.py`` (the
+        parser), ``markdown_positions.py`` (where each token's text came from),
+        ``markdown_source.py`` (the located reading) and ``raw_html.py`` (raw HTML as
+        Vue's tokenizer reads it): twenty-three.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -115,7 +120,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 20, names
+        assert len(names) == 23, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

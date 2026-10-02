@@ -320,7 +320,10 @@ def render_node_page(
     symbols = public_symbol_names(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
     page_dir = _kind_dir(node.kind)
-    summary = render_project_text(node.summary, portal or PortalLinks(), page_dir=page_dir)
+    # The summary sits below the page's own front matter, so a "---" in it is Markdown.
+    summary = render_project_text(
+        node.summary, portal or PortalLinks(), page_dir=page_dir, opens_page=False
+    )
 
     lines: list[str] = [
         "---",

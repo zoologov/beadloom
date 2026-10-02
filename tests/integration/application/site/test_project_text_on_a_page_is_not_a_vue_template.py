@@ -26,6 +26,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _HELM = "{{ .Values.image.tag }}"
+#: The Helm value in prose as the page holds it: its braces broken by an empty comment,
+#: which renders nothing and which Vue never reads as a delimiter (``beadloom-ujzb.21``).
+_SHOWN = "{<!---->" + _HELM[1:]
 _SUMMARY = f"Deploys with {_HELM} and `{_HELM}`; returns List<String>."
 _NOW = "2026-09-30T00:00:00+00:00"
 _REPO = "https://gitlab.com/acme/shop"
@@ -50,7 +53,7 @@ def test_a_node_summary_is_shown_as_written_and_the_viewer_still_mounts(
     node = NodeRow(ref_id="shop", kind="service", summary=_SUMMARY, source=None)
     body = render_node_page(conn, node, {"shop": "service"}, PortalLinks()).body
     assert (
-        f"Deploys with <span v-pre>{_HELM}</span> and <code v-pre>{_HELM}</code>; "
+        f"Deploys with {_SHOWN} and <code v-pre>{_HELM}</code>; "
         "returns List&lt;String>."
     ) in body
     assert '<ArchitectureMap focus="shop" :depth="1" height="60vh" />' in body
@@ -90,20 +93,20 @@ def test_the_generated_portal_shows_project_text_as_written(
     generate_site(conn, out, project_root=root, now_ts=_NOW)
 
     about = (out / "index.md").read_text(encoding="utf-8")
-    assert f"Set <span v-pre>{_HELM}</span>." in about
+    assert f"Set {_SHOWN}." in about
     assert '<a href="/shop/docs/guide.html">The guide</a>' in about
     about_ru = (out / "ru" / "index.md").read_text(encoding="utf-8")
     assert f"<code v-pre>{_HELM}</code>" in about_ru
 
     guide = (out / "docs" / "guide.md").read_text(encoding="utf-8")
     assert "&lt;details><summary>More</summary>" in guide
-    assert f"Hidden <span v-pre>{_HELM}</span>." in guide
+    assert f"Hidden {_SHOWN}." in guide
     assert '<img src="./logo.png" alt="logo"> gone' in guide
     assert f'<a href="{_REPO}/-/blob/{ref}/LICENSE">licence</a>' in guide
     assert "```mermaid\ngraph LR\n  A --> B\n```" in guide
 
     service = (out / "services" / "shop.md").read_text(encoding="utf-8")
-    assert f"Deploys with <span v-pre>{_HELM}</span>" in service
+    assert f"Deploys with {_SHOWN}" in service
 
 
 def test_an_image_the_portal_publishes_is_found_from_every_page_that_shows_it(

@@ -11,7 +11,8 @@
 # a repository file built but led nowhere.
 #
 # On the portal, the project's text is the author's text rather than a template.
-# Vue is told to leave an interpolation alone where it sits (`v-pre`), a tag Vue
+# An interpolation is shown with its braces apart (an empty comment between them,
+# which renders nothing) or inside an element Vue skips (`v-pre`), a tag Vue
 # cannot compile shows as the text it is, and a raw link follows the rule every
 # Markdown link in project text follows.
 
@@ -40,3 +41,22 @@ Feature: a project's own text is shown as written, never compiled as a Vue templ
     When the project is initialised and its site is generated
     Then the published guide links "license" in HTML to "https://gitlab.com/acme/orders/-/blob/{commit}/LICENSE"
     And the published guide reads "a diagram" in place of the image
+
+  # BDL-076 (`beadloom-ujzb.21`). The text is read the way VitePress's markdown-it
+  # reads it: four columns past a list item's content, or after a quote's marker,
+  # is code markdown-it renders without `v-pre`.
+  @bead:beadloom-ujzb.21
+  Scenario: a Helm value in indented code inside a list item and a quote reaches no Vue template
+    Given a project whose README opens with "Takes orders."
+    And the project's document "docs/guide.md" reads "- install:\n\n      helm install {{ .Release.Name }}\n\n> Then:\n>\n>     helm upgrade {{ .Release.Name }}"
+    When the project is initialised and its site is generated
+    Then the published guide holds "{{ .Release.Name }}" in 2 blocks Vue skips
+
+  @bead:beadloom-ujzb.21
+  Scenario: a generic type and a Vue event inside raw HTML do not reach Vue as template
+    Given a project whose README opens with "Takes orders."
+    And the project's document "docs/guide.md" reads "<details>\n<summary>Map<String, Integer> config</summary>\n\nBody.\n\n</details>\n\n<div @click=\"go\">hi</div>"
+    When the project is initialised and its site is generated
+    Then the published guide shows "<String," as text
+    And the published guide keeps "<summary>" as HTML
+    And the published guide holds no "@click"

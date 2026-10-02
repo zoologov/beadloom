@@ -41,3 +41,10 @@ Feature: a link in a project's own text is a working link or plain text on its p
     Then the published guide links "the readme" to "/"
     And the published guide reads "the handler" as plain text
     And no page of the portal holds a dead link
+
+  @bead:beadloom-ujzb.21
+  Scenario: a link whose text is code is a link like any other
+    Given a project whose README opens with "See [`LICENSE`](LICENSE) and [`the guide`](docs/missing.md)."
+    When the project is initialised and its site is generated
+    Then the root service's page reads "See `LICENSE` and `the guide`."
+    And no page of the portal holds a dead link

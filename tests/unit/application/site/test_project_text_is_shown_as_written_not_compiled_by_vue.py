@@ -14,9 +14,15 @@ a README or a published document, one build per form:
 - ``a < b``, a closed ``<p align="center">``, ``<br>`` and an HTML comment built
   and rendered as written.
 
-:func:`render_project_text` keeps each form as the author wrote it: Vue is told to
-leave an interpolation alone where it stands (``v-pre``), a tag it cannot compile
-or must not run becomes text, and a tag it can compile is kept.
+:func:`render_project_text` keeps each form as the author wrote it: a brace pair
+Vue would read is broken by an empty comment (``{<!---->{``), a tag it cannot
+compile or must not run becomes text, and a tag it can compile is kept.
+
+``beadloom-ujzb.21`` changed the mechanism for prose from ``<span v-pre>`` around
+the interpolation to an empty comment between its braces, because the span was
+measured to fail the build on its own when it crossed an emphasis
+(``*a {{ b* }}``); the expectations below that name ``<span v-pre>`` changed with
+it, and nothing else about them did.
 """
 
 from __future__ import annotations
@@ -42,29 +48,38 @@ def _inert(text: str) -> str:
     ["{{ .Values.image.tag }}", "{{ name }}", "{{ 1 + 1 }}", "{{ user.name | upper }}"],
 )
 def test_an_interpolation_in_prose_is_left_alone_by_vue(mustache: str) -> None:
-    assert _inert(f"Set {mustache} here.") == f"Set <span v-pre>{mustache}</span> here."
+    assert _inert(f"Set {mustache} here.") == f"Set {{<!---->{mustache[1:]} here."
 
 
 def test_each_interpolation_on_a_line_is_left_alone() -> None:
     out = _inert("{{ a }} and {{ b }}")
-    assert out == "<span v-pre>{{ a }}</span> and <span v-pre>{{ b }}</span>"
+    assert out == "{<!---->{ a }} and {<!---->{ b }}"
 
 
 def test_an_interpolation_that_does_not_close_on_its_line_is_left_alone_from_its_braces() -> None:
-    assert _inert("Open {{ x\nand y }}.") == "Open <span v-pre>{{</span> x\nand y }}."
+    assert _inert("Open {{ x\nand y }}.") == "Open {<!---->{ x\nand y }}."
 
 
-@pytest.mark.parametrize("braces", ["\\{\\{", "&#123;&#123;", "&lbrace;&lbrace;"])
-def test_braces_that_markdown_turns_into_an_interpolation_are_left_alone(braces: str) -> None:
-    assert _inert(f"A {braces} x") == f"A <span v-pre>{braces}</span> x"
+def test_braces_that_markdown_turns_into_an_interpolation_are_left_alone() -> None:
+    assert _inert("A \\{\\{ x") == "A \\{<!---->\\{ x"
+
+
+@pytest.mark.parametrize("braces", ["&#123;&#123;", "&lbrace;&lbrace;"])
+def test_braces_written_as_entities_stay_entities_vue_does_not_read(braces: str) -> None:
+    """Measured (``beadloom-ujzb.21``): VitePress writes an entity back as written.
+
+    The page holds ``&#123;&#123;``, which Vue's tokenizer does not take for a
+    delimiter; the earlier expectation wrapped it in ``<span v-pre>`` for nothing.
+    """
+    assert _inert(f"A {braces} x") == f"A {braces} x"
 
 
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("| a |\n|---|\n| {{ x.y }} |\n", "| a |\n|---|\n| <span v-pre>{{ x.y }}</span> |\n"),
-        ("## Set {{ .Values.tag }}\n", "## Set <span v-pre>{{ .Values.tag }}</span>\n"),
-        ("[{{ x }}](https://a.test)", "[<span v-pre>{{ x }}</span>](https://a.test)"),
+        ("| a |\n|---|\n| {{ x.y }} |\n", "| a |\n|---|\n| {<!---->{ x.y }} |\n"),
+        ("## Set {{ .Values.tag }}\n", "## Set {<!---->{ .Values.tag }}\n"),
+        ("[{{ x }}](https://a.test)", "[{<!---->{ x }}](https://a.test)"),
     ],
 )
 def test_an_interpolation_in_a_table_a_heading_or_link_text_is_left_alone(
@@ -75,7 +90,7 @@ def test_an_interpolation_in_a_table_a_heading_or_link_text_is_left_alone(
 
 def test_an_interpolation_inside_an_html_block_is_left_alone() -> None:
     text = '<p align="center">\n  {{ .Values.x }}\n</p>\n'
-    assert _inert(text) == '<p align="center">\n  <span v-pre>{{ .Values.x }}</span>\n</p>\n'
+    assert _inert(text) == '<p align="center">\n  {<!---->{ .Values.x }}\n</p>\n'
 
 
 @pytest.mark.parametrize(
@@ -101,8 +116,13 @@ def test_a_code_span_holding_an_interpolation_becomes_code_vue_leaves_alone() ->
 
 
 def test_such_a_code_span_keeps_its_characters_and_its_padding_rule() -> None:
+    """A backtick inside is escaped: unescaped, markdown-it read `` `c` `` as a nested code span.
+
+    Measured (``beadloom-ujzb.21``): the earlier output rendered
+    ``<code v-pre>… <code>c</code></code>``, and the author's backticks were lost.
+    """
     out = _inert("Run `` {{ a }} <b> & `c` `` now.")
-    assert out == "Run <code v-pre>{{ a }} &lt;b&gt; &amp; `c`</code> now."
+    assert out == "Run <code v-pre>{{ a }} &lt;b&gt; &amp; \\`c\\`</code> now."
 
 
 def test_a_code_span_with_no_interpolation_is_left_as_written() -> None:
@@ -172,7 +192,7 @@ def test_an_element_that_would_run_or_restyle_the_page_is_text(name: str) -> Non
 
 def test_an_escaped_tag_shows_its_interpolation_as_written_too() -> None:
     out = _inert('<Foo title="{{ x }}">')
-    assert out == '&lt;Foo title="<span v-pre>{{ x }}</span>">'
+    assert out == '&lt;Foo title="{<!---->{ x }}">'
 
 
 @pytest.mark.parametrize(
@@ -181,7 +201,8 @@ def test_an_escaped_tag_shows_its_interpolation_as_written_too() -> None:
         ('<div v-if="false">shown</div>', '<div v-if="false" v-pre>shown</div>'),
         ('<span :title="x">t</span>', '<span :title="x" v-pre>t</span>'),
         ('<img v-bind:src="x" />', '<img v-bind:src="x" v-pre />'),
-        ("<p v-pre>{{ x }}</p>", "<p v-pre><span v-pre>{{ x }}</span></p>"),
+        # Vue already skips what a v-pre element holds; the earlier reader wrapped it anyway.
+        ("<p v-pre>{{ x }}</p>", "<p v-pre>{{ x }}</p>"),
     ],
 )
 def test_a_vue_directive_on_a_kept_element_is_shown_rather_than_run(
@@ -215,7 +236,7 @@ def test_text_vue_already_reads_as_written_is_unchanged(text: str) -> None:
 
 def test_a_line_with_several_forms_keeps_each_as_written() -> None:
     once = _inert("<b>{{ x }}</b> `{{ y }}` List<T>")
-    assert once == "<b><span v-pre>{{ x }}</span></b> <code v-pre>{{ y }}</code> List&lt;T>"
+    assert once == "<b>{<!---->{ x }}</b> <code v-pre>{{ y }}</code> List&lt;T>"
 
 
 # -- a raw link and a raw image -----------------------------------------------
@@ -261,7 +282,7 @@ def test_a_raw_link_to_a_published_document_reaches_its_page_under_the_base() ->
 
 def test_a_raw_image_with_nowhere_to_go_becomes_its_alt_text() -> None:
     assert _doc('<img src="missing.png" alt="a {{ x }} &amp; y">') == (
-        "a <span v-pre>{{ x }}</span> &amp; y"
+        "a {<!---->{ x }} &amp; y"
     )
 
 

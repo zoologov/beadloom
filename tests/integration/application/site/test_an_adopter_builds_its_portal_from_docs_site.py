@@ -16,6 +16,7 @@ and Node 20 or later is on ``PATH``; otherwise it is skipped with the reason.
 from __future__ import annotations
 
 import base64
+import html
 import json
 import re
 import shutil
@@ -243,3 +244,144 @@ def test_project_text_with_a_helm_value_and_a_relative_image_builds_as_written(
     # The root service's summary is the README's first paragraph, which holds no image.
     for page, alt in ((about, "Acme logo"), (guide, "Guide logo")):
         assert re.search(rf'<img src="(data:image/png|/assets/)[^"]*" alt="{alt}"', page), page
+
+
+#: R2's findings F1, F3 and F4 (BDL-076, ``beadloom-ujzb.21``), each of which failed
+#: ``vitepress build`` or left a live Vue binding: a link whose text is code, and
+#: text the hand-written reader read differently from VitePress's markdown-it.
+_ADVERSARIAL_README = (
+    "# Acme Orders\n\n"
+    "See [`LICENSE`](LICENSE), [`the guide`][g] and ![`logo`](docs/missing.png).\n\n"
+    "[g]: docs/missing.md\n"
+)
+_ADVERSARIAL_DOC = """---
+title: Adversarial {{ .Values.a }}
+---
+
+# Adversarial
+
+Intro.
+
+    ```
+    image: {{ .Values.b }}
+    ```
+
+A paragraph line
+    ```
+still {{ .Values.c }} prose
+
+- item
+
+      ```yaml
+      tag: {{ .Values.d }}
+      ```
+
+- item:
+
+      helm install {{ .Values.e }}
+
+* a
+
+  para
+
+        {{ .Values.f }}
+
+> Note:
+>
+>     helm install {{ .Values.g }}
+
+- item
+  ```
+  code {{ .Values.h }}
+- next item {{ .Values.i }}
+
+Use `a`{{ .Values.j }}`c` here.
+
+| a | b |
+|---|---|
+| `x|{{ .Values.k }}` | <T> |
+
+*a {{ .Values.l* }}
+
+<details>
+<summary>Map<String, Integer> config</summary>
+
+Body.
+
+</details>
+
+<div>
+Map<K,V> and {{ .Values.m }}
+</div>
+
+<div @click="go">clicked</div>
+
+Text.
+
+<!-- todo: finish
+
+More {{ .Values.n }}.
+"""
+#: How each case must read on the built page, as text a reader sees.
+_AS_WRITTEN = (
+    "image: {{ .Values.b }}",
+    "still {{ .Values.c }} prose",
+    "tag: {{ .Values.d }}",
+    "helm install {{ .Values.e }}",
+    "{{ .Values.f }}",
+    "helm install {{ .Values.g }}",
+    "code {{ .Values.h }}",
+    "next item {{ .Values.i }}",
+    "a{{ .Values.j }}c",
+    "{{ .Values.k }}",
+    "a {{ .Values.l }}",  # the asterisks are an emphasis around "a {{ .Values.l"
+    "Map<String, Integer> config",
+    "Map<K,V> and {{ .Values.m }}",
+    "clicked",
+    "<!-- todo: finish",
+    "More {{ .Values.n }}.",
+)
+
+
+def _shown_text(page: str) -> str:
+    """The text a reader sees on *page*: the body's markup removed, entities decoded."""
+    body = page.split("<body", 1)[1]
+    body = re.sub(r"<script\b.*?</script>", "", body, flags=re.DOTALL)
+    return html.unescape(re.sub(r"<[^>]+>", "", body))
+
+
+def test_project_text_markdown_it_reads_differently_builds_and_reads_as_written(
+    tmp_path: Path, npm: str
+) -> None:
+    """Every R2 case in one README and one document: the build passes, the text reads as written.
+
+    On the code before ``beadloom-ujzb.21`` the README failed with a dead link
+    (``./LICENSE``) and the document with "Error parsing JavaScript expression"
+    and "Element is missing end tag".
+    """
+    root = tmp_path / "acme-orders"
+    _write_project(root)
+    (root / "README.md").write_text(_ADVERSARIAL_README, encoding="utf-8")
+    (root / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "adversarial.md").write_text(_ADVERSARIAL_DOC, encoding="utf-8")
+    _beadloom("init", "--yes", "--project", str(root))
+    _beadloom("reindex", "--project", str(root))
+    _beadloom("docs", "site", "--project", str(root))
+
+    site = root / "site"
+    for command in ([npm, "ci", "--no-audit", "--no-fund"], [npm, "run", "docs:build"]):
+        built = subprocess.run(command, cwd=site, capture_output=True, encoding="utf-8")  # noqa: S603
+        assert built.returncode == 0, built.stdout + built.stderr
+
+    dist = site / ".vitepress" / "dist"
+    about = _shown_text((dist / "index.html").read_text(encoding="utf-8"))
+    assert "See LICENSE, the guide and logo." in about, about
+    page = (dist / "docs" / "adversarial.html").read_text(encoding="utf-8")
+    shown = _shown_text(page)
+    missing = [text for text in _AS_WRITTEN if text not in shown]
+    assert missing == [], shown
+    # The front matter stayed front matter: it titles the page and is not shown.
+    assert "<title>Adversarial {{ .Values.a }}" in page
+    assert "title: Adversarial" not in shown
+    assert "@click" not in page

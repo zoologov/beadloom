@@ -201,6 +201,63 @@ def test_a_link_beside_a_code_span_is_still_rebased() -> None:
     assert out == "Run `[x](LICENSE)`, then read license."
 
 
+# -- a link whose text is code (R2 F1, beadloom-ujzb.21) ----------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("See [`LICENSE`](LICENSE).", "See `LICENSE`."),
+        ("[`CONTRIBUTING.md`](CONTRIBUTING.md)", "`CONTRIBUTING.md`"),
+        ("Read [the `guide`](docs/guide.md).", "Read [the `guide`](/docs/guide)."),
+    ],
+)
+def test_a_link_whose_text_is_code_is_rebased(text: str, expected: str) -> None:
+    """A code span in the link text cut the prose in two, and the dead link failed the build."""
+    assert rebase_links(text, _PUBLISHED) == expected
+
+
+def test_a_link_whose_text_is_code_goes_to_the_declared_repository() -> None:
+    out = rebase_links("See [`LICENSE`](LICENSE).", _WITH_REPO)
+    assert out == f"See [`LICENSE`]({_REPO}/-/blob/{_REF}/LICENSE)."
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("See [`LICENSE`][l].\n\n[l]: LICENSE\n", "See `LICENSE`.\n\n"),
+        ("See [`LICENSE`].\n\n[`LICENSE`]: LICENSE\n", "See `LICENSE`.\n\n"),
+        ("See [`LICENSE`][].\n\n[`LICENSE`]: LICENSE\n", "See `LICENSE`.\n\n"),
+    ],
+)
+def test_a_withdrawn_reference_with_a_code_label_becomes_its_text(
+    text: str, expected: str
+) -> None:
+    assert rebase_links(text, _PUBLISHED) == expected
+
+
+def test_an_image_whose_alt_text_is_code_follows_the_rule() -> None:
+    assert rebase_links("![`x`](docs/missing.png)", _PUBLISHED) == "`x`"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "<div>\n[x](LICENSE)\n</div>\n",
+        "- a\n\n      [x](LICENSE)\n",
+        "> ```\n> [x](LICENSE)\n> ```\n",
+    ],
+)
+def test_text_markdown_it_does_not_read_as_a_link_is_left_as_written(text: str) -> None:
+    """Raw HTML and code are not links to markdown-it, so VitePress checks none of them."""
+    assert rebase_links(text, _PUBLISHED) == text
+
+
+def test_a_definition_inside_a_block_quote_is_rebased_in_place() -> None:
+    text = "> See [the guide][g].\n>\n> [g]: docs/guide.md\n"
+    assert rebase_links(text, _PUBLISHED) == "> See [the guide][g].\n>\n> [g]: /docs/guide\n"
+
+
 def test_prose_with_no_link_is_unchanged() -> None:
     text = "# Title\n\nJust prose, a (parenthetical), and [unclosed bracket.\n"
     assert rebase_links(text, _PUBLISHED) == text

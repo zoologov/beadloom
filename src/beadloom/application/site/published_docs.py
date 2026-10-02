@@ -58,6 +58,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.site.markdown_links import PortalLinks
 from beadloom.application.site.project_text import render_project_text
+from beadloom.application.site.vitepress_markdown import front_matter_length
 
 if TYPE_CHECKING:
     import sqlite3
@@ -96,11 +97,13 @@ class PublishedDoc:
 
 
 def inject_badge(prose: str, badge_body: str) -> str:
-    """Return *prose* with *badge_body* injected as a marker-delimited prefix.
+    """Return *prose* with *badge_body* injected as a marker-delimited block at its top.
 
     The badge is wrapped between :data:`BADGE_START` / :data:`BADGE_END`. If a
     previous badge region is present it is replaced in place; the authored prose
-    after the region is preserved byte-for-byte.
+    after the region is preserved byte-for-byte. The top is below the document's
+    front matter, which VitePress reads only at the very start of a page
+    (BDL-076, ``beadloom-ujzb.21``, R2 F3-i).
     """
     block = f"{BADGE_START}\n{badge_body}\n{BADGE_END}\n\n"
     if BADGE_START in prose and BADGE_END in prose:
@@ -110,7 +113,8 @@ def inject_badge(prose: str, badge_body: str) -> str:
         # re-injection is byte-stable (no accumulating blank lines).
         after = after[2:] if after.startswith("\n\n") else after.lstrip("\n")
         return f"{before}{block}{after}"
-    return f"{block}{prose}"
+    head = front_matter_length(prose, closed_only=True)
+    return f"{prose[:head]}{block}{prose[head:]}"
 
 
 def _node_coverage_pct(
@@ -345,12 +349,15 @@ def publish_docs(
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix == ".md":
             source_dir = (_DOCS_DIR / rel.as_posix()).parent.as_posix()
+            text = src.read_text(encoding="utf-8")
             prose = render_project_text(
-                src.read_text(encoding="utf-8"),
+                text,
                 links,
                 source_dir=source_dir,
                 mirrored_dir=_DOCS_DIR.as_posix(),
                 page_dir=source_dir,
+                # A closed front matter stays first on the page; the badge goes below it.
+                opens_page=front_matter_length(text, closed_only=True) > 0,
             )
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose

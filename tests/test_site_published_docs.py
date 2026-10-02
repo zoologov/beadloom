@@ -345,6 +345,25 @@ def test_inject_badge_overwrites_only_badge_region() -> None:
     assert twice.count(BADGE_END) == 1
 
 
+def test_inject_badge_goes_after_front_matter_so_vitepress_still_reads_it() -> None:
+    """R2 F3-i (``beadloom-ujzb.21``): above the front matter, the badge made it Markdown.
+
+    VitePress reads front matter only at the very top of a page. With the badge
+    first, ``---`` became a rule and ``title: …`` a heading, so a ``{{ }}`` in it
+    reached Vue while the project text pass still took the block for front matter.
+    """
+    head = "---\ntitle: x {{ .Values.a }}\n---\n"
+    injected = inject_badge(f"{head}\n# Head\n", "BADGE")
+    assert injected == f"{head}{BADGE_START}\nBADGE\n{BADGE_END}\n\n\n# Head\n"
+    assert inject_badge(injected, "BADGE") == injected
+
+
+def test_inject_badge_goes_first_when_the_front_matter_never_closes() -> None:
+    """An unclosed block is not front matter the badge can follow: gray-matter would take all."""
+    prose = "---\ntitle: x\n"
+    assert inject_badge(prose, "BADGE").startswith(BADGE_START)
+
+
 def test_inject_badge_preserves_prose_byte_for_byte() -> None:
     prose = "# Title\n\nLine one.\nLine two.\n"
     injected = inject_badge(prose, "BADGE")

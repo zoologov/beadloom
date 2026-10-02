@@ -37,8 +37,10 @@ Inline links, images, the badge-link idiom ``[![alt](img)](target)`` and
 reference definitions (``[label]: target``) are all rebased. A reference whose
 definition becomes text is withdrawn: the definition is removed and every
 ``[text][label]``, ``[label][]`` and ``[label]`` naming it becomes its text.
-Nothing inside code changes (:func:`.markdown_code.code_regions` says where code
-is). Pure and deterministic.
+A link is what markdown-it renders as one, read the way VitePress reads the text
+(:func:`.markdown_source.read_markdown`): a link whose text is a code span is a
+link, and anything inside code or raw HTML is not (BDL-076, ``beadloom-ujzb.21``).
+Pure and deterministic.
 
 :func:`raw_html_destination` is the same rule for an ``href`` or a ``src`` the
 project wrote as raw HTML, which VitePress neither checks nor rewrites: a
@@ -54,34 +56,19 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.markdown_code import code_regions
+from beadloom.application.site.markdown_positions import normalise
+from beadloom.application.site.markdown_source import Edit, apply_edits, read_markdown
 from beadloom.application.site.repository_link import RepositoryLink
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-# Inline link/image: optional "!" (image), [text], (target). The text may hold
-# one whole nested image, the badge-link idiom. The target stops at the first
-# ")", which is enough for the targets READMEs and summaries carry.
-_LINK_RE = re.compile(r"(!?)\[((?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*)\]\(([^)]*)\)")
-
-# A reference definition on its own line: up to three spaces of indent,
-# [label]:, the target (bare or <bracketed>), then an optional title.
-_DEFINITION_RE = re.compile(
-    r"^( {0,3})\[([^\]\n]+)\]:[ \t]*(<[^>\n]*>|\S+)([^\n]*)(\n?)", re.MULTILINE
-)
-
-# A full or collapsed reference: [text][label] / [text][].
-_FULL_REFERENCE_RE = re.compile(r"(!?)\[((?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*)\]\[([^\[\]]*)\]")
-# A shortcut reference: [label], not followed by "(", "[" or ":".
-_SHORTCUT_REFERENCE_RE = re.compile(r"(!?)(?<!\])\[([^\[\]]+)\](?![\[(:])")
+    from beadloom.application.site.markdown_source import Definition, Link
 
 # A target the portal does not resolve against its own tree: any URI scheme
 # (http:, mailto:, ...) or a protocol-relative "//host" address.
 _ABSOLUTE_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//)")
-
-# A target and its optional title: `path "title"` or `<path with spaces> "title"`.
-_TARGET_RE = re.compile(r"^\s*(<[^>]*>|\S+)(\s.*?)?\s*$", re.DOTALL)
+_WHITESPACE_RE = re.compile(r"\s")
 
 _DOCS_DIR = "docs"
 
@@ -180,6 +167,7 @@ def rebase_links(
     source_dir: str = "",
     mirrored_dir: str = "",
     page_dir: str | None = None,
+    front_matter: bool = True,
 ) -> str:
     """Rebase every link in *markdown* onto the portal (see the module docstring).
 
@@ -189,18 +177,85 @@ def rebase_links(
     document), so a relative link that stays inside it is left as written.
     ``page_dir`` is the portal directory the page is written to (``""`` for the
     About page, ``"services"`` for a service's page), which lets an image the
-    portal publishes be referenced from there.
+    portal publishes be referenced from there. ``front_matter`` says a leading
+    front matter block is not Markdown (the text opens its page).
+
+    The links are the ones markdown-it renders (:func:`.markdown_source.read_markdown`),
+    so a link whose text is code is one (``beadloom-ujzb.21``), and a link in
+    code or raw HTML is not.
     """
+    text = normalise(markdown)
+    source = read_markdown(text, front_matter=front_matter)
     origin = _origin(portal, source_dir, mirrored_dir, page_dir)
-    text, withdrawn = _rebase_definitions(markdown, origin)
-    parts: list[str] = []
-    cursor = 0
-    for region in code_regions(text):
-        parts.append(_rewrite_prose(text[cursor : region.start], origin, withdrawn))
-        parts.append(text[region.start : region.end])
-        cursor = region.end
-    parts.append(_rewrite_prose(text[cursor:], origin, withdrawn))
-    return "".join(parts)
+    edits: list[Edit] = []
+    withdrawn: set[str] = set()
+    defined: set[str] = set()
+    for definition in source.definitions:
+        if (
+            not _rebase_definition(text, definition, origin, edits)
+            and definition.reference not in defined
+        ):
+            withdrawn.add(definition.reference)
+        defined.add(definition.reference)
+    for link in source.links:
+        _rebase_link(text, link, origin, withdrawn, edits)
+    return apply_edits(text, edits)
+
+
+def _rebase_link(
+    text: str, link: Link, origin: _Origin, withdrawn: set[str], edits: list[Edit]
+) -> None:
+    """Rebase one link; with nowhere to go, or a withdrawn definition, it becomes its label."""
+    if link.destination is None:
+        if link.reference in withdrawn:
+            edits.extend(_unwrapped(link))
+        return
+    start, end = link.destination
+    written = text[start:end]
+    url = written[1:-1] if written.startswith("<") else written
+    destination = _destination(url, origin, image=link.image)
+    if destination is None:
+        edits.extend(_unwrapped(link))
+    elif destination != url:
+        edits.append(Edit(start, end, _written_destination(destination, written)))
+
+
+def _unwrapped(link: Link) -> list[Edit]:
+    """The edits that leave only the label of *link*: its opener and its tail go."""
+    pieces = (link.opener, *link.tail)
+    return [Edit(start, end, "") for start, end in pieces]
+
+
+def _rebase_definition(
+    text: str, definition: Definition, origin: _Origin, edits: list[Edit]
+) -> bool:
+    """Rebase one definition; ``False`` when it has nowhere to go and is removed."""
+    start, end = definition.destination
+    written = text[start:end]
+    url = written[1:-1] if written.startswith("<") else written
+    destination = _destination(url, origin)
+    if destination is None:
+        edits.extend(_removed(text, definition))
+        return False
+    if destination != url:
+        edits.append(Edit(start, end, _written_destination(destination, written)))
+    return True
+
+
+def _removed(text: str, definition: Definition) -> list[Edit]:
+    """The edits that remove *definition*: its whole lines, or, in a container, its own text."""
+    line_start, line_end = definition.lines
+    first = definition.pieces[0][0] if definition.pieces else line_start
+    if not text[line_start:first].strip():
+        return [Edit(line_start, line_end, "")]
+    return [Edit(start, end, "") for start, end in definition.pieces]
+
+
+def _written_destination(destination: str, written: str) -> str:
+    """*destination* as Markdown writes it: in angle brackets where it must be."""
+    if written.startswith("<") and _WHITESPACE_RE.search(destination):
+        return f"<{destination}>"
+    return destination
 
 
 def raw_html_destination(
@@ -232,77 +287,6 @@ def _origin(
 ) -> _Origin:
     page = None if page_dir is None else page_dir.strip("/")
     return _Origin(portal, source_dir.strip("/"), mirrored_dir.strip("/"), page)
-
-
-def _rewrite_prose(prose: str, origin: _Origin, withdrawn: frozenset[str]) -> str:
-    def replace(match: re.Match[str]) -> str:
-        return _rebase_inline(match, origin, withdrawn)
-
-    rewritten = _LINK_RE.sub(replace, prose)
-    return _withdraw_references(rewritten, withdrawn) if withdrawn else rewritten
-
-
-def _rebase_inline(match: re.Match[str], origin: _Origin, withdrawn: frozenset[str]) -> str:
-    bang, text, raw_target = match.group(1), match.group(2), match.group(3)
-    # The badge-link idiom: the visible text is an image, rebased by the same rule.
-    if "![" in text:
-        text = _rewrite_prose(text, origin, withdrawn)
-    url, title = _split_target(raw_target)
-    destination = _destination(url, origin, image=bool(bang))
-    if destination is None:
-        return text
-    if destination == url:
-        return f"{bang}[{text}]({raw_target})"
-    return f"{bang}[{text}]({destination}{title})"
-
-
-def _rebase_definitions(markdown: str, origin: _Origin) -> tuple[str, frozenset[str]]:
-    """Rebase every reference definition outside code; return the text and the withdrawn labels."""
-    protected = [(region.start, region.end) for region in code_regions(markdown)]
-    withdrawn: set[str] = set()
-
-    def replace(match: re.Match[str]) -> str:
-        if any(start <= match.start() < end for start, end in protected):
-            return match.group(0)
-        indent, label, raw_url, title, newline = match.groups()
-        url = raw_url[1:-1] if raw_url.startswith("<") else raw_url
-        destination = _destination(url, origin)
-        if destination is None:
-            withdrawn.add(_label_key(label))
-            return ""
-        if destination == url:
-            return match.group(0)
-        return f"{indent}[{label}]: {destination}{title}{newline}"
-
-    return _DEFINITION_RE.sub(replace, markdown), frozenset(withdrawn)
-
-
-def _withdraw_references(prose: str, withdrawn: frozenset[str]) -> str:
-    """Every reference to a withdrawn definition becomes its text (an image, its alt)."""
-
-    def full(match: re.Match[str]) -> str:
-        text, label = match.group(2), match.group(3)
-        return text if _label_key(label or text) in withdrawn else match.group(0)
-
-    def shortcut(match: re.Match[str]) -> str:
-        label = match.group(2)
-        return label if _label_key(label) in withdrawn else match.group(0)
-
-    return _SHORTCUT_REFERENCE_RE.sub(shortcut, _FULL_REFERENCE_RE.sub(full, prose))
-
-
-def _label_key(label: str) -> str:
-    """A reference label as Markdown matches it: case-insensitive, whitespace collapsed."""
-    return " ".join(label.split()).lower()
-
-
-def _split_target(raw_target: str) -> tuple[str, str]:
-    """The URL of an inline target and its title part (with its leading space)."""
-    match = _TARGET_RE.match(raw_target)
-    if match is None:
-        return "", ""
-    url, title = match.group(1), match.group(2) or ""
-    return (url[1:-1] if url.startswith("<") else url), title
 
 
 def _is_absolute(url: str) -> bool:

@@ -12,58 +12,73 @@ inline code alike; ``List<String>``, an unclosed ``<details>`` and a ``<script>`
 failed the build; a ``<style>`` restyled the whole page.
 
 :func:`render_project_text` is the one path that text takes onto a page. Its
-links are rebased (:func:`.markdown_links.rebase_links`), and then:
+links are rebased (:func:`.markdown_links.rebase_links`), and then it is read
+the way VitePress reads it (:func:`.markdown_source.read_markdown`,
+``beadloom-ujzb.21``) and changed only where Vue would read it:
 
-- an interpolation is wrapped in ``<span v-pre>``, which VitePress documents for
-  exactly this: Vue leaves the element's content as it is. A code span holding
-  one becomes ``<code v-pre>``, and an indented block holding one is wrapped in a
-  ``<div v-pre>``. A fenced block is left alone, since VitePress already renders
-  it with ``v-pre``; so is YAML front matter.
-- a tag is kept when Vue compiles it as the HTML the author meant: a lowercase
-  element of the HTML a forge renders in a README, balanced by its closing tag.
-  An inline element closes in its own paragraph; a block element may close in a
-  later one, on a line of its own. A Vue directive on a kept element
-  (``v-if``, ``:title``) is shown rather than run, by ``v-pre`` on the element.
-- any other tag is text: a name that is not such an element (``List<String>``,
-  ``<MyWidget />``), an element that would run or restyle the page (``<script>``,
-  ``<style>``), an element with no partner.
+- in text markdown-it renders, a brace pair Vue would take for an interpolation
+  is broken by an empty comment, ``{<!---->{``: the page shows the two braces,
+  and Vue never reads them as a delimiter. A code span holding one becomes
+  ``<code v-pre>``, and an indented block holding one is wrapped in a
+  ``<div v-pre>`` inside its own list item or block quote. A fenced block is left
+  alone, since VitePress renders it with ``v-pre``; so is front matter.
+  An entity such as ``&#123;`` is left alone too: VitePress writes it back as an
+  entity, which Vue does not read as a brace.
+- in raw HTML, which markdown-it passes through, markup is read as Vue's
+  tokenizer reads it (:mod:`.raw_html`). A tag is kept when it is a lowercase
+  element of the HTML a forge renders in a README and its partner closes it
+  inside the same element markdown-it writes (a paragraph, a list item, an
+  emphasis); any other tag, an unclosed comment and markup Vue cannot read are
+  text. An attribute only Vue gives meaning to (``@click``, ``#slot``,
+  ``.prop``) is dropped; a directive the DOM can hold (``v-if``, ``:title``) is
+  shown rather than run, by ``v-pre`` on its element.
 - a raw ``href``, ``src`` or ``srcset`` follows the rule of a Markdown link
   (:func:`.markdown_links.raw_html_destination`). An ``<a>`` with nowhere to go
   keeps its content, and an ``<img>`` becomes its alt text.
 
-Wrapping the whole text in one ``v-pre`` was measured and rejected: it stops the
-Mermaid component from mounting, so a diagram in a published document shows as
-literal ``<Mermaid>`` markup, and Vue still refuses an unbalanced tag inside it.
-Pure and deterministic.
+An edit can change how markdown-it reads the text: a line that opened an HTML
+block, once escaped, is a paragraph. So the pass repeats on its own result until
+it finds nothing to change. Wrapping the whole text in one ``v-pre`` was
+measured and rejected: it stops the Mermaid component from mounting, and Vue
+still refuses an unbalanced tag inside it. Pure and deterministic.
 """
 
 # beadloom:domain=application
 
 from __future__ import annotations
 
-import bisect
 import html
-import re
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.markdown_code import (
-    CodeRegion,
-    block_breaks,
-    code_regions,
-    is_escaped,
-)
 from beadloom.application.site.markdown_links import (
     PortalLinks,
     raw_html_destination,
     rebase_links,
 )
+from beadloom.application.site.markdown_positions import normalise
+from beadloom.application.site.markdown_source import (
+    CodeBlock,
+    CodeSpan,
+    Edit,
+    Element,
+    MarkdownSource,
+    RawHtml,
+    Segment,
+    Text,
+    apply_edits,
+    read_markdown,
+)
+from beadloom.application.site.raw_html import Markup, read_markup
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     #: Where a raw attribute's URL goes: ``(url, is_asset) -> url`` or ``None``.
     RawLink = Callable[[str, bool], "str | None"]
+
+logger = logging.getLogger(__name__)
 
 #: The elements a forge renders in a README, and so the ones kept as HTML.
 _KEPT = frozenset(
@@ -76,24 +91,12 @@ _KEPT = frozenset(
         "tbody", "td", "tfoot", "th", "thead", "time", "tr", "track", "tt", "u", "ul", "var",
         "video", "wbr"
     )
-)
+)  # fmt: skip
 #: Elements with no closing tag.
 _VOID = frozenset(
-    (
-        "area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-        "track", "wbr"
-    )
-)
-#: Elements that open an HTML block on a line of their own (CommonMark's type 6).
-_BLOCK = frozenset(
-    (
-        "address", "article", "aside", "blockquote", "body", "caption", "center", "col",
-        "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption",
-        "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "html",
-        "legend", "li", "main", "menu", "nav", "ol", "p", "section", "summary", "table", "tbody",
-        "td", "tfoot", "th", "thead", "tr", "ul"
-    )
-)
+    ("area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+     "track", "wbr")
+)  # fmt: skip
 #: The attributes that hold a URL, per element, and whether the URL is an asset.
 _URL_ATTRS: dict[str, dict[str, bool]] = {
     "a": {"href": False},
@@ -102,49 +105,19 @@ _URL_ATTRS: dict[str, dict[str, bool]] = {
     "video": {"src": True, "poster": True},
     "audio": {"src": True},
 }
-#: The most indentation a line may carry and still open an HTML block.
-_BLOCK_INDENT = 3
-
-_ATTR = r"""\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?"""
-# An HTML comment, an opening tag or a closing tag, as CommonMark recognises them.
-_TAG_RE = re.compile(
-    rf"(?P<comment><!--.*?-->)"
-    rf"|<(?P<name>[A-Za-z][A-Za-z0-9-]*)(?P<attrs>(?:{_ATTR})*)(?P<tail>\s*/?>)"
-    rf"|</(?P<close>[A-Za-z][A-Za-z0-9-]*)\s*>",
-    re.DOTALL,
-)
-_ATTR_RE = re.compile(
-    r"""(?P<lead>\s+)(?P<name>[A-Za-z_:][A-Za-z0-9_.:-]*)"""
-    r"""(?:\s*=\s*(?P<value>[^\s"'=<>`]+|'[^']*'|"[^"]*"))?"""
-)
-# An opening brace as Markdown may write it: bare, backslash-escaped, or an entity.
-_BRACE = r"(?:\\?\{|&(?:#123|#[xX]0*7[bB]|lbrace|lcub);)"
-# An interpolation: two opening braces, through the first "}}" on the same line.
-_MUSTACHE_RE = re.compile(rf"{_BRACE}{_BRACE}(?:[^\n]*?\}}\}})?")
-_BLOCK_CODE = frozenset({"frontmatter", "fence", "indented"})
-
-
-@dataclass
-class _Tag:
-    """One tag in the prose, and what becomes of it: ``keep``, ``text``, ``drop``.
-
-    An HTML comment is read as a tag whose fate is ``comment``: it is left as written.
-    """
-
-    start: int
-    end: int
-    name: str
-    closing: bool
-    attrs: str
-    tail: str
-    chunk: int
-    block: bool
-    fate: str = "keep"
-
-    @property
-    def pairs(self) -> bool:
-        """Whether the tag needs a partner: an opening or closing tag of a non-void element."""
-        return self.fate == "keep" and self.name not in _VOID and "/" not in self.tail
+#: Attribute names only Vue gives meaning to (an event, a slot, a property binding).
+_VUE_ONLY = ("@", "#", ".", "[")
+#: Directive names the DOM can hold, which ``v-pre`` turns into plain attributes.
+_DIRECTIVES = ("v-", ":")
+_V_PRE = "v-pre"
+#: An empty comment: between two braces it ends an interpolation before it starts.
+_BREAK = "<!---->"
+#: Characters with a meaning to VitePress's inline Markdown, escaped inside ``<code v-pre>``.
+_INLINE_SPECIAL = frozenset("\\`*_[]~|:")
+#: The most passes the text may need; each one only escapes, wraps or breaks.
+_MAX_PASSES = 8
+#: Passes in which an indented block may still be wrapped (see :meth:`_Pass._code_block`).
+_WRAP_PASSES = 3
 
 
 def render_project_text(
@@ -154,14 +127,22 @@ def render_project_text(
     source_dir: str = "",
     mirrored_dir: str = "",
     page_dir: str | None = None,
+    opens_page: bool = True,
 ) -> str:
     """*markdown*, the project's own text, as a portal page shows it (module docstring).
 
     ``source_dir``, ``mirrored_dir`` and ``page_dir`` are
-    :func:`.markdown_links.rebase_links`'s.
+    :func:`.markdown_links.rebase_links`'s. ``opens_page`` says the text begins
+    its page, so a leading front matter block is VitePress's front matter; below
+    other content it is Markdown.
     """
     text = rebase_links(
-        markdown, portal, source_dir=source_dir, mirrored_dir=mirrored_dir, page_dir=page_dir
+        normalise(markdown),
+        portal,
+        source_dir=source_dir,
+        mirrored_dir=mirrored_dir,
+        page_dir=page_dir,
+        front_matter=opens_page,
     )
 
     def raw_link(url: str, asset: bool) -> str | None:
@@ -174,172 +155,261 @@ def render_project_text(
             asset=asset,
         )
 
-    return _inert(text, raw_link)
+    return _inert(text, raw_link, front_matter=opens_page)
 
 
-def _inert(text: str, raw_link: RawLink) -> str:
-    regions = code_regions(text)
-    tags = _read_tags(text, regions)
-    _balance([tag for tag in tags if tag.pairs])
-    _withdraw_links(tags, raw_link)
-    edits = [(r.start, r.end, _render_code(text[r.start : r.end], r.kind)) for r in regions]
-    edits += [(t.start, t.end, _render_tag(t, text, raw_link)) for t in tags]
-    parts: list[str] = []
-    cursor = 0
-    for start, end, replacement in sorted(edits):
-        parts.extend((_wrap_mustaches(text[cursor:start]), replacement))
-        cursor = end
-    parts.append(_wrap_mustaches(text[cursor:]))
-    return "".join(parts)
+def _inert(text: str, raw_link: RawLink, *, front_matter: bool) -> str:
+    """*text* changed until a reading of it finds nothing Vue would compile.
 
-
-# -- reading the tags ---------------------------------------------------------
-
-
-def _read_tags(text: str, regions: list[CodeRegion]) -> list[_Tag]:
-    """Every tag and comment in the prose between *regions*, in order."""
-    breaks = _paragraph_breaks(text, regions)
-    gaps = zip(
-        [0, *(r.end for r in regions)], [*(r.start for r in regions), len(text)], strict=True
-    )
-    tags: list[_Tag] = []
-    for start, end in gaps:
-        for match in _TAG_RE.finditer(text, start, end):
-            if match["comment"] is not None:
-                tags.append(_comment(match))
-            elif not is_escaped(text, match.start()):
-                tags.append(_tag_of(match, text, breaks))
-    return tags
-
-
-def _comment(match: re.Match[str]) -> _Tag:
-    return _Tag(match.start(), match.end(), "", False, "", "", 0, False, fate="comment")
-
-
-def _paragraph_breaks(text: str, regions: list[CodeRegion]) -> list[int]:
-    """Positions where a paragraph ends: a new block, and both edges of a block of code."""
-    breaks = set(block_breaks(text))
-    for region in regions:
-        if region.kind in _BLOCK_CODE:
-            breaks.update((region.start, region.end))
-    return sorted(breaks)
-
-
-def _tag_of(match: re.Match[str], text: str, breaks: list[int]) -> _Tag:
-    closing = match["close"] is not None
-    name = match["close"] if closing else match["name"]
-    chunk = bisect.bisect_right(breaks, match.start())
-    tag = _Tag(
-        start=match.start(),
-        end=match.end(),
-        name=name,
-        closing=closing,
-        attrs=match["attrs"] or "",
-        tail=match["tail"] or ">",
-        chunk=chunk,
-        block=_opens_a_block(text, match, name, breaks[chunk - 1] if chunk else 0),
-    )
-    if name not in _KEPT:
-        tag.fate = "text"
-    return tag
-
-
-def _opens_a_block(text: str, match: re.Match[str], name: str, paragraph_start: int) -> bool:
-    """Whether the tag stands where CommonMark opens an HTML block with it.
-
-    A block element's tag at the start of a line opens one anywhere; any other
-    element's does only on the first line of a paragraph, alone on its line.
+    Raw URLs are rebased on the first reading only: a rebased URL is an address
+    on the portal, which the link rule would read again as a repository path.
     """
-    line_start = text.rfind("\n", 0, match.start()) + 1
-    indent = text[line_start : match.start()]
-    if indent.strip(" ") or len(indent) > _BLOCK_INDENT:
+    for attempt in range(_MAX_PASSES):
+        links = raw_link if attempt == 0 else None
+        edits = _Pass(text, links, wrap=attempt < _WRAP_PASSES).run(
+            read_markdown(text, front_matter=front_matter)
+        )
+        if not edits:
+            return text
+        text = apply_edits(text, edits)
+    logger.warning("project text still changed after %d passes", _MAX_PASSES)
+    return text
+
+
+@dataclass(frozen=True)
+class _Open:
+    """A raw opening tag waiting for its partner, and whether Vue skips what it holds."""
+
+    markup: Markup
+    segment: Segment
+    v_pre: bool
+
+
+class _Pass:
+    """One reading of the text: the edits that keep it out of Vue's hands.
+
+    The stack holds the raw opening tags still waiting for a partner, and a
+    ``None`` for each element markdown-it has opened: a raw tag cannot close
+    across one, since the page would then nest wrongly.
+    """
+
+    def __init__(self, text: str, raw_link: RawLink | None, *, wrap: bool) -> None:
+        self.text = text
+        self.raw_link = raw_link
+        self.wrap = wrap
+        self.stack: list[_Open | None] = []
+        self.edits: list[Edit] = []
+
+    def run(self, source: MarkdownSource) -> list[Edit]:
+        for part in source.parts:
+            if isinstance(part, Element):
+                self._element(part)
+            elif isinstance(part, RawHtml):
+                self._raw(part.segment)
+            elif isinstance(part, Text):
+                self._text(part.segment)
+            elif isinstance(part, CodeSpan):
+                self._code_span(part)
+            else:
+                self._code_block(part)
+        self._unwind()
+        return self.edits
+
+    @property
+    def _protected(self) -> bool:
+        """Whether Vue skips what comes next: an open element carries ``v-pre``."""
+        return any(entry is not None and entry.v_pre for entry in self.stack)
+
+    # -- elements markdown-it writes ----------------------------------------------
+
+    def _element(self, part: Element) -> None:
+        if part.opening:
+            self.stack.append(None)
+            return
+        while self.stack:
+            entry = self.stack.pop()
+            if entry is None:
+                return
+            self._escape(entry.segment, entry.markup.start)
+
+    def _unwind(self) -> None:
+        for entry in self.stack:
+            if entry is not None:
+                self._escape(entry.segment, entry.markup.start)
+        self.stack.clear()
+
+    # -- text ---------------------------------------------------------------------
+
+    def _text(self, segment: Segment) -> None:
+        """Break every brace pair markdown-it would render adjacent: ``{{``, ``{\\{``."""
+        if self._protected:
+            return
+        text = segment.text
+        for index in range(len(text) - 1):
+            if text[index] != "{":
+                continue
+            following = text[index + 1 : index + 3]
+            if following.startswith("{") or following == "\\{":
+                self._insert(segment.source(index + 1), _BREAK)
+
+    def _raw_text(self, segment: Segment, start: int, end: int) -> None:
+        """Break every ``{{`` in raw HTML's text, which Vue reads as written."""
+        if self._protected:
+            return
+        for index in range(start, end - 1):
+            if segment.text[index] == "{" and segment.text[index + 1] == "{":
+                self._insert(segment.source(index + 1), _BREAK)
+
+    # -- code -----------------------------------------------------------------------
+
+    def _code_span(self, part: CodeSpan) -> None:
+        if "{{" not in part.content or self._protected:
+            return
+        self.edits.append(
+            Edit(part.start, part.end, f"<code v-pre>{_inline_code(part.content)}</code>")
+        )
+
+    def _code_block(self, part: CodeBlock) -> None:
+        """Wrap an indented block holding ``{{`` in ``<div v-pre>``, inside its containers.
+
+        A wrapper that did not take (a container this reading cannot continue)
+        would be wrapped again on every pass; after a few, each brace pair in the
+        block is split by a zero-width space instead, which no reading can undo.
+        """
+        if part.kind != "indented" or "{{" not in part.content or self._protected:
+            return
+        if not self.wrap:
+            block = self.text[part.start : part.end]
+            for index in range(len(block) - 1):
+                if block[index] == "{" and block[index + 1] == "{":
+                    self._insert(part.start + index + 1, "\u200b")
+            return
+        blank = (part.resume or part.continuation).rstrip()
+        if part.resume:
+            opening = f"<div {_V_PRE}>\n{blank}\n{part.resume}"
+        else:
+            opening = f"{part.continuation}<div {_V_PRE}>\n{blank}\n"
+        self._insert(part.insert_at, opening)
+        closing_blank = part.continuation.rstrip()
+        closing = f"{closing_blank}\n{part.continuation}</div>\n{closing_blank}\n"
+        self._insert(part.end, closing)
+
+    # -- raw HTML ---------------------------------------------------------------------
+
+    def _raw(self, segment: Segment) -> None:
+        cursor = 0
+        for markup in read_markup(segment.text):
+            self._raw_text(segment, cursor, markup.start)
+            cursor = markup.end
+            if markup.kind == "unreadable":
+                self._escape(segment, markup.start)
+            elif markup.kind == "open":
+                self._open(segment, markup)
+            elif markup.kind == "close":
+                self._close(segment, markup)
+        self._raw_text(segment, cursor, len(segment.text))
+
+    def _open(self, segment: Segment, markup: Markup) -> None:
+        if markup.name not in _KEPT:
+            self._escape(segment, markup.start)
+            return
+        names = [attribute.name.lower() for attribute in markup.attributes]
+        v_pre = any(name == _V_PRE or name.startswith(_DIRECTIVES) for name in names)
+        entry = _Open(markup, segment, v_pre)
+        if markup.self_closing or markup.name in _VOID:
+            self._keep(entry, None)
+        else:
+            self.stack.append(entry)
+
+    def _close(self, segment: Segment, markup: Markup) -> None:
+        if markup.name in _KEPT and markup.name not in _VOID:
+            for index in range(len(self.stack) - 1, -1, -1):
+                entry = self.stack[index]
+                if entry is None:
+                    break
+                if entry.markup.name == markup.name:
+                    for unclosed in self.stack[index + 1 :]:
+                        if unclosed is not None:
+                            self._escape(unclosed.segment, unclosed.markup.start)
+                    del self.stack[index:]
+                    self._keep(entry, (segment, markup))
+                    return
+        self._escape(segment, markup.start)
+
+    def _keep(self, entry: _Open, closing: tuple[Segment, Markup] | None) -> None:
+        """A kept element: URLs rebased, Vue-only attributes dropped, directives shown, not run."""
+        markup, segment = entry.markup, entry.segment
+        if self.raw_link is not None and self._withdrawn(entry, closing, self.raw_link):
+            return
+        directive = False
+        for attribute in markup.attributes:
+            name = attribute.name.lower()
+            if name.startswith(_VUE_ONLY):
+                self._replace(segment, attribute.start, attribute.end, "")
+                continue
+            directive = directive or (name.startswith(_DIRECTIVES) and name != _V_PRE)
+            asset = _URL_ATTRS.get(markup.name, {}).get(name)
+            if asset is None or attribute.value is None or self.raw_link is None:
+                continue
+            rebased = _rebase_url_attr(name, attribute.value, asset, self.raw_link)
+            if rebased is None:
+                self._replace(segment, attribute.start, attribute.end, "")
+            elif rebased != attribute.value:
+                lead = segment.text[attribute.start : attribute.name_start]
+                written = f'{lead}{attribute.name}="{html.escape(rebased)}"'
+                self._replace(segment, attribute.start, attribute.end, written)
+        if directive and _V_PRE not in {attribute.name.lower() for attribute in markup.attributes}:
+            self._insert(segment.source(markup.attributes_end), f" {_V_PRE}")
+
+    def _withdrawn(
+        self, entry: _Open, closing: tuple[Segment, Markup] | None, raw_link: RawLink
+    ) -> bool:
+        """An ``<a>`` with nowhere to go keeps its content; such an ``<img>`` becomes its alt."""
+        markup, segment = entry.markup, entry.segment
+        if markup.name == "a":
+            href = _value(markup, "href")
+            if href is None or raw_link(href, False) is not None:
+                return False
+            self._replace(segment, markup.start, markup.end, "")
+            if closing is not None:
+                self._replace(closing[0], closing[1].start, closing[1].end, "")
+            return True
+        if markup.name == "img":
+            src = _value(markup, "src")
+            if src is None or raw_link(src, True) is not None:
+                return False
+            alt = (_value(markup, "alt") or "").replace("<", "&lt;")
+            self._replace(segment, markup.start, markup.end, alt)
+            return True
         return False
-    if name.lower() in _BLOCK:
-        return True
-    line_end = text.find("\n", match.end())
-    alone = not text[match.end() : line_end if line_end >= 0 else len(text)].strip()
-    return alone and not text[paragraph_start:line_start].strip()
+
+    # -- edits ----------------------------------------------------------------------
+
+    def _escape(self, segment: Segment, index: int) -> None:
+        """The ``<`` at *index* as text."""
+        start = segment.source(index)
+        self.edits.append(Edit(start, start + 1, "&lt;"))
+
+    def _insert(self, at: int, text: str) -> None:
+        self.edits.append(Edit(at, at, text))
+
+    def _replace(self, segment: Segment, start: int, end: int, text: str) -> None:
+        """Replace ``segment.text[start:end]``, line by line: each line keeps its own prefix."""
+        pieces = segment.pieces(start, end)
+        if not pieces:
+            self._insert(segment.source(start), text)
+            return
+        first, *rest = pieces
+        self.edits.append(Edit(first[0], first[1], text))
+        self.edits.extend(Edit(piece_start, piece_end, "") for piece_start, piece_end in rest)
 
 
-def _balance(tags: list[_Tag]) -> None:
-    """Pair every opening tag with its closing tag; a tag left without one is text."""
-    stack: list[_Tag] = []
-    for tag in tags:
-        for opened in [o for o in stack if o.chunk < tag.chunk and not o.block]:
-            opened.fate = "text"
-            stack.remove(opened)
-        if not tag.closing:
-            stack.append(tag)
-            continue
-        index = next((i for i in range(len(stack) - 1, -1, -1) if stack[i].name == tag.name), None)
-        if index is None or (stack[index].chunk != tag.chunk and not tag.block):
-            tag.fate = "text"
-            continue
-        for unclosed in stack[index + 1 :]:
-            unclosed.fate = "text"
-        del stack[index:]
-    for unclosed in stack:
-        unclosed.fate = "text"
-
-
-def _withdraw_links(tags: list[_Tag], raw_link: RawLink) -> None:
-    """An ``<a>`` whose address has nowhere to go loses its tags and keeps its content.
-
-    After :func:`_balance` the kept ``<a>`` tags nest properly, so a closing tag
-    shares the fate of the latest opening tag still open.
-    """
-    depth: list[_Tag] = []
-    for tag in tags:
-        if tag.name != "a" or tag.fate != "keep":
-            continue
-        if not tag.closing:
-            href = _attribute(tag.attrs, "href")
-            withdrawn = href is not None and raw_link(href, False) is None
-            tag.fate = "drop" if withdrawn else "keep"
-            depth.append(tag)
-        elif depth:
-            tag.fate = depth.pop().fate
-
-
-# -- writing the page ---------------------------------------------------------
-
-
-def _render_tag(tag: _Tag, text: str, raw_link: RawLink) -> str:
-    original = text[tag.start : tag.end]
-    if tag.fate == "comment":
-        return original
-    if tag.fate == "drop":
-        return ""
-    if tag.fate == "text":
-        return "&lt;" + _wrap_mustaches(original[1:])
-    if tag.closing:
-        return original
-    return _render_kept(tag, raw_link)
-
-
-def _render_kept(tag: _Tag, raw_link: RawLink) -> str:
-    """A kept opening tag, its URLs rebased and its directives shown rather than run."""
-    url_attrs = _URL_ATTRS.get(tag.name, {})
-    attrs: list[str] = []
-    directive = False
-    for match in _ATTR_RE.finditer(tag.attrs):
-        name = match["name"].lower()
-        directive = directive or (name.startswith((":", "v-")) and name != "v-pre")
-        value = _unquote(match["value"])
-        if name not in url_attrs or value is None:
-            attrs.append(match.group(0))
-            continue
-        rebased = _rebase_url_attr(name, value, url_attrs[name], raw_link)
-        if rebased is None and tag.name == "img" and name == "src":
-            alt = _attribute(tag.attrs, "alt") or ""
-            return _wrap_mustaches(alt.replace("<", "&lt;"))
-        if rebased == value:
-            attrs.append(match.group(0))
-        elif rebased is not None:
-            attrs.append(f'{match["lead"]}{match["name"]}="{html.escape(rebased)}"')
-    if directive and _attribute(tag.attrs, "v-pre") is None:
-        attrs.append(" v-pre")
-    return f"<{tag.name}{''.join(attrs)}{tag.tail}"
+def _value(markup: Markup, name: str) -> str | None:
+    """The value of the attribute *name*, ``""`` when it has none, ``None`` when it is absent."""
+    for attribute in markup.attributes:
+        if attribute.name.lower() == name:
+            return attribute.value or ""
+    return None
 
 
 def _rebase_url_attr(name: str, value: str, asset: bool, raw_link: RawLink) -> str | None:
@@ -357,39 +427,7 @@ def _rebase_url_attr(name: str, value: str, asset: bool, raw_link: RawLink) -> s
     return value if rewritten == ", ".join(c.strip() for c in value.split(",")) else rewritten
 
 
-def _attribute(attrs: str, wanted: str) -> str | None:
-    """The unquoted value of the attribute *wanted*, ``""`` when it has none, else ``None``."""
-    for match in _ATTR_RE.finditer(attrs):
-        if match["name"].lower() == wanted:
-            return _unquote(match["value"]) or ""
-    return None
-
-
-def _unquote(value: str | None) -> str | None:
-    if value is not None and value[:1] in {'"', "'"}:
-        return value[1:-1]
-    return value
-
-
-def _render_code(code: str, kind: str) -> str:
-    """A code region, left as written unless Vue would read an interpolation in it."""
-    if "{{" not in code or kind in {"frontmatter", "fence"}:
-        return code
-    if kind == "indented":
-        block = code if code.endswith("\n") else f"{code}\n"
-        return f"<div v-pre>\n\n{block}\n</div>\n\n"
-    return f"<code v-pre>{html.escape(_code_span_content(code), quote=False)}</code>"
-
-
-def _code_span_content(span: str) -> str:
-    """A code span's content as CommonMark reads it: line endings as spaces, one pad stripped."""
-    ticks = len(span) - len(span.lstrip("`"))
-    content = span[ticks:-ticks].replace("\n", " ")
-    if content.startswith(" ") and content.endswith(" ") and content.strip():
-        content = content[1:-1]
-    return content
-
-
-def _wrap_mustaches(prose: str) -> str:
-    """Every interpolation in *prose* inside ``<span v-pre>``, so Vue leaves it as written."""
-    return _MUSTACHE_RE.sub(lambda match: f"<span v-pre>{match.group(0)}</span>", prose)
+def _inline_code(content: str) -> str:
+    """A code span's content inside ``<code v-pre>``: no character read as Markdown or HTML."""
+    escaped = html.escape(content, quote=False)
+    return "".join(f"\\{char}" if char in _INLINE_SPECIAL else char for char in escaped)
