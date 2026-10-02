@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** Slice 2 — `beadloom-ujzb.21` (project text through markdown-it-py, owner); then a focused re-review of R2's findings, W2, P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** Slice 2 — `beadloom-ujzb.22` (re-review of R2's findings, read-only) ∥ `beadloom-ri5a` (W2, docs); then P2. Serialised: `beadloom waves` finds them in one node, `site-generation`.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**`beadloom-ujzb.21` closed (2026-10-02):** `e9979074` — project text read by markdown-it-py 4.2 configured as VitePress 1.6.4 configures markdown-it (js-default + html, the @mdit-vue component rules and markdown-it-container ported); checked against VitePress's own parser on 142 Markdown files and R2's cases (57,613 block tokens, no difference beyond anchors and table-cell maps). `{{` broken by an empty comment where Vue reads text; raw HTML read as Vue's tokenizer reads it, Vue-only attributes dropped; links from located tokens (F1). 51 adversarial inputs: 19 failed on the old code, 0 now. Our portal's dist identical. `markdown-it-py>=4.0` declared. Filed `beadloom-xx30` (P3, an apostrophe in a pyproject comment yields a phantom dependency).
 
 **`beadloom-ujzb.20` closed (2026-10-01):** `5bb73acf` — F8: shipped specs choose subjects by graph shape, no node id, bead id, `BDL-` reference or "this repository" in 33 shipped files; the test reads all 130 node ids and the tracker. F9: `site.repo_url` normalised (scheme and host case, trailing `/`, `.git`), a route past the repository refused by name. F10: the Pages workflow — `permissions: {}` at the top, build `contents: read` + `pages: read`, deploy `pages: write` + `id-token: write`, `on.push.branches` from `origin/HEAD`, an exact run-time guard, actions pinned by SHA (read with `git ls-remote` on 2026-10-01), `${{` refused. F11: a missing generated module is tolerated with a warning; any other load error surfaces. `site-adopters` moved to its own workflow with a `paths:` filter, weekly cron and dispatch (owner); a self-check derives the filter from the slow tests' import chain. Combined tree: pytest 1 failed (stale pairs), slow 79 passed, Playwright 101, `beadloom ci` rc 1 on 235 stale pairs. Not verified on GitHub: whether `pages: read` suffices for `configure-pages`.
 
@@ -138,8 +140,9 @@
 | `beadloom-ujzb.18` | chore | ✓ done | no node ids of ours in the shipped scaffold |
 | `beadloom-ujzb.19` | fix | ✓ done | R2: init findings F2, F5, F6, F7 |
 | `beadloom-ujzb.20` | fix | ✓ done | R2: site findings F8–F11 |
-| `beadloom-ujzb.21` | fix | in progress | R2: project text F1, F3, F4 |
+| `beadloom-ujzb.21` | fix | ✓ done |
+| `beadloom-ujzb.22` | review | in progress | re-review of R2's findings | R2: project text F1, F3, F4 |
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
 | `beadloom-fht7` | R2 review | ✓ done | review slice 2 |
-| `beadloom-ri5a` | W2 tech-writer | blocked | adopter docs |
+| `beadloom-ri5a` | W2 tech-writer | in progress | adopter docs |
 | `beadloom-la3t` | P2 PR 2 | blocked | owner's look; PR 2 |
