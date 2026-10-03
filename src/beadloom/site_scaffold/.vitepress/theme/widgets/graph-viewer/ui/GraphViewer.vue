@@ -11,6 +11,10 @@
 // and the entities it draws. Everything it shows comes from the data file; the
 // mode supplies the filters in its slot of the toolbar.
 //
+// ELK lays the graph out in a Web Worker. Until it answers, the canvas says it is
+// laying the graph out and the toolbar keeps working; a layout that fails is
+// reported above the canvas, as a data file that cannot be read is.
+//
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
 // embedded view are one UI. The panel shows what the page puts in its `panel`
@@ -281,6 +285,7 @@ onMounted(() => {
     state: () => ({ ...state, mode: props.mode }),
     arranging: () => navigation.arranging.value,
     impactSummary: () => summary.value,
+    layout: () => canvas.layout.value,
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -335,10 +340,24 @@ onBeforeUnmount(() => disposeHandle());
       <FullscreenButton :active="fullscreen.active.value" @toggle="fullscreen.toggle" />
     </div>
 
+    <p v-if="canvas.layoutError.value" class="bl-viewer-note" role="alert">
+      The graph could not be laid out ({{ canvas.layoutError.value.message }}). The static summary
+      on this page is the source of truth.
+    </p>
+
     <div class="bl-viewer-body">
+      <p
+        v-if="canvas.layingOut.value"
+        class="bl-viewer-status"
+        role="status"
+        data-testid="layout-status"
+      >
+        Laying out the graph…
+      </p>
       <div
         ref="container"
         class="bl-viewer-canvas"
+        :class="{ 'is-laying-out': canvas.layingOut.value }"
         data-testid="graph-canvas"
         tabindex="0"
         :aria-label="`${mode.label}: drag to pan, scroll to zoom; keys + − 0 f Esc`"
@@ -455,6 +474,18 @@ onBeforeUnmount(() => disposeHandle());
 .bl-viewer:fullscreen .bl-viewer-canvas,
 .bl-viewer.is-fallback-fullscreen .bl-viewer-canvas {
   height: auto;
+}
+/* Until ELK answers, every node stands at one point; the canvas is shown once they are placed. */
+.bl-viewer-canvas.is-laying-out {
+  visibility: hidden;
+}
+.bl-viewer-status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  margin: 0;
+  color: var(--vp-c-text-2);
 }
 .bl-viewer-canvas:focus-visible {
   outline: 2px solid var(--vp-c-brand-1);

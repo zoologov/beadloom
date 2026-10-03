@@ -1,22 +1,22 @@
 // beadloom:component=site-graph-viewer
 // The Cytoscape instance behind the viewer's canvas, and what the viewer does to it.
 //
-// It creates the graph, lays it out, reports taps, labels a hovered edge, shows
-// only a set of node ids (and of contracts), marks a selection — the selected node, the nodes and
-// edges its walk reached, their distance rings and risks, and what lies outside
-// — and swaps the stylesheet when the theme changes. It decides nothing about
-// which nodes are visible or selected: the viewer's state does.
+// It creates the graph, has ELK lay it out in a worker (`shared/elk`) while the
+// page stays responsive, places the nodes where ELK put them, reports taps,
+// labels a hovered edge, shows only a set of node ids (and of contracts), marks a
+// selection — the selected node, the nodes and edges its walk reached, their
+// distance rings and risks, and what lies outside — and swaps the stylesheet when
+// the theme changes. It decides nothing about which nodes are visible or
+// selected: the viewer's state does.
+//
+// The layout's run (`layout`) keeps ELK's geometry — a box for every node and a
+// route for every edge, in the graph's coordinates — beside the canvas, so what
+// is drawn from it later reads the same layout the nodes were placed by.
 
-import { onBeforeUnmount, ref, shallowRef } from "vue";
-import { LAYERED_LAYOUT, loadCytoscape } from "../../../shared/cytoscape/index.js";
-
-function runLayout(cy) {
-  return new Promise((resolve) => {
-    const layout = cy.layout(LAYERED_LAYOUT);
-    layout.one("layoutstop", resolve);
-    layout.run();
-  });
-}
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { loadCytoscape } from "../../../shared/cytoscape/index.js";
+import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
+import { applyGeometry, layoutInputOf } from "./canvasLayout.js";
 
 /** Every class a selection puts on the canvas, removed before the next one is marked. */
 const SELECTION_CLASSES = [
@@ -32,10 +32,20 @@ const SELECTION_CLASSES = [
 /** The node data the impact mode sets: the node's distance from the selection. */
 export const DISTANCE_DATA = "impactDistance";
 
-/** `{ cy, ready, mount, setStyle, showOnly, markSelection, resize }` over the container in `containerRef`. */
+/**
+ * `{ cy, ready, layingOut, layout, layoutError, mount, setStyle, showOnly, markSelection, resize }`
+ * over the container in `containerRef`.
+ *
+ * `layingOut` is true while ELK runs; `layout` is the last run, `{ geometry,
+ * source, ms }` (`shared/elk`, `layOut`), or null; `layoutError` is the error a
+ * failed run gave, or null.
+ */
 export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap }) {
   const cy = shallowRef(null);
   const ready = ref(false);
+  const layingOut = ref(false);
+  const layout = shallowRef(null);
+  const layoutError = shallowRef(null);
   let generation = 0;
 
   // Cytoscape reports no `mouseout` when the pointer leaves the canvas from an
@@ -46,6 +56,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
 
   function destroy() {
     ready.value = false;
+    layingOut.value = false;
+    layout.value = null;
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     cy.value?.destroy();
     cy.value = null;
@@ -65,8 +77,24 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     instance.on("mouseout", "edge", (event) => event.target.removeClass("is-hovered"));
     containerRef.value.addEventListener("mouseleave", clearHover);
     cy.value = instance;
-    await runLayout(instance);
-    if (mine !== generation) return false;
+    return place(instance, mine);
+  }
+
+  /** Lay `instance` out and place its nodes; false when a newer mount took over, or ELK failed. */
+  async function place(instance, mine) {
+    layingOut.value = true;
+    layoutError.value = null;
+    try {
+      const run = await layOut(elkGraphOf(layoutInputOf(instance)));
+      if (mine !== generation) return false;
+      await applyGeometry(instance, run.geometry);
+      layout.value = run;
+    } catch (error) {
+      if (mine === generation) layoutError.value = error;
+      return false;
+    } finally {
+      if (mine === generation) layingOut.value = false;
+    }
     ready.value = true;
     return true;
   }
@@ -141,10 +169,24 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     cy.value?.resize();
   }
 
+  // ELK takes longer to load than to lay a graph out; loading it while the data
+  // file and Cytoscape load takes that time off the first drawing.
+  onMounted(warmUpLayout);
   onBeforeUnmount(() => {
     generation += 1;
     destroy();
   });
 
-  return { cy, ready, mount, setStyle, showOnly, markSelection, resize };
+  return {
+    cy,
+    ready,
+    layingOut,
+    layout,
+    layoutError,
+    mount,
+    setStyle,
+    showOnly,
+    markSelection,
+    resize,
+  };
 }

@@ -1,20 +1,14 @@
 // beadloom:component=site-shared
-// Cytoscape.js with the ELK layout, loaded in the browser only and registered once.
+// Cytoscape.js, loaded in the browser only and once.
 //
-// Both libraries touch the DOM at import time, so they are imported lazily:
-// VitePress renders every page on the server first, where they cannot load.
+// Cytoscape touches the DOM at import time, so it is imported lazily: VitePress
+// renders every page on the server first, where it cannot load. The layout is
+// not Cytoscape's: ELK runs in a worker of its own (`shared/elk`).
 
 let loading = null;
 
-/** The `cytoscape` factory with the `elk` layout registered. */
+/** The `cytoscape` factory. */
 export function loadCytoscape() {
-  if (!loading) {
-    loading = Promise.all([import("cytoscape"), import("cytoscape-elk")]).then(
-      ([{ default: cytoscape }, { default: elk }]) => {
-        cytoscape.use(elk);
-        return cytoscape;
-      }
-    );
-  }
+  loading ||= import("cytoscape").then(({ default: cytoscape }) => cytoscape);
   return loading;
 }

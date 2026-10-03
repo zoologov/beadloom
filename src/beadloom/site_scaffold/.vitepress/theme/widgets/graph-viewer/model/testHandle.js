@@ -6,7 +6,9 @@
 // Cytoscape resolved, each node's status and its border, the edge styles it drew — each edge's arrows, the colours
 // along its line and its opacity — and what a selection marked —
 // the neighbourhood, the dimmed nodes, the impact rings and risks, and the
-// impact summary the panel shows. The handle exists only when
+// impact summary the panel shows — and the layout: whether ELK ran for it or it
+// was already laid out, and ELK's geometry, a box for every node and a route for
+// every edge in the graph's coordinates. The handle exists only when
 // `navigator.webdriver` is true, which a real reader's browser never reports,
 // so the tested bundle and the deployed one are the same bundle.
 
@@ -94,6 +96,18 @@ function readers(source) {
       const summary = source.impactSummary();
       return summary ? JSON.parse(JSON.stringify(summary)) : null;
     },
+    // How the drawn layout was had: `{ source, ms }`, "worker" when ELK ran for
+    // this viewer and "cache" when the page had laid the same graph out already.
+    layoutRun: () => {
+      const run = source.layout();
+      return run ? { source: run.source, ms: run.ms } : null;
+    },
+    // ELK's geometry: `{ boxes, routes }`, each box `{ x1, y1, x2, y2 }` and each
+    // route `{ source, target, sections }`, a section a list of `{ x, y }` points.
+    elkGeometry: () => {
+      const run = source.layout();
+      return run ? JSON.parse(JSON.stringify(run.geometry)) : null;
+    },
     drawnEdgeKinds: () => [...new Set(cy().edges().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
     edgeStyle: (key) => {
       const edge = cy().edges().filter((e) => e.data("styleKey") === key)[0];
@@ -144,9 +158,10 @@ function readers(source) {
  * Expose the handle over `source` when the browser is automated; return its disposer.
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
- * `arranging()` and `impactSummary()`. The handle is the last viewer's to
- * install it, and the disposer removes it only while it is still this one's, so
- * a viewer that leaves the page does not take a live neighbour's handle along.
+ * `arranging()`, `impactSummary()` and `layout()`, the canvas's last layout run.
+ * The handle is the last viewer's to install it, and the disposer removes it only
+ * while it is still this one's, so a viewer that leaves the page does not take a
+ * live neighbour's handle along.
  */
 export function exposeTestHandle(source) {
   if (typeof window === "undefined" || navigator.webdriver !== true) return () => {};
