@@ -13,6 +13,8 @@
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
 
+**PR #91 (2026-10-03):** opened at `5aeaf18c` after the owner's look ("Все ок") and README wording; every required check green, but the advisory `site-adopters` failed at collection (two TUI test modules import `textual` unguarded) — 0 of 81 slow tests ran. `beadloom-ujzb.26` `588dbbe2`: the two modules guarded, a self-check collects the suite in each pytest job's own extras (red on the old tree), the job unchanged. Reproduced locally in the job's extras: rc 2 before, 81 collected and passed after (two browser tests needed a rerun after a Chromium crash under load).
+
 **`beadloom-ujzb.25` closed (2026-10-02):** `c4c664e1` — nine refs' documents made true for the re-review's fixes; 60 stale → 0 (673 fresh, surface re-recorded); pytest 0 failed; `beadloom ci` rc 0. README untouched (a wording question is open with the owner).
 
 **`beadloom-ujzb.24` closed (2026-10-02):** `c6120e0b`, `6bcf02b7` — m3: JVM and Swift layouts name only the folders they read, so code beside a module is scanned; a file directly beside one is named ("Not read: …"); m4: our own portal recognised by the scaffold's marker — ignored, and no longer scanned as source after `init --force`; m5: a package split across folders resolves by the file named after the imported class, else to no edge; m6: the `site-adopters` filter derived by tracing the product code the slow tests run (84 files were unnamed). Six fixtures byte-identical. Combined tree: pytest 1 failed (stale pairs), slow 81 passed, `beadloom ci` rc 1 on 60 stale pairs.
@@ -154,7 +156,8 @@
 | `beadloom-ujzb.22` | review | ✓ done | re-review of R2's findings |
 | `beadloom-ujzb.23` | fix | ✓ done | re-review: site findings |
 | `beadloom-ujzb.24` | fix | ✓ done | re-review: init and CI findings |
-| `beadloom-ujzb.25` | docs | ✓ done | pairs the fixes make stale | R2: project text F1, F3, F4 |
+| `beadloom-ujzb.25` | docs | ✓ done | pairs the fixes make stale |
+| `beadloom-ujzb.26` | fix | ✓ done | site-adopters collection on GitHub | R2: project text F1, F3, F4 |
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
 | `beadloom-fht7` | R2 review | ✓ done | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | ✓ done | adopter docs |
