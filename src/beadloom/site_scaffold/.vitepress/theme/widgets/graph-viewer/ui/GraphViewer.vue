@@ -15,6 +15,10 @@
 // laying the graph out and the toolbar keeps working; a layout that fails is
 // reported above the canvas, as a data file that cannot be read is.
 //
+// A node's edges are drawn bundled, several along one line. When the pointer is
+// on a line that more than one edge runs along, a note over the canvas names
+// them, since the line alone cannot say which edges it carries.
+//
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
 // embedded view are one UI. The panel shows what the page puts in its `panel`
@@ -69,6 +73,8 @@ import { DEFAULT_MODE, modeOf } from "../model/modes.js";
 
 /** The selection's value for the neighbourhood, the default; the other is `IMPACT_VIEW`. */
 const NEIGHBOURHOOD_VIEW = "neighbourhood";
+/** How many edges along a hovered line the note names before it counts the rest. */
+const NAMED_EDGES = 8;
 
 const props = defineProps({
   mode: { type: String, default: DEFAULT_MODE },
@@ -197,6 +203,20 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
+// The edges along the line under the pointer, named, when the line carries more than one.
+const bundleNote = computed(() => {
+  const ids = canvas.hoveredEdges.value;
+  const instance = canvas.cy.value;
+  if (ids.length < 2 || !instance) return "";
+  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const named = ids.slice(0, NAMED_EDGES).map((id) => {
+    const edge = instance.getElementById(id);
+    return `${labelOf(edge.data("source"))} → ${labelOf(edge.data("target"))}`;
+  });
+  const rest = ids.length - named.length;
+  return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
+});
+
 // How much of the canvas's right edge the panel lies over: in the page it
 // overlays the canvas, in full screen it sits beside it and covers nothing.
 function coveredRight() {
@@ -285,6 +305,9 @@ onMounted(() => {
     state: () => ({ ...state, mode: props.mode }),
     impactSummary: () => summary.value,
     layout: () => canvas.layout.value,
+    bundles: () => canvas.bundles.value,
+    junctions: () => canvas.junctions(),
+    hoveredEdges: () => canvas.hoveredEdges.value,
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -350,6 +373,9 @@ onBeforeUnmount(() => disposeHandle());
         data-testid="layout-status"
       >
         Laying out the graph…
+      </p>
+      <p v-if="bundleNote" class="bl-viewer-bundle-note" role="status" data-testid="edge-bundle-note">
+        {{ bundleNote }}
       </p>
       <div
         ref="container"
@@ -483,6 +509,21 @@ onBeforeUnmount(() => disposeHandle());
   z-index: 1;
   margin: 0;
   color: var(--vp-c-text-2);
+}
+.bl-viewer-bundle-note {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 2;
+  max-width: 60%;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  font-size: 12px;
+  pointer-events: none;
 }
 .bl-viewer-canvas:focus-visible {
   outline: 2px solid var(--vp-c-brand-1);

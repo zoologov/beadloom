@@ -30,6 +30,8 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
+    # Trunks, buses and junction dots drawn over ELK's routes (BDL-077 E3).
+    "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
     "data-version.spec.js": "site-architecture-data",

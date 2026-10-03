@@ -17,6 +17,13 @@
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
 // a node's fill is its distance ring's tone, and a risky node carries a dashed
 // danger outline.
+//
+// A dimmed node is drawn see-through; a dimmed edge is drawn opaque in its colour
+// faded towards the background. Edges bundled into one trunk are drawn along the
+// same line, and see-through ones would add up there: ten at a seventh of full
+// strength draw the trunk at four fifths. Opaque faded ones draw it at the
+// strength of one. Every edge along a hovered line is drawn wider, so a trunk
+// under the pointer shows every edge it carries.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
@@ -223,6 +230,23 @@ function edgeRules(tokens) {
   ];
 }
 
+/** An edge outside the selection: its own look faded towards the background, at full opacity. */
+function dimmedEdgeRules(tokens) {
+  const fade = (colour) => mixRgb(colour, tokens.bg, DIMMED_OPACITY);
+  return Object.entries(EDGE_STYLES).map(([key, look]) => {
+    const colour = tokens[look.tone];
+    return {
+      selector: `edge.is-dimmed[styleKey = "${key}"]`,
+      style: {
+        "line-color": fade(colour),
+        "line-gradient-stop-colors": [fade(mixRgb(colour, tokens.bg, SOURCE_END_SHARE)), fade(colour)],
+        "target-arrow-color": fade(colour),
+        "text-opacity": DIMMED_OPACITY,
+      },
+    };
+  });
+}
+
 function selectionRules(tokens) {
   const rings = RING_TONES.flatMap((tone, ring) => [
     {
@@ -247,7 +271,9 @@ function selectionRules(tokens) {
         "outline-opacity": 1,
       },
     },
-    { selector: ".is-dimmed", style: { opacity: DIMMED_OPACITY } },
+    { selector: "node.is-dimmed", style: { opacity: DIMMED_OPACITY } },
+    ...dimmedEdgeRules(tokens),
+    { selector: "edge.is-along-hover", style: { width: GEOMETRY.walkEdgeWidth, "z-index": 11 } },
   ];
 }
 

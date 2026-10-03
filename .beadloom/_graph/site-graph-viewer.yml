@@ -10,6 +10,7 @@ nodes:
     # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
     # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
     tests:
+      - src/beadloom/site_scaffold/e2e/bundles.spec.js
       - src/beadloom/site_scaffold/e2e/colours.spec.js
       - src/beadloom/site_scaffold/e2e/graph-viewer-instances.spec.js
       - src/beadloom/site_scaffold/e2e/routes.spec.js

@@ -13,6 +13,15 @@
 //   common endpoint count against each other: edges that leave or reach one node
 //   meet there by design.
 //
+// And five things about how a node's edges fan out, for the trunks and buses:
+//
+// - the channels a node's edges leave it in, per side and direction: the heights
+//   of their first horizontal runs, one per step of a staircase;
+// - the excess steps over a drawing, every node's steps beyond two;
+// - the lanes a node's edges take across a line some distance out;
+// - the points where routes that ran together part, found the slow way;
+// - the pairs of edges with no common end drawn along one line.
+//
 // Nothing here knows a project's names; a box, an edge and a point are plain data.
 
 /** How many samples an edge is read at. */
@@ -190,4 +199,198 @@ export function sharing(edges) {
     meanShared: shares.reduce((sum, share) => sum + share, 0) / (shares.length || 1),
     indistinct: edges.filter((_, index) => shares[index] > 0.5).map((edge) => edge.id),
   };
+}
+
+/** Two coordinates closer than this are one, in layout units. */
+const SAME = 0.5;
+const same = (a, b) => Math.abs(a - b) < SAME;
+
+/** `route`'s points read from `node`'s end: as drawn from a source, reversed into a target. */
+function fromEnd(route, node) {
+  return route.source === node ? route.points : [...route.points].reverse();
+}
+
+/** The side of `box` a route read from its end leaves by: "top", "bottom", or null for another side. */
+function sideLeft(points, box) {
+  if (same(points[0].y, box.y1)) return "top";
+  if (same(points[0].y, box.y2)) return "bottom";
+  return null;
+}
+
+/** The height of a route's first horizontal run, read from its end, or null when it has none. */
+function firstChannel(points) {
+  for (let i = 1; i < points.length; i += 1) {
+    if (same(points[i - 1].y, points[i].y) && !same(points[i - 1].x, points[i].x)) return points[i - 1].y;
+  }
+  return null;
+}
+
+/**
+ * The channels `node`'s edges leave it in: a map from "side/direction" to the
+ * set of heights, to the unit, of their first horizontal runs. A fan drawn as a
+ * staircase has one height per step; a bus has one.
+ */
+export function channelsOf(routes, node, box) {
+  const channels = new Map();
+  for (const route of routes) {
+    if (route.source !== node && route.target !== node) continue;
+    const points = fromEnd(route, node);
+    const side = sideLeft(points, box);
+    const channel = firstChannel(points);
+    if (!side || channel === null) continue;
+    const key = `${side}/${route.source === node ? "out" : "in"}`;
+    if (!channels.has(key)) channels.set(key, new Set());
+    channels.get(key).add(Math.round(channel));
+  }
+  return channels;
+}
+
+/**
+ * How many steps a drawing's fans have beyond the two a node may take on its
+ * own: over every node in `leaves` with two edges or more, its first-run heights
+ * less two, and none below zero.
+ */
+export function excessSteps(routes, leaves) {
+  const byNode = new Map();
+  for (const route of routes) {
+    for (const node of [route.source, route.target]) {
+      if (!leaves.has(node)) continue;
+      if (!byNode.has(node)) byNode.set(node, []);
+      byNode.get(node).push(route);
+    }
+  }
+  let excess = 0;
+  for (const [node, own] of byNode) {
+    if (own.length < 2) continue;
+    const heights = new Set();
+    for (const route of own) {
+      const channel = firstChannel(fromEnd(route, node));
+      if (channel !== null) heights.add(Math.round(channel));
+    }
+    excess += Math.max(0, heights.size - 2);
+  }
+  return excess;
+}
+
+/**
+ * Where `node`'s edges cross a line `distance` units out from each side they
+ * leave by: `{ top, bottom }`, each `{ lanes, others }` — the lanes, distinct to
+ * the unit, and the other ends of the edges that leave by that side.
+ */
+export function lanesAt(routes, node, box, distance) {
+  const sides = {};
+  for (const route of routes) {
+    if (route.source !== node && route.target !== node) continue;
+    const points = fromEnd(route, node);
+    const side = sideLeft(points, box);
+    if (!side) continue;
+    const y = side === "bottom" ? box.y2 + distance : box.y1 - distance;
+    sides[side] ||= { xs: [], others: [] };
+    sides[side].others.push(route.source === node ? route.target : route.source);
+    for (let i = 1; i < points.length; i += 1) {
+      const a = points[i - 1];
+      const b = points[i];
+      if (same(a.y, b.y)) {
+        if (same(a.y, y)) sides[side].xs.push(a.x, b.x);
+        continue;
+      }
+      if ((a.y - y) * (b.y - y) <= 0) {
+        sides[side].xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
+        break;
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(sides).map(([side, { xs, others }]) => [side, { lanes: new Set(xs.map(Math.round)).size, others }])
+  );
+}
+
+/** The compass directions a polyline leaves `point` in, when the point lies on it; empty when not. */
+function directionsAt(points, point) {
+  const directions = new Set();
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (distanceToSegment(point, a, b) > SAME) continue;
+    for (const end of [a, b]) {
+      const dx = end.x - point.x;
+      const dy = end.y - point.y;
+      if (Math.abs(dx) < SAME && Math.abs(dy) < SAME) continue;
+      directions.add(Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "E" : "W") : dy > 0 ? "S" : "N");
+    }
+  }
+  return directions;
+}
+
+/**
+ * Where drawn routes branch: `[{ x, y, edges }]`. A point branches when two
+ * routes through it share a direction out of it and differ in another — they ran
+ * together and part there. Two routes that cross share no direction, and two
+ * that run on together differ in none. Read by comparing every route with every
+ * other at every corner, the slow way, so it checks a faster finder.
+ */
+export function branchPoints(routes) {
+  const found = [];
+  const boxes = routes.map(({ points }) => ({
+    x1: Math.min(...points.map((p) => p.x)) - SAME,
+    x2: Math.max(...points.map((p) => p.x)) + SAME,
+    y1: Math.min(...points.map((p) => p.y)) - SAME,
+    y2: Math.max(...points.map((p) => p.y)) + SAME,
+  }));
+  for (const route of routes) {
+    for (const point of route.points.slice(1, -1)) {
+      if (found.some((f) => Math.abs(f.x - point.x) < SAME && Math.abs(f.y - point.y) < SAME)) continue;
+      const through = [];
+      routes.forEach((other, i) => {
+        const b = boxes[i];
+        if (point.x < b.x1 || point.x > b.x2 || point.y < b.y1 || point.y > b.y2) return;
+        const directions = directionsAt(other.points, point);
+        if (directions.size) through.push({ id: other.id, directions });
+      });
+      const edges = new Set();
+      for (const a of through) {
+        for (const b of through) {
+          if (a === b) continue;
+          const shared = [...a.directions].some((d) => b.directions.has(d));
+          const differ = a.directions.size !== b.directions.size || [...a.directions].some((d) => !b.directions.has(d));
+          if (shared && differ) edges.add(a.id);
+        }
+      }
+      if (edges.size) found.push({ x: point.x, y: point.y, edges: [...edges].sort() });
+    }
+  }
+  return found;
+}
+
+/**
+ * The pairs of edges with no common endpoint whose routes run along one line for
+ * more than a unit: `["a|b", …]`, sorted. Edges that share an end may share a
+ * line by design, in a bundle; two that do not are drawn as one there.
+ */
+export function collinearPairs(routes) {
+  const lines = { x: new Map(), y: new Map() };
+  for (const route of routes) {
+    for (let i = 1; i < route.points.length; i += 1) {
+      const [a, b] = [route.points[i - 1], route.points[i]];
+      const axis = same(a.y, b.y) ? "y" : same(a.x, b.x) ? "x" : null;
+      if (!axis) continue;
+      const along = axis === "y" ? "x" : "y";
+      const key = Math.round(a[axis]);
+      if (!lines[axis].has(key)) lines[axis].set(key, []);
+      lines[axis].get(key).push({ route, lo: Math.min(a[along], b[along]), hi: Math.max(a[along], b[along]) });
+    }
+  }
+  const pairs = new Set();
+  for (const byLine of Object.values(lines)) {
+    for (const segments of byLine.values()) {
+      for (let i = 0; i < segments.length; i += 1) {
+        for (let j = i + 1; j < segments.length; j += 1) {
+          const [s, t] = [segments[i], segments[j]];
+          if (s.route === t.route || sharesAnEnd(s.route, t.route)) continue;
+          if (Math.min(s.hi, t.hi) - Math.max(s.lo, t.lo) > 1) pairs.add([s.route.id, t.route.id].sort().join("|"));
+        }
+      }
+    }
+  }
+  return [...pairs].sort();
 }

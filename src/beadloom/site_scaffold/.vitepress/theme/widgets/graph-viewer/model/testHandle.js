@@ -9,7 +9,9 @@
 // impact summary the panel shows — and the layout: whether ELK ran for it or it
 // was already laid out, and ELK's geometry, a box for every node and a route for
 // every edge in the graph's coordinates — and the same drawn: each node's box
-// and each edge's route as Cytoscape draws them. The handle exists only when
+// and each edge's route as Cytoscape draws them — and the bundles: the routes
+// with each node's fans bundled, the trunks and buses, the junction dots for the
+// edges drawn now, and the edges along a hovered line. The handle exists only when
 // `navigator.webdriver` is true, which a real reader's browser never reports,
 // so the tested bundle and the deployed one are the same bundle.
 
@@ -140,6 +142,21 @@ function readers(source) {
     // and control points. `loop` says the edge joins a node to itself or to a box
     // that holds it; `label` is where its label sits. Graph coordinates.
     edgeRoutes: () => cy().edges().filter((edge) => edge.visible()).map(drawnRouteOf),
+    // The routes with each node's fans bundled: `{ ms, routes, trunks, buses }`.
+    // `routes` maps each routed edge's id to its polyline, graph coordinates;
+    // a trunk is `{ node, box, direction, side, members }`, a bus `{ node, side,
+    // direction, channel, members }`; `ms` is how long the bundling took.
+    bundles: () => {
+      const bundles = source.bundles();
+      if (!bundles) return null;
+      const { ms, paths: routes, trunks, buses } = bundles;
+      return JSON.parse(JSON.stringify({ ms, routes, trunks, buses }));
+    },
+    // The junction dots drawn now, `[{ x, y, edges }]`: where the routes of the
+    // edges drawn part, and which edges part there.
+    junctions: () => source.junctions(),
+    // The ids of the edges drawn along the line under the pointer.
+    hoveredEdges: () => [...source.hoveredEdges()].sort(),
     drawnEdgeKinds: () => [...new Set(cy().edges().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
     edgeStyle: (key) => {
       const edge = cy().edges().filter((e) => e.data("styleKey") === key)[0];
@@ -190,7 +207,9 @@ function readers(source) {
  * Expose the handle over `source` when the browser is automated; return its disposer.
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
- * `impactSummary()` and `layout()`, the canvas's last layout run.
+ * `impactSummary()`, `layout()`, the canvas's last layout run, `bundles()`, its
+ * routes with the fans bundled, `junctions()`, the dots drawn now, and
+ * `hoveredEdges()`, the ids of the edges along the line under the pointer.
  * The handle is the last viewer's to install it, and the disposer removes it only
  * while it is still this one's, so a viewer that leaves the page does not take a
  * live neighbour's handle along.

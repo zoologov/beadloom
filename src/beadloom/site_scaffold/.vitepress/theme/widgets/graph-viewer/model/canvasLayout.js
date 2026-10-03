@@ -8,10 +8,16 @@
 //
 // The answer is drawn as ELK computed it. Every leaf stands at the centre of its
 // ELK box, through a `preset` layout; every compound is sized to its ELK box; and
-// every edge follows its ELK route, its ends and corners given relative to the
-// centres of its nodes (`lib/routes.js`). An edge into a box that holds its other
-// end is the exception: Cytoscape always draws it as a loop inside the box.
+// every edge follows its ELK route with its node's fans bundled (`lib/bundles.js`),
+// its ends and corners given relative to the centres of its nodes
+// (`lib/routes.js`). An edge into a box that holds its other end is the
+// exception: Cytoscape always draws it as a loop inside the box.
+//
+// The bundling reads one layout and the graph it was computed for, and is kept
+// beside that layout: a node page or full screen that draws the same layout
+// draws the same bundles without computing them again.
 
+import { bundleRoutes } from "../lib/bundles.js";
 import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../lib/routes.js";
 
 /** Node sizes as Cytoscape lays them out: the shape, without the label. */
@@ -98,23 +104,55 @@ export function fitCompounds(cy, geometry) {
     });
 }
 
-/** Draw every edge of `cy` but a loop along its route in `geometry`. */
-function routeEdges(cy, geometry) {
+/** The bundles computed for each layout: one layout is one graph's, and its bundles are too. */
+const bundlesByLayout = new WeakMap();
+
+/** What the bundling reads of `cy` and `geometry`: every node's container, and the edges drawn along a route. */
+function drawingOf(cy, geometry) {
+  const nodes = cy.nodes().map((node) => ({ id: node.id(), parent: node.isChild() ? node.parent().id() : null }));
+  const edges = cy
+    .edges()
+    .filter((edge) => geometry.routes[edge.id()] && !isLoop(edge))
+    .map((edge) => ({ id: edge.id(), source: edge.source().id(), target: edge.target().id() }));
+  const paths = Object.fromEntries(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
+  return { nodes, edges, boxes: geometry.boxes, paths };
+}
+
+/**
+ * The routes of `cy` with its fans bundled from `geometry`'s (`lib/bundles.js`):
+ * `{ paths, trunks, buses, ms }`, `ms` the time the bundling took when it ran.
+ */
+function bundlesOf(cy, geometry) {
+  if (!bundlesByLayout.has(geometry)) {
+    const started = performance.now();
+    const bundles = bundleRoutes(drawingOf(cy, geometry));
+    bundlesByLayout.set(geometry, Object.freeze({ ...bundles, ms: performance.now() - started }));
+  }
+  return bundlesByLayout.get(geometry);
+}
+
+/** Draw every edge of `cy` but a loop along its route in `paths`, between the boxes of `geometry`. */
+function routeEdges(cy, geometry, paths) {
   cy.batch(() => {
     cy.edges().forEach((edge) => {
-      const route = geometry.routes[edge.id()];
+      const path = paths[edge.id()];
       const sourceBox = geometry.boxes[edge.source().id()];
       const targetBox = geometry.boxes[edge.target().id()];
-      if (!route || !sourceBox || !targetBox || isLoop(edge)) return;
-      const segments = segmentsOf(pathOf(route), centreOf(sourceBox), centreOf(targetBox));
+      if (!path || !sourceBox || !targetBox) return;
+      const segments = segmentsOf(path, centreOf(sourceBox), centreOf(targetBox));
       if (segments) edge.data("route", segments);
     });
   });
 }
 
-/** Draw `cy` as `geometry` lays it out: leaves placed, compounds sized, edges routed; resolves when drawn. */
+/**
+ * Draw `cy` as `geometry` lays it out: leaves placed, compounds sized, edges
+ * routed with their fans bundled; resolves to the bundles when it is drawn.
+ */
 export async function applyGeometry(cy, geometry) {
   await placeLeaves(cy, geometry);
   fitCompounds(cy, geometry);
-  routeEdges(cy, geometry);
+  const bundles = bundlesOf(cy, geometry);
+  routeEdges(cy, geometry, bundles.paths);
+  return bundles;
 }

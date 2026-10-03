@@ -1,5 +1,8 @@
 // Edges are drawn along the routes ELK computed, around every box, and boxes at ELK's size.
 //
+// A node's fans are then bundled from those routes (`bundles.spec.js`), so an
+// edge is drawn along its route as the viewer computed it from ELK's.
+//
 // In an earlier version the viewer placed the nodes where ELK put them and threw
 // ELK's routes away: Cytoscape drew each edge as a curve from centre to centre,
 // so on a graph of 130 nodes 232 of 453 edges passed through a box they did not
@@ -16,7 +19,6 @@ import {
   deviation,
   distanceToPolyline,
   edgesThroughBoxes,
-  polylineOf,
   sharing,
 } from "./support/routeMetrics.js";
 import {
@@ -91,12 +93,14 @@ const DRAWINGS = [
 
 for (const drawing of DRAWINGS) {
   test.describe(`on ${drawing.name}`, () => {
-    test("every edge is drawn along ELK's route with its label on it, and only an edge into its own box is a loop", async ({
+    // The route is ELK's with a node's fans bundled (`bundles.spec.js` checks
+    // the bundling against ELK's routes); this case checks it is drawn as computed.
+    test("every edge is drawn along its route with its label on it, and only an edge into its own box is a loop", async ({
       page,
       request,
     }) => {
       const parents = await drawing.open(page, request);
-      const { routes: elk } = await viewer(page, "elkGeometry");
+      const { routes: computed } = await viewer(page, "bundles");
       const drawn = await viewer(page, "edgeRoutes");
       requireShape(drawn.some((r) => !r.loop), BETWEEN_TWO_BOXES);
 
@@ -105,7 +109,7 @@ for (const drawing of DRAWINGS) {
       expect(drawn.filter((r) => !r.routed).map((r) => r.id).sort()).toEqual(loops);
       const routed = drawn.filter((r) => r.routed);
       const offRoute = routed
-        .map((r) => ({ id: r.id, by: deviation(r.points, polylineOf(elk[r.id].sections)) }))
+        .map((r) => ({ id: r.id, by: deviation(r.points, computed[r.id]) }))
         .filter((r) => r.by > ROUTE_TOLERANCE);
       expect(offRoute).toEqual([]);
       const labelsOff = routed.filter((r) => distanceToPolyline(r.label, r.points) > ROUTE_TOLERANCE);

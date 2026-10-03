@@ -134,9 +134,15 @@ test("clearing the selection shows the whole graph again", async ({ page, reques
 
 // The rest of the graph is its nodes AND its edges: an edge the walk did not
 // take is dimmed, or hidden with "Hide the rest", and every edge it took is
-// shown at full strength.
+// shown at full strength. A dimmed edge is drawn opaque in a colour faded towards
+// the background, so edges drawn along one trunk do not darken it: its line
+// colour differs from the one it is drawn in with nothing selected.
 const OUTSIDE_LOOKS = [
-  { choice: "dimmed", query: "", outside: (look) => look.visible && look.opacity < 1 },
+  {
+    choice: "dimmed",
+    query: "",
+    outside: (look, plain) => look.visible && look.opacity === 1 && look.lineColour !== plain.lineColour,
+  },
   { choice: "hidden", query: "&hide=1", outside: (look) => !look.visible },
 ];
 
@@ -155,13 +161,17 @@ for (const { choice, query, outside: looksOutside } of OUTSIDE_LOOKS) {
     requireShape(subject, "no node's two-step outgoing walk takes one drawn edge and leaves another out");
     const walked = new Set(walkedFrom(subject));
 
+    await openArchitecture(page);
+    const plain = Object.fromEntries((await viewer(page, "edgeLooks")).map((look) => [look.key, look]));
     await openArchitecture(page, `?focus=${subject}&depth=2&dir=out${query}`);
     await expect.poll(async () => (await viewer(page, "neighbourhood")).edges.length).toBe(walked.size);
 
     const looks = await viewer(page, "edgeLooks");
     expect(looks.length).toBeGreaterThan(walked.size);
+    const fullStrength = (look) =>
+      look.visible && look.opacity === 1 && look.lineColour === plain[look.key].lineColour;
     const wrong = looks.filter((look) =>
-      walked.has(look.key) ? !(look.visible && look.opacity === 1) : !looksOutside(look)
+      walked.has(look.key) ? !fullStrength(look) : !looksOutside(look, plain[look.key])
     );
     expect(wrong).toEqual([]);
   });
