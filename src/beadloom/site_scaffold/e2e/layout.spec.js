@@ -7,7 +7,13 @@
 
 import { test, expect } from "@playwright/test";
 import { adopterSizedGraph } from "./support/adopterGraph.js";
-import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
+import {
+  architectureData,
+  openArchitecture,
+  viewer,
+  viewerAfter,
+  waitForViewer,
+} from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 
 /** How far a drawn position may lie from ELK's, in layout units. */
@@ -23,6 +29,10 @@ const PROBE_INTERVAL_MS = 10;
  */
 const LONGEST_HOLD_MS = 1000;
 
+/** The architecture page's path, under any base. */
+const ARCHITECTURE_PAGE = /\/architecture\.html$/;
+
+const pathOf = (page) => new URL(page.url()).pathname;
 const centreOf = (box) => ({ x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 });
 const within = (point, box, slack) =>
   point.x >= box.x1 - slack &&
@@ -87,16 +97,13 @@ test("a graph drawn again is not laid out again", async ({ page, request }) => {
   expect(first.source).toBe("worker");
 
   // To the node's page and back, inside the single-page app: the module that holds the layouts stays.
-  await page.getByRole("link", { name: "Open the node's page →" }).click();
-  await page.waitForURL((url) => !url.pathname.endsWith("/architecture.html"));
-  await waitForViewer(page);
-  await page.evaluate(() => (window.__previousViewer = window.__beadloomViewer));
-  await page.goBack();
-  await page.waitForFunction(
-    () => window.__beadloomViewer && window.__beadloomViewer !== window.__previousViewer && window.__beadloomViewer.ready(),
-    null,
-    { timeout: 45_000 }
-  );
+  // Each step waits for the next page's own viewer: one read before the node page is
+  // drawn reads the architecture page's, and the node page's can then answer for the
+  // way back, on a canvas of another shape.
+  await viewerAfter(page, () => page.getByRole("link", { name: "Open the node's page →" }).click());
+  expect(pathOf(page)).not.toMatch(ARCHITECTURE_PAGE);
+  await viewerAfter(page, () => page.goBack());
+  expect(pathOf(page)).toMatch(ARCHITECTURE_PAGE);
 
   expect((await viewer(page, "layoutRun")).source).toBe("cache");
   expect(await viewer(page, "positions")).toEqual(positions);

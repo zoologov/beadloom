@@ -22,6 +22,28 @@ export async function waitForViewer(page) {
   });
 }
 
+/**
+ * Do `navigate`, a move to another page inside the single-page app, and wait for
+ * the viewer of the page it leads to.
+ *
+ * The app changes the URL before it has drawn the next page, so for a while the
+ * page being left is still drawn and its viewer is still installed and ready.
+ * Neither the URL nor "a ready viewer" says which page's viewer answers; only a
+ * handle other than the one installed before the move does.
+ */
+export async function viewerAfter(page, navigate) {
+  await page.evaluate(() => (window.__viewerBeforeMove = window.__beadloomViewer));
+  await navigate();
+  await page.waitForFunction(
+    () => {
+      const handle = window.__beadloomViewer;
+      return Boolean(handle) && handle !== window.__viewerBeforeMove && handle.ready();
+    },
+    null,
+    { timeout: 45_000 }
+  );
+}
+
 /** Call a read-only method of the test handle and return its answer. */
 export function viewer(page, method, ...args) {
   return page.evaluate(([name, params]) => window.__beadloomViewer[name](...params), [
