@@ -41,7 +41,12 @@ ORTHOGONAL`); `cytoscape-elk` keeps only node positions and discards them.
       at most 3% (today 14.4%), on this repository's graph and the adopter-sized one.
 - [ ] Edges are drawn as right-angled routes with arrowheads that enter a box on a side.
 - [ ] Bridges show where a highlighted edge (selection, neighbourhood, impact, hover) crosses
-      another edge, so the highlighted line can be followed.
+      another edge, so the highlighted line can be followed; no bridges on other edges.
+- [ ] The whole-graph view shows top-level boxes and aggregated edges (41 instead of 453 on
+      this repository's graph), and zooming in opens boxes level by level down to every node
+      and routed edge, without the layout jumping between levels.
+- [ ] No node's edges form a staircase: a high-degree node's edges stay within a bounded width
+      around it (bound fixed in the RFC from measurement).
 - [ ] The viewer stays as fast as today: frame time at the whole-graph fit and at zoom 1 no
       worse than today's on both graphs; first render at most 15% slower.
 - [ ] The page stays responsive while ELK lays out (0.5 s here, 2.7 s at adopter size today, on
@@ -56,25 +61,32 @@ ORTHOGONAL`); `cytoscape-elk` keeps only node positions and discards them.
 - Editing the diagram with live re-routing.
 - Ports pinned to fixed points on a side (Visio-style); ELK 0.12 crashes on them with
   compounds, and they bring back shared trunks.
+- Arrange (dragging boxes): removed by the owner's ruling.
 - Bridges on every crossing at every zoom (measured: thousands per graph, up to 500 per screen;
   they read as texture).
 - Changing ELK's layer assignment or node order.
 
-## Open questions for the owner
+## Owner's rulings (2026-10-03)
 
-These decide the user stories marked *pending*:
+1. **Arrange is removed.** Boxes are not draggable; routes never go stale.
+2. **Edges from a node to its own container stay loops**, as today (19 of 453).
+3. **Bridges only on highlighted edges**: neighbourhood, impact, hover.
+4. **The overview works like a map** (semantic zoom): zoomed out, fewer and larger things —
+   top-level boxes and aggregated edges between them; zooming in, boxes open and detail fills
+   in, down to every node and every routed edge. Fewer edges on screen also keeps bridges few.
+5. **The staircase from high-degree nodes is solved in this work item**; the approach is chosen
+   by measurement in the RFC (candidates below).
 
-1. **Arrange (dragging a box).** A second ELK run puts the node back, so routes cannot follow a
-   drag. Options: the moved node's edges become curves; routes are off while arranging; Arrange
-   is removed.
-2. **Edges from a node to its own container** (19 of 453). Cytoscape draws them as loops in any
-   style. Options: keep loops; hide them; show them in the card only.
-3. **Bridges**: only on highlighted edges (recommended) or on all edges above a zoom.
-4. **The overview**: at the whole-graph fit ELK packs parallel edges under a pixel apart and
-   they merge into grey bands. Whether this work item includes a probe of fewer edges in the
-   overview (e.g. edges between containers merged into one line with a count when zoomed out).
-5. **High-degree nodes**: ELK fans their edges into a staircase (about 60 steps from
-   `cli-commands`). Whether this work item addresses the layout, or leaves it.
+Measured for ruling 4 on this repository's graph: at the domain level (12 top-level boxes) the
+453 drawn edges become 41 aggregated edges (the heaviest carries 30), and 165 edges stay inside
+a domain until it is opened. `cli-commands`, the largest fan (70 edges), becomes 10 aggregated
+edges at that level.
+
+Candidates for ruling 5, to be measured in the RFC: aggregation at the overview (ruling 4
+already turns the 70-edge fan into 10); ELK edge merging for a node above a fan-out threshold,
+so its edges share one trunk and branch near their targets (a bus); ports spread over more than
+one side of the hub; and lower ELK priority for a composition root's edges, so they stop pulling
+the layout.
 
 ## User Stories
 
@@ -90,17 +102,30 @@ it enters.
 - [ ] Every routed edge ends with an arrowhead on a side of its target box.
 - [ ] The A2 metric on the drawn routes: 0 edges more than half shared.
 
-### US-2: Follow a highlighted line through crossings
+### US-2: Read the overview like a map
+**As** a team member opening the architecture, **I want** the whole-graph view to show the
+top-level boxes and one aggregated edge per pair of boxes, and more detail as I zoom in,
+**so that** the overview is readable and detail appears where I look.
+
+**Acceptance criteria:**
+- [ ] At the whole-graph fit only top-level boxes and aggregated edges are drawn, each
+      aggregated edge showing how many edges it carries.
+- [ ] Zooming into a box opens it and draws its children and their edges; the boxes do not move
+      between levels.
+- [ ] Selecting a node (search, URL, card link, neighbourhood, impact, node page) opens every
+      box needed to show it and its highlighted edges, whatever the zoom.
+
+### US-3: Follow a highlighted line through crossings
 **As** a team member tracing a dependency, **I want** bridges where the highlighted edges cross
 other edges, **so that** I can follow one line across a busy area.
 
 **Acceptance criteria:**
 - [ ] With a node selected (neighbourhood or impact), each crossing of a highlighted edge with
       another drawn edge shows a bridge on the highlighted edge.
-- [ ] With nothing highlighted, no bridges are drawn (*pending* question 3).
+- [ ] With nothing highlighted, no bridges are drawn.
 - [ ] Bridges follow the theme in light and dark, and no fallback colour is drawn.
 
-### US-3: Keep every existing mode working
+### US-4: Keep every existing mode working
 **As** a user of the viewer, **I want** filters, hide, neighbourhood, impact, node pages, URL
 state and full screen to behave as before, **so that** nothing I rely on regresses.
 
@@ -108,12 +133,17 @@ state and full screen to behave as before, **so that** nothing I rely on regress
 - [ ] The existing 101 browser cases pass on this repository's portal, and the shipped suite
       passes on the six adopter fixtures.
 - [ ] Hiding nodes leaves the remaining routes intact (no re-layout needed).
+- [ ] Boxes cannot be dragged; the Arrange control is gone.
 
-### US-4: Arrange still works (*pending* question 1)
-**As** a user arranging the picture, **I want** a moved box's edges to stay attached in a way
-I can read, **so that** arranging does not break the diagram.
+### US-5: No staircase from a high-degree node
+**As** a team member reading a hub such as `cli-commands`, **I want** its many edges drawn as
+a compact bundle, **so that** one node does not take half the screen.
 
-### US-5: The page stays responsive during layout
+**Acceptance criteria:**
+- [ ] On this repository's graph, `cli-commands`'s edges at full detail fit within the bound
+      the RFC sets, and stay distinguishable by the A2 metric.
+
+### US-6: The page stays responsive during layout
 **As** a user opening a large architecture, **I want** the page to respond while the layout
 is computed, **so that** a 3x graph does not freeze the tab for seconds.
 
@@ -130,4 +160,4 @@ is computed, **so that** a 3x graph does not freeze the tab for seconds.
 - [ ] Frame-time and first-render bounds hold in the CI browser run — non-behavioural where CI
       has no GPU: the bound is stated per environment.
 - [ ] Docs: the viewer's slice pages and the portal guide describe the routes, bridges and the
-      decisions on the pending questions.
+      owner's rulings (no Arrange, loops, bridges on highlighted edges, the map-like overview).
