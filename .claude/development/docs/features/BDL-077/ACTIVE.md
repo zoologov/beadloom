@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-a6a6` (E5, bridges); then T → R → W → P.
+**Bead:** `beadloom-lb1v` (T, every PRD criterion measured); then R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -34,13 +34,15 @@
 | `beadloom-bcqk` | E3 | ✓ done | trunk and bus |
 | `beadloom-m6k7.2` | fix | ✓ done | a node id `root` collides with ELK's root |
 | `beadloom-94h4` | E4 | ✓ done | the map |
-| `beadloom-a6a6` | E5 | in progress | bridges on highlighted edges |
-| `beadloom-lb1v` | T | blocked | PRD criteria measured |
+| `beadloom-a6a6` | E5 | ✓ done | bridges on highlighted edges |
+| `beadloom-lb1v` | T | in progress | PRD criteria measured |
 | `beadloom-87o6` | R | blocked | review |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **E5 closed** `6f0d3bd0`: bridges on hovered and walk edges, none between bundle siblings or with nothing highlighted, skipped under 2 px; finding 4.5 ms here / 26.7 ms at adopter size once per selection; drawing ≤ 0.55 ms per frame; frame time unchanged within ±1.5 ms; 161 browser cases. For the owner's look: the busiest node's full neighbourhood draws 2,225 bridges (about 32 per edge) when every box is open.
 
 - **E4 closed** `c2c62eab`, `6122f46d`, `c6fc16a9`: the map. Overview here 12 boxes and 34 aggregated edges (carrying 277 of 453); at adopter size 79 drawn of 345 pairs (weight ≥ 4; 266 counted as "+N"); box displacement 0 at every level; frame at the fit 39.6 → 16.7 ms here and 162 → 16.7 ms at adopter size (the display cap), zoom ≈ 1 at adopter size 105 → 16.7. Decisions in CONTEXT: an edge with a closed box at one end joins its pair's aggregated edge; a revealed box is drawn open; the default neighbourhood opens its walk unless the node is a hub; search opens its matches; fit ignores labels. 47 existing cases now open every box first (`openEveryBox`); 148 browser cases.
 
