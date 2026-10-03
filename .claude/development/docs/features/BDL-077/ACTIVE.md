@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-m6k7.1` (a flaky E1 case on adopter portals); then E2 → E3 → E4 → E5 → T → R → W → P.
+**Bead:** `beadloom-5x4g` (E2, routes drawn); then E3 → E4 → E5 → T → R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -29,8 +29,8 @@
 | `beadloom-rcnz` | R&D | ✓ done | path A/B, map and hub probes |
 | `beadloom-7y2i` | E1 | ✓ done | ELK in a worker, elkjs 0.12 direct |
 | `beadloom-nvux` | E0 | ✓ done | Arrange removed |
-| `beadloom-m6k7.1` | fix | in progress | flaky layout-cache case on adopter portals |
-| `beadloom-5x4g` | E2 | blocked | routes drawn exactly |
+| `beadloom-m6k7.1` | fix | ✓ done | flaky layout-cache case on adopter portals |
+| `beadloom-5x4g` | E2 | in progress | routes drawn exactly |
 | `beadloom-bcqk` | E3 | blocked | trunk and bus |
 | `beadloom-94h4` | E4 | blocked | the map |
 | `beadloom-a6a6` | E5 | blocked | bridges on highlighted edges |
@@ -40,6 +40,8 @@
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-m6k7.1` closed** `14750797`: the fault was in the case (VitePress changes the URL before the next page loads, so the case read the previous viewer's handle); a `viewerAfter` helper waits for a different ready handle; reproduced deterministically (4 of 4 before, 8 of 8 after), python fixture 5 of 5 full suites green. Found: the canvas size enters ELK's input (`aspectRatio`, grid-seeded positions) but changes no box with `INCLUDE_CHILDREN` — E2 drops it so one layout per data file holds by construction.
 
 - **E0 closed** `4063628c`: Arrange removed on every page; `panOnNodes()` makes a drag on a node pan; new cases (no control, drag and long press move no node) red first; 108 browser cases. On four adopter fixtures one E1 case flaked ('worker' where 'cache' was expected after a trip to a node page and back; the canvas measured 540 px — a node page's height) → `beadloom-m6k7.1`, fixed before E2.
 
