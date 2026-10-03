@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-7y2i` (E1, ELK in a worker); then `beadloom-nvux` (E0, Arrange removed) — serialised by `beadloom waves` (shared node `site-app`); then E2 → E3 → E4 → E5 → T → R → W → P.
+**Bead:** `beadloom-nvux` (E0, Arrange removed); then E2 → E3 → E4 → E5 → T → R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -27,8 +27,8 @@
 |---|---|---|---|
 | `beadloom-m6k7` | epic | ready | BDL-077 parent |
 | `beadloom-rcnz` | R&D | ✓ done | path A/B, map and hub probes |
-| `beadloom-7y2i` | E1 | in progress | ELK in a worker, elkjs 0.12 direct |
-| `beadloom-nvux` | E0 | ready | Arrange removed |
+| `beadloom-7y2i` | E1 | ✓ done | ELK in a worker, elkjs 0.12 direct |
+| `beadloom-nvux` | E0 | in progress | Arrange removed |
 | `beadloom-5x4g` | E2 | blocked | routes drawn exactly |
 | `beadloom-bcqk` | E3 | blocked | trunk and bus |
 | `beadloom-94h4` | E4 | blocked | the map |
@@ -39,5 +39,7 @@
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **E1 closed** `d9c43d46`: ELK in a Web Worker, elkjs 0.12 direct; positions identical (max 4.5e-13 units); longest main-thread hold 2,943 → 455 ms at adopter size (113 ms while ELK runs), 746 → 180 ms here; one elkjs in the lock (`beadloom-f2we` closed); `cytoscape-elk` and `web-worker` removed; 105 browser cases (4 new). `beadloom ci` rc 1 on 18 stale pairs → W. Filed `beadloom-stcx` (P2, `vitepress dev` crash, pre-existing).
 
 - Filed from the R&D: `beadloom-f2we` (nested elkjs 0.9.3) — closed by E1.
