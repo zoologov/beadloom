@@ -74,11 +74,22 @@ _SELF_CHECK_MARKER = (
 #: What the snapshot build did, for the terminal summary; empty until a test asks.
 _SNAPSHOT_BUILD: dict[str, object] = {}
 
+#: The ``slow`` marker (BDL-076 B1): a test that installs a toolchain's
+#: dependencies or runs a production build outside Python, a minute or more. It
+#: runs when :data:`_RUN_SLOW_ENV` is ``1`` and is otherwise SKIPPED with that
+#: reason, never deselected, so a run that did not enter it says so.
+_SLOW_MARKER = (
+    "slow: installs npm dependencies or runs a production build; "
+    "skipped unless BEADLOOM_RUN_SLOW=1"
+)
+_RUN_SLOW_ENV = "BEADLOOM_RUN_SLOW"
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Install the tracked-write and contact guards, or say why one cannot fire."""
     global _GUARD
     config.addinivalue_line("markers", _SELF_CHECK_MARKER)
+    config.addinivalue_line("markers", _SLOW_MARKER)
     _GUARD = TrackedWriteGuard(_REPO_ROOT)
     # Installed after the tracked-write guard's own `git ls-files`: that call is
     # the guard infrastructure reading the tracked set, not a test's contact.
@@ -99,11 +110,23 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Mark every self-check: by its folder, or by reading the snapshot through any fixture."""
+    """Mark every self-check, and skip every slow test the run did not ask for.
+
+    A self-check is marked by its folder, or by reading the snapshot through any
+    fixture. A ``slow`` test is skipped with its reason unless
+    ``BEADLOOM_RUN_SLOW=1``.
+    """
+    run_slow = os.environ.get(_RUN_SLOW_ENV) == "1"
+    skip_slow = pytest.mark.skip(reason=f"slow: set {_RUN_SLOW_ENV}=1 to run it")
     for item in items:
         in_folder = _SELF_CHECK_DIR in Path(str(item.path)).resolve().parents
         if in_folder or _SELF_CHECK_FIXTURE in getattr(item, "fixturenames", ()):
             item.add_marker(pytest.mark.self_check)
+        # Read through getattr: the hook is also driven with a stand-in item
+        # (tests/test_self_check_snapshot.py) that carries no marker lookup.
+        closest = getattr(item, "get_closest_marker", None)
+        if not run_slow and closest is not None and closest("slow") is not None:
+            item.add_marker(skip_slow)
 
 
 def pytest_report_header(config: pytest.Config) -> list[str]:

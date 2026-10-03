@@ -7,6 +7,8 @@
 #        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
 #      tests-locale ──(the environment dimension; not in ai-techwriter's needs)
 #        site-build ──► site-e2e (browser tests; advisory, not a required check)
+#     site-adopters.yml (adopter fixtures, every stack; slow tests; advisory) runs
+#       apart: on a pull request that changes what it tests, weekly, and by hand
 #
 # gate / tests / tests-locale / site-build run in parallel on GitHub-hosted
 # runners; there is no platform dimension — it was built, priced and declined
@@ -394,9 +396,14 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: site
 
+      # This repository's graph holds every shape the suite is written about, so
+      # a case that would skip for a missing shape fails here instead
+      # (beadloom-ujzb.17); an adopter's portal, which may lack one, skips it.
       - name: Run the browser tests
         run: npm run test:e2e
         working-directory: site
+        env:
+          BEADLOOM_E2E_NO_SKIP: "1"
 
       - name: Upload the Playwright report
         if: failure()

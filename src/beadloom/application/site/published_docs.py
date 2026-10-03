@@ -30,7 +30,21 @@ Badges are injected ONLY into the copied file under ``site/docs/…``; the sourc
 ``docs/`` prose is never rewritten (no AI authoring — that is the deferred
 F4.1). The badge is a stable, marker-delimited prefix between
 :data:`BADGE_START` / :data:`BADGE_END`, so regeneration overwrites ONLY the
-badge region and leaves the authored prose byte-for-byte intact.
+badge region and leaves the authored prose intact.
+
+One change reaches the prose of the copy: a link that leaves ``docs/``. The copy
+mirrors ``docs/``, so a link to another file under it resolves as written and is
+left alone; a link to ``../README.md`` or ``../src/app.js`` would resolve beside
+the copy, where the portal publishes nothing, and fail ``vitepress build``. Such
+a link is rebased by :func:`beadloom.application.site.markdown_links.rebase_links`,
+the rule the About page and the node pages follow (BDL-076, ``beadloom-ujzb.11``).
+A link inside ``docs/`` to a file the portal does not publish becomes its text,
+since the build cannot resolve it (``beadloom-ujzb.12``).
+
+The other change is to how the prose is read, not to what it says. VitePress
+compiles a page as a Vue template, so an interpolation such as a Helm value or
+a tag Vue cannot compile is marked to be shown as written
+(:func:`beadloom.application.site.project_text.render_project_text`).
 """
 
 # beadloom:domain=application
@@ -39,7 +53,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
+
+from beadloom.application.site.markdown_links import PortalLinks
+from beadloom.application.site.project_text import render_project_text
+from beadloom.application.site.vitepress_markdown import (
+    front_matter_is_read,
+    front_matter_length,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -55,6 +77,9 @@ BADGE_END = "<!-- beadloom:badge-end -->"
 #: Boilerplate files excluded from per-node source-coverage counting (mirrors
 #: the doc_sync engine's exclusions).
 _COVERAGE_EXCLUDE = frozenset({"__init__.py", "__main__.py", "conftest.py"})
+
+#: The project directory the documentation is published from, as a path inside it.
+_DOCS_DIR = PurePosixPath("docs")
 
 
 @dataclass(frozen=True)
@@ -75,11 +100,15 @@ class PublishedDoc:
 
 
 def inject_badge(prose: str, badge_body: str) -> str:
-    """Return *prose* with *badge_body* injected as a marker-delimited prefix.
+    """Return *prose* with *badge_body* injected as a marker-delimited block at its top.
 
     The badge is wrapped between :data:`BADGE_START` / :data:`BADGE_END`. If a
     previous badge region is present it is replaced in place; the authored prose
-    after the region is preserved byte-for-byte.
+    after the region is preserved byte-for-byte. The top is below the document's
+    front matter, which VitePress reads only at the very start of a page
+    (BDL-076, ``beadloom-ujzb.21``, R2 F3-i), when gray-matter can read it: a
+    block it cannot parse fails the build at the top of a page, so the badge then
+    goes first and the block below it is Markdown (``beadloom-ujzb.23``, m1).
     """
     block = f"{BADGE_START}\n{badge_body}\n{BADGE_END}\n\n"
     if BADGE_START in prose and BADGE_END in prose:
@@ -89,7 +118,13 @@ def inject_badge(prose: str, badge_body: str) -> str:
         # re-injection is byte-stable (no accumulating blank lines).
         after = after[2:] if after.startswith("\n\n") else after.lstrip("\n")
         return f"{before}{block}{after}"
-    return f"{block}{prose}"
+    head = _page_front_matter_length(prose)
+    return f"{prose[:head]}{block}{prose[head:]}"
+
+
+def _page_front_matter_length(text: str) -> int:
+    """The front matter that stays first on the page: closed, and read by gray-matter."""
+    return front_matter_length(text, closed_only=True) if front_matter_is_read(text) else 0
 
 
 def _node_coverage_pct(
@@ -267,15 +302,43 @@ def _render_docs_index(published: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _published_sources(docs_dir: Path) -> list[Path]:
+    """Every file under *docs_dir* that is published, sorted.
+
+    Hidden and OS-junk files (``.DS_Store``) are skipped: they are
+    non-deterministic per machine and would pollute the published site.
+    """
+    return [
+        src
+        for src in sorted(docs_dir.rglob("*"))
+        if src.is_file()
+        and not any(part.startswith(".") for part in src.relative_to(docs_dir).parts)
+    ]
+
+
+def published_files(project_root: Path) -> frozenset[str]:
+    """The project paths (``docs/…``) of every file :func:`publish_docs` copies."""
+    docs_dir = project_root / "docs"
+    if not docs_dir.is_dir():
+        return frozenset()
+    return frozenset(
+        (_DOCS_DIR / src.relative_to(docs_dir).as_posix()).as_posix()
+        for src in _published_sources(docs_dir)
+    )
+
+
 def publish_docs(
     conn: sqlite3.Connection,
     out_dir: Path,
     *,
     project_root: Path,
+    portal: PortalLinks | None = None,
 ) -> list[Path]:
     """Copy ``docs/**`` into ``out_dir/docs/…`` with badges; return written paths.
 
     NEVER mutates the source ``docs/`` — badges are injected only into the copy.
+    A link in a copy that leaves ``docs/`` is rebased onto *portal*, what the
+    portal publishes; with none, such a link keeps only its text.
     Non-Markdown files are copied verbatim (no badge). A generated
     ``docs/index.md`` landing page is emitted so the ``/docs/`` nav target
     resolves. Deterministic.
@@ -288,19 +351,25 @@ def publish_docs(
     written: list[Path] = []
     out_docs = out_dir / "docs"
     published_md: list[str] = []
+    links = portal or PortalLinks()
 
-    for src in sorted(docs_dir.rglob("*")):
-        if not src.is_file():
-            continue
+    for src in _published_sources(docs_dir):
         rel = src.relative_to(docs_dir)
-        # Skip hidden / OS-junk files (e.g. ``.DS_Store``): they are
-        # non-deterministic per machine and would pollute the published site.
-        if any(part.startswith(".") for part in rel.parts):
-            continue
         dst = out_docs / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix == ".md":
-            prose = src.read_text(encoding="utf-8")
+            source_dir = (_DOCS_DIR / rel.as_posix()).parent.as_posix()
+            text = src.read_text(encoding="utf-8")
+            prose = render_project_text(
+                text,
+                links,
+                source_dir=source_dir,
+                mirrored_dir=_DOCS_DIR.as_posix(),
+                page_dir=source_dir,
+                # A closed front matter gray-matter reads stays first on the page; the
+                # badge goes below it. Any other goes below the badge, as Markdown.
+                opens_page=_page_front_matter_length(text) > 0,
+            )
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose
             dst.write_text(content, encoding="utf-8")

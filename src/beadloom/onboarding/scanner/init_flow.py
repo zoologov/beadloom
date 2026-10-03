@@ -10,11 +10,16 @@ from typing import TYPE_CHECKING, Any
 from beadloom.onboarding.scanner.agents_md import generate_agents_md
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.onboarding.scanner.doc_classify import auto_link_docs, import_docs
-from beadloom.onboarding.scanner.project_scan import scan_project
+from beadloom.onboarding.scanner.project_scan import (
+    generated_portals,
+    scan_project,
+    unscanned_portals_sentence,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.onboarding.ignore_block import PortalProbe
     from beadloom.onboarding.scanner.reindex_port import Reindexer
 
 
@@ -45,6 +50,7 @@ def non_interactive_init(
     reindex: Reindexer,
     mode: str = "bootstrap",
     force: bool = False,
+    is_portal: PortalProbe | None = None,
 ) -> dict[str, Any]:
     """Run non-interactive initialization (no prompts).
 
@@ -64,6 +70,10 @@ def non_interactive_init(
         Init mode — ``"bootstrap"`` (default), ``"import"``, or ``"both"``.
     force:
         When *True*, delete existing ``.beadloom/`` directory before init.
+    is_portal:
+        Whether a folder holds the portal ``beadloom docs site`` wrote, handed to
+        :func:`bootstrap_project` (the scaffold's marker test, supplied by the
+        caller for the reason *reindex* is).
 
     Returns
     -------
@@ -87,7 +97,7 @@ def non_interactive_init(
 
     # Execute chosen mode.
     if mode in ("bootstrap", "both"):
-        bs_result = bootstrap_project(project_root)
+        bs_result = bootstrap_project(project_root, is_portal=is_portal)
         result["bootstrap"] = bs_result
 
         # Auto-link existing docs to graph nodes before skeleton generation.
@@ -162,7 +172,9 @@ def non_interactive_init(
     return result
 
 
-def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any]:
+def interactive_init(
+    project_root: Path, *, reindex: Reindexer, is_portal: PortalProbe | None = None
+) -> dict[str, Any]:
     """Run interactive initialization wizard.
 
     Shows a menu to choose init mode, handles re-init detection,
@@ -170,7 +182,7 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
 
     *reindex* is supplied by the caller for the reason given in
     :func:`non_interactive_init` and in
-    :mod:`beadloom.onboarding.scanner.reindex_port`.
+    :mod:`beadloom.onboarding.scanner.reindex_port`; *is_portal* likewise.
 
     Returns dict with summary of what was done.
 
@@ -202,8 +214,10 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
             return result
         result["reinit"] = True
 
-    # Show project scan summary.
-    scan = scan_project(project_root)
+    # Show project scan summary: of what the bootstrap below reads, so a portal
+    # `docs site` wrote is left out of both (the re-review's finding m4).
+    portals = generated_portals(project_root, is_portal) if is_portal is not None else ()
+    scan = scan_project(project_root, skip=portals)
     console.print("\n[bold]Project scan:[/bold]")
     if scan["manifests"]:
         console.print(f"  Manifests: {escape(', '.join(scan['manifests']))}")
@@ -258,7 +272,7 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
     # Execute chosen mode.
     if mode in ("bootstrap", "both"):
         console.print("\n[bold]Bootstrapping from code...[/bold]")
-        bs_result = bootstrap_project(project_root)
+        bs_result = bootstrap_project(project_root, is_portal=is_portal)
         result["bootstrap"] = bs_result
 
         nodes = bs_result.get("nodes", [])
@@ -266,6 +280,15 @@ def interactive_init(project_root: Path, *, reindex: Reindexer) -> dict[str, Any
         preset_name = bs_result.get("preset", "monolith")
         console.print(f"  Preset: {escape(str(preset_name))}")
         console.print(f"  Generated {len(nodes)} nodes, {len(edges)} edges")
+        unread = bs_result.get("unread_swift")
+        if unread is not None and unread.sentence():
+            console.print(f"  {escape(unread.sentence())}", soft_wrap=True)
+        beside = bs_result.get("beside_modules")
+        for sentence in beside.sentences() if beside is not None else []:
+            console.print(f"  {escape(sentence)}", soft_wrap=True)
+        portal_sentence = unscanned_portals_sentence(bs_result.get("generated_portals", ()))
+        if portal_sentence:
+            console.print(f"  {escape(portal_sentence)}", soft_wrap=True)
 
         # Interactive review. The graph is on disk already: the answers below
         # decide what happens NEXT, not whether anything was written.

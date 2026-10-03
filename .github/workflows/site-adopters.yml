@@ -1,0 +1,150 @@
+# The portal on projects that are not this one (BDL-076 B3), apart from the
+# pipeline every pull request runs.
+#
+# One small fixture per claimed stack (Python, Go, JS/TS, Java, Kotlin, Swift)
+# under tests/fixtures/site/ is committed, initialised with `beadloom init`,
+# built with `beadloom docs site`, `npm ci` and `vitepress build`, and read the
+# way its adopter would read it; the shipped Playwright suite then runs on each
+# portal as its adopter runs it, with `npm run test:e2e`, and a case whose shape
+# a fixture's graph lacks skips by itself, naming the shape (beadloom-ujzb.17).
+# These are the suite's `slow` tests, which the `tests` job skips: without this
+# workflow nothing runs them. No stack toolchain is installed: `beadloom init`
+# parses the source, it does not build it.
+#
+# WHEN IT RUNS (beadloom-ujzb.20, owner ruling of 2026-10-01). It builds six
+# portals and runs the browser suite on each, about sixteen minutes measured
+# locally, so it no longer runs on every pull request:
+#
+#   pull_request       only when the change touches what it tests: the paths
+#                      below. `paths:` is GitHub's own filter, decided before a
+#                      run exists, so a pull request outside it starts no run,
+#                      takes no runner and needs no changed-files step or
+#                      third-party action. The price of that filter is that an
+#                      unstarted workflow reports no check-run, which is why this
+#                      job can never be a required status check while it is
+#                      filtered (tests/support/ci_workflows.py ADVISORY_JOBS).
+#   schedule           weekly on the default branch, which catches a change the
+#                      filter does not name (the rest of the CLI, the parts of
+#                      the package the steps below never enter) within a week.
+#   workflow_dispatch  by hand, on any branch.
+#
+# The filter names every file the slow tests read - each slow test, the
+# conftest files above it and the support modules they import - and every file
+# of the package their beadloom steps (init, reindex, docs site) run: traced on
+# every fixture in a fresh interpreter by tests/support/slow_test_trace.py
+# (beadloom-ujzb.24; the hand list before it missed application/reindex and the
+# init command). tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py
+# derives both sets and fails while the filter misses a file of either.
+
+name: Site adopters
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+    paths:
+      # The code a portal is built from, and every package file the slow tests'
+      # beadloom steps enter (the self-check traces it). A folder is named whole
+      # where the steps enter most of it; the command line by file.
+      - "src/beadloom/application/*.py"
+      - "src/beadloom/application/active_table/**"
+      - "src/beadloom/application/debt_report/**"
+      - "src/beadloom/application/impact/**"
+      - "src/beadloom/application/reindex/**"
+      - "src/beadloom/application/site/**"
+      - "src/beadloom/application/source_derivation/**"
+      - "src/beadloom/application/waves/**"
+      - "src/beadloom/site_scaffold/**"
+      - "src/beadloom/onboarding/**"
+      - "src/beadloom/graph/**"
+      - "src/beadloom/context_oracle/**"
+      - "src/beadloom/doc_sync/**"
+      - "src/beadloom/infrastructure/**"
+      - "src/beadloom/services/cli.py"
+      - "src/beadloom/services/commands/_root.py"
+      - "src/beadloom/services/commands/docs.py"
+      - "src/beadloom/services/commands/index_ops.py"
+      - "src/beadloom/services/commands/setup.py"
+      # The fixtures and the slow tests, with what they read.
+      - "tests/fixtures/site/**"
+      - "tests/conftest.py"
+      - "tests/integration/application/site/conftest.py"
+      - "tests/integration/application/site/test_an_adopter_*.py"
+      - "tests/integration/application/site/test_the_browser_tests_pass_on_an_adopter_portal.py"
+      - "tests/support/adopter_portals.py"
+      - "tests/support/committed_project.py"
+      - "tests/support/contact_guard.py"
+      - "tests/support/portal_browser_suite.py"
+      - "tests/support/repository_root.py"
+      - "tests/support/self_check_snapshot.py"
+      - "tests/support/tracked_write_guard.py"
+      # The environment it runs in, and this file.
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/site-adopters.yml"
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+
+# One run per pull request or branch; a superseded run is cancelled.
+concurrency:
+  group: site-adopters-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # NOT a required check: advisory, and filtered (see the header).
+  site-adopters:
+    runs-on: ubuntu-latest
+    # Six Playwright runs: about 15 minutes measured on a 10-core machine with
+    # 5 workers each; a 4-core runner gets 2 workers, so the bound is doubled.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # The extras the slow tests need, and no more. `-m slow` deselects after
+      # collection, so every test module is imported here, and a module needing
+      # another extra skips by itself (`pytest.importorskip`). That every job
+      # running pytest collects in the extras it syncs is held by
+      # tests/self_check/config/test_every_pytest_job_collects_in_its_own_extras.py,
+      # in the `tests` job every pull request runs (beadloom-ujzb.26).
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/beadloom/site_scaffold/package-lock.json
+
+      # The browser at the version the scaffold's locked @playwright/test expects,
+      # read from the scaffold itself, so the two cannot drift apart.
+      - name: Install the Playwright Chromium browser
+        run: >-
+          npx --yes "playwright@$(node -p
+          "require('./src/beadloom/site_scaffold/package.json').devDependencies['@playwright/test']")"
+          install --with-deps chromium
+
+      - name: Build every adopter fixture and run the browser tests on each
+        run: uv run pytest -m slow -v --basetemp="$RUNNER_TEMP/adopters"
+        env:
+          BEADLOOM_RUN_SLOW: "1"
+
+      - name: Upload the fixtures' Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-adopters-playwright
+          path: |
+            ${{ runner.temp }}/adopters/**/site/test-results/
+            ${{ runner.temp }}/adopters/**/site/playwright-report/
+          retention-days: 14

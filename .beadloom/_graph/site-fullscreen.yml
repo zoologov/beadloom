@@ -5,12 +5,12 @@ nodes:
   - ref_id: site-fullscreen
     kind: component
     summary: "Full screen for the viewer's whole space, with a CSS fallback over the same element"
-    source: site/.vitepress/theme/features/fullscreen/
+    source: src/beadloom/site_scaffold/.vitepress/theme/features/fullscreen/
     tags: [fsd-features]
     # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
     # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
     tests:
-      - site/e2e/fullscreen.spec.js
+      - src/beadloom/site_scaffold/e2e/fullscreen.spec.js
     docs:
       - docs/services/vitepress-site/fullscreen.md
 edges:

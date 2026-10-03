@@ -18,9 +18,14 @@ import pytest
 
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
 from beadloom.infrastructure.db import connection
-from beadloom.tui.data_providers import LintDataProvider
-from beadloom.tui.widgets.lint_panel import LintPanelWidget
 from tests.support.layer_population_projects import write_partly_layered_project
+
+# The widgets import textual, the `tui` extra; a job that does not sync it skips
+# this module instead of failing collection (beadloom-ujzb.26).
+textual = pytest.importorskip("textual")
+
+from beadloom.tui.data_providers import LintDataProvider  # noqa: E402 - after the guard
+from beadloom.tui.widgets.lint_panel import LintPanelWidget  # noqa: E402 - after the guard
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

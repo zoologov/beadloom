@@ -5,13 +5,13 @@ nodes:
   - ref_id: site-impact-view
     kind: component
     summary: "The impact mode: every node that depends on the selected one, without a depth limit, in distance rings; over the architecture a summary of domains, services, layer boundaries crossed and risky nodes, over the landscape the contracts and protocols crossed, the broken ones and the services at risk; and the terminal commands to copy"
-    source: site/.vitepress/theme/features/impact-view/
+    source: src/beadloom/site_scaffold/.vitepress/theme/features/impact-view/
     tags: [fsd-features]
     # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
     # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
     tests:
-      - site/e2e/impact.spec.js
-      - site/e2e/landscape-impact.spec.js
+      - src/beadloom/site_scaffold/e2e/impact.spec.js
+      - src/beadloom/site_scaffold/e2e/landscape-impact.spec.js
     docs:
       - docs/services/vitepress-site/impact-view.md
 edges:

@@ -3,7 +3,7 @@
 A slice of the `pages` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/pages/architecture/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/pages/architecture/`
 
 ---
 
@@ -30,6 +30,6 @@ architecture page has. A node of any kind has a page, `other/` included.
 
 ## Tests
 
-`site/e2e/node-page.spec.js`: a node page opens focused on its node, every toolbar control works
-from it, a cleared selection stays cleared after a reload, a page under `other/` opens the same
-way, and full screen shows the tools, the card and the legend.
+`src/beadloom/site_scaffold/e2e/node-page.spec.js`: a node page opens focused on its node,
+every toolbar control works from it, a cleared selection stays cleared after a reload, a page
+under `other/` opens the same way, and full screen shows the tools, the card and the legend.

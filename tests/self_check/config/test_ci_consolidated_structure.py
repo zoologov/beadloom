@@ -17,6 +17,7 @@ from tests.support import ci_pipeline_properties as properties
 from tests.support.ci_pipeline_properties import held_to
 from tests.support.ci_workflows import (
     ADVISORY_JOBS,
+    ADVISORY_WORKFLOWS,
     GH_CI,
     GH_TEMPLATE,
     GL_CI,
@@ -137,9 +138,29 @@ def test_every_advisory_job_is_a_ci_job() -> None:
     An entry left behind after its job is renamed or removed would exempt a
     future job of that name from the required-contexts comparison unseen.
     """
-    jobs = set(load_yaml(GH_CI)["jobs"])  # type: ignore[arg-type]
+    jobs = {
+        str(job)
+        for workflow in (GH_CI, *ADVISORY_WORKFLOWS)
+        for job in load_yaml(workflow)["jobs"]  # type: ignore[union-attr]
+    }
 
     assert set(ADVISORY_JOBS) - jobs == set()
+
+
+def test_every_job_of_an_advisory_workflow_is_advisory_and_never_required() -> None:
+    """A workflow outside ``ci.yml`` adds check-runs the required-contexts comparison
+    does not derive, so each of its jobs is named advisory, and none is required:
+    a filtered workflow reports nothing on most pull requests (``beadloom-ujzb.20``).
+    """
+    from beadloom.onboarding.branch_protection import DEFAULT_STATUS_CHECK_CONTEXTS
+
+    for workflow in ADVISORY_WORKFLOWS:
+        jobs = load_yaml(workflow)["jobs"]
+        assert isinstance(jobs, dict)
+        for key, job in jobs.items():
+            assert key in ADVISORY_JOBS, (workflow.name, key)
+            names = {str(key), str(job.get("name", key))}
+            assert names & set(DEFAULT_STATUS_CHECK_CONTEXTS) == set(), (workflow.name, key)
 
 
 def test_no_advisory_job_is_also_required() -> None:

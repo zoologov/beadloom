@@ -9,6 +9,14 @@ the architecture viewer focused on the page's node (BDL-076 A4), in the place
 the scoped Mermaid diagram had, after the text sections. The Mermaid C4 view
 stays on ``architecture-diagram.md``. All output is deterministic (sorted, no
 wall-clock).
+
+A node's summary is the project's own text — ``beadloom init`` takes the root
+service's from the README's first paragraph — so it goes onto the page by
+:func:`beadloom.application.site.project_text.render_project_text`, the path the
+About page and the published documents take: its links are rebased onto the
+portal (BDL-076, ``beadloom-ujzb.11``) and it is shown as written rather than
+compiled as a Vue template (``beadloom-ujzb.12``). The viewer the page mounts is
+the generator's own markup and is left to Vue.
 """
 
 # beadloom:domain=application
@@ -19,6 +27,8 @@ import html
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.application.site.markdown_links import PortalLinks
+from beadloom.application.site.project_text import render_project_text
 from beadloom.infrastructure.repository import get_owned_symbols
 
 if TYPE_CHECKING:
@@ -293,12 +303,27 @@ def _graph_section(ref_id: str) -> list[str]:
     ]
 
 
-def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, str]) -> NodePage:
-    """Render one node's Markdown page (deterministic)."""
+def render_node_page(
+    conn: sqlite3.Connection,
+    node: NodeRow,
+    kinds: dict[str, str],
+    portal: PortalLinks | None = None,
+) -> NodePage:
+    """Render one node's Markdown page (deterministic).
+
+    *portal* is what the portal publishes, which a relative link in the summary
+    is rebased onto. With none, every such link keeps only its text: there is no
+    page the summary could be known to reach.
+    """
     grouped = _load_edges_for(conn, node.ref_id, kinds)
     incoming = _load_incoming_for(conn, node.ref_id, kinds)
     symbols = public_symbol_names(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
+    page_dir = _kind_dir(node.kind)
+    # The summary sits below the page's own front matter, so a "---" in it is Markdown.
+    summary = render_project_text(
+        node.summary, portal or PortalLinks(), page_dir=page_dir, opens_page=False
+    )
 
     lines: list[str] = [
         "---",
@@ -310,7 +335,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
         "",
         f"**Kind:** {node.kind}",
         "",
-        node.summary or "_No summary._",
+        summary or "_No summary._",
         "",
     ]
     if node.source:
@@ -324,8 +349,10 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n")
 
 
-def render_all_pages(conn: sqlite3.Connection) -> list[NodePage]:
+def render_all_pages(
+    conn: sqlite3.Connection, portal: PortalLinks | None = None
+) -> list[NodePage]:
     """Render every node page, sorted by output path (deterministic)."""
     kinds = _load_kinds(conn)
-    pages = [render_node_page(conn, node, kinds) for node in load_nodes(conn)]
+    pages = [render_node_page(conn, node, kinds, portal) for node in load_nodes(conn)]
     return sorted(pages, key=lambda p: p.rel_path)

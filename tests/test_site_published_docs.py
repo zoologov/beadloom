@@ -345,6 +345,25 @@ def test_inject_badge_overwrites_only_badge_region() -> None:
     assert twice.count(BADGE_END) == 1
 
 
+def test_inject_badge_goes_after_front_matter_so_vitepress_still_reads_it() -> None:
+    """R2 F3-i (``beadloom-ujzb.21``): above the front matter, the badge made it Markdown.
+
+    VitePress reads front matter only at the very top of a page. With the badge
+    first, ``---`` became a rule and ``title: …`` a heading, so a ``{{ }}`` in it
+    reached Vue while the project text pass still took the block for front matter.
+    """
+    head = "---\ntitle: x {{ .Values.a }}\n---\n"
+    injected = inject_badge(f"{head}\n# Head\n", "BADGE")
+    assert injected == f"{head}{BADGE_START}\nBADGE\n{BADGE_END}\n\n\n# Head\n"
+    assert inject_badge(injected, "BADGE") == injected
+
+
+def test_inject_badge_goes_first_when_the_front_matter_never_closes() -> None:
+    """An unclosed block is not front matter the badge can follow: gray-matter would take all."""
+    prose = "---\ntitle: x\n"
+    assert inject_badge(prose, "BADGE").startswith(BADGE_START)
+
+
 def test_inject_badge_preserves_prose_byte_for_byte() -> None:
     prose = "# Title\n\nLine one.\nLine two.\n"
     injected = inject_badge(prose, "BADGE")
@@ -375,3 +394,28 @@ def test_regenerate_published_docs_byte_identical(
         if p.is_file()
     }
     assert first == second
+
+
+def test_inject_badge_goes_first_when_gray_matter_cannot_read_the_front_matter() -> None:
+    """Re-review m1 (``beadloom-ujzb.23``): below the badge is where it compiled before.
+
+    With the badge under a front matter js-yaml refuses, VitePress parsed the block
+    and the build failed; above it, the block is Markdown and the page builds.
+    """
+    prose = "---\ntitle: Setup: the first step\n---\n# Setup\n"
+    injected = inject_badge(prose, "BADGE")
+    assert injected == f"{BADGE_START}\nBADGE\n{BADGE_END}\n\n{prose}"
+
+
+def test_a_doc_whose_front_matter_is_not_yaml_is_published_below_its_badge_as_markdown(
+    conn: sqlite3.Connection, project: Path
+) -> None:
+    doc = project / "docs" / "orphan.md"
+    doc.write_text("---\ntitle: Setup: the first step {{ x }}\n---\n# Setup\n", encoding="utf-8")
+    out = project / "site"
+    generate_site(conn, out, project_root=project)
+    text = (out / "docs" / "orphan.md").read_text(encoding="utf-8")
+    assert text.startswith(BADGE_START)
+    # Read as Markdown, so the brace pair in what is now a heading is broken for Vue.
+    shown = "---\ntitle: Setup: the first step {<!---->{ x }}\n---\n# Setup\n"
+    assert text.endswith(f"{BADGE_END}\n\n{shown}")

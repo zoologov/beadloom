@@ -15,6 +15,8 @@ import builtins
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -416,3 +418,159 @@ class TestBootstrapProjectIntegration:
                 e for e in depends_on_edges if e["src"] == "api" and e["dst"] == "models"
             ]
             assert len(api_to_models) >= 1, f"Expected api->models edge, got: {depends_on_edges}"
+
+
+def _go_available() -> bool:
+    try:
+        import tree_sitter_go  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _go_project(tmp_path: Path, files: dict[str, str]) -> dict[str, dict[str, Any]]:
+    """Write a Go project and return its clusters, one per ``<source dir>/<name>`` folder."""
+    clusters: dict[str, dict[str, Any]] = {}
+    for rel_path, text in files.items():
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        parts = rel_path.split("/")
+        if rel_path.endswith(".go") and len(parts) >= 3:
+            entry = clusters.setdefault(
+                parts[1], {"files": [], "children": {}, "source_dir": parts[0]}
+            )
+            entry["files"].append(rel_path)
+    return clusters
+
+
+def _go_imports(*paths: str) -> str:
+    return "package x\n\nimport (\n" + "".join(f'\t"{p}"\n' for p in paths) + ")\n"
+
+
+@pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
+class TestAGoImportNamesThePackageItsModulePathNames:
+    """BDL-076 B5: a Go import is read through the module path ``go.mod`` declares.
+
+    Measured by B3 on the Go adopter fixture: the scan took the first segment of
+    ``example.org/tidewater/internal/catalog`` that named a cluster, and on the
+    standard layout ``cmd/tidewater/`` names the module, so every internal import
+    landed on the entry point.
+    """
+
+    def test_the_entry_point_named_after_the_module_attracts_no_internal_import(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.onboarding.scanner import _quick_import_scan
+
+        clusters = _go_project(
+            tmp_path,
+            {
+                "go.mod": "module example.org/tidewater\n",
+                "cmd/tidewater/main.go": _go_imports(
+                    "net/http", "example.org/tidewater/internal/api"
+                ),
+                "internal/api/api.go": _go_imports(
+                    "encoding/json", "example.org/tidewater/internal/catalog"
+                ),
+                "internal/catalog/catalog.go": _go_imports(
+                    "example.org/tidewater/internal/catalog/search"
+                ),
+                "internal/catalog/search/search.go": "package search\n",
+            },
+        )
+        refs = {name: f"{name}-node" for name in clusters}
+
+        edges = _quick_import_scan(tmp_path, clusters, refs)
+
+        assert {(e["src"], e["dst"]) for e in edges} == {
+            ("tidewater-node", "api-node"),
+            ("api-node", "catalog-node"),
+        }
+
+    def test_a_module_from_elsewhere_whose_segment_names_a_cluster_is_no_edge(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.onboarding.scanner import _quick_import_scan
+
+        clusters = _go_project(
+            tmp_path,
+            {
+                "go.mod": "module example.org/tidewater\n",
+                "internal/api/api.go": _go_imports("github.com/acme/storage/client", "net/http"),
+                "internal/storage/storage.go": "package storage\n",
+                "internal/http/http.go": "package http\n",
+            },
+        )
+        refs = {name: name for name in clusters}
+
+        assert _quick_import_scan(tmp_path, clusters, refs) == []
+
+
+def _jvm_available() -> bool:
+    try:
+        import tree_sitter_java  # noqa: F401
+        import tree_sitter_kotlin  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _java(package: str, *imports: str) -> str:
+    lines = "".join(f"import {name};\n" for name in imports)
+    return f"package {package};\n\n{lines}\nclass X {{}}\n"
+
+
+@pytest.mark.skipif(not _jvm_available(), reason="tree-sitter-java or -kotlin not installed")
+class TestAJvmImportNamesAPackageUnderTheSourceRoots:
+    """BDL-076 B6: a Java or Kotlin import is read as a package path under the source roots.
+
+    The segment reading took the first segment of an import naming a cluster, so
+    ``org.springframework.web.client.RestClient`` named a package ``web`` of the
+    project's own. Read under ``src/main/java`` it names no folder of the project.
+    """
+
+    def _scan(self, tmp_path: Path, files: dict[str, str]) -> set[tuple[str, str]]:
+        from beadloom.onboarding.scanner import _quick_import_scan
+        from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
+
+        for rel_path, text in files.items():
+            path = tmp_path / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        layout = read_jvm_layout(tmp_path)
+        clusters = cluster_packages(layout)
+        refs = {name: name for name in clusters}
+        edges = _quick_import_scan(tmp_path, clusters, refs, jvm=layout)
+        return {(e["src"], e["dst"]) for e in edges}
+
+    def test_a_third_party_import_sharing_a_package_name_is_no_edge(self, tmp_path: Path) -> None:
+        shop = "src/main/java/org/acme/shop"
+        edges = self._scan(
+            tmp_path,
+            {
+                f"{shop}/web/Controller.java": _java(
+                    "org.acme.shop.web", "org.acme.shop.model.Item"
+                ),
+                f"{shop}/model/Item.java": _java(
+                    "org.acme.shop.model", "org.springframework.web.client.RestClient"
+                ),
+            },
+        )
+
+        assert edges == {("web", "model")}
+
+    def test_an_import_of_another_modules_package_joins_the_two_modules(
+        self, tmp_path: Path
+    ) -> None:
+        edges = self._scan(
+            tmp_path,
+            {
+                "core/src/main/java/org/acme/core/geo/Point.java": _java("org.acme.core.geo"),
+                "app/src/main/kotlin/org/acme/app/Main.kt": (
+                    "package org.acme.app\n\nimport org.acme.core.geo.Point\n\nfun main() {}\n"
+                ),
+            },
+        )
+
+        assert edges == {("app", "core")}

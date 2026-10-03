@@ -23,6 +23,7 @@ plain YAML in Git, then continuously checks the real code against it:
 - Python 3.10+
 - uv (recommended) or pip
 - Optional: a git repo (for the hooks and the agentic flow), `bd` (the [beads](https://github.com/steveyegge/beads) tracker, for the agentic flow)
+- Optional: `Node.js 22` or later with npm, to build the [portal](#publish-the-portal)
 
 ## Install
 
@@ -36,11 +37,17 @@ Optional extras (language parsers, TUI, file watcher):
 
 ```bash
 uv tool install "beadloom[languages]"   # TS/JS, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C
+pip install "beadloom[languages]"       # the same extra with pip
 uv tool install "beadloom[tui]"         # interactive terminal dashboard
 uv tool install "beadloom[watch]"       # file watcher for auto-reindex
 uv tool install "beadloom[graphql]"     # typed GraphQL contract checking (graphql-core)
 uv tool install "beadloom[all]"         # everything
 ```
+
+Without the `languages` extra Beadloom parses Python only: `reindex` records no symbol and no
+import from a file in any other language, so no edge is drawn from that code, and nothing warns
+you unless the run finds no symbol at all. Install the extra for a project in any other
+language.
 
 The current release is **7.0.0**. `beadloom --version` reports the build you actually
 installed. This line is the one place a document states the version as a claim, and
@@ -58,16 +65,6 @@ beadloom init --bootstrap     # scan code → generate an initial graph
 
 `--bootstrap` scans your code structure and proposes domains, services, and
 features. Use `--yes` (`-y`) to skip prompts (CI / automation).
-`init` creates:
-
-- `.beadloom/_graph/services.yml` — the architecture graph (nodes + edges)
-- `.beadloom/_graph/rules.yml` — auto-generated architecture lint rules
-- `.beadloom/config.yml` — project configuration
-- `docs/` — documentation skeletons for each graph node
-- `.mcp.json` (or equivalent) — MCP config for the detected editor
-
-It also runs a full reindex: code symbols are extracted, imports resolved, and
-`depends_on` edges inferred from code.
 
 **`init` checks its own output, and can exit 1.** After the graph is written and indexed,
 every entry point that wrote a file under `.beadloom/_graph/` — `--yes` in any mode,
@@ -86,6 +83,101 @@ that take no verdict, and the one graph file shape that still ends `init` in a t
 > code structure alone. You fill it in by hand or with any AI agent (see
 > `beadloom docs polish`), and Beadloom keeps it current.
 
+### What `init` writes
+
+- `.beadloom/_graph/services.yml` — the architecture graph (nodes + edges)
+- `.beadloom/_graph/rules.yml` — auto-generated architecture lint rules
+- `.beadloom/config.yml` — project configuration: `languages`, `scan_paths`, and on a JVM or
+  Swift project `tests.mirrors`
+- `.beadloom/AGENTS.md` and `.beadloom/README.md`
+- `docs/` — documentation skeletons for each graph node (an existing file is never overwritten)
+- `.mcp.json` (or equivalent) — MCP config for the detected editor
+- `.gitignore` — two additions, both appended and never rewritten:
+  - the generated working set under `.beadloom/` (the index and its SQLite sidecars, the guard
+    firing record), written once;
+  - `/site/`, the directory `beadloom docs site` writes the portal into, checked on every run.
+
+The `/site/` line is not written when a line of `.gitignore` already decides for `site/`
+(`site/`, `/site/**`, or `!/site/` to commit the portal), when `site/` already holds files —
+tracked by git or only on disk, it is then your own source and must stay visible to
+`git status` — or when the project is not inside a git working tree. Untracked files of the
+portal `beadloom docs site` wrote there do not count: `init` recognises them by the generated
+marker the scaffold writes into its files, writes the line for them, and does not scan that
+folder as code. Files git tracks in `site/` keep it yours, whatever they are. `init` prints
+which:
+
+```text
+  Ignored: /site/ (the portal `beadloom docs site` writes) appended to .gitignore
+  Not ignored: /site/ - site/ already holds 12 files tracked by git, so it is the project's own and new files there must stay visible to git; run `beadloom docs site --out <dir>` to write the portal elsewhere, or move that source out of site/
+```
+
+and, when a top-level folder holds the portal `docs site` wrote (after `init --force` on a
+project that already built its portal):
+
+```text
+  Not scanned: site/ - holds the portal `beadloom docs site` wrote (its files carry the generated marker), which is output, not the project's code
+```
+
+A portal written below a top-level folder (`--out build/portal`) is not recognised and is
+scanned like the rest of the project.
+
+With your own `site/`, write the portal elsewhere, for example `beadloom docs site --out portal`,
+and ignore that directory yourself.
+
+`init` also runs a full reindex: code symbols are extracted, imports resolved, and
+`depends_on` edges inferred from code.
+
+### What `init` reads in each stack
+
+`init` makes a node of each module it finds and draws an edge for each import between two of
+them. Six stacks were measured, each on a small project under `tests/fixtures/site/` built from
+the installed wheel: every module became a node, every import between modules an edge, and no
+edge appeared that the code does not have.
+
+| Stack | What `init` reads | Measured on its fixture |
+|-------|-------------------|-------------------------|
+| Python | the folders under the source directories; imports through the scan paths | three of three modules, three of three edges |
+| JavaScript, TypeScript | the same; a relative import (`./x`, `../y`) by the file it names | six of six modules, seven of seven edges |
+| Go | the folders; an import through the governing `go.mod`, with `go.work` `use` and local `replace` directives; the standard library and other modules draw no edge | five of five modules, seven of seven edges |
+| Java, Kotlin (Maven, Gradle) | every module holding `src/<set>/<java\|kotlin>/`; the packages below the common base package become nodes, the production roots the scan paths, each test tree a `tests.mirrors` entry; an import through the package its files declare | Java: four packages, four edges. Kotlin: three and three, on the layout Kotlin's conventions recommend, with the common root package left out of the folders |
+| Swift (Swift Package Manager) | every `Package.swift`, read as text and never run; each library, executable, macro or plugin target holding Swift becomes a node and its folder a scan path; each test target a `tests.mirrors` entry; an import through the target the manifest declares | three targets, three edges |
+
+A project mixing stacks keeps each one's reading: a Python or TypeScript service beside a Maven
+module or a Swift package keeps its node and its scan path. Code inside a module's folder but
+outside the folders its layout reads — Python scripts in `backend/scripts` beside a Gradle
+module's `backend/src` — is a scan path too, and its files belong to the module's node. `init`
+names it:
+
+```text
+  Also scanned: backend/scripts - code in a module's folder outside its source roots; its files belong to that module's node
+```
+
+**Known limits.**
+
+- **An Xcode project is reported, not read.** Its targets list their files in
+  `project.pbxproj`, not by folder, so `init` reads Swift through `Package.swift` only and says
+  what it saw: `Not read: 14 .swift files outside any Package.swift target (Xcode:
+  App.xcodeproj) - init reads Swift through Package.swift only, so they are in no node and no
+  scan path`. Declare the nodes and the scan paths by hand.
+- **A Gradle `sourceSets` with custom `srcDirs`, or a Maven `<sourceDirectory>`,** is not read:
+  `init` finds a JVM module by the standard `src/<set>/<java|kotlin>/` layout and parses no build
+  file. Add the source folders to `scan_paths` and declare the nodes by hand.
+- **A code file lying directly in a folder beside a JVM module or a Swift package** (`services/x.py`
+  next to `services/billing/`) is in no scan path: a scan path is a folder, and that folder
+  would scan the module's test tree too. `init` names it — `Not read: services/x.py - a code
+  file lying directly in a folder that holds a module; ...`, or with several files a count and
+  the first five — and the file is read once you move it into a folder of its own.
+- **A Java or Kotlin package declared in folders that different nodes own** resolves an import
+  of a class to the folder holding the class's file (`B.kt`, `B.java`). A wildcard import of
+  such a package, a top-level Kotlin function, or a class in a file named otherwise draws no
+  edge rather than a guessed one.
+- **After changing only `go.mod`, `go.work` or `Package.swift`,** an incremental
+  `beadloom reindex` does not re-resolve the imports of the files they govern (`beadloom-jcng`).
+  Run `beadloom reindex --full`.
+- **Flat Python tests** (`tests/test_*.py`) bind to no node after `init`, because the tests it
+  binds by path are those under `tests/unit/` and `tests/integration/` (`beadloom-76mk`). Move
+  them into a kind folder, or list them under the node's `tests:` in the graph.
+
 ## Configuration
 
 Everything lives under `.beadloom/` in your repo.
@@ -99,6 +191,7 @@ Everything lives under `.beadloom/` in your repo.
 | `docs_dir` | `docs/` | Documentation root directory |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |
 | `tests` | see below | Where your tests are and which files are tests |
+| `site` | the directory name, base `/`, no repository | The portal's identity: `title`, `description`, `base`, `repo_url`, `forges`; see the [`site:` reference](guides/vitepress-site.md#configuration-reference-site) |
 
 #### `tests:` — where your tests are
 
@@ -131,7 +224,7 @@ path decides only WHETHER it is a test, by the patterns below. Every key is opti
 | `tests.roots` | `[tests, test, spec, __tests__]`, each read only where a folder of exactly that spelling exists | replaces the list |
 | `tests.kinds` | `unit`, `integration`, `acceptance`, `self_check`, each in a folder of its own name | replaces the folder of that one kind |
 | `tests.patterns` | the five groups below | replaces all five groups |
-| `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
+| `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees; `init` writes one entry per JVM test tree and per Swift test target, so on such a project the defaults no longer apply |
 | `tests.beside_code` | `true` | `true` or `false` |
 
 | Language | Framework group | Default patterns |
@@ -353,17 +446,68 @@ assigns each contract a verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER`
 per-satellite staleness. `beadloom ci --hub <export> --fail-on default` folds the
 landscape gate into the unified CI verdict.
 
-## Publish a knowledge base
+## Publish the portal
+
+`beadloom docs site` turns the graph into a VitePress site: an interactive architecture viewer
+with impact and neighbourhood modes, a page per node, a metrics dashboard, the contract
+landscape, and your `docs/` with a freshness badge on each. The theme ships in the package, so
+nothing else needs installing besides `Node.js 22` or later. From a fresh install to a published
+portal:
 
 ```bash
-beadloom docs site --out site            # generate a VitePress content tree
-(cd site && npm install && npm run docs:build)   # build the static site
+pip install "beadloom[languages]"       # or: uv tool install "beadloom[languages]"
+cd your-project
+beadloom init --yes                     # the graph, the config, /site/ in .gitignore
+beadloom reindex                        # init ran one; run it again after changing code or the graph
+beadloom docs site                      # the content and the scaffold, into site/
+cd site && npm ci && npm run docs:build # site/.vitepress/dist is the static site
+npm run docs:preview                    # look at it locally
 ```
 
-The site is a metrics dashboard, an interactive architecture view, a
-cross-service landscape map, and your hand-written docs with a freshness badge
-on each. `docs site` reads the graph read-only and never writes into your
-source `docs/` tree.
+`docs site` reports what it wrote:
+
+```text
+Generated 144 files under /home/me/tidewater/site
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+```
+
+**Give the portal your project's identity** in `.beadloom/config.yml`. Without it the title is
+the directory's name, the base is `/` and the portal links to no repository:
+
+```yaml
+site:
+  title: Tidewater
+  base: /tidewater/
+  repo_url: https://github.com/acme/tidewater
+```
+
+**The base path.** GitHub Pages serves a project repository under `/<repo>/`. When `base` is
+still `/` and `origin` is a `github.com` project repository, `docs site` warns on stderr:
+
+```text
+Warning: the portal is built for the base /, and GitHub Pages serves this project repository under /tidewater/, where the portal loads none of its assets. Set `site.base: /tidewater/` in .beadloom/config.yml, unless the site is served from a custom domain.
+```
+
+**Publish with GitHub Pages:**
+
+```bash
+beadloom docs site --pages-workflow     # also writes .github/workflows/beadloom-portal.yml
+```
+
+```text
+Pages workflow: .github/workflows/beadloom-portal.yml written (base /tidewater/, Node 22, portal site/, branch main)
+```
+
+Set Settings → Pages → **Source = GitHub Actions**, commit the workflow and push to the default
+branch: each push regenerates the portal from the code with the same beadloom version, builds it,
+checks its base against the Pages address and deploys it. Run the command again after upgrading
+beadloom or changing `site:`. On another forge, run the same commands in your CI and publish
+`site/.vitepress/dist`.
+
+Everything under `site/` is output and stays out of git. Your own pages and styles go under
+`.beadloom/site/`, which is copied last on every run. A self-hosted forge for the source links,
+what happens to links and HTML in your docs, and the browser tests the portal ships are in the
+[VitePress Site guide](guides/vitepress-site.md).
 
 ## Keep docs in sync
 
@@ -382,7 +526,7 @@ carries the sections its kind's peers carry. It never blocks. See
 
 ## Limits
 
-- Code indexer parses Python, TypeScript/JavaScript, Go, Rust out of the box; Kotlin, Java, Swift, C/C++, Objective-C via `beadloom[languages]`. Import analysis spans 9 languages.
+- The code indexer parses Python out of the box; TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++ and Objective-C need `beadloom[languages]`. What `init` reads per stack, and its limits, is [above](#what-init-reads-in-each-stack).
 - Documentation is indexed from `docs/` (configurable via `config.yml`).
 - The graph is YAML under `.beadloom/_graph/`; rules in `.beadloom/_graph/rules.yml`.
 - Maximum documentation chunk size: 2000 characters.
@@ -395,4 +539,4 @@ carries the sections its kind's peers carry. It never blocks. See
 - [Testing](guides/testing.md) — where a test lives, how it binds to a node, the suite rules, and mutation per change and weekly.
 - [Parallel waves](guides/parallel-waves.md) — what a wave of concurrent agents guarantees, and what it only reports.
 - [CI Setup](guides/ci-setup.md) — GitHub Actions / GitLab CI integration.
-- [VitePress Site](guides/vitepress-site.md) — publish the knowledge base.
+- [VitePress Site](guides/vitepress-site.md) — the portal: what it shows, the `site:` settings, publishing and its browser tests.

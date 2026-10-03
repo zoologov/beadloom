@@ -51,7 +51,9 @@ beadloom init --yes [--mode {bootstrap,import,both}] [--force] [--project DIR]
 beadloom init [--project DIR]
 ```
 
-`--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`.
+`--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`. Three stacks are read through their build layout rather than as folders (BDL-076): Go imports through `go.mod`/`go.work`, a Maven or Gradle tree as packages under `src/<set>/<java|kotlin>/`, and a Swift Package Manager project as the targets its `Package.swift` declares; an Xcode project is reported (`Not read: N .swift files outside any Package.swift target`) and not read. What each stack gets is in [Getting Started](../getting-started.md#what-init-reads-in-each-stack).
+
+Every bootstrapping mode also writes `/site/` into `.gitignore`, for the portal `beadloom docs site` writes, unless a line already names `site/`, `site/` already holds files, or the project is not in a git working tree; `init` prints which (`Ignored: /site/ ...` or `Not ignored: /site/ - <reason>`).
 
 `--preset` selects an architecture preset:
 - `monolith` -- top dirs are domains; subdirs map to features, entities, services
@@ -798,22 +800,57 @@ Creates `docs/` tree: `architecture.md`, domain READMEs, service pages, feature 
 
 ### beadloom docs site
 
-Generate a VitePress content tree from the architecture graph.
+Generate the project's portal: a VitePress site built from the architecture graph.
 
 ```bash
-beadloom docs site [--out DIR] [--federated FILE] [--project DIR]
+beadloom docs site [--out DIR] [--federated FILE] [--pages-workflow] [--project DIR]
 ```
 
-Reads the indexed graph read-only and emits, under `--out` (default `site/`):
+Reads the indexed graph read-only (run `beadloom reindex` first; without the database it exits 1)
+and writes under `--out` (default `site/`, the directory `beadloom init` ignores):
 
-- `index.md` -- architecture overview: domain/service/feature counts, the top-level C4/Mermaid diagram, and a health summary line (nodes/edges/docs/coverage/stale).
-- per-node pages (`domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md`) -- each with summary, source, public symbols, `part_of`/`depends_on`/`uses` edges rendered as Markdown links to the other node pages, linked hand-written docs, and an embedded scoped C4/Mermaid diagram.
-- `dashboard.md` + `dashboard.data.json` -- **Showcase A**, the AaC/DocAsCode metrics dashboard (lint count + severity, debt score + trend, doc coverage / sync-check freshness / stale count, doctor pass-fail, and an optional federated rollup). Every number comes from the SAME code path as its gate (`lint` / `debt-report` / `sync-check` / `doctor` / `federate`) -- honest by construction.
-- `landscape.md` -- **Showcase B**, the 🌟 cross-repo landscape map: a Mermaid diagram of the federated contract graph (with `--federated`) or the local graph (without), edges labelled by their verdict, a `classDef` health overlay, and clickable nodes linking to their intra-repo page.
-- `docs/**` + `docs/index.md` -- **Showcase C**, the published validated documentation: the REAL `docs/**` tree copied verbatim (the source of truth, rendered as-is) with a per-doc `doc_sync` freshness badge injected into the COPY only. The source `docs/` is NEVER mutated.
-- `.vitepress/config.generated.mjs` -- the nav/sidebar config imported by the committed VitePress scaffold (`site/.vitepress/config.mjs`); sections: Dashboard / Architecture / Landscape / Documentation.
+- **the content:** the About page from `README.md` (and `/ru/` from `README.ru.md` when it
+  exists), `architecture.md` with `public/architecture.data.json` for the interactive viewer,
+  `architecture-diagram.md` (the Mermaid C4 fallback), one page per node under `domains/`,
+  `services/`, `features/` or `other/` with the viewer opened on the node, `dashboard.md` with
+  `dashboard.data.json`, `landscape.md` with `public/landscape.data.json`,
+  `landscape-diagram.md`, the published `docs/**` with a freshness badge on each copy, and
+  `.vitepress/config.generated.mjs` (nav and sidebar);
+- **the identity:** `.vitepress/site.generated.mjs`, from the `site:` block of
+  `.beadloom/config.yml` (title, description, base, repository link);
+- **the scaffold:** the theme, the viewer, `package.json`, `package-lock.json`,
+  `.vitepress/config.mjs` and the browser tests, from the installed package. Each file carries a
+  `beadloom:generated` marker; a file without the marker, or edited after it was written, is
+  never overwritten and is reported. `.beadloom/site/` is copied last.
 
-Beadloom produces, VitePress renders. Output is deterministic (sorted, stable frontmatter, no wall-clock in the diffed output) and is NEVER written into the source `docs/` tree -- only under `--out`. `--federated` takes a `federate` hub artifact (`federated.json`) and drives the Showcase B landscape map. To render: `cd site && npm install && npm run docs:build` (preview with `npm run docs:preview`). See the [VitePress Site guide](../guides/vitepress-site.md).
+```text
+Generated 144 files under /home/me/tidewater/site
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+```
+
+A kept file is named on stderr with the reason and the remedy, and the exit code stays 0. A
+`site:` value the portal cannot use exits 1 before anything is written, each refusal printed as
+`site.<key>: <why>` with its remedy. When `site.base` is `/` and `origin` is a `github.com`
+project repository, a warning on stderr says that Pages serves it under `/<repo>/` and names the
+`site.base` to set; the exit code is unchanged.
+
+- `--federated FILE` -- a `beadloom federate` hub artifact for the Mermaid landscape diagram and
+  the dashboard; the viewer's landscape always reads the project's own contracts.
+- `--pages-workflow` -- also write `.github/workflows/beadloom-portal.yml`, which regenerates,
+  builds and deploys the portal to GitHub Pages under the declared base, and print the line
+
+  ```text
+  Pages workflow: <path> <written|updated|unchanged|kept> (base <base>, Node <major>, portal <dir>/, branch <name>)
+  ```
+
+  The branch is the default branch git records for `origin`
+  (`origin/HEAD`); with none, the line ends `no branch` and stderr names
+  `git remote set-head origin --auto`. A workflow beadloom did not write, or one edited by hand,
+  is kept. `--out` must lie inside the project, or the command exits 1 before writing.
+
+Output is deterministic and is never written into the source `docs/` tree. To build:
+`cd site && npm ci && npm run docs:build`. See the [VitePress Site guide](../guides/vitepress-site.md)
+for what the portal shows, the `site:` keys and the publishing steps.
 
 ### beadloom docs audit
 
@@ -1327,6 +1364,11 @@ printed (`! <file>: <reason>` plus a `-> <remediation>` line) and exits 0, so an
 adopter upgrading into this release does not go red for a file scaffolded before
 the flow manifest existed. The clean line says which case it is —
 `Agent-config in sync — no blocking drift (N warning(s) — see above).`
+
+It also prints every value of the `site:` block that `beadloom docs site` cannot use (BDL-076
+B1), under ``The `site:` block of .beadloom/config.yml (N):``, each as `site.<key>: <why>` with
+its remedy, and exits 1 on them: a mistyped base deploys the portal under the wrong path. The
+Gate's `config-check` step reports the same refusals as the rule `site-config`.
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path (`config_sync.apply_config_fixes`), names every file it changed, declines any body Beadloom cannot prove it wrote, and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 

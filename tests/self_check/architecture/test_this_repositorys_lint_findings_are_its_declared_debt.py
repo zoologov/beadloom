@@ -22,11 +22,29 @@ from beadloom.graph.rules import (
 )
 from beadloom.graph.rules.doc_area import derive_convention
 from beadloom.infrastructure.db import open_db
+from beadloom.onboarding.graph_files import each_graph_file
 from beadloom.services.cli import main
 from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+#: Where the site's theme lives since BDL-076 B1 (`beadloom-dfwt`). The site
+#: node itself sources the scaffold's root, which no docs area is derived for,
+#: before the move as after it; its slices source the theme.
+_SCAFFOLD = "src/beadloom/site_scaffold/.vitepress/theme/"
+#: The site's slice nodes (BDL-076 A2).
+_SITE_SLICES = 20
+
+
+def _node_sources(root: Path) -> list[tuple[str, str]]:
+    """Every node's ``(ref_id, source)``, read from the graph files under *root*."""
+    return [
+        (str(node.get("ref_id", "")), str(node["source"]))
+        for _path, data in each_graph_file(root / ".beadloom" / "_graph")
+        for node in data.get("nodes") or []
+        if node.get("source")
+    ]
 
 
 class TestLintRecalibrationGuard:
@@ -102,7 +120,7 @@ class TestLintRecalibrationGuard:
     def test_doc_area_coherence_blocks_and_judges_both_source_trees(
         self, self_check_snapshot: Path
     ) -> None:
-        """The rule is at ``error`` and checks pairs in ``src/`` AND in ``site/``.
+        """The rule is at ``error`` and checks the site's pairs as well as the Python ones.
 
         Silence from a rule is a pass only beside what it checked. From BDL-076 A2
         until ``beadloom-5o48`` it checked none of this repository's pairs; a
@@ -124,10 +142,18 @@ class TestLintRecalibrationGuard:
             )
         finally:
             conn.close()
-        trees_checked = {p.tree for p in convention.checked}
-        assert sorted(trees_checked) == ["site/.vitepress/theme", "src/beadloom"], (
-            convention.population()
-        )
+        # BDL-076 B1 (`beadloom-dfwt`) moved the site's scaffold into the package,
+        # so `src/` is this repository's one source tree and the site's pairs are
+        # read inside it. What this test guards is unchanged: the site's pairs are
+        # judged, not dropped. Every slice of the theme is checked.
+        site_nodes = {
+            ref_id
+            for ref_id, source in _node_sources(self_check_snapshot)
+            if source.startswith(_SCAFFOLD)
+        }
+        checked_site = {p.ref_id for p in convention.checked if p.source.startswith(_SCAFFOLD)}
+        assert len(site_nodes) >= _SITE_SLICES, site_nodes
+        assert checked_site == site_nodes, convention.population()
         assert convention.contradicting == (), convention.population()
 
     def test_each_suite_rule_states_its_population(self, self_check_snapshot: Path) -> None:

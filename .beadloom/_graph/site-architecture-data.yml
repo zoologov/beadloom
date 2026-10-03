@@ -5,12 +5,12 @@ nodes:
   - ref_id: site-architecture-data
     kind: component
     summary: "The architecture data file as the viewer reads it, refused with a message when its schema version is unknown"
-    source: site/.vitepress/theme/entities/architecture-data/
+    source: src/beadloom/site_scaffold/.vitepress/theme/entities/architecture-data/
     tags: [fsd-entities]
     # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
     # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
     tests:
-      - site/e2e/data-version.spec.js
+      - src/beadloom/site_scaffold/e2e/data-version.spec.js
     docs:
       - docs/services/vitepress-site/architecture-data.md
 edges:

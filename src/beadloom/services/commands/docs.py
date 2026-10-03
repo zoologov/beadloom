@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from beadloom.application.doc_spaces import SpacesReport, TrackerRead
+    from beadloom.application.site.scaffold import ScaffoldReport
 
 from beadloom.services.commands._root import main
 
@@ -99,21 +100,38 @@ def docs_polish(
     default=None,
     help="Project root (default: current directory).",
 )
+@click.option(
+    "--pages-workflow",
+    is_flag=True,
+    default=False,
+    help="Also write .github/workflows/beadloom-portal.yml, which publishes the portal "
+    "to GitHub Pages; a workflow beadloom did not write, or one edited by hand, is kept.",
+)
 def docs_site(
     *,
     out_dir: Path | None,
     federated: Path | None,
     project: Path | None,
+    pages_workflow: bool,
 ) -> None:
-    """Generate a VitePress content tree from the architecture graph.
+    """Generate the project's portal: a VitePress site built from the architecture graph.
 
     Reads the indexed graph read-only and emits an architecture overview,
-    one page per node (with summary, symbols, edges-as-links, and an embedded
-    C4/Mermaid diagram), and the VitePress nav/sidebar config — under --out
-    (default site/). Never writes into the source docs/ tree.
+    one page per node, the dashboard, the landscape and the VitePress nav —
+    under --out (default site/) — with the identity declared under `site:` in
+    .beadloom/config.yml. Writes the portal scaffold (theme, viewer,
+    package.json, lockfile, VitePress config, browser tests) from the installed
+    package, never over a file it did not write, then copies .beadloom/site/
+    last. Never writes into the source docs/ tree.
+
+    With --pages-workflow, also writes the GitHub Pages workflow that
+    regenerates, builds and deploys the portal under the declared base.
     """
     from beadloom.application.site import generate_site
+    from beadloom.application.site.pages_workflow import PagesWorkflowError, site_dir_of
+    from beadloom.application.site.site_config import SiteConfigError
     from beadloom.infrastructure.db import connection
+    from beadloom.onboarding.ignore_block import PORTAL_DIR
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -121,10 +139,99 @@ def docs_site(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
-    out = out_dir if out_dir is not None else project_root / "site"
-    with connection(db_path) as conn:
-        result = generate_site(conn, out, project_root=project_root, federated=federated)
+    # The default is the directory `init` names in .gitignore, read from one place.
+    out = out_dir if out_dir is not None else project_root / PORTAL_DIR
+    if pages_workflow:
+        try:
+            site_dir_of(project_root, out)
+        except PagesWorkflowError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+    try:
+        with connection(db_path) as conn:
+            result = generate_site(conn, out, project_root=project_root, federated=federated)
+    except SiteConfigError as exc:
+        click.echo("Error: the `site:` block of .beadloom/config.yml cannot be used:", err=True)
+        for refusal in exc.refusals:
+            click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
+            click.echo(f"    -> {refusal.remediation}", err=True)
+        sys.exit(1)
     click.echo(f"Generated {len(result.written)} files under {out}")
+    _echo_scaffold_report(result.scaffold, out)
+    _warn_about_the_base(project_root)
+    if pages_workflow:
+        _write_pages_workflow(project_root, out)
+
+
+def _warn_about_the_base(project_root: Path) -> None:
+    """Warn on stderr when the base cannot match the project's GitHub Pages path.
+
+    The origin remote is read for this and for nothing else; the exit code is
+    the generation's own.
+    """
+    from beadloom.application.site.pages_base import base_warning
+    from beadloom.application.site.repository_link import origin_remote
+    from beadloom.application.site.site_config import site_config_of
+
+    warning = base_warning(site_config_of(project_root).base, origin_remote(project_root))
+    if warning is not None:
+        click.echo(warning, err=True)
+
+
+def _write_pages_workflow(project_root: Path, out: Path) -> None:
+    """Write the Pages workflow for the portal at *out*, and say what became of it."""
+    from beadloom import __version__
+    from beadloom.application.site.pages_workflow import (
+        PagesWorkflowError,
+        write_pages_workflow,
+    )
+    from beadloom.application.site.site_config import site_config_of
+
+    try:
+        report = write_pages_workflow(
+            project_root,
+            out_dir=out,
+            base=site_config_of(project_root).base,
+            version=__version__,
+        )
+    except PagesWorkflowError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    branch = f"branch {report.branch}" if report.branch else "no branch"
+    click.echo(
+        f"Pages workflow: {report.path} {report.outcome} (base {report.base}, "
+        f"Node {report.node_major}, portal {report.site_dir}/, {branch})"
+    )
+    if not report.branch and report.outcome != "kept":
+        click.echo(
+            f"{report.path} names no branch: git records no default branch for `origin` "
+            "(origin/HEAD), so every push starts a run that deploys only from the "
+            "default branch. To name it, run `git remote set-head origin --auto` and "
+            "`beadloom docs site --pages-workflow` again.",
+            err=True,
+        )
+    if report.outcome == "kept":
+        click.echo(f"Kept {report.path}: it {report.reason}", err=True)
+        click.echo(f"  -> {report.remediation}", err=True)
+
+
+def _echo_scaffold_report(report: ScaffoldReport, out: Path) -> None:
+    """Say what happened to each scaffold file, and name every one that was kept."""
+    click.echo(
+        f"Scaffold (beadloom {report.version}): {len(report.written)} written, "
+        f"{len(report.updated)} updated, {len(report.unchanged)} unchanged, "
+        f"{len(report.retired)} retired, {len(report.overridden)} copied from .beadloom/site/"
+    )
+    if not report.kept:
+        return
+    click.echo(
+        f"Kept {len(report.kept)} file(s) under {out} that beadloom did not write "
+        "or that were edited by hand; the shipped version was not written over them:",
+        err=True,
+    )
+    for kept in report.kept:
+        click.echo(f"  - {kept.path}: {kept.reason}", err=True)
+        click.echo(f"    -> {kept.remediation}", err=True)
 
 
 @docs.command("audit")

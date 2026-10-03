@@ -1,0 +1,10 @@
+"""Booking a pickup through the API."""
+
+from __future__ import annotations
+
+from parceldesk.api.routes import book_pickup
+from parceldesk.storage.bookings import BookingStore
+
+
+def test_book_pickup_returns_the_booking_number() -> None:
+    assert book_pickup("north-depot", 1.0, BookingStore())["id"] == 1

@@ -85,7 +85,10 @@ Status lives in ACTIVE.md, reconciled from the tracker. This table names the pla
 | B2 | `beadloom-qki6` | dev: this repository's site through the same path; `--pages-workflow`; workflows | P0 | B1 |
 | B3 | `beadloom-hmqn` | test: adopter fixtures for Python, Go, JS/TS, Java, Kotlin and Swift; build every one; browser tests on Go and TS | P0 | B1 |
 | B4 | `beadloom-ujzb.8` | dev: source links for a self-hosted forge, declared in config (owner, 2026-09-30) | P0 | P1 |
-| T2 | `beadloom-19l6` | test: slice 2's criteria, measured end to end | P0 | B2, B3, B4 |
+| B5 | `beadloom-ujzb.14` | bug: Go - init's false edges to `cmd/<module>`, reindex resolves no Go import (owner, 2026-10-01) | P1 | B3 |
+| B6 | `beadloom-ujzb.15` | bug: Maven/Gradle - init makes source-set nodes, no edges (owner, 2026-10-01) | P1 | B5 |
+| B7 | `beadloom-ujzb.16` | bug: Swift Package Manager - init finds nothing (owner, 2026-10-01) | P1 | B6 |
+| T2 | `beadloom-19l6` | test: slice 2's criteria, measured end to end | P0 | B2, B3, B4, B5, B6, B7 |
 | R2 | `beadloom-fht7` | review: slice 2, authors' accounts withheld | P0 | T2 |
 | W2 | `beadloom-ri5a` | tech-writer: adopter-facing docs for the portal | P0 | R2 |
 | P2 | `beadloom-la3t` | coordinator: the owner's browser look, PR 2 | P0 | W2 |

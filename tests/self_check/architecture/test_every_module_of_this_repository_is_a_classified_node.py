@@ -95,6 +95,26 @@ class TestSiteGenerationCluster:
         ``application/`` into ``application/site/``, whose single owner is the
         ``site-generation`` node: eleven modules plus the ``dashboard/`` package.
         BDL-076 A3 (``beadloom-7091``) added ``repository_link.py``, the twelfth.
+        BDL-076 B1 (``beadloom-dfwt``) added ``scaffold.py`` and ``site_config.py``,
+        the portal's shipped files and its identity: fourteen.
+        ``beadloom-ujzb.11`` added ``markdown_links.py``, the one rule for a link in
+        the project's own text on a portal page: fifteen.
+        BDL-076 B2 (``beadloom-qki6``) added ``pages_workflow.py``, the GitHub Pages
+        workflow that publishes the portal: sixteen.
+        ``beadloom-ujzb.12`` added ``markdown_code.py``, where a project's Markdown
+        holds code, and ``project_text.py``, the one path project text takes onto a
+        page, shown as written rather than compiled as a Vue template: eighteen.
+        ``beadloom-ujzb.13`` added ``pages_base.py``, whether the portal's base can
+        match the path GitHub Pages serves the project under: nineteen.
+        BDL-076 B4 (``beadloom-ujzb.8``) added ``forge_routes.py``, the routes a
+        forge serves a path under and which forge serves a host: twenty.
+        ``beadloom-ujzb.21`` replaced the hand-written ``markdown_code.py`` with
+        markdown-it-py read as VitePress reads Markdown: ``vitepress_markdown.py`` (the
+        parser), ``markdown_positions.py`` (where each token's text came from),
+        ``markdown_source.py`` (the located reading) and ``raw_html.py`` (raw HTML as
+        Vue's tokenizer reads it): twenty-three.
+        ``beadloom-ujzb.23`` added ``markdown_attrs.py``, where VitePress's
+        markdown-it-attrs reads a brace as the start of attributes: twenty-four.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -102,7 +122,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 12, names
+        assert len(names) == 24, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

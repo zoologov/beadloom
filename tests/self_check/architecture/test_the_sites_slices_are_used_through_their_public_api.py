@@ -20,7 +20,8 @@ from pathlib import PurePosixPath
 from tests.support.repository_root import REPO_ROOT
 
 #: The theme, relative to the repository root.
-_THEME = REPO_ROOT / "site" / ".vitepress" / "theme"
+#: Package data since BDL-076 B1 (`beadloom-dfwt`); `site/` holds the written copy.
+_THEME = REPO_ROOT / "src" / "beadloom" / "site_scaffold" / ".vitepress" / "theme"
 
 #: The layers whose second path part is a slice or a segment, and the layer
 #: that is one unit whole.

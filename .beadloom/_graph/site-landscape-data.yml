@@ -5,7 +5,7 @@ nodes:
   - ref_id: site-landscape-data
     kind: component
     summary: "The landscape data file as the landscape map reads it"
-    source: site/.vitepress/theme/entities/landscape-data/
+    source: src/beadloom/site_scaffold/.vitepress/theme/entities/landscape-data/
     tags: [fsd-entities]
     docs:
       - docs/services/vitepress-site/landscape-data.md

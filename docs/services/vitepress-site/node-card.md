@@ -3,7 +3,7 @@
 A slice of the `widgets` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/widgets/node-card/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/widgets/node-card/`
 
 ---
 
@@ -43,7 +43,7 @@ all says "not recorded", because the two are different answers.
 
 ## Tests
 
-`site/e2e/card.spec.js`: every field the data file holds, "none" where it holds nothing, the
-layer's origin, every edge kind by direction with a click that moves the selection, the commands
-copied, the symbol cap, every doc and test file by name, a source linked per forge, and a source
-without a link when the file gives none.
+`src/beadloom/site_scaffold/e2e/card.spec.js`: every field the data file holds, "none" where it
+holds nothing, the layer's origin, every edge kind by direction with a click that moves the
+selection, the commands copied, the symbol cap, every doc and test file by name, a source
+linked per forge, and a source without a link when the file gives none.

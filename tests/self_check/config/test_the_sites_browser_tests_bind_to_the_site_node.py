@@ -9,6 +9,11 @@ unplaced. The product behaviour — roots, patterns, the ``tests:`` override —
 judged over projects on disk elsewhere; this module holds the claims about this
 repository.
 
+BDL-076 B1 (``beadloom-dfwt``) moved the theme and the browser tests with the rest
+of the scaffold into the package, ``src/beadloom/site_scaffold/``: the theme is
+scanned because ``src`` is, and ``site/`` is the output ``docs site`` writes. The
+claims below follow the files; none of them was loosened.
+
 It reads the tracked configuration and graph through ``REPO_ROOT``, never the
 index. It carries the ``self_check`` marker by its folder (see
 ``tests/conftest.py``).
@@ -24,10 +29,12 @@ from tests.support.repository_root import REPO_ROOT
 
 #: The node that owns the site theme.
 _SITE_NODE = "vitepress-site"
-#: The folder the theme's scan path names.
-_THEME = "site/.vitepress/theme"
+#: The theme, where the package ships it.
+_THEME = "src/beadloom/site_scaffold/.vitepress/theme"
+#: The browser tests' root, where the package ships them.
+_E2E_ROOT = "src/beadloom/site_scaffold/e2e"
 #: A browser test as A5 will name it; it does not have to exist.
-_BROWSER_TEST = "site/e2e/viewer.spec.js"
+_BROWSER_TEST = f"{_E2E_ROOT}/viewer.spec.js"
 
 
 def _node_sources_and_overrides() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
@@ -44,14 +51,16 @@ def _node_sources_and_overrides() -> tuple[list[tuple[str, str]], list[tuple[str
 
 
 def test_the_site_theme_is_a_scan_path() -> None:
-    assert _THEME in resolve_scan_paths(REPO_ROOT)
+    """The theme sits under a scan path, so its files are read for symbols and imports."""
+    scan_paths = resolve_scan_paths(REPO_ROOT)
+    assert any(_THEME.startswith(f"{path.rstrip('/')}/") for path in scan_paths), scan_paths
 
 
 def test_a_playwright_spec_under_site_e2e_is_read_as_a_test() -> None:
     layout, problems = load_test_layout(REPO_ROOT)
 
     assert problems == []
-    assert "site/e2e" in layout.roots
+    assert _E2E_ROOT in layout.roots
     assert layout.framework_of(_BROWSER_TEST) == "playwright"
 
 

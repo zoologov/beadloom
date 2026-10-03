@@ -13,7 +13,14 @@ Cross-IDE context injection via a three-layer architecture.
    under `.beadloom/` (the index, and later the guard firing record) does not arrive as
    untracked churn in the adopter's repository. It is appended once and never rewritten,
    the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
-   prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
+   prints it. The same call names the portal's output directory, `/site/`, with
+   `ensure_portal_ignored()` (BDL-076 `beadloom-ujzb.13`), returned as `portal_ignore`; it
+   writes nothing when a line already decides for `site/` or when `site/` already holds files,
+   except untracked files of the portal `docs site` wrote, which the `is_portal` probe the CLI
+   hands to `bootstrap_project()` recognises (`beadloom-ujzb.24`, m4). Such a top-level folder
+   is not scanned either; `bootstrap_project()` returns it as `generated_portals`, and `init`
+   prints a `Not scanned: site/ - ...` line for it.
+   See the [ignore-block component](../../components/ignore-block/DOC.md).
 
 4. **The domain-parent post-condition** (one invariant, two writers) — every node
    `bootstrap_project()`
@@ -207,6 +214,59 @@ Cross-IDE context injection via a three-layer architecture.
    `test_the_path_it_names_survives_the_render_whole` asserts the tail contiguously, which
    is the only form of the claim a wrap cannot satisfy by accident.
 
+## What bootstrap reads per stack
+
+BDL-076 B5–B7 and R2 measured `init` on one small project per claimed stack
+(`tests/fixtures/site/`) and fixed what it drew. A cluster is a folder two levels below a source
+directory unless a stack's layout says otherwise:
+
+| Stack | Read from | Nodes | Scan paths | Edges in the quick scan |
+|-------|-----------|-------|------------|-------------------------|
+| Python, JS/TS, Rust and the rest | the folder tree | the folder clusters | the source directories | imports through the scan paths, relative JS/TS specifiers by file |
+| Go | the folder tree, `go.mod`, `go.work` | the folder clusters | the source directories (`cmd`, `internal`, ...) | through the governing `go.mod` (`graph/go_modules.py`); the standard library and other modules draw none |
+| Java, Kotlin | `scanner/jvm_layout.py`: every folder holding `src/<set>/<java\|kotlin>/` with a `.java` or `.kt` file | in the root module, the subpackages of the common base package, with their own subpackages as children; a module below the root is one cluster named by its path, with its top-level packages as children | the production roots, `src/<set>/<java\|kotlin>/`, and any other code folder in a module's folder | through the packages the files declare (`graph/jvm_packages.py`), so Kotlin's layout that omits the root package from the folders resolves; a package declared in several folders reaches the one holding the imported class, and draws no edge when different clusters hold the folders it reaches |
+| Swift | `scanner/swift_layout.py`: every `Package.swift`, read as text | a library, executable, macro or plugin target whose folder holds `.swift`; a package below the root is one cluster with its targets as children | the target folders, and any other code folder in a package's folder | through the target the manifest declares |
+
+A test source set (`test`, `integrationTest`, `testFixtures`, `androidTest`, `it`) and a Swift
+test target are never nodes and never scan paths: each is written into `tests.mirrors`, to the
+production root or target it tests, and a written `mirrors` replaces the default trees. Each
+layout reports the folders it `claimed`; `project_scan.unclaimed_code()` keeps every other
+folder with code, so a Python or TypeScript service beside a JVM module or a Swift package keeps
+its node, and `_cluster_with_children(claimed=...)` leaves claimed folders to their layout.
+
+Since `beadloom-ujzb.24` (re-review finding m3) the scan paths leave out only the folders a
+layout READS: `JvmLayout.read_folders` (each module's `src`) and `SwiftLayout.read_folders`
+(each target's folder). Code elsewhere in a module's folder (`backend/scripts` beside
+`backend/src`) is a scan path, and its files belong to the module's node, the deepest node whose
+folder holds them. `bootstrap_project()` returns that as `beside_modules`, a
+`CodeBesideModules(scanned, unread)`, and `init` prints its sentences:
+
+```text
+Also scanned: backend/scripts - code in a module's folder outside its source roots; its files belong to that module's node
+Not read: services/run.py - a code file lying directly in a folder that holds a module; a scan path is a folder, and that one would scan the module's test tree too, so move the file into a folder of its own to have it read
+```
+
+With several unread files the second line counts them and names the first five. Both lines are
+printed by `init --yes`, `init --bootstrap` and the wizard, and neither is printed when there is
+nothing to say.
+
+Not read, and said or known:
+
+- **An Xcode project.** Its targets list their files in `project.pbxproj`, not by folder, so a
+  folder node would carry no edge by construction. `swift_layout.unread_swift()` counts the
+  `.swift` files outside every manifest target and the `.xcodeproj`/`.xcworkspace` found, and
+  `init` prints `Not read: N .swift files outside any Package.swift target (Xcode: X.xcodeproj)`.
+- **Gradle `sourceSets` with custom `srcDirs`, and Maven's `<sourceDirectory>`.** Modules are
+  found by walking for the standard `src/<set>/<language>/` layout; no build file is parsed, so a
+  project name is not taken from `artifactId` or `rootProject.name` either.
+- **A code file lying directly beside a claimed module** (`services/x.py` next to
+  `services/billing/` holding `src/main/java/`) is in a cluster and in no scan path, and `init`
+  names it on its `Not read:` line.
+- **A portal written below a top-level folder** (`docs site --out a/b`) is not recognised as
+  the portal, so it is scanned like the project's code.
+- **A flat Python `tests/test_*.py`** binds to no node after `init`, because the written mirrors
+  bind `tests/unit/**` and `tests/integration/**` only (`beadloom-76mk`).
+
 ## API
 
 ### `prime_context(project_root, *, fmt="markdown")`
@@ -344,14 +404,23 @@ class ScanResult(TypedDict):
 
 ### `ClusterEntry` (TypedDict)
 
-A two-level directory cluster produced by `_cluster_with_children()`.
+A two-level directory cluster produced by `_cluster_with_children()`,
+`jvm_layout.cluster_packages()` and `swift_layout.cluster_targets()`.
 
 ```python
-class ClusterEntry(TypedDict):
+class _ClusterPlacement(TypedDict, total=False):
+    directory: str                      # The cluster's folder, when not source_dir/name
+    child_directories: dict[str, str]   # A child's folder, when not directory/child
+
+class ClusterEntry(_ClusterPlacement):
     files: list[str]                    # All code files in the cluster
     children: dict[str, list[str]]      # Child dir name → code files
     source_dir: str                     # Owning top-level source directory
 ```
+
+Read a cluster's folder with `cluster_directory(name, entry)` and a child's with
+`child_directory(name, entry, child)`, never by joining the names: a JVM package or a Swift
+target lies deeper than its name says.
 
 ### `IndexCounts` / `Reindexer` (`reindex_port.py`)
 
@@ -367,10 +436,12 @@ class IndexCounts(Protocol):
 Reindexer = Callable[[Path], IndexCounts]
 ```
 
-`interactive_init(project_root, *, reindex)` and
-`non_interactive_init(project_root, *, reindex, mode=..., force=...)` take the re-index as a
-**required** keyword argument, and `services/commands/setup.py` supplies
-`application.reindex.reindex`.
+`interactive_init(project_root, *, reindex, is_portal=None)` and
+`non_interactive_init(project_root, *, reindex, mode=..., force=..., is_portal=None)` take the
+re-index as a **required** keyword argument, and `services/commands/setup.py` supplies
+`application.reindex.reindex`. The optional `is_portal` probe is handed in for the same reason
+(`beadloom-ujzb.24`): `setup.py` supplies the scaffold's marker test (a file the scaffold ships,
+at its place in the folder, carrying the generated marker), which lives in `application.site`.
 
 Why it is handed in. The declared direction is
 `services → application → domains → infrastructure`; onboarding is a domain and the re-index is
@@ -401,7 +472,7 @@ fails at the call site instead.
 
 ## Source
 
-- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py` / `reindex_port.py`; the package `__init__.py` re-exports the full public surface
+- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py` / `reindex_port.py`, and the stack layouts `jvm_layout.py` (`read_jvm_layout()`, `JvmLayout`, `SourceRoot`, `is_test_set()`, `cluster_packages()`, `jvm_package_directory()`; `JvmLayout.read_folders`) and `swift_layout.py` (`read_swift_layout()`, `SwiftLayout`, `TargetRoot`, `cluster_targets()`, `unread_swift()`, `UnreadSwift`; `SwiftLayout.read_folders`); `project_scan.py` also holds `unclaimed_code()`, `UnclaimedCode`, `CodeBesideModules`, `generated_portals()` and `unscanned_portals_sentence()`; the package `__init__.py` re-exports the full public surface
 - `src/beadloom/services/commands/query.py` — `prime` CLI command
 - `src/beadloom/services/commands/setup.py` — `setup-rules` and `setup-mcp` CLI commands
 - `src/beadloom/services/mcp_server.py` — `prime` MCP tool

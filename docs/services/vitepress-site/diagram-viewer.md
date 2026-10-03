@@ -3,7 +3,7 @@
 A slice of the `widgets` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/widgets/diagram-viewer/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/widgets/diagram-viewer/`
 
 ---
 
@@ -31,5 +31,6 @@ base-aware click targets.
 
 ## Tests
 
-`site/e2e/diagram-links.spec.js`: a landscape diagram link to a page under `other/` carries the
-base path, and a diagram rendered again by a theme switch keeps its links and its controls.
+`src/beadloom/site_scaffold/e2e/diagram-links.spec.js`: a landscape diagram link to a page
+under `other/` carries the base path, and a diagram rendered again by a theme switch keeps its
+links and its controls.

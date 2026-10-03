@@ -303,7 +303,11 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    carries the mutation-SCOPE findings (BDL-061 S4b), each with its own rule
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
-   index was built.
+   index was built. Since BDL-076 B1 it also carries every value of the `site:`
+   block that `beadloom docs site` cannot use (`_site_config_findings`, rule
+   `site-config`, severity `error`, located at `.beadloom/config.yml`), read by the
+   same `read_site_config` that stops `docs site` before it writes: a mistyped
+   base deploys the portal under the wrong path and says nothing.
 11. **doctor** — graph integrity.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 

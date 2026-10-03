@@ -3,7 +3,7 @@
 A slice of the `app` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/app/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/app/`
 
 ---
 

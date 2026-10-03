@@ -9,7 +9,11 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
-from beadloom.onboarding.ignore_block import ensure_ignore_block
+from beadloom.onboarding.ignore_block import (
+    PortalProbe,
+    ensure_ignore_block,
+    ensure_portal_ignored,
+)
 from beadloom.onboarding.scanner.agents_md import (
     generate_agents_md,
     setup_mcp_auto,
@@ -18,17 +22,28 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
+from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 from beadloom.onboarding.scanner.project_scan import (
+    CodeBesideModules,
     _cluster_with_children,
     _detect_project_name,
     _read_manifest_deps,
+    generated_portals,
+    is_claimed,
     scan_project,
+    unclaimed_code,
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
 from beadloom.onboarding.scanner.rules_gen import generate_rules
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
+from beadloom.onboarding.scanner.swift_layout import (
+    cluster_targets,
+    read_swift_layout,
+    unread_swift,
+)
+from beadloom.onboarding.scanner.types import child_directory, cluster_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,11 +53,18 @@ def bootstrap_project(
     project_root: Path,
     *,
     preset_name: str | None = None,
+    is_portal: PortalProbe | None = None,
 ) -> dict[str, Any]:
     """Bootstrap a project: scan, cluster, generate YAML graph and config.
 
     When *preset_name* is given (or auto-detected), the bootstrap uses
     architecture-aware rules for node kind classification and edge inference.
+
+    *is_portal* tells a folder holding the portal ``beadloom docs site`` wrote
+    (the scaffold's marker test, handed in from above this domain): such a
+    top-level folder is not scanned, and its untracked files do not keep the
+    portal's ignore line out (the re-review's finding m4). Without it every
+    folder is read as the project's, as before.
 
     Returns summary dict with generated file counts.
     """
@@ -52,7 +74,8 @@ def bootstrap_project(
     graph_dir = beadloom_dir / "_graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    scan = scan_project(project_root)
+    portals = generated_portals(project_root, is_portal) if is_portal is not None else ()
+    scan = scan_project(project_root, skip=portals)
 
     # Resolve preset.
     if preset_name and preset_name in PRESETS:
@@ -60,9 +83,34 @@ def bootstrap_project(
     else:
         preset = detect_preset(project_root)
 
+    # A Maven or Gradle tree is clustered by package below its source roots
+    # (BDL-076 B6), a Swift package by target (B7); the folders they account for
+    # leave the directory clustering, which made nodes of `src/main` and
+    # `src/test` and knew no `Sources/`. Only those folders leave it: a Python or
+    # TypeScript service beside a module or a package keeps its node and its scan
+    # path (R2 finding 2). Without such a tree both lists below are the scan's,
+    # as they were.
+    jvm = read_jvm_layout(project_root)
+    swift = read_swift_layout(project_root)
+    claimed = jvm.claimed | swift.claimed
+    source_dirs = [d for d in scan["source_dirs"] if not is_claimed(d, claimed)]
     clusters = _cluster_with_children(
         project_root,
-        source_dirs=scan["source_dirs"] or None,
+        source_dirs=source_dirs if claimed else (source_dirs or None),
+        claimed=claimed,
+    )
+    clusters.update(cluster_packages(jvm, taken=clusters))
+    clusters.update(cluster_targets(swift, taken=clusters))
+    # The scan paths leave out only what the layouts READ (a module's `src`, a
+    # target's folder): the rest of a module's folder is scanned like any other,
+    # and a code file no scan path can hold is named (the re-review's finding m3).
+    read = jvm.read_folders | swift.read_folders
+    unclaimed = unclaimed_code(
+        project_root, [d for d in scan["source_dirs"] if not is_claimed(d, read)], read
+    )
+    beside_modules = CodeBesideModules(
+        scanned=tuple(folder for folder in unclaimed.folders if is_claimed(folder, claimed)),
+        unread=unclaimed.loose_files,
     )
 
     nodes: list[dict[str, str]] = []
@@ -101,14 +149,14 @@ def bootstrap_project(
         kind, confidence = preset.classify_dir(name)
         all_files: list[str] = info["files"]
         children: dict[str, list[str]] = info["children"]
-        source_dir: str = info["source_dir"]
+        directory = cluster_directory(name, info)
 
         # Top-level node — contextual summary with symbols, README, entry points.
         preferred = _sanitize_ref_id(name)
         ref_id = ref_ids.take(preferred, qualifier=kind)
         ref_by_name[preferred] = ref_id
         cluster_refs[name] = ref_id
-        dir_path = project_root / source_dir / name
+        dir_path = project_root / directory
         summary = _build_contextual_summary(
             dir_path,
             name,
@@ -123,7 +171,7 @@ def bootstrap_project(
                 "kind": kind,
                 "summary": summary,
                 "confidence": confidence,
-                "source": f"{source_dir}/{name}/",
+                "source": f"{directory}/",
             }
         )
 
@@ -134,7 +182,8 @@ def bootstrap_project(
                 child_preferred = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
                 child_ref_id = ref_ids.take(child_preferred, qualifier=child_kind)
                 ref_by_name[child_preferred] = child_ref_id
-                child_dir_path = project_root / source_dir / name / child_name
+                child_dir = child_directory(name, info, child_name)
+                child_dir_path = project_root / child_dir
                 child_summary = _build_contextual_summary(
                     child_dir_path,
                     child_name,
@@ -149,7 +198,7 @@ def bootstrap_project(
                         "kind": child_kind,
                         "summary": child_summary,
                         "confidence": child_conf,
-                        "source": f"{source_dir}/{name}/{child_name}/",
+                        "source": f"{child_dir}/",
                     }
                 )
                 edges.append(
@@ -161,8 +210,8 @@ def bootstrap_project(
                 )
 
     # Fallback: no clusters found, create minimal nodes from scan.
-    if not nodes and scan["source_dirs"]:
-        for sd in scan["source_dirs"]:
+    if not nodes and source_dirs:
+        for sd in source_dirs:
             sd_ref_id = ref_ids.take(sd, qualifier=preset.default_kind)
             ref_by_name[sd] = sd_ref_id
             nodes.append(
@@ -178,8 +227,7 @@ def bootstrap_project(
     # Monorepo: infer depends_on edges from manifest files.
     if preset.infer_deps_from_manifests:
         for name, info in clusters.items():
-            source_dir = info["source_dir"]
-            pkg_dir = project_root / source_dir / name
+            pkg_dir = project_root / cluster_directory(name, info)
             dep_names = _read_manifest_deps(pkg_dir)
             src_ref_id = cluster_refs[name]
             for dep in dep_names:
@@ -194,7 +242,7 @@ def bootstrap_project(
                     )
 
     # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, cluster_refs)
+    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
     edges.extend(import_edges)
 
     # Create root node + part_of edges from top-level nodes.
@@ -303,13 +351,28 @@ def bootstrap_project(
 
     # Create config.
     config: dict[str, Any] = {
-        "scan_paths": scan["source_dirs"] or ["src"],
-        "languages": scan["languages"] or ["python"],
+        "scan_paths": sorted(
+            [
+                *unclaimed.folders,
+                *jvm.production_roots,
+                *swift.production_roots,
+            ]
+        )
+        or ["src"],
+        # The project scan counts no `.swift` file, so a Swift package's language
+        # comes from its targets.
+        "languages": sorted({*scan["languages"], *swift.languages}) or ["python"],
         "sync": {"hook_mode": "warn"},
         "preset": preset.name,
     }
     if not has_docs:
         config["docs_dir"] = None
+    # Each JVM test tree and each Swift test target is named with the code tree
+    # it tests, so a test binds to its package or target; written whole, both
+    # together, because a declared mapping replaces the test layout's default one.
+    mirrors = {**jvm.mirrors, **swift.mirrors}
+    if mirrors:
+        config["tests"] = {"mirrors": dict(sorted(mirrors.items()))}
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,
@@ -329,6 +392,9 @@ def bootstrap_project(
     # Name the derived state this directory now holds, so the adopter does not
     # inherit untracked churn from the first reindex or the first guarded edit.
     # Bootstrap owns it because bootstrap is what creates the working set.
+    # The portal's output directory goes first, as one line of its own, so it
+    # does not read as an entry of the block that follows (BDL-076 `.13`).
+    portal_ignore = ensure_portal_ignored(project_root, is_portal=is_portal)
     ignore = ensure_ignore_block(project_root)
 
     return {
@@ -346,4 +412,11 @@ def bootstrap_project(
         "edges": edges,
         "ignore_added": ignore.added,
         "ignore_skipped_reason": ignore.skipped_reason,
+        "portal_ignore": portal_ignore,
+        # Swift this run saw and did not read, said rather than left silent (R2 F7).
+        "unread_swift": unread_swift(project_root, swift),
+        # Code beside a module: scanned, or named when no scan path can hold it (m3).
+        "beside_modules": beside_modules,
+        # Top-level folders holding the portal `docs site` wrote, not scanned (m4).
+        "generated_portals": portals,
     }

@@ -3,10 +3,10 @@
 """Where a node's source can be read on the web: the repository the site links to.
 
 The node card links a node's ``source`` to its repository (BDL-076 A3). The
-address comes from the project's own ``origin`` remote, never from a constant,
-because the same generator writes an adopter's portal; and the revision is the
-commit the site was generated from, so a link shows the source the page
-describes rather than whatever the branch holds later.
+address comes from the project's declaration or its own ``origin`` remote, never
+from a constant, because the same generator writes an adopter's portal; and the
+revision is the commit the site was generated from, so a link shows the source
+the page describes rather than whatever the branch holds later.
 
 A remote git can reach but a browser cannot (a path on disk, ``file://``) gives
 no address, and the card then shows the source without a link; so does a remote
@@ -17,28 +17,40 @@ node's finished link, because no screen reads the address and a remote git
 cannot use can still hold a credential in a place no parser expects (BDL-076
 re-review finding m3).
 
-The link to one path is decided here, per forge, and written finished into the
-data file (BDL-076 R1 finding M1): each forge serves a path at a revision under
-its own route, and only the generator knows which forge the remote is. The
-forge is recognised from the host, and only a public forge's own host is
-recognised. Any other host — a self-hosted forge included — gets no link,
-because a guessed route is a 404 that looks like a link, and the card's
-plain-text source is true. A self-hosted forge is declared in the project's
-configuration instead (the owner's ruling, `beadloom-ujzb.8`, slice 2).
+The link to one path is decided here, per forge, and written finished wherever
+it goes (BDL-076 R1 finding M1): the node card's source, and every link from a
+project's own text to a file of its repository, an image included. The routes
+are :mod:`beadloom.application.site.forge_routes`; the forge is recognised from
+the host, a public forge's by this package and any other by the project's
+``site.forges`` setting (``beadloom-ujzb.8``). A host neither names gets no
+link, because a guessed route is a 404 that looks like a link, and the plain
+text it leaves is true.
+
+Which repository (``beadloom-ujzb.8``): the one the project declares in
+``site.repo_url`` wins over the ``origin`` remote. The declaration is the
+project's own statement, checked by ``config-check`` for a credential, a query
+and a fragment; the remote is whatever this clone was made from — a mirror, a
+fork, a CI clone with a token — and an SSH remote of a forge served under a path
+prefix cannot name the web address at all. The remote is read only when nothing
+is declared, and only for the card's links, as before.
 """
 
 from __future__ import annotations
 
 import logging
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
+from beadloom.application.site.forge_routes import VSTS_SSH_HOST, VSTS_SUFFIX, forge_for
 from beadloom.graph.federation import current_commit_sha
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
+
+    from beadloom.application.site.forge_routes import Forge, Route
 
 logger = logging.getLogger(__name__)
 
@@ -56,83 +68,57 @@ _GIT_SUFFIX = ".git"
 #: (``<collection>/<project>/_ssh/<repo>``) are not mapped: they get no address
 #: rather than one on the SSH host that looks right (re-review finding m1).
 _AZURE_SSH_HOST = "ssh.dev.azure.com"
-_VSTS_SSH_HOST = "vs-ssh.visualstudio.com"
 _AZURE_SSH_PREFIX = "v3"
 _AZURE_SSH_PARTS = 4  # v3, organisation, project, repository
 
-_GITHUB = "github"
-_GITLAB = "gitlab"
-_BITBUCKET = "bitbucket"
-_GITEA = "gitea"
-_AZURE = "azure"
-
-#: Each forge's route to a path at a revision, over the repository's web address.
-#: The path and the revision arrive URL-encoded.
-_ROUTES = {
-    _GITHUB: "{base}/tree/{ref}/{path}",
-    _GITLAB: "{base}/-/tree/{ref}/{path}",
-    _BITBUCKET: "{base}/src/{ref}/{path}",
-    _GITEA: "{base}/src/commit/{ref}/{path}",
-    _AZURE: "{base}?path=/{path}&version=GC{ref}",
-}
-
-#: The public forges, by the host they serve from.
-_PUBLIC_HOSTS = {
-    "github.com": _GITHUB,
-    "gitlab.com": _GITLAB,
-    "bitbucket.org": _BITBUCKET,
-    "codeberg.org": _GITEA,
-    "gitea.com": _GITEA,
-    "dev.azure.com": _AZURE,
-}
-
-#: Azure DevOps' older hosts, ``<organisation>.visualstudio.com``.
-_VSTS_SUFFIX = ".visualstudio.com"
-
-#: Azure DevOps' other hosts, web and SSH.
+#: Azure DevOps' hosts, web and SSH, besides ``<organisation>.visualstudio.com``.
 _AZURE_HOSTS = frozenset({"dev.azure.com", _AZURE_SSH_HOST})
 
 
 @dataclass(frozen=True)
 class RepositoryLink:
-    """The repository's web address and the revision the site was generated from.
+    """The repository's web address, the revision the site was generated from, and its forges.
 
-    Both are empty when nothing states them: a project outside git, or one whose
-    ``origin`` has no web address.
+    ``url`` and ``ref`` are empty when nothing states them: a project outside
+    git, or one whose ``origin`` has no web address and that declares none.
+    ``forges`` are the hosts the project declares a forge for (``site.forges``),
+    keyed lower-case.
     """
 
     url: str = ""
     ref: str = ""
+    forges: Mapping[str, Forge] = field(default_factory=dict, hash=False)
 
     def source_url(self, source: str) -> str:
-        """The page the forge serves for *source* at the recorded commit, or ``""``.
+        """The page the forge serves for *source*, a directory or a file, or ``""``.
 
-        ``""`` when there is no repository, no commit or no path, and when the
-        host is not a forge this module recognises.
+        ``""`` when there is no repository, no commit or no path, and when no
+        forge is known for the host.
         """
+        return self._link("tree", source)
+
+    def file_url(self, path: str) -> str:
+        """The page the forge serves for the file *path*, or ``""`` (as :meth:`source_url`)."""
+        return self._link("blob", path)
+
+    def raw_url(self, path: str) -> str:
+        """The file *path* itself, as an image is drawn from, or ``""``.
+
+        Also ``""`` when the forge serves no raw file the generator can name.
+        """
+        return self._link("raw", path)
+
+    def _link(self, route: Route, source: str) -> str:
         path = source.strip("/")
-        route = _ROUTES.get(forge_of(self.url) or "")
-        if route is None or not self.ref or not path:
+        forge = forge_for(self.url, self.forges)
+        if forge is None or not self.ref or not path:
             return ""
-        return route.format(
-            base=self.url, ref=quote(self.ref, safe=""), path=quote(path, safe="/")
-        )
-
-
-def forge_of(web_url: str) -> str | None:
-    """Which forge serves *web_url*, by its host; ``None`` when none is recognised."""
-    try:
-        host = (urlsplit(web_url).hostname or "").lower()
-    except ValueError:
-        return None
-    if host.endswith(_VSTS_SUFFIX) and host != _VSTS_SSH_HOST:
-        return _AZURE
-    return _PUBLIC_HOSTS.get(host)
+        return forge.link(route, self.url, self.ref, path)
 
 
 def _is_azure_host(host: str) -> bool:
     """Whether Azure DevOps serves *host* (lower-case), on the web or over SSH."""
-    return host in _AZURE_HOSTS or host.endswith(_VSTS_SUFFIX)
+    return host in _AZURE_HOSTS or host.endswith(VSTS_SUFFIX)
 
 
 def _strip_suffix(path: str) -> str:
@@ -170,8 +156,8 @@ def _ssh_web_url(host: str, path: str) -> str:
     _, org, project, repo = parts
     if lowered == _AZURE_SSH_HOST:
         return f"https://dev.azure.com/{org}/{project}/_git/{repo}"
-    if lowered == _VSTS_SSH_HOST:
-        return f"https://{org}{_VSTS_SUFFIX}/{project}/_git/{repo}"
+    if lowered == VSTS_SSH_HOST:
+        return f"https://{org}{VSTS_SUFFIX}/{project}/_git/{repo}"
     return ""
 
 
@@ -214,7 +200,11 @@ def _web_url(remote: str) -> str:
     return ""
 
 
-def _origin_remote(project_root: Path) -> str:
+def origin_remote(project_root: Path) -> str:
+    """The ``origin`` remote as git reports it, or ``""`` without git or a remote.
+
+    Never logged or published as it is: it can hold a credential.
+    """
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],  # noqa: S607 - the git on PATH, as every git read here
@@ -230,15 +220,25 @@ def _origin_remote(project_root: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def repository_of(project_root: Path) -> RepositoryLink:
+def repository_of(
+    project_root: Path,
+    *,
+    declared_url: str = "",
+    forges: Mapping[str, Forge] | None = None,
+) -> RepositoryLink:
     """The repository link of the project at ``project_root``.
 
-    Empty unless ``project_root`` is the top of its own git repository: a
-    project nested in another repository must not link to that one, which is
-    the guard :func:`~beadloom.graph.federation.current_commit_sha` applies.
+    *declared_url* is ``site.repo_url``, and wins over the ``origin`` remote,
+    which is read only when nothing is declared. The revision is empty unless
+    ``project_root`` is the top of its own git repository: a project nested in
+    another repository must not link to that one, which is the guard
+    :func:`~beadloom.graph.federation.current_commit_sha` applies. A declared
+    repository without a revision keeps its address, so a link to the
+    repository itself still goes somewhere true, and links no path.
     """
+    declared = dict(forges or {})
     ref = current_commit_sha(project_root)
     if ref is None:
-        return RepositoryLink()
-    url = web_url_of_remote(_origin_remote(project_root))
-    return RepositoryLink(url=url, ref=ref if url else "")
+        return RepositoryLink(url=declared_url, forges=declared)
+    url = declared_url or web_url_of_remote(origin_remote(project_root))
+    return RepositoryLink(url=url, ref=ref if url else "", forges=declared)

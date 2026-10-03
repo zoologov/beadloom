@@ -3,7 +3,7 @@
 A slice of the `widgets` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/widgets/graph-viewer/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/widgets/graph-viewer/`
 
 ---
 
@@ -86,7 +86,8 @@ they share it. `bezier` separates them best, and it is the viewer's curve style.
 
 ## Tests
 
-`site/e2e/colours.spec.js` and `site/e2e/graph-viewer-instances.spec.js` are declared on this
-node: colours in both themes, and two viewers on one page, each with its own panel id and
-test handle. The other Playwright specs drive this
-widget too, and each is declared on the slice it tests.
+`src/beadloom/site_scaffold/e2e/colours.spec.js` and
+`src/beadloom/site_scaffold/e2e/graph-viewer-instances.spec.js` are declared on this node:
+colours in both themes, and two viewers on one page, each with its own panel id and test
+handle. The other Playwright specs drive this widget too, and each is declared on the slice it
+tests.

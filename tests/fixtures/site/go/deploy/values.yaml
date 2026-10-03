@@ -1,0 +1,4 @@
+replicaCount: 2
+image:
+  repository: registry.example.org/tidewater
+  tag: "0.4.1"

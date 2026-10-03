@@ -96,7 +96,7 @@ def serialize_dashboard_data(data: dict[str, object]) -> str:
     return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
 
-def _widgets_section() -> list[str]:
+def _widgets_section(*, ai_techwriter: bool) -> list[str]:
     """Mount the committed widgets — critical-first (banner + cards lead).
 
     The attention banner (``AlertBanner``) + threshold-colored status cards
@@ -107,7 +107,12 @@ def _widgets_section() -> list[str]:
     ``ClientOnly`` mounts are the single presentation surface for the dashboard
     (BEAD-12: the verbose textual metric dump was removed); the honest data lives
     in ``dashboard.data.json``, computed by ``build_dashboard_data`` (unchanged).
+
+    The AI tech-writer panel is mounted only for a project that records its
+    runs (BDL-076 B1): on any other project's portal it would be a panel about
+    a harness the project does not have.
     """
+    panel = ["  <AiTechwriterActivity />"] if ai_techwriter else []
     return [
         "<ClientOnly>",
         "  <AlertBanner />",
@@ -115,7 +120,7 @@ def _widgets_section() -> list[str]:
         "  <HealthGauges />",
         "  <CategoryChart />",
         "  <TrendCharts />",
-        "  <AiTechwriterActivity />",
+        *panel,
         "  <Recommendations />",
         "</ClientOnly>",
         "",
@@ -142,5 +147,7 @@ def render_dashboard_md(data: dict[str, object]) -> str:
         "`doctor` / `federate`). Honest by construction.",
         "",
     ]
-    lines.extend(_widgets_section())
+    ai = data.get("ai_techwriter")
+    recorded = isinstance(ai, dict) and ai.get("recorded") is True
+    lines.extend(_widgets_section(ai_techwriter=recorded))
     return "\n".join(lines) + "\n"

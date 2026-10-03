@@ -1,0 +1,9 @@
+"""Pricing a pickup."""
+
+from __future__ import annotations
+
+from parceldesk.billing.invoice import price_pickup
+
+
+def test_price_pickup_adds_the_weight_charge_to_the_base_rate() -> None:
+    assert price_pickup(10.0) == 7.5

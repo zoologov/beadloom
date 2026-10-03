@@ -36,7 +36,9 @@ from tests.support.repository_root import REPO_ROOT as _REPO_ROOT
 if TYPE_CHECKING:
     from pathlib import Path
 
-_SITE = _REPO_ROOT / "site"
+# BDL-076 B1 (`beadloom-dfwt`): the scaffold is package data, laid out as it sits
+# in a portal; `site/` is the copy `docs site` writes, absent from a fresh checkout.
+_SITE = _REPO_ROOT / "src" / "beadloom" / "site_scaffold"
 _THEME = _SITE / ".vitepress" / "theme"
 
 # The deps the Cytoscape+ELK viz needs at runtime — INCLUDING `web-worker`, the
@@ -47,7 +49,7 @@ _REQUIRED_VIZ_DEPS = ("cytoscape", "cytoscape-elk", "elkjs", "web-worker")
 def _package_json() -> dict[str, object]:
     path = _SITE / "package.json"
     if not path.exists():
-        pytest.skip("site/package.json absent in this checkout")
+        pytest.skip("the scaffold's package.json is absent in this checkout")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -61,7 +63,7 @@ def test_viz_worker_deps_declared() -> None:
             deps.update(block)
     missing = [d for d in _REQUIRED_VIZ_DEPS if d not in deps]
     assert not missing, (
-        f"site/package.json is missing viz worker deps {missing}; "
+        f"the scaffold's package.json is missing viz worker deps {missing}; "
         "this is the class of gap that crashed the dev server while docs:build "
         "stayed green (BDL-060 S4)."
     )

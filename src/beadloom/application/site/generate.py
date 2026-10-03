@@ -4,8 +4,8 @@
 
 Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``):
 - ``index.md`` — the About home page, rendered from the project ``README.md``
-  via :func:`beadloom.application.site.about.render_about` (link-rebased so
-  README links resolve on the site). Falls back to the architecture overview
+  with its links rebased (see :mod:`beadloom.application.site.about`) so README
+  links resolve on the site. Falls back to the architecture overview
   body when no ``README.md`` is present.
 - ``ru/index.md`` — the RU About page, rendered from ``README.ru.md`` the same
   way (omitted when that file is absent).
@@ -26,8 +26,15 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   in (source never mutated) with a per-doc ``doc_sync`` validation badge (same
   source as ``sync-check``).
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
-  committed VitePress scaffold (sections: Dashboard / Architecture / Landscape /
+  VitePress scaffold (sections: Dashboard / Architecture / Landscape /
   Documentation).
+- ``.vitepress/site.generated.mjs`` — the portal's identity (title, description,
+  base path, repository link) from the project's ``site:`` block (see
+  :mod:`beadloom.application.site.site_config`).
+- the scaffold — the theme, the viewer, ``package.json``, the lockfile, the
+  VitePress config and the browser tests — written from the installed package,
+  then the project's own ``.beadloom/site/``, copied last (see
+  :mod:`beadloom.application.site.scaffold`).
 
 Beadloom produces, VitePress renders. Output is deterministic (sorted, stable
 frontmatter) and is NEVER written into the source ``docs/`` tree — only under
@@ -45,13 +52,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom import __version__
 from beadloom.application.debt_report import (
     NodeDebt,
     collect_debt_data,
     compute_top_offenders,
     load_debt_weights,
 )
-from beadloom.application.site.about import render_about
+from beadloom.application.site.about import portal_links_for
 from beadloom.application.site.architecture_card import NodeFinding, NodeVerdicts
 from beadloom.application.site.architecture_view import (
     build_architecture_view_data,
@@ -85,19 +93,24 @@ from beadloom.application.site.node_pages import (
     node_page_urls,
     render_all_pages,
 )
-from beadloom.application.site.published_docs import build_published_docs, publish_docs
-from beadloom.application.site.repository_link import repository_of
+from beadloom.application.site.project_text import render_project_text
+from beadloom.application.site.published_docs import (
+    build_published_docs,
+    publish_docs,
+    published_files,
+)
+from beadloom.application.site.repository_link import RepositoryLink, repository_of
+from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
+from beadloom.application.site.site_config import render_site_module, site_config_of
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
-logger = logging.getLogger(__name__)
+    from beadloom.application.site.markdown_links import PortalLinks
 
-#: Canonical repo URL used to rebase unknown internal README links to absolute
-#: GitHub URLs (so the About page never carries a broken site-relative link).
-_REPO_URL = "https://github.com/zoologov/beadloom"
+logger = logging.getLogger(__name__)
 
 
 class MermaidValidationError(RuntimeError):
@@ -117,10 +130,15 @@ class MermaidValidationError(RuntimeError):
 
 @dataclass(frozen=True)
 class SiteResult:
-    """The outcome of a site generation: every file written, sorted."""
+    """The outcome of a site generation: every file written, sorted.
+
+    ``scaffold`` is what the scaffold writer did with each shipped file,
+    including the ones it kept because they are not beadloom's.
+    """
 
     out_dir: Path
     written: tuple[Path, ...]
+    scaffold: ScaffoldReport
 
 
 @dataclass(frozen=True)
@@ -278,24 +296,44 @@ def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[st
     return slugs
 
 
-#: README cross-link basename (lowercased) -> site route. Rewrites the README's
-#: ``[Русский](README.ru.md)`` / ``[English](README.md)`` toggle into an in-page
-#: cross-link between the EN About (``/``) and the RU About (``/ru/``) — replaces
-#: the dropped VitePress locale switcher (BDL-046 BEAD-11).
-_CROSS_LINK_ROUTES: dict[str, str] = {"readme.ru.md": "/ru/", "readme.md": "/"}
+#: Each README of the pair and the site route of its About page. The README's
+#: ``[Русский](README.ru.md)`` / ``[English](README.md)`` toggle becomes an
+#: in-page cross-link between the EN About (``/``) and the RU About (``/ru/``) —
+#: replaces the dropped VitePress locale switcher (BDL-046 BEAD-11).
+_ABOUT_PAGES: tuple[tuple[str, str], ...] = (("README.md", "/"), ("README.ru.md", "/ru/"))
 
 
-def _render_about_page(readme_path: Path, slugs: set[str]) -> str | None:
-    """The About-page body for *readme_path*, or None when the file is absent."""
+def _portal_links(
+    project_root: Path, slugs: set[str], repository: RepositoryLink, base: str
+) -> PortalLinks:
+    """What this portal publishes, for rebasing the links in the project's own text.
+
+    A README of the pair is routed only when the file exists, since its About
+    page is written only then: until BDL-076 (``beadloom-ujzb.11``) the toggle
+    went to ``/ru/`` on a project with no ``README.ru.md``, a dead link.
+    *repository* is the repository the project declares, at the site's commit,
+    empty when none is declared; *base* is the path the portal is served under,
+    which a raw HTML link needs.
+    """
+    routes = {name: route for name, route in _ABOUT_PAGES if (project_root / name).is_file()}
+    return portal_links_for(
+        published_doc_slugs=slugs,
+        repository=repository,
+        cross_link_routes=routes,
+        base=base,
+        published_files=published_files(project_root),
+    )
+
+
+def _render_about_page(readme_path: Path, portal: PortalLinks, page_dir: str) -> str | None:
+    """The About-page body for *readme_path*, or None when the file is absent.
+
+    *page_dir* is the portal directory the page is written to.
+    """
     if not readme_path.is_file():
         return None
-    readme_text = readme_path.read_text(encoding="utf-8")
-    return render_about(
-        readme_text,
-        published_doc_slugs=slugs,
-        repo_url=_REPO_URL,
-        cross_link_routes=_CROSS_LINK_ROUTES,
-    )
+    text = readme_path.read_text(encoding="utf-8")
+    return render_project_text(text, portal, page_dir=page_dir)
 
 
 def _render_docs_overview(slugs: set[str]) -> str:
@@ -496,7 +534,20 @@ def generate_site(
 
     Returns:
         A :class:`SiteResult` listing every written file (sorted).
+
+    Raises:
+        SiteConfigError: the project's ``site:`` block holds a value the portal
+            cannot use. Raised before any file is written.
     """
+    identity = site_config_of(project_root)
+    # One repository for every link: the declared one wins over the remote
+    # (``beadloom-ujzb.8``). The project's own text links only to a repository
+    # the project declared, since nothing from the remote is published except
+    # the card's source links (BDL-076 CONTEXT, the owner's ruling).
+    repository = repository_of(
+        project_root, declared_url=identity.repo_url, forges=identity.forges
+    )
+    text_repository = repository if identity.repo_url else RepositoryLink()
     nodes = load_nodes(conn)
     written: list[Path] = []
     now_ts = now_ts or _now()
@@ -504,8 +555,9 @@ def generate_site(
     # About home (EN) from README.md, with the architecture overview moved to
     # its own /architecture page. Falls back to the overview when no README.
     slugs = _published_doc_slugs(conn, project_root)
+    portal = _portal_links(project_root, slugs, text_repository, identity.base)
     overview = _render_index(conn, nodes)
-    about_en = _render_about_page(project_root / "README.md", slugs)
+    about_en = _render_about_page(project_root / "README.md", portal, "")
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
 
     # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
@@ -525,7 +577,7 @@ def generate_site(
             debt=_node_debt(conn, project_root),
         ),
         generated_at=now_ts,
-        repository=repository_of(project_root),
+        repository=repository,
     )
     _write(
         out_dir / "public" / "architecture.data.json",
@@ -536,11 +588,11 @@ def generate_site(
     _write(out_dir / "architecture-diagram.md", overview, written)
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
-    about_ru = _render_about_page(project_root / "README.ru.md", slugs)
+    about_ru = _render_about_page(project_root / "README.ru.md", portal, "ru")
     if about_ru is not None:
         _write(out_dir / "ru" / "index.md", about_ru, written)
 
-    for page in render_all_pages(conn):
+    for page in render_all_pages(conn, portal):
         _write(out_dir / page.rel_path, page.body, written)
 
     # Showcase A — the metrics dashboard (machine data + human page). Numbers
@@ -594,7 +646,7 @@ def generate_site(
     # site/docs/ preserving structure (source never mutated) and inject a
     # per-doc validation badge from the doc_sync engine (same source as
     # sync-check). Badges land only in the copy under out_dir.
-    published = publish_docs(conn, out_dir, project_root=project_root)
+    published = publish_docs(conn, out_dir, project_root=project_root, portal=portal)
     written.extend(published)
     # Replace the flat docs landing publish_docs emits with a grouped overview
     # (Domains / Services / Guides …). The path is already recorded by
@@ -610,5 +662,14 @@ def generate_site(
         render_nav_config(conn, project_root),
         written,
     )
+    _write(out_dir / ".vitepress" / "site.generated.mjs", render_site_module(identity), written)
 
-    return SiteResult(out_dir=out_dir, written=tuple(sorted(written)))
+    # The scaffold last but one, the project's overrides last of all: a file
+    # under .beadloom/site/ replaces whatever this run wrote at its path.
+    scaffold = write_scaffold(out_dir, project_root=project_root, version=__version__)
+    for rel in (*scaffold.written, *scaffold.updated, *scaffold.overridden):
+        written.append(out_dir / rel)
+
+    return SiteResult(
+        out_dir=out_dir, written=tuple(sorted(set(written))), scaffold=scaffold
+    )

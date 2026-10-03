@@ -100,8 +100,12 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 def test_ci_has_the_declared_jobs() -> None:
     """The consolidated four (BDL-050), the locale DIMENSION (BDL-061.38) and site-e2e.
 
-    ``site-e2e`` (BDL-076 A5) is the one job here that is not a required check;
-    it is listed in ``tests.support.ci_workflows.ADVISORY_JOBS`` with its exit.
+    ``site-e2e`` (BDL-076 A5) is the job here that is not a required check; it is
+    listed in ``tests.support.ci_workflows.ADVISORY_JOBS`` with its exit.
+    ``site-adopters`` (B3) left this file for ``site-adopters.yml`` in
+    ``beadloom-ujzb.20``, so that it runs only on a pull request that changes what
+    it tests; ``tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py``
+    holds it there.
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
@@ -280,6 +284,44 @@ def test_deploy_site_node_version_bumped() -> None:
     text = DEPLOY_SITE.read_text(encoding="utf-8")
     assert "node-version: 18" not in text
     assert "node-version: 22" in text
+
+
+def _setup_node_versions() -> dict[str, str]:
+    """Every ``actions/setup-node`` step of every workflow, as ``file:job`` -> version."""
+    found: dict[str, str] = {}
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        jobs = _load(workflow).get("jobs", {})
+        assert isinstance(jobs, dict)
+        for name, job in jobs.items():
+            steps = job.get("steps", []) if isinstance(job, dict) else []
+            for step in steps:
+                if isinstance(step, dict) and "actions/setup-node@" in str(step.get("uses", "")):
+                    found[f"{workflow.name}:{name}"] = str(step["with"]["node-version"])
+    return found
+
+
+def test_every_workflow_builds_the_portal_on_the_node_the_scaffold_declares() -> None:
+    """BDL-076 ``beadloom-ujzb.13``: one Node for the portal, declared once.
+
+    An adopter's Pages workflow sets up the lowest major the scaffold's
+    ``engines.node`` admits. Our own workflows build the same scaffold, so they
+    set up that major too: a portal we test on one Node and an adopter builds on
+    another is a difference nobody measures.
+    """
+    import json
+
+    from beadloom.application.site.pages_workflow import node_major_of
+    from beadloom.application.site.scaffold import shipped_files
+
+    declared = node_major_of(json.loads(shipped_files()["package.json"])["engines"]["node"])
+    versions = _setup_node_versions()
+    assert {
+        "ci.yml:site-build",
+        "ci.yml:site-e2e",
+        "deploy-site.yml:build",
+        "site-adopters.yml:site-adopters",
+    } <= set(versions)
+    assert {where: v for where, v in versions.items() if v != declared} == {}
 
 
 # --------------------------------------------------------------------------- #

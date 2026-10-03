@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
+from beadloom.graph.go_modules import GoModules
+from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
 from beadloom.graph.rules.layers import part_of_ancestors
+from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
@@ -35,8 +38,9 @@ _TS_ALIAS_MAP: dict[str, str] = {
     "~/": "src/",
 }
 
-# Go standard library packages have no '/' in their path (heuristic).
-# We skip those.
+# Go standard library packages with no '/' in their path are not recorded at
+# all (heuristic); the others are recorded and stay unresolved, because
+# ``resolve_go_import`` maps only the modules the project holds.
 
 
 @dataclass(frozen=True)
@@ -1004,6 +1008,107 @@ def resolve_import_to_node(
     return _find_node_by_source_prefix(dir_path, effective_scan, conn)
 
 
+#: The extension of a Go source file, and the suffix of a Go test file.
+_GO_EXTENSION = ".go"
+_GO_TEST_SUFFIX = "_test.go"
+
+
+def resolve_go_import(
+    import_path: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+    modules: GoModules,
+) -> str | None:
+    """Map a Go *import_path* to the node that owns the package it names (BDL-076 B5).
+
+    *importer* is the importing file's project-relative POSIX path. The package's
+    directory comes from the project's Go modules (:mod:`.go_modules`: the module
+    path stripped, the rest read under that module's ``go.mod``); its owner is
+    decided by the one ownership rule, applied to the package's first non-test
+    ``.go`` file in name order, so a node sourced at a directory or at a file of
+    the package are both found. ``None`` for the standard library, a module the
+    project does not hold, and a package directory that holds no Go file.
+
+    Go imports never go through :func:`resolve_import_to_node`: its dotted-path
+    reading turned ``net/http`` into a node whose source is ``net/``.
+    """
+    directory = modules.package_directory(import_path, importer)
+    if directory is None:
+        return None
+    package = project_root / directory
+    if not package.is_dir():
+        return None
+    files = sorted(p.name for p in package.glob(f"*{_GO_EXTENSION}") if p.is_file())
+    if not files:
+        return None
+    primary = next((name for name in files if not name.endswith(_GO_TEST_SUFFIX)), files[0])
+    return get_owning_ref_id(conn, posixpath.join(directory, primary))
+
+
+#: The extension of a Swift source file.
+_SWIFT_EXTENSION = ".swift"
+
+
+def _swift_module(import_path: str) -> str:
+    """The module a Swift import names: ``import Core.Route`` names ``Core``."""
+    return import_path.split(".", 1)[0]
+
+
+def resolve_swift_import(
+    import_path: str,
+    importer: str,
+    project_root: Path,
+    conn: sqlite3.Connection,
+    packages: SwiftPackages,
+) -> str | None:
+    """Map a Swift *import_path* to the node that owns the target it names (BDL-076 B7).
+
+    *importer* is the importing file's project-relative POSIX path. The target's
+    folder comes from the project's manifests (:mod:`.swift_packages`: the target
+    of that name in the importer's own package, else the one other package that
+    declares it); its owner is decided by the one ownership rule, applied to the
+    folder itself, so a node sourced at the target folder or above it is found.
+    ``None`` for an Apple framework, a product of a package the project does not
+    hold, a target with no Swift source and a folder that does not exist.
+
+    The caller reads an import here only when some manifest declares its module;
+    a project with no ``Package.swift`` keeps the dotted-path reading of
+    :func:`resolve_import_to_node`, which finds a module folder under a scan path.
+    """
+    directory = packages.module_directory(import_path, importer)
+    if directory is None or not (project_root / directory).is_dir():
+        return None
+    return get_owning_ref_id(conn, f"{directory}/")
+
+
+def resolve_jvm_import(
+    import_path: str,
+    file_path: Path,
+    conn: sqlite3.Connection,
+    scan_paths: list[str],
+    packages: JvmPackages,
+) -> str | None:
+    """Map a Java or Kotlin *import_path* to the node that owns the package it names.
+
+    The package is the one the project's files DECLARE (:mod:`.jvm_packages`, R2
+    finding 6), and its owner is decided by the one ownership rule, applied to
+    the package's folder. Kotlin's recommended layout omits the common root
+    package from the folders, so the dotted path names no folder there; it is
+    still the reading for an import whose package no file declares, which keeps
+    every import that resolved before resolving the same way.
+
+    Where several folders declare the package, the import reaches those holding
+    the class it names, else all of them, and it resolves only when one node owns
+    every folder it reaches: never to a folder picked by the order it was read in
+    (the re-review's finding m5).
+    """
+    if packages.package(import_path) is None:
+        return resolve_import_to_node(import_path, file_path, conn, scan_paths=scan_paths)
+    owners = {get_owning_ref_id(conn, f"{folder}/") for folder in packages.folders(import_path)}
+    return owners.pop() if len(owners) == 1 else None
+
+
 #: Extensions whose files write their imports in one language, mapped to one
 #: representative extension of it. An extension not listed is its own language.
 _IMPORT_LANGUAGE: dict[str, str] = {
@@ -1014,6 +1119,11 @@ _IMPORT_LANGUAGE: dict[str, str] = {
     ".cjs": ".ts",
     ".vue": ".ts",
     ".kts": ".kt",
+    # Java and Kotlin share the JVM's one package namespace: a Kotlin file imports
+    # a Java class by its package and the other way round, and Gradle keeps the
+    # two in separate roots (`src/main/java`, `src/main/kotlin`) of one module
+    # (BDL-076 B6).
+    ".java": ".kt",
     ".mm": ".m",
     ".h": ".c",
     ".cpp": ".c",
@@ -1191,8 +1301,16 @@ def _index_one_file(
     project_root: Path,
     conn: sqlite3.Connection,
     scan_paths: list[str],
+    go_modules: GoModules,
+    swift_packages: SwiftPackages,
+    jvm_packages: JvmPackages,
 ) -> int:
-    """Index one source file's imports into ``code_imports``; return the count."""
+    """Index one source file's imports into ``code_imports``; return the count.
+
+    *go_modules* is read only when the file is Go, *swift_packages* only when it
+    is Swift, and each only once per run. *jvm_packages* holds the packages the
+    project's Java and Kotlin files declare, read once per run.
+    """
     imports = extract_imports(file_path)
     if not imports:
         return 0
@@ -1208,7 +1326,21 @@ def _index_one_file(
     is_ts = file_path.suffix in _TS_EXTENSIONS
 
     for imp in imports:
-        if is_ts and is_relative_specifier(imp.import_path):
+        if file_path.suffix == _GO_EXTENSION:
+            resolved = resolve_go_import(
+                imp.import_path, relative.as_posix(), project_root, conn, go_modules
+            )
+        elif file_path.suffix == _SWIFT_EXTENSION and swift_packages.declares(
+            _swift_module(imp.import_path)
+        ):
+            resolved = resolve_swift_import(
+                imp.import_path, relative.as_posix(), project_root, conn, swift_packages
+            )
+        elif file_path.suffix in JVM_EXTENSIONS and jvm_packages:
+            resolved = resolve_jvm_import(
+                imp.import_path, file_path, conn, scan_paths, jvm_packages
+            )
+        elif is_ts and is_relative_specifier(imp.import_path):
             resolved = resolve_relative_import(
                 imp.import_path, relative.as_posix(), project_root, conn
             )
@@ -1242,12 +1374,18 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     scan_paths = resolve_scan_paths(project_root)
     files = _collect_source_files(project_root)
     languages = scan_path_languages(project_root, scan_paths, files)
+    go_modules = GoModules(project_root)
+    swift_packages = SwiftPackages(project_root)
+    jvm_packages = read_jvm_packages(project_root, files)
     total = sum(
         _index_one_file(
             file_path,
             project_root,
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
+            go_modules,
+            swift_packages,
+            jvm_packages,
         )
         for file_path in files
     )
@@ -1284,8 +1422,17 @@ def reindex_file_imports(
         conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
 
     scan_paths = resolve_scan_paths(project_root)
-    languages = scan_path_languages(project_root, scan_paths, _collect_source_files(project_root))
+    files = _collect_source_files(project_root)
+    languages = scan_path_languages(project_root, scan_paths, files)
     extensions = _supported_extensions()
+    go_modules = GoModules(project_root)
+    swift_packages = SwiftPackages(project_root)
+    # Every JVM file's declaration is read only when a touched file is Java or Kotlin.
+    jvm_packages = (
+        read_jvm_packages(project_root, files)
+        if any(posixpath.splitext(path)[1] in JVM_EXTENSIONS for path in touched)
+        else JvmPackages(())
+    )
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
@@ -1296,6 +1443,9 @@ def reindex_file_imports(
             project_root,
             conn,
             _scan_paths_for(file_path.suffix, scan_paths, languages),
+            go_modules,
+            swift_packages,
+            jvm_packages,
         )
 
     conn.commit()

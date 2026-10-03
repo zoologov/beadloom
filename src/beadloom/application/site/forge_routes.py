@@ -1,0 +1,428 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
+"""The routes a forge serves a repository path under, and which forge serves a host.
+
+A forge shows a path at a revision under its own route, and serves the file
+itself under another one; an image in a project's text needs the second,
+because the first is an HTML page. Three routes, over the repository's web
+address ``{url}``, the revision ``{ref}`` and the path ``{path}``:
+
+``tree``
+    the page for a path, a directory or a file (the node card's source link);
+``blob``
+    the page for a file (a link in the project's own text);
+``raw``
+    the file itself (an image in that text); empty when the forge serves none
+    the generator can name.
+
+Each known kind carries its routes below. None was opened against a live forge
+when they were written (no network was used): they are the URL forms the forges
+publish for GitHub, GitLab, Gitea and Bitbucket Cloud. The least certain is the
+Azure DevOps ``raw`` route, a call to its Items REST API, followed by what a
+forge does with a directory under ``blob`` (GitHub and GitLab redirect to
+``tree``). ``bitbucket`` is Bitbucket Cloud; Bitbucket Data Center serves other
+routes and is described by a template.
+
+A forge is recognised from the host of the web address. A public forge's own
+host is recognised by this module; any other host is recognised only when the
+project declares the forge that serves it (``site.forges``, BDL-076
+``beadloom-ujzb.8``), by kind or by a URL template, because a guessed route is a
+404 that looks like a link.
+"""
+
+from __future__ import annotations
+
+import string
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
+from urllib.parse import quote, urlsplit
+
+from beadloom.doc_sync.declarations import describe_value
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+#: The three routes a forge serves a path under.
+Route = Literal["tree", "blob", "raw"]
+
+
+@dataclass(frozen=True)
+class Forge:
+    """How one forge serves a repository's paths: three URL templates.
+
+    ``kind`` is the name of a known forge, ``""`` for one a project described by
+    a template. A route is ``""`` when the forge serves nothing under it.
+    """
+
+    kind: str
+    tree: str
+    blob: str
+    raw: str
+
+    def link(self, route: Route, url: str, ref: str, path: str) -> str:
+        """The address of *path* at *ref* under *route* (``tree``/``blob``/``raw``), or ``""``.
+
+        The revision and the path are URL-encoded here; ``url`` is taken as the
+        web address it already is.
+        """
+        template = {"tree": self.tree, "blob": self.blob, "raw": self.raw}[route]
+        if not template:
+            return ""
+        values = {"url": url, "ref": quote(ref, safe=""), "path": quote(path, safe="/")}
+        if _ITEMS in template:
+            items = _azure_items(url)
+            if not items:
+                return ""
+            values[_ITEMS_FIELD] = items
+        return template.format(**values)
+
+    @property
+    def route_segments(self) -> frozenset[str]:
+        """The first path segment each route appends to the repository's address.
+
+        ``tree``/``blob``/``raw`` for GitHub, ``-`` for GitLab; none for a route
+        that is a query (Azure DevOps) or does not start at ``{url}/``.
+        """
+        segments: set[str] = set()
+        for template in (self.tree, self.blob, self.raw):
+            if not template.startswith(_URL_PREFIX):
+                continue
+            first = template[len(_URL_PREFIX) :].split("/", 1)[0]
+            if first and "{" not in first and "?" not in first:
+                segments.add(first)
+        return frozenset(segments)
+
+
+#: A route that continues the repository's address as a path.
+_URL_PREFIX = "{url}/"
+
+#: The fewest path segments a repository's address has on any known forge:
+#: an owner or group, and the repository.
+_REPOSITORY_SEGMENTS = 2
+
+
+def runs_past_repository(web_url: str, forge: Forge) -> bool:
+    """Whether *web_url* goes on, past a repository, into a page *forge* serves.
+
+    ``https://github.com/o/r/tree/main`` does: ``tree`` is a route GitHub
+    appends, it comes after the owner and the repository, and something
+    follows it. A segment that is the last one, or that comes before the
+    second, is a name (a repository called ``tree``, an owner called ``src``).
+
+    A known forge also says where its repository's address ends (BDL-076,
+    ``beadloom-ujzb.23``, re-review finding n2): GitHub, Bitbucket Cloud and a
+    public Gitea host serve a repository at ``/<owner>/<repository>`` and
+    nothing deeper, so ``/o/r/pulls`` is a page; GitLab reserves the names of
+    its own routes (``tree``, ``blob``, ``-``), which no project may take, so one
+    of them past the second segment is a page; Azure DevOps ends a repository
+    at ``_git/<repository>``.
+    """
+    segments = _segments(web_url)
+    if segments is None:
+        return False
+    routes = forge.route_segments
+    last = len(segments) - 1
+    if any(
+        segment in routes
+        for index, segment in enumerate(segments)
+        if _REPOSITORY_SEGMENTS <= index < last
+    ):
+        return True
+    return _past_by_shape(segments, forge.kind, _host(web_url))
+
+
+def stops_before_repository(web_url: str, forge: Forge) -> str | None:
+    """How *forge* writes a repository's address, when *web_url* stops before one; else ``None``.
+
+    A host alone, an owner or a group alone, an Azure DevOps project with no
+    ``_git/<repository>``: none of them is a repository on a known forge. A forge
+    a project describes by a template says nothing about its addresses' shape.
+    """
+    shape = _SHAPES.get(forge.kind)
+    segments = _segments(web_url)
+    if shape is None or segments is None:
+        return None
+    if forge.kind == _AZURE:
+        short = _AZURE_REPOSITORY not in segments[:-1]
+    else:
+        short = len(segments) < _REPOSITORY_SEGMENTS
+    return shape.path if short else None
+
+
+@dataclass(frozen=True)
+class _Shape:
+    """Where a known forge's repository address ends.
+
+    ``path`` is how the forge writes one, for a refusal; ``at_root`` that it is
+    always the first two segments of the path, and ``public_at_root`` that it is
+    on the forge's public host (a self-hosted one may serve under a path);
+    ``pages`` the segments past the repository only the forge's own pages use.
+    """
+
+    path: str
+    at_root: bool
+    public_at_root: bool = False
+    pages: frozenset[str] = frozenset()
+
+
+#: The project names GitLab reserves because its own routes use them.
+_GITLAB_RESERVED = frozenset(
+    ("-", "badges", "blame", "blob", "builds", "commits", "create", "create_dir", "edit",
+     "files", "find_file", "new", "preview", "raw", "refs", "tree", "update", "wikis")
+)  # fmt: skip
+#: Gitea's pages of a repository, for a host that may serve it under a path.
+_GITEA_PAGES = frozenset(
+    ("src", "raw", "media", "blame", "commits", "commit", "branches", "tags", "releases",
+     "issues", "pulls", "wiki", "activity", "actions", "projects", "packages", "milestones",
+     "labels", "settings", "compare")
+)  # fmt: skip
+#: The segment before an Azure DevOps repository's name.
+_AZURE_REPOSITORY = "_git"
+
+
+def _past_by_shape(segments: list[str], kind: str, host: str) -> bool:
+    """Whether *segments* run past where a repository's address ends on the forge *kind*."""
+    shape = _SHAPES.get(kind)
+    if shape is None:
+        return False
+    if kind == _AZURE:
+        return _AZURE_REPOSITORY in segments[:-2]
+    at_root = shape.at_root or (shape.public_at_root and _PUBLIC_HOSTS.get(host) == kind)
+    if at_root:
+        return len(segments) > _REPOSITORY_SEGMENTS
+    last = len(segments) - 1
+    return any(
+        segment in shape.pages and (kind == _GITLAB or index < last)
+        for index, segment in enumerate(segments)
+        if index >= _REPOSITORY_SEGMENTS
+    )
+
+
+def _segments(web_url: str) -> list[str] | None:
+    try:
+        return [part for part in urlsplit(web_url).path.split("/") if part]
+    except ValueError:
+        return None
+
+
+def _host(web_url: str) -> str:
+    try:
+        return (urlsplit(web_url).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+_GITHUB = "github"
+_GITLAB = "gitlab"
+_BITBUCKET = "bitbucket"
+_GITEA = "gitea"
+_AZURE = "azure"
+
+#: Azure DevOps serves a file's content through its REST API, under the
+#: project, not the repository's web page. The generator derives that address
+#: from the web address; a project's own template cannot name it.
+_ITEMS_FIELD = "items"
+_ITEMS = "{" + _ITEMS_FIELD + "}"
+_AZURE_WEB_SEGMENT = "/_git/"
+_AZURE_ITEMS_ROUTE = "/_apis/git/repositories/{repo}/items"
+#: The Items API version the route names; a GET without one is refused.
+_AZURE_API_VERSION = "7.1"
+
+#: Every known forge, by kind.
+KNOWN_FORGES: Mapping[str, Forge] = {
+    _GITHUB: Forge(
+        kind=_GITHUB,
+        tree="{url}/tree/{ref}/{path}",
+        blob="{url}/blob/{ref}/{path}",
+        raw="{url}/raw/{ref}/{path}",
+    ),
+    _GITLAB: Forge(
+        kind=_GITLAB,
+        tree="{url}/-/tree/{ref}/{path}",
+        blob="{url}/-/blob/{ref}/{path}",
+        raw="{url}/-/raw/{ref}/{path}",
+    ),
+    _GITEA: Forge(
+        kind=_GITEA,
+        tree="{url}/src/commit/{ref}/{path}",
+        blob="{url}/src/commit/{ref}/{path}",
+        raw="{url}/raw/commit/{ref}/{path}",
+    ),
+    _BITBUCKET: Forge(
+        kind=_BITBUCKET,
+        tree="{url}/src/{ref}/{path}",
+        blob="{url}/src/{ref}/{path}",
+        raw="{url}/raw/{ref}/{path}",
+    ),
+    _AZURE: Forge(
+        kind=_AZURE,
+        tree="{url}?path=/{path}&version=GC{ref}",
+        blob="{url}?path=/{path}&version=GC{ref}",
+        raw=(
+            _ITEMS + "?path=/{path}&versionDescriptor.version={ref}"
+            "&versionDescriptor.versionType=commit&%24format=octetStream&download=false"
+            f"&api-version={_AZURE_API_VERSION}"
+        ),
+    ),
+}
+
+#: The public forges, by the host they serve from.
+_PUBLIC_HOSTS = {
+    "github.com": _GITHUB,
+    "gitlab.com": _GITLAB,
+    "bitbucket.org": _BITBUCKET,
+    "codeberg.org": _GITEA,
+    "gitea.com": _GITEA,
+    "dev.azure.com": _AZURE,
+}
+
+#: Where each known forge's repository address ends (:func:`runs_past_repository`).
+_SHAPES: Mapping[str, _Shape] = {
+    _GITHUB: _Shape("/<owner>/<repository>", at_root=True),
+    _BITBUCKET: _Shape("/<workspace>/<repository>", at_root=True),
+    _GITEA: _Shape(
+        "/<owner>/<repository>", at_root=False, public_at_root=True, pages=_GITEA_PAGES
+    ),
+    _GITLAB: _Shape("/<group>/<project>", at_root=False, pages=_GITLAB_RESERVED),
+    _AZURE: _Shape("/<organisation>/<project>/_git/<repository>", at_root=False),
+}
+
+#: Azure DevOps' older hosts, ``<organisation>.visualstudio.com``, and the one
+#: among them that serves SSH and no web page.
+VSTS_SUFFIX = ".visualstudio.com"
+VSTS_SSH_HOST = "vs-ssh.visualstudio.com"
+
+
+def forge_for(web_url: str, declared: Mapping[str, Forge] | None = None) -> Forge | None:
+    """The forge that serves *web_url*, by its host; ``None`` when none is known.
+
+    A host the project declares (keys lower-case) is looked up first, so a
+    declaration is never overruled by this module's table.
+    """
+    try:
+        host = (urlsplit(web_url).hostname or "").lower()
+    except ValueError:
+        return None
+    if not host:
+        return None
+    if declared and host in declared:
+        return declared[host]
+    if host.endswith(VSTS_SUFFIX) and host != VSTS_SSH_HOST:
+        return KNOWN_FORGES[_AZURE]
+    kind = _PUBLIC_HOSTS.get(host)
+    return None if kind is None else KNOWN_FORGES[kind]
+
+
+def _azure_items(url: str) -> str:
+    """The Items API address of the Azure DevOps repository at *url*, or ``""``."""
+    head, found, repo = url.rpartition(_AZURE_WEB_SEGMENT)
+    if not found or not repo or "/" in repo:
+        return ""
+    return head + _AZURE_ITEMS_ROUTE.format(repo=repo)
+
+
+# -- a project's own declaration ------------------------------------------------
+
+#: The routes a project's template gives: the page for a path, and the file.
+_SOURCE = "source"
+_RAW = "raw"
+_TEMPLATE_KEYS = (_SOURCE, _RAW)
+#: The placeholders a template may use.
+PLACEHOLDERS = ("url", "ref", "path")
+_REQUIRED_PLACEHOLDER = "path"
+_WEB_SCHEMES = frozenset({"http", "https"})
+
+#: Values the placeholders are replaced with to check what a template yields.
+_SAMPLE = {"url": "https://forge.example/team/repo", "ref": "0" * 40, "path": "a/b"}
+
+
+def read_forge(setting: object) -> tuple[Forge | None, tuple[str, ...]]:
+    """The forge a ``site.forges`` value names, or what makes it name none.
+
+    A string is a kind; a mapping is a template: ``source:`` (required), the
+    page for a path, and ``raw:``, the file itself. Every problem is returned,
+    not only the first, so an author repairs the entry in one pass.
+    """
+    if isinstance(setting, str):
+        forge = KNOWN_FORGES.get(setting)
+        return (forge, ()) if forge else (None, (_unknown_kind(setting),))
+    if not isinstance(setting, dict):
+        return None, (f"is {describe_value(setting)}, not a forge kind or a mapping of templates",)
+    problems = [
+        f"has `{key}:`, which is not a template key; the keys are `source:` and `raw:`"
+        for key in setting
+        if key not in _TEMPLATE_KEYS
+    ]
+    if _SOURCE not in setting:
+        problems.append("has no `source:` template")
+    templates: dict[str, str] = {}
+    for key in _TEMPLATE_KEYS:
+        if key not in setting:
+            continue
+        value = setting[key]
+        problem = template_problem(value)
+        if problem is not None:
+            problems.append(f"`{key}:` {problem}")
+        elif isinstance(value, str):
+            templates[key] = value
+    if problems:
+        return None, tuple(problems)
+    source = templates[_SOURCE]
+    return Forge(kind="", tree=source, blob=source, raw=templates.get(_RAW, "")), ()
+
+
+def template_problem(template: object) -> str | None:
+    """What makes *template* unusable as a route, or ``None``."""
+    if not isinstance(template, str):
+        return f"is {describe_value(template)}, not a template"
+    try:
+        fields = [
+            (name, conversion, spec)
+            for _, name, spec, conversion in string.Formatter().parse(template)
+            if name is not None
+        ]
+    except ValueError:
+        return "has an unmatched brace; write a placeholder as `{path}`"
+    names: list[str] = []
+    for name, conversion, spec in fields:
+        written = (
+            "{"
+            + name
+            + (f"!{conversion}" if conversion else "")
+            + (f":{spec}" if spec else "")
+            + "}"
+        )
+        if name not in PLACEHOLDERS:
+            return f"names `{written}`; the placeholders are {_placeholders()}"
+        if conversion or spec:
+            return f"writes `{written}`; a placeholder is written bare, as `{{{name}}}`"
+        names.append(name)
+    if _REQUIRED_PLACEHOLDER not in names:
+        return "has no `{path}`, so every path would get one address"
+    return _yield_problem(template)
+
+
+def _yield_problem(template: str) -> str | None:
+    """What is wrong with the address *template* yields, or ``None``."""
+    try:
+        parts = urlsplit(template.format(**_SAMPLE))
+        host = parts.hostname
+    except ValueError:
+        return "does not yield a web address"
+    if parts.scheme not in _WEB_SCHEMES or not host:
+        return "does not yield an http(s) address; start it with `{url}` or `https://`"
+    if parts.username is not None or parts.password is not None:
+        return "carries a credential, which the portal would publish"
+    return None
+
+
+def _unknown_kind(name: str) -> str:
+    kinds = ", ".join(f"`{kind}`" for kind in sorted(KNOWN_FORGES))
+    return (
+        f"names `{name}`, which is not a forge kind; the kinds are {kinds}, "
+        "or a mapping with a `source:` template"
+    )
+
+
+def _placeholders() -> str:
+    return ", ".join(f"`{{{name}}}`" for name in PLACEHOLDERS)

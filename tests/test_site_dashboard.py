@@ -1132,6 +1132,9 @@ def test_ai_techwriter_skips_malformed_rows(tmp_path: Path) -> None:
 
 def test_dashboard_md_mounts_ai_techwriter_widget(tmp_path: Path) -> None:
     project = _make_project(tmp_path, with_violation=False)
+    # BDL-076 B1: the panel is mounted for a project that records its runs, so
+    # the project records them; an empty store is still a recording project.
+    _write_runs(project, [])
     conn = _open(project)
     try:
         data = build_dashboard_data(conn, project_root=project)
@@ -1139,3 +1142,17 @@ def test_dashboard_md_mounts_ai_techwriter_widget(tmp_path: Path) -> None:
         conn.close()
     md = render_dashboard_md(data)
     assert "<AiTechwriterActivity" in md
+
+
+def test_dashboard_md_omits_the_ai_techwriter_widget_without_a_run_store(
+    tmp_path: Path,
+) -> None:
+    """BDL-076 B1: a project without the harness gets no panel about it."""
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    assert data["ai_techwriter"]["recorded"] is False
+    assert "<AiTechwriterActivity" not in render_dashboard_md(data)

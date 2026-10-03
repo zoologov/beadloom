@@ -3,7 +3,7 @@
 A slice of the `pages` layer of the VitePress site's Feature-Sliced layout. The layout and the
 layer rule are described in [the site's page](../vitepress-site.md).
 
-**Source:** `site/.vitepress/theme/pages/landscape/`
+**Source:** `src/beadloom/site_scaffold/.vitepress/theme/pages/landscape/`
 
 ---
 
@@ -37,4 +37,4 @@ card of either of its ends.
 
 ## Tests
 
-`site/e2e/landscape.spec.js` drives this page.
+`src/beadloom/site_scaffold/e2e/landscape.spec.js` drives this page.
