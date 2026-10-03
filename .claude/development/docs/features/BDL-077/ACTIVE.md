@@ -16,6 +16,8 @@
 - [x] R&D, two prototypes in the scratchpad: path A (Cytoscape + ELK routes + bridges) and path B (JointJS core, own SVG from ELK, maxGraph); numbers in `RND.md` (2026-10-03)
 - [x] PRD drafted (`PRD.md`, Draft) with five open questions for the owner
 - [x] Owner's rulings (2026-10-03): Arrange removed; loops kept; bridges only on highlighted edges; a map-like overview (semantic zoom) in scope; the staircase solved in scope — folded into PRD
+- [x] PRD approved (2026-10-03)
+- [ ] Explore axes; two probes for the RFC (a map-like overview without boxes moving; the hub staircase)
 - [ ] RFC, CONTEXT, PLAN; beads
 
 ## Results
