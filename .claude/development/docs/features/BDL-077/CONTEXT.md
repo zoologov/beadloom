@@ -1,0 +1,95 @@
+# CONTEXT: BDL-077 — The viewer draws edges like a classic diagram
+
+> **Status:** Approved
+> **Created:** 2026-10-03
+> **Last updated:** 2026-10-03
+
+---
+
+## Goal
+
+The architecture viewer draws ELK's orthogonal routes around every box, reads like a map at the
+overview and opens detail where the user zooms, bundles a node's edges into a trunk and bus instead
+of a staircase, and shows bridges where highlighted edges cross — from one ELK layout, so nothing
+moves.
+
+## Key Constraints
+
+- **One ELK layout; levels, bundles and bridges are derived from it.** No re-layout per level, per
+  selection or per filter; box displacement across levels is 0.
+- **ELK runs in a Web Worker, elkjs 0.12.0 called directly;** `cytoscape-elk` is removed. Results in
+  root coordinates (`elk.json.shapeCoords`/`edgeCoords: ROOT`).
+- **Cytoscape 3.34.1 stays;** literal colours only; exact pins.
+- **The data file does not change** (schema 2, every v1 key). Aggregation and levels are computed in
+  the browser from `edges` and `part_of`. No Python node is in scope.
+- **Feature-Sliced Design:** layers `app`, `pages`, `widgets`, `features`, `entities`, `shared`; a
+  layer imports only below it; a slice only through its `index.js`; `site-fsd-layers` judges it.
+- **Browser tests assert state through `window.__beadloomViewer`, not pixels;** every behaviour
+  lands with a case seen failing first; the PRD's numbers are checked by a suite case on this
+  repository's portal and an adopter fixture. Frame bounds are stated per environment (CI has no
+  GPU).
+- **No project vocabulary hard-coded** in anything that ships; the same canvas serves the
+  landscape mode.
+- **Commits and suites:** commit only your own files by explicit path under
+  `bd merge-slot acquire/release --holder <bead-id>` (proceed only on exit 0); never pipe a command
+  whose exit code is the answer; run long suites in the foreground. Restore
+  `.beadloom/metrics_history.json` if a run rewrites it.
+- **The owner looks at the viewer in a browser before the PR is merged;** merge on the owner's word.
+
+## Code Standards
+
+### Language and Environment
+
+- JavaScript (ES modules) and Vue 3 SFCs for the viewer, no TypeScript; Python 3.10+ only where a
+  self-check or the suite needs it.
+- Node 22 (`$HOME/.nvm/versions/node/v22.9.0/bin` locally); npm with the committed lockfile; uv.
+
+### Methodologies
+
+| Methodology | Application |
+|---|---|
+| TDD | each behaviour with its Playwright case seen red first; pure functions (routes, bundles, levels, bridges) driven with crafted inputs |
+| Clean Code | pure functions over ELK output in `lib/`, Cytoscape effects in `model/`; SRP, DRY, KISS |
+| Architecture | FSD as above; `services -> application -> domains -> infrastructure` for any Python touched |
+
+### Testing
+
+- **Browser:** Playwright on `vitepress build` served by `vitepress preview`, Chromium; the shipped
+  suite also on the six adopter fixtures (`site-adopters`).
+- **Python:** pytest + pytest-cov where a self-check changes; coverage ≥ 80% on changed modules.
+
+### Code Quality
+
+- `uv run ruff check src/ tests/`, `uv run mypy src/`, `npm run docs:build`, the browser suite,
+  `beadloom ci` rc 0.
+
+### Restrictions
+
+- No `console.log`; no global state beyond the documented test handle.
+- No `Any`/`# type: ignore` without a reason; no bare `except:`; pathlib; `safe_load`.
+
+## Architectural Decisions
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-10-03 | Keep Cytoscape; draw ELK's orthogonal routes (path A) | R&D: through-box 232 → 0, indistinct 22 → 0; JointJS core and maxGraph fail on this graph; own SVG is the fallback |
+| 2026-10-03 | Arrange (dragging boxes) removed | Owner: routes never go stale |
+| 2026-10-03 | Edges from a node to its own container stay loops | Owner |
+| 2026-10-03 | Bridges only on highlighted edges (hover, neighbourhood, impact) | Owner; bridges on every crossing read as texture |
+| 2026-10-03 | A map-like overview: levels derived from one layout, aggregated routes from member routes, open-what-is-in-view at N = 600 px (1.3× fit floor, 0.8 hysteresis), a selection opens its own ancestors, a walk opens its boxes | Owner rulings 4 and Q2; probe: displacement 0, overview 453 → 37 edges, frame 27 → 17 ms (125 → 17 at adopter size) |
+| 2026-10-03 | Aggregated edges per unordered pair; weak ones hidden only above a budget of 100 drawn, at the smallest weight that fits, counted on the box, all drawn on hover/selection of the box | Owner Q1 with the coordinator's refinement |
+| 2026-10-03 | Trunk + bus post-processed from ELK's sections (bus on every node, trunks at ≥ 20 drawn edges, hub-to-hub on the source's trunk) | Probe: `cli-commands` 36 steps / 70 lanes → 1 / 10; no node moves; ELK-side options rejected |
+| 2026-10-03 | PRD goals restated: A2 counted against edges with no common endpoint; hub bound in channels and lanes, not pixel width | Owner Q3 |
+| 2026-10-03 | Loops onto the root wrapper hidden at the overview | Owner Q4 |
+| 2026-10-03 | The data file does not change | Everything needed is in `edges` and `part_of`; keeps Python out of scope |
+
+## Related Files
+
+Discover with `beadloom ctx vitepress-site`, `beadloom ctx site-graph-viewer` and `axes.md`
+Supplement A.
+
+## Current Phase
+
+- **Phase:** Development
+- **Current bead:** see ACTIVE.md
+- **Blockers:** none

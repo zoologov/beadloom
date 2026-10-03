@@ -1,6 +1,6 @@
 # RFC: BDL-077 — The viewer draws edges like a classic diagram
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-10-03
 
 ---

@@ -1,25 +1,23 @@
 # ACTIVE: BDL-077 — The viewer draws edges like a classic diagram
 
 > **Last updated:** 2026-10-03
-> **Phase:** Planning
+> **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-rcnz` (R&D: ELK routes in Cytoscape, bridges, JointJS and other renderers)
-**Goal:** a measured choice of how the viewer draws edges, and a PRD the owner can discuss.
-**Done when:** the owner has read the report and the PRD and ruled on its open questions.
+**Bead:** `beadloom-7y2i` (E1, ELK in a worker); then `beadloom-nvux` (E0, Arrange removed) — serialised by `beadloom waves` (shared node `site-app`); then E2 → E3 → E4 → E5 → T → R → W → P.
+**Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
+**Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
 ## Progress
 
-- [x] R&D, two prototypes in the scratchpad: path A (Cytoscape + ELK routes + bridges) and path B (JointJS core, own SVG from ELK, maxGraph); numbers in `RND.md` (2026-10-03)
-- [x] PRD drafted (`PRD.md`, Draft) with five open questions for the owner
-- [x] Owner's rulings (2026-10-03): Arrange removed; loops kept; bridges only on highlighted edges; a map-like overview (semantic zoom) in scope; the staircase solved in scope — folded into PRD
-- [x] PRD approved (2026-10-03)
-- [x] Explore axes (`axes.md`); probes: the map overview (derived levels, displacement 0) and the staircase (trunk + bus) — in `RND.md`
-- [x] RFC drafted (Draft) with four open questions
-- [ ] RFC, CONTEXT, PLAN; beads
+- [x] R&D (`RND.md`), PRD approved, axes (`axes.md`), probes, RFC approved (2026-10-03)
+- [x] CONTEXT and PLAN — approval delegated by the owner ("дальше веди сам согласно claude.md и /coordinator", 2026-10-03)
+- [x] Beads: epic `beadloom-m6k7` + 10 from one plan; the R&D bead `beadloom-rcnz` closed
+- [ ] Development (E0–E5)
+- [ ] Test, review, docs, the owner's look, PR
 
 ## Results
 
@@ -27,9 +25,19 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-rcnz` | R&D | in progress | measured; awaiting the owner's rulings |
+| `beadloom-m6k7` | epic | ready | BDL-077 parent |
+| `beadloom-rcnz` | R&D | ✓ done | path A/B, map and hub probes |
+| `beadloom-7y2i` | E1 | in progress | ELK in a worker, elkjs 0.12 direct |
+| `beadloom-nvux` | E0 | ready | Arrange removed |
+| `beadloom-5x4g` | E2 | blocked | routes drawn exactly |
+| `beadloom-bcqk` | E3 | blocked | trunk and bus |
+| `beadloom-94h4` | E4 | blocked | the map |
+| `beadloom-a6a6` | E5 | blocked | bridges on highlighted edges |
+| `beadloom-lb1v` | T | blocked | PRD criteria measured |
+| `beadloom-87o6` | R | blocked | review |
+| `beadloom-t3pw` | W | blocked | docs |
+| `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
 
-- Recommendation in the report: keep Cytoscape and draw ELK's routes (path A); bridges only on highlighted edges; the overview needs fewer edges on screen, not another renderer; own SVG from ELK is the fallback.
-- Filed from the R&D: `beadloom-f2we` (the viewer runs a nested elkjs 0.9.3, not the pinned 0.12).
+- Filed from the R&D: `beadloom-f2we` (nested elkjs 0.9.3) — closed by E1.
