@@ -110,6 +110,12 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      # The extras the slow tests need, and no more. `-m slow` deselects after
+      # collection, so every test module is imported here, and a module needing
+      # another extra skips by itself (`pytest.importorskip`). That every job
+      # running pytest collects in the extras it syncs is held by
+      # tests/self_check/config/test_every_pytest_job_collects_in_its_own_extras.py,
+      # in the `tests` job every pull request runs (beadloom-ujzb.26).
       - name: Install dependencies
         run: uv sync --extra dev --extra languages
 

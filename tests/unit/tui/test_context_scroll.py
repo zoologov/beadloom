@@ -12,7 +12,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
-from beadloom.tui.widgets.context_preview import (
+import pytest
+
+# The widgets import textual, the `tui` extra; a job that does not sync it skips
+# this module instead of failing collection (beadloom-ujzb.26).
+textual = pytest.importorskip("textual")
+
+from beadloom.tui.widgets.context_preview import (  # noqa: E402 - after the guard
     ContextPreviewWidget,
     _render_context_preview,
 )
