@@ -154,3 +154,73 @@ test("a layout that cannot run is reported rather than left laying out", async (
   await expect(page.getByRole("alert")).toContainText("could not be laid out", { timeout: 45_000 });
   await expect(page.getByTestId("layout-status")).toBeHidden();
 });
+
+/**
+ * A graph whose node ids are the ids the viewer gives things of its own: `root`,
+ * the name ELK's root graph had, and `e0:a->b`, the id Cytoscape's edge from `a`
+ * to `b` had as the file's first edge, in the one id space Cytoscape keeps for
+ * nodes and edges. Each colliding node is a box or a leaf with routed edges.
+ */
+function graphNamedLikeTheViewersIds(served) {
+  const node = (id, parent) => ({
+    id,
+    label: id,
+    kind: parent ? "component" : "domain",
+    parent: parent || id,
+    findings: [],
+    doc_status: "fresh",
+    lint_clean: true,
+  });
+  const nodes = [
+    node("root"),
+    node("a", "root"),
+    node("b", "root"),
+    node("other"),
+    node("e0:a->b", "other"),
+    node("c", "other"),
+  ];
+  const drawn = [
+    ["a", "b"],
+    ["e0:a->b", "a"],
+    ["c", "root"],
+    ["e0:a->b", "c"],
+    ["b", "e0:a->b"],
+  ].map(([src, dst]) => ({ src, dst, kind: "depends_on" }));
+  const containment = nodes.map((n) => ({ src: n.id, dst: n.parent, kind: "part_of" }));
+  return { ...served, nodes, edges: [...drawn, ...containment] };
+}
+
+test("a node named like an id the viewer gives its own things gets its box and its routes", async ({
+  page,
+  request,
+}) => {
+  const data = graphNamedLikeTheViewersIds(await architectureData(request));
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+  const ids = data.nodes.map((n) => n.id).sort();
+  const drawnEdges = data.edges.filter((e) => e.kind !== "part_of");
+
+  const { boxes, routes } = await viewer(page, "elkGeometry");
+  expect(Object.keys(boxes).sort()).toEqual(ids);
+  expect(Object.keys(await viewer(page, "positions")).sort()).toEqual(ids);
+  expect((await viewer(page, "edgeLooks")).map((e) => e.key)).toEqual(
+    drawnEdges.map((e) => `${e.kind}:${e.src}->${e.dst}`).sort()
+  );
+
+  expect(Object.keys(routes)).toHaveLength(drawnEdges.length);
+  const detached = Object.entries(routes)
+    .filter(([, route]) => {
+      const points = route.sections.flat();
+      return (
+        points.length === 0 ||
+        !boxes[route.source] ||
+        !boxes[route.target] ||
+        !within(points[0], boxes[route.source], END_TOLERANCE) ||
+        !within(points[points.length - 1], boxes[route.target], END_TOLERANCE)
+      );
+    })
+    .map(([, route]) => `${route.source}->${route.target}`);
+  expect(detached).toEqual([]);
+  const drawn = await viewer(page, "edgeRoutes");
+  expect(drawn.filter((r) => !r.loop && !r.routed).map((r) => `${r.source}->${r.target}`)).toEqual([]);
+});

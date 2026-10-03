@@ -6,7 +6,12 @@
 // without rebuilding it. Containment becomes Cytoscape's `parent`; every other
 // drawn kind becomes an edge with its style key. A landscape node carries its
 // health, and a landscape edge its contract and, when broken, its badge.
+//
+// Cytoscape keeps one id space for nodes and edges, and a node's id is the data
+// file's, so an edge's id, made here from its place in the file and its ends, is
+// chosen against the ids already given (`freshId`): no node can take it.
 
+import { freshId } from "../../../shared/ids/index.js";
 import { EDGE_STYLES, edgeKeyOf, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
 import { statusOf } from "../../../entities/graph-node/index.js";
 import { layerToneOf } from "../../../entities/layer/index.js";
@@ -26,12 +31,12 @@ function nodeElement(node, { parents, layers }) {
   return { group: "nodes", data };
 }
 
-function edgeElement(edge, index) {
+function edgeElement(edge, id) {
   const styleKey = styleKeyOf(edge);
   return {
     group: "edges",
     data: {
-      id: `e${index}:${edge.src}->${edge.dst}`,
+      id,
       source: edge.src,
       target: edge.dst,
       kind: edge.kind,
@@ -48,10 +53,13 @@ function edgeElement(edge, index) {
 /** Cytoscape elements for the nodes and the drawn edges between them. */
 export function buildElements(nodes, edges, context) {
   const ids = new Set(nodes.map((node) => node.id));
+  const taken = new Set(ids);
   const elements = nodes.map((node) => nodeElement(node, context));
   edges.forEach((edge, index) => {
     if (isDrawnKind(edge.kind) && ids.has(edge.src) && ids.has(edge.dst)) {
-      elements.push(edgeElement(edge, index));
+      const id = freshId(`e${index}:${edge.src}->${edge.dst}`, taken);
+      taken.add(id);
+      elements.push(edgeElement(edge, id));
     }
   });
   return elements;

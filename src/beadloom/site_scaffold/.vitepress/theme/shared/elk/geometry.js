@@ -5,8 +5,8 @@
 // set to `ROOT` (`graph.js`), so a box's corner and a section's points are
 // already absolute and no parent's offset is added here. The geometry is frozen:
 // one layout serves every viewer of the same graph, and none of them may move it.
-
-import { ROOT_ID } from "./graph.js";
+// The root is ELK's graph, not a node, so it is told apart by where it stands,
+// never by its id, which a node of the drawing may share.
 
 const pointOf = ({ x, y }) => Object.freeze({ x, y });
 
@@ -14,6 +14,16 @@ const pointOf = ({ x, y }) => Object.freeze({ x, y });
 function polylineOf(section) {
   const points = [section.startPoint, ...(section.bendPoints || []), section.endPoint];
   return Object.freeze(points.map(pointOf));
+}
+
+/** A node's box, its corners. */
+function boxOf(shape) {
+  return Object.freeze({
+    x1: shape.x,
+    y1: shape.y,
+    x2: shape.x + shape.width,
+    y2: shape.y + shape.height,
+  });
 }
 
 function routeOf(edge) {
@@ -35,16 +45,11 @@ export function geometryOf(laidOut) {
   const boxes = {};
   const routes = {};
   const visit = (shape) => {
-    if (shape.id !== ROOT_ID) {
-      boxes[shape.id] = Object.freeze({
-        x1: shape.x,
-        y1: shape.y,
-        x2: shape.x + shape.width,
-        y2: shape.y + shape.height,
-      });
-    }
     for (const edge of shape.edges || []) routes[edge.id] = routeOf(edge);
-    for (const child of shape.children || []) visit(child);
+    for (const child of shape.children || []) {
+      boxes[child.id] = boxOf(child);
+      visit(child);
+    }
   };
   visit(laidOut);
   return Object.freeze({ boxes: Object.freeze(boxes), routes: Object.freeze(routes) });

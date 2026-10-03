@@ -11,6 +11,11 @@
 // The answer comes back in the graph's own coordinates: `elk.json.shapeCoords`
 // and `elk.json.edgeCoords` set to `ROOT` make every box and every edge section
 // absolute, rather than relative to the box that contains it.
+//
+// The root is a graph of ELK's, not a node of the drawing, and its id shares
+// ELK's node ids with the drawing's: it is named so that no node has its name.
+
+import { freshId } from "../ids/index.js";
 
 /** The options of the layout, the same for every graph. */
 export const LAYERED_OPTIONS = Object.freeze({
@@ -30,8 +35,11 @@ const ROOT_COORDINATES = Object.freeze({
   "elk.json.edgeCoords": "ROOT",
 });
 
-/** The id of the graph's root; no node of the drawing is given it. */
-export const ROOT_ID = "root";
+/**
+ * The name the graph's root is given. A node of the drawing may have it too, so
+ * the root takes it only when no node does (`freshId`).
+ */
+const ROOT_NAME = "root";
 
 /** ELK's per-node options: the node's lane, when it has one. */
 function laneOf(node) {
@@ -53,7 +61,7 @@ function laneOf(node) {
 export function elkGraphOf({ nodes, edges }) {
   const containers = new Set(nodes.map((node) => node.parent).filter(Boolean));
   const byId = new Map();
-  const root = { id: ROOT_ID, children: [], edges: [] };
+  const root = { id: freshId(ROOT_NAME, new Set(nodes.map((node) => node.id))), children: [], edges: [] };
   for (const node of nodes) {
     const shape = { id: node.id, layoutOptions: laneOf(node) };
     if (!containers.has(node.id)) {
