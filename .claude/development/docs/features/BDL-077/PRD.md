@@ -37,16 +37,21 @@ ORTHOGONAL`); `cytoscape-elk` keeps only node positions and discards them.
 
 - [ ] No drawn edge passes through a box it does not connect (today 232 of 453), except edges
       from a node to its own container, which are a stated decision.
-- [ ] No edge is indistinct: 0 edges more than half shared (today 22), and the mean shared share
-      at most 3% (today 14.4%), on this repository's graph and the adopter-sized one.
+- [ ] No edge is indistinct: counted against edges with no common endpoint (an edge shares its
+      trunk with its siblings by design), 0 edges more than half shared (today 22) and the mean
+      shared share at most 3% (today 14.4%), on this repository's graph and the adopter-sized one.
+      *(Amended by the owner with the RFC, Q3.)*
 - [ ] Edges are drawn as right-angled routes with arrowheads that enter a box on a side.
 - [ ] Bridges show where a highlighted edge (selection, neighbourhood, impact, hover) crosses
       another edge, so the highlighted line can be followed; no bridges on other edges.
-- [ ] The whole-graph view shows top-level boxes and aggregated edges (41 instead of 453 on
-      this repository's graph), and zooming in opens boxes level by level down to every node
-      and routed edge, without the layout jumping between levels.
-- [ ] No node's edges form a staircase: a high-degree node's edges stay within a bounded width
-      around it (bound fixed in the RFC from measurement).
+- [ ] The whole-graph view shows top-level boxes and aggregated edges, one per pair of boxes
+      (37 instead of 453 on this repository's graph; at most 100 on any graph, weaker ones
+      counted on their box), and zooming in opens boxes level by level down to every node and
+      routed edge, without the layout jumping between levels.
+- [ ] No node's edges form a staircase: a node with 20 or more drawn edges leaves each side in one
+      channel per direction, and its edges cross a line 150 units from it in no more lanes than
+      the number of top-level boxes they lead to, plus one per edge into its own box
+      (`cli-commands`: at most 11; today 70). *(Amended by the owner with the RFC, Q3.)*
 - [ ] The viewer stays as fast as today: frame time at the whole-graph fit and at zoom 1 no
       worse than today's on both graphs; first render at most 15% slower.
 - [ ] The page stays responsive while ELK lays out (0.5 s here, 2.7 s at adopter size today, on

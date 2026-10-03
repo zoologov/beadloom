@@ -32,7 +32,7 @@ fit the overview is an unreadable cloud and costs 27 ms per frame here and 125 m
 | PRD story | What answers it | Measured |
 |---|---|---|
 | US-1 edges around boxes | ELK's orthogonal sections drawn exactly in Cytoscape | through-box 232 → 0 (except the loops of ruling 2); indistinct 22 → 0 |
-| US-2 map overview | one layout, levels derived from it; aggregated routes taken from member routes | 453 → 37 drawn edges at the overview, box displacement 0 at every level, overview frame 27 → 17 ms (125 → 17 ms at adopter size) |
+| US-2 map overview | one layout, levels derived from it; aggregated routes taken from member routes; unordered pairs, weak edges hidden over a budget | 453 → 37 drawn edges at the overview (≤ 100 at adopter size), box displacement 0 at every level, overview frame 27 → 17 ms (125 → 17 ms at adopter size) |
 | US-3 bridges | an overlay on highlighted edges only | finding 29 ms / 208 ms for the whole graph; a highlight set is a small fraction |
 | US-4 modes keep working | filters and hide need no re-route; selection opens what it needs | 3.9 ms / 8.9 ms to open a selection's boxes |
 | US-5 no staircase | trunk + bus post-processed from ELK's sections | `cli-commands` steps 36 → 1, lanes 70 → 10; excess steps over the graph 403 → 76; no node moves |
@@ -137,11 +137,17 @@ after it).
 - **Collapsed box:** the same Cytoscape compound, its size locked from ELK, children removed with
   `cy.remove` and restored with `cy.restore` (hiding by `display: none` kept Cytoscape spending
   ~95 ms per frame on hidden elements at adopter size).
-- **Aggregated edges:** one per ordered pair of drawn boxes, drawn when at least one end is
-  collapsed; its route is the medoid of its members' ELK routes clipped from where they leave the
-  source box to where they enter the target box (1,065 clips, 0 failed; 3–6 ms, cached per pair);
-  solid line, width by member count, a count label. An edge is drawn as itself only when both its
-  ends are drawn as themselves.
+- **Aggregated edges:** one per **unordered** pair of drawn boxes (owner, Q1), drawn when at least
+  one end is collapsed; arrowheads at each end that has members arriving, and the count split by
+  direction in the label and on hover. Its route is the medoid of its members' ELK routes clipped
+  from where they leave one box to where they enter the other (1,065 clips, 0 failed; 3–6 ms,
+  cached per pair); solid line, width by member count. An edge is drawn as itself only when both
+  its ends are drawn as themselves.
+- **Weak edges hidden only over a budget (owner, Q1):** when a level would draw more than **100**
+  aggregated edges, the aggregated edges below the smallest weight that brings the count within
+  100 are not drawn; each box shows how many of its aggregated edges are hidden ("+N"), and hovering
+  or selecting a box draws all of its edges. On this repository's graph the budget is never reached
+  (the overview draws 37); at adopter size (333 unordered pairs) weight ≥ 3 gives 96.
 - **Open-what-is-in-view rule:** a box opens when its parent is open, it overlaps the viewport, the
   zoom is past 1.3× the fit, and its larger side is at least **N = 600 px** on screen; it closes below
   0.8 N. Rule evaluation ≤ 0.2 ms per frame; a switch 2–6 ms.
@@ -167,7 +173,7 @@ come from the resolved theme tokens; nothing is drawn when no edge is highlighte
 **D7. Landscape mode** uses the same canvas: routes, bus/trunk and bridges apply; it has no
 containers, so no levels.
 
-### The PRD criteria this RFC proposes to restate (owner to confirm)
+### The PRD criteria this RFC restates (owner, Q3)
 
 - **A2, "no indistinct edge":** an edge in a trunk shares its trunk with its siblings by design
   (58 here). The criterion counts sharing only with an edge that has **no common endpoint**. Under
@@ -245,7 +251,7 @@ ruling 3.
 
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Large adopter overview still dense (33 top-level boxes → 443 aggregated edges at adopter size) | High | Med | Open question Q1 |
+| Large adopter overview still dense (33 top-level boxes → 443 aggregated edges at adopter size) | High | Med | unordered pairs (333) and the weak-edge budget of 100 (Q1) |
 | Shared trunk segments: dimmed edges darken on a trunk; hit-testing a trunk is ambiguous | Med | Med | draw a trunk once per bundle for hit-testing; dim rules per bundle; hover selects the bundle and lists members |
 | Junction dots wrong after filter/hide | Med | Med | recompute for the visible set; a metric case for stray/missing dots |
 | Bundle post-process too slow at adopter size | Med | Low | spatial index; budget ≤ 50 ms; worker if needed |
@@ -258,7 +264,7 @@ ruling 3.
 
 | # | Question | Decision |
 |---|---|---|
-| Q1 | A large adopter's overview (33 top-level boxes) still draws 443 aggregated edges. Options: draw unordered pairs (333); hide aggregated edges below a weight (≥ 2: 200; ≥ 3: 96) with the count shown on the box; or leave it. | Pending (owner) |
-| Q2 | N for the open rule: 600 px proposed (measured 400 and 700: 400 opens `application` and `onboarding` at mid-zoom, 700 only `application`). | Pending (owner) |
-| Q3 | The restated A2 and hub-bound criteria above replace the PRD's wording. | Pending (owner) |
-| Q4 | Loops onto the root wrapper hidden at the overview, drawn at full detail. | Pending (owner) |
+| Q1 | A large adopter's overview (33 top-level boxes) still draws 443 aggregated edges. | Decided (owner, 2026-10-03): unordered pairs, and weak aggregated edges hidden with a count on the box; the coordinator's refinement — hide only above a budget of 100 drawn aggregated edges, at the smallest weight that fits, and draw all of a box's edges on hover or selection — see D4. |
+| Q2 | N for the open rule. | Decided (owner): 600 px. |
+| Q3 | The restated A2 and hub-bound criteria replace the PRD's wording. | Decided (owner): yes; the PRD's Goals are amended. |
+| Q4 | Loops onto the root wrapper hidden at the overview, drawn at full detail. | Decided (owner): yes. |
