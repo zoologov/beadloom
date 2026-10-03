@@ -8,8 +8,8 @@
 // - A **junction dot** marks each point where drawn routes part
 //   (`lib/junctions.js`). The dots are found for the edges drawn now: a filter or
 //   a hidden neighbourhood that removes one branch removes its dot. They are
-//   drawn on a canvas of their own above Cytoscape's, redrawn whenever Cytoscape
-//   renders, in the colour of the strongest edge through them, so a dot outside a
+//   drawn on a canvas of their own above Cytoscape's (`overlayCanvas.js`),
+//   redrawn whenever Cytoscape renders, in the colour of the strongest edge through them, so a dot outside a
 //   selection fades with its edges.
 // - **The edges along a hovered line**: Cytoscape reports the one edge under the
 //   pointer, which on a trunk is whichever member it drew last. Every drawn edge
@@ -17,6 +17,7 @@
 //   instead (`routesAlong`).
 
 import { junctionsOf, routeIndexOf, routesAlong } from "../lib/junctions.js";
+import { overlayCanvas } from "./overlayCanvas.js";
 
 /** A junction dot's radius, in layout units: wider than the widest edge it sits on. */
 export const JUNCTION_RADIUS = 3.6;
@@ -30,21 +31,6 @@ function colourOf(cy, ids) {
   return strongest ? strongest.style("line-color") : null;
 }
 
-/** A canvas over `container`, under no pointer: the dots never take an event from the graph. */
-function overlayCanvas(container) {
-  const canvas = document.createElement("canvas");
-  Object.assign(canvas.style, {
-    position: "absolute",
-    top: "0",
-    left: "0",
-    zIndex: "1",
-    pointerEvents: "none",
-  });
-  canvas.dataset.layer = "junctions";
-  container.appendChild(canvas);
-  return canvas;
-}
-
 /**
  * The overlay of `cy` in `container` for the routes in `paths` (edge id to its
  * drawn polyline): `{ refresh, along, junctions, destroy }`.
@@ -55,29 +41,17 @@ function overlayCanvas(container) {
  * coordinates. `junctions()` gives `[{ x, y, edges }]`.
  */
 export function bundleOverlay(cy, container, paths) {
-  const canvas = overlayCanvas(container);
+  const layer = overlayCanvas(container, "junctions");
   let drawnIds = "";
   let index = routeIndexOf([]);
   let found = [];
   let dots = [];
 
   function draw() {
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    const ratio = window.devicePixelRatio || 1;
-    if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
-      canvas.width = Math.round(width * ratio);
-      canvas.height = Math.round(height * ratio);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    }
-    const context = canvas.getContext("2d");
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    const context = layer.begin();
     const zoom = cy.zoom();
     if (!dots.length || JUNCTION_RADIUS * zoom < SMALLEST_DOT) return;
-    const pan = cy.pan();
-    context.setTransform(ratio * zoom, 0, 0, ratio * zoom, ratio * pan.x, ratio * pan.y);
+    layer.inGraph(cy);
     const extent = cy.extent();
     for (const dot of dots) {
       if (dot.x < extent.x1 || dot.x > extent.x2 || dot.y < extent.y1 || dot.y > extent.y2) continue;
@@ -85,6 +59,7 @@ export function bundleOverlay(cy, container, paths) {
       context.beginPath();
       context.arc(dot.x, dot.y, JUNCTION_RADIUS, 0, 2 * Math.PI);
       context.fill();
+      layer.drew();
     }
   }
 
@@ -113,7 +88,7 @@ export function bundleOverlay(cy, container, paths) {
     junctions: () => found.map(({ x, y, edges }) => ({ x, y, edges: [...edges] })),
     destroy() {
       cy.removeListener("render", draw);
-      canvas.remove();
+      layer.remove();
     },
   };
 }

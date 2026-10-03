@@ -62,6 +62,24 @@ export function segmentsOf(path, sourceCentre, targetCentre) {
 }
 
 /**
+ * The path a segments edge is drawn along: `segments` (`segmentsOf`'s answer)
+ * between nodes centred at `sourceCentre` and `targetCentre`, back in the
+ * graph's coordinates, its ends and every corner.
+ */
+export function pathOfSegments(segments, sourceCentre, targetCentre) {
+  const start = { x: sourceCentre.x + segments.sourceEndpoint[0], y: sourceCentre.y + segments.sourceEndpoint[1] };
+  const end = { x: targetCentre.x + segments.targetEndpoint[0], y: targetCentre.y + segments.targetEndpoint[1] };
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  const corners = segments.weights.map((weight, i) => {
+    const off = length ? segments.distances[i] / length : 0;
+    return { x: start.x + weight * dx - off * dy, y: start.y + weight * dy + off * dx };
+  });
+  return [start, ...corners, end];
+}
+
+/**
  * The size that draws a compound node as `box`, ELK's box for it, around its
  * children drawn in `childrenBox`, or around none when it is null: `{ width,
  * height, biasLeft, biasRight, biasTop, biasBottom }`.

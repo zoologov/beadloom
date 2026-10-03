@@ -11,7 +11,9 @@
 // every edge in the graph's coordinates — and the same drawn: each node's box
 // and each edge's route as Cytoscape draws them — and the bundles: the routes
 // with each node's fans bundled, the trunks and buses, the junction dots for the
-// edges drawn now, and the edges along a hovered line — and the map: the boxes
+// edges drawn now, and the edges along a hovered line — and the bridges: where
+// each highlighted edge crosses another drawn edge, and what drawing them cost
+// per frame — and the map: the boxes
 // open and closed, each aggregated edge with what it carries each way and
 // whether the budget draws it, and the counts of hidden edges on the boxes.
 //
@@ -24,7 +26,7 @@
 // the deployed one are the same bundle.
 
 import { isLoop } from "./canvasLayout.js";
-import { DISTANCE_DATA } from "./useGraphCanvas.js";
+import { DISTANCE_DATA } from "./canvasMarks.js";
 import { AGGREGATE, HIDDEN_EDGES } from "../lib/levels.js";
 import { titleFits } from "../lib/mapMarks.js";
 
@@ -72,6 +74,7 @@ function drawnRouteOf(edge) {
   const corners = edge.segmentPoints();
   return {
     id: edge.id(),
+    key: edge.data("key") ?? null,
     source: edge.source().id(),
     target: edge.target().id(),
     aggregated: isAggregate(edge),
@@ -178,12 +181,13 @@ function readers(source) {
       const run = source.layout();
       return run ? JSON.parse(JSON.stringify(run.geometry)) : null;
     },
-    // Each drawn edge as Cytoscape draws it: `{ id, source, target, aggregated,
-    // routed, loop, points, label }`, `aggregated` for an edge of the map's. A
-    // routed edge follows a route of corners, and `points` are its ends and
-    // corners; any other edge is a curve, and `points` are its ends and control
-    // points. `loop` says the edge joins a node to itself or to a box
-    // that holds it; `label` is where its label sits. Graph coordinates.
+    // Each drawn edge as Cytoscape draws it: `{ id, key, source, target,
+    // aggregated, routed, loop, points, label }`. `key` names an edge of the data
+    // file as a walk names it, and is null for an edge of the map's, which
+    // `aggregated` marks. A routed edge follows a route of corners, and `points`
+    // are its ends and corners; any other edge is a curve, and `points` are its
+    // ends and control points. `loop` says the edge joins a node to itself or to
+    // a box that holds it; `label` is where its label sits. Graph coordinates.
     edgeRoutes: () => cy().edges().filter((edge) => edge.visible()).map(drawnRouteOf),
     // The boxes drawn open, by id.
     openBoxes: () => source.map()?.openBoxes() || [],
@@ -250,6 +254,18 @@ function readers(source) {
     // The junction dots drawn now, `[{ x, y, edges }]`: where the routes of the
     // edges drawn part, and which edges part there.
     junctions: () => source.junctions(),
+    // The bridges drawn now, one entry per highlighted edge drawn along a route:
+    // `[{ edge, crossings }]`, each crossing `{ x, y, crossed, colour,
+    // crossedColour, under }`: where, in graph coordinates, the edge crosses the
+    // drawn edge `crossed`, the colours both lines have there, and the colour
+    // under the crossing the hop is drawn over. Empty when nothing is highlighted.
+    bridges: () => JSON.parse(JSON.stringify(source.bridges())),
+    // What drawing the bridges cost: `{ findMs, paintMs, frames }`, how long the
+    // crossings took to find the last time they changed and their colours to
+    // read the last time, and for each recent frame `{ at, ms, drawn }`, when it
+    // was drawn (`performance.now()`), how long the bridges took to draw and how
+    // many were drawn.
+    bridgeFrames: () => JSON.parse(JSON.stringify(source.bridgeFrames())),
     // The ids of the edges drawn along the line under the pointer.
     hoveredEdges: () => [...source.hoveredEdges()].sort(),
     drawnEdgeKinds: () => [...new Set(originals().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
@@ -259,7 +275,8 @@ function readers(source) {
       return { lineStyle: edge.style("line-style"), width: parseFloat(edge.style("width")), colour: edge.style("line-color") };
     },
     // Every edge of the data file drawn now, and its look: its arrow ends, the
-    // colours along its line from the source end to the target end, and whether it
+    // colours along its line from the source end to the target end and where each
+    // stop sits along it (as Cytoscape resolved them, in percent), and whether it
     // is shown and how opaque. How direction reads, and what a selection leaves
     // out, are here. An aggregated edge is not an edge of the file
     // (`aggregatedEdges`).
@@ -272,6 +289,7 @@ function readers(source) {
           targetArrow: edge.style("target-arrow-shape"),
           lineColour: edge.style("line-color"),
           stops: String(edge.style("line-gradient-stop-colors")).split(/\s+(?=rgb|#|hsl)/),
+          stopPositions: String(edge.style("line-gradient-stop-positions")).split(/\s+/),
           visible: edge.visible(),
           opacity: parseFloat(edge.style("opacity")),
         }))
@@ -304,7 +322,8 @@ function readers(source) {
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
  * `impactSummary()`, `layout()`, the canvas's last layout run, `bundles()`, its
- * routes with the fans bundled, `junctions()`, the dots drawn now,
+ * routes with the fans bundled, `junctions()`, the dots drawn now, `bridges()`
+ * and `bridgeFrames()`, the bridges drawn now and their cost,
  * `hoveredEdges()`, the ids of the edges along the line under the pointer,
  * `map()`, the map drawn now (`canvasMap.js`), and `revealNodes(ids)`, which draws
  * the nodes in `ids` as themselves.

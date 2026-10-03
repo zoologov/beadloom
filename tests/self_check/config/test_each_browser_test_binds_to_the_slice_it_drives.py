@@ -30,6 +30,8 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
+    # Bridges on highlighted edges where they cross other drawn edges (BDL-077 E5).
+    "bridges.spec.js": "site-graph-viewer",
     # Trunks, buses and junction dots drawn over ELK's routes (BDL-077 E3).
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",

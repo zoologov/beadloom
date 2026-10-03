@@ -4,7 +4,8 @@
 // It creates the graph, has ELK lay it out in a worker (`shared/elk`) while the
 // page stays responsive, draws it as ELK laid it out — every node in its place,
 // every box at its size, every edge along its route with its node's fans bundled
-// (`canvasLayout.js`) and a dot where bundled routes part (`bundleOverlay.js`) —
+// (`canvasLayout.js`), a dot where bundled routes part (`bundleOverlay.js`) and a
+// bridge wherever a highlighted edge crosses another (`bridgeOverlay.js`) —
 // reports taps, labels a hovered edge and marks every edge along the hovered
 // line, shows only a set of node ids (and of contracts), marks a selection — the
 // selected node, the nodes and edges its walk reached, their distance rings and
@@ -27,37 +28,24 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
+import { bridgeOverlay } from "./bridgeOverlay.js";
 import { bundleOverlay } from "./bundleOverlay.js";
+import { ALONG_HOVER, DISTANCE_DATA, HOVERED, SELECTION_CLASSES } from "./canvasMarks.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 import { canvasMap } from "./canvasMap.js";
+import { siblingsOf } from "../lib/bridges.js";
 import { COLLAPSED } from "../lib/levels.js";
-
-/** Every class a selection puts on the canvas, removed before the next one is marked. */
-const SELECTION_CLASSES = [
-  "is-selected",
-  "is-selected-edge",
-  "in-walk",
-  "is-walk-edge",
-  "is-dimmed",
-  "is-outside",
-  "is-risk",
-  "holds-walk",
-];
-
-/** The class of every edge drawn along the line under the pointer. */
-const ALONG_HOVER = "is-along-hover";
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
 const UNPLACED = Object.freeze({ name: "null" });
 
-/** The node data the impact mode sets: the node's distance from the selection. */
-export const DISTANCE_DATA = "impactDistance";
-
 /**
  * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, junctions,
- * map, mount, setStyle, reveal, showOnly, markSelection, resize }` over the
- * container in `containerRef`.
+ * bridges, bridgeFrames, map, mount, setStyle, reveal, showOnly, markSelection,
+ * resize }` over the container in `containerRef`.
  *
+ * `background()` gives the colour the canvas is drawn on, in which a bridge
+ * erases the line it hops with.
  * `fitZoom()` gives the zoom of the whole-graph fit now, which the map's levels
  * are measured from. `reveal(source, ids)` draws the nodes in `ids` as themselves
  * with their own edges for `source` ("search", or a test), opening every box that
@@ -70,9 +58,11 @@ export const DISTANCE_DATA = "impactDistance";
  * the fans bundled, `{ paths, trunks, buses, ms }` (`canvasLayout.js`), or null;
  * `hoveredEdges` the ids of the edges along the line under the pointer;
  * `layoutError` is the error a failed run gave, or null; `junctions()` the dots
- * drawn where routes part, `[{ x, y, edges }]`.
+ * drawn where routes part, `[{ x, y, edges }]`; `bridges()` the bridges drawn on
+ * the highlighted edges and `bridgeFrames()` what drawing them cost
+ * (`bridgeOverlay.js`).
  */
-export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom }) {
+export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, background }) {
   const cy = shallowRef(null);
   const ready = ref(false);
   const layingOut = ref(false);
@@ -81,6 +71,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const hoveredEdges = shallowRef([]);
   const layoutError = shallowRef(null);
   let overlay = null;
+  let bridges = null;
   let map = null;
   let generation = 0;
   // What the filters show and what the selection marks, kept to mark again on
@@ -91,9 +82,10 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   // Cytoscape reports no `mouseout` when the pointer leaves the canvas from an
   // edge, so a hovered label would stay; leaving the container clears it.
   function clearHover() {
-    cy.value?.edges(".is-hovered").removeClass("is-hovered");
+    cy.value?.edges(`.${HOVERED}`).removeClass(HOVERED);
     cy.value?.edges(`.${ALONG_HOVER}`).removeClass(ALONG_HOVER);
     hoveredEdges.value = [];
+    bridges?.refresh();
     hoverNode(null);
   }
 
@@ -111,10 +103,12 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       for (const id of ids) cy.value.getElementById(id).addClass(ALONG_HOVER);
     });
     hoveredEdges.value = ids;
+    bridges?.refresh();
   }
 
   function refreshOverlay() {
     overlay?.refresh();
+    bridges?.refresh();
   }
 
   function destroy() {
@@ -126,6 +120,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     overlay?.destroy();
     overlay = null;
+    bridges?.destroy();
+    bridges = null;
     map?.destroy();
     map = null;
     shown = { ids: null, contracts: null };
@@ -153,7 +149,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       if (event.target === instance) onBackgroundTap();
     });
     instance.on("mouseover", "edge", (event) => {
-      event.target.addClass("is-hovered");
+      event.target.addClass(HOVERED);
       hoverAlong(event.target, event.position);
     });
     instance.on("mouseout", "edge", clearHover);
@@ -175,6 +171,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       if (mine !== generation) return false;
       overlay = bundleOverlay(instance, containerRef.value, drawn.paths);
       overlay.refresh();
+      bridges = bridgeOverlay(instance, containerRef.value, { siblings: siblingsOf(drawn), background });
       map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw });
       layout.value = run;
       bundles.value = drawn;
@@ -337,6 +334,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     hoveredEdges,
     layoutError,
     junctions: () => overlay?.junctions() || [],
+    bridges: () => bridges?.bridges() || [],
+    bridgeFrames: () => bridges?.frames() || { findMs: 0, paintMs: 0, frames: [] },
     map: () => map,
     mount,
     setStyle,

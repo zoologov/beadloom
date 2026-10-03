@@ -17,7 +17,9 @@
 //
 // A node's edges are drawn bundled, several along one line. When the pointer is
 // on a line that more than one edge runs along, a note over the canvas names
-// them, since the line alone cannot say which edges it carries.
+// them, since the line alone cannot say which edges it carries. A highlighted
+// edge — under the pointer, or on a selection's walk — hops over every other
+// edge it crosses, so it can be followed through a busy area.
 //
 // The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
@@ -219,6 +221,7 @@ function toggleImpact() {
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
   fitZoom: () => navigation.fitZoom(),
+  background: () => tokens.value?.bg,
   onNodeTap: (id) => {
     select(id, { frame: false });
     focusCanvas();
@@ -347,6 +350,8 @@ onMounted(() => {
     layout: () => canvas.layout.value,
     bundles: () => canvas.bundles.value,
     junctions: () => canvas.junctions(),
+    bridges: () => canvas.bridges(),
+    bridgeFrames: () => canvas.bridgeFrames(),
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
     revealNodes: (ids) => canvas.revealNow("test", ids),
