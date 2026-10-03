@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-bcqk` (E3, trunk and bus); then E4 → E5 → T → R → W → P.
+**Bead:** `beadloom-m6k7.2` (a node named `root` collides with ELK's root); then E4 → E5 → T → R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -31,8 +31,9 @@
 | `beadloom-nvux` | E0 | ✓ done | Arrange removed |
 | `beadloom-m6k7.1` | fix | ✓ done | flaky layout-cache case on adopter portals |
 | `beadloom-5x4g` | E2 | ✓ done | routes drawn exactly |
-| `beadloom-bcqk` | E3 | in progress | trunk and bus |
-| `beadloom-94h4` | E4 | blocked | the map |
+| `beadloom-bcqk` | E3 | ✓ done | trunk and bus |
+| `beadloom-m6k7.2` | fix | in progress | a node id `root` collides with ELK's root |
+| `beadloom-94h4` | E4 | ready | the map |
 | `beadloom-a6a6` | E5 | blocked | bridges on highlighted edges |
 | `beadloom-lb1v` | T | blocked | PRD criteria measured |
 | `beadloom-87o6` | R | blocked | review |
@@ -40,6 +41,8 @@
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **E3 closed** `cf07192c`: trunks and buses; excess steps 396 → 36 here (bound 80), 1,419 → 179 at adopter size; `cli-commands` one channel instead of 36, 9 lanes instead of 69; no node moves; through-box 0; A2 (no common endpoint) 0; 9.9 ms here, 27.7 ms at adopter size; frame time unchanged. The literal hub lane bound fails at adopter size where hubs feed hubs → the bound counts a node's own trunk lanes (CONTEXT, surfaced to the owner). Filed `beadloom-m6k7.2` (a node id `root` collides with ELK's root).
 
 - **E2 closed** `4ceb0f10`: routes drawn along ELK's sections (max deviation 0.005 units here, 0.021 at adopter size); through-box 232 → 0; A2 (no common endpoint) 22 → 0; boxes at ELK's size (padding 0); the canvas size out of ELK's input — node page and full screen read one cached layout (341 ms → 0.3 ms). Watch: frame cost without a GPU rose (fit 31.9 → 38.0 ms here, 119 → 164 at adopter size; zoom 1 at adopter size 43 → 107) — the longer paths, not JavaScript; E3's bundling and E4's map should cut it, T measures with and without a GPU against the PRD bound.
 

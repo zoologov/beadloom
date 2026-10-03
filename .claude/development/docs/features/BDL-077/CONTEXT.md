@@ -82,6 +82,8 @@ moves.
 | 2026-10-03 | PRD goals restated: A2 counted against edges with no common endpoint; hub bound in channels and lanes, not pixel width | Owner Q3 |
 | 2026-10-03 | Loops onto the root wrapper hidden at the overview | Owner Q4 |
 | 2026-10-03 | The data file does not change | Everything needed is in `edges` and `part_of`; keeps Python out of scope |
+| 2026-10-03 | The hub lane bound counts the lanes of the edges whose trunk or bus belongs to the node; edges another hub sends arrive on the sender's trunk in lanes of their own | Coordinator, after E3 measured that the literal reading conflicts with "hub-to-hub edges ride the source's trunk" at adopter size (18 hub sides over, busiest 50 vs 29) while every hub keeps one channel per side and direction; surfaced to the owner, who may overrule. |
+| 2026-10-03 | Dimmed edges are drawn opaque in a colour faded towards the background, not at low opacity | E3: ten see-through edges on one trunk added up to about four-fifths strength |
 
 ## Related Files
 
