@@ -107,6 +107,22 @@ for (const graph of GRAPHS) {
       expect(wrong.map(([name]) => name)).toEqual([]);
     });
 
+    test("at the whole-graph fit at most 100 edges are drawn, every one between two nodes at the top", async ({
+      page,
+      request,
+    }) => {
+      const data = await graph.open(page, request);
+      const tree = treeOf(data);
+      requireShape(tree.topBoxes.length > 1, "fewer than two boxes at the top of the containment tree");
+
+      const drawn = await viewer(page, "edgeRoutes");
+      // The nodes at the top: under the one root that holds everything, or the roots when none does.
+      const top = new Set(Object.keys(tree.parents).filter((id) => id !== tree.wrapper && tree.parents[id] === tree.wrapper));
+      expect(drawn.length).toBeGreaterThan(0);
+      expect(drawn.length).toBeLessThanOrEqual(AGGREGATE_BUDGET);
+      expect(drawn.filter((r) => !top.has(r.source) || !top.has(r.target)).map((r) => r.id)).toEqual([]);
+    });
+
     test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a route between its two boxes along one of its edges", async ({
       page,
       request,

@@ -38,6 +38,8 @@ import { LACKING, requireShape } from "./support/shape.js";
 
 /** How far a drawn route, a box side or a label may lie from ELK's, in layout units. */
 const ROUTE_TOLERANCE = 0.5;
+/** The most of its middle an edge may share, on average, with edges it has no common end with. */
+const MEAN_SHARED = 0.03;
 
 /** What a case about routes needs: an edge between two nodes, neither of which holds the other. */
 const BETWEEN_TWO_BOXES = "no drawn edge between two nodes neither of which holds the other";
@@ -135,6 +137,19 @@ for (const drawing of DRAWINGS) {
 
       expect(edgesThroughBoxes(between, boxes, parents)).toEqual([]);
       expect(sharing(between).indistinct).toEqual([]);
+    });
+
+    // Edges that leave or reach one node share their trunk by design; an edge
+    // counts as shared only beside an edge with no common end (`routeMetrics.js`).
+    test("on average an edge shares at most 3% of its middle with edges it has no common end with", async ({
+      page,
+      request,
+    }) => {
+      await drawing.open(page, request);
+      const between = (await viewer(page, "edgeRoutes")).filter((r) => !r.loop);
+      requireShape(between.length > 0, BETWEEN_TWO_BOXES);
+
+      expect(sharing(between).meanShared).toBeLessThanOrEqual(MEAN_SHARED);
     });
   });
 }

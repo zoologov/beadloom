@@ -44,6 +44,14 @@ const TOLERANCE = 0.5;
 const CLEARANCE_PX = 12;
 /** The zoom steps that bring the canvas from the fit to full size, at most. */
 const ZOOM_STEPS = 20;
+/**
+ * Why the two cases about every busy node are expected to fail: the viewer
+ * bundles the edges of a leaf only, so a box with many edges of its own still
+ * leaves its side in a staircase, and on an adopter-sized graph some busy leaves
+ * keep a second channel and more lanes than the bound. A case marked so passes
+ * while it fails, and fails the run the day it passes, so the mark goes with the fix.
+ */
+const KNOWN_STAIRCASES = "known: a box's own edges are not bundled, and busy leaves of an adopter-sized graph exceed the bound";
 
 /** The graphs a bundled drawing is read on. */
 const GRAPHS = [
@@ -105,6 +113,26 @@ function busiestOf(routes, leaves) {
     for (const id of [r.source, r.target]) if (leaves.has(id)) degree.set(id, (degree.get(id) || 0) + 1);
   }
   return [...degree].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || [null, 0];
+}
+
+/** Every node, leaf or box, with at least `threshold` drawn edges, busiest first: `[[id, degree]]`. */
+async function busyNodes(page, threshold) {
+  const degree = new Map();
+  for (const r of await viewer(page, "edgeRoutes")) {
+    for (const id of new Set([r.source, r.target])) degree.set(id, (degree.get(id) || 0) + 1);
+  }
+  return [...degree].filter(([, d]) => d >= threshold).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+/**
+ * The drawn routes of `node`'s own edges: every one but an edge another node's
+ * trunk carries. A busy node's edge to another busy node rides its source's trunk
+ * and arrives at the target in a lane of its own, so it counts at its source.
+ */
+function ownRoutes(drawn, node, trunks) {
+  const carried = new Set(trunks.filter((t) => t.node !== node).flatMap((t) => t.members));
+  const mine = new Set(trunks.filter((t) => t.node === node).flatMap((t) => t.members));
+  return drawn.filter((r) => (r.source === node || r.target === node) && (mine.has(r.id) || !carried.has(r.id)));
 }
 
 /** Whether every junction lies by a point of `expected`, and every point of `expected` by a junction. */
@@ -178,6 +206,53 @@ for (const graph of GRAPHS) {
         .filter(({ id }) => !bundled.has(id) && deviation(routes[id], polylineOf(elk[id].sections)) > TOLERANCE)
         .map(({ id }) => id);
       expect(rerouted).toEqual([]);
+    });
+
+    test("every node with 20 drawn edges or more leaves each side in one channel per direction", async ({
+      page,
+      request,
+    }) => {
+      test.fail(true, KNOWN_STAIRCASES);
+      await graph.open(page, request);
+      const busy = await busyNodes(page, TRUNK_DEGREE);
+      requireShape(busy.length > 0, `no node has ${TRUNK_DEGREE} drawn edges`);
+      const drawn = await drawnRoutes(page);
+      const { trunks } = await viewer(page, "bundles");
+      const { boxes } = await viewer(page, "elkGeometry");
+
+      const steps = busy.flatMap(([node]) =>
+        [...channelsOf(ownRoutes(drawn, node, trunks), node, boxes[node])]
+          .filter(([, heights]) => heights.size > 1)
+          .map(([side, heights]) => `${node} ${side}: ${heights.size} channels`)
+      );
+      expect(steps).toEqual([]);
+    });
+
+    test("every node with 20 drawn edges or more crosses a line 150 units out in no more lanes than the top-level boxes it leads to, plus one per edge into its own", async ({
+      page,
+      request,
+    }) => {
+      test.fail(true, KNOWN_STAIRCASES);
+      const parents = parentMap(await graph.open(page, request));
+      const busy = await busyNodes(page, TRUNK_DEGREE);
+      requireShape(busy.length > 0, `no node has ${TRUNK_DEGREE} drawn edges`);
+      const drawn = await drawnRoutes(page);
+      const { trunks } = await viewer(page, "bundles");
+      const { boxes } = await viewer(page, "elkGeometry");
+      const topBox = topBoxOf(parents);
+
+      const over = busy.flatMap(([node]) => {
+        const own = topBox(node);
+        return Object.entries(lanesAt(ownRoutes(drawn, node, trunks), node, boxes[node], LANE_DISTANCE))
+          .map(([side, { lanes, others }]) => {
+            const bound =
+              new Set(others.map(topBox).filter((top) => top !== own)).size + others.filter((o) => topBox(o) === own).length;
+            return { node, side, lanes, bound };
+          })
+          .filter(({ lanes, bound }) => lanes > bound)
+          .map(({ node: id, side, lanes, bound }) => `${id} ${side}: ${lanes} lanes, at most ${bound}`);
+      });
+      expect(over).toEqual([]);
     });
 
     test("no two edges with no common end are drawn along one line", async ({ page, request }) => {

@@ -11,7 +11,8 @@ WITHOUT needing node (``docs:build``, the dev-server boot and the browser cases
 under ``site/e2e/`` drive the behaviour):
 
 1. Every runtime dependency the viz needs is declared (``cytoscape``, ``elkjs``),
-   ``cytoscape-elk`` is not, and the lockfile holds exactly one elkjs, the pinned one.
+   ``cytoscape-elk`` is not, the lockfile holds exactly one elkjs, the pinned one,
+   and the theme loads elkjs from its worker alone, so that one is the one that runs.
 2. The layout runs in a worker Vite bundles: the worker module loads elkjs's own
    worker script, and the client names it the way Vite recognises.
 3. Every relative import in the committed theme points at a file that exists
@@ -45,6 +46,8 @@ _THEME = _SITE / ".vitepress" / "theme"
 _REQUIRED_VIZ_DEPS = ("cytoscape", "elkjs")
 # The adapter that ran a nested elkjs of its own on the main thread (`beadloom-f2we`).
 _RETIRED_VIZ_DEPS = ("cytoscape-elk",)
+# A module specifier that names elkjs or a file of it, in either kind of quote.
+_ELKJS_SPECIFIER = re.compile(r"""["'](elkjs(?:/[^"']*)?)["']""")
 
 
 def _package_json() -> dict[str, object]:
@@ -94,6 +97,17 @@ def test_the_layout_runs_in_a_worker_vite_bundles() -> None:
     assert 'import "elkjs/lib/elk-worker.min.js";' in worker
     client = _read("shared/elk/layOut.js")
     assert 'new Worker(new URL("./elk.worker.js", import.meta.url), { type: "module" })' in client
+
+
+def test_the_theme_reaches_elkjs_only_through_its_worker() -> None:
+    """The one elkjs the lock holds is the one that runs: no other module loads a build of it."""
+    importers = {
+        path.relative_to(_THEME).as_posix(): specifiers
+        for path in _theme_sources()
+        if (specifiers := _ELKJS_SPECIFIER.findall(path.read_text(encoding="utf-8")))
+    }
+
+    assert importers == {"shared/elk/elk.worker.js": ["elkjs/lib/elk-worker.min.js"]}
 
 
 def _local_imports(source: str) -> list[str]:
