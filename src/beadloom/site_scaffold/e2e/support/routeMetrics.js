@@ -204,6 +204,24 @@ export function sharing(edges) {
 /** Two coordinates closer than this are one, in layout units. */
 const SAME = 0.5;
 const same = (a, b) => Math.abs(a - b) < SAME;
+/**
+ * Two lanes or channels this close or closer are one, in layout units. Cytoscape
+ * reports a drawn corner up to half a unit off its computed place, so one line
+ * drawn by several edges can read as 2166.4 in one and 2166.6 in another, which
+ * rounding to the unit would count twice; two lanes of a staircase lie ten apart.
+ */
+const ONE_LANE = 1;
+
+/** The distinct values among `values`: sorted, each more than `ONE_LANE` past the one before, to the unit. */
+function distinctLines(values) {
+  const lines = [];
+  let last = -Infinity;
+  for (const value of [...values].sort((a, b) => a - b)) {
+    if (value - last > ONE_LANE) lines.push(Math.round(value));
+    last = value;
+  }
+  return lines;
+}
 
 /** `route`'s points read from `node`'s end: as drawn from a source, reversed into a target. */
 function fromEnd(route, node) {
@@ -227,11 +245,12 @@ function firstChannel(points) {
 
 /**
  * The channels `node`'s edges leave it in: a map from "side/direction" to the
- * set of heights, to the unit, of their first horizontal runs. A fan drawn as a
- * staircase has one height per step; a bus has one.
+ * set of heights, to the unit, of their first horizontal runs, heights a unit
+ * apart or closer counted as one. A fan drawn as a staircase has one height per
+ * step; a bus has one.
  */
 export function channelsOf(routes, node, box) {
-  const channels = new Map();
+  const heights = new Map();
   for (const route of routes) {
     if (route.source !== node && route.target !== node) continue;
     const points = fromEnd(route, node);
@@ -239,10 +258,10 @@ export function channelsOf(routes, node, box) {
     const channel = firstChannel(points);
     if (!side || channel === null) continue;
     const key = `${side}/${route.source === node ? "out" : "in"}`;
-    if (!channels.has(key)) channels.set(key, new Set());
-    channels.get(key).add(Math.round(channel));
+    if (!heights.has(key)) heights.set(key, []);
+    heights.get(key).push(channel);
   }
-  return channels;
+  return new Map([...heights].map(([key, values]) => [key, new Set(distinctLines(values))]));
 }
 
 /**
@@ -262,12 +281,8 @@ export function excessSteps(routes, leaves) {
   let excess = 0;
   for (const [node, own] of byNode) {
     if (own.length < 2) continue;
-    const heights = new Set();
-    for (const route of own) {
-      const channel = firstChannel(fromEnd(route, node));
-      if (channel !== null) heights.add(Math.round(channel));
-    }
-    excess += Math.max(0, heights.size - 2);
+    const heights = own.map((route) => firstChannel(fromEnd(route, node))).filter((channel) => channel !== null);
+    excess += Math.max(0, distinctLines(heights).length - 2);
   }
   return excess;
 }
@@ -275,7 +290,8 @@ export function excessSteps(routes, leaves) {
 /**
  * Where `node`'s edges cross a line `distance` units out from each side they
  * leave by: `{ top, bottom }`, each `{ lanes, others }` — the lanes, distinct to
- * the unit, and the other ends of the edges that leave by that side.
+ * the unit (a unit apart or closer is one lane), and the other ends of the
+ * edges that leave by that side.
  */
 export function lanesAt(routes, node, box, distance) {
   const sides = {};
@@ -301,7 +317,7 @@ export function lanesAt(routes, node, box, distance) {
     }
   }
   return Object.fromEntries(
-    Object.entries(sides).map(([side, { xs, others }]) => [side, { lanes: new Set(xs.map(Math.round)).size, others }])
+    Object.entries(sides).map(([side, { xs, others }]) => [side, { lanes: distinctLines(xs).length, others }])
   );
 }
 

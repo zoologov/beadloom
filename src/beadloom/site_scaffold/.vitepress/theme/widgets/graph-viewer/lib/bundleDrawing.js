@@ -49,11 +49,12 @@ export function simplify(points) {
 }
 
 /**
- * The drawing of `{ nodes, edges, boxes, paths }` (`bundleRoutes`), indexed by
- * `options.cellSize` and `options.bandWidth`: its containment, the routed edges
- * at each node, and its routes, which `setRoute` replaces one at a time.
+ * The drawing of `{ nodes, edges, loops, boxes, paths }` (`bundleRoutes`),
+ * indexed by `options.cellSize` and `options.bandWidth`: its containment, the
+ * routed edges at each node, how many edges each node draws, and its routes,
+ * which `setRoute` replaces one at a time.
  */
-export function drawingOf({ nodes, edges, boxes, paths }, options) {
+export function drawingOf({ nodes, edges, loops = [], boxes, paths }, options) {
   const parent = new Map(nodes.map((node) => [node.id, node.parent || null]));
   const holders = new Set([...parent.values()].filter(Boolean));
   const roots = nodes.map((node) => node.id).filter((id) => !parent.get(id));
@@ -91,6 +92,14 @@ export function drawingOf({ nodes, edges, boxes, paths }, options) {
       atNode.get(id).push(edge);
     }
   }
+  // A node draws its routed edges and its loops: a box's edges into its own
+  // children, a node's into a box that holds it. A loop is never rerouted, but it
+  // is one of the node's drawn edges, and a node is busy by the edges it draws.
+  const drawn = new Map([...atNode].map(([id, at]) => [id, at.length]));
+  for (const loop of loops) {
+    for (const id of new Set([loop.source, loop.target])) drawn.set(id, (drawn.get(id) || 0) + 1);
+  }
+  const withDegree = (degree) => order.filter((id) => drawn.get(id) >= degree);
 
   const boxIndex = gridIndex(options.cellSize);
   for (const [id, box] of Object.entries(boxes)) boxIndex.insert({ id, box }, box);
@@ -116,13 +125,13 @@ export function drawingOf({ nodes, edges, boxes, paths }, options) {
     routes,
     setRoute,
     edgesAt: (id) => atNode.get(id) || [],
-    /** The leaves with at least `degree` routed edges, in the order the edges first name them. */
-    leavesWithDegree: (degree) => order.filter((id) => !holders.has(id) && atNode.get(id).length >= degree),
-    /** The same, the leaves with the most edges first. */
-    leavesByDegree: (degree) =>
-      order
-        .filter((id) => !holders.has(id) && atNode.get(id).length >= degree)
-        .sort((a, b) => atNode.get(b).length - atNode.get(a).length),
+    /**
+     * The nodes, leaves and boxes alike, that route an edge and draw at least
+     * `degree` edges, in the order the routed edges first name them.
+     */
+    nodesWithDegree: withDegree,
+    /** The same, the nodes that draw the most edges first. */
+    nodesByDegree: (degree) => withDegree(degree).sort((a, b) => drawn.get(b) - drawn.get(a)),
     /** The bus channel each edge was given, by the node whose bus gave it: edge id to `{ node, y }`. */
     channels: new Map(),
     /** Visit every box whose rectangle meets `rect`. */

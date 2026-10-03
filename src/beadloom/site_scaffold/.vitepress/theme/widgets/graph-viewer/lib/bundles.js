@@ -18,6 +18,12 @@
 // - The **fallback**: an edge keeps its own route wherever a new segment would
 //   cross a box or run along an edge that has nothing to do with it.
 //
+// A node is a leaf or a box alike: a box's edges leave its border as a leaf's
+// do, and a box with many edges would otherwise leave its side in a staircase as
+// wide as a leaf's. A node is busy by the edges it draws, its loops included (a
+// box's edges into its own children, a node's into a box that holds it), though
+// a loop is never rerouted.
+//
 // The trunks are drawn first and the buses on top of them, the busiest nodes
 // first (`trunks.js`, `buses.js`), over one drawing whose routes they rewrite
 // (`bundleDrawing.js`). The layered layout runs downwards, so edges leave a node
@@ -31,9 +37,9 @@ import { trunksOf } from "./trunks.js";
 
 /** What the bundling is tuned by, in layout units unless named otherwise. */
 export const BUNDLE_OPTIONS = Object.freeze({
-  /** A leaf with at least this many routed edges gets trunks. */
+  /** A node, leaf or box, that draws at least this many edges, its loops included, gets trunks. */
   trunkDegree: 20,
-  /** A leaf with at least this many routed edges gets buses: every node that has a fan at all. */
+  /** A node that draws at least this many edges gets buses: every node that has a fan at all. */
   busDegree: 2,
   /** How far outside its box a trunk's distribution line runs. */
   trunkStop: 8,
@@ -63,7 +69,8 @@ export const BUNDLE_OPTIONS = Object.freeze({
  * The routes of a drawing with its fans bundled: `{ paths, trunks, buses }`.
  *
  * `nodes` are `{ id, parent }` (null at a root); `edges` are the routed edges,
- * `{ id, source, target }`, without the ones drawn as loops; `boxes` map a node's
+ * `{ id, source, target }`, without the ones drawn as loops, and `loops` those,
+ * the same way, counted in a node's degree and never rerouted; `boxes` map a node's
  * id to its box `{ x1, y1, x2, y2 }`, and `paths` an edge's id to its route, a
  * polyline of `{ x, y }`. `paths` in the answer holds every routed edge's route,
  * bundled or as it was; `trunks` and `buses` say which edges share which.
@@ -72,9 +79,9 @@ export const BUNDLE_OPTIONS = Object.freeze({
 export function bundleRoutes(drawing, overrides = {}) {
   const options = { ...BUNDLE_OPTIONS, ...overrides };
   const state = drawingOf(drawing, options);
-  const hubs = state.leavesWithDegree(options.trunkDegree);
+  const hubs = state.nodesWithDegree(options.trunkDegree);
   const hubSet = new Set(hubs);
   const trunks = hubs.flatMap((hub) => trunksOf(state, hub, hubSet, options));
-  const buses = state.leavesByDegree(options.busDegree).flatMap((node) => busesAt(state, node, options));
+  const buses = state.nodesByDegree(options.busDegree).flatMap((node) => busesAt(state, node, options));
   return { paths: Object.fromEntries(state.routes), trunks, buses };
 }

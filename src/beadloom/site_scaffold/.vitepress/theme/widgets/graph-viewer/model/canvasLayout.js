@@ -107,15 +107,19 @@ export function fitCompounds(cy, geometry) {
 /** The bundles computed for each layout: one layout is one graph's, and its bundles are too. */
 const bundlesByLayout = new WeakMap();
 
-/** What the bundling reads of `cy` and `geometry`: every node's container, and the edges drawn along a route. */
+/**
+ * What the bundling reads of `cy` and `geometry`: every node's container, the
+ * edges drawn along a route, and the edges drawn as loops, which a node's degree
+ * counts and nothing reroutes.
+ */
 function drawingOf(cy, geometry) {
   const nodes = cy.nodes().map((node) => ({ id: node.id(), parent: node.isChild() ? node.parent().id() : null }));
-  const edges = cy
-    .edges()
-    .filter((edge) => geometry.routes[edge.id()] && !isLoop(edge))
-    .map((edge) => ({ id: edge.id(), source: edge.source().id(), target: edge.target().id() }));
+  const laidOut = cy.edges().filter((edge) => geometry.routes[edge.id()]);
+  const ends = (edge) => ({ id: edge.id(), source: edge.source().id(), target: edge.target().id() });
+  const edges = laidOut.filter((edge) => !isLoop(edge)).map(ends);
+  const loops = laidOut.filter(isLoop).map(ends);
   const paths = Object.fromEntries(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
-  return { nodes, edges, boxes: geometry.boxes, paths };
+  return { nodes, edges, loops, boxes: geometry.boxes, paths };
 }
 
 /**
