@@ -10,6 +10,7 @@ import { adopterSizedGraph } from "./support/adopterGraph.js";
 import {
   architectureData,
   openArchitecture,
+  openEveryBox,
   viewer,
   viewerAfter,
   waitForViewer,
@@ -44,6 +45,7 @@ test("each node is drawn where ELK placed it, and every box and route is in the 
   page,
 }) => {
   await openArchitecture(page);
+  await openEveryBox(page);
   const { boxes, routes } = await viewer(page, "elkGeometry");
   const drawn = await viewer(page, "boxes");
   const positions = await viewer(page, "positions");
@@ -141,6 +143,7 @@ test("the toolbar answers while an adopter-sized graph is laid out", async ({ pa
   expect(await panel.getAttribute("aria-expanded")).not.toBe(before);
   await waitForViewer(page);
   await expect(status).toBeHidden();
+  await openEveryBox(page);
   expect(await viewer(page, "visibleIds")).toHaveLength(data.nodes.length);
   const gaps = await page.evaluate(() => window.__layoutGaps);
   expect(gaps.length).toBeGreaterThan(0);
@@ -197,6 +200,7 @@ test("a node named like an id the viewer gives its own things gets its box and i
   const data = graphNamedLikeTheViewersIds(await architectureData(request));
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
   await openArchitecture(page);
+  await openEveryBox(page);
   const ids = data.nodes.map((n) => n.id).sort();
   const drawnEdges = data.edges.filter((e) => e.kind !== "part_of");
 

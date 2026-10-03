@@ -46,6 +46,8 @@ SPEC_SLICE = {
     "layers.spec.js": "site-layer",
     # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).
     "layout.spec.js": "site-shared",
+    # The map-like overview: levels, aggregated edges, the budget (BDL-077 E4).
+    "map.spec.js": "site-graph-viewer",
     "navigation.spec.js": "site-navigate-graph",
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",

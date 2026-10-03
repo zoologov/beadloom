@@ -2,9 +2,12 @@
 //
 // In an earlier version the viewer drew two kinds of six and its legend listed a `part_of`
 // line style that was never drawn.
+//
+// Every case reads the edges at full detail, every box open: at the whole-graph
+// fit the viewer draws aggregated edges between closed boxes (`map.spec.js`).
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, serveEveryEdgeKind, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
 
 /** The legend keys the data file calls for: each drawn edge kind, plus `violation`. */
 function expectedKeys(data) {
@@ -20,6 +23,7 @@ function expectedKeys(data) {
 test("the legend lists exactly the edge kinds that are drawn", async ({ page, request }) => {
   const data = await architectureData(request);
   await openArchitecture(page);
+  await openEveryBox(page);
 
   const drawn = await viewer(page, "drawnEdgeKinds");
   expect(drawn).toEqual(expectedKeys(data));
@@ -35,6 +39,7 @@ test("each edge kind has its own line style, and a violation is red, dashed and 
 }) => {
   const data = await serveEveryEdgeKind(page, request);
   await openArchitecture(page);
+  await openEveryBox(page);
   const drawn = await viewer(page, "drawnEdgeKinds");
   expect(drawn).toEqual(expectedKeys(data));
   expect(drawn).toEqual(["consumes", "depends_on", "produces", "uses", "violation"]);
@@ -59,6 +64,7 @@ test("each edge kind has its own line style, and a violation is red, dashed and 
 
 test("hovering an edge shows its label, and only while it is hovered", async ({ page }) => {
   await openArchitecture(page);
+  await openEveryBox(page);
   await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
   // Cytoscape reads where its canvas is on the page when the scroll event reaches
   // it; a pointer that arrives before that frame is placed by the old position.
@@ -108,6 +114,7 @@ for (const colorScheme of ["light", "dark"]) {
     }) => {
       await serveEveryEdgeKind(page, request);
       await openArchitecture(page);
+      await openEveryBox(page);
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         colorScheme === "dark"
       );
@@ -126,6 +133,7 @@ for (const colorScheme of ["light", "dark"]) {
     }) => {
       await serveEveryEdgeKind(page, request);
       await openArchitecture(page);
+      await openEveryBox(page);
       const background = await viewerBackground(page);
 
       const looks = await viewer(page, "edgeLooks");

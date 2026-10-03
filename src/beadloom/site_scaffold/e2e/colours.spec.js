@@ -3,11 +3,15 @@
 // In an earlier version the stylesheet handed Cytoscape `var(--vp-…)` strings. Cytoscape
 // accepts only literal colours, so it logged each one as invalid and drew it in
 // its fallback grey, rgb(153,153,153).
+//
+// The colours are read at the whole-graph fit, where the viewer draws a map of
+// closed boxes and aggregated edges, and at full detail, every box open.
 
 import { test, expect } from "@playwright/test";
 import {
   collectRejectedStyles,
   openArchitecture,
+  openEveryBox,
   serveEveryEdgeKind,
   unresolvedColours,
   viewer,
@@ -17,9 +21,12 @@ test("no drawn colour is Cytoscape's fallback, and no style is rejected", async 
   const rejected = collectRejectedStyles(page);
   await openArchitecture(page);
 
-  const colours = await viewer(page, "colours");
-  expect(colours.length).toBeGreaterThan(0);
-  expect(unresolvedColours(colours)).toEqual([]);
+  const overview = await viewer(page, "colours");
+  await openEveryBox(page);
+  const detail = await viewer(page, "colours");
+  expect(overview.length).toBeGreaterThan(0);
+  expect(detail.length).toBeGreaterThan(overview.length);
+  expect(unresolvedColours([...overview, ...detail])).toEqual([]);
   expect(rejected).toEqual([]);
 });
 
@@ -52,6 +59,7 @@ for (const colorScheme of ["light", "dark"]) {
       const rejected = collectRejectedStyles(page);
       await serveEveryEdgeKind(page, request);
       await openArchitecture(page);
+      await openEveryBox(page);
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         colorScheme === "dark"
       );

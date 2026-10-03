@@ -11,6 +11,10 @@
 // hid every child it shrank to a node's size where it stood. And the canvas's
 // shape was part of what ELK was given, so a node page, whose canvas is shorter,
 // had the same graph laid out again.
+//
+// The cases on the architecture graph read it at full detail, every box open: at
+// the whole-graph fit the viewer draws a map of closed boxes (`map.spec.js`). The
+// theme case reads the map as drawn at the fit.
 
 import { test, expect } from "@playwright/test";
 import { adopterSizedGraph } from "./support/adopterGraph.js";
@@ -24,6 +28,7 @@ import {
 import {
   architectureData,
   openArchitecture,
+  openEveryBox,
   parentMap,
   viewer,
   viewerAfter,
@@ -68,6 +73,7 @@ const DRAWINGS = [
     open: async (page, request) => {
       const data = await architectureData(request);
       await openArchitecture(page);
+      await openEveryBox(page);
       return parentMap(data);
     },
   },
@@ -77,6 +83,7 @@ const DRAWINGS = [
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
       await openArchitecture(page);
+      await openEveryBox(page);
       return parentMap(data);
     },
   },
@@ -150,6 +157,7 @@ test("every box is drawn as ELK sized it, also when a filter hides every child o
   requireShape(holders.size > 0 && emptiedBoxes(kind).length > 0, "no kind filter shows a box without any of its children");
 
   await openArchitecture(page);
+  await openEveryBox(page);
   const { boxes: elk } = await viewer(page, "elkGeometry");
   expect(misdrawnBoxes(Object.keys(elk), await viewer(page, "nodeBoxes"), elk)).toEqual([]);
 

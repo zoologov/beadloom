@@ -6,7 +6,7 @@
 // behind, so no control moves a node any more.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, parentMap, viewer, waitForViewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, parentMap, viewer, waitForViewer } from "./support/viewer.js";
 import { drag, gesturesOnALeaf, pressEveryToolbarButton } from "./support/pointer.js";
 import { landscapeData } from "./support/landscape.js";
 import { LACKING, requireShape } from "./support/shape.js";
@@ -53,6 +53,8 @@ test("a drag inside a domain box pans the view and moves no node", async ({ page
     "no container sits inside another container, so there is no box within a box to drag in"
   );
   await openArchitecture(page);
+  // A box within a box is drawn at full detail; at the whole-graph fit every box is drawn closed.
+  await openEveryBox(page);
   const canvas = page.getByTestId("graph-canvas");
   await canvas.scrollIntoViewIfNeeded();
   const boxes = await viewer(page, "boxes");

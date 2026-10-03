@@ -44,6 +44,23 @@ export async function viewerAfter(page, navigate) {
   );
 }
 
+/**
+ * Draw the whole graph at full detail: every box open at once, as a reader sees
+ * each box after zooming into it.
+ *
+ * At the whole-graph fit the viewer draws a map: the boxes at the top, closed,
+ * with aggregated edges between them (`map.spec.js`). A case about every node or
+ * every edge of the graph opens every box first, with the handle's one action,
+ * which draws each node it names as itself; `positions` names every node, drawn
+ * or not.
+ */
+export async function openEveryBox(page) {
+  await page.evaluate(() => {
+    const handle = window.__beadloomViewer;
+    handle.revealNodes(Object.keys(handle.positions()));
+  });
+}
+
 /** Call a read-only method of the test handle and return its answer. */
 export function viewer(page, method, ...args) {
   return page.evaluate(([name, params]) => window.__beadloomViewer[name](...params), [

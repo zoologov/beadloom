@@ -24,12 +24,21 @@
 // strength draw the trunk at four fifths. Opaque faded ones draw it at the
 // strength of one. Every edge along a hovered line is drawn wider, so a trunk
 // under the pointer shows every edge it carries.
+//
+// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted, its
+// title in the middle, or above it when the box is too narrow for it; an
+// aggregated edge is a solid line as wide as the count of edges it carries, with
+// an arrowhead at each end edges arrive at and the counts as its label. Those
+// marks keep one size on screen whatever the zoom: each multiplies its size by
+// the map's scale, which the map keeps in its data.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
 import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
 import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
+import { MAP_MARKS, aggregateWidthOf, scaleOf, titleFits, titleOf, titleSizeOf } from "./mapMarks.js";
 
 export const GEOMETRY = Object.freeze({
   nodeWidth: 160,
@@ -194,6 +203,7 @@ function edgeRules(tokens) {
       "line-gradient-stop-colors": [mixRgb(colour, tokens.bg, SOURCE_END_SHARE), colour],
       "line-gradient-stop-positions": [0, 70],
       "target-arrow-color": colour,
+      "source-arrow-color": colour,
       "target-arrow-shape": look.arrow,
     };
     if (look.dash) style["line-dash-pattern"] = look.dash;
@@ -241,6 +251,7 @@ function dimmedEdgeRules(tokens) {
         "line-color": fade(colour),
         "line-gradient-stop-colors": [fade(mixRgb(colour, tokens.bg, SOURCE_END_SHARE)), fade(colour)],
         "target-arrow-color": fade(colour),
+        "source-arrow-color": fade(colour),
         "text-opacity": DIMMED_OPACITY,
       },
     };
@@ -277,6 +288,46 @@ function selectionRules(tokens) {
   ];
 }
 
+/** The map's looks: a closed box and its title, an aggregated edge, a count of hidden edges. */
+function mapRules(tokens) {
+  const tones = [...LAYER_TONES, UNLAYERED_TONE];
+  return [
+    { selector: `node[${HIDDEN_EDGES}]`, style: { label: titleOf, "text-wrap": "wrap" } },
+    {
+      selector: `node.${COLLAPSED}`,
+      style: {
+        label: titleOf,
+        "text-wrap": "wrap",
+        "font-weight": 700,
+        "font-size": (node) => MAP_MARKS.boxTitle * scaleOf(node),
+        "text-valign": (node) => (titleFits(node) ? "center" : "top"),
+        "text-max-width": (node) => (titleFits(node) ? node.data("box").width : titleSizeOf(node).width + 1),
+        "background-opacity": MAP_MARKS.collapsedOpacity,
+      },
+    },
+    ...tones.map((tone) => ({
+      selector: `node.${COLLAPSED}[tone = "${tone}"]`,
+      style: { "background-color": tokens[tone] },
+    })),
+    {
+      selector: `edge[${AGGREGATE}]`,
+      style: {
+        width: aggregateWidthOf,
+        "line-style": "solid",
+        "line-fill": "solid",
+        label: "data(countLabel)",
+        "font-size": (edge) => MAP_MARKS.countLabel * scaleOf(edge),
+        "font-weight": 700,
+        "text-rotation": "none",
+        "text-background-padding": (edge) => `${2 * scaleOf(edge)}px`,
+        "source-arrow-shape": (edge) => (edge.data("backward") ? "triangle" : "none"),
+        "target-arrow-shape": (edge) => (edge.data("forward") ? "triangle" : "none"),
+        "z-index": 5,
+      },
+    },
+  ];
+}
+
 /** The whole stylesheet for resolved `tokens` (see `shared/theme-tokens`). */
 export function buildStylesheet(tokens) {
   return [
@@ -284,6 +335,7 @@ export function buildStylesheet(tokens) {
     ...edgeRules(tokens),
     ...geometryRules(),
     ...selectionRules(tokens),
+    ...mapRules(tokens),
     { selector: ".is-hidden, .is-outside", style: { display: "none" } },
   ];
 }

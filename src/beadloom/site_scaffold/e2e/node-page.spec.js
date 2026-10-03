@@ -10,6 +10,7 @@ import {
   flaggedIds,
   fullscreenView,
   openArchitecture,
+  openEveryBox,
   parentMap,
   viewer,
   waitForViewer,
@@ -140,6 +141,8 @@ test("a filter on a node page keeps what it keeps on the architecture page", asy
 
   await page.goto(pageOf(node));
   await waitForViewer(page);
+  // What the filter keeps, over the whole graph: every box open (`filters.spec.js`).
+  await openEveryBox(page);
   await page.getByLabel("Only flagged", { exact: true }).check();
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(

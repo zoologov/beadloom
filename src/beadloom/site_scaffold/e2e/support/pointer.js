@@ -96,11 +96,15 @@ export async function pressEveryToolbarButton(page) {
   return count;
 }
 
-/** The position of every leaf node, by id. */
+/**
+ * The position of every node that is not a box drawn open, by id: the leaves,
+ * the boxes drawn closed, and the nodes inside those, which are not drawn and
+ * keep their places.
+ */
 async function leafPositions(page) {
   const boxes = await viewer(page, "boxes");
   const positions = await viewer(page, "positions");
-  return Object.fromEntries(Object.entries(positions).filter(([id]) => !boxes[id].isParent));
+  return Object.fromEntries(Object.entries(positions).filter(([id]) => !boxes[id]?.isParent));
 }
 
 /**

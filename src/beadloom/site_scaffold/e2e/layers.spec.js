@@ -9,7 +9,7 @@
 // show none of the declared names.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, viewer } from "./support/viewer.js";
 import { LACKING, requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
@@ -115,6 +115,8 @@ test("each declared layer is drawn in a colour of its own, apart from a node in 
   requireShape((data.layers || []).length > 1, LACKING.layers);
 
   await openArchitecture(page);
+  // Every node's border, at full detail: at the whole-graph fit only the boxes at the top are drawn.
+  await openEveryBox(page);
   const borders = new Map(
     (await viewer(page, "colours"))
       .filter((entry) => entry.property === "border-color")

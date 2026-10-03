@@ -3,6 +3,11 @@
 // In an earlier version a filter hid compound parents with `display: none`, and Cytoscape
 // hides the children of a hidden parent: `Kind = feature` showed nothing, and
 // the domain filter kept direct children only.
+//
+// A filter's case reads the filtered graph at full detail, every box open: at
+// the whole-graph fit the viewer draws a map of closed boxes, and how a filter
+// composes with it is `map.spec.js`'s. The search box opens the boxes that hold
+// what it finds by itself, so its case opens none.
 
 import { test, expect } from "@playwright/test";
 import {
@@ -10,6 +15,7 @@ import {
   depthOf,
   flaggedIds,
   openArchitecture,
+  openEveryBox,
   parentMap,
   subtreeOf,
   viewer,
@@ -37,6 +43,7 @@ test("a kind filter keeps every node of that kind visible, with its containers",
   const ofKind = data.nodes.filter((n) => n.kind === kind).map((n) => n.id);
 
   await openArchitecture(page);
+  await openEveryBox(page);
   await page.getByLabel("Kind", { exact: true }).selectOption(kind);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
@@ -59,6 +66,7 @@ test("a domain filter keeps the domain's whole subtree", async ({ page, request 
   const subtree = subtreeOf(domain, parents);
 
   await openArchitecture(page);
+  await openEveryBox(page);
   await page.getByLabel("Domain", { exact: true }).selectOption(domain);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
@@ -100,6 +108,7 @@ test("a layer filter keeps every node in that layer, inherited or its own, with 
   const members = data.nodes.filter((n) => n.layer_rank === declared.layer_rank).map((n) => n.id);
 
   await openArchitecture(page);
+  await openEveryBox(page);
   // The filter offers the declared names, not the tag tokens.
   const name = data.layers.find((layer) => layer.rank === declared.layer_rank).name;
   await page.getByLabel("Layer", { exact: true }).selectOption(name);
@@ -122,6 +131,7 @@ test("the flagged filter keeps every node with a violation or stale docs, with i
   );
 
   await openArchitecture(page);
+  await openEveryBox(page);
   await page.getByLabel("Only flagged", { exact: true }).check();
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(

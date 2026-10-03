@@ -19,6 +19,13 @@
 // on a line that more than one edge runs along, a note over the canvas names
 // them, since the line alone cannot say which edges it carries.
 //
+// The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
+// boxes at the top and one aggregated edge per pair of them, more detail where
+// the reader zooms in. A selection opens the boxes that hold its node, and those
+// of every node its walk reaches unless the node is a hub selected with nothing
+// more asked; a search opens the boxes that hold what it finds. The pointer on an
+// aggregated edge names how many edges it carries each way.
+//
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
 // embedded view are one UI. The panel shows what the page puts in its `panel`
@@ -65,6 +72,7 @@ import { withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
+import { AGGREGATE, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
@@ -129,6 +137,18 @@ const dependents = computed(() =>
   mode.impact ? dependentsOf(edges.value, mode.impact.dependentEnds, ids.value) : new Map()
 );
 const impactMode = computed(() => Boolean(mode.impact) && state.view === IMPACT_VIEW);
+// Whether the reader asked the neighbourhood for nothing more than a selection gives.
+const neutralNeighbourhood = computed(
+  () =>
+    state.depth === NEIGHBOURHOOD_DEFAULTS.depth &&
+    state.dir === NEIGHBOURHOOD_DEFAULTS.dir &&
+    Boolean(state.hide) === NEIGHBOURHOOD_DEFAULTS.hide
+);
+// How many drawn edges a node has: a hub's walk opens only its own boxes.
+const degreeOf = (id) =>
+  (drawnAdjacency.value.out.get(id)?.length || 0) + (drawnAdjacency.value.in.get(id)?.length || 0);
+// What the search box finds, whose boxes it opens.
+const searched = computed(() => mode.searched(graph.value, state));
 
 // The walk from the selected node, or null when nothing is selected.
 const walk = computed(() => {
@@ -160,6 +180,10 @@ const selection = computed(() => {
       ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
       : null,
     risks: summary.value ? new Set(summary.value.risky.map((entry) => entry.id)) : null,
+    reveal: selectionReveals(state.focus, [...distances.keys()], {
+      degree: degreeOf(state.focus),
+      wholeWalk: impactMode.value || !neutralNeighbourhood.value,
+    }),
   };
 });
 
@@ -194,6 +218,7 @@ function toggleImpact() {
 
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
+  fitZoom: () => navigation.fitZoom(),
   onNodeTap: (id) => {
     select(id, { frame: false });
     focusCanvas();
@@ -216,6 +241,19 @@ const bundleNote = computed(() => {
   const rest = ids.length - named.length;
   return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
 });
+// The edges an aggregated edge under the pointer carries, each way, named by its two ends.
+const aggregateNote = computed(() => {
+  const ids = canvas.hoveredEdges.value;
+  const instance = canvas.cy.value;
+  if (ids.length !== 1 || !instance) return "";
+  const edge = instance.getElementById(ids[0]);
+  if (edge.empty() || !edge.data(AGGREGATE)) return "";
+  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const way = (count, from, to) =>
+    count ? `${count} ${count === 1 ? "edge" : "edges"} ${labelOf(from)} → ${labelOf(to)}` : "";
+  const [a, b] = [edge.data("source"), edge.data("target")];
+  return [way(edge.data("forward"), a, b), way(edge.data("backward"), b, a)].filter(Boolean).join("; ");
+});
 
 // How much of the canvas's right edge the panel lies over: in the page it
 // overlays the canvas, in full screen it sits beside it and covers nothing.
@@ -232,9 +270,9 @@ const navigation = useGraphNavigation(() => canvas.cy.value, {
   getInset: () => ({ right: coveredRight() }),
 });
 
-/** Fit the selection's walk when there is one, else everything visible. */
+/** Fit the selection's walk, with the closed boxes that hold part of it, when there is one; else everything visible. */
 function frameSelection() {
-  nextTick(() => navigation.fit(selection.value ? ".in-walk" : undefined));
+  nextTick(() => navigation.fit(selection.value ? ".in-walk, .holds-walk" : undefined));
 }
 
 function refit() {
@@ -265,6 +303,7 @@ async function render() {
   const mounted = await canvas.mount(elements, buildStylesheet(tokens.value));
   if (!mounted) return;
   navigation.panOnNodes();
+  canvas.reveal("search", searched.value);
   canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
   frameSelection();
@@ -278,6 +317,7 @@ watch(tokens, (current, previous) => {
 });
 watch(visible, (shown) => {
   if (!canvas.ready.value) return;
+  canvas.reveal("search", searched.value);
   canvas.showOnly(shown.nodes, shown.contracts);
   navigation.fit();
 });
@@ -308,6 +348,8 @@ onMounted(() => {
     bundles: () => canvas.bundles.value,
     junctions: () => canvas.junctions(),
     hoveredEdges: () => canvas.hoveredEdges.value,
+    map: () => canvas.map(),
+    revealNodes: (ids) => canvas.revealNow("test", ids),
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -376,6 +418,14 @@ onBeforeUnmount(() => disposeHandle());
       </p>
       <p v-if="bundleNote" class="bl-viewer-bundle-note" role="status" data-testid="edge-bundle-note">
         {{ bundleNote }}
+      </p>
+      <p
+        v-if="aggregateNote"
+        class="bl-viewer-bundle-note"
+        role="status"
+        data-testid="aggregated-edge-note"
+      >
+        {{ aggregateNote }}
       </p>
       <div
         ref="container"

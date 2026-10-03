@@ -9,6 +9,9 @@
 // edges to one top-level box share one route to a line along that box. Where two
 // routes part, a dot marks it; hovering a shared line names every edge on it; and
 // edges outside a selection fade in colour, so a trunk of them does not darken.
+//
+// Every case reads the graph at full detail, every box open: at the whole-graph
+// fit the viewer draws a map of closed boxes (`map.spec.js`).
 
 import { test, expect } from "@playwright/test";
 import { adopterSizedGraph } from "./support/adopterGraph.js";
@@ -22,7 +25,7 @@ import {
   lanesAt,
   polylineOf,
 } from "./support/routeMetrics.js";
-import { architectureData, openArchitecture, parentMap, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 
 /** A node with this many drawn edges is busy enough for trunks; the viewer's own threshold. */
@@ -49,6 +52,7 @@ const GRAPHS = [
     open: async (page, request) => {
       const data = await architectureData(request);
       await openArchitecture(page);
+      await openEveryBox(page);
       return data;
     },
   },
@@ -58,6 +62,7 @@ const GRAPHS = [
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
       await openArchitecture(page);
+      await openEveryBox(page);
       return data;
     },
   },
@@ -285,6 +290,7 @@ test("hovering a line several edges share highlights every edge along it and nam
   requireShape(Boolean(busiest), "no node has a drawn edge");
   // The busiest node's fans in the middle of the canvas, at about full size.
   await openArchitecture(page, `?focus=${encodeURIComponent(busiest)}`);
+  await openEveryBox(page);
   await page.getByRole("button", { name: "Panel" }).click();
   await page.getByRole("button", { name: "Centre" }).click();
   for (let step = 0; step < ZOOM_STEPS && (await viewer(page, "zoom")) < 1; step += 1) {
@@ -341,6 +347,7 @@ test("an edge outside a selection fades in colour at full opacity, so a trunk of
   requireShape(Boolean(busiest), "no node has a drawn edge");
 
   await openArchitecture(page, `?focus=${encodeURIComponent(busiest)}&depth=1`);
+  await openEveryBox(page);
   await expect.poll(async () => (await viewer(page, "neighbourhood")).edges.length).toBeGreaterThan(0);
   const walked = new Set((await viewer(page, "neighbourhood")).edges);
   const looks = await viewer(page, "edgeLooks");

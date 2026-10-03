@@ -13,6 +13,7 @@ nodes:
       - src/beadloom/site_scaffold/e2e/bundles.spec.js
       - src/beadloom/site_scaffold/e2e/colours.spec.js
       - src/beadloom/site_scaffold/e2e/graph-viewer-instances.spec.js
+      - src/beadloom/site_scaffold/e2e/map.spec.js
       - src/beadloom/site_scaffold/e2e/routes.spec.js
     docs:
       - docs/services/vitepress-site/graph-viewer.md
