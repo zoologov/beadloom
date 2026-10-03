@@ -59,3 +59,17 @@ Without a GPU (software raster, as in CI) path A's frames on the adopter-sized g
 ## Artefacts
 
 Prototypes, drivers, raw results and 70 screenshots are in the session scratchpad (`rnd/harness`, `rnd/B`, `rnd/shots`); the owner's report links the key screenshots.
+
+## Probe: the map-like overview (2026-10-03)
+
+- **Derived levels (chosen):** one ELK layout; collapsed boxes keep their ELK size, children removed (`cy.remove`/`restore`); aggregated route = medoid of the members' routes clipped between the two boxes. Box displacement 0 at every level and switch order, both graphs. Overview here: 12 boxes, 37 drawn edges (35 aggregated carrying 277 + 2), A2 0.001 / 0, 52 crossings; adopter-sized: 34 boxes, 443 drawn (376 aggregated), 12,223 crossings. Clips 1,065 / 0 failed, 3–6 ms. Switch 5–11 ms cold, ≤ 4 ms warm (14–20 / ≤ 12 at adopter size). Overview frame p50 16.7 ms (27.3 today) here, 16.5 ms (125.5 today) at adopter size.
+- **ELK on the collapsed graph with positions handed in:** boxes move up to 6,940 units (30,264 at adopter size); interactive strategies move every box, throw with `INCLUDE_CHILDREN`, or time out; `fixed` routes nothing. Rejected.
+- **Own router (A* + nudging):** 1.9 s / 20 s at adopter size, segments nudged into boxes. Rejected.
+- **cytoscape-expand-collapse 4.1.1:** unmaintained, shrinks boxes (up to 1,885 units), bezier meta-edges. Rejected.
+- **Level rule:** per-box "open what is in view" (parent open, overlaps the viewport, zoom past 1.3× fit, larger side ≥ N px; closes below 0.8 N): ≤ 0.2 ms per frame, switch 1.7–6 ms. Depth-by-zoom degenerates (L2 already draws 447 of 453). A selection opening its neighbours' boxes degenerates for a hub (`cli-commands` → 406 edges); open only its own ancestors.
+
+## Probe: the staircase (2026-10-03)
+
+- **Trunk + bus post-processed from ELK's sections (chosen):** `cli-commands` steps 36 → 1, lanes at 150 units 70 → 10, hub ink 57.6k → 7.2k; A2 against edges with no common endpoint 0.020 / 0 (unchanged); through-box 0; crossings +10.6%; no node moves; +8 ms (100–230 ms at adopter size before a spatial index). Bus on every node + trunks on degree ≥ 20: excess steps over the graph 403 → 76, nodes with > 5 steps 41 → 1.
+- **ELK-side options:** `mergeEdges` (any form), FREE / three-sided ports, port alignment, priorities, own partition — no effect or a deeper staircase; `layerConstraint FIRST` throws; hyperedge ports collapse the fan but move all 130 nodes and add 13–56% crossings. Rejected (PRD non-goal on layout changes).
+- **elkjs 0.9.3 vs 0.12:** identical layouts and routes; 0.9.3 ignores `shapeCoords`/`edgeCoords` (relative coordinates).
