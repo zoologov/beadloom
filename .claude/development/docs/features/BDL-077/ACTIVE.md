@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-m6k7.3` (a box hub is not bundled), then `beadloom-m6k7.4` (adopter-size leaves over the lane bound); then R → W → P.
+**Bead:** `beadloom-m6k7.4` (adopter-size leaves over the lane bound); then R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -36,13 +36,15 @@
 | `beadloom-94h4` | E4 | ✓ done | the map |
 | `beadloom-a6a6` | E5 | ✓ done | bridges on highlighted edges |
 | `beadloom-lb1v` | T | ✓ done | PRD criteria measured |
-| `beadloom-m6k7.3` | fix | in progress | a box hub is not bundled |
-| `beadloom-m6k7.4` | fix | blocked | adopter-size leaves over the lane bound |
+| `beadloom-m6k7.3` | fix | ✓ done | a box hub is not bundled |
+| `beadloom-m6k7.4` | fix | in progress | adopter-size leaves over the lane bound |
 | `beadloom-87o6` | R | blocked | review |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-m6k7.3` closed** `bde3684c`: every node, box or leaf, gets buses and trunks; a box's loops count in its degree but are never rerouted. `mcp-server` 20 channels / 26 lanes → 1 / 6 (bound 7); every busy node here within its bound; no node moved; through-box 0. `routeMetrics` now treats values within one unit as one lane (Cytoscape reports trunk corners up to half a unit off) — for review. Adopter-size analysis for `.4`: 111 over-bound edges sit in no trunk (hub-to-hub edges the source never trunked), 84 ride the source's trunk and arrive in lanes of their own.
 
 - **T closed** `0bd7ca46`: 28 criteria — 24 MET, 3 NOT MET, 1 not measurable here (frame bounds on CI's machines). NOT MET: the staircase goal — `mcp-server` (a box, 29 edges) leaves in 20 channels and 26 lanes vs 7, because only leaves are bundled (`beadloom-m6k7.3`); at adopter size 15 sides over the lane bound even under the coordinator's reading and 10 nodes with two channels (`beadloom-m6k7.4`) — the reading is withdrawn (CONTEXT); the docs (W). Frame vs main: first render −6% here, −10% at adopter size; fit and zoom ≈ 1 at the 16.7 ms cap in both rooms (today 31/121 ms without a GPU). Not bounded by the PRD, for review: every box opened at zoom 1 at adopter size is slower than today (109 vs 43 ms without a GPU, 31 vs 25 with). 170 browser cases, 4 of them `test.fail` until the two bugs are fixed.
 
