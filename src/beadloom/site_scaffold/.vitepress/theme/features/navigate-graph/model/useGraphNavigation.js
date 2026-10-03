@@ -1,19 +1,18 @@
 // beadloom:component=site-navigate-graph
-// How a reader moves around the graph: pan, zoom, fit, centre, and Arrange.
+// How a reader moves around the graph: pan, zoom, fit and centre.
 //
-// Dragging the canvas pans and never moves the node under the pointer. In an
-// earlier version every node was grabbable, compound parents included, and a domain box
-// covers its children's area, so a drag started almost anywhere inside it
-// grabbed the box. Now nodes are not grabbable (`autoungrabify`) and every node
-// is `pannable`, which passes a drag on it through to the viewport. "Arrange"
-// is the deliberate gesture for moving nodes: it makes the leaves grabbable,
-// while a drag inside a box still pans.
+// Dragging the canvas pans and never moves the node under the pointer, on any
+// page and by any gesture. In an earlier version every node was grabbable,
+// compound parents included, and a domain box covers its children's area, so a
+// drag started almost anywhere inside it grabbed the box. Later an "Arrange"
+// button made the leaves grabbable on purpose. A node stays where the layout put
+// it now, because what is drawn between the nodes is read from that layout: no
+// node is grabbable (`autoungrabify`), and every node is `pannable`, which
+// passes a drag on it through to the viewport.
 //
 // Fitting and centring leave out the part of the canvas something lies over:
 // in the page the viewer's panel covers the canvas's right edge, and a graph
 // fitted to the whole canvas would put what the reader asked for under it.
-
-import { ref } from "vue";
 
 /** The Cytoscape options of the navigation model, given when the graph is created. */
 export const NAVIGATION_OPTIONS = Object.freeze({
@@ -40,27 +39,22 @@ const NO_INSET = Object.freeze({ right: 0 });
 /**
  * Navigation over the graph `getCy()` returns.
  *
- * `fit(selector)` fits the visible elements the selector names, or everything
- * visible; `centre(id)` centres on a node, or on what is visible when no node
- * is named. `getInset()` says how many pixels at the canvas's right edge are
- * covered, and both leave them out.
+ * `panOnNodes()` makes a drag on any node of the graph pan the view; call it once
+ * the graph holds its nodes. `fit(selector)` fits the visible elements the
+ * selector names, or everything visible; `centre(id)` centres on a node, or on what is
+ * visible when no node is named. `getInset()` says how many pixels at the
+ * canvas's right edge are covered, and both leave them out.
  */
 export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
-  const arranging = ref(false);
-
   // The centre of the uncovered part of the canvas, in rendered pixels.
   function openCentre(cy, inset) {
     return { x: (cy.width() - inset.right) / 2, y: cy.height() / 2 };
   }
 
-  function applyArrangePolicy() {
+  function panOnNodes() {
     const cy = getCy();
     if (!cy) return;
-    cy.autoungrabify(!arranging.value);
-    cy.nodes().forEach((node) => {
-      if (node.isParent() || !arranging.value) node.panify();
-      else node.unpanify();
-    });
+    cy.nodes().panify();
   }
 
   function zoomBy(factor) {
@@ -107,18 +101,11 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
     cy.pan({ x: centreOfOpen.x - zoom * (box.x1 + box.w / 2), y: centreOfOpen.y - zoom * (box.y1 + box.h / 2) });
   }
 
-  function toggleArrange() {
-    arranging.value = !arranging.value;
-    applyArrangePolicy();
-  }
-
   return {
-    arranging,
-    applyArrangePolicy,
+    panOnNodes,
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(1 / ZOOM_STEP),
     fit,
     centre,
-    toggleArrange,
   };
 }

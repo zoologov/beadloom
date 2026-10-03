@@ -50,7 +50,6 @@ function readers(source) {
     visibleIds: () => cy().nodes().filter((node) => node.visible()).map((node) => node.id()).sort(),
     selection: () => source.selection() || null,
     state: () => ({ ...source.state() }),
-    arranging: () => source.arranging(),
     positions: () => Object.fromEntries(cy().nodes().map((node) => [node.id(), { ...node.position() }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),
@@ -158,7 +157,7 @@ function readers(source) {
  * Expose the handle over `source` when the browser is automated; return its disposer.
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
- * `arranging()`, `impactSummary()` and `layout()`, the canvas's last layout run.
+ * `impactSummary()` and `layout()`, the canvas's last layout run.
  * The handle is the last viewer's to install it, and the disposer removes it only
  * while it is still this one's, so a viewer that leaves the page does not take a
  * live neighbour's handle along.

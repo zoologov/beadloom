@@ -1,11 +1,15 @@
-// Navigation: dragging the canvas pans and never moves a node.
+// Navigation: dragging the canvas pans and never moves a node, on every page that draws a graph.
 //
 // In an earlier version every node was grabbable, compound parents included, so a drag that
-// started inside a domain box moved the box and everything in it.
+// started inside a domain box moved the box and everything in it. Later an "Arrange" button
+// made the leaves draggable on purpose; a moved node left the routes drawn from its layout
+// behind, so no control moves a node any more.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, parentMap, viewer } from "./support/viewer.js";
-import { requireShape } from "./support/shape.js";
+import { architectureData, openArchitecture, parentMap, viewer, waitForViewer } from "./support/viewer.js";
+import { drag, gesturesOnALeaf, pressEveryToolbarButton } from "./support/pointer.js";
+import { landscapeData } from "./support/landscape.js";
+import { LACKING, requireShape } from "./support/shape.js";
 
 /** A point on the canvas, inside a compound parent's box, that lies on no other node. */
 function pointInsideParentOnly(boxes, canvas) {
@@ -41,13 +45,6 @@ function isAncestor(candidate, id, boxes) {
   return false;
 }
 
-async function drag(page, from, dx, dy) {
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(from.x + dx, from.y + dy, { steps: 12 });
-  await page.mouse.up();
-}
-
 test("a drag inside a domain box pans the view and moves no node", async ({ page, request }) => {
   const parents = parentMap(await architectureData(request));
   const containers = new Set(Object.values(parents).filter(Boolean));
@@ -70,32 +67,71 @@ test("a drag inside a domain box pans the view and moves no node", async ({ page
   expect(await viewer(page, "pan")).not.toEqual(panBefore);
 });
 
-test("dragging a node moves it only while Arrange is on", async ({ page }) => {
-  await openArchitecture(page);
-  const canvas = page.getByTestId("graph-canvas");
-  await canvas.scrollIntoViewIfNeeded();
-  const area = await canvas.boundingBox();
-  const boxes = await viewer(page, "boxes");
-  const [leaf, box] = Object.entries(boxes).find(
-    ([, b]) =>
-      !b.isParent &&
-      b.x1 > area.x + 60 &&
-      b.y1 > area.y + 60 &&
-      b.x2 < area.x + area.width - 120 &&
-      b.y2 < area.y + area.height - 60
+/** The names a control that moved nodes would carry. */
+const MOVING_CONTROL = /arrang|drag|\bmov/i;
+
+/** The pages that draw a graph in the viewer, given the data file the portal was built from. */
+function viewerPages(data) {
+  const withPage = data.nodes.find((n) => n.url);
+  requireShape(withPage, "no node has a page of its own");
+  return {
+    "the architecture page": "architecture.html",
+    "the landscape": "landscape.html",
+    "a node page": `${withPage.url.replace(/^\//, "")}.html`,
+  };
+}
+
+/** The accessible name of every control of the viewer's toolbar. */
+async function toolbarControlNames(page) {
+  const snapshot = await page.locator("[role='toolbar']").first().ariaSnapshot();
+  return [...snapshot.matchAll(/- (?:button|combobox|checkbox|searchbox|radio|switch) "([^"]+)"/g)].map(
+    ([, name]) => name
   );
-  const centre = { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
+}
 
-  const before = (await viewer(page, "positions"))[leaf];
-  await drag(page, centre, 60, 40);
-  expect((await viewer(page, "positions"))[leaf]).toEqual(before);
+test("no page offers a control that moves nodes", async ({ page, request }) => {
+  const offered = {};
+  for (const [name, path] of Object.entries(viewerPages(await architectureData(request)))) {
+    await page.goto(path);
+    await waitForViewer(page);
+    const names = await toolbarControlNames(page);
+    expect(names.length, `${name} has a toolbar`).toBeGreaterThan(3);
+    offered[name] = names.filter((control) => MOVING_CONTROL.test(control));
+  }
 
-  await page.getByRole("button", { name: "Arrange" }).click();
-  expect(await viewer(page, "arranging")).toBe(true);
-  const moved = (await viewer(page, "boxes"))[leaf];
-  await drag(page, { x: (moved.x1 + moved.x2) / 2, y: (moved.y1 + moved.y2) / 2 }, 60, 40);
-  expect((await viewer(page, "positions"))[leaf]).not.toEqual(before);
+  expect(offered).toEqual({ "the architecture page": [], "the landscape": [], "a node page": [] });
 });
+
+/** The graph pages a gesture case runs on, each requiring that its graph holds a node. */
+const GRAPH_PAGES = [
+  { name: "the architecture page", path: "architecture.html", requireANode: () => {} },
+  {
+    name: "the landscape",
+    path: "landscape.html",
+    requireANode: async (request) =>
+      requireShape((await landscapeData(request)).nodes.length > 0, LACKING.landscapeService),
+  },
+];
+
+for (const { name, path, requireANode } of GRAPH_PAGES) {
+  test(`on ${name} a drag and a long press on a node pan the view and move no node, whatever toolbar button was pressed`, async ({
+    page,
+    request,
+  }) => {
+    await requireANode(request);
+    await page.goto(path);
+    await waitForViewer(page);
+    await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+    expect(await pressEveryToolbarButton(page)).toBeGreaterThan(3);
+
+    const outcomes = await gesturesOnALeaf(page);
+    expect(outcomes, "a leaf node the pointer reaches").not.toBeNull();
+    expect(outcomes).toEqual({
+      drag: { moved: [], panned: true },
+      "long press": { moved: [], panned: true },
+    });
+  });
+}
 
 test("the keys and the buttons zoom, fit and clear the selection", async ({ page }) => {
   await openArchitecture(page);

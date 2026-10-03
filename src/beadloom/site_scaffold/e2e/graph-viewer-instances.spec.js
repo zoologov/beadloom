@@ -21,7 +21,6 @@ test("the test handle is removed only by the viewer that installed it", async ({
       ready: () => false,
       selection: () => name,
       state: () => ({}),
-      arranging: () => false,
       impactSummary: () => null,
     });
     const disposeFirst = exposeTestHandle(source("first"));

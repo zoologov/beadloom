@@ -244,7 +244,7 @@ async function render() {
   });
   const mounted = await canvas.mount(elements, buildStylesheet(tokens.value));
   if (!mounted) return;
-  navigation.applyArrangePolicy();
+  navigation.panOnNodes();
   canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
   frameSelection();
@@ -283,7 +283,6 @@ onMounted(() => {
     ready: () => canvas.ready.value,
     selection: () => state.focus,
     state: () => ({ ...state, mode: props.mode }),
-    arranging: () => navigation.arranging.value,
     impactSummary: () => summary.value,
     layout: () => canvas.layout.value,
   });
@@ -321,12 +320,10 @@ onBeforeUnmount(() => disposeHandle());
       <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
       <span class="bl-viewer-spacer" />
       <NavigationControls
-        :arranging="navigation.arranging.value"
         @zoom-in="navigation.zoomIn"
         @zoom-out="navigation.zoomOut"
         @fit="navigation.fit"
         @centre="navigation.centre(state.focus)"
-        @arrange="navigation.toggleArrange"
       />
       <button
         type="button"
@@ -390,7 +387,7 @@ onBeforeUnmount(() => disposeHandle());
         <p v-else class="bl-viewer-hint">
           Select a node to see its card and its neighbourhood; "Depth" and "Direction" choose how
           far it reaches<template v-if="mode.impact">, and "Impact" shows everything that depends
-          on it</template>. Drag to pan and scroll to zoom; "Arrange" lets you move nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
+          on it</template>. Drag to pan and scroll to zoom. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
           <kbd>Esc</kbd> clear.
         </p>
       </aside>
