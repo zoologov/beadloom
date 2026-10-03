@@ -25,7 +25,8 @@ test("no drawn colour is Cytoscape's fallback, and no style is rejected", async 
   await openEveryBox(page);
   const detail = await viewer(page, "colours");
   expect(overview.length).toBeGreaterThan(0);
-  expect(detail.length).toBeGreaterThan(overview.length);
+  // Full detail draws at least what the map does; on a graph with no box, the same.
+  expect(detail.length).toBeGreaterThanOrEqual(overview.length);
   expect(unresolvedColours([...overview, ...detail])).toEqual([]);
   expect(rejected).toEqual([]);
 });

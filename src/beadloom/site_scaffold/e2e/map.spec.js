@@ -266,7 +266,9 @@ test("zooming into a box opens it and draws its children, and zooming out closes
   const area = await canvas.boundingBox();
   const b = (await viewer(page, "boxes"))[target];
   const from = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
-  await drag(page, from, area.x + area.width / 2 - from.x, area.y + area.height / 2 - from.y);
+  const [dx, dy] = [area.x + area.width / 2 - from.x, area.y + area.height / 2 - from.y];
+  // A press that does not move is a tap, which would select the box: drag only when it is off the middle.
+  if (Math.hypot(dx, dy) > MARGIN_PX) await drag(page, from, dx, dy);
   const step = async (name) => {
     await page.getByRole("button", { name, exact: true }).click();
     await expect.poll(async () => againstTheRule(await viewer(page, "level"), boxes, tree.topBoxes)).toEqual([]);
