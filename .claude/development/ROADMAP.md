@@ -459,22 +459,19 @@ Nothing is in progress except the release in item 4. The order below is the owne
 `bd show <id>` is where its state is checked. Every open P0 and P1 bug is named in this section,
 either inside an item or in the unranked list at its end.
 
-### 0. BDL-076 — the architecture graph viewer, made a working tool (P0, owner 2026-09-29/30)
+### 0. BDL-077 — the viewer draws edges like a classic diagram (owner 2026-10-03; PRD in draft)
 
-**Epic `beadloom-ujzb`, work item `.claude/development/docs/features/BDL-076/`.** Ranked above
-`beadloom-jwfc` by the owner: the team asked for a graph viewer they can work in, and the graph is
-the product's foundation. Measured by explore, 2026-09-30:
-- panning grabs the domain box under the pointer, because every node is grabbable;
-- every theme colour reaches Cytoscape as `var(--vp-…)`, which it rejects and turns grey;
-- a filter that hides a parent also hides its children;
-- full screen leaves the controls out;
-- the node card is thin;
-- node pages carry an unrelated Mermaid diagram;
-- `beadloom docs site` writes no scaffold at all, so an adopter has no portal.
+**Bead `beadloom-rcnz`, work item `.claude/development/docs/features/BDL-077/`.** The owner asked
+for edges that route around blocks, bridges where edges cross, and a look closer to draw.io or
+Visio, and named JointJS as a candidate. The R&D is done (`RND.md`): ELK already routes every
+edge around the boxes and the viewer throws the routes away; drawing them in Cytoscape takes edges
+through boxes from 232 of 453 to 0 and indistinct edges from 22 to 0. JointJS core and maxGraph
+fail on this graph; drawing SVG ourselves is the fallback. The PRD is a draft with five open
+questions for the owner (Arrange, edges to a node's own container, where bridges show, the
+overview, high-degree fans).
 
-The work is two slices: the viewer for the team first, then the portal for adopters on every
-claimed stack. It starts with this repository's own site coming under its own beadloom (A0).
-Code-level impact in the viewer is a separate item, `beadloom-ikj6`.
+BDL-076 (the viewer for the team and the portal for adopters) shipped in two slices: PR #90
+(`c133e0a5`) and PR #91 (`e7bd7671`), epic `beadloom-ujzb` closed.
 
 ### 1. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0 bug, BDL-UX #226)
 
