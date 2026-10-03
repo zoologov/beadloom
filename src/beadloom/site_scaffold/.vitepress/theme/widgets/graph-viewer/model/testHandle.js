@@ -8,10 +8,12 @@
 // the neighbourhood, the dimmed nodes, the impact rings and risks, and the
 // impact summary the panel shows — and the layout: whether ELK ran for it or it
 // was already laid out, and ELK's geometry, a box for every node and a route for
-// every edge in the graph's coordinates. The handle exists only when
+// every edge in the graph's coordinates — and the same drawn: each node's box
+// and each edge's route as Cytoscape draws them. The handle exists only when
 // `navigator.webdriver` is true, which a real reader's browser never reports,
 // so the tested bundle and the deployed one are the same bundle.
 
+import { isLoop } from "./canvasLayout.js";
 import { DISTANCE_DATA } from "./useGraphCanvas.js";
 
 const HANDLE = "__beadloomViewer";
@@ -42,6 +44,28 @@ function colourEntries(cy) {
   return entries;
 }
 
+const pointOf = ({ x, y }) => ({ x, y });
+
+function drawnBoxOf(node) {
+  const { x, y } = node.position();
+  const halfWidth = node.outerWidth() / 2;
+  const halfHeight = node.outerHeight() / 2;
+  return { x1: x - halfWidth, y1: y - halfHeight, x2: x + halfWidth, y2: y + halfHeight };
+}
+
+function drawnRouteOf(edge) {
+  const corners = edge.segmentPoints();
+  return {
+    id: edge.id(),
+    source: edge.source().id(),
+    target: edge.target().id(),
+    routed: Boolean(corners),
+    loop: isLoop(edge),
+    points: [edge.sourceEndpoint(), ...(corners || edge.controlPoints() || []), edge.targetEndpoint()].map(pointOf),
+    label: pointOf(edge.midpoint()),
+  };
+}
+
 function readers(source) {
   const cy = () => source.cy();
   const rect = () => source.container().getBoundingClientRect();
@@ -62,6 +86,9 @@ function readers(source) {
         ])
       );
     },
+    // Each node's box as drawn, in the graph's coordinates: its shape and its
+    // border, without its label or Cytoscape's margin for antialiasing.
+    nodeBoxes: () => Object.fromEntries(cy().nodes().map((node) => [node.id(), drawnBoxOf(node)])),
     colours: () => colourEntries(cy()),
     neighbourhood: () => ({
       ids: idsOf(cy().nodes(".in-walk")),
@@ -107,6 +134,12 @@ function readers(source) {
       const run = source.layout();
       return run ? JSON.parse(JSON.stringify(run.geometry)) : null;
     },
+    // Each drawn edge as Cytoscape draws it: `{ id, source, target, routed, loop,
+    // points, label }`. A routed edge follows a route of corners, and `points` are
+    // its ends and corners; any other edge is a curve, and `points` are its ends
+    // and control points. `loop` says the edge joins a node to itself or to a box
+    // that holds it; `label` is where its label sits. Graph coordinates.
+    edgeRoutes: () => cy().edges().filter((edge) => edge.visible()).map(drawnRouteOf),
     drawnEdgeKinds: () => [...new Set(cy().edges().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
     edgeStyle: (key) => {
       const edge = cy().edges().filter((e) => e.data("styleKey") === key)[0];

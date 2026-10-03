@@ -48,6 +48,8 @@ SPEC_SLICE = {
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
     "node-status.spec.js": "site-graph-node",
+    # ELK's routes and box sizes drawn by the canvas (BDL-077 E2).
+    "routes.spec.js": "site-graph-viewer",
     "shell-command.spec.js": "site-shared",
     "url-state.spec.js": "site-url-state",
 }

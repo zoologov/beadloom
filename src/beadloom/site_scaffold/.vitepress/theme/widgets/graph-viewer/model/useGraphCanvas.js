@@ -2,7 +2,8 @@
 // The Cytoscape instance behind the viewer's canvas, and what the viewer does to it.
 //
 // It creates the graph, has ELK lay it out in a worker (`shared/elk`) while the
-// page stays responsive, places the nodes where ELK put them, reports taps,
+// page stays responsive, draws it as ELK laid it out — every node in its place,
+// every box at its size, every edge along its route (`canvasLayout.js`) — reports taps,
 // labels a hovered edge, shows only a set of node ids (and of contracts), marks a
 // selection — the selected node, the nodes and edges its walk reached, their
 // distance rings and risks, and what lies outside — and swaps the stylesheet when
@@ -11,12 +12,13 @@
 //
 // The layout's run (`layout`) keeps ELK's geometry — a box for every node and a
 // route for every edge, in the graph's coordinates — beside the canvas, so what
-// is drawn from it later reads the same layout the nodes were placed by.
+// is drawn from it later reads the same layout the nodes were placed by: when a
+// filter or a selection shows or hides nodes, every box is sized to it again.
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
-import { applyGeometry, layoutInputOf } from "./canvasLayout.js";
+import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 
 /** Every class a selection puts on the canvas, removed before the next one is marked. */
 const SELECTION_CLASSES = [
@@ -28,6 +30,9 @@ const SELECTION_CLASSES = [
   "is-outside",
   "is-risk",
 ];
+
+/** Cytoscape's layout that places nothing, run when the graph is created. */
+const UNPLACED = Object.freeze({ name: "null" });
 
 /** The node data the impact mode sets: the node's distance from the selection. */
 export const DISTANCE_DATA = "impactDistance";
@@ -68,7 +73,15 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     const cytoscape = await loadCytoscape();
     if (mine !== generation || !containerRef.value) return false;
     destroy();
-    const instance = cytoscape({ container: containerRef.value, elements, style, ...options });
+    // No layout on creation: ELK places every node, and Cytoscape's default grid
+    // would only spend time spreading them over the canvas first.
+    const instance = cytoscape({
+      container: containerRef.value,
+      elements,
+      style,
+      layout: UNPLACED,
+      ...options,
+    });
     instance.on("tap", "node", (event) => onNodeTap(event.target.id()));
     instance.on("tap", (event) => {
       if (event.target === instance) onBackgroundTap();
@@ -103,6 +116,12 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     cy.value?.style(style);
   }
 
+  // A box is drawn around the children shown; whenever that set changes, every
+  // box is sized to ELK's again.
+  function fitBoxes() {
+    if (cy.value && layout.value) fitCompounds(cy.value, layout.value.geometry);
+  }
+
   /**
    * Show only the nodes in `ids`. When `contracts` is a set of contract keys, an
    * edge that carries a contract outside it is hidden as well, because two
@@ -116,6 +135,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
         edge.toggleClass("is-hidden", Boolean(contracts && contract && !contracts.has(contract)));
       });
     });
+    fitBoxes();
   }
 
   function markNode(node, selection, outside) {
@@ -163,6 +183,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
         focus.connectedEdges(".is-walk-edge").addClass("is-selected-edge");
       }
     });
+    fitBoxes();
   }
 
   function resize() {

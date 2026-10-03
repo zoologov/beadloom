@@ -22,7 +22,6 @@ export const LAYERED_OPTIONS = Object.freeze({
   "elk.layered.spacing.nodeNodeBetweenLayers": "70",
   "elk.spacing.nodeNode": "45",
   "elk.padding": "[top=36,left=24,bottom=24,right=24]",
-  "elk.layered.crossingMinimization.semiInteractive": "true",
 });
 
 /** Every coordinate of the answer in the root's frame. */
@@ -44,21 +43,21 @@ function laneOf(node) {
 /**
  * The ELK graph of `nodes` and `edges`.
  *
- * A node is `{ id, parent, width, height, x, y, partition }`: `parent` is the id
- * of the node that contains it, or null; `x` and `y` are its top-left corner as
- * drawn now, which semi-interactive crossing minimisation reads to order ties.
- * A node some other node names as its parent is a box, sized by ELK, so its own
- * size and place are not handed over. An edge is `{ id, source, target }`.
- * `aspectRatio` is the drawing area's width over its height.
+ * A node is `{ id, parent, width, height, partition }`: `parent` is the id of
+ * the node that contains it, or null. A node some other node names as its parent
+ * is a box, sized by ELK, so its own size is not handed over. An edge is
+ * `{ id, source, target }`. Nothing about where the graph will be drawn is
+ * handed over, neither the drawing area's shape nor where a node stands now, so
+ * the layout depends on the graph alone.
  */
-export function elkGraphOf({ nodes, edges, aspectRatio }) {
+export function elkGraphOf({ nodes, edges }) {
   const containers = new Set(nodes.map((node) => node.parent).filter(Boolean));
   const byId = new Map();
   const root = { id: ROOT_ID, children: [], edges: [] };
   for (const node of nodes) {
     const shape = { id: node.id, layoutOptions: laneOf(node) };
     if (!containers.has(node.id)) {
-      Object.assign(shape, { x: node.x, y: node.y, width: node.width, height: node.height });
+      Object.assign(shape, { width: node.width, height: node.height });
     }
     byId.set(node.id, shape);
   }
@@ -69,6 +68,6 @@ export function elkGraphOf({ nodes, edges, aspectRatio }) {
   for (const edge of edges) {
     root.edges.push({ id: edge.id, sources: [edge.source], targets: [edge.target] });
   }
-  root.layoutOptions = { aspectRatio, ...LAYERED_OPTIONS, ...ROOT_COORDINATES };
+  root.layoutOptions = { ...LAYERED_OPTIONS, ...ROOT_COORDINATES };
   return root;
 }

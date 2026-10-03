@@ -43,10 +43,17 @@ const RING_FILL_SHARE = 0.55;
 const DIMMED_OPACITY = 0.14;
 
 /**
- * The edge curve style, chosen by measurement: `bezier` lets fewer edges share a
- * stretch than `taxi`, which runs every edge out of a node down one trunk.
+ * The curve style of an edge the layout did not route: Cytoscape draws an edge
+ * into the node's own box as a loop, whatever its style, and `bezier` is that
+ * loop's style.
  */
 export const CURVE_STYLE = "bezier";
+
+/** The radius of a routed edge's rounded corners, in layout units. */
+export const ROUTE_CORNER_RADIUS = 6;
+
+/** How many decimals a route's numbers keep: far below a pixel, and never in exponent form. */
+const ROUTE_DECIMALS = 6;
 
 /** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */
 const SOURCE_END_SHARE = 0.35;
@@ -92,7 +99,12 @@ function nodeRules(tokens) {
         "text-halign": "center",
         "font-weight": 700,
         "border-style": "dashed",
-        padding: "12px",
+        // ELK leaves the room around a box's children, and the box is drawn at
+        // ELK's size (`geometryRules`); Cytoscape adds no padding of its own,
+        // which would push a box past ELK's where ELK's room is narrower.
+        padding: 0,
+        // A box is sized from its children's shapes; a child's label never resizes it.
+        "compound-sizing-wrt-labels": "exclude",
       },
     },
     ...tones.map((tone) => ({
@@ -120,6 +132,46 @@ function nodeRules(tokens) {
         "overlay-color": tokens.brand,
         "overlay-opacity": 0.12,
         "overlay-padding": 4,
+      },
+    },
+  ];
+}
+
+const decimal = (value) => value.toFixed(ROUTE_DECIMALS);
+const pixels = (value) => `${decimal(value)}px`;
+
+/**
+ * The rules that draw ELK's geometry: a box at the size ELK gave it, and an edge
+ * along ELK's route (`lib/routes.js`). Their values are read from each element's
+ * data, so a stylesheet rebuilt for another theme draws the same geometry.
+ */
+function geometryRules() {
+  const box = (node) => node.data("box");
+  const route = (edge) => edge.data("route");
+  return [
+    {
+      selector: "node[box]",
+      style: {
+        width: (node) => box(node).width,
+        height: (node) => box(node).height,
+        "min-width": (node) => box(node).width,
+        "min-height": (node) => box(node).height,
+        "min-width-bias-left": (node) => pixels(box(node).biasLeft),
+        "min-width-bias-right": (node) => pixels(box(node).biasRight),
+        "min-height-bias-top": (node) => pixels(box(node).biasTop),
+        "min-height-bias-bottom": (node) => pixels(box(node).biasBottom),
+      },
+    },
+    {
+      selector: "edge[route]",
+      style: {
+        "curve-style": "round-segments",
+        "segment-radii": ROUTE_CORNER_RADIUS,
+        "edge-distances": "endpoints",
+        "source-endpoint": (edge) => route(edge).sourceEndpoint.map(pixels).join(" "),
+        "target-endpoint": (edge) => route(edge).targetEndpoint.map(pixels).join(" "),
+        "segment-weights": (edge) => route(edge).weights.map(decimal).join(" "),
+        "segment-distances": (edge) => route(edge).distances.map(decimal).join(" "),
       },
     },
   ];
@@ -204,6 +256,7 @@ export function buildStylesheet(tokens) {
   return [
     ...nodeRules(tokens),
     ...edgeRules(tokens),
+    ...geometryRules(),
     ...selectionRules(tokens),
     { selector: ".is-hidden, .is-outside", style: { display: "none" } },
   ];
