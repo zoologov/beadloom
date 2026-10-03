@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-94h4` (E4, the map); then E5 → T → R → W → P.
+**Bead:** `beadloom-a6a6` (E5, bridges); then T → R → W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -33,14 +33,16 @@
 | `beadloom-5x4g` | E2 | ✓ done | routes drawn exactly |
 | `beadloom-bcqk` | E3 | ✓ done | trunk and bus |
 | `beadloom-m6k7.2` | fix | ✓ done | a node id `root` collides with ELK's root |
-| `beadloom-94h4` | E4 | in progress | the map |
-| `beadloom-a6a6` | E5 | blocked | bridges on highlighted edges |
+| `beadloom-94h4` | E4 | ✓ done | the map |
+| `beadloom-a6a6` | E5 | in progress | bridges on highlighted edges |
 | `beadloom-lb1v` | T | blocked | PRD criteria measured |
 | `beadloom-87o6` | R | blocked | review |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **E4 closed** `c2c62eab`, `6122f46d`, `c6fc16a9`: the map. Overview here 12 boxes and 34 aggregated edges (carrying 277 of 453); at adopter size 79 drawn of 345 pairs (weight ≥ 4; 266 counted as "+N"); box displacement 0 at every level; frame at the fit 39.6 → 16.7 ms here and 162 → 16.7 ms at adopter size (the display cap), zoom ≈ 1 at adopter size 105 → 16.7. Decisions in CONTEXT: an edge with a closed box at one end joins its pair's aggregated edge; a revealed box is drawn open; the default neighbourhood opens its walk unless the node is a hub; search opens its matches; fit ignores labels. 47 existing cases now open every box first (`openEveryBox`); 148 browser cases.
 
 - **`beadloom-m6k7.2` closed** `a5a7b5ab`: `shared/ids` `freshId` keeps ELK's root and Cytoscape's edge ids out of the node id space (ids unchanged when nothing collides); the root found by position; our portal unchanged, the adopter graph's `root` wrapper now drawn at ELK's box. Filed `beadloom-ytcg` (P2, a node id `__proto__` is not drawn).
 
