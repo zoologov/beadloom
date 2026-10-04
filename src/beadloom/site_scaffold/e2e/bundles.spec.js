@@ -17,7 +17,7 @@
 // target and back while the others did not.
 
 import { test, expect } from "@playwright/test";
-import { RANK_POSITIONS, adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, RANK_POSITIONS, adopterSizedGraph } from "./support/adopterGraph.js";
 import {
   branchPoints,
   channelsOf,
@@ -32,6 +32,8 @@ import {
 } from "./support/routeMetrics.js";
 import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
+import { openThemeModules } from "./support/themeModules.js";
+import { ENVIRONMENT, boundHere } from "./support/environment.js";
 
 /** A node with this many drawn edges is busy enough for trunks; the viewer's own threshold. */
 const TRUNK_DEGREE = 20;
@@ -41,8 +43,18 @@ const LANE_DISTANCE = 150;
 const STEPS_KEPT = 0.2;
 /** ELK's excess steps below which a drawing has no staircase worth measuring. */
 const STAIRCASE = 20;
-/** How long rewriting the routes may take on an adopter-sized graph, in ms. */
-const BUNDLING_BUDGET_MS = 50;
+/**
+ * How long rewriting the routes may take on an adopter-sized graph, in ms, per
+ * environment (`support/environment.js`). Locally (Apple M1 Max, headless
+ * Chromium, no GPU) it took 36 to 39 ms; the bound is 50. On a GitHub-hosted
+ * Ubuntu runner (two Playwright workers, no GPU) it took 186.8 ms, and the same
+ * code took 157 to 161 ms here with the page's processor slowed four times and
+ * 196 to 205 ms slowed five times, so the runner runs it about 4.7 times slower;
+ * its bound is 400, about twice what it measured there. Either bound still
+ * catches the bundling without its indexes, which took 100 to 230 ms locally
+ * (`lib/spatialIndex.js`).
+ */
+const BUNDLING_BUDGET_MS = { local: 50, ci: 400 };
 /** How far two points, or a point and a line, may lie apart and count as one, in layout units. */
 const TOLERANCE = 0.5;
 /** How far, in pixels on screen, a hovered point lies from any other edge and any node. */
@@ -53,6 +65,7 @@ const ZOOM_STEPS = 20;
 const GRAPHS = [
   {
     name: "this portal's architecture graph",
+    tag: [],
     open: async (page, request) => {
       const data = await architectureData(request);
       await openArchitecture(page);
@@ -62,6 +75,7 @@ const GRAPHS = [
   },
   {
     name: "an adopter-sized architecture graph",
+    tag: [ADOPTER_SIZED],
     open: async (page, request) => {
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
@@ -224,7 +238,7 @@ function sameJunctions(junctions, expected) {
 }
 
 for (const graph of GRAPHS) {
-  test.describe(`on ${graph.name}`, () => {
+  test.describe(`on ${graph.name}`, { tag: graph.tag }, () => {
     test("no node or box moves: every leaf stands at its ELK box's centre and every box keeps ELK's size", async ({
       page,
       request,
@@ -331,7 +345,7 @@ for (const graph of GRAPHS) {
 }
 
 for (const layerRanks of RANK_COUNTS) {
-  test(`on an adopter-sized graph in ${layerRanks} layer rank(s), every busy node leaves each side in one channel per direction within its lane bound, and no route runs through a box, back into its own ends or along an edge with no common end`, async ({
+  test(`on an adopter-sized graph in ${layerRanks} layer rank(s), every busy node leaves each side in one channel per direction within its lane bound, and no route runs through a box, back into its own ends or along an edge with no common end`, { tag: ADOPTER_SIZED }, async ({
     page,
     request,
   }) => {
@@ -353,10 +367,15 @@ for (const layerRanks of RANK_COUNTS) {
   });
 }
 
-test("the bundling takes at most 50 ms on an adopter-sized graph", async ({ page, request }) => {
+test("the bundling of an adopter-sized graph takes no longer than the bound for this environment", { tag: ADOPTER_SIZED }, async ({
+  page,
+  request,
+}) => {
+  const bound = boundHere(BUNDLING_BUDGET_MS);
   await GRAPHS[1].open(page, request);
   const { ms } = await viewer(page, "bundles");
-  expect(ms).toBeLessThanOrEqual(BUNDLING_BUDGET_MS);
+  test.info().annotations.push({ type: "measured", description: `${ENVIRONMENT}: bundling ${ms.toFixed(1)} ms (bound ${bound} ms)` });
+  expect(ms).toBeLessThanOrEqual(bound);
 });
 
 test("the busiest node leaves each side in one channel per direction, in no more lanes than the boxes it leads to", async ({
@@ -396,6 +415,58 @@ test("a box with 20 drawn edges, one of them a loop into its own child, leaves i
 
   expect(await staircasesOf(page, busy)).toEqual([]);
   expect(await lanesOverBoundOf(page, busy, parentMap(data))).toEqual([]);
+});
+
+/**
+ * A drawing in which an edge of a box's own child leaves through the middle of
+ * the box's bottom side, where the box's bus would start: the box sends four
+ * edges down, each in a channel of its own as ELK routes them, and its child's
+ * one edge drops through the border at the box's centre on its way to a leaf of
+ * its own. A layout gives this shape when a box holds one child, centred in it.
+ */
+function crossedPortDrawing() {
+  const leafAt = (x, y) => ({ x1: x - 80, y1: y, x2: x + 80, y2: y + 44 });
+  const boxes = { box: { x1: 0, y1: 0, x2: 400, y2: 100 }, child: leafAt(200, 30), far: leafAt(700, 300) };
+  const nodes = [
+    { id: "box", parent: null },
+    { id: "child", parent: "box" },
+    { id: "far", parent: null },
+  ];
+  const edges = [];
+  const paths = {};
+  // Each edge's port on the box's side, the leaf it leads to, and its own channel.
+  const fan = [
+    [150, -300, 120],
+    [170, -100, 130],
+    [230, 450, 140],
+    [250, 950, 150],
+  ];
+  fan.forEach(([port, x, channel], k) => {
+    const target = `below-${k}`;
+    boxes[target] = leafAt(x, 300);
+    nodes.push({ id: target, parent: null });
+    edges.push({ id: `down-${k}`, source: "box", target });
+    paths[`down-${k}`] = [{ x: port, y: 100 }, { x: port, y: channel }, { x, y: channel }, { x, y: 300 }];
+  });
+  edges.push({ id: "through", source: "child", target: "far" });
+  paths.through = [{ x: 200, y: 74 }, { x: 200, y: 160 }, { x: 700, y: 160 }, { x: 700, y: 300 }];
+  return { nodes, edges, loops: [], boxes, paths };
+}
+
+test("a node's bus leaves its side in one channel when an edge of its own child crosses that side at its middle", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const drawing = crossedPortDrawing();
+  const paths = await page.evaluate(async (input) => {
+    const { bundleRoutes } = await import("/widgets/graph-viewer/lib/bundles.js");
+    return bundleRoutes(input).paths;
+  }, drawing);
+  const routes = drawing.edges.map((edge) => ({ ...edge, points: paths[edge.id] }));
+
+  const channels = [...channelsOf(routes, "box", drawing.boxes.box)].map(([side, heights]) => [side, heights.size]);
+  expect(channels).toEqual([["bottom/out", 1]]);
+  expect(collinearPairs(routes)).toEqual([]);
 });
 
 test("junction dots follow the edges drawn now: a filter and a hidden neighbourhood remove the ones they part", async ({

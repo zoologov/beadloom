@@ -20,7 +20,7 @@
 // `map.spec.js` holds it: the top-level nodes only, and at most 100 edges.
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { ENVIRONMENT, boundHere } from "./support/environment.js";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
 
@@ -59,8 +59,8 @@ const ZOOM_STEPS = 30;
 
 /** The graphs a frame is timed on: this portal's and an adopter-sized one. */
 const GRAPHS = [
-  { name: "this portal's architecture graph", data: (served) => served },
-  { name: "an adopter-sized architecture graph", data: (served) => adopterSizedGraph(served) },
+  { name: "this portal's architecture graph", tag: [], data: (served) => served },
+  { name: "an adopter-sized architecture graph", tag: [ADOPTER_SIZED], data: (served) => adopterSizedGraph(served) },
 ];
 
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -148,7 +148,7 @@ function report(what, measured, bound) {
 }
 
 for (const graph of GRAPHS) {
-  test(`on ${graph.name} a frame takes no longer than the bound for this environment, at the whole-graph fit and at zoom 1`, async ({
+  test(`on ${graph.name} a frame takes no longer than the bound for this environment, at the whole-graph fit and at zoom 1`, { tag: graph.tag }, async ({
     page,
     request,
   }) => {
@@ -167,7 +167,7 @@ for (const graph of GRAPHS) {
   });
 }
 
-test("the adopter-sized graph is first drawn within the bound for this environment", async ({ browser, request }, testInfo) => {
+test("the adopter-sized graph is first drawn within the bound for this environment", { tag: ADOPTER_SIZED }, async ({ browser, request }, testInfo) => {
   test.setTimeout(OPENINGS * 60_000);
   const bound = boundHere(FIRST_DRAWING_MS);
   const data = adopterSizedGraph(await architectureData(request));

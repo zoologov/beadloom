@@ -13,7 +13,7 @@
 // at the whole-graph fit the viewer draws a map (`map.spec.js`).
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { bundleSiblings, compareBridges, expectedBridges } from "./support/bridges.js";
 import { neighbourhood } from "./support/graph.js";
 import { drag } from "./support/pointer.js";
@@ -45,10 +45,12 @@ const WINDOW = { width: 1000, height: 500 };
 const GRAPHS = [
   {
     name: "this portal's architecture graph",
+    tag: [],
     data: (request) => architectureData(request),
   },
   {
     name: "an adopter-sized architecture graph",
+    tag: [ADOPTER_SIZED],
     data: async (request) => adopterSizedGraph(await architectureData(request)),
     slow: true,
   },
@@ -190,7 +192,7 @@ const crossingsOf = (reported) => reported.flatMap(({ edge, crossings }) => cros
 
 for (const graph of GRAPHS) {
   for (const colorScheme of ["light", "dark"]) {
-    test.describe(`on ${graph.name}, in the ${colorScheme} theme`, () => {
+    test.describe(`on ${graph.name}, in the ${colorScheme} theme`, { tag: graph.tag }, () => {
       test.use({ colorScheme });
 
       test("with a node's neighbourhood selected, every crossing of a highlighted edge carries a bridge in its colour, and nothing else does", async ({
@@ -250,7 +252,7 @@ for (const graph of GRAPHS) {
     });
   }
 
-  test(`on ${graph.name}, with nothing highlighted no bridge is drawn, at the overview or at full detail`, async ({ page, request }) => {
+  test(`on ${graph.name}, with nothing highlighted no bridge is drawn, at the overview or at full detail`, { tag: graph.tag }, async ({ page, request }) => {
     if (graph.slow) test.setTimeout(180_000);
     const data = await graph.data(request);
     const busiest = await busiestLeaf(page, data);
@@ -272,7 +274,7 @@ for (const graph of GRAPHS) {
     expect(frames[frames.length - 1].drawn).toBe(0);
   });
 
-  test(`on ${graph.name}, drawing the bridges of a hub's neighbourhood costs a few milliseconds a frame`, async ({ page, request }) => {
+  test(`on ${graph.name}, drawing the bridges of a hub's neighbourhood costs a few milliseconds a frame`, { tag: graph.tag }, async ({ page, request }) => {
     if (graph.slow) test.setTimeout(180_000);
     const data = await graph.data(request);
     const busiest = await busiestLeaf(page, data);

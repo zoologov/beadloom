@@ -123,7 +123,10 @@ does not ask the viewer to grade itself:
 - `adopterGraph.js`: `adopterSizedGraph(served, { layerRanks })`, a seeded graph of about four
   hundred and fifty nodes and thirteen hundred drawn edges made from the served file's
   declarations, laid out in the served layer ranks or in `layerRanks` of them, up to
-  `RANK_POSITIONS` (four).
+  `RANK_POSITIONS` (four). Every case that runs on it carries the tag `ADOPTER_SIZED`
+  (`@adopter-sized`), and `BEADLOOM_E2E_NO_ADOPTER_SIZED=1` leaves those cases out of a run, in
+  every project (`playwright.config.js` sets the filter, because a `--grep-invert` on the
+  command line filters nothing in `chromium`, which `performance` depends on).
 - `routeMetrics.js`: deviation from a computed route, edges through boxes and through their own
   ends, the A2 sharing metric, channels, excess steps, lanes at a distance, branch points and
   collinear pairs. Values a unit apart or closer count as one channel or lane.
@@ -149,6 +152,7 @@ the case, naming the ones it states.
 | Mean interval between canvas drawings while panning, at the fit and at zoom 1, on both graphs | `performance.spec.js` | 25 ms | 33.4 ms |
 | First drawing of the adopter-sized graph, median of three openings | `performance.spec.js` | 7,200 ms | 15,000 ms |
 | Longest main-thread task from the data file's arrival until the graph is placed | `layout.spec.js` | 1,000 ms | 2,000 ms |
+| Rewriting the adopter-sized graph's routes into trunks and buses | `bundles.spec.js` | 50 ms | 400 ms |
 
 The `local` bounds were calibrated on an Apple M1 Max in headless Chromium without a GPU, where
 the viewer measured 16.7 ms per frame, a first drawing of 5,707 to 5,781 ms and a longest task of
@@ -156,8 +160,14 @@ the viewer measured 16.7 ms per frame, a first drawing of 5,707 to 5,781 ms and 
 measured them when they were written, and they catch ELK on the main thread or the whole graph
 drawn at the fit, not a 15% slowdown. Two structural guards hold the same regressions on any
 machine: the whole-graph fit draws only the top-level boxes and at most 100 edges, and the pointer
-resting anywhere at the overview lifts the budget for one box at most (`map.spec.js`). The
-bundling's 50 ms budget at adopter size (`bundles.spec.js`) is one number for every environment.
+resting anywhere at the overview lifts the budget for one box at most (`map.spec.js`).
+
+The bundling's bound is the one `ci` bound set from a runner's measurement (`beadloom-m6k7.7`).
+The bundling took 36 to 39 ms on the M1 Max and 186.8 ms on a GitHub-hosted Ubuntu runner with
+two Playwright workers. On the M1 Max with the page's processor slowed four times it took 157 to
+161 ms, and slowed five times 196 to 205 ms, so the runner ran it about 4.7 times slower. The
+`ci` bound of 400 ms is about twice the runner's measurement. Both bounds still catch the bundling
+without its indexes, which took 100 to 230 ms on the M1 Max (`lib/spatialIndex.js`).
 
 **Any project's graph** (`beadloom-ujzb.17`, `.20`). A case chooses its subject from the data the
 portal serves, never by a node id of this repository. A case written about a shape the served
@@ -171,10 +181,16 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 74 and 27, swift 74 and 27.
 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
-`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 182 cases in 24 files, 179
+`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 184 cases in 24 files, 181
 in the `chromium` project and 3 in `performance`, under the `ci` bounds. It is not a required
 check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
-on pull requests that change what it tests, weekly on `main` and on demand. What it tests is its
+on pull requests that change what it tests, weekly on `main` and on demand. It runs in seven
+legs, one per claimed stack and one for the slow tests that build a project of their own, and
+`BEADLOOM_SLOW_PART` names a leg's part (`beadloom-m6k7.7`). One after another, the six suites
+took about 14 minutes each on the runner, and the job was cancelled at its 60-minute timeout
+during the third. The 28 cases tagged `@adopter-sized` run on the first stack of each count of
+declared layers (python, go and typescript) and are left out on java, kotlin and swift, which
+declare none, like python, and would draw the same graph. What it tests is its
 `paths:` filter, and a self-check holds that filter to every file the slow tests read and every
 `src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced on each fixture in
 a fresh interpreter (`beadloom-ujzb.24`).

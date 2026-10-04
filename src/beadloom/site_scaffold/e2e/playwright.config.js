@@ -16,11 +16,20 @@
 // beside other browsers would time them as well. If another case fails they are
 // not run. Their bounds are stated per environment (`support/environment.js`).
 // To run them alone: `npx playwright test -c e2e --project performance --no-deps`.
+//
+// The cases tagged `@adopter-sized` run on a made-up graph of an adopter's size
+// rather than on the portal's own (`support/adopterGraph.js`), which takes only
+// the served file's declared layer ranks. With BEADLOOM_E2E_NO_ADOPTER_SIZED=1
+// they are left out of the run, in every project: a run over several portals
+// that declare the same ranks checks them on one of those portals only. The
+// filter is set here rather than with `--grep-invert`, because a filter on the
+// command line leaves out nothing from `chromium`, which `performance` depends on.
 
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { importGenerated } from "../.vitepress/generated.mjs";
+import { ADOPTER_SIZED, NO_ADOPTER_SIZED } from "./support/adopterGraph.js";
 
 const SITE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A port of its own, so a preview the developer already runs on 4173 is not reused.
@@ -48,6 +57,7 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   timeout: 60_000,
+  ...(process.env[NO_ADOPTER_SIZED] === "1" ? { grepInvert: new RegExp(ADOPTER_SIZED) } : {}),
   use: {
     baseURL: `http://localhost:${PORT}${BASE}`,
     viewport: { width: 1400, height: 900 },

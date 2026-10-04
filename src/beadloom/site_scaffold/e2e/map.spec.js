@@ -9,7 +9,7 @@
 // the boxes it needs. Every level is a view of the one layout: no box moves.
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { landscapeData, openLandscape } from "./support/landscape.js";
 import { distanceToPolyline, edgesThroughBoxes, polylineOf } from "./support/routeMetrics.js";
 import {
@@ -52,6 +52,7 @@ const sorted = (ids) => [...ids].sort();
 const GRAPHS = [
   {
     name: "this portal's architecture graph",
+    tag: [],
     open: async (page, request, query = "") => {
       const data = await architectureData(request);
       await openArchitecture(page, query);
@@ -60,6 +61,7 @@ const GRAPHS = [
   },
   {
     name: "an adopter-sized architecture graph",
+    tag: [ADOPTER_SIZED],
     open: async (page, request, query = "") => {
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
@@ -86,7 +88,7 @@ async function aggregatedByPair(page) {
 const carried = (edge) => ({ forward: sorted(edge.forwardKeys), backward: sorted(edge.backwardKeys) });
 
 for (const graph of GRAPHS) {
-  test.describe(`on ${graph.name}`, () => {
+  test.describe(`on ${graph.name}`, { tag: graph.tag }, () => {
     test("at the whole-graph fit only the top-level boxes are drawn, and one aggregated edge per pair carries every edge between them", async ({
       page,
       request,
@@ -192,7 +194,7 @@ for (const graph of GRAPHS) {
   });
 }
 
-test("over the budget the weakest aggregated edges are counted on their boxes, and hovering or selecting a box draws all of its edges", async ({
+test("over the budget the weakest aggregated edges are counted on their boxes, and hovering or selecting a box draws all of its edges", { tag: ADOPTER_SIZED }, async ({
   page,
   request,
 }) => {
@@ -246,7 +248,7 @@ test("over the budget the weakest aggregated edges are counted on their boxes, a
 /** How many points across the canvas, each way, the pointer is rested on. */
 const GRID = [12, 8];
 
-test("wherever the pointer rests at the overview, it draws the left-out edges of one box at most, the one it rests on", async ({
+test("wherever the pointer rests at the overview, it draws the left-out edges of one box at most, the one it rests on", { tag: ADOPTER_SIZED }, async ({
   page,
   request,
 }) => {

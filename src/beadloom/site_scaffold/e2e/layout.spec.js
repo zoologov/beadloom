@@ -6,7 +6,7 @@
 // no control of the toolbar answered, and ELK's edge routes were thrown away.
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import {
   architectureData,
   openArchitecture,
@@ -114,6 +114,60 @@ test("a graph drawn again is not laid out again", async ({ page, request }) => {
   expect(await viewer(page, "positions")).toEqual(positions);
 });
 
+/** A font family whose glyphs are as wide as each other, unlike the portal's own. */
+const OTHER_FONT = '"Courier New", Courier, monospace';
+
+/**
+ * Draw every later page of `page` in `OTHER_FONT`: the portal's web fonts are not
+ * served, and the theme's font variable names the other family. A build server
+ * renders text with fonts of its own, and this is the same difference made on
+ * purpose.
+ */
+async function drawInAnotherFont(page) {
+  await page.route(/\.woff2?(\?.*)?$/, (route) => route.abort());
+  await page.addInitScript((family) => {
+    const style = document.createElement("style");
+    style.textContent = `:root { --vp-font-family-base: ${family} !important; }`;
+    document.addEventListener("DOMContentLoaded", () => document.head.appendChild(style));
+  }, OTHER_FONT);
+}
+
+/**
+ * The layout of the graph drawn now, at full detail, and how wide the page's font
+ * sets text: `{ source, geometry, positions, routes, labels }`, `source` where
+ * the layout came from and `labels` the width of every node's id set in the font
+ * the page draws text in, as the browser renders it.
+ */
+async function layoutAndLabels(page) {
+  await openArchitecture(page);
+  await openEveryBox(page);
+  const labels = await page.evaluate((ids) => {
+    const context = document.createElement("canvas").getContext("2d");
+    context.font = `600 12px ${getComputedStyle(document.body).fontFamily}`;
+    return ids.map((id) => context.measureText(id).width);
+  }, Object.keys(await viewer(page, "positions")));
+  const routes = Object.fromEntries((await viewer(page, "edgeRoutes")).map((r) => [r.id, r.points]));
+  const { source } = await viewer(page, "layoutRun");
+  return { source, geometry: await viewer(page, "elkGeometry"), positions: await viewer(page, "positions"), routes, labels };
+}
+
+test("the layout does not depend on the fonts text is rendered in: in another font every box, position and route is the same", async ({
+  page,
+}) => {
+  const ours = await layoutAndLabels(page);
+  await drawInAnotherFont(page);
+  const other = await layoutAndLabels(page);
+  // Both were laid out, and the other font sets text at other widths, or the comparison shows nothing.
+  expect([ours.source, other.source]).toEqual(["worker", "worker"]);
+  expect(other.labels).not.toEqual(ours.labels);
+
+  const differing = (a, b) => Object.keys({ ...a, ...b }).filter((id) => JSON.stringify(a[id]) !== JSON.stringify(b[id]));
+  expect(differing(other.geometry.boxes, ours.geometry.boxes)).toEqual([]);
+  expect(differing(other.geometry.routes, ours.geometry.routes)).toEqual([]);
+  expect(differing(other.positions, ours.positions)).toEqual([]);
+  expect(differing(other.routes, ours.routes)).toEqual([]);
+});
+
 /**
  * Record, from the page's first script on, every task that holds the main thread
  * over 50 ms (the Long Tasks API reports no shorter one) and when the layout's
@@ -152,7 +206,7 @@ function layoutTasks(page) {
   });
 }
 
-test("the toolbar answers while an adopter-sized graph is laid out", async ({ page, request }) => {
+test("the toolbar answers while an adopter-sized graph is laid out", { tag: ADOPTER_SIZED }, async ({ page, request }) => {
   const data = adopterSizedGraph(await architectureData(request));
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
   await page.addInitScript(recordLayoutTasks);

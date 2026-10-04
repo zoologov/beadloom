@@ -16,6 +16,18 @@
 // whatever the served file declares: the same boxes, nodes and edges, laid out
 // in that many ranks.
 
+/**
+ * The tag of every case that runs on this graph rather than on the portal's own.
+ * The graph takes nothing from the served file but its schema and its declared
+ * layer ranks, so such a case does the same work on every portal that declares
+ * the same ranks. A run that has already checked these cases on such a portal can
+ * leave them out by setting `NO_ADOPTER_SIZED` to 1 (`playwright.config.js`).
+ */
+export const ADOPTER_SIZED = "@adopter-sized";
+
+/** The environment variable that leaves out every case tagged `ADOPTER_SIZED`. */
+export const NO_ADOPTER_SIZED = "BEADLOOM_E2E_NO_ADOPTER_SIZED";
+
 /** The graph's size: boxes per layer position (and unlayered), and drawn edges. */
 const BOXES_PER_RANK = [4, 6, 18, 5];
 /**

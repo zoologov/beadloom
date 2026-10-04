@@ -70,6 +70,11 @@ loop follows its ELK route: `curve-style: round-segments` with corners rounded a
 (`ROUTE_CORNER_RADIUS`), its ends and corners given relative to its nodes' centres
 (`segmentsOf`), with the arrowhead where the route enters the target's box. ELK's input carries
 nothing about the canvas, so the architecture page, a node page and full screen share one layout.
+It carries nothing about text either: a leaf's size is the stylesheet's 160 by 44 units plus its
+border, never its label (`layoutInputOf`), and ELK sizes every box, so the layout depends on the
+data file alone. The geometry in the site-e2e trace of 2026-10-04, taken on a Linux runner, is
+identical to that of the same data file laid out on macOS (`beadloom-m6k7.7`), and
+`layout.spec.js` holds it with the fonts changed.
 
 The routes replaced Cytoscape's `bezier` curves from one node's centre to the other's in BDL-077.
 Measured on this repository's graph in headless Chromium on an Apple M1 Max, with the built
@@ -99,7 +104,10 @@ after the layout, and no node or box moves:
 - **Bus** (`lib/buses.js`), on every node with two or more drawn edges: the edges leaving one side
   in one direction start from the side's middle and share one channel in the first gap, the
   nearest one ELK already used. The gap ends at the nearest box over any place the channel runs
-  to, a lane's as well as a port's.
+  to, a lane's as well as a port's. The port moves 3 units (`portShift`) off the middle when a
+  lane begins there, and when its drop to the channel would run along an edge that does not end
+  at the node: a box's own child can send an edge out through the middle of the box's side, and
+  then no edge of the bus could start there (`portOf`, `beadloom-m6k7.7`).
 - **Trunk** (`lib/trunks.js`), on a node, leaf or box, with twenty or more drawn edges, loops
   included: its edges to one top-level box share one member's route to a distribution line 8
   units outside that box, then drop in where ELK had them enter. Out-trunks are drawn before
@@ -114,7 +122,8 @@ The thresholds are `BUNDLE_OPTIONS`. `lib/bundleDrawing.js` holds the drawing be
 per layout, so a node page or full screen does not compute them again. Measured (`beadloom-bcqk`,
 `beadloom-m6k7.4`): `cli-commands` leaves its bottom side in one channel and crosses a line 150
 units out in nine lanes, nine being its bound, where ELK's routes took 36 channels and 69 lanes.
-Bundling takes 13 ms here and about 38 ms on the adopter-sized graph.
+Bundling takes 13 ms here and about 38 ms on the adopter-sized graph, on the M1 Max; a
+GitHub-hosted Ubuntu runner took 186.8 ms for the adopter-sized graph.
 
 `model/bundleOverlay.js` draws a **junction dot** wherever drawn routes part (`lib/junctions.js`),
 on a canvas above Cytoscape's (`model/overlayCanvas.js`), found again for the edges drawn now. On
@@ -267,8 +276,9 @@ is declared on the slice it tests.
   right angles from outside them; every node with twenty or more drawn edges leaves each side in one
   channel per direction and crosses a line 150 units out within its lane bound; no two edges with
   no common end run along one line; a junction dot marks exactly where routes part. The
-  adopter-sized graph is also drawn in one to four layer ranks. Bundling takes at most 50 ms at
-  adopter size; a box hub whose loop counts in its degree is bundled; dots follow a filter;
+  adopter-sized graph is also drawn in one to four layer ranks. Bundling at adopter size stays
+  within its bound for the environment (50 ms locally, 400 ms in CI); a bus starts off the middle
+  of a side where an edge of the node's own child crosses it; a box hub whose loop counts in its degree is bundled; dots follow a filter;
   hovering a shared line names its edges; a dimmed edge fades in colour at opacity 1.
 - `e2e/map.spec.js`: the overview draws only the top-level boxes and at most 100 aggregated
   edges; arrowheads, counts and routes of aggregated edges; no box moves between levels; the

@@ -34,6 +34,7 @@ import tempfile
 from functools import cache
 from typing import Any
 
+from tests.support.adopter_portals import SLOW_PART_ENV, SLOW_PARTS
 from tests.support.ci_workflows import (
     ADVISORY_JOBS,
     ADVISORY_WORKFLOWS,
@@ -152,6 +153,14 @@ def test_the_adopters_job_runs_pytest_on_the_slow_marker() -> None:
 
 def test_the_adopters_job_turns_the_slow_tests_on() -> None:
     assert _slow_step()["env"][_SWITCH] == "1"
+
+
+def test_the_adopters_job_runs_every_part_of_the_slow_tests_in_a_leg_of_its_own() -> None:
+    """``beadloom-m6k7.7``: a part no leg names would leave its slow tests unrun."""
+    matrix = jobs_of(GH_SITE_ADOPTERS)[_JOB]["strategy"]["matrix"]
+
+    assert matrix["part"] == list(SLOW_PARTS)
+    assert _slow_step()["env"][SLOW_PART_ENV] == "${{ matrix.part }}"
 
 
 def test_the_adopters_job_runs_the_whole_suite_not_a_folder_of_it() -> None:

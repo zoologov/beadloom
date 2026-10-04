@@ -17,7 +17,7 @@
 // theme case reads the map as drawn at the fit.
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { landscapeData, openLandscape } from "./support/landscape.js";
 import {
   deviation,
@@ -72,6 +72,7 @@ function misdrawnBoxes(ids, drawn, elk) {
 const DRAWINGS = [
   {
     name: "this portal's architecture graph",
+    tag: [],
     open: async (page, request) => {
       const data = await architectureData(request);
       await openArchitecture(page);
@@ -81,6 +82,7 @@ const DRAWINGS = [
   },
   {
     name: "an adopter-sized architecture graph",
+    tag: [ADOPTER_SIZED],
     open: async (page, request) => {
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
@@ -91,6 +93,7 @@ const DRAWINGS = [
   },
   {
     name: "the landscape",
+    tag: [],
     open: async (page, request) => {
       const data = await landscapeData(request);
       requireShape(data.edges.length > 0, LACKING.landscape);
@@ -101,7 +104,7 @@ const DRAWINGS = [
 ];
 
 for (const drawing of DRAWINGS) {
-  test.describe(`on ${drawing.name}`, () => {
+  test.describe(`on ${drawing.name}`, { tag: drawing.tag }, () => {
     // The route is ELK's with a node's fans bundled (`bundles.spec.js` checks
     // the bundling against ELK's routes); this case checks it is drawn as computed.
     test("every edge is drawn along its route with its label on it, and only an edge into its own box is a loop", async ({

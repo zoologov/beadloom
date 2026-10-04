@@ -68,11 +68,14 @@ every other layer does.
 left alone, any other is single-quoted, and a source path with a space is quoted in the command
 the impact summary copies.
 
-`src/beadloom/site_scaffold/e2e/layout.spec.js` drives `elk` and `ids`, five cases:
+`src/beadloom/site_scaffold/e2e/layout.spec.js` drives `elk` and `ids`, six cases:
 
 - each leaf is drawn at the centre of its ELK box, every child box lies inside its parent's, and
   every route starts and ends on its own nodes' boxes;
 - a graph drawn again (a node page, then back) is answered from the cache and not laid out again;
+- the layout does not depend on the fonts text is rendered in: with the portal's web fonts refused
+  and its font variable set to a monospace family, which sets every node's id at another width,
+  every box, position and route is the same (`beadloom-m6k7.7`);
 - the toolbar answers while an adopter-sized graph is laid out, and no main-thread task from the
   data file's arrival until the graph is placed is longer than the environment's bound (Long
   Tasks API, recorded from page start);

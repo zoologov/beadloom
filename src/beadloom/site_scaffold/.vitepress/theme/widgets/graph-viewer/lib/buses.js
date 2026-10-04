@@ -16,6 +16,9 @@
 // Every edge of a bus runs along its channel for a while: a lane that begins
 // right below the side's middle would take its edge straight down through the
 // channel to turn further out, a second channel, so the bus's port moves off it.
+// The port moves off an edge that does not end at the node, too: a box's own
+// child can send an edge out through the middle of the box's side, and every
+// edge of a bus starting there would run along it, so none would join.
 // An edge whose lane cannot be reached along the channel, a box or an unrelated
 // edge in the way, leaves the bus at its own port's place instead, as an edge
 // that drops further does, and keeps its route only when that fails too.
@@ -125,13 +128,34 @@ function busChannel(drawing, fan, { border, sign, gap, span, options }) {
 }
 
 /**
- * The port's place at `x`, or `options.portShift` to either side of it when a
- * lane begins nearer than `options.channelRun`: the edge there would not run
- * along the channel at all.
+ * Where the bus of `fan` leaves `border`, and its channel: `{ port, channel }`.
+ * The port is the side's middle `x`, or `options.portShift` to either side of
+ * it: the first of those places that no lane begins nearer to than
+ * `options.channelRun` (an edge there would not run along the channel at all)
+ * and whose drop to the channel runs along no edge that does not end at `node`
+ * (every edge of the bus would start along it). With no such place the first
+ * place off the lanes is taken, and with none of those the middle.
  */
-function portOffLanes(x, lanes, options) {
-  const free = (place) => lanes.every((lane) => Math.abs(lane - place) >= options.channelRun);
-  return [x, x + options.portShift, x - options.portShift].find(free) ?? x;
+function portOf(drawing, node, x, { fan, border, sign, gap, options }) {
+  const lanes = fan.map((item) => item.lane);
+  const starts = [...lanes, ...fan.map(({ route }) => route[0].x)];
+  const atNode = (edge) => edge.source === node || edge.target === node;
+  const busAt = (place) => {
+    const span = [Math.min(...lanes, place), Math.max(...lanes, place)];
+    return { port: { x: place, y: border }, channel: busChannel(drawing, fan, { border, sign, gap, span, options }) };
+  };
+  const clear = ({ port, channel }) =>
+    !runsAlongAnother(drawing, port, { x: port.x, y: channel }, options.alongClearance, atNode);
+  const places = [x, x + options.portShift, x - options.portShift].filter((place) =>
+    starts.every((start) => Math.abs(start - place) >= options.channelRun)
+  );
+  let first = null;
+  for (const place of places) {
+    const bus = busAt(place);
+    if (clear(bus)) return bus;
+    first ||= bus;
+  }
+  return first || busAt(x);
 }
 
 /**
@@ -199,10 +223,7 @@ function busOf(drawing, node, { side, sign }, direction, options) {
     item.inGap = inGap.has(item);
     item.lane = item.inGap ? item.route[2].x : item.route[0].x;
   }
-  const lanes = fan.map((item) => item.lane);
-  const port = { x: portOffLanes(centreX(box) + separation, [...lanes, ...ports], options), y: border };
-  const span = [Math.min(...lanes, port.x), Math.max(...lanes, port.x)];
-  const channel = busChannel(drawing, fan, { border, sign, gap, span, options });
+  const { port, channel } = portOf(drawing, node, centreX(box) + separation, { fan, border, sign, gap, options });
 
   const members = fan
     .filter((item) => joinBus(drawing, node, item, { port, channel, sign, options }))
