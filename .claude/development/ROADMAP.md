@@ -459,19 +459,15 @@ Nothing is in progress except the release in item 4. The order below is the owne
 `bd show <id>` is where its state is checked. Every open P0 and P1 bug is named in this section,
 either inside an item or in the unranked list at its end.
 
-### 0. BDL-077 — the viewer draws edges like a classic diagram (owner 2026-10-03; PRD in draft)
+### 0. Shipped: BDL-076 and BDL-077 — the viewer
 
-**Bead `beadloom-rcnz`, work item `.claude/development/docs/features/BDL-077/`.** The owner asked
-for edges that route around blocks, bridges where edges cross, and a look closer to draw.io or
-Visio, and named JointJS as a candidate. The R&D is done (`RND.md`): ELK already routes every
-edge around the boxes and the viewer throws the routes away; drawing them in Cytoscape takes edges
-through boxes from 232 of 453 to 0 and indistinct edges from 22 to 0. JointJS core and maxGraph
-fail on this graph; drawing SVG ourselves is the fallback. The PRD is a draft with five open
-questions for the owner (Arrange, edges to a node's own container, where bridges show, the
-overview, high-degree fans).
-
-BDL-076 (the viewer for the team and the portal for adopters) shipped in two slices: PR #90
-(`c133e0a5`) and PR #91 (`e7bd7671`), epic `beadloom-ujzb` closed.
+BDL-076 (the viewer for the team and the portal for adopters) shipped in PR #90 (`c133e0a5`) and
+PR #91 (`e7bd7671`). BDL-077 (edges like a classic diagram: ELK's routes around boxes, trunks and
+buses instead of staircases, a map-like overview, bridges on highlighted edges, ELK in a worker)
+shipped in PR #92 (`2f65cbd9`) on 2026-10-04. Open follow-ups from them: `beadloom-nh7h` (a local
+index resolves one import differently from a fresh reindex), `beadloom-stcx` (`vitepress dev`
+crash on mermaid), `beadloom-ytcg` (a node id `__proto__`), `beadloom-jcng` (incremental reindex
+after a manifest change), `beadloom-76mk` (flat Python tests bind to no node).
 
 ### 1. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0 bug, BDL-UX #226)
 

@@ -1,6 +1,6 @@
 # PRD: BDL-077 — The viewer draws edges like a classic diagram
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-03
 > **Source:** owner's ask on 2026-09-30 after BDL-076 PR 1 (`beadloom-rcnz`); measured in R&D on 2026-10-03 (`RND.md` in this folder).
 
