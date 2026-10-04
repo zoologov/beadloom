@@ -40,8 +40,12 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 ## Goals
 
 - [ ] The overview reads at a glance: one thin line weight, counts on pills that nothing paints
-      over, no two arrowheads overlapping, parallel lines separated by a visible gap, every box
-      title readable and inside or beside its box without covering marks.
+      over, no two arrowheads overlapping, one arrowhead where lines share their last run into a
+      box, parallel lines at least 5 px apart, no line under a title or through a box, every box
+      and every top-level node titled readably (on this repository's graph: 0 head overlaps,
+      today 12; minimum gap 7 px, today 0.8).
+- [ ] With one box open, its outward edges stay aggregated at the box; a node's own outward edges
+      show on hover or selection.
 - [ ] Every arrowhead is whole: a constant size on screen, with a straight run before its box at
       least as long as the head.
 - [ ] A followed line (hover, a selection's walk) is visibly on top of what it crosses; there are
@@ -74,9 +78,19 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 6. **Activity counts changed lines over 30 days, with levels relative to the project;** a box
    rolls up its children; zero is named as no change.
 7. **Selecting a node at the overview zooms to its neighbourhood.**
-8. **The overview itself must read better** — on the prototype's screenshots too, arrowheads and
-   lines run into each other and lines get in each other's way. The approach is chosen by a
-   probe with screenshots (variants in `RND.md`), then the owner picks.
+8. **The overview gets its own routing and is calm by default** (probe V5, `RND.md`): aggregated
+   edges are routed fresh between the fixed boxes — even gaps, a straight run into each box, clear
+   of titles; lines are thin and light, and hovering or selecting a box brings its lines forward
+   and fades the rest.
+9. **An open box keeps its outward edges aggregated at the box.** It shows its nodes and the edges
+   among them; a node's own edges to the outside appear when the node is hovered or selected.
+   This replaces BDL-077's rule that an edge is drawn as itself once both its ends are drawn.
+10. **One line weight, thin, always.** No bridges, no dots, no arrowheads on top of each other,
+    and **no redundant arrowheads**: lines that share their last run into a box end in one
+    arrowhead, not one per line.
+11. **Deferred:** an overview for projects whose top level does not fit the canvas (boxes of
+    about 35×10 px) — a minimum box size or another grouping tier — waits for a real large
+    project.
 
 ## User Stories
 

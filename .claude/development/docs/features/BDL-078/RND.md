@@ -19,3 +19,19 @@ Paths relative to `src/beadloom/site_scaffold/.vitepress/theme/widgets/graph-vie
 ## How other tools handle it (from knowledge, not verified in this session)
 
 Thin uniform or two-to-three-step line weights; counts and labels as chips with a background; arrowheads sized independently of stroke width; highlight-and-dim with the followed edge raised instead of line jumps (jumps exist in draw.io and yFiles; yFiles is the reference for hub dots on square joins).
+
+## Probe: a readable overview (2026-10-04)
+
+Diagnosis confirmed on the first prototype (V0): medoid lanes 0.8 px apart at the fit; 12 overlapping arrowhead pairs here, 174 at adopter size; 13 of 34 lines under a title plate.
+
+| This repository (34 lines) | head overlaps | min gap px | crowded px | crossings | length px | through box | under a title | routing |
+|---|---|---|---|---|---|---|---|---|
+| V0 prototype | 12 | 0.8 | 4,108 | 55 | 11,120 | 3 | 13 | – |
+| V1 tidy medoids (ports spread, nudged) | 0 | 0.8 | 3,614 | 64 | 10,953 | 0 | 13 | 0.3 ms |
+| V2 overview router | 0 | 7.1 | 0 | 50 | 8,623 | 0 | 0 | 18 ms |
+| V3 direct curves | 9 | 0.8 | 974 | 79 | 7,282 | 8 | 5 | 0.6 ms |
+| **V5 = V2 + calm by default** (chosen) | 0 | 7.1 | 0 | 50 | 8,623 | 0 | 0 | 18 ms |
+
+Adopter-sized (36 boxes, 100 lines): V0 174 head overlaps; V1 38; V2/V5 2 (one line fell back to its medoid), routing 100 ms; V3 109. The router works on a grid of tracks about 8 px apart, boxes and outside titles as obstacles, a straight run into each box, bends, crossings and running beside another line priced; lines into one box may share their last run and one arrowhead. Boxes never move.
+
+Open: with one box open every variant is poor (about 100 lines from small nodes to closed boxes) → owner's ruling 9. The adopter-sized "fit" does not fit (zoom clamps at 0.02; boxes about 35×10 px) → deferred (ruling 11). A top-level leaf node has no readable title at the overview → in scope.
