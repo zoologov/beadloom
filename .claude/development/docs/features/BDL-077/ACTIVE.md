@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-m6k7.4` (adopter-size leaves over the lane bound); then R → W → P.
+**Bead:** `beadloom-87o6` (R, review with the authors' accounts withheld); then W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -37,12 +37,14 @@
 | `beadloom-a6a6` | E5 | ✓ done | bridges on highlighted edges |
 | `beadloom-lb1v` | T | ✓ done | PRD criteria measured |
 | `beadloom-m6k7.3` | fix | ✓ done | a box hub is not bundled |
-| `beadloom-m6k7.4` | fix | in progress | adopter-size leaves over the lane bound |
-| `beadloom-87o6` | R | blocked | review |
+| `beadloom-m6k7.4` | fix | ✓ done | adopter-size leaves over the lane bound |
+| `beadloom-87o6` | R | in progress | review |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-m6k7.4` closed** `1021f1b9`: the literal hub bound and one channel per side and direction hold for every busy node here and on the three adopter-sized graph shapes the suite draws (18/17/24 over-bound sides → 0; 15/11/13 second-channel sides → 0); excess steps here 36 → 7; no node moved; bundling 36–37 ms at adopter size (budget 50). Levers: incoming trunks, edges in two trunks, bus port shifts and fallbacks, joins. `lanesAt` treats a corner within half a unit of the line as meeting it. RFC D3 updated for the new hub-to-hub rule. Residual: a two-rank graph keeps one second channel → `beadloom-m6k7.5` (P2).
 
 - **`beadloom-m6k7.3` closed** `bde3684c`: every node, box or leaf, gets buses and trunks; a box's loops count in its degree but are never rerouted. `mcp-server` 20 channels / 26 lanes → 1 / 6 (bound 7); every busy node here within its bound; no node moved; through-box 0. `routeMetrics` now treats values within one unit as one lane (Cytoscape reports trunk corners up to half a unit off) — for review. Adopter-size analysis for `.4`: 111 over-bound edges sit in no trunk (hub-to-hub edges the source never trunked), 84 ride the source's trunk and arrive in lanes of their own.
 

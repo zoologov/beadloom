@@ -125,7 +125,8 @@ container stay Cytoscape loops (ruling 2).
 - **Trunk** on nodes with ≥ 20 drawn edges: edges to the same top-level box share one member's route,
   stopping 8 units short of the box border, where a distribution line runs along the border (moved
   6 units out when occupied or blocked); each edge drops in where ELK had it enter.
-- **Hub-to-hub** edges belong to the source hub's trunk only.
+- **Hub-to-hub** edges ride the source hub's outgoing trunk and may also join the target's incoming trunk (an edge in two trunks), provided the shared route runs along no edge that does not end at the hub; an incoming trunk leaves out an edge whose busy source would lose its lane. *(Changed by `beadloom-m6k7.4`: the source-only rule could not meet the owner's bound.)*
+- **Joins:** an edge left in a lane of its own rides its box's main lane out past 150 units, then turns back to its own route.
 - **Fallback:** an edge keeps its own ELK route wherever the new segment would cross a box or run
   along an unrelated edge.
 - **Junction dots** where two or more routes actually branch, recomputed for the visible set.
