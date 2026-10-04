@@ -14,7 +14,7 @@ import { landscapeData, openLandscape } from "./support/landscape.js";
 import { distanceToPolyline, edgesThroughBoxes, polylineOf } from "./support/routeMetrics.js";
 import {
   AGGREGATE_BUDGET,
-  budgetThreshold,
+  budgetLeftOut,
   degreesOf,
   drawnEdgesOf,
   levelOf,
@@ -24,6 +24,7 @@ import { neighbourhood, impact } from "./support/graph.js";
 import { architectureData, openArchitecture, viewer, withAncestors } from "./support/viewer.js";
 import { drag } from "./support/pointer.js";
 import { LACKING, requireShape } from "./support/shape.js";
+import { openThemeModules } from "./support/themeModules.js";
 
 /** A box opens at this larger side on screen, in pixels, and closes below 0.8 of it. */
 const OPEN_SIDE_PX = 600;
@@ -198,14 +199,14 @@ test("over the budget the weakest aggregated edges are counted on their boxes, a
   const data = await GRAPHS[1].open(page, request);
   const tree = treeOf(data);
   const expected = levelOf(tree, new Set(), drawnEdgesOf(data));
-  const weights = [...expected.pairs.values()].map((p) => p.forward.length + p.backward.length);
-  requireShape(weights.length > AGGREGATE_BUDGET, `no more than ${AGGREGATE_BUDGET} pairs of boxes at the top`);
-  const threshold = budgetThreshold(weights);
+  const weighed = [...expected.pairs.values()].map((p) => ({ ends: p.ends, weight: p.forward.length + p.backward.length }));
+  requireShape(weighed.length > AGGREGATE_BUDGET, `no more than ${AGGREGATE_BUDGET} pairs of boxes at the top`);
+  const leftOut = budgetLeftOut(weighed);
 
   const edges = await viewer(page, "aggregatedEdges");
   const shown = edges.filter((e) => e.drawn);
-  expect(shown.length).toBeLessThanOrEqual(AGGREGATE_BUDGET);
-  expect(edges.filter((e) => e.drawn !== e.weight >= threshold).map((e) => e.id)).toEqual([]);
+  expect(shown.length).toBe(AGGREGATE_BUDGET);
+  expect(edges.filter((e) => e.drawn === leftOut.has(e.ends.join("|"))).map((e) => e.id)).toEqual([]);
   const hiddenAt = new Map();
   for (const e of edges.filter((x) => !x.drawn)) for (const end of e.ends) hiddenAt.set(end, (hiddenAt.get(end) || 0) + 1);
   const marks = await viewer(page, "hiddenEdgeCounts");
@@ -240,6 +241,115 @@ test("over the budget the weakest aggregated edges are counted on their boxes, a
       return mine.length > 0 && mine.every((e) => e.drawn);
     })
     .toBe(true);
+});
+
+/** How many points across the canvas, each way, the pointer is rested on. */
+const GRID = [12, 8];
+
+test("wherever the pointer rests at the overview, it draws the left-out edges of one box at most, the one it rests on", async ({
+  page,
+  request,
+}) => {
+  const data = await GRAPHS[1].open(page, request);
+  const tree = treeOf(data);
+  requireShape(levelOf(tree, new Set(), drawnEdgesOf(data)).pairs.size > AGGREGATE_BUDGET, `no more than ${AGGREGATE_BUDGET} pairs of boxes at the top`);
+  await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+  const canvas = await page.getByTestId("graph-canvas").boundingBox();
+  const counted = async () => Object.keys(await viewer(page, "hiddenEdgeCounts"));
+  const atRest = await counted();
+  expect(atRest.length).toBeGreaterThan(1);
+
+  // The pointer rests on every point of a grid over the canvas: on boxes, on edges, on the
+  // box that holds everything. Each box whose left-out edges are drawn loses its count.
+  const lifted = [];
+  for (let i = 1; i < GRID[0]; i += 1) {
+    for (let j = 1; j < GRID[1]; j += 1) {
+      const [x, y] = [canvas.x + (canvas.width * i) / GRID[0], canvas.y + (canvas.height * j) / GRID[1]];
+      await page.mouse.move(x, y);
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const now = new Set(await counted());
+      const uncounted = atRest.filter((id) => !now.has(id));
+      if (uncounted.length > 1) lifted.push(`${uncounted.length} boxes with the pointer at ${x.toFixed(0)},${y.toFixed(0)}`);
+    }
+  }
+  expect(lifted).toEqual([]);
+});
+
+/** The names of the pairs the map's budget leaves out of `pairs`, `[{ name, weight }]`, sorted. */
+async function leftOutByBudget(page, pairs, budget = AGGREGATE_BUDGET) {
+  return page.evaluate(
+    async ({ list, most }) => {
+      const { budgetOf } = await import("/widgets/graph-viewer/lib/levels.js");
+      return [...budgetOf(list, most)].sort();
+    },
+    { list: pairs, most: budget }
+  );
+}
+
+/** `count` pairs of weight `weight`, named `prefix-000` onwards. */
+const pairsOf = (prefix, count, weight) =>
+  Array.from({ length: count }, (_, k) => ({ name: `${prefix}-${String(k).padStart(3, "0")}`, weight }));
+
+test("101 pairs that each carry one edge: the budget draws 100 of them and leaves out one, the same one whatever the order", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const pairs = pairsOf("pair", AGGREGATE_BUDGET + 1, 1);
+
+  expect(await leftOutByBudget(page, pairs)).toEqual(["pair-100"]);
+  expect(await leftOutByBudget(page, [...pairs].reverse())).toEqual(["pair-100"]);
+});
+
+test("over the budget the strongest pairs are drawn, and a tie at the cut fills the budget rather than emptying it", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const strong = pairsOf("strong", 99, 5);
+  const weak = pairsOf("weak", 300, 1);
+  // 99 strong pairs and the first weak one by name fill the budget; the other 299 are left out.
+  expect(await leftOutByBudget(page, [...weak, ...strong])).toEqual(weak.slice(1).map((p) => p.name));
+
+  // 90 of weight 3 and 20 of weight 2: every heavy pair and the first 10 of weight 2.
+  const heavy = pairsOf("heavy", 90, 3);
+  const middle = pairsOf("middle", 20, 2);
+  expect(await leftOutByBudget(page, [...middle, ...heavy])).toEqual(middle.slice(10).map((p) => p.name));
+
+  // Within the budget nothing is left out.
+  expect(await leftOutByBudget(page, pairsOf("few", AGGREGATE_BUDGET, 1))).toEqual([]);
+});
+
+/**
+ * `served` with its nodes and edges replaced by `boxes` top-level boxes of one
+ * node each and one edge between the nodes of each of the first `pairs` pairs of
+ * boxes: every aggregated edge at the overview carries one edge.
+ */
+function evenlyWeakGraph(served, boxes, pairs) {
+  const node = (id, parent) => ({ id, label: id, kind: parent ? "component" : "domain", parent: parent || id, findings: [], doc_status: "fresh", lint_clean: true });
+  const nodes = [];
+  for (let b = 0; b < boxes; b += 1) nodes.push(node(`box${b}`), node(`box${b}-n`, `box${b}`));
+  const edges = [];
+  for (let a = 0; a < boxes && edges.length < pairs; a += 1) {
+    for (let b = a + 1; b < boxes && edges.length < pairs; b += 1) edges.push({ src: `box${a}-n`, dst: `box${b}-n`, kind: "depends_on" });
+  }
+  return { ...served, nodes, edges: [...nodes.map((n) => ({ src: n.id, dst: n.parent, kind: "part_of" })), ...edges] };
+}
+
+test("at the overview 101 pairs of boxes joined by one edge each draw 100 aggregated edges and count the one left out on its two boxes", async ({
+  page,
+  request,
+}) => {
+  const data = evenlyWeakGraph(await architectureData(request), 15, AGGREGATE_BUDGET + 1);
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+
+  const edges = await viewer(page, "aggregatedEdges");
+  expect(edges).toHaveLength(AGGREGATE_BUDGET + 1);
+  const left = edges.filter((e) => !e.drawn);
+  expect(left).toHaveLength(1);
+  const counts = await viewer(page, "hiddenEdgeCounts");
+  expect(Object.fromEntries(Object.entries(counts).map(([id, m]) => [id, m.count]))).toEqual(
+    Object.fromEntries(left[0].ends.map((end) => [end, 1]))
+  );
 });
 
 /** Whether the box `box` is in view, by the viewer's extent. */

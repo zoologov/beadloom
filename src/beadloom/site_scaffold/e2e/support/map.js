@@ -87,14 +87,20 @@ export function levelOf(tree, open, edges) {
   return { nodes, originals: originals.sort(), pairs };
 }
 
-/** The smallest weight whose aggregated edges, with every heavier one, number at most `budget`; 0 when all fit. */
-export function budgetThreshold(weights, budget = AGGREGATE_BUDGET) {
-  if (weights.length <= budget) return 0;
-  const distinct = [...new Set(weights)].sort((a, b) => a - b);
-  for (const weight of distinct) {
-    if (weights.filter((w) => w >= weight).length <= budget) return weight;
-  }
-  return Math.max(...distinct) + 1;
+/** Code-unit order of two strings, which no locale changes. */
+const byCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * The names, "a|b", of the pairs a level leaves out to draw at most `budget`:
+ * every pair past the `budget` heaviest, `pairs` being `[{ ends, weight }]`. Of
+ * pairs as heavy as each other, the one whose ends come first in code-unit order
+ * is drawn first, so a tie at the cut fills the budget rather than emptying it.
+ */
+export function budgetLeftOut(pairs, budget = AGGREGATE_BUDGET) {
+  const ranked = [...pairs].sort(
+    (a, b) => b.weight - a.weight || byCodeUnits(a.ends[0], b.ends[0]) || byCodeUnits(a.ends[1], b.ends[1])
+  );
+  return new Set(ranked.slice(budget).map((pair) => pair.ends.join("|")));
 }
 
 /** Each node's count of drawn edges, the ones whose ends are both in the file. */

@@ -98,7 +98,6 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   let inView = new Set();
   let open = new Set();
   let pairs = [];
-  let threshold = 0;
   let scale = scaleAt(cy.zoom());
   let queued = false;
   let destroyed = false;
@@ -182,9 +181,12 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       .map((pair) => ({ ...pair, forward: pair.forward.filter(kept), backward: pair.backward.filter(kept) }))
       .map((pair) => ({ ...pair, weight: pair.forward.length + pair.backward.length }))
       .filter((pair) => pair.weight > 0);
-    const weakest = budgetOf(weighed.map((pair) => pair.weight), options.budget);
+    const leftOut = budgetOf(weighed, options.budget);
     const free = new Set([...exempt.values()].filter(Boolean));
-    for (const pair of weighed) pair.hidden = pair.weight < weakest && !pair.ends.some((end) => isWithin(end, free));
+    for (const pair of weighed) {
+      pair.overBudget = leftOut.has(pair.name);
+      pair.hidden = pair.overBudget && !pair.ends.some((end) => isWithin(end, free));
+    }
     const hiddenAt = new Map();
     for (const pair of weighed.filter((p) => p.hidden)) for (const end of pair.ends) hiddenAt.set(end, (hiddenAt.get(end) || 0) + 1);
     const drawnPairs = new Set(weighed.filter((pair) => !pair.hidden).map((pair) => pair.name));
@@ -212,7 +214,6 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     });
     open = nextOpen;
     pairs = weighed;
-    threshold = weakest;
   }
 
   /** Restyle the map's marks when the zoom has crossed a step. */
@@ -262,14 +263,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     /**
      * Draw every edge of the node `id`, and of everything inside it, for `source`
      * (the pointer, the selection), whatever the budget; null releases it. True
-     * when the drawing changes.
+     * when the drawing changes. The root that holds everything exempts nothing:
+     * its edges are every edge, and the pointer rests on it wherever it is on no
+     * other node, so it would lift the budget at the overview.
      */
     setExempt(source, id) {
       const before = exempt.get(source) || null;
-      const after = id || null;
+      const after = id && id !== tree.wrapper ? id : null;
       exempt.set(source, after);
       if (before === after) return false;
-      const weakAt = (id) => id !== null && pairs.some((pair) => pair.weight < threshold && pair.ends.some((end) => isWithin(end, new Set([id]))));
+      const weakAt = (id) => id !== null && pairs.some((pair) => pair.overBudget && pair.ends.some((end) => isWithin(end, new Set([id]))));
       return weakAt(before) || weakAt(after);
     },
     /** Every pair of the level drawn now: `[{ element, pair }]`, `pair.hidden` when the budget leaves it out. */

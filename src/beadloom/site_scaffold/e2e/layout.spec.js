@@ -16,19 +16,22 @@ import {
   waitForViewer,
 } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
+import { ENVIRONMENT, boundHere } from "./support/environment.js";
 
 /** How far a drawn position may lie from ELK's, in layout units. */
 const POSITION_TOLERANCE = 0.5;
 /** How far a route's end may lie outside the box of the node it ends on, in layout units. */
 const END_TOLERANCE = 1;
-/** How often the main thread is sampled while the graph is laid out. */
-const PROBE_INTERVAL_MS = 10;
 /**
- * The longest the main thread may be held at a time while the graph is laid out. ELK
- * takes 2 to 3 seconds over this graph, and on the main thread it held the page that
- * long in one task; in the worker the longest hold measured 120 to 450 ms.
+ * The longest one task may hold the page's main thread while the graph is laid
+ * out, per environment (`support/environment.js`). ELK takes 2 to 3 s over the
+ * adopter-sized graph on an Apple M1 Max, and on the main thread it held the page
+ * that long in one task. With ELK in the worker the longest task in that window
+ * measured 302 to 353 ms there (headless Chromium, no GPU, beside four other
+ * cases). A build server is slower and unmeasured, so its bound is wider; ELK on
+ * the main thread there would take longer still.
  */
-const LONGEST_HOLD_MS = 1000;
+const LONGEST_TASK_MS = { local: 1000, ci: 2000 };
 
 /** The architecture page's path, under any base. */
 const ARCHITECTURE_PAGE = /\/architecture\.html$/;
@@ -111,24 +114,52 @@ test("a graph drawn again is not laid out again", async ({ page, request }) => {
   expect(await viewer(page, "positions")).toEqual(positions);
 });
 
+/**
+ * Record, from the page's first script on, every task that holds the main thread
+ * over 50 ms (the Long Tasks API reports no shorter one) and when the layout's
+ * status is removed. Installed before the page loads, it cannot miss a task that
+ * starts before a case could look.
+ */
+function recordLayoutTasks() {
+  const probe = { tasks: [], hidden: null };
+  window.__layoutProbe = probe;
+  probe.observer = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) probe.tasks.push({ start: entry.startTime, end: entry.startTime + entry.duration });
+  });
+  probe.observer.observe({ type: "longtask", buffered: true });
+  let shown = false;
+  new MutationObserver(() => {
+    const present = Boolean(document.querySelector("[data-testid='layout-status']"));
+    if (present) shown = true;
+    else if (shown && probe.hidden === null) probe.hidden = performance.now();
+  }).observe(document, { childList: true, subtree: true });
+}
+
+/**
+ * The tasks over 50 ms that ran, any part of them, from the moment the data file
+ * arrived until the layout's status was removed, and that window. The window
+ * opens at the data file rather than at the status, because the task that starts
+ * the layout ends as the status is shown, and a hold in it would fall outside.
+ */
+function layoutTasks(page) {
+  return page.evaluate(() => {
+    const probe = window.__layoutProbe;
+    for (const entry of probe.observer.takeRecords()) probe.tasks.push({ start: entry.startTime, end: entry.startTime + entry.duration });
+    const data = performance.getEntriesByType("resource").find((entry) => new URL(entry.name).pathname.endsWith("/architecture.data.json"));
+    const opened = data ? data.responseEnd : null;
+    const during = probe.tasks.filter((task) => task.end >= opened && task.start <= probe.hidden);
+    return { opened, hidden: probe.hidden, durations: during.map((task) => task.end - task.start) };
+  });
+}
+
 test("the toolbar answers while an adopter-sized graph is laid out", async ({ page, request }) => {
   const data = adopterSizedGraph(await architectureData(request));
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await page.addInitScript(recordLayoutTasks);
   await page.goto("architecture.html");
 
   const status = page.getByTestId("layout-status");
   await expect(status).toBeVisible({ timeout: 45_000 });
-  // How long the page's main thread was held at a time, sampled until the layout is placed.
-  await page.evaluate((every) => {
-    window.__layoutGaps = [];
-    let last = performance.now();
-    const probe = setInterval(() => {
-      const now = performance.now();
-      window.__layoutGaps.push(now - last);
-      last = now;
-      if (!document.querySelector("[data-testid='layout-status']")) clearInterval(probe);
-    }, every);
-  }, PROBE_INTERVAL_MS);
   const panel = page.getByRole("button", { name: "Panel", exact: true });
   const before = await panel.getAttribute("aria-expanded");
   // The button's answer is recorded with whether the layout was still running when it came.
@@ -143,19 +174,42 @@ test("the toolbar answers while an adopter-sized graph is laid out", async ({ pa
   expect(await panel.getAttribute("aria-expanded")).not.toBe(before);
   await waitForViewer(page);
   await expect(status).toBeHidden();
+
+  // Every task that held the main thread from the data file's arrival until the graph was placed.
+  const { opened, hidden, durations } = await layoutTasks(page);
+  expect(opened, "the data file's arrival was timed").not.toBeNull();
+  expect(hidden, "the layout's status was removed").not.toBeNull();
+  const longest = Math.max(0, ...durations);
+  const bound = boundHere(LONGEST_TASK_MS);
+  test.info().annotations.push({
+    type: "measured",
+    description: `${ENVIRONMENT}: longest main-thread task while laying out ${longest.toFixed(0)} ms (bound ${bound} ms) over ${(hidden - opened).toFixed(0)} ms, ${durations.length} tasks over 50 ms`,
+  });
+  expect(longest).toBeLessThan(bound);
+
   await openEveryBox(page);
   expect(await viewer(page, "visibleIds")).toHaveLength(data.nodes.length);
-  const gaps = await page.evaluate(() => window.__layoutGaps);
-  expect(gaps.length).toBeGreaterThan(0);
-  expect(Math.max(...gaps)).toBeLessThan(LONGEST_HOLD_MS);
 });
 
-test("a layout that cannot run is reported rather than left laying out", async ({ page }) => {
+test("a layout that cannot run is reported, nothing unplaced is drawn, and the controls that act on the graph are off", async ({
+  page,
+}) => {
   await page.route("**/elk.worker*.js", (route) => route.abort());
   await page.goto("architecture.html");
 
-  await expect(page.getByRole("alert")).toContainText("could not be laid out", { timeout: 45_000 });
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("could not be laid out", { timeout: 45_000 });
+  // The alert says what failed: the layout's worker, which could not be loaded.
+  await expect(alert).toContainText("the layout worker stopped: it could not be loaded");
   await expect(page.getByTestId("layout-status")).toBeHidden();
+  // No node was placed, so the canvas is not shown: every node would stand at one point.
+  await expect(page.getByTestId("graph-canvas")).toBeHidden();
+  // Nothing to zoom, filter or walk; the panel and full screen act on the viewer, not the graph.
+  const live = await page
+    .getByRole("toolbar", { name: "Graph viewer tools" })
+    .locator("button, select, input")
+    .evaluateAll((controls) => controls.filter((c) => !c.matches(":disabled")).map((c) => c.getAttribute("aria-label") || c.textContent.trim()));
+  expect(live.sort()).toEqual(["Full screen", "Panel"]);
 });
 
 /**

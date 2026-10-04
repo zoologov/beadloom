@@ -10,6 +10,12 @@
 // A case written about a shape your graph does not hold, such as declared layers
 // or a contract in the landscape, is skipped and the report names that shape
 // (`support/shape.js`). With BEADLOOM_E2E_NO_SKIP=1 such a case fails instead.
+//
+// The cases that time the viewer (`performance.spec.js`) run in a project of
+// their own, one at a time, after every other case has finished: a case timed
+// beside other browsers would time them as well. If another case fails they are
+// not run. Their bounds are stated per environment (`support/environment.js`).
+// To run them alone: `npx playwright test -c e2e --project performance --no-deps`.
 
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
@@ -29,6 +35,10 @@ async function configuredBase() {
   return site?.base || "/";
 }
 const BASE = process.env.BEADLOOM_E2E_BASE || (await configuredBase());
+/** The browser every case runs in. */
+const BROWSER = { ...devices["Desktop Chrome"], viewport: { width: 1400, height: 900 } };
+/** The cases that time the viewer, which run alone. */
+const PERFORMANCE = "performance.spec.js";
 
 export default defineConfig({
   testDir: ".",
@@ -43,7 +53,10 @@ export default defineConfig({
     viewport: { width: 1400, height: 900 },
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1400, height: 900 } } }],
+  projects: [
+    { name: "chromium", testIgnore: PERFORMANCE, use: BROWSER },
+    { name: "performance", testMatch: PERFORMANCE, dependencies: ["chromium"], workers: 1, use: BROWSER },
+  ],
   webServer: {
     command: `node e2e/support/serve.mjs ${PORT}`,
     cwd: SITE_ROOT,

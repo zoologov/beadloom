@@ -31,7 +31,8 @@
 // nothing at the overview and is not drawn; it is drawn once its end is.
 //
 // When a level would draw more aggregated edges than a budget, the weakest are
-// not drawn (`budgetOf`) and each end counts how many of its edges are hidden.
+// not drawn (`budgetOf`), ties at the cut broken by name so the budget is filled,
+// and each end counts how many of its edges are hidden.
 // Everything here is pure: ids and boxes in, sets and counts out.
 
 /** The class of a box drawn closed: the stylesheet draws its title and tint, the map sets it. */
@@ -156,17 +157,21 @@ export function levelOf(tree, open, edges) {
   return { nodes, originals, pairs };
 }
 
+/** Code-unit order of two strings, which no locale changes. */
+const byCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
- * The weight below which an aggregated edge is not drawn: the smallest weight
- * that, with every heavier one, keeps the drawn count within `budget`; 0 when
- * every one fits. `weights` are the aggregated edges' member counts.
+ * The names of the aggregated edges a level leaves out to draw at most `budget`:
+ * every one past the `budget` heaviest. `pairs` are `[{ name, weight }]`, the
+ * weight being the edges a pair carries. Of pairs as heavy as each other the one
+ * whose name comes first in code-unit order is drawn first; a pair's name is its
+ * two ends in that order, so the same pairs are drawn whatever order they come
+ * in, and a tie at the cut fills the budget rather than leaving it empty.
  */
-export function budgetOf(weights, budget) {
-  if (weights.length <= budget) return 0;
-  const descending = [...weights].sort((a, b) => b - a);
-  // The weight of the first edge past the budget cannot be drawn, nor any as light.
-  const firstOut = descending[budget];
-  return firstOut + 1;
+export function budgetOf(pairs, budget) {
+  if (pairs.length <= budget) return new Set();
+  const ranked = [...pairs].sort((a, b) => b.weight - a.weight || byCodeUnits(a.name, b.name));
+  return new Set(ranked.slice(budget).map((pair) => pair.name));
 }
 
 /** Whether `box` overlaps `extent`, both `{ x1, y1, x2, y2 }`. */

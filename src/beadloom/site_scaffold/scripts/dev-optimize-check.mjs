@@ -1,13 +1,18 @@
 // Dev/runtime guard for the interactive viz.
 //
-// The web-worker bug class slipped through because `vitepress build` (the
-// production bundle) stayed GREEN while the VitePress *dev* server crashed: the
-// dev server pre-bundles dependencies with Vite's optimizer, and the Cytoscape +
-// cytoscape-elk -> elkjs -> web-worker chain failed to resolve there. This script
-// boots the VitePress dev server programmatically (the SAME path the crash was
-// on), waits until it is listening (proving dep optimization succeeded), then
-// shuts it straight down — so it proves the dev path without leaving a server
-// running. Exits non-zero on any boot/optimize failure.
+// `vitepress build` (the production bundle) and the VitePress *dev* server
+// resolve dependencies differently: the dev server pre-bundles them with Vite's
+// optimizer, so a dependency chain the build resolves can still crash the dev
+// server. That happened once, when the theme reached elkjs through
+// cytoscape-elk, whose `web-worker` dependency did not resolve under the
+// optimizer. The theme now runs elkjs in a module worker of its own
+// (`shared/elk/elk.worker.js`), and no package pulls `web-worker` in.
+//
+// This script boots the VitePress dev server programmatically, the same path,
+// waits until it is listening, then shuts it down, so it proves the dev server
+// boots without leaving one running. It does not open a page, so it does not
+// prove the layout worker runs under the dev server. Exits non-zero on any boot
+// or optimize failure.
 
 import { createServer } from "vitepress";
 
@@ -16,8 +21,8 @@ const root = new URL("..", import.meta.url).pathname;
 async function main() {
   const server = await createServer(root, { port: 5199 });
   await server.listen();
-  // Reaching here means Vite created the dev server + began dep optimization
-  // for the configured root without throwing on the viz worker chain.
+  // Reaching here means Vite created the dev server and began dependency
+  // optimization for the configured root without throwing.
   await server.close();
   process.stdout.write("DEV-OPTIMIZE-CHECK OK: vitepress dev server booted + closed\n");
 }

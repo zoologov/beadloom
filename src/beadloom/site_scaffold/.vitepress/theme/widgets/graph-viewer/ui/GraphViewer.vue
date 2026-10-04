@@ -13,7 +13,10 @@
 //
 // ELK lays the graph out in a Web Worker. Until it answers, the canvas says it is
 // laying the graph out and the toolbar keeps working; a layout that fails is
-// reported above the canvas, as a data file that cannot be read is.
+// reported above the canvas, as a data file that cannot be read is, with what
+// failed. No node of a graph that was not laid out has a place, so its canvas
+// stays hidden and the controls that act on the graph are turned off; the
+// panel and full screen act on the viewer and stay on.
 //
 // A node's edges are drawn bundled, several along one line. When the pointer is
 // on a line that more than one edge runs along, a note over the canvas names
@@ -231,6 +234,10 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
+// Until ELK has placed the nodes, every one stands at one point: the canvas is not shown.
+const unplaced = computed(() => canvas.layingOut.value || Boolean(canvas.layoutError.value));
+// The graph could not be laid out: there is nothing to zoom, filter or walk.
+const graphControlsOff = computed(() => Boolean(canvas.layoutError.value));
 // The edges along the line under the pointer, named, when the line carries more than one.
 const bundleNote = computed(() => {
   const ids = canvas.hoveredEdges.value;
@@ -375,26 +382,28 @@ onBeforeUnmount(() => disposeHandle());
     </p>
 
     <div role="toolbar" aria-label="Graph viewer tools" class="bl-viewer-toolbar">
-      <component
-        :is="mode.filterControls"
-        :filters="state"
-        :options="options"
-        @change="(key, value) => (state[key] = value)"
-      />
-      <NeighbourhoodControls
-        :depth="state.depth"
-        :dir="state.dir"
-        :hide="Boolean(state.hide)"
-        @change="(key, value) => (state[key] = value)"
-      />
-      <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
-      <span class="bl-viewer-spacer" />
-      <NavigationControls
-        @zoom-in="navigation.zoomIn"
-        @zoom-out="navigation.zoomOut"
-        @fit="navigation.fit"
-        @centre="navigation.centre(state.focus)"
-      />
+      <fieldset class="bl-viewer-controls" :disabled="graphControlsOff">
+        <component
+          :is="mode.filterControls"
+          :filters="state"
+          :options="options"
+          @change="(key, value) => (state[key] = value)"
+        />
+        <NeighbourhoodControls
+          :depth="state.depth"
+          :dir="state.dir"
+          :hide="Boolean(state.hide)"
+          @change="(key, value) => (state[key] = value)"
+        />
+        <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
+        <span class="bl-viewer-spacer" />
+        <NavigationControls
+          @zoom-in="navigation.zoomIn"
+          @zoom-out="navigation.zoomOut"
+          @fit="navigation.fit"
+          @centre="navigation.centre(state.focus)"
+        />
+      </fieldset>
       <button
         type="button"
         class="bl-viewer-button"
@@ -435,7 +444,7 @@ onBeforeUnmount(() => disposeHandle());
       <div
         ref="container"
         class="bl-viewer-canvas"
-        :class="{ 'is-laying-out': canvas.layingOut.value }"
+        :class="{ 'is-unplaced': unplaced }"
         data-testid="graph-canvas"
         tabindex="0"
         :aria-label="`${mode.label}: drag to pan, scroll to zoom; keys + − 0 f Esc`"
@@ -515,6 +524,10 @@ onBeforeUnmount(() => disposeHandle());
   align-items: center;
   gap: 8px;
 }
+/* The controls that act on the graph, one group to turn off; laid out as the toolbar's own items. */
+.bl-viewer-controls {
+  display: contents;
+}
 .bl-viewer-spacer {
   flex: 1 1 auto;
 }
@@ -554,7 +567,7 @@ onBeforeUnmount(() => disposeHandle());
   height: auto;
 }
 /* Until ELK answers, every node stands at one point; the canvas is shown once they are placed. */
-.bl-viewer-canvas.is-laying-out {
+.bl-viewer-canvas.is-unplaced {
   visibility: hidden;
 }
 .bl-viewer-status {
